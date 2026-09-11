@@ -399,6 +399,20 @@ Validar:
 - idempotência;
 - correlation ID.
 
+### 19.1 Gate de ativação orientado pela pesquisa
+
+Uma `SourceDefinition` executável deve manter referência à empresa ou à
+`CompanySource` quando aplicável e registrar:
+
+- estado da evidência;
+- data da revisão;
+- termos revisados;
+- collector homologado localmente.
+
+Fontes importadas da pesquisa começam desabilitadas. Uma fonte só pode ser
+habilitada depois da validação do endpoint, esquema, paginação e identidade
+externa. ATS identificado não equivale a endpoint homologado.
+
 ---
 
 ## 20. Critério de aceite
@@ -423,13 +437,17 @@ Validar o framework com múltiplas fontes de comportamentos diferentes.
 ## 22. Ordem recomendada
 
 ```text
-1. Greenhouse
+1. Ashby
 2. Lever
-3. Ashby
+3. Greenhouse
 4. uma fonte remota
 ```
 
-A ordem pode mudar por disponibilidade, mas o MVP deve concluir três ATSs.
+A pesquisa de fontes confirmou quatro endpoints Ashby (RevenueCat, Supabase,
+Render e WorkOS) e um Lever (Spotify). Por isso, o MVP começa com um adaptador
+Ashby parametrizado por board, segue com Lever e homologa o board da CI&T pela
+relevância para Brasil/home office. Greenhouse permanece como terceiro ATS,
+depois da validação de um endpoint real. O MVP deve concluir os três ATSs.
 
 ---
 
