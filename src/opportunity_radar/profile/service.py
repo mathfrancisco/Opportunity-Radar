@@ -1,9 +1,11 @@
 """Application service for immutable, versioned career profiles."""
 
 from datetime import UTC, datetime
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -125,10 +127,13 @@ class ProfileService:
         return self._to_domain(version)
 
     def _advance_profile(self, profile: CareerProfileModel, expected: int) -> None:
-        result = self.session.execute(
-            update(CareerProfileModel)
-            .where(CareerProfileModel.id == profile.id, CareerProfileModel.version == expected)
-            .values(version=expected + 1)
+        result = cast(
+            CursorResult[Any],
+            self.session.execute(
+                update(CareerProfileModel)
+                .where(CareerProfileModel.id == profile.id, CareerProfileModel.version == expected)
+                .values(version=expected + 1)
+            ),
         )
         if result.rowcount != 1:
             raise ProfileConflictError("career profile was changed")
