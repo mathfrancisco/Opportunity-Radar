@@ -1,0 +1,226 @@
+name: CI/CD
+
+on:
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish container images after validation
+        type: boolean
+        default: false
+
+concurrency:
+  group: pipeline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  backend-quality:
+    name: Backend / lint and types
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install backend tooling
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install --no-deps .
+      - name: Validate dependencies
+        run: python -m pip check
+      - name: Lint
+        run: ruff check .
+      - name: Type check
+        run: mypy
+
+  backend-tests:
+    name: Backend / tests and migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql+psycopg://opportunity_radar:ci-password@127.0.0.1:5432/opportunity_radar
+      OLLAMA_BASE_URL: http://127.0.0.1:11434
+      RUN_DATABASE_INTEGRATION: "1"
+    services:
+      postgres:
+        image: postgres:17.2-alpine
+        env:
+          POSTGRES_DB: opportunity_radar
+          POSTGRES_USER: opportunity_radar
+          POSTGRES_PASSWORD: ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opportunity_radar -d opportunity_radar"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install backend
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install --no-deps .
+      - name: Verify migration round trip
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+          test "$(alembic current | awk '{print $1}')" = "$(alembic heads | awk '{print $1}')"
+      - name: Run backend tests
+        run: pytest -q
+
+  frontend:
+    name: Frontend / lint, types, tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install frontend
+        run: npm ci
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Validate frontend
+        run: npm run check
+
+  e2e:
+    name: Compose / smoke E2E and persistence
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [backend-quality, backend-tests, frontend]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+      - name: Validate Compose configuration
+        run: docker compose -f compose.yaml -f compose.ci.yaml config --quiet
+      - name: Start application
+        run: docker compose -f compose.yaml -f compose.ci.yaml up --detach --build api worker frontend
+      - name: Verify API, frontend and degraded AI mode
+        run: |
+          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
+          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:3000/
+          curl --fail http://127.0.0.1:8000/health | python -c "import json,sys; data=json.load(sys.stdin); assert data['ollama']['status'] == 'degraded'"
+          test "$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose -f compose.yaml -f compose.ci.yaml ps -q worker)")" = "healthy"
+      - name: Import and expose the company catalog
+        run: |
+          docker compose -f compose.yaml -f compose.ci.yaml run --rm \
+            -v "$PWD/tests/fixtures:/imports:ro" \
+            api python scripts/import_notion_export.py \
+            --input /imports/notion_companies.csv
+          curl --fail http://127.0.0.1:3000/api/companies | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 2"
+      - name: Verify PostgreSQL persistence after restart
+        run: |
+          before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
+          companies_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM company_radar.company')"
+          docker compose -f compose.yaml -f compose.ci.yaml restart postgres
+          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
+          after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
+          companies_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM company_radar.company')"
+          test -n "$before"
+          test "$before" = "$after"
+          test "$companies_before" = "2"
+          test "$companies_before" = "$companies_after"
+      - name: Collect logs on failure
+        if: failure()
+        run: docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --tail=300
+      - name: Stop application
+        if: always()
+        run: docker compose -f compose.yaml -f compose.ci.yaml down --volumes --remove-orphans
+
+  publish:
+    name: Publish / ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [e2e]
+    if: >-
+      (github.event_name == 'push' &&
+       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))) ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish)
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: api
+            dockerfile: docker/api/Dockerfile
+          - image: worker
+            dockerfile: docker/worker/Dockerfile
+          - image: frontend
+            dockerfile: docker/frontend/Dockerfile
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/opportunity-radar-${{ matrix.image }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - name: Build and publish image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          provenance: mode=max
+          sbom: true
