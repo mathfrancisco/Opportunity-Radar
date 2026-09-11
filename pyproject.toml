@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "opportunity-radar"
+version = "0.1.0"
+description = "Opportunity discovery and matching platform"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "alembic>=1.14,<2",
+  "apscheduler>=3.10,<4",
+  "fastapi>=0.115,<1",
+  "psycopg[binary]>=3.2,<4",
+  "pydantic-settings>=2.6,<3",
+  "sqlalchemy>=2.0,<3",
+  "uvicorn[standard]>=0.32,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28,<1",
+  "mypy>=1.14,<2",
+  "pytest>=8.3,<9",
+  "ruff>=0.9,<1",
+]
+
+[project.scripts]
+opportunity-radar-worker = "opportunity_radar.worker:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/opportunity_radar"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/backend"]
+pythonpath = [".", "src"]
+markers = ["integration: tests that require the isolated PostgreSQL CI database"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "apps"]
+ignore_missing_imports = true
+disallow_untyped_defs = true

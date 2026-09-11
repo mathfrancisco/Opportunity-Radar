@@ -1,0 +1,122 @@
+name: opportunity-radar
+
+x-app-environment: &app-environment
+  APP_ENV: ${APP_ENV:-development}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://opportunity_radar:change-me-for-local-use@postgres:5432/opportunity_radar}
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+  OLLAMA_MODEL_ANALYSIS: ${OLLAMA_MODEL_ANALYSIS:-llama3.2:3b}
+  FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+  COLLECTION_TIMEZONE: ${COLLECTION_TIMEZONE:-America/Sao_Paulo}
+  WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
+  ANALYSIS_CONCURRENCY: ${ANALYSIS_CONCURRENCY:-1}
+
+services:
+  postgres:
+    image: postgres:17.2-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-opportunity_radar}
+      POSTGRES_USER: ${POSTGRES_USER:-opportunity_radar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-for-local-use}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    networks: [app_net]
+
+  ollama:
+    image: ollama/ollama:0.5.13
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [app_net]
+
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    environment: *app-environment
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [app_net]
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+      target: test
+    environment: *app-environment
+    command: ["uvicorn", "opportunity_radar.presentation.http.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+    networks: [app_net]
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker/Dockerfile
+    environment: *app-environment
+    command: ["python", "-m", "opportunity_radar.worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      ollama:
+        condition: service_started
+    volumes:
+      - local_exports:/app/data/exports
+      - local_backups:/app/data/backups
+    healthcheck:
+      test: ["CMD", "python", "-c", "from pathlib import Path; raise SystemExit(0 if Path('/tmp/opportunity-radar-worker-ready').is_file() else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+    networks: [app_net]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    ports:
+      - "3000:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+    networks: [app_net]
+
+networks:
+  app_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  ollama_models:
+  local_exports:
+  local_backups:
