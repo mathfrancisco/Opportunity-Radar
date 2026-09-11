@@ -31,7 +31,11 @@ def database_health(engine: Engine) -> DependencyHealth:
             revision = connection.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-        alembic_ini = Path(__file__).resolve().parents[3] / "alembic.ini"
+        candidates = (
+            Path.cwd() / "alembic.ini",
+            Path(__file__).resolve().parents[3] / "alembic.ini",
+        )
+        alembic_ini = next((path for path in candidates if path.is_file()), candidates[0])
         expected_revision = ScriptDirectory.from_config(Config(str(alembic_ini))).get_current_head()
         if revision != expected_revision:
             return DependencyHealth("unhealthy", "database migration is not at head")
