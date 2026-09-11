@@ -65,7 +65,9 @@ def read_rows(path: Path) -> Iterator[dict[str, Any]]:
                 content.get("items", content.get("companies", [])),
             )
         if not isinstance(content, list) or not all(isinstance(row, dict) for row in content):
-            raise ValueError("JSON must be an array of objects or contain results, items, or companies.")
+            raise ValueError(
+                "JSON must be an array of objects or contain results, items, or companies."
+            )
         yield from content
         return
     raise ValueError("Input must be a .csv or .json file.")

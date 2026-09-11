@@ -153,7 +153,10 @@ def _raise_http(error: ProfileError) -> NoReturn:
             status_code=status.HTTP_409_CONFLICT,
             detail=str(error),
         ) from error
-    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail=str(error),
+    ) from error
 
 
 def _serialize(version: ProfileVersion) -> ProfileVersionResponse:
