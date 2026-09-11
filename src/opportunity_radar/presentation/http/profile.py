@@ -101,7 +101,11 @@ def list_profile_versions(session: Session = Depends(get_session)) -> list[Profi
         _raise_http(error)
 
 
-@router.post("/versions", response_model=ProfileVersionResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/versions",
+    response_model=ProfileVersionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 def create_profile_version(
     body: CreateVersionBody, session: Session = Depends(get_session)
 ) -> ProfileVersionResponse:
@@ -145,7 +149,10 @@ def _raise_http(error: ProfileError) -> NoReturn:
     if isinstance(error, ProfileNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
     if isinstance(error, (ProfileConflictError, ImmutableProfileVersionError)):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
     raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
 
 

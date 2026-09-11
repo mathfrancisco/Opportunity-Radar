@@ -1,0 +1,1 @@
+"""Company Radar backend tests."""

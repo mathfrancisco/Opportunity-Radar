@@ -104,7 +104,9 @@ class ProfileSnapshot:
         ):
             raise InvalidProfileSnapshotError("compensation minimum must not exceed maximum")
         if (preferences.timezone_start_hour is None) != (preferences.timezone_end_hour is None):
-            raise InvalidProfileSnapshotError("timezone window must include both start and end hours")
+            raise InvalidProfileSnapshotError(
+                "timezone window must include both start and end hours"
+            )
         start_hour = preferences.timezone_start_hour
         end_hour = preferences.timezone_end_hour
         if start_hour is not None and end_hour is not None and not (

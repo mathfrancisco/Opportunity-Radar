@@ -60,7 +60,10 @@ def read_rows(path: Path) -> Iterator[dict[str, Any]]:
     if path.suffix.casefold() == ".json":
         content = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(content, dict):
-            content = content.get("results", content.get("items", content.get("companies", [])))
+            content = content.get(
+                "results",
+                content.get("items", content.get("companies", [])),
+            )
         if not isinstance(content, list) or not all(isinstance(row, dict) for row in content):
             raise ValueError("JSON must be an array of objects or contain results, items, or companies.")
         yield from content
