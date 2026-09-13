@@ -5,7 +5,7 @@ from __future__ import annotations
 from base64 import b64decode
 from binascii import Error as Base64Error
 from datetime import datetime
-from typing import Any, Literal, NoReturn
+from typing import Any, Literal, NoReturn, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -29,6 +29,16 @@ from opportunity_radar.presentation.http.dependencies import get_session
 
 router = APIRouter(tags=["acquisition"])
 
+EvidenceStatus = Literal[
+    "unverified",
+    "confirmed",
+    "ats_identified",
+    "careers_page",
+    "dynamic_review",
+    "redirect_review",
+    "access_pending",
+]
+
 
 class SourceDefinitionBody(BaseModel):
     source_type: str = Field(min_length=1, max_length=64)
@@ -39,15 +49,7 @@ class SourceDefinitionBody(BaseModel):
     priority: int = Field(default=100, ge=0)
     rate_limit_policy: dict[str, Any] = Field(default_factory=dict)
     configuration: dict[str, Any] = Field(default_factory=dict)
-    evidence_status: Literal[
-        "unverified",
-        "confirmed",
-        "ats_identified",
-        "careers_page",
-        "dynamic_review",
-        "redirect_review",
-        "access_pending",
-    ] = "unverified"
+    evidence_status: EvidenceStatus = "unverified"
     reviewed_at: datetime | None = None
     terms_reviewed: bool = False
     collector_local_tested: bool = False
@@ -255,7 +257,7 @@ def _source_response(source: SourceDefinitionModel) -> SourceDefinitionResponse:
         priority=source.priority,
         rate_limit_policy=source.rate_limit_policy,
         configuration=source.configuration,
-        evidence_status=source.evidence_status,
+        evidence_status=cast(EvidenceStatus, source.evidence_status),
         reviewed_at=source.reviewed_at,
         terms_reviewed=source.terms_reviewed,
         collector_local_tested=source.collector_local_tested,

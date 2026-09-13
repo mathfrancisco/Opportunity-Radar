@@ -33,7 +33,7 @@ class Collector(Protocol):
         self, context: HealthcheckContext | None = None
     ) -> HealthResult: ...
 
-    async def discover(
+    def discover(
         self, request: CollectionRequest
     ) -> AsyncIterator[CollectedItem]: ...
 
