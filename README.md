@@ -230,6 +230,37 @@ O MVP está pronto quando uma máquina limpa consegue subir o ambiente, importar
 
 Detalhes: [Arquitetura do MVP](docs/02-arquitetura-mvp.md) e [Roadmap do MVP](docs/29-roadmap-mvp.md).
 
+### 7.5 Estado da coleta
+
+O importador dos estudos também materializa RevenueCat, Supabase, Render e
+WorkOS como `SourceDefinition` Ashby desabilitadas. Cada definição conserva o
+vínculo com a evidência pesquisada e o identificador do board. O adaptador
+Ashby consulta uma vez a API pública do board, aceita limite de itens, preserva
+o objeto original, ignora anúncios não listados e registra tentativas e retries
+na execução. O intervalo mínimo é aplicado entre execuções da mesma fonte; a
+última tentativa HTTP e os eventos de rate limit ficam persistidos.
+
+As fontes permanecem desabilitadas até a revisão dos termos e a homologação do
+coletor. Depois desses gates, `PATCH /api/sources/{id}` ativa a definição com
+controle de versão e `POST /api/sources/{id}/runs` executa a coleta. Uma chamada
+sem `inputs` inicia uma fonte externa; uma chamada com `inputs` mantém o fluxo
+manual compatível.
+
+### 7.5 Estado da coleta
+
+O importador dos estudos também materializa RevenueCat, Supabase, Render e
+WorkOS como `SourceDefinition` Ashby desabilitadas. Cada definição conserva o
+vínculo com a evidência pesquisada e o identificador do board. O adaptador
+Ashby consulta uma vez a API pública do board, aceita limite de itens, preserva
+o objeto original, ignora anúncios não listados e registra tentativas e retries
+na execução.
+
+As fontes permanecem desabilitadas até a revisão dos termos e a homologação do
+coletor. Depois desses gates, `PATCH /api/sources/{id}` ativa a definição com
+controle de versão e `POST /api/sources/{id}/runs` executa a coleta. Uma chamada
+sem `inputs` inicia uma fonte externa; uma chamada com `inputs` mantém o fluxo
+manual compatível.
+
 ---
 
 ## 8. Arquitetura final

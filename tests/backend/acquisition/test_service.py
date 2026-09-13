@@ -1,8 +1,13 @@
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
+from datetime import UTC, datetime
 from uuid import uuid4
 
+import httpx
+import pytest
+
+from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
@@ -14,6 +19,7 @@ from opportunity_radar.acquisition.domain import (
     HealthResult,
 )
 from opportunity_radar.acquisition.models import (
+    RawItemModel,
     SourceCheckpointModel,
     SourceDefinitionModel,
 )
@@ -43,7 +49,8 @@ class _MemorySession:
     def commit(self) -> None:
         self.committed = True
 
-    def refresh(self, model: object) -> None:
+    def refresh(self, model: object, attribute_names: object = None) -> None:
+        del attribute_names
         return None
 
 
@@ -205,3 +212,102 @@ def test_partial_run_does_not_promote_checkpoint() -> None:
     assert run.items_invalid == 1
     assert run.checkpoint_after is None
     assert checkpoints == []
+
+
+def test_ashby_source_configuration_reaches_collector_and_records_http_metrics() -> None:
+    throttling_delays: list[float] = []
+
+    async def sleeper(delay: float) -> None:
+        throttling_delays.append(delay)
+
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="ashby",
+        name="Acme jobs",
+        enabled=True,
+        rate_limit_policy={
+            "minimum_interval_seconds": 5,
+            "max_retry_delay_seconds": 30,
+        },
+        configuration={"board_identifier": "acme", "company_name": "Acme"},
+        last_http_attempt_at=datetime.now(UTC),
+    )
+    session = _MemorySession()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/job-board/acme")
+        return httpx.Response(
+            200,
+            json={
+                "apiVersion": "1",
+                "jobs": [
+                    {"title": "Broken", "isListed": True},
+                    {
+                        "title": "Backend Engineer",
+                        "jobUrl": "https://jobs.ashbyhq.com/acme/job-1",
+                        "isListed": True,
+                    }
+                ],
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((AshbyCollector(client=client),)),
+        repository=_MemoryRepository(source),  # type: ignore[arg-type]
+        sleeper=sleeper,
+    )
+    try:
+        run = asyncio.run(service.execute(source.id, CollectionRequest()))
+    finally:
+        asyncio.run(client.aclose())
+
+    raw_items = [item for item in session.added if isinstance(item, RawItemModel)]
+    assert run.status == "PARTIAL"
+    assert run.error_code == AcquisitionErrorCode.INVALID_ITEM.value
+    assert run.items_seen == 2
+    assert run.items_invalid == 1
+    assert run.items_persisted == 1
+    assert run.http_requests == 1
+    assert run.retry_count == 0
+    assert raw_items[0].payload["title"] == "Backend Engineer"
+    assert len(throttling_delays) == 1
+    assert 0 < throttling_delays[0] <= 5
+
+
+def test_reused_request_does_not_leak_telemetry_between_runs() -> None:
+    class TelemetryCollector(_Collector):
+        async def discover(
+            self, request: CollectionRequest
+        ) -> AsyncIterator[CollectedItem]:
+            request.telemetry.record_http_attempt()
+            yield CollectedItem(
+                source_type=self.source_type,
+                external_id="job-1",
+                raw_payload={"title": "First"},
+            )
+
+    service, _ = _service(TelemetryCollector())
+    request = CollectionRequest()
+
+    first = asyncio.run(service.execute(service.repository.source.id, request))
+    second = asyncio.run(service.execute(service.repository.source.id, request))
+
+    assert first.http_requests == 1
+    assert second.http_requests == 1
+    assert request.telemetry.http_requests == 0
+
+
+def test_rejects_incremental_mode_when_collector_does_not_support_it() -> None:
+    service, session = _service(_Collector())
+
+    with pytest.raises(AcquisitionError, match="does not support incremental"):
+        asyncio.run(
+            service.execute(
+                service.repository.source.id,
+                CollectionRequest(mode=CollectionMode.INCREMENTAL),
+            )
+        )
+
+    assert session.added == []

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import StrEnum
+from math import isfinite
 from typing import Any, Mapping
 from uuid import UUID, uuid4
 
@@ -91,11 +92,66 @@ class ManualInput:
             raise ValueError("only manual file input accepts binary content")
 
 
+@dataclass(slots=True)
+class CollectionTelemetry:
+    """Per-request network counters that collectors report to the run owner."""
+
+    http_requests: int = 0
+    retry_count: int = 0
+    rate_limit_events: int = 0
+    last_http_attempt_at: datetime | None = None
+    invalid_items: int = 0
+    last_invalid_item_error: str | None = None
+
+    def record_http_attempt(self, *, retry: bool = False) -> None:
+        self.http_requests += 1
+        self.last_http_attempt_at = datetime.now(timezone.utc)
+        if retry:
+            self.retry_count += 1
+
+    def record_rate_limit(self) -> None:
+        self.rate_limit_events += 1
+
+    def record_invalid_item(self, summary: str) -> None:
+        self.invalid_items += 1
+        self.last_invalid_item_error = summary
+
+
+@dataclass(frozen=True, slots=True)
+class CollectionNetworkPolicy:
+    """Validated network limits applied to one source run."""
+
+    max_retries: int = 2
+    retry_delay_seconds: float = 1.0
+    max_retry_delay_seconds: float = 30.0
+    minimum_interval_seconds: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.max_retries < 0 or self.max_retries > 5:
+            raise ValueError("max_retries must be between 0 and 5")
+        delays = (
+            self.retry_delay_seconds,
+            self.max_retry_delay_seconds,
+            self.minimum_interval_seconds,
+        )
+        if any(not isfinite(value) or value < 0 for value in delays):
+            raise ValueError("network delays must be finite and non-negative")
+        if self.max_retry_delay_seconds > 300:
+            raise ValueError("max_retry_delay_seconds cannot exceed 300")
+        if self.minimum_interval_seconds > 60:
+            raise ValueError("minimum_interval_seconds cannot exceed 60")
+        if self.max_retry_delay_seconds < self.minimum_interval_seconds:
+            raise ValueError(
+                "max_retry_delay_seconds cannot be below minimum_interval_seconds"
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class CollectionRequest:
     source_definition_id: UUID | None = None
     mode: CollectionMode = CollectionMode.DISCOVERY
     company_reference: str | None = None
+    company_name: str | None = None
     keywords: tuple[str, ...] = ()
     locations: tuple[str, ...] = ()
     cursor: str | None = None
@@ -103,6 +159,10 @@ class CollectionRequest:
     max_items: int | None = None
     correlation_id: str | None = None
     manual_inputs: tuple[ManualInput, ...] = ()
+    telemetry: CollectionTelemetry = field(
+        default_factory=CollectionTelemetry, compare=False, repr=False
+    )
+    network_policy: CollectionNetworkPolicy | None = None
 
     def __post_init__(self) -> None:
         if self.max_items is not None and self.max_items < 1:
@@ -183,6 +243,7 @@ class SourceRun:
     items_invalid: int = 0
     http_requests: int = 0
     retry_count: int = 0
+    rate_limit_events: int = 0
     error_code: AcquisitionErrorCode | None = None
     error_summary: str | None = None
     checkpoint_before: str | None = None
@@ -217,6 +278,22 @@ class SourceRun:
             raise ValueError("retry count cannot be negative")
         self.http_requests += 1
         self.retry_count += retries
+
+    def record_http_activity(
+        self, *, requests: int, retries: int, rate_limit_events: int = 0
+    ) -> None:
+        self._require_running()
+        if (
+            requests < 0
+            or retries < 0
+            or retries > requests
+            or rate_limit_events < 0
+            or rate_limit_events > requests
+        ):
+            raise ValueError("invalid HTTP activity counters")
+        self.http_requests += requests
+        self.retry_count += retries
+        self.rate_limit_events += rate_limit_events
 
     def finish(
         self,

@@ -6,6 +6,14 @@ Esta pesquisa fornece o cadastro de fontes e o estado de evidência. Ela não im
 
 Começar com os endpoints JSON confirmados de Supabase, RevenueCat, Render, WorkOS e Spotify. Eles permitem testar normalização e persistência com evidência prévia de resposta. Em paralelo de desenvolvimento, preparar o adaptador Lever para o board da CI&T, cuja listagem mostrou Brasil e homeoffice; o endpoint específico ainda precisa de validação. Priorizar relevância de localização além da facilidade técnica.
 
+### Estado de implementação
+
+O adaptador Ashby parametrizado por board está implementado. O importador cria
+definições desabilitadas para RevenueCat, Supabase, Render e WorkOS, e a API
+exige evidência confirmada, termos revisados e coletor homologado antes de
+ativá-las. A validação automatizada usa fixture e transporte HTTP simulado; a
+comparação controlada com cada portal real permanece como gate operacional.
+
 ## Estratégia por plataforma
 
 | Fonte | Estratégia proposta | Validação restante |

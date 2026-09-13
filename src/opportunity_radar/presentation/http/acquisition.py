@@ -58,6 +58,7 @@ class SourceDefinitionBody(BaseModel):
 class SourceDefinitionResponse(SourceDefinitionBody):
     id: UUID
     last_health_status: str | None
+    last_http_attempt_at: datetime | None
     created_at: datetime
     updated_at: datetime
     version: int
@@ -70,6 +71,14 @@ class SourcePageResponse(BaseModel):
     total: int
 
 
+class SourceControlsBody(BaseModel):
+    enabled: bool
+    terms_reviewed: bool
+    collector_local_tested: bool
+    reviewed_at: datetime | None = None
+    expected_version: int = Field(ge=1)
+
+
 class ManualInputBody(BaseModel):
     kind: ManualInputKind
     value: str = Field(min_length=1, max_length=2048)
@@ -79,7 +88,8 @@ class ManualInputBody(BaseModel):
 
 
 class CreateRunBody(BaseModel):
-    inputs: list[ManualInputBody] = Field(min_length=1)
+    mode: CollectionMode | None = None
+    inputs: list[ManualInputBody] = Field(default_factory=list)
     max_items: int | None = Field(default=None, ge=1)
     correlation_id: str | None = Field(default=None, max_length=255)
 
@@ -97,6 +107,7 @@ class SourceRunResponse(BaseModel):
     items_invalid: int
     http_requests: int
     retry_count: int
+    rate_limit_events: int
     error_code: str | None
     error_summary: str | None
     checkpoint_before: str | None
@@ -160,21 +171,39 @@ def get_source(
     return _source_response(source)
 
 
+@router.patch("/sources/{source_id}", response_model=SourceDefinitionResponse)
+def update_source_controls(
+    source_id: UUID,
+    body: SourceControlsBody,
+    session: Session = Depends(get_session),
+) -> SourceDefinitionResponse:
+    try:
+        source = AcquisitionService(session).update_source_controls(
+            source_id, **body.model_dump()
+        )
+    except AcquisitionError as error:
+        _raise_acquisition_error(error)
+    return _source_response(source)
+
+
 @router.post(
     "/sources/{source_id}/runs",
     response_model=SourceRunResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def execute_manual_source(
+async def execute_source(
     source_id: UUID,
     body: CreateRunBody,
     session: Session = Depends(get_session),
 ) -> SourceRunResponse:
     try:
         manual_inputs = tuple(_manual_input(item) for item in body.inputs)
+        mode = body.mode or (
+            CollectionMode.MANUAL if manual_inputs else CollectionMode.DISCOVERY
+        )
         request = CollectionRequest(
             source_definition_id=source_id,
-            mode=CollectionMode.MANUAL,
+            mode=mode,
             manual_inputs=manual_inputs,
             max_items=body.max_items,
             correlation_id=body.correlation_id,
@@ -262,6 +291,7 @@ def _source_response(source: SourceDefinitionModel) -> SourceDefinitionResponse:
         terms_reviewed=source.terms_reviewed,
         collector_local_tested=source.collector_local_tested,
         last_health_status=source.last_health_status,
+        last_http_attempt_at=source.last_http_attempt_at,
         created_at=source.created_at,
         updated_at=source.updated_at,
         version=source.version,
@@ -282,6 +312,7 @@ def _run_response(run: SourceRunModel) -> SourceRunResponse:
         items_invalid=run.items_invalid,
         http_requests=run.http_requests,
         retry_count=run.retry_count,
+        rate_limit_events=run.rate_limit_events,
         error_code=run.error_code,
         error_summary=run.error_summary,
         checkpoint_before=run.checkpoint_before,

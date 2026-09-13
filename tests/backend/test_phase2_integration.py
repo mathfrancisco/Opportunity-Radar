@@ -86,3 +86,63 @@ def test_manual_acquisition_is_idempotent_and_visible() -> None:
         persisted_runs = session.scalar(select(func.count(SourceRunModel.id)))
     assert raw_items == 3
     assert persisted_runs == 2
+
+
+def test_confirmed_external_source_requires_explicit_activation_gates() -> None:
+    database_url = os.environ["DATABASE_URL"]
+    client = TestClient(create_app(Settings(database_url=database_url)))
+    invalid_policy = client.post(
+        "/sources",
+        json={
+            "source_type": "ashby",
+            "name": "CI invalid Ashby policy",
+            "configuration": {"board_identifier": "ci-board"},
+            "rate_limit_policy": {"unbounded_delay": True},
+        },
+    )
+    assert invalid_policy.status_code == 422
+
+    created = client.post(
+        "/sources",
+        json={
+            "source_type": "ashby",
+            "name": "CI Ashby activation",
+            "configuration": {
+                "board_identifier": "ci-board",
+                "company_name": "CI Company",
+            },
+            "rate_limit_policy": {
+                "max_retries": 2,
+                "requests_per_second": 0.5,
+                "max_retry_delay_seconds": 30,
+            },
+            "evidence_status": "confirmed",
+        },
+    )
+
+    assert created.status_code == 201
+    source = created.json()
+    rejected = client.patch(
+        f"/sources/{source['id']}",
+        json={
+            "enabled": True,
+            "terms_reviewed": False,
+            "collector_local_tested": True,
+            "expected_version": source["version"],
+        },
+    )
+    assert rejected.status_code == 422
+
+    activated = client.patch(
+        f"/sources/{source['id']}",
+        json={
+            "enabled": True,
+            "terms_reviewed": True,
+            "collector_local_tested": True,
+            "reviewed_at": "2026-09-13T12:00:00Z",
+            "expected_version": source["version"],
+        },
+    )
+    assert activated.status_code == 200
+    assert activated.json()["enabled"] is True
+    assert activated.json()["version"] == source["version"] + 1

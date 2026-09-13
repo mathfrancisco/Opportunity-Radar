@@ -14,9 +14,10 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.models import SourceDefinitionModel
 from opportunity_radar.companies.domain import (
     AmbiguousCompanyIdentityError,
     CompanyCandidate,
@@ -57,6 +58,58 @@ VERIFICATION_RANK = {
     "ats_identified": 3,
     "api_json_confirmed": 4,
 }
+
+
+def register_confirmed_collectors(session: Session, *, dry_run: bool) -> int:
+    """Materialize reviewed JSON endpoints as disabled runnable definitions."""
+    confirmed_sources = session.scalars(
+        select(CompanySource)
+        .join(CompanySource.company)
+        .where(
+            CompanySource.verification_status == "api_json_confirmed",
+            CompanySource.source_type == "ashby",
+            CompanySource.external_key.is_not(None),
+        )
+        .order_by(Company.canonical_name)
+    ).all()
+    existing_company_sources = set(
+        session.scalars(
+            select(SourceDefinitionModel.company_source_id).where(
+                SourceDefinitionModel.company_source_id.is_not(None),
+                SourceDefinitionModel.source_type == "ashby",
+            )
+        ).all()
+    )
+    missing = [
+        source for source in confirmed_sources if source.id not in existing_company_sources
+    ]
+    if dry_run:
+        return len(missing)
+    for source in missing:
+        session.add(
+            SourceDefinitionModel(
+                source_type="ashby",
+                name=f"{source.company.canonical_name} jobs",
+                company_source_id=source.id,
+                enabled=False,
+                priority=25,
+                rate_limit_policy={
+                    "max_retries": 2,
+                    "requests_per_second": 0.2,
+                    "max_retry_delay_seconds": 30,
+                },
+                configuration={
+                    "board_identifier": source.external_key,
+                    "company_name": source.company.canonical_name,
+                },
+                evidence_status="confirmed",
+                reviewed_at=source.last_verified_at,
+                terms_reviewed=False,
+                collector_local_tested=False,
+            )
+        )
+    session.flush()
+    return len(missing)
 
 
 @dataclass(frozen=True, slots=True)
@@ -383,6 +436,12 @@ def import_research_catalog(
             "backlog": sum(report["backlog"] for report in reports),
             "already_completed": len(reports) - len(applied_reports),
         }
+        registered = register_confirmed_collectors(
+            session, dry_run=dry_run
+        )
+        result["source_definitions_registered"] = registered
+        if registered and result["status"] == "already_completed":
+            result["status"] = "completed"
         if dry_run:
             session.rollback()
         else:

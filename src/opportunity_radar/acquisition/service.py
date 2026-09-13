@@ -2,23 +2,30 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
+from math import isfinite
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.collectors import CollectorRegistry, ManualCollector
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
     AcquisitionErrorCode,
     CollectedItem,
+    CollectionMode,
+    CollectionNetworkPolicy,
     CollectionRequest,
+    CollectionTelemetry,
     SourceRun,
     SourceRunStatus,
 )
@@ -53,10 +60,14 @@ class AcquisitionService:
         session: Session,
         registry: CollectorRegistry | None = None,
         repository: AcquisitionRepository | None = None,
+        sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
-        self.registry = registry or CollectorRegistry((ManualCollector(),))
+        self.registry = registry or CollectorRegistry(
+            (ManualCollector(), AshbyCollector())
+        )
+        self._sleeper = sleeper
 
     def create_source(
         self,
@@ -84,15 +95,22 @@ class AcquisitionService:
         self.registry.resolve(normalized_type)
         source_configuration = dict(configuration or {})
         _reject_secret_configuration(source_configuration)
+        source_rate_limit_policy = dict(rate_limit_policy or {})
+        _network_policy(source_rate_limit_policy)
+        if normalized_type == "ashby":
+            AshbyCollector.validate_board_identifier(
+                _required_string(source_configuration, "board_identifier")
+            )
         if enabled and normalized_type != "manual" and (
             evidence_status != "confirmed"
+            or reviewed_at is None
             or not terms_reviewed
             or not collector_local_tested
         ):
             raise AcquisitionError(
                 AcquisitionErrorCode.INVALID_CONFIGURATION,
-                "external sources require confirmed evidence, reviewed terms, "
-                "and a locally tested collector",
+                "external sources require confirmed evidence, a review date, "
+                "reviewed terms, and a locally tested collector",
             )
         source = SourceDefinitionModel(
             source_type=normalized_type,
@@ -101,7 +119,7 @@ class AcquisitionService:
             enabled=enabled,
             schedule=schedule,
             priority=priority,
-            rate_limit_policy=dict(rate_limit_policy or {}),
+            rate_limit_policy=source_rate_limit_policy,
             configuration=source_configuration,
             evidence_status=evidence_status,
             reviewed_at=reviewed_at,
@@ -128,6 +146,61 @@ class AcquisitionService:
     def get_source(self, source_id: UUID) -> SourceDefinitionModel | None:
         return self.repository.get_source(source_id)
 
+    def update_source_controls(
+        self,
+        source_id: UUID,
+        *,
+        enabled: bool,
+        terms_reviewed: bool,
+        collector_local_tested: bool,
+        reviewed_at: datetime | None,
+        expected_version: int,
+    ) -> SourceDefinitionModel:
+        source = self.repository.get_source(source_id)
+        if source is None:
+            raise SourceNotFoundError(source_id)
+        if source.version != expected_version:
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                "source definition was changed; refresh it before updating",
+            )
+        effective_reviewed_at = reviewed_at or source.reviewed_at
+        if enabled and source.source_type != "manual" and (
+            source.evidence_status != "confirmed"
+            or effective_reviewed_at is None
+            or not terms_reviewed
+            or not collector_local_tested
+        ):
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                "external sources require confirmed evidence, a review date, "
+                "reviewed terms, and a locally tested collector",
+            )
+        updated_id = self.session.scalar(
+            update(SourceDefinitionModel)
+            .where(
+                SourceDefinitionModel.id == source_id,
+                SourceDefinitionModel.version == expected_version,
+            )
+            .values(
+                enabled=enabled,
+                terms_reviewed=terms_reviewed,
+                collector_local_tested=collector_local_tested,
+                reviewed_at=effective_reviewed_at,
+                version=SourceDefinitionModel.version + 1,
+            )
+            .returning(SourceDefinitionModel.id)
+        )
+        if updated_id is None:
+            self.session.rollback()
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                "source definition was changed; refresh it before updating",
+            )
+        self.session.commit()
+        self.session.refresh(source)
+        return source
+
     def get_run(self, run_id: UUID) -> SourceRunModel | None:
         return self.repository.get_run(run_id)
 
@@ -147,6 +220,31 @@ class AcquisitionService:
             raise SourceNotFoundError(source_id)
         if not source.enabled:
             raise SourceDisabledError(source_id)
+        if (
+            source.source_type == "manual"
+            and request.mode is not CollectionMode.MANUAL
+        ):
+            raise AcquisitionError(
+                AcquisitionErrorCode.MANUAL_INPUT_INVALID,
+                "manual sources require at least one input",
+            )
+        if source.source_type != "manual" and request.mode is CollectionMode.MANUAL:
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                "external sources do not accept manual inputs",
+            )
+
+        collector = self.registry.resolve(source.source_type)
+        if (
+            request.mode is CollectionMode.INCREMENTAL
+            and not collector.capabilities.incremental_cursor
+        ):
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                f"{source.source_type} does not support incremental collection",
+            )
+        network_policy = _network_policy(source.rate_limit_policy or {})
+        run_telemetry = CollectionTelemetry()
 
         checkpoint_before = source.checkpoint.cursor if source.checkpoint else None
         run = SourceRun(source_definition_id=source.id, checkpoint_before=checkpoint_before)
@@ -170,14 +268,42 @@ class AcquisitionService:
                 retryable=True,
             ) from conflict
 
+        # A competing transaction may have waited on the active-run unique index.
+        # Reload after acquiring that slot so throttling uses its committed attempt.
+        self.session.refresh(source, attribute_names=["last_http_attempt_at"])
+        last_http_attempt_at = source.last_http_attempt_at
+        if (
+            last_http_attempt_at is not None
+            and network_policy.minimum_interval_seconds
+        ):
+            elapsed = (datetime.now(UTC) - last_http_attempt_at).total_seconds()
+            delay = network_policy.minimum_interval_seconds - elapsed
+            if delay > 0:
+                await self._sleeper(delay)
+
         error: AcquisitionError | None = None
         last_cursor: str | None = None
         try:
-            collector = self.registry.resolve(source.source_type)
-            collector_request = (
-                replace(request, cursor=checkpoint_before)
-                if request.cursor is None and checkpoint_before is not None
-                else request
+            collector_request = replace(
+                request,
+                source_definition_id=source.id,
+                cursor=(
+                    checkpoint_before
+                    if request.cursor is None and checkpoint_before is not None
+                    else request.cursor
+                ),
+                company_reference=(
+                    _required_string(source.configuration, "board_identifier")
+                    if source.source_type == "ashby"
+                    else request.company_reference
+                ),
+                company_name=(
+                    _optional_string(source.configuration, "company_name")
+                    if source.source_type == "ashby"
+                    else request.company_name
+                ),
+                telemetry=run_telemetry,
+                network_policy=network_policy,
             )
             async for item in collector.discover(collector_request):
                 run.record_items(seen=1)
@@ -205,6 +331,23 @@ class AcquisitionService:
         except Exception as caught:  # Preserve a stable external error boundary.
             error = AcquisitionError(AcquisitionErrorCode.UNKNOWN_EXTERNAL_ERROR, str(caught))
 
+        if run_telemetry.invalid_items:
+            run.record_items(
+                seen=run_telemetry.invalid_items,
+                invalid=run_telemetry.invalid_items,
+            )
+            if error is None:
+                error = AcquisitionError(
+                    AcquisitionErrorCode.INVALID_ITEM,
+                    f"{run_telemetry.invalid_items} source item(s) were invalid: "
+                    f"{run_telemetry.last_invalid_item_error}",
+                )
+        run.record_http_activity(
+            requests=run_telemetry.http_requests,
+            retries=run_telemetry.retry_count,
+            rate_limit_events=run_telemetry.rate_limit_events,
+        )
+
         if error is None:
             final_status = (
                 SourceRunStatus.PARTIAL
@@ -225,6 +368,8 @@ class AcquisitionService:
             ),
         )
         self._copy_run(run, persisted_run)
+        if run_telemetry.last_http_attempt_at is not None:
+            source.last_http_attempt_at = run_telemetry.last_http_attempt_at
 
         # The checkpoint is part of this same transaction, so it cannot advance before raw evidence.
         if final_status is SourceRunStatus.SUCCEEDED and last_cursor is not None:
@@ -295,6 +440,7 @@ class AcquisitionService:
         model.items_invalid = run.items_invalid
         model.http_requests = run.http_requests
         model.retry_count = run.retry_count
+        model.rate_limit_events = run.rate_limit_events
         model.error_code = run.error_code.value if run.error_code else None
         model.error_summary = run.error_summary
         model.checkpoint_after = run.checkpoint_after
@@ -333,6 +479,79 @@ def _identity_key(
 
 def _string_or_none(value: object) -> str | None:
     return value if isinstance(value, str) else None
+
+
+def _required_string(configuration: Mapping[str, Any], key: str) -> str:
+    value = configuration.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise AcquisitionError(
+            AcquisitionErrorCode.INVALID_CONFIGURATION,
+            f"source configuration requires a non-empty {key}",
+        )
+    return value.strip()
+
+
+def _optional_string(configuration: Mapping[str, Any], key: str) -> str | None:
+    value = configuration.get(key)
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _network_policy(policy: Mapping[str, Any]) -> CollectionNetworkPolicy:
+    supported = {
+        "max_retries",
+        "retry_delay_seconds",
+        "max_retry_delay_seconds",
+        "minimum_interval_seconds",
+        "requests_per_second",
+    }
+    unknown = sorted(str(key) for key in policy if key not in supported)
+    if unknown:
+        raise AcquisitionError(
+            AcquisitionErrorCode.INVALID_CONFIGURATION,
+            f"unsupported rate limit policy fields: {', '.join(unknown)}",
+        )
+
+    def number(key: str, default: float) -> float:
+        value = policy.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                f"rate limit policy {key} must be numeric",
+            )
+        numeric_value = float(value)
+        if not isfinite(numeric_value):
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                f"rate limit policy {key} must be finite",
+            )
+        return numeric_value
+
+    max_retries = policy.get("max_retries", 2)
+    if isinstance(max_retries, bool) or not isinstance(max_retries, int):
+        raise AcquisitionError(
+            AcquisitionErrorCode.INVALID_CONFIGURATION,
+            "rate limit policy max_retries must be an integer",
+        )
+    minimum_interval = number("minimum_interval_seconds", 0.0)
+    if "requests_per_second" in policy:
+        requests_per_second = number("requests_per_second", 0.0)
+        if requests_per_second <= 0:
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                "rate limit policy requests_per_second must be positive",
+            )
+        minimum_interval = max(minimum_interval, 1.0 / requests_per_second)
+    try:
+        return CollectionNetworkPolicy(
+            max_retries=max_retries,
+            retry_delay_seconds=number("retry_delay_seconds", 1.0),
+            max_retry_delay_seconds=number("max_retry_delay_seconds", 30.0),
+            minimum_interval_seconds=minimum_interval,
+        )
+    except ValueError as error:
+        raise AcquisitionError(
+            AcquisitionErrorCode.INVALID_CONFIGURATION, str(error)
+        ) from error
 
 
 def _reject_secret_configuration(configuration: Mapping[str, Any]) -> None:

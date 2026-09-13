@@ -70,6 +70,9 @@ class SourceDefinitionModel(Base):
         Boolean, nullable=False, default=False
     )
     last_health_status: Mapped[str | None] = mapped_column(String(32))
+    last_http_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -95,7 +98,8 @@ class SourceRunModel(Base):
         ),
         CheckConstraint(
             "items_seen >= 0 AND items_persisted >= 0 AND items_skipped >= 0 "
-            "AND items_invalid >= 0 AND http_requests >= 0 AND retry_count >= 0",
+            "AND items_invalid >= 0 AND http_requests >= 0 AND retry_count >= 0 "
+            "AND rate_limit_events >= 0",
             name="ck_source_run_counters",
         ),
         Index("ix_source_run_source_started", "source_definition_id", "started_at"),
@@ -125,6 +129,9 @@ class SourceRunModel(Base):
     items_invalid: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     http_requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rate_limit_events: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
     error_code: Mapped[str | None] = mapped_column(String(64))
     error_summary: Mapped[str | None] = mapped_column(Text)
     checkpoint_before: Mapped[str | None] = mapped_column(Text)
