@@ -18,6 +18,7 @@ from opportunity_radar.acquisition.domain import (
     CollectorCapabilities,
     HealthResult,
 )
+from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.models import (
     RawItemModel,
@@ -359,3 +360,55 @@ def test_lever_source_configuration_reaches_paginated_collector() -> None:
     assert run.items_persisted == 1
     assert run.http_requests == 1
     assert raw_items[0].external_id == "spotify-job-1"
+
+
+def test_greenhouse_source_configuration_reaches_collector() -> None:
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="greenhouse",
+        name="AssemblyAI jobs",
+        enabled=True,
+        rate_limit_policy={},
+        configuration={
+            "board_token": "assemblyai",
+            "company_name": "AssemblyAI",
+        },
+    )
+    session = _MemorySession()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/boards/assemblyai/jobs")
+        assert request.url.params["content"] == "true"
+        return httpx.Response(
+            200,
+            json={
+                "jobs": [
+                    {
+                        "id": 123,
+                        "title": "ML Engineer",
+                        "absolute_url": (
+                            "https://job-boards.greenhouse.io/assemblyai/jobs/123"
+                        ),
+                    }
+                ],
+                "meta": {"total": 1},
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((GreenhouseCollector(client=client),)),
+        repository=_MemoryRepository(source),  # type: ignore[arg-type]
+    )
+    try:
+        run = asyncio.run(service.execute(source.id, CollectionRequest()))
+    finally:
+        asyncio.run(client.aclose())
+
+    raw_items = [item for item in session.added if isinstance(item, RawItemModel)]
+    assert run.status == "SUCCEEDED"
+    assert run.items_seen == 1
+    assert run.items_persisted == 1
+    assert run.http_requests == 1
+    assert raw_items[0].external_id == "123"

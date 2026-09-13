@@ -1,0 +1,44 @@
+{
+  "jobs": [
+    {
+      "id": 84102,
+      "internal_job_id": 9001,
+      "requisition_id": "ENG-42",
+      "title": "Senior Backend Engineer",
+      "updated_at": "2026-09-13T12:30:00Z",
+      "location": {"name": "Sao Paulo, Brazil"},
+      "absolute_url": "https://boards.greenhouse.io/acme/jobs/84102",
+      "content": "<p>Build dependable services for customers.</p>",
+      "language": "en",
+      "departments": [
+        {"id": 1, "name": "Engineering", "child_ids": [], "parent_id": null}
+      ],
+      "offices": [
+        {
+          "id": 2,
+          "name": "Sao Paulo",
+          "location": "Brazil",
+          "child_ids": [],
+          "parent_id": null
+        }
+      ],
+      "metadata": [
+        {"id": 3, "name": "employment_type", "value": "full-time"}
+      ]
+    },
+    {
+      "id": 84103,
+      "internal_job_id": null,
+      "requisition_id": null,
+      "title": "Product Designer",
+      "updated_at": "2026-09-12T10:00:00Z",
+      "location": {"name": "Remote"},
+      "absolute_url": "https://boards.greenhouse.io/acme/jobs/84103",
+      "content": "<p>Design clear, useful workflows.</p>",
+      "departments": [],
+      "offices": [],
+      "metadata": null
+    }
+  ],
+  "meta": {"total": 2}
+}

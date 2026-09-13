@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from sqlalchemy import select, text
+from sqlalchemy import and_, or_, select, text
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import SourceDefinitionModel
@@ -61,14 +61,24 @@ VERIFICATION_RANK = {
 }
 
 
-def register_confirmed_collectors(session: Session, *, dry_run: bool) -> int:
-    """Materialize reviewed JSON endpoints as disabled runnable definitions."""
-    confirmed_sources = session.scalars(
+def register_researched_collectors(session: Session, *, dry_run: bool) -> int:
+    """Materialize researched API and ATS boards as disabled definitions."""
+    runnable_sources = session.scalars(
         select(CompanySource)
         .join(CompanySource.company)
         .where(
-            CompanySource.verification_status == "api_json_confirmed",
-            CompanySource.source_type.in_(("ashby", "lever")),
+            or_(
+                and_(
+                    CompanySource.verification_status == "api_json_confirmed",
+                    CompanySource.source_type.in_(
+                        ("ashby", "lever", "greenhouse")
+                    ),
+                ),
+                and_(
+                    CompanySource.verification_status == "ats_identified",
+                    CompanySource.source_type == "greenhouse",
+                ),
+            ),
             CompanySource.external_key.is_not(None),
         )
         .order_by(Company.canonical_name)
@@ -84,19 +94,20 @@ def register_confirmed_collectors(session: Session, *, dry_run: bool) -> int:
     }
     missing = [
         source
-        for source in confirmed_sources
+        for source in runnable_sources
         if (source.id, source.source_type) not in existing_definitions
     ]
     if dry_run:
         return len(missing)
     for source in missing:
+        identifier_key = {
+            "ashby": "board_identifier",
+            "lever": "site_identifier",
+            "greenhouse": "board_token",
+        }[source.source_type]
         configuration = {
             "company_name": source.company.canonical_name,
-            (
-                "board_identifier"
-                if source.source_type == "ashby"
-                else "site_identifier"
-            ): source.external_key,
+            identifier_key: source.external_key,
         }
         if source.source_type == "lever":
             configuration["api_region"] = (
@@ -110,14 +121,22 @@ def register_confirmed_collectors(session: Session, *, dry_run: bool) -> int:
                 name=f"{source.company.canonical_name} jobs",
                 company_source_id=source.id,
                 enabled=False,
-                priority=25,
+                priority=(
+                    25
+                    if source.verification_status == "api_json_confirmed"
+                    else 50
+                ),
                 rate_limit_policy={
                     "max_retries": 2,
                     "requests_per_second": 0.2,
                     "max_retry_delay_seconds": 30,
                 },
                 configuration=configuration,
-                evidence_status="confirmed",
+                evidence_status=(
+                    "confirmed"
+                    if source.verification_status == "api_json_confirmed"
+                    else "ats_identified"
+                ),
                 reviewed_at=source.last_verified_at,
                 terms_reviewed=False,
                 collector_local_tested=False,
@@ -451,7 +470,7 @@ def import_research_catalog(
             "backlog": sum(report["backlog"] for report in reports),
             "already_completed": len(reports) - len(applied_reports),
         }
-        registered = register_confirmed_collectors(
+        registered = register_researched_collectors(
             session, dry_run=dry_run
         )
         result["source_definitions_registered"] = registered

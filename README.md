@@ -232,15 +232,15 @@ Detalhes: [Arquitetura do MVP](docs/02-arquitetura-mvp.md) e [Roadmap do MVP](do
 
 ### 7.5 Estado da coleta
 
-O importador dos estudos também materializa RevenueCat, Supabase, Render e
-WorkOS como `SourceDefinition` Ashby desabilitadas e o Spotify como uma
-definição Lever desabilitada. Cada definição conserva o vínculo com a evidência
-pesquisada e o identificador do board ou site. O adaptador Ashby consulta uma
-vez a API pública do board; o Lever percorre a listagem paginada nas regiões
-global ou UE. Ambos aceitam limite de itens, preservam o objeto original e
-registram tentativas e retries na execução. O intervalo mínimo é aplicado entre
-requisições e execuções da mesma fonte; a última tentativa HTTP e os eventos de
-rate limit ficam persistidos.
+O importador dos estudos materializa RevenueCat, Supabase, Render e WorkOS como
+`SourceDefinition` Ashby desabilitadas, o Spotify como uma definição Lever e o
+board identificado da AssemblyAI como Greenhouse. Cada definição conserva o
+vínculo com a evidência e o identificador técnico pesquisado. Ashby e Greenhouse
+consultam uma vez a API pública do board; Lever percorre a listagem paginada nas
+regiões global ou UE. Os três adaptadores aceitam limite de itens, preservam o
+objeto original e registram tentativas e retries na execução. O intervalo mínimo
+é aplicado entre requisições e execuções da mesma fonte; a última tentativa HTTP
+e os eventos de rate limit ficam persistidos.
 
 As fontes permanecem desabilitadas até a revisão dos termos e a homologação do
 coletor. Depois desses gates, `PATCH /api/sources/{id}` ativa a definição com

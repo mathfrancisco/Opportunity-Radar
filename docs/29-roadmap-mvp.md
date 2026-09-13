@@ -444,10 +444,11 @@ Validar o framework com múltiplas fontes de comportamentos diferentes.
 ```
 
 A pesquisa de fontes confirmou quatro endpoints Ashby (RevenueCat, Supabase,
-Render e WorkOS) e um Lever (Spotify). Por isso, o MVP começa com um adaptador
-Ashby parametrizado por board, segue com Lever e homologa o board da CI&T pela
-relevância para Brasil/home office. Greenhouse permanece como terceiro ATS,
-depois da validação de um endpoint real. O MVP deve concluir os três ATSs.
+Render e WorkOS), um Lever (Spotify) e identificou explicitamente o board
+Greenhouse da AssemblyAI. Os três adaptadores estão implementados e suas
+definições permanecem desabilitadas até revisão de termos e homologação contra
+os portais reais. CI&T continua como próximo board Lever a validar pela
+relevância para Brasil/home office.
 
 ---
 

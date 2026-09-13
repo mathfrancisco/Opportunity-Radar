@@ -29,6 +29,7 @@ from opportunity_radar.acquisition.domain import (
     SourceRun,
     SourceRunStatus,
 )
+from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.models import (
     RawItemModel,
@@ -66,7 +67,12 @@ class AcquisitionService:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
         self.registry = registry or CollectorRegistry(
-            (ManualCollector(), AshbyCollector(), LeverCollector())
+            (
+                ManualCollector(),
+                AshbyCollector(),
+                LeverCollector(),
+                GreenhouseCollector(),
+            )
         )
         self._sleeper = sleeper
 
@@ -110,6 +116,10 @@ class AcquisitionService:
                 _required_string(source_configuration, "api_region")
                 if "api_region" in source_configuration
                 else "global"
+            )
+        if normalized_type == "greenhouse":
+            GreenhouseCollector.validate_board_token(
+                _required_string(source_configuration, "board_token")
             )
         if enabled and normalized_type != "manual" and (
             evidence_status != "confirmed"
@@ -518,6 +528,14 @@ def _collector_settings(
                 if "api_region" in source.configuration
                 else "global"
             ),
+        )
+    if source.source_type == "greenhouse":
+        return (
+            GreenhouseCollector.validate_board_token(
+                _required_string(source.configuration, "board_token")
+            ),
+            _optional_string(source.configuration, "company_name"),
+            None,
         )
     return None, None, None
 

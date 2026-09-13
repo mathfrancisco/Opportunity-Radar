@@ -18,6 +18,13 @@ O adaptador Lever também está implementado com paginação e seleção das reg
 global/UE. O importador materializa somente o endpoint confirmado do Spotify;
 CI&T continua no catálogo de evidências até a homologação do site `ciandt`.
 
+O adaptador Greenhouse consulta a Job Board API pública pelo token do board e
+preserva conteúdo, departamentos, escritórios e metadados do anúncio. O board
+explicitamente identificado da AssemblyAI vira uma definição desabilitada com
+estado `ats_identified`; os demais indícios de Greenhouse permanecem apenas no
+catálogo até que um token seja confirmado. A ativação ainda depende da revisão
+dos termos e da comparação controlada com o portal real.
+
 ## Estratégia por plataforma
 
 | Fonte | Estratégia proposta | Validação restante |
