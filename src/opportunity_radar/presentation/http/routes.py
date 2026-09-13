@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, Response, status
 
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.health import ollama_health, ready_health
+from opportunity_radar.presentation.http.acquisition import router as acquisition_router
 from opportunity_radar.presentation.http.companies import router as companies_router
 from opportunity_radar.presentation.http.profile import router as profile_router
 
 router = APIRouter()
+router.include_router(acquisition_router)
 router.include_router(companies_router)
 router.include_router(profile_router)
 

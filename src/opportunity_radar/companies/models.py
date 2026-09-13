@@ -25,7 +25,10 @@ SCHEMA = "company_radar"
 
 class Company(Base):
     __tablename__ = "company"
-    __table_args__ = ({"schema": SCHEMA},)
+    __table_args__ = (
+        UniqueConstraint("normalized_name", name="uq_company_normalized_name"),
+        {"schema": SCHEMA},
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -105,6 +108,7 @@ class CompanySource(Base):
     )
     confidence: Mapped[Decimal | None] = mapped_column(Numeric(4, 3))
     verification_method: Mapped[str | None] = mapped_column(String(50))
+    evidence_note: Mapped[str | None] = mapped_column(Text)
     last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     company: Mapped[Company] = relationship(back_populates="sources")
 

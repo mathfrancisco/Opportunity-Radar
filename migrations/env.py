@@ -6,6 +6,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from opportunity_radar.acquisition import models as acquisition_models  # noqa: F401
 from opportunity_radar.companies import models as company_models  # noqa: F401
 from opportunity_radar.platform.database import Base
 from opportunity_radar.profile import models as profile_models  # noqa: F401

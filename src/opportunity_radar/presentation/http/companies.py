@@ -15,6 +15,14 @@ from opportunity_radar.presentation.http.dependencies import get_session
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
+SOURCE_ORDER = {
+    "api_json_confirmed": 0,
+    "ats_identified": 1,
+    "careers_confirmed": 2,
+    "research_recorded": 3,
+    "backlog": 4,
+}
+
 
 class CompanyAliasResponse(BaseModel):
     id: UUID
@@ -26,6 +34,9 @@ class CompanySourceResponse(BaseModel):
     name: str
     url: str
     status: str
+    external_key: str | None
+    verification_method: str | None
+    evidence: str | None
     last_verified_at: datetime | None
 
 
@@ -65,9 +76,19 @@ def company_response(company: Company) -> CompanyResponse:
                 name=source.source_type,
                 url=source.endpoint,
                 status=source.verification_status,
+                external_key=source.external_key,
+                verification_method=source.verification_method,
+                evidence=source.evidence_note,
                 last_verified_at=source.last_verified_at,
             )
-            for source in company.sources
+            for source in sorted(
+                company.sources,
+                key=lambda item: (
+                    SOURCE_ORDER.get(item.verification_status, 99),
+                    item.source_type,
+                    item.endpoint,
+                ),
+            )
         ],
     )
 
