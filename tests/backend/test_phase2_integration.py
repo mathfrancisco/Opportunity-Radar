@@ -101,6 +101,18 @@ def test_confirmed_external_source_requires_explicit_activation_gates() -> None:
         },
     )
     assert invalid_policy.status_code == 422
+    invalid_region = client.post(
+        "/sources",
+        json={
+            "source_type": "lever",
+            "name": "CI invalid Lever region",
+            "configuration": {
+                "site_identifier": "ci-site",
+                "api_region": 123,
+            },
+        },
+    )
+    assert invalid_region.status_code == 422
 
     created = client.post(
         "/sources",

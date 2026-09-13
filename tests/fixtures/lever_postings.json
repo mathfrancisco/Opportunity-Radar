@@ -1,0 +1,27 @@
+[
+  {
+    "id": "d8f4799e-9412-4af5-a3f2-0325d7cae0a0",
+    "text": "Senior Backend Engineer",
+    "hostedUrl": "https://jobs.lever.co/acme/d8f4799e-9412-4af5-a3f2-0325d7cae0a0",
+    "applyUrl": "https://jobs.lever.co/acme/d8f4799e-9412-4af5-a3f2-0325d7cae0a0/apply",
+    "descriptionPlain": "Build dependable services for customers.",
+    "categories": {
+      "commitment": "Full-time",
+      "department": "Engineering",
+      "location": "Sao Paulo, Brazil",
+      "team": "Platform"
+    },
+    "country": "BR",
+    "workplaceType": "remote",
+    "salaryRange": {"min": 100000, "max": 150000, "currency": "USD"}
+  },
+  {
+    "id": "bc5f04af-7d7f-4f7e-b5e3-6f6ed351ea21",
+    "text": "Product Designer",
+    "hostedUrl": "https://jobs.lever.co/acme/bc5f04af-7d7f-4f7e-b5e3-6f6ed351ea21",
+    "descriptionPlain": "Design clear, useful workflows.",
+    "categories": {"location": "Remote"},
+    "country": "BR",
+    "workplaceType": "remote"
+  }
+]

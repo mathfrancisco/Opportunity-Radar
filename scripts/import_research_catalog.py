@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -67,28 +68,45 @@ def register_confirmed_collectors(session: Session, *, dry_run: bool) -> int:
         .join(CompanySource.company)
         .where(
             CompanySource.verification_status == "api_json_confirmed",
-            CompanySource.source_type == "ashby",
+            CompanySource.source_type.in_(("ashby", "lever")),
             CompanySource.external_key.is_not(None),
         )
         .order_by(Company.canonical_name)
     ).all()
-    existing_company_sources = set(
-        session.scalars(
-            select(SourceDefinitionModel.company_source_id).where(
-                SourceDefinitionModel.company_source_id.is_not(None),
-                SourceDefinitionModel.source_type == "ashby",
-            )
-        ).all()
-    )
+    existing_definitions = {
+        (company_source_id, source_type)
+        for company_source_id, source_type in session.execute(
+            select(
+                SourceDefinitionModel.company_source_id,
+                SourceDefinitionModel.source_type,
+            ).where(SourceDefinitionModel.company_source_id.is_not(None))
+        )
+    }
     missing = [
-        source for source in confirmed_sources if source.id not in existing_company_sources
+        source
+        for source in confirmed_sources
+        if (source.id, source.source_type) not in existing_definitions
     ]
     if dry_run:
         return len(missing)
     for source in missing:
+        configuration = {
+            "company_name": source.company.canonical_name,
+            (
+                "board_identifier"
+                if source.source_type == "ashby"
+                else "site_identifier"
+            ): source.external_key,
+        }
+        if source.source_type == "lever":
+            configuration["api_region"] = (
+                "eu"
+                if urlparse(source.endpoint).hostname == "api.eu.lever.co"
+                else "global"
+            )
         session.add(
             SourceDefinitionModel(
-                source_type="ashby",
+                source_type=source.source_type,
                 name=f"{source.company.canonical_name} jobs",
                 company_source_id=source.id,
                 enabled=False,
@@ -98,10 +116,7 @@ def register_confirmed_collectors(session: Session, *, dry_run: bool) -> int:
                     "requests_per_second": 0.2,
                     "max_retry_delay_seconds": 30,
                 },
-                configuration={
-                    "board_identifier": source.external_key,
-                    "company_name": source.company.canonical_name,
-                },
+                configuration=configuration,
                 evidence_status="confirmed",
                 reviewed_at=source.last_verified_at,
                 terms_reviewed=False,

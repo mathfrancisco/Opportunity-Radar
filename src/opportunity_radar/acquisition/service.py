@@ -29,6 +29,7 @@ from opportunity_radar.acquisition.domain import (
     SourceRun,
     SourceRunStatus,
 )
+from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.models import (
     RawItemModel,
     SourceCheckpointModel,
@@ -65,7 +66,7 @@ class AcquisitionService:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
         self.registry = registry or CollectorRegistry(
-            (ManualCollector(), AshbyCollector())
+            (ManualCollector(), AshbyCollector(), LeverCollector())
         )
         self._sleeper = sleeper
 
@@ -100,6 +101,15 @@ class AcquisitionService:
         if normalized_type == "ashby":
             AshbyCollector.validate_board_identifier(
                 _required_string(source_configuration, "board_identifier")
+            )
+        if normalized_type == "lever":
+            LeverCollector.validate_site_slug(
+                _required_string(source_configuration, "site_identifier")
+            )
+            LeverCollector.validate_instance(
+                _required_string(source_configuration, "api_region")
+                if "api_region" in source_configuration
+                else "global"
             )
         if enabled and normalized_type != "manual" and (
             evidence_status != "confirmed"
@@ -284,6 +294,7 @@ class AcquisitionService:
         error: AcquisitionError | None = None
         last_cursor: str | None = None
         try:
+            company_reference, company_name, api_region = _collector_settings(source)
             collector_request = replace(
                 request,
                 source_definition_id=source.id,
@@ -292,16 +303,9 @@ class AcquisitionService:
                     if request.cursor is None and checkpoint_before is not None
                     else request.cursor
                 ),
-                company_reference=(
-                    _required_string(source.configuration, "board_identifier")
-                    if source.source_type == "ashby"
-                    else request.company_reference
-                ),
-                company_name=(
-                    _optional_string(source.configuration, "company_name")
-                    if source.source_type == "ashby"
-                    else request.company_name
-                ),
+                company_reference=company_reference or request.company_reference,
+                company_name=company_name or request.company_name,
+                api_region=api_region or request.api_region,
                 telemetry=run_telemetry,
                 network_policy=network_policy,
             )
@@ -494,6 +498,28 @@ def _required_string(configuration: Mapping[str, Any], key: str) -> str:
 def _optional_string(configuration: Mapping[str, Any], key: str) -> str | None:
     value = configuration.get(key)
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _collector_settings(
+    source: SourceDefinitionModel,
+) -> tuple[str | None, str | None, str | None]:
+    if source.source_type == "ashby":
+        return (
+            _required_string(source.configuration, "board_identifier"),
+            _optional_string(source.configuration, "company_name"),
+            None,
+        )
+    if source.source_type == "lever":
+        return (
+            _required_string(source.configuration, "site_identifier"),
+            _optional_string(source.configuration, "company_name"),
+            LeverCollector.validate_instance(
+                _required_string(source.configuration, "api_region")
+                if "api_region" in source.configuration
+                else "global"
+            ),
+        )
+    return None, None, None
 
 
 def _network_policy(policy: Mapping[str, Any]) -> CollectionNetworkPolicy:

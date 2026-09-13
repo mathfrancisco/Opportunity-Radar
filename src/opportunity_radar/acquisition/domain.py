@@ -152,6 +152,7 @@ class CollectionRequest:
     mode: CollectionMode = CollectionMode.DISCOVERY
     company_reference: str | None = None
     company_name: str | None = None
+    api_region: str | None = None
     keywords: tuple[str, ...] = ()
     locations: tuple[str, ...] = ()
     cursor: str | None = None

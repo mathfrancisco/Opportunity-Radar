@@ -14,6 +14,10 @@ exige evidência confirmada, termos revisados e coletor homologado antes de
 ativá-las. A validação automatizada usa fixture e transporte HTTP simulado; a
 comparação controlada com cada portal real permanece como gate operacional.
 
+O adaptador Lever também está implementado com paginação e seleção das regiões
+global/UE. O importador materializa somente o endpoint confirmado do Spotify;
+CI&T continua no catálogo de evidências até a homologação do site `ciandt`.
+
 ## Estratégia por plataforma
 
 | Fonte | Estratégia proposta | Validação restante |

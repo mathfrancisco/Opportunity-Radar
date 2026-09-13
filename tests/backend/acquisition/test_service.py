@@ -18,6 +18,7 @@ from opportunity_radar.acquisition.domain import (
     CollectorCapabilities,
     HealthResult,
 )
+from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.models import (
     RawItemModel,
     SourceCheckpointModel,
@@ -311,3 +312,50 @@ def test_rejects_incremental_mode_when_collector_does_not_support_it() -> None:
         )
 
     assert session.added == []
+
+
+def test_lever_source_configuration_reaches_paginated_collector() -> None:
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="lever",
+        name="Spotify jobs",
+        enabled=True,
+        rate_limit_policy={},
+        configuration={
+            "site_identifier": "spotify",
+            "company_name": "Spotify",
+            "api_region": "global",
+        },
+    )
+    session = _MemorySession()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/postings/spotify")
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "spotify-job-1",
+                    "text": "Backend Engineer",
+                    "hostedUrl": "https://jobs.lever.co/spotify/job-1",
+                }
+            ],
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((LeverCollector(client=client),)),
+        repository=_MemoryRepository(source),  # type: ignore[arg-type]
+    )
+    try:
+        run = asyncio.run(service.execute(source.id, CollectionRequest()))
+    finally:
+        asyncio.run(client.aclose())
+
+    raw_items = [item for item in session.added if isinstance(item, RawItemModel)]
+    assert run.status == "SUCCEEDED"
+    assert run.items_seen == 1
+    assert run.items_persisted == 1
+    assert run.http_requests == 1
+    assert raw_items[0].external_id == "spotify-job-1"

@@ -54,7 +54,7 @@ Foram sondados 16 endpoints: cinco retornaram JSON consultável. Não houve test
 - **Acesso pendente:** a ferramenta de pesquisa não conseguiu consultar o endereço. Não prova que o site está fora do ar ou que a automação é impossível.
 - **Redirecionamento:** o destino exige revisão de identidade ou deixou de ser uma página de carreiras.
 
-“Direto” inclui o portal oficial e o board de recrutamento contratado pela própria empresa. Não implica que a vaga aceite residência no Brasil, contratação PJ ou trabalho remoto internacional. Essas condições devem ser verificadas em cada anúncio. O adaptador Ashby já possui parser e testes com fixture; a homologação contra os boards reais e a revisão dos termos continuam pendentes antes da ativação.
+“Direto” inclui o portal oficial e o board de recrutamento contratado pela própria empresa. Não implica que a vaga aceite residência no Brasil, contratação PJ ou trabalho remoto internacional. Essas condições devem ser verificadas em cada anúncio. Os adaptadores Ashby e Lever já possuem parser e testes com fixture; a homologação contra os boards reais e a revisão dos termos continuam pendentes antes da ativação.
 
 ## Cinco endpoints confirmados
 
@@ -77,6 +77,8 @@ Foram sondados 16 endpoints: cinco retornaram JSON consultável. Não houve test
 
 A pesquisa sustenta começar por um conjunto pequeno de fontes oficiais e expandir por plataforma compartilhada. O próximo marco é coletar e reconciliar vagas dos cinco endpoints confirmados, somando o board Lever da CI&T para avaliar oportunidades no Brasil. Não é necessário manter Notion após importar e revisar empresas e aliases na dashboard. O sistema pode executar localmente; a coleta continuará dependendo de acesso à internet aos sites externos.
 
-Na importação operacional, os quatro endpoints Ashby confirmados viram definições
-desabilitadas. Páginas dinâmicas, redirecionamentos e acessos pendentes continuam
-apenas como backlog; o importador não cria coletores executáveis para esses casos.
+Na importação operacional, os quatro endpoints Ashby confirmados e o endpoint
+Lever do Spotify viram definições desabilitadas. CI&T permanece como ATS
+identificado até a homologação do endpoint. Páginas dinâmicas,
+redirecionamentos e acessos pendentes continuam apenas como backlog; o
+importador não cria coletores executáveis para esses casos.
