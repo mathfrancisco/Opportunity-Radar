@@ -20,7 +20,7 @@ As referências de implementação são a [Job Board API do Greenhouse](https://
 
 ## Limites de domínio sugeridos
 
-- **Company Catalog:** empresa, aliases, grupo e fontes oficiais. Recebe a importação única do Notion.
+- **Company Catalog:** empresa, aliases, grupo e fontes oficiais. Recebe as tabelas revisadas em `docs/pesquisas`; o Notion não faz parte do fluxo operacional.
 - **Source Collection:** conectores, agendas, execuções, tentativas e resultados brutos. Conhece ATS e HTTP; não decide aderência ao perfil.
 - **Job Catalog:** identidade da vaga, versões, localidades, status e deduplicação.
 - **Matching:** regras geográficas, senioridade e perfil; Ollama pode ajudar a interpretar texto, preservando a evidência original.
@@ -64,5 +64,4 @@ O catálogo JSON da pesquisa é uma entrada de revisão, não uma migração SQL
 
 Registrar timeout, HTTP 403, 404, 429, 5xx, mudança de esquema e resultado vazio separadamente. Não interpretar uma proteção de acesso como lista vazia. Redirecionamentos entre marcas abrem pendência de revisão. Navegador local pode ser necessário em fontes dinâmicas, mas não é garantia de acesso e não deve contornar autenticação ou controles de acesso.
 
-Antes de habilitar uma coleta recorrente, revisar as condições publicadas da fonte e usar a interface disponível apropriada. As 222 empresas deste catálogo têm termos_revisados=false e coletor_local_testado=false. Isso é informação de estado do projeto, não conclusão de que a coleta é proibida.
-
+Antes de habilitar uma coleta recorrente, revisar as condições publicadas da fonte e usar a interface disponível apropriada. Os 222 registros, reconciliados em 220 identidades de empresa, têm termos_revisados=false e coletor_local_testado=false. Isso é informação de estado do projeto, não conclusão de que a coleta é proibida.

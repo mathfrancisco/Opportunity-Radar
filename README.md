@@ -2,7 +2,7 @@
 
 Sistema local-first para descoberta, consolidação, avaliação e gestão de oportunidades profissionais.
 
-O Opportunity Radar transforma uma lista estática de empresas em um radar operacional contínuo. A base inicial de 186 empresas, hoje mantida no Notion, é importada uma única vez e passa a ser administrada pelo próprio sistema. A partir daí, fontes públicas e autorizadas são consultadas, vagas são preservadas em formato bruto, normalizadas para um modelo canônico, deduplicadas, filtradas por critérios objetivos, avaliadas contra o perfil profissional e apresentadas em uma dashboard local.
+O Opportunity Radar transforma uma lista pesquisada de empresas em um radar operacional contínuo. O catálogo inicial reúne 222 registros documentados em `docs/pesquisas`, incluindo as 186 linhas que vieram do Notion e 36 adicionais. Neon/Databricks e receeve/InDebted são reconciliadas como aliases, resultando em 220 identidades de empresa administradas pelo sistema. A partir daí, fontes públicas e autorizadas são consultadas, vagas são preservadas em formato bruto, normalizadas para um modelo canônico, deduplicadas, filtradas por critérios objetivos, avaliadas contra o perfil profissional e apresentadas em uma dashboard local.
 
 A inteligência artificial é executada localmente com Ollama. PostgreSQL concentra o estado transacional, a API é construída com FastAPI, o frontend usa React e a execução é padronizada por Docker Compose. O projeto começa como um monólito modular orientado a domínios e evolui de forma incremental, sem assumir microsserviços, Kubernetes ou infraestrutura distribuída antes de existir necessidade real.
 
@@ -173,7 +173,7 @@ A regra de dependência é sempre voltada para dentro:
 
 ```mermaid
 flowchart TD
-    A["Importação única do Notion"] --> B["Catálogo local de empresas"]
+    A["Importação dos estudos de fontes"] --> B["Catálogo local de empresas"]
     B --> C["Descoberta de endpoints de carreira"]
     C --> D["Execução de coletores autorizados"]
     D --> E["Persistência de SourceRun e RawItem"]
@@ -217,16 +217,16 @@ Validar o ciclo completo com poucas fontes e poucos componentes físicos:
 
 ### 7.3 Fontes mínimas
 
-- Greenhouse;
-- Lever;
 - Ashby;
+- Lever;
+- Greenhouse;
 - uma fonte remota baseada em API/RSS;
 - inclusão manual por URL;
 - geração assistida de consultas Google Boolean.
 
 ### 7.4 Resultado esperado
 
-O MVP está pronto quando uma máquina limpa consegue subir o ambiente, importar a base inicial, coletar vagas de pelo menos três ATSs, evitar duplicidade, produzir avaliações explicáveis e manter o pipeline após reiniciar os containers.
+O MVP está pronto quando uma máquina limpa consegue subir o ambiente, importar os 222 registros pesquisados em 220 identidades reconciliadas, coletar vagas de pelo menos três ATSs, evitar duplicidade, produzir avaliações explicáveis e manter o pipeline após reiniciar os containers. A implantação começa pelos endpoints JSON confirmados, segue pelos ATSs identificados e depois pelas páginas de carreiras; fontes dinâmicas e pendentes permanecem no backlog até serem homologadas.
 
 Detalhes: [Arquitetura do MVP](docs/02-arquitetura-mvp.md) e [Roadmap do MVP](docs/29-roadmap-mvp.md).
 

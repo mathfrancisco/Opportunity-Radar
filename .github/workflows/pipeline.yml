@@ -141,26 +141,46 @@ jobs:
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:3000/
           curl --fail http://127.0.0.1:8000/health | python -c "import json,sys; data=json.load(sys.stdin); assert data['ollama']['status'] == 'degraded'"
           test "$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose -f compose.yaml -f compose.ci.yaml ps -q worker)")" = "healthy"
-      - name: Import and expose the company catalog
+      - name: Import and expose the researched company catalog
         run: |
           docker compose -f compose.yaml -f compose.ci.yaml run --rm \
-            -v "$PWD/tests/fixtures:/imports:ro" \
-            api python scripts/import_notion_export.py \
-            --input /imports/notion_companies.csv
+            -v "$PWD/docs/pesquisas:/imports:ro" \
+            api python scripts/import_research_catalog.py \
+            --input /imports/auditoria-186-empresas.md \
+            --input /imports/empresas-adicionais.md
           curl --fail http://127.0.0.1:3000/api/companies | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 220"
+      - name: Verify manual acquisition through the public API
+        run: |
+          source_id="$(curl --fail --silent \
+            --json '{"source_type":"manual","name":"CI manual intake","enabled":true,"evidence_status":"confirmed","collector_local_tested":true}' \
+            http://127.0.0.1:3000/api/sources | \
+            python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
+          run_payload='{"correlation_id":"compose-e2e","inputs":[{"kind":"URL","value":"https://example.com/jobs/ci-1"},{"kind":"TEXT","value":"Remote Python role"}]}'
+          curl --fail --silent --json "$run_payload" \
+            "http://127.0.0.1:3000/api/sources/$source_id/runs" | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'SUCCEEDED'; assert data['items_persisted'] == 2"
+          curl --fail --silent --json "$run_payload" \
+            "http://127.0.0.1:3000/api/sources/$source_id/runs" | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['items_skipped'] == 2"
+          curl --fail --silent "http://127.0.0.1:3000/api/source-runs?source_id=$source_id" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 2"
       - name: Verify PostgreSQL persistence after restart
         run: |
           before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
           companies_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM company_radar.company')"
+          raw_items_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM acquisition.raw_item')"
           docker compose -f compose.yaml -f compose.ci.yaml restart postgres
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
           after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
           companies_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM company_radar.company')"
+          raw_items_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM acquisition.raw_item')"
           test -n "$before"
           test "$before" = "$after"
-          test "$companies_before" = "2"
+          test "$companies_before" = "220"
           test "$companies_before" = "$companies_after"
+          test "$raw_items_before" = "2"
+          test "$raw_items_before" = "$raw_items_after"
       - name: Collect logs on failure
         if: failure()
         run: docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --tail=300

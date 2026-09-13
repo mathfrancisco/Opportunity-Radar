@@ -48,8 +48,7 @@ doctor:
 	@docker compose exec -T api python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5); print('API healthy')"
 
 import-companies:
-	@test -n "$(FILE)" || (echo "Usage: make import-companies FILE=data/companies.csv [DRY_RUN=1] [RESUME=1] [REPORT=data/report.json]"; exit 2)
-	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/import_notion_export.py --input "/workspace/$(FILE)" $(if $(DRY_RUN),--dry-run,) $(if $(RESUME),--resume,) $(if $(REPORT),--report "/workspace/$(REPORT)",)
+	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/import_research_catalog.py $(if $(FILE),--input "/workspace/$(FILE)",--input /workspace/docs/pesquisas/auditoria-186-empresas.md --input /workspace/docs/pesquisas/empresas-adicionais.md) $(if $(DRY_RUN),--dry-run,) $(if $(RESUME),--resume,) $(if $(REPORT),--report "/workspace/$(REPORT)",)
 
 collect backup restore-check:
 	@echo "Target '$@' belongs to a later MVP phase and is not implemented yet."

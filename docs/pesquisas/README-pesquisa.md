@@ -23,6 +23,20 @@ Das 186 empresas, **150 têm evidência de página de carreiras, ATS ou API**. O
 - [Plano de integração local](plano-integracao-local.md): conectores, etapas e critérios de aceite.
 - Os quatro documentos preservam os 222 registros levantados; a exportação estruturada para importação será gerada somente depois da revisão de identidades e aliases.
 
+## Fonte oficial do catálogo do MVP
+
+O fluxo normal usa `scripts/import_research_catalog.py` para ler diretamente as
+tabelas da auditoria e das empresas adicionais. A prioridade operacional é:
+
+```text
+API JSON confirmada > ATS identificado > página de carreiras
+```
+
+Páginas dinâmicas, redirecionamentos e acessos pendentes são importados no
+backlog, sem ativar coleta. O export do Notion deixou de ser uma entrada
+necessária para o MVP. As 222 linhas resultam em 220 identidades porque
+Neon/Databricks e receeve/InDebted são reconciliadas como aliases.
+
 ## Origem e método
 
 A [página compartilhada](https://app.notion.com/p/Tier-List-de-Empresas-Remoto-Europa-e-Espanha-3a64da369be6813b9a99d8e722e17cd9?source=copy_link) referencia o [banco mestre](https://app.notion.com/p/cc358c8b93a44004bdc6e08c1644c5e3). Foram extraídas exatamente 186 linhas, preservando empresa, prioridade e Fonte. O campo Fonte estava vazio em 156 registros; 20 apontavam para fontes secundárias e 10 para fontes oficiais. Portanto, Fonte não poderia ser usado diretamente como cadastro de conectores.

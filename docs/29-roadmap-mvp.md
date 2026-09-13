@@ -238,19 +238,19 @@ Criar a base estável usada pelo matching e pela aquisição orientada a empresa
 
 ---
 
-## 12. Importação única do Notion
+## 12. Importação do catálogo pesquisado
 
 Criar:
 
 ```text
-scripts/import_notion_export.py
+scripts/import_research_catalog.py
 ```
 
 Entradas:
 
 ```text
-CSV
-JSON
+docs/pesquisas/auditoria-186-empresas.md
+docs/pesquisas/empresas-adicionais.md
 ```
 
 Flags:
@@ -283,13 +283,13 @@ Flags:
 ### Arquivo válido
 
 ```text
-186 empresas
+222 registros pesquisados
 ```
 
 Resultado:
 
 ```text
-186 reconciliadas
+220 identidades reconciliadas
 ```
 
 ### Arquivo repetido
@@ -326,7 +326,7 @@ manual_review_required
 - [ ] reimport é idempotente;
 - [ ] ambiguidades são reportadas;
 - [ ] empresas aparecem na dashboard/API;
-- [ ] token do Notion não é necessário depois da migração.
+- [ ] Notion não é dependência do fluxo de importação.
 
 ---
 
@@ -1197,7 +1197,7 @@ Cortar esses itens tornaria o MVP rápido de demonstrar, mas caro de evoluir.
 
 | Item | Depende de |
 | --- | --- |
-| Import Notion | DB + Company model |
+| Import dos estudos | DB + Company model |
 | Collector | Acquisition framework |
 | Opportunity | RawItem/normalização |
 | Matching | Opportunity + Profile |
@@ -1374,14 +1374,14 @@ Sequência recomendada:
 05. docker compose
 06. Profile
 07. Company
-08. Notion import dry-run
-09. Notion import final
+08. research catalog import dry-run
+09. research catalog import final
 10. Acquisition contracts
 11. ManualCollector
 12. SourceRun/RawItem
-13. Greenhouse
+13. Ashby
 14. Lever
-15. Ashby
+15. Greenhouse
 16. remote source
 17. normalization
 18. SourceOccurrence
@@ -1422,7 +1422,7 @@ Compose + API + Web + DB
 ## Milestone B — Catálogo
 
 ```text
-186 empresas importadas
+222 registros importados em 220 identidades reconciliadas
 ```
 
 ## Milestone C — Primeira vaga
