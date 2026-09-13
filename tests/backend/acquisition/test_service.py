@@ -1,7 +1,6 @@
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
-from typing import Any
 from uuid import uuid4
 
 from opportunity_radar.acquisition.collectors import CollectorRegistry

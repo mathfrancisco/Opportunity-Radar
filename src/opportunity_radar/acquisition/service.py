@@ -206,7 +206,11 @@ class AcquisitionService:
             error = AcquisitionError(AcquisitionErrorCode.UNKNOWN_EXTERNAL_ERROR, str(caught))
 
         if error is None:
-            final_status = SourceRunStatus.PARTIAL if run.items_invalid else SourceRunStatus.SUCCEEDED
+            final_status = (
+                SourceRunStatus.PARTIAL
+                if run.items_invalid
+                else SourceRunStatus.SUCCEEDED
+            )
         elif error.code is AcquisitionErrorCode.INVALID_ITEM:
             final_status = SourceRunStatus.PARTIAL
         elif run.items_persisted:
