@@ -308,7 +308,6 @@ class SourceRun:
             or retries < 0
             or retries > requests
             or rate_limit_events < 0
-            or rate_limit_events > requests
         ):
             raise ValueError("invalid HTTP activity counters")
         self.http_requests += requests
