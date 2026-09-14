@@ -1,7 +1,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import httpx
@@ -25,6 +25,7 @@ from opportunity_radar.acquisition.models import (
     SourceCheckpointModel,
     SourceDefinitionModel,
 )
+from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.service import (
     AcquisitionService,
     canonical_payload_hash,
@@ -315,6 +316,20 @@ def test_rejects_incremental_mode_when_collector_does_not_support_it() -> None:
     assert session.added == []
 
 
+def test_rejects_search_filters_when_collector_does_not_support_them() -> None:
+    service, session = _service(_Collector())
+
+    with pytest.raises(AcquisitionError, match="does not support keyword search"):
+        asyncio.run(
+            service.execute(
+                service.repository.source.id,
+                CollectionRequest(keywords=("python",)),
+            )
+        )
+
+    assert session.added == []
+
+
 def test_lever_source_configuration_reaches_paginated_collector() -> None:
     source = SourceDefinitionModel(
         id=uuid4(),
@@ -412,3 +427,104 @@ def test_greenhouse_source_configuration_reaches_collector() -> None:
     assert run.items_persisted == 1
     assert run.http_requests == 1
     assert raw_items[0].external_id == "123"
+
+
+def test_remotive_query_uses_separate_interval_between_runs() -> None:
+    throttling_delays: list[float] = []
+
+    async def sleeper(delay: float) -> None:
+        throttling_delays.append(delay)
+
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="remotive",
+        name="Remotive remote jobs",
+        enabled=True,
+        rate_limit_policy={"minimum_run_interval_seconds": 21_600},
+        configuration={},
+        last_http_attempt_at=datetime.now(UTC) - timedelta(hours=7),
+    )
+    session = _MemorySession()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["search"] == "python backend"
+        assert request.url.params["limit"] == "1"
+        return httpx.Response(
+            200,
+            json={
+                "job-count": 1,
+                "jobs": [
+                    {
+                        "id": 42,
+                        "url": "https://remotive.com/remote-jobs/dev/job-42",
+                        "title": "Python Engineer",
+                    }
+                ],
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((RemotiveCollector(client=client),)),
+        repository=_MemoryRepository(source),  # type: ignore[arg-type]
+        sleeper=sleeper,
+    )
+    try:
+        run = asyncio.run(
+            service.execute(
+                source.id,
+                CollectionRequest(keywords=("python", "backend"), max_items=1),
+            )
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    raw_items = [item for item in session.added if isinstance(item, RawItemModel)]
+    assert run.status == "SUCCEEDED"
+    assert run.items_persisted == 1
+    assert raw_items[0].external_id == "42"
+    assert throttling_delays == []
+
+
+def test_run_interval_fails_fast_without_holding_the_request() -> None:
+    sleeper_delays: list[float] = []
+    network_called = False
+
+    async def sleeper(delay: float) -> None:
+        sleeper_delays.append(delay)
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal network_called
+        network_called = True
+        return httpx.Response(200, json={"job-count": 0, "jobs": []})
+
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="remotive",
+        name="Remotive remote jobs",
+        enabled=True,
+        rate_limit_policy={"minimum_run_interval_seconds": 21_600},
+        configuration={},
+        last_http_attempt_at=datetime.now(UTC),
+    )
+    session = _MemorySession()
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((RemotiveCollector(client=client),)),
+        repository=_MemoryRepository(source),  # type: ignore[arg-type]
+        sleeper=sleeper,
+    )
+
+    try:
+        run = asyncio.run(service.execute(source.id, CollectionRequest()))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert run.status == "FAILED"
+    assert run.error_code == AcquisitionErrorCode.SOURCE_RATE_LIMITED.value
+    assert run.http_requests == 0
+    assert run.rate_limit_events == 1
+    assert sleeper_delays == []
+    assert network_called is False

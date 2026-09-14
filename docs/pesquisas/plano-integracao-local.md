@@ -25,6 +25,13 @@ estado `ats_identified`; os demais indícios de Greenhouse permanecem apenas no
 catálogo até que um token seja confirmado. A ativação ainda depende da revisão
 dos termos e da comparação controlada com o portal real.
 
+Como fonte remota não orientada por empresa, o MVP usa a
+[API pública da Remotive](https://github.com/remotive-io/remote-jobs-api). O
+adaptador implementa busca textual, limite de resultados, atribuição da origem e
+intervalo mínimo persistente de seis horas entre execuções. A definição inicial
+é criada desabilitada e `unverified`, pois não faz parte dos cinco endpoints que
+retornaram JSON durante a pesquisa de empresas.
+
 ## Estratégia por plataforma
 
 | Fonte | Estratégia proposta | Validação restante |
@@ -32,6 +39,7 @@ dos termos e da comparação controlada com o portal real.
 | Ashby | Adaptador para public job posting API | Identificador exato do board, campos, completude e alterações |
 | Greenhouse | Job Board API pública | Board token, conteúdo e reconciliação com o portal |
 | Lever | Postings API | Identificador, paginação e região da instância |
+| Remotive | Remote Jobs API com busca textual | Termos, atribuição e comparação controlada com o portal |
 | Workable, Teamtailor, Gupy e outras | Investigar interfaces públicas e HTML por fonte | Não presumir API pública sem evidência |
 | Portal próprio | HTTP e parser específico; navegador quando necessário | Renderização, paginação, estabilidade e acesso permitido |
 

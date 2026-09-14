@@ -7,6 +7,7 @@ from opportunity_radar.acquisition.domain import (
     AcquisitionError,
     AcquisitionErrorCode,
     CollectionMode,
+    CollectionNetworkPolicy,
     CollectionRequest,
     HealthResult,
     ManualInput,
@@ -58,3 +59,21 @@ def test_manual_input_types_are_explicit() -> None:
     manual_input = ManualInput(kind=ManualInputKind.TEXT, value="job description")
 
     assert manual_input.kind is ManualInputKind.TEXT
+
+
+def test_run_interval_is_independent_from_request_retry_delays() -> None:
+    policy = CollectionNetworkPolicy(
+        max_retry_delay_seconds=30,
+        minimum_run_interval_seconds=21_600,
+    )
+
+    assert policy.minimum_interval_seconds == 0
+    assert policy.minimum_run_interval_seconds == 21_600
+
+    with pytest.raises(ValueError, match="cannot exceed 604800"):
+        CollectionNetworkPolicy(minimum_run_interval_seconds=604_801)
+
+
+def test_collection_request_rejects_invalid_keywords() -> None:
+    with pytest.raises(ValueError, match="at most 10 non-empty strings"):
+        CollectionRequest(keywords=("",))

@@ -84,3 +84,8 @@ definições desabilitadas. A definição da AssemblyAI conserva o estado
 catálogo até a homologação do endpoint. Páginas dinâmicas, redirecionamentos e
 acessos pendentes continuam apenas como backlog; o importador não cria
 coletores executáveis para esses casos.
+
+O importador também cria uma definição Remotive independente do catálogo de
+empresas para cumprir o caso de feed/query do MVP. Ela permanece desabilitada e
+`unverified`; sua existência não altera a contagem dos cinco endpoints JSON
+confirmados por esta pesquisa.

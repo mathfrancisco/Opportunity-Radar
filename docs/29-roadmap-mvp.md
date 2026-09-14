@@ -512,7 +512,7 @@ Validar que novo collector não exige modificar domínio.
 
 ## 27. Fonte remota
 
-Escolher uma das fontes previstas para o MVP.
+Fonte escolhida: Remotive, pela API pública e pela busca textual documentada.
 
 Objetivo:
 
@@ -527,6 +527,16 @@ mas também para:
 ```text
 feed/query
 ```
+
+Estado implementado:
+
+- definição desabilitada e independente de empresa;
+- busca por até dez palavras-chave;
+- limite de itens aplicado na requisição e na emissão;
+- atribuição da Remotive preservada no item bruto;
+- intervalo persistente de seis horas entre execuções;
+- bloqueio imediato de execução antecipada, sem espera longa;
+- ativação bloqueada até revisão dos termos e homologação controlada.
 
 ---
 

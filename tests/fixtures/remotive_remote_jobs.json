@@ -1,0 +1,32 @@
+{
+  "job-count": 2,
+  "jobs": [
+    {
+      "id": 200001,
+      "url": "https://remotive.com/remote-jobs/software-dev/senior-python-engineer-200001",
+      "title": "Senior Python Engineer",
+      "company_name": "Acme Remote",
+      "company_logo": "https://images.remotive.com/acme.png",
+      "category": "Software Development",
+      "tags": ["python", "backend"],
+      "job_type": "full_time",
+      "publication_date": "2026-09-13T12:30:00",
+      "candidate_required_location": "Brazil",
+      "salary": "$80k - $100k",
+      "description": "<p>Build reliable services.</p>"
+    },
+    {
+      "id": 200002,
+      "url": "https://remotive.com/remote-jobs/design/product-designer-200002",
+      "title": "Product Designer",
+      "company_name": "Acme Remote",
+      "company_logo": null,
+      "category": "Design",
+      "job_type": "contract",
+      "publication_date": "2026-09-12T10:00:00Z",
+      "candidate_required_location": "Worldwide",
+      "salary": null,
+      "description": "<p>Design useful workflows.</p>"
+    }
+  ]
+}

@@ -151,7 +151,7 @@ jobs:
           curl --fail http://127.0.0.1:3000/api/companies | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 220"
           curl --fail http://127.0.0.1:3000/api/sources | \
-            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 6; assert {item['source_type'] for item in data['items']} == {'ashby', 'lever', 'greenhouse'}; assert all(not item['enabled'] for item in data['items']); greenhouse=next(item for item in data['items'] if item['source_type'] == 'greenhouse'); assert greenhouse['evidence_status'] == 'ats_identified'; assert greenhouse['configuration']['board_token'] == 'assemblyai'"
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 7; assert {item['source_type'] for item in data['items']} == {'ashby', 'lever', 'greenhouse', 'remotive'}; assert all(not item['enabled'] for item in data['items']); greenhouse=next(item for item in data['items'] if item['source_type'] == 'greenhouse'); assert greenhouse['evidence_status'] == 'ats_identified'; assert greenhouse['configuration']['board_token'] == 'assemblyai'; remotive=next(item for item in data['items'] if item['source_type'] == 'remotive'); assert remotive['evidence_status'] == 'unverified'; assert remotive['rate_limit_policy']['minimum_run_interval_seconds'] == 21600"
       - name: Verify manual acquisition through the public API
         run: |
           source_id="$(curl --fail --silent \

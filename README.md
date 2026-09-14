@@ -242,6 +242,14 @@ objeto original e registram tentativas e retries na execução. O intervalo mín
 é aplicado entre requisições e execuções da mesma fonte; a última tentativa HTTP
 e os eventos de rate limit ficam persistidos.
 
+O mesmo importador garante uma definição Remotive desabilitada, sem vínculo com
+uma empresa específica. Esse coletor aceita até dez palavras-chave por execução,
+envia o limite de itens à API e conserva a atribuição da Remotive em cada item.
+O intervalo persistente padrão é de seis horas entre execuções, seguindo a
+cadência recomendada pela fonte; tentativas antecipadas falham com código
+estruturado, sem manter uma requisição aberta por horas. A definição começa como
+`unverified` e precisa dos mesmos gates operacionais antes de ser ativada.
+
 As fontes permanecem desabilitadas até a revisão dos termos e a homologação do
 coletor. Depois desses gates, `PATCH /api/sources/{id}` ativa a definição com
 controle de versão e `POST /api/sources/{id}/runs` executa a coleta. Uma chamada

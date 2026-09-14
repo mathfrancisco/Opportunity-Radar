@@ -125,6 +125,7 @@ class CollectionNetworkPolicy:
     retry_delay_seconds: float = 1.0
     max_retry_delay_seconds: float = 30.0
     minimum_interval_seconds: float = 0.0
+    minimum_run_interval_seconds: float | None = None
 
     def __post_init__(self) -> None:
         if self.max_retries < 0 or self.max_retries > 5:
@@ -144,6 +145,15 @@ class CollectionNetworkPolicy:
             raise ValueError(
                 "max_retry_delay_seconds cannot be below minimum_interval_seconds"
             )
+        run_interval = self.minimum_run_interval_seconds
+        if run_interval is not None and (
+            not isfinite(run_interval) or run_interval < 0
+        ):
+            raise ValueError(
+                "minimum_run_interval_seconds must be finite and non-negative"
+            )
+        if run_interval is not None and run_interval > 604_800:
+            raise ValueError("minimum_run_interval_seconds cannot exceed 604800")
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +178,15 @@ class CollectionRequest:
     def __post_init__(self) -> None:
         if self.max_items is not None and self.max_items < 1:
             raise ValueError("max_items must be positive")
+        if len(self.keywords) > 10 or any(
+            not isinstance(keyword, str)
+            or not keyword.strip()
+            or len(keyword) > 100
+            for keyword in self.keywords
+        ):
+            raise ValueError(
+                "keywords must contain at most 10 non-empty strings up to 100 characters"
+            )
         if self.mode is CollectionMode.MANUAL and not self.manual_inputs:
             raise ValueError("manual collection requires at least one manual input")
         if self.mode is not CollectionMode.MANUAL and self.manual_inputs:

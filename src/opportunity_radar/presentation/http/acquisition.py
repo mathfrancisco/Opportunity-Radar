@@ -5,11 +5,11 @@ from __future__ import annotations
 from base64 import b64decode
 from binascii import Error as Base64Error
 from datetime import datetime
-from typing import Any, Literal, NoReturn, cast
+from typing import Annotated, Any, Literal, NoReturn, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.domain import (
@@ -37,6 +37,10 @@ EvidenceStatus = Literal[
     "dynamic_review",
     "redirect_review",
     "access_pending",
+]
+SearchKeyword = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
 ]
 
 
@@ -90,6 +94,7 @@ class ManualInputBody(BaseModel):
 class CreateRunBody(BaseModel):
     mode: CollectionMode | None = None
     inputs: list[ManualInputBody] = Field(default_factory=list)
+    keywords: list[SearchKeyword] = Field(default_factory=list, max_length=10)
     max_items: int | None = Field(default=None, ge=1)
     correlation_id: str | None = Field(default=None, max_length=255)
 
@@ -205,6 +210,7 @@ async def execute_source(
             source_definition_id=source_id,
             mode=mode,
             manual_inputs=manual_inputs,
+            keywords=tuple(body.keywords),
             max_items=body.max_items,
             correlation_id=body.correlation_id,
         )

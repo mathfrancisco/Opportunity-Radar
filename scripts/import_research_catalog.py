@@ -42,6 +42,7 @@ LINK = re.compile(r"\[([^]]+)\]\((https?://[^)]+)\)")
 BACKLOG_STATES = ("página dinâmica", "redirecionamento", "acesso pendente")
 RESEARCHED_AT = datetime(2026, 9, 11, tzinfo=UTC)
 RESEARCH_IMPORT_LOCK = "opportunity_radar.research_catalog"
+REMOTIVE_SOURCE_NAME = "Remotive remote jobs"
 RESEARCH_ALIASES = {
     "Databricks": ("Neon",),
     "Neon": ("Databricks",),
@@ -62,7 +63,7 @@ VERIFICATION_RANK = {
 
 
 def register_researched_collectors(session: Session, *, dry_run: bool) -> int:
-    """Materialize researched API and ATS boards as disabled definitions."""
+    """Materialize researched source candidates as disabled definitions."""
     runnable_sources = session.scalars(
         select(CompanySource)
         .join(CompanySource.company)
@@ -97,8 +98,14 @@ def register_researched_collectors(session: Session, *, dry_run: bool) -> int:
         for source in runnable_sources
         if (source.id, source.source_type) not in existing_definitions
     ]
+    remotive_missing = session.scalar(
+        select(SourceDefinitionModel.id).where(
+            SourceDefinitionModel.source_type == "remotive",
+            SourceDefinitionModel.name == REMOTIVE_SOURCE_NAME,
+        )
+    ) is None
     if dry_run:
-        return len(missing)
+        return len(missing) + int(remotive_missing)
     for source in missing:
         identifier_key = {
             "ashby": "board_identifier",
@@ -142,8 +149,27 @@ def register_researched_collectors(session: Session, *, dry_run: bool) -> int:
                 collector_local_tested=False,
             )
         )
+    if remotive_missing:
+        session.add(
+            SourceDefinitionModel(
+                source_type="remotive",
+                name=REMOTIVE_SOURCE_NAME,
+                enabled=False,
+                priority=75,
+                rate_limit_policy={
+                    "max_retries": 2,
+                    "minimum_run_interval_seconds": 21_600,
+                    "max_retry_delay_seconds": 30,
+                },
+                configuration={},
+                evidence_status="unverified",
+                reviewed_at=None,
+                terms_reviewed=False,
+                collector_local_tested=False,
+            )
+        )
     session.flush()
-    return len(missing)
+    return len(missing) + int(remotive_missing)
 
 
 @dataclass(frozen=True, slots=True)

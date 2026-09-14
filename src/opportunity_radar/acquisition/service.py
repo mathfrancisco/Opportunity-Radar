@@ -8,7 +8,7 @@ import json
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
-from math import isfinite
+from math import ceil, isfinite
 from typing import Any
 from uuid import UUID
 
@@ -37,6 +37,7 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
     SourceRunModel,
 )
+from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.repository import AcquisitionRepository
 
 
@@ -72,6 +73,7 @@ class AcquisitionService:
                 AshbyCollector(),
                 LeverCollector(),
                 GreenhouseCollector(),
+                RemotiveCollector(),
             )
         )
         self._sleeper = sleeper
@@ -263,6 +265,16 @@ class AcquisitionService:
                 AcquisitionErrorCode.INVALID_CONFIGURATION,
                 f"{source.source_type} does not support incremental collection",
             )
+        if request.keywords and not collector.capabilities.keyword_search:
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                f"{source.source_type} does not support keyword search",
+            )
+        if request.locations and not collector.capabilities.location_search:
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                f"{source.source_type} does not support location search",
+            )
         network_policy = _network_policy(source.rate_limit_policy or {})
         run_telemetry = CollectionTelemetry()
 
@@ -292,18 +304,35 @@ class AcquisitionService:
         # Reload after acquiring that slot so throttling uses its committed attempt.
         self.session.refresh(source, attribute_names=["last_http_attempt_at"])
         last_http_attempt_at = source.last_http_attempt_at
+        minimum_run_interval = (
+            network_policy.minimum_run_interval_seconds
+            if network_policy.minimum_run_interval_seconds is not None
+            else network_policy.minimum_interval_seconds
+        )
+        throttle_error: AcquisitionError | None = None
         if (
             last_http_attempt_at is not None
-            and network_policy.minimum_interval_seconds
+            and minimum_run_interval
         ):
             elapsed = (datetime.now(UTC) - last_http_attempt_at).total_seconds()
-            delay = network_policy.minimum_interval_seconds - elapsed
+            delay = minimum_run_interval - elapsed
             if delay > 0:
-                await self._sleeper(delay)
+                if network_policy.minimum_run_interval_seconds is not None:
+                    run_telemetry.record_rate_limit()
+                    throttle_error = AcquisitionError(
+                        AcquisitionErrorCode.SOURCE_RATE_LIMITED,
+                        "source run interval has not elapsed; "
+                        f"retry in {ceil(delay)} seconds",
+                        retryable=True,
+                    )
+                else:
+                    await self._sleeper(delay)
 
         error: AcquisitionError | None = None
         last_cursor: str | None = None
         try:
+            if throttle_error is not None:
+                raise throttle_error
             company_reference, company_name, api_region = _collector_settings(source)
             collector_request = replace(
                 request,
@@ -546,6 +575,7 @@ def _network_policy(policy: Mapping[str, Any]) -> CollectionNetworkPolicy:
         "retry_delay_seconds",
         "max_retry_delay_seconds",
         "minimum_interval_seconds",
+        "minimum_run_interval_seconds",
         "requests_per_second",
     }
     unknown = sorted(str(key) for key in policy if key not in supported)
@@ -591,6 +621,11 @@ def _network_policy(policy: Mapping[str, Any]) -> CollectionNetworkPolicy:
             retry_delay_seconds=number("retry_delay_seconds", 1.0),
             max_retry_delay_seconds=number("max_retry_delay_seconds", 30.0),
             minimum_interval_seconds=minimum_interval,
+            minimum_run_interval_seconds=(
+                number("minimum_run_interval_seconds", 0.0)
+                if "minimum_run_interval_seconds" in policy
+                else None
+            ),
         )
     except ValueError as error:
         raise AcquisitionError(
