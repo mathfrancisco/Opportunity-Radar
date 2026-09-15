@@ -660,6 +660,22 @@ mesmo external ID
 - [ ] status funciona;
 - [ ] procedência aparece na API.
 
+Estado implementado da primeira fatia:
+
+- snapshot `collected_item_v1` persistido junto ao `RawItem`;
+- normalização determinística de título, URL, localização, work mode,
+  seniority e contract type;
+- fingerprint `v1` com empresa, título, localização, modalidade, contrato e
+  data de publicação;
+- `Opportunity`, `SourceOccurrence` e `NormalizationResult` persistidos;
+- resolução idempotente por identidade externa, URL e fingerprint exato;
+- ambiguidades separadas para revisão com razões estruturadas;
+- API de listagem, detalhe, procedência, normalização e lifecycle;
+- worker responsável pelo processamento periódico dos itens pendentes.
+
+Próximo incremento: compensação e extração inicial de skills antes de iniciar
+Matching determinístico.
+
 ---
 
 # Fase 5 — Matching determinístico

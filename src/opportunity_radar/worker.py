@@ -5,19 +5,39 @@ from pathlib import Path
 from threading import Event
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
 
+from opportunity_radar.opportunities.service import OpportunityService
 from opportunity_radar.platform.config import Settings, get_settings
+from opportunity_radar.platform.database import create_database_engine
 
 WORKER_READY_FILE = Path("/tmp/opportunity-radar-worker-ready")
 
 
 def heartbeat() -> None:
-    """Keep the Phase 0 scheduler active until domain jobs are added."""
+    """Expose a lightweight scheduler liveness job."""
+
+
+def normalize_opportunities(engine: Engine) -> None:
+    with Session(engine) as session:
+        OpportunityService(session).normalize_pending()
 
 
 def build_scheduler(settings: Settings) -> BackgroundScheduler:
     scheduler = BackgroundScheduler(timezone=settings.collection_timezone)
+    engine = create_database_engine(settings.database_url)
     scheduler.add_job(heartbeat, "interval", minutes=5, id="heartbeat", replace_existing=True)
+    scheduler.add_job(
+        normalize_opportunities,
+        "interval",
+        seconds=60,
+        args=(engine,),
+        id="normalize-opportunities",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
     return scheduler
 
 

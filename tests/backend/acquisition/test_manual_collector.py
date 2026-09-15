@@ -22,7 +22,15 @@ def test_manual_collector_preserves_url_and_text_payloads() -> None:
     request = CollectionRequest(
         mode=CollectionMode.MANUAL,
         manual_inputs=(
-            ManualInput(kind=ManualInputKind.URL, value="https://example.com/jobs/1"),
+            ManualInput(
+                kind=ManualInputKind.URL,
+                value="https://example.com/jobs/1",
+                metadata={
+                    "title": "Senior Backend Engineer",
+                    "company_name": "Example",
+                    "location_text": "Remote",
+                },
+            ),
             ManualInput(kind=ManualInputKind.TEXT, value="Original job description"),
         ),
     )
@@ -30,6 +38,9 @@ def test_manual_collector_preserves_url_and_text_payloads() -> None:
     items = asyncio.run(_collect(request))
 
     assert items[0].url == "https://example.com/jobs/1"
+    assert items[0].title == "Senior Backend Engineer"
+    assert items[0].company_name == "Example"
+    assert items[0].location_text == "Remote"
     assert items[0].raw_payload == {"kind": "URL", "url": "https://example.com/jobs/1"}
     assert items[1].description == "Original job description"
     assert items[1].raw_payload["text"] == "Original job description"

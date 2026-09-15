@@ -177,7 +177,15 @@ class ManualCollector:
             source_type=self.source_type,
             external_id=f"manual:{digest}",
             url=url,
+            title=self._metadata_string(manual_input, "title"),
+            company_name=self._metadata_string(manual_input, "company_name"),
+            location_text=self._metadata_string(manual_input, "location_text"),
             description=description,
             raw_payload=payload,
             metadata=metadata,
         )
+
+    @staticmethod
+    def _metadata_string(manual_input: ManualInput, key: str) -> str | None:
+        value = manual_input.metadata.get(key)
+        return value.strip() if isinstance(value, str) and value.strip() else None

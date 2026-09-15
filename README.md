@@ -256,6 +256,22 @@ controle de versão e `POST /api/sources/{id}/runs` executa a coleta. Uma chamad
 sem `inputs` inicia uma fonte externa; uma chamada com `inputs` mantém o fluxo
 manual compatível.
 
+### 7.6 Estado da normalização
+
+Cada `RawItem` novo conserva um snapshot `collected_item_v1`, que isola o
+contexto de Opportunities dos formatos específicos de cada coletor. O worker
+processa itens pendentes em lotes e cria uma `Opportunity` canônica com
+fingerprint versionado e uma `SourceOccurrence` por origem. A resolução usa
+identidade externa da fonte, URL normalizada e fingerprint exato; candidatos
+ambíguos permanecem separados com `REVIEW_REQUIRED` e razões persistidas.
+
+`GET /api/opportunities` lista as vagas e suas ocorrências,
+`GET /api/opportunities/{id}` expõe a procedência e os resultados de
+normalização, e `PATCH /api/opportunities/{id}/status` controla o lifecycle com
+versão otimista. `POST /api/opportunities/normalizations/pending` permite
+reprocessar evidência local sem consultar a fonte novamente. Compensação e
+extração inicial de skills permanecem como o próximo incremento da Fase 4.
+
 ---
 
 ## 8. Arquitetura final

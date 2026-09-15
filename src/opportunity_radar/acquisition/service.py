@@ -40,6 +40,8 @@ from opportunity_radar.acquisition.models import (
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.repository import AcquisitionRepository
 
+COLLECTED_ITEM_V1_KEY = "collected_item_v1"
+
 
 class SourceNotFoundError(AcquisitionError):
     def __init__(self, source_id: UUID) -> None:
@@ -451,6 +453,7 @@ class AcquisitionService:
         ):
             return False
         metadata = _json_object(item.metadata)
+        metadata[COLLECTED_ITEM_V1_KEY] = collected_item_v1(item, metadata)
         try:
             with self.session.begin_nested():
                 self.session.add(
@@ -497,6 +500,28 @@ def canonical_payload_hash(payload: Mapping[str, Any]) -> str:
         separators=(",", ":"),
     )
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def collected_item_v1(
+    item: CollectedItem,
+    metadata: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Serialize the stable boundary consumed by the Opportunities context."""
+    source_metadata = dict(metadata if metadata is not None else item.metadata)
+    source_metadata.pop(COLLECTED_ITEM_V1_KEY, None)
+    return {
+        "version": 1,
+        "source_type": item.source_type,
+        "external_id": item.external_id,
+        "url": item.url,
+        "title": item.title,
+        "company_name": item.company_name,
+        "location_text": item.location_text,
+        "description": item.description,
+        "published_at": item.published_at.isoformat() if item.published_at else None,
+        "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+        "metadata": source_metadata,
+    }
 
 
 def _json_object(value: Mapping[str, Any]) -> dict[str, Any]:

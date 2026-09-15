@@ -158,7 +158,7 @@ jobs:
             --json '{"source_type":"manual","name":"CI manual intake","enabled":true,"evidence_status":"confirmed","collector_local_tested":true}' \
             http://127.0.0.1:3000/api/sources | \
             python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
-          run_payload='{"correlation_id":"compose-e2e","inputs":[{"kind":"URL","value":"https://example.com/jobs/ci-1"},{"kind":"TEXT","value":"Remote Python role"}]}'
+          run_payload='{"correlation_id":"compose-e2e","inputs":[{"kind":"URL","value":"https://example.com/jobs/ci-1","metadata":{"title":"Senior Python Engineer","company_name":"Example","location_text":"Remote","employment_type":"full-time"}},{"kind":"TEXT","value":"Remote Python role","metadata":{"title":"Senior Python Engineer","company_name":"Example","location_text":"Remote","employment_type":"full-time"}}]}'
           curl --fail --silent --json "$run_payload" \
             "http://127.0.0.1:3000/api/sources/$source_id/runs" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'SUCCEEDED'; assert data['items_persisted'] == 2"
@@ -167,22 +167,34 @@ jobs:
             python -c "import json,sys; data=json.load(sys.stdin); assert data['items_skipped'] == 2"
           curl --fail --silent "http://127.0.0.1:3000/api/source-runs?source_id=$source_id" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 2"
+          curl --fail --silent --request POST \
+            "http://127.0.0.1:3000/api/opportunities/normalizations/pending?limit=10"
+          curl --fail --silent http://127.0.0.1:3000/api/opportunities | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 1; item=data['items'][0]; assert item['fingerprint_version'] == 'v1'; assert item['work_mode'] == 'REMOTE'; assert item['seniority'] == 'SENIOR'; assert item['contract_type'] == 'FULL_TIME'; assert len(item['occurrences']) == 2"
       - name: Verify PostgreSQL persistence after restart
         run: |
           before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
           companies_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM company_radar.company')"
           raw_items_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM acquisition.raw_item')"
+          opportunities_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity')"
+          occurrences_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.source_occurrence')"
           docker compose -f compose.yaml -f compose.ci.yaml restart postgres
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
           after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
           companies_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM company_radar.company')"
           raw_items_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM acquisition.raw_item')"
+          opportunities_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity')"
+          occurrences_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.source_occurrence')"
           test -n "$before"
           test "$before" = "$after"
           test "$companies_before" = "220"
           test "$companies_before" = "$companies_after"
           test "$raw_items_before" = "2"
           test "$raw_items_before" = "$raw_items_after"
+          test "$opportunities_before" = "1"
+          test "$opportunities_before" = "$opportunities_after"
+          test "$occurrences_before" = "2"
+          test "$occurrences_before" = "$occurrences_after"
       - name: Collect logs on failure
         if: failure()
         run: docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --tail=300

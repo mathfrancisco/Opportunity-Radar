@@ -8,3 +8,4 @@ def test_worker_scheduler_has_a_heartbeat_job() -> None:
     )
 
     assert scheduler.get_job("heartbeat") is not None
+    assert scheduler.get_job("normalize-opportunities") is not None

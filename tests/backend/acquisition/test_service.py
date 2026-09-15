@@ -27,6 +27,7 @@ from opportunity_radar.acquisition.models import (
 )
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.service import (
+    COLLECTED_ITEM_V1_KEY,
     AcquisitionService,
     canonical_payload_hash,
 )
@@ -275,6 +276,14 @@ def test_ashby_source_configuration_reaches_collector_and_records_http_metrics()
     assert run.http_requests == 1
     assert run.retry_count == 0
     assert raw_items[0].payload["title"] == "Backend Engineer"
+    snapshot = raw_items[0].item_metadata[COLLECTED_ITEM_V1_KEY]
+    assert snapshot["version"] == 1
+    assert snapshot["source_type"] == "ashby"
+    assert snapshot["external_id"].startswith("ashby:")
+    assert snapshot["url"] == "https://jobs.ashbyhq.com/acme/job-1"
+    assert snapshot["title"] == "Backend Engineer"
+    assert snapshot["company_name"] == "Acme"
+    assert snapshot["metadata"]["parser_version"] == "ashby-public-job-board-v1"
     assert len(throttling_delays) == 1
     assert 0 < throttling_delays[0] <= 5
 
