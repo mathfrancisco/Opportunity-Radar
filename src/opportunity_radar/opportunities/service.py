@@ -16,14 +16,19 @@ from sqlalchemy.orm import Session
 from opportunity_radar.acquisition.service import COLLECTED_ITEM_V1_KEY
 from opportunity_radar.opportunities.domain import (
     CanonicalCandidate,
+    CompensationPeriod,
+    GrossNet,
     NormalizationError,
     NormalizationInput,
     OpportunityStatus,
+    SkillClassification,
     build_candidate,
 )
 from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
+    OpportunityCompensationModel,
     OpportunityModel,
+    OpportunitySkillModel,
     SourceOccurrenceModel,
 )
 from opportunity_radar.opportunities.repository import (
@@ -31,7 +36,7 @@ from opportunity_radar.opportunities.repository import (
     RawItemEvidence,
 )
 
-NORMALIZER_VERSION = "v1"
+NORMALIZER_VERSION = "v2"
 
 
 class RawItemNotFoundError(LookupError):
@@ -199,6 +204,17 @@ class OpportunityService:
             )
             self.session.add(occurrence)
 
+        self.session.flush()
+        enrichment_reasons = _reconcile_enrichment(
+            opportunity=opportunity,
+            occurrence=occurrence,
+            candidate=candidate,
+            raw_item_id=raw_item.id,
+        )
+        if enrichment_reasons:
+            reasons.extend(enrichment_reasons)
+            result_status = "REVIEW_REQUIRED"
+
         result = NormalizationResultModel(
             raw_item_id=raw_item.id,
             opportunity=opportunity,
@@ -267,6 +283,187 @@ class OpportunityService:
         return updated
 
 
+def _reconcile_enrichment(
+    *,
+    opportunity: OpportunityModel,
+    occurrence: SourceOccurrenceModel,
+    candidate: CanonicalCandidate,
+    raw_item_id: UUID,
+) -> list[dict[str, Any]]:
+    reasons: list[dict[str, Any]] = []
+    compensation = candidate.compensation
+    current_compensation = next(
+        (
+            item
+            for item in opportunity.compensations
+            if item.source_occurrence_id == occurrence.id
+        ),
+        None,
+    )
+    if compensation is None:
+        if current_compensation is not None:
+            opportunity.compensations.remove(current_compensation)
+    else:
+        candidate_period = (
+            compensation.period or CompensationPeriod.UNKNOWN
+        ).value
+        candidate_gross_net = (compensation.gross_net or GrossNet.UNKNOWN).value
+        if current_compensation is None:
+            current_compensation = OpportunityCompensationModel(
+                amount_min=compensation.minimum,
+                amount_max=compensation.maximum,
+                currency=compensation.currency,
+                period=candidate_period,
+                gross_net=candidate_gross_net,
+                evidence_text=compensation.evidence,
+                evidence_source=compensation.evidence_source,
+                normalizer_version=NORMALIZER_VERSION,
+                source_occurrence_id=occurrence.id,
+                raw_item_id=raw_item_id,
+            )
+            opportunity.compensations.append(current_compensation)
+        else:
+            current_compensation.amount_min = compensation.minimum
+            current_compensation.amount_max = compensation.maximum
+            current_compensation.currency = compensation.currency
+            current_compensation.period = candidate_period
+            current_compensation.gross_net = candidate_gross_net
+            current_compensation.evidence_text = compensation.evidence
+            current_compensation.evidence_source = compensation.evidence_source
+            current_compensation.normalizer_version = NORMALIZER_VERSION
+            current_compensation.raw_item_id = raw_item_id
+
+        conflicts = [
+            item
+            for item in opportunity.compensations
+            if item is not current_compensation
+            and _compensation_conflicts(current_compensation, item)
+        ]
+        if conflicts:
+            reasons.append(
+                {
+                    "code": "CONFLICTING_COMPENSATION_EVIDENCE",
+                    "current": _compensation_reason(current_compensation),
+                    "conflicts": [_compensation_reason(item) for item in conflicts],
+                }
+            )
+
+    occurrence_key = str(occurrence.id)
+    candidate_skill_keys = {
+        (skill.canonical_id, skill.taxonomy_version) for skill in candidate.skills
+    }
+    for skill in list(opportunity.skills):
+        skill.evidence = [
+            item
+            for item in skill.evidence
+            if not (
+                isinstance(item, Mapping)
+                and item.get("source_occurrence_id") == occurrence_key
+            )
+        ]
+        skill_key = (skill.canonical_name, skill.taxonomy_version)
+        if not skill.evidence and skill_key not in candidate_skill_keys:
+            opportunity.skills.remove(skill)
+        else:
+            _refresh_skill_requirement(skill)
+    by_key = {
+        (skill.canonical_name, skill.taxonomy_version): skill
+        for skill in opportunity.skills
+    }
+    for extracted in candidate.skills:
+        evidence = {
+            "raw_item_id": str(raw_item_id),
+            "source_occurrence_id": str(occurrence.id),
+            "text": extracted.evidence_text,
+            "requirement": extracted.classification.value,
+        }
+        key = (extracted.canonical_id, extracted.taxonomy_version)
+        current_skill = by_key.get(key)
+        if current_skill is None:
+            current_skill = OpportunitySkillModel(
+                canonical_name=extracted.canonical_id,
+                display_name=extracted.canonical_id,
+                requirement=extracted.classification.value,
+                evidence=[evidence],
+                taxonomy_version=extracted.taxonomy_version,
+                normalizer_version=NORMALIZER_VERSION,
+            )
+            opportunity.skills.append(current_skill)
+            by_key[key] = current_skill
+            continue
+        current_skill.evidence = [*current_skill.evidence, evidence]
+        _refresh_skill_requirement(current_skill)
+        current_skill.normalizer_version = NORMALIZER_VERSION
+    return reasons
+
+
+def _compensation_conflicts(
+    left: OpportunityCompensationModel,
+    right: OpportunityCompensationModel,
+) -> bool:
+    if (
+        left.amount_min is not None
+        and right.amount_min is not None
+        and left.amount_min != right.amount_min
+    ):
+        return True
+    if (
+        left.amount_max is not None
+        and right.amount_max is not None
+        and left.amount_max != right.amount_max
+    ):
+        return True
+    merged_min = left.amount_min if left.amount_min is not None else right.amount_min
+    merged_max = left.amount_max if left.amount_max is not None else right.amount_max
+    if merged_min is not None and merged_max is not None and merged_min > merged_max:
+        return True
+    if (
+        left.currency is not None
+        and right.currency is not None
+        and left.currency != right.currency
+    ):
+        return True
+    if (
+        left.period != CompensationPeriod.UNKNOWN.value
+        and right.period != CompensationPeriod.UNKNOWN.value
+        and left.period != right.period
+    ):
+        return True
+    return (
+        left.gross_net != GrossNet.UNKNOWN.value
+        and right.gross_net != GrossNet.UNKNOWN.value
+        and left.gross_net != right.gross_net
+    )
+
+
+def _refresh_skill_requirement(skill: OpportunitySkillModel) -> None:
+    classifications = {
+        str(item.get("requirement"))
+        for item in skill.evidence
+        if isinstance(item, Mapping)
+        and item.get("requirement")
+        not in {None, SkillClassification.UNKNOWN.value}
+    }
+    skill.requirement = (
+        classifications.pop()
+        if len(classifications) == 1
+        else SkillClassification.UNKNOWN.value
+    )
+
+
+def _compensation_reason(value: OpportunityCompensationModel) -> dict[str, Any]:
+    return {
+        "minimum": str(value.amount_min) if value.amount_min is not None else None,
+        "maximum": str(value.amount_max) if value.amount_max is not None else None,
+        "currency": value.currency,
+        "period": value.period,
+        "gross_net": value.gross_net,
+        "evidence_source": value.evidence_source,
+        "source_occurrence_id": str(value.source_occurrence_id),
+        "raw_item_id": str(value.raw_item_id),
+    }
+
+
 def _normalization_input(evidence: RawItemEvidence) -> NormalizationInput:
     snapshot = evidence.raw_item.item_metadata.get(COLLECTED_ITEM_V1_KEY)
     if not isinstance(snapshot, Mapping):
@@ -288,6 +485,7 @@ def _normalization_input(evidence: RawItemEvidence) -> NormalizationInput:
     return NormalizationInput(
         raw_item_id=evidence.raw_item.id,
         source_definition_id=evidence.raw_item.source_definition_id,
+        source_type=evidence.source_type,
         external_id=external_id,
         url=url,
         title=_optional_string(snapshot, "title"),

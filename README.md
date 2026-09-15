@@ -245,6 +245,8 @@ e os eventos de rate limit ficam persistidos.
 O mesmo importador garante uma definição Remotive desabilitada, sem vínculo com
 uma empresa específica. Esse coletor aceita até dez palavras-chave por execução,
 envia o limite de itens à API e conserva a atribuição da Remotive em cada item.
+Salário e tags declarados pela API também seguem no snapshot de coleta. O coletor
+Ashby solicita os componentes públicos de compensação do próprio job board.
 O intervalo persistente padrão é de seis horas entre execuções, seguindo a
 cadência recomendada pela fonte; tentativas antecipadas falham com código
 estruturado, sem manter uma requisição aberta por horas. A definição começa como
@@ -269,8 +271,17 @@ ambíguos permanecem separados com `REVIEW_REQUIRED` e razões persistidas.
 `GET /api/opportunities/{id}` expõe a procedência e os resultados de
 normalização, e `PATCH /api/opportunities/{id}/status` controla o lifecycle com
 versão otimista. `POST /api/opportunities/normalizations/pending` permite
-reprocessar evidência local sem consultar a fonte novamente. Compensação e
-extração inicial de skills permanecem como o próximo incremento da Fase 4.
+reprocessar evidência local sem consultar a fonte novamente.
+
+O normalizador `v2` extrai somente remuneração explicitamente declarada. Cada
+ocorrência mantém seu próprio registro para que atualizações e conflitos não
+apaguem a procedência. Valores
+monetários usam `Decimal`, conservam moeda, período, bruto/líquido quando a fonte
+os fornece e mantêm a referência da evidência; conflitos entre ocorrências
+produzem `REVIEW_REQUIRED`. A taxonomia inicial `skills-v1` resolve aliases como
+`React.js` e `ReactJS` para `react`, deduplica a competência canônica e registra a
+evidência de cada ocorrência. Esses dados aparecem na listagem e no
+detalhe de oportunidades.
 
 ---
 

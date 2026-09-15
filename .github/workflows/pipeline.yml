@@ -158,7 +158,7 @@ jobs:
             --json '{"source_type":"manual","name":"CI manual intake","enabled":true,"evidence_status":"confirmed","collector_local_tested":true}' \
             http://127.0.0.1:3000/api/sources | \
             python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
-          run_payload='{"correlation_id":"compose-e2e","inputs":[{"kind":"URL","value":"https://example.com/jobs/ci-1","metadata":{"title":"Senior Python Engineer","company_name":"Example","location_text":"Remote","employment_type":"full-time"}},{"kind":"TEXT","value":"Remote Python role","metadata":{"title":"Senior Python Engineer","company_name":"Example","location_text":"Remote","employment_type":"full-time"}}]}'
+          run_payload='{"correlation_id":"compose-e2e","inputs":[{"kind":"URL","value":"https://example.com/jobs/ci-1","metadata":{"title":"Senior Python Engineer","company_name":"Example","location_text":"Remote","employment_type":"full-time","salaryRange":{"min":100000,"max":150000,"currency":"USD"},"skills":["Python","ReactJS"]}},{"kind":"TEXT","value":"Required: Python and ReactJS.","metadata":{"title":"Senior Python Engineer","company_name":"Example","location_text":"Remote","employment_type":"full-time","salaryRange":{"min":100000,"max":150000,"currency":"USD"},"skills":["Python","ReactJS"]}}]}'
           curl --fail --silent --json "$run_payload" \
             "http://127.0.0.1:3000/api/sources/$source_id/runs" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'SUCCEEDED'; assert data['items_persisted'] == 2"
@@ -170,7 +170,7 @@ jobs:
           curl --fail --silent --request POST \
             "http://127.0.0.1:3000/api/opportunities/normalizations/pending?limit=10"
           curl --fail --silent http://127.0.0.1:3000/api/opportunities | \
-            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 1; item=data['items'][0]; assert item['fingerprint_version'] == 'v1'; assert item['work_mode'] == 'REMOTE'; assert item['seniority'] == 'SENIOR'; assert item['contract_type'] == 'FULL_TIME'; assert len(item['occurrences']) == 2"
+            python -c "import json,sys; from decimal import Decimal; data=json.load(sys.stdin); assert data['total'] == 1; item=data['items'][0]; assert item['fingerprint_version'] == 'v1'; assert item['work_mode'] == 'REMOTE'; assert item['seniority'] == 'SENIOR'; assert item['contract_type'] == 'FULL_TIME'; assert len(item['compensations']) == 2; assert all(Decimal(value['minimum']) == Decimal('100000') and value['currency'] == 'USD' for value in item['compensations']); assert {skill['canonical_name'] for skill in item['skills']} == {'python', 'react'}; assert all(skill['taxonomy_version'] == 'skills-v1' for skill in item['skills']); assert len(item['occurrences']) == 2"
       - name: Verify PostgreSQL persistence after restart
         run: |
           before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
@@ -178,6 +178,8 @@ jobs:
           raw_items_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM acquisition.raw_item')"
           opportunities_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity')"
           occurrences_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.source_occurrence')"
+          compensations_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_compensation')"
+          skills_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_skill')"
           docker compose -f compose.yaml -f compose.ci.yaml restart postgres
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
           after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
@@ -185,6 +187,8 @@ jobs:
           raw_items_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM acquisition.raw_item')"
           opportunities_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity')"
           occurrences_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.source_occurrence')"
+          compensations_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_compensation')"
+          skills_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_skill')"
           test -n "$before"
           test "$before" = "$after"
           test "$companies_before" = "220"
@@ -195,6 +199,10 @@ jobs:
           test "$opportunities_before" = "$opportunities_after"
           test "$occurrences_before" = "2"
           test "$occurrences_before" = "$occurrences_after"
+          test "$compensations_before" = "2"
+          test "$compensations_before" = "$compensations_after"
+          test "$skills_before" = "2"
+          test "$skills_before" = "$skills_after"
       - name: Collect logs on failure
         if: failure()
         run: docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --tail=300

@@ -192,6 +192,8 @@ class OpportunityRepository:
             .options(
                 selectinload(OpportunityModel.occurrences),
                 selectinload(OpportunityModel.normalization_results),
+                selectinload(OpportunityModel.compensations),
+                selectinload(OpportunityModel.skills),
             )
         )
 
@@ -215,7 +217,11 @@ class OpportunityRepository:
             self.session.scalars(
                 select(OpportunityModel)
                 .where(*filters)
-                .options(selectinload(OpportunityModel.occurrences))
+                .options(
+                    selectinload(OpportunityModel.occurrences),
+                    selectinload(OpportunityModel.compensations),
+                    selectinload(OpportunityModel.skills),
+                )
                 .order_by(
                     OpportunityModel.published_at.desc().nullslast(),
                     OpportunityModel.created_at.desc(),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -45,6 +46,8 @@ def test_normalizes_and_deduplicates_manual_evidence_with_provenance() -> None:
         "company_name": "Example Corp",
         "location_text": "Remote",
         "employment_type": "full-time",
+        "salaryRange": {"min": 100000, "max": 150000, "currency": "USD"},
+        "skills": ["Python", "ReactJS"],
     }
     collected = client.post(
         f"/sources/{source['id']}/runs",
@@ -107,6 +110,22 @@ def test_normalizes_and_deduplicates_manual_evidence_with_provenance() -> None:
     assert opportunity["work_mode"] == "REMOTE"
     assert opportunity["seniority"] == "SENIOR"
     assert opportunity["contract_type"] == "FULL_TIME"
+    assert len(opportunity["compensations"]) == 3
+    assert all(
+        Decimal(item["minimum"]) == Decimal("100000")
+        for item in opportunity["compensations"]
+    )
+    assert all(
+        Decimal(item["maximum"]) == Decimal("150000")
+        for item in opportunity["compensations"]
+    )
+    assert all(item["currency"] == "USD" for item in opportunity["compensations"])
+    assert all(item["period"] == "UNKNOWN" for item in opportunity["compensations"])
+    assert {item["canonical_name"] for item in opportunity["skills"]} == {
+        "python",
+        "react",
+    }
+    assert all(item["taxonomy_version"] == "skills-v1" for item in opportunity["skills"])
     assert len(opportunity["occurrences"]) == 3
     assert {item["raw_item_id"] for item in opportunity["occurrences"]}
 
@@ -117,6 +136,9 @@ def test_normalizes_and_deduplicates_manual_evidence_with_provenance() -> None:
         for item in detail.json()["normalization_results"]
     }
     assert decisions == {"NEW", "MERGED"}
+    assert all(
+        len(item["evidence"]) == 3 for item in detail.json()["skills"]
+    )
 
     with Session(engine) as session:
         succeeded_raw_item_id = session.scalar(

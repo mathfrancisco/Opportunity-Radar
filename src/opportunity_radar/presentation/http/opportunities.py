@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -17,7 +18,9 @@ from opportunity_radar.opportunities.domain import (
 )
 from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
+    OpportunityCompensationModel,
     OpportunityModel,
+    OpportunitySkillModel,
     SourceOccurrenceModel,
 )
 from opportunity_radar.opportunities.repository import OpportunityRepository
@@ -58,6 +61,28 @@ class NormalizationResultResponse(BaseModel):
     processed_at: datetime
 
 
+class CompensationResponse(BaseModel):
+    minimum: Decimal | None
+    maximum: Decimal | None
+    currency: str | None
+    period: str
+    gross_net: str
+    evidence_text: str | None
+    evidence_source: str | None
+    normalizer_version: str
+    source_occurrence_id: UUID | None
+    raw_item_id: UUID
+
+
+class OpportunitySkillResponse(BaseModel):
+    canonical_name: str
+    display_name: str
+    requirement: str
+    evidence: list[Any]
+    taxonomy_version: str
+    normalizer_version: str
+
+
 class OpportunityResponse(BaseModel):
     id: UUID
     fingerprint: str
@@ -74,6 +99,8 @@ class OpportunityResponse(BaseModel):
     published_at: datetime | None
     source_updated_at: datetime | None
     version: int
+    compensations: list[CompensationResponse]
+    skills: list[OpportunitySkillResponse]
     occurrences: list[SourceOccurrenceResponse]
 
 
@@ -240,6 +267,20 @@ def _opportunity_response(opportunity: OpportunityModel) -> OpportunityResponse:
         published_at=opportunity.published_at,
         source_updated_at=opportunity.source_updated_at,
         version=opportunity.version,
+        compensations=[
+            _compensation_response(item)
+            for item in sorted(
+                opportunity.compensations,
+                key=lambda value: (value.evidence_source or "", str(value.id)),
+            )
+        ],
+        skills=[
+            _skill_response(item)
+            for item in sorted(
+                opportunity.skills,
+                key=lambda value: (value.canonical_name, str(value.id)),
+            )
+        ],
         occurrences=[
             _occurrence_response(item)
             for item in sorted(
@@ -247,6 +288,34 @@ def _opportunity_response(opportunity: OpportunityModel) -> OpportunityResponse:
                 key=lambda value: (value.first_seen_at, str(value.id)),
             )
         ],
+    )
+
+
+def _compensation_response(
+    compensation: OpportunityCompensationModel,
+) -> CompensationResponse:
+    return CompensationResponse(
+        minimum=compensation.amount_min,
+        maximum=compensation.amount_max,
+        currency=compensation.currency,
+        period=compensation.period,
+        gross_net=compensation.gross_net,
+        evidence_text=compensation.evidence_text,
+        evidence_source=compensation.evidence_source,
+        normalizer_version=compensation.normalizer_version,
+        source_occurrence_id=compensation.source_occurrence_id,
+        raw_item_id=compensation.raw_item_id,
+    )
+
+
+def _skill_response(skill: OpportunitySkillModel) -> OpportunitySkillResponse:
+    return OpportunitySkillResponse(
+        canonical_name=skill.canonical_name,
+        display_name=skill.display_name,
+        requirement=skill.requirement,
+        evidence=skill.evidence,
+        taxonomy_version=skill.taxonomy_version,
+        normalizer_version=skill.normalizer_version,
     )
 
 

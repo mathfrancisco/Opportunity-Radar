@@ -40,7 +40,7 @@ def test_parses_listed_jobs_and_preserves_payload() -> None:
         asyncio.run(client.aclose())
 
     assert str(calls[0].url) == (
-        "https://api.ashbyhq.com/posting-api/job-board/acme?includeCompensation=false"
+        "https://api.ashbyhq.com/posting-api/job-board/acme?includeCompensation=true"
     )
     assert item.url == payload["jobs"][0]["jobUrl"]
     assert item.external_id.startswith("ashby:")
@@ -51,7 +51,8 @@ def test_parses_listed_jobs_and_preserves_payload() -> None:
     assert item.published_at is not None
     assert item.raw_payload == payload["jobs"][0]
     assert item.metadata["applyUrl"] == payload["jobs"][0]["applyUrl"]
-    assert item.metadata["parser_version"] == "ashby-job-board-v1"
+    assert item.metadata["compensation"] == payload["jobs"][0]["compensation"]
+    assert item.metadata["parser_version"] == "ashby-job-board-v2"
     assert len(calls) == 1
     assert collection_request.telemetry.http_requests == 1
     assert collection_request.telemetry.retry_count == 0

@@ -49,7 +49,8 @@ def test_queries_maps_and_preserves_public_payload() -> None:
     assert item.raw_payload == payload["jobs"][0]
     assert item.metadata["category"] == "Software Development"
     assert item.metadata["attribution"] == "Remotive"
-    assert item.metadata["parser_version"] == "remotive-remote-jobs-v1"
+    assert item.metadata["parser_version"] == "remotive-remote-jobs-v2"
+    assert item.metadata["tags"] == ["python", "backend"]
     assert request.telemetry.http_requests == 1
 
 

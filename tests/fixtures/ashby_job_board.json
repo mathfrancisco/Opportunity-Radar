@@ -14,6 +14,18 @@
       "descriptionPlain": "Build reliable services.",
       "publishedAt": "2025-04-30T16:21:55.393+00:00",
       "employmentType": "FullTime",
+      "compensation": {
+        "scrapeableCompensationSalarySummary": "$81K - $87K",
+        "summaryComponents": [
+          {
+            "compensationType": "Salary",
+            "interval": "1 YEAR",
+            "currencyCode": "USD",
+            "minValue": 81000,
+            "maxValue": 87000
+          }
+        ]
+      },
       "jobUrl": "https://jobs.ashbyhq.com/acme/backend-engineer",
       "applyUrl": "https://jobs.ashbyhq.com/acme/backend-engineer/apply"
     },

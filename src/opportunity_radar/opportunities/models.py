@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -12,6 +13,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -103,6 +105,12 @@ class OpportunityModel(Base):
     normalization_results: Mapped[list["NormalizationResultModel"]] = relationship(
         back_populates="opportunity"
     )
+    compensations: Mapped[list["OpportunityCompensationModel"]] = relationship(
+        back_populates="opportunity", cascade="all, delete-orphan"
+    )
+    skills: Mapped[list["OpportunitySkillModel"]] = relationship(
+        back_populates="opportunity", cascade="all, delete-orphan"
+    )
 
 
 class SourceOccurrenceModel(Base):
@@ -161,6 +169,9 @@ class SourceOccurrenceModel(Base):
     source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     opportunity: Mapped[OpportunityModel] = relationship(back_populates="occurrences")
     normalization_results: Mapped[list["NormalizationResultModel"]] = relationship(
+        back_populates="source_occurrence"
+    )
+    compensation_evidence: Mapped[list["OpportunityCompensationModel"]] = relationship(
         back_populates="source_occurrence"
     )
 
@@ -226,3 +237,120 @@ class NormalizationResultModel(Base):
     source_occurrence: Mapped[SourceOccurrenceModel | None] = relationship(
         back_populates="normalization_results"
     )
+
+
+class OpportunityCompensationModel(Base):
+    __tablename__ = "opportunity_compensation"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_occurrence_id",
+            name="uq_opportunity_compensation_source_occurrence",
+        ),
+        CheckConstraint(
+            "amount_min IS NOT NULL OR amount_max IS NOT NULL",
+            name="ck_opportunity_compensation_amount_present",
+        ),
+        CheckConstraint(
+            "amount_min IS NULL OR amount_max IS NULL OR amount_min <= amount_max",
+            name="ck_opportunity_compensation_range",
+        ),
+        CheckConstraint(
+            "period IN ('YEAR', 'MONTH', 'WEEK', 'DAY', 'HOUR', 'UNKNOWN')",
+            name="ck_opportunity_compensation_period",
+        ),
+        CheckConstraint(
+            "gross_net IN ('GROSS', 'NET', 'UNKNOWN')",
+            name="ck_opportunity_compensation_gross_net",
+        ),
+        Index("ix_opportunity_compensation_currency_period", "currency", "period"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    opportunity_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.opportunity.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    amount_min: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    amount_max: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    currency: Mapped[str | None] = mapped_column(String(3))
+    period: Mapped[str] = mapped_column(String(16), nullable=False, default="UNKNOWN")
+    gross_net: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="UNKNOWN"
+    )
+    evidence_text: Mapped[str | None] = mapped_column(Text)
+    evidence_source: Mapped[str | None] = mapped_column(String(512))
+    normalizer_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_occurrence_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.source_occurrence.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    raw_item_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("acquisition.raw_item.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    opportunity: Mapped[OpportunityModel] = relationship(back_populates="compensations")
+    source_occurrence: Mapped[SourceOccurrenceModel] = relationship(
+        back_populates="compensation_evidence"
+    )
+
+
+class OpportunitySkillModel(Base):
+    __tablename__ = "opportunity_skill"
+    __table_args__ = (
+        UniqueConstraint(
+            "opportunity_id",
+            "canonical_name",
+            "taxonomy_version",
+            name="uq_opportunity_skill_opportunity_name_taxonomy",
+        ),
+        CheckConstraint(
+            "requirement IN ('REQUIRED', 'PREFERRED', 'UNKNOWN')",
+            name="ck_opportunity_skill_requirement",
+        ),
+        Index("ix_opportunity_skill_requirement", "requirement"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    opportunity_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.opportunity.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    canonical_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    requirement: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="UNKNOWN"
+    )
+    evidence: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    taxonomy_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    normalizer_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    opportunity: Mapped[OpportunityModel] = relationship(back_populates="skills")

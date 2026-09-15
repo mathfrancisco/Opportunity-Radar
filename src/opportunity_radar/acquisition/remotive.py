@@ -24,7 +24,7 @@ from opportunity_radar.acquisition.domain import (
 )
 
 _API_URL = "https://remotive.com/api/remote-jobs"
-_PARSER_VERSION = "remotive-remote-jobs-v1"
+_PARSER_VERSION = "remotive-remote-jobs-v2"
 
 
 class RemotiveCollector:
@@ -287,6 +287,7 @@ class RemotiveCollector:
                 "category": job.get("category"),
                 "job_type": job.get("job_type"),
                 "salary": job.get("salary"),
+                "tags": job.get("tags"),
                 "company_logo": job.get("company_logo"),
                 "attribution": "Remotive",
                 "parser_version": _PARSER_VERSION,

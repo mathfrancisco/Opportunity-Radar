@@ -672,9 +672,15 @@ Estado implementado da primeira fatia:
 - ambiguidades separadas para revisão com razões estruturadas;
 - API de listagem, detalhe, procedência, normalização e lifecycle;
 - worker responsável pelo processamento periódico dos itens pendentes.
+- compensação explícita por ocorrência, normalizada com `Decimal`, moeda,
+  período, bruto/líquido e procedência, sem inferência pelo título;
+- conflito de compensação entre ocorrências direcionado a revisão explicável;
+- taxonomia inicial `skills-v1`, aliases canônicos e evidência textual por
+  ocorrência;
+- compensação e skills expostas na API e preservadas após reprocessamento.
 
-Próximo incremento: compensação e extração inicial de skills antes de iniciar
-Matching determinístico.
+Próximo incremento: iniciar Matching determinístico com snapshots versionados e
+hard filters explícitos.
 
 ---
 

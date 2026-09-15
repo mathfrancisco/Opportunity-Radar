@@ -26,7 +26,7 @@ from opportunity_radar.acquisition.domain import (
 )
 
 _BOARD_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
-_PARSER_VERSION = "ashby-job-board-v1"
+_PARSER_VERSION = "ashby-job-board-v2"
 
 
 class AshbyCollector:
@@ -133,7 +133,7 @@ class AshbyCollector:
             try:
                 request.telemetry.record_http_attempt(retry=attempt > 0)
                 response = await client.get(
-                    url, params={"includeCompensation": "false"}
+                    url, params={"includeCompensation": "true"}
                 )
                 if response.status_code == 429:
                     request.telemetry.record_rate_limit()
@@ -280,6 +280,7 @@ class AshbyCollector:
                 "isRemote": job.get("isRemote"),
                 "workplaceType": job.get("workplaceType"),
                 "employmentType": job.get("employmentType"),
+                "compensation": job.get("compensation"),
                 "parser_version": _PARSER_VERSION,
             },
         )
