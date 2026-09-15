@@ -637,11 +637,15 @@ def extract_skills(
             metadata_texts.append(value)
         elif isinstance(value, (list, tuple)):
             metadata_texts.extend(item for item in value if isinstance(item, str))
-    texts = tuple(
-        (value, False, index == 0)
-        for index, value in enumerate((title, description))
-        if _clean_text(value)
-    ) + tuple((value, True, False) for value in metadata_texts if _clean_text(value))
+    texts: list[tuple[str, bool, bool]] = []
+    for index, value in enumerate((title, description)):
+        cleaned = _clean_text(value)
+        if cleaned is not None:
+            texts.append((cleaned, False, index == 0))
+    for value in metadata_texts:
+        cleaned = _clean_text(value)
+        if cleaned is not None:
+            texts.append((cleaned, True, False))
     matches: dict[str, list[tuple[SkillClassification, str]]] = {}
     for text, structured, title_text in texts:
         for entry in SKILL_TAXONOMY:
