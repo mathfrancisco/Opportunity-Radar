@@ -230,15 +230,17 @@ def test_ambiguous_skill_aliases_require_technical_context() -> None:
     )
     portuguese_title = extract_skills("Desenvolvedor React", None, {})
     business_title = extract_skills("Go-to-Market Manager", None, {})
+    explicit_sentence = extract_skills(None, "Required: React.", {})
     structured = extract_skills(None, None, {"skills": ["React", "Go"]})
 
     assert prose == ()
     assert {skill.canonical_id for skill in portuguese_title} == {"react"}
     assert business_title == ()
+    assert {skill.canonical_id for skill in explicit_sentence} == {"react"}
     assert {skill.canonical_id for skill in structured} == {"react", "go"}
 
 
-def test_candidate_includes_compensation_and_deduplicated_skills_without_fingerprint_change() -> None:
+def test_candidate_enrichment_does_not_change_fingerprint() -> None:
     candidate = build_candidate(
         _input(
             title="React.js Engineer",

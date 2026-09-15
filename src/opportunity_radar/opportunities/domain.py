@@ -7,8 +7,8 @@ import json
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Any, Mapping
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -539,7 +539,10 @@ def extract_compensation(
 
 def _skill_pattern(alias: str) -> re.Pattern[str]:
     escaped = re.escape(alias.casefold())
-    return re.compile(rf"(?<![\w+#.]){escaped}(?![\w+#.])", re.IGNORECASE)
+    dotted_variant = r"(?!\.js\b)" if alias.casefold() == "react" else ""
+    return re.compile(
+        rf"(?<![\w+#]){escaped}(?![\w+#]){dotted_variant}", re.IGNORECASE
+    )
 
 
 def _classify_skill(text: str, occurrence: re.Match[str]) -> SkillClassification:
