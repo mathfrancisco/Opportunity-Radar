@@ -283,7 +283,7 @@ def test_ashby_source_configuration_reaches_collector_and_records_http_metrics()
     assert snapshot["url"] == "https://jobs.ashbyhq.com/acme/job-1"
     assert snapshot["title"] == "Backend Engineer"
     assert snapshot["company_name"] == "Acme"
-    assert snapshot["metadata"]["parser_version"] == "ashby-public-job-board-v1"
+    assert snapshot["metadata"]["parser_version"] == "ashby-job-board-v1"
     assert len(throttling_delays) == 1
     assert 0 < throttling_delays[0] <= 5
 

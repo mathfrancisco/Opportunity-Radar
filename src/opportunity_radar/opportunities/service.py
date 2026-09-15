@@ -146,19 +146,21 @@ class OpportunityService:
             occurrence.source_published_at = candidate.published_at
             occurrence.source_updated_at = candidate.source_updated_at
         else:
-            opportunity = self.repository.opportunity_by_normalized_url(
+            url_match = self.repository.opportunity_by_normalized_url(
                 candidate.normalized_url
             )
-            if opportunity is not None:
+            if url_match is not None:
+                opportunity = url_match
                 decision = "MERGED"
                 result_status = "SUCCEEDED"
                 reasons = [{"code": "SAME_NORMALIZED_URL"}]
             else:
-                opportunity = self.repository.opportunity_by_fingerprint(
+                fingerprint_match = self.repository.opportunity_by_fingerprint(
                     fingerprint=candidate.fingerprint,
                     fingerprint_version=candidate.fingerprint_version,
                 )
-                if opportunity is not None:
+                if fingerprint_match is not None:
+                    opportunity = fingerprint_match
                     decision = "MERGED"
                     result_status = "SUCCEEDED"
                     reasons = [{"code": "EXACT_VERSIONED_FINGERPRINT"}]
