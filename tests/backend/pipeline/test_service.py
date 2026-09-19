@@ -22,7 +22,11 @@ from opportunity_radar.pipeline.domain import (
 from opportunity_radar.pipeline.models import ApplicationProcessModel, StageHistoryModel
 from opportunity_radar.pipeline.service import PipelineService
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
+from opportunity_radar.profile.models import (
+    CareerProfileModel,
+    EmploymentPreferenceModel,
+    ProfileVersionModel,
+)
 
 pytestmark = [
     pytest.mark.integration,
@@ -64,6 +68,10 @@ def _fixtures(session: Session) -> tuple[OpportunityModel, ProfileVersionModel]:
         version=1,
     )
     session.add_all([version, opportunity])
+    session.flush()
+    # A version without its preference row cannot be loaded as a domain object, and the
+    # pipeline service loads the profile before starting an application.
+    session.add(EmploymentPreferenceModel(profile_version_id=version.id))
     session.commit()
     return opportunity, version
 

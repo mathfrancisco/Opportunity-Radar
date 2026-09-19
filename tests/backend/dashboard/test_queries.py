@@ -25,7 +25,11 @@ from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.pipeline.domain import ApplicationStage
 from opportunity_radar.pipeline.service import PipelineService
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
+from opportunity_radar.profile.models import (
+    CareerProfileModel,
+    EmploymentPreferenceModel,
+    ProfileVersionModel,
+)
 
 pytestmark = [
     pytest.mark.integration,
@@ -58,6 +62,9 @@ def _profile_version(session: Session) -> ProfileVersionModel:
         status="DRAFT",
     )
     session.add(version)
+    session.flush()
+    # Loading a version as a domain object requires its preference row.
+    session.add(EmploymentPreferenceModel(profile_version_id=version.id))
     session.flush()
     return version
 
@@ -426,6 +433,5 @@ def test_overview_counts_reflect_the_catalogue_and_flag_the_missing_pipeline() -
         assert summary.assessed_opportunities >= 1
         assert summary.verdict_counts.get("HIGH_PRIORITY", 0) >= 1
         assert summary.sources_failing == len(summary.failing_sources)
-        # Phase 8 has not built the pipeline: absence must stay distinguishable from zero.
-        assert summary.applications_active is None
-        assert summary.follow_ups_due is None
+        assert summary.applications_active == sum(summary.applications_by_stage.values())
+        assert summary.follow_ups_due <= summary.applications_active
