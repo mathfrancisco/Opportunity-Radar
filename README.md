@@ -283,6 +283,23 @@ produzem `REVIEW_REQUIRED`. A taxonomia inicial `skills-v1` resolve aliases como
 evidência de cada ocorrência. Esses dados aparecem na listagem e no
 detalhe de oportunidades.
 
+### 7.7 Estado do matching determinístico
+
+O endpoint `POST /api/matches/evaluate` avalia uma oportunidade contra a versão
+ativa do perfil ou contra uma versão informada explicitamente. O motor aplica
+hard filters com estados `TRUE`, `FALSE` e `UNKNOWN`, calcula oito fatores com
+pesos e políticas de ausência versionados e persiste score, confiança, verdict,
+explicações e evidências. Ausência de país permitido, autorização, timezone ou
+senioridade preferida permanece desconhecida e não é convertida em reprovação.
+
+Cada `MatchAssessment` conserva os snapshots exatos usados, a versão da
+oportunidade, do perfil, das regras e da taxonomia. Um hash inclui esses dados e
+a data UTC usada na recência. Repetir a mesma combinação no mesmo dia é
+idempotente; uma mudança de conteúdo, versão ou data de referência produz um novo
+registro histórico.
+`GET /api/matches` oferece listagem paginada e filtros por oportunidade e perfil,
+enquanto `GET /api/matches/{id}` retorna todos os hard filters e fatores.
+
 ---
 
 ## 8. Arquitetura final

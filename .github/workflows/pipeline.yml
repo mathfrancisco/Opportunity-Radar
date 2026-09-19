@@ -158,7 +158,7 @@ jobs:
             --json '{"source_type":"manual","name":"CI manual intake","enabled":true,"evidence_status":"confirmed","collector_local_tested":true}' \
             http://127.0.0.1:3000/api/sources | \
             python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
-          run_payload='{"correlation_id":"compose-e2e","inputs":[{"kind":"URL","value":"https://example.com/jobs/ci-1","metadata":{"title":"Senior Python Engineer","company_name":"Example","location_text":"Remote","employment_type":"full-time","salaryRange":{"min":100000,"max":150000,"currency":"USD"},"skills":["Python","ReactJS"]}},{"kind":"TEXT","value":"Required: Python and ReactJS.","metadata":{"title":"Senior Python Engineer","company_name":"Example","location_text":"Remote","employment_type":"full-time","salaryRange":{"min":100000,"max":150000,"currency":"USD"},"skills":["Python","ReactJS"]}}]}'
+          run_payload='{"correlation_id":"compose-e2e","inputs":[{"kind":"URL","value":"https://example.com/jobs/ci-1","metadata":{"title":"Senior Python Engineer","company_name":"Example","location_text":"Remote","employment_type":"full-time","salaryRange":{"min":100000,"max":150000,"currency":"USD","interval":"year"},"skills":["Python","ReactJS"]}},{"kind":"TEXT","value":"Required: Python and ReactJS.","metadata":{"title":"Senior Python Engineer","company_name":"Example","location_text":"Remote","employment_type":"full-time","salaryRange":{"min":100000,"max":150000,"currency":"USD","interval":"year"},"skills":["Python","ReactJS"]}}]}'
           curl --fail --silent --json "$run_payload" \
             "http://127.0.0.1:3000/api/sources/$source_id/runs" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'SUCCEEDED'; assert data['items_persisted'] == 2"
@@ -171,6 +171,24 @@ jobs:
             "http://127.0.0.1:3000/api/opportunities/normalizations/pending?limit=10"
           curl --fail --silent http://127.0.0.1:3000/api/opportunities | \
             python -c "import json,sys; from decimal import Decimal; data=json.load(sys.stdin); assert data['total'] == 1; item=data['items'][0]; assert item['fingerprint_version'] == 'v1'; assert item['work_mode'] == 'REMOTE'; assert item['seniority'] == 'SENIOR'; assert item['contract_type'] == 'FULL_TIME'; assert len(item['compensations']) == 2; assert all(Decimal(value['minimum']) == Decimal('100000') and value['currency'] == 'USD' for value in item['compensations']); assert {skill['canonical_name'] for skill in item['skills']} == {'python', 'react'}; assert all(skill['taxonomy_version'] == 'skills-v1' for skill in item['skills']); assert len(item['occurrences']) == 2"
+      - name: Verify deterministic matching through the public API
+        run: |
+          profile_payload='{"expected_profile_version":0,"skills":[{"canonical_name":"python"},{"canonical_name":"react"}],"preferences":{"work_modes":["REMOTE"],"contracts":["FULL_TIME"],"countries":["BR"],"compensation_min":100000,"compensation_currency":"USD","compensation_period":"YEAR"}}'
+          profile_draft="$(curl --fail --silent --json "$profile_payload" http://127.0.0.1:3000/api/profile/versions)"
+          profile_id="$(python -c "import json,sys; print(json.load(sys.stdin)['id'])" <<< "$profile_draft")"
+          profile_lock="$(python -c "import json,sys; print(json.load(sys.stdin)['profile_lock_version'])" <<< "$profile_draft")"
+          profile_published="$(curl --fail --silent --json "{\"expected_profile_version\":$profile_lock}" "http://127.0.0.1:3000/api/profile/versions/$profile_id/publish")"
+          profile_lock="$(python -c "import json,sys; print(json.load(sys.stdin)['profile_lock_version'])" <<< "$profile_published")"
+          curl --fail --silent --json "{\"expected_profile_version\":$profile_lock}" \
+            "http://127.0.0.1:3000/api/profile/versions/$profile_id/activate"
+          opportunity_id="$(curl --fail --silent http://127.0.0.1:3000/api/opportunities | python -c "import json,sys; print(json.load(sys.stdin)['items'][0]['id'])")"
+          match_payload="{\"opportunity_id\":\"$opportunity_id\"}"
+          first_match="$(curl --fail --silent --json "$match_payload" http://127.0.0.1:3000/api/matches/evaluate)"
+          first_match_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['rules_version'] == 'matching-v1'; assert data['taxonomy_version'] == 'skills-v1'; assert data['eligibility'] == 'UNKNOWN'; assert data['verdict'] == 'REVIEW_REQUIRED'; assert len(data['input_hash']) == 64; assert len(data['eligibility_details']) == 7; assert len(data['factors']) == 8; print(data['id'])" <<< "$first_match")"
+          second_match_id="$(curl --fail --silent --json "$match_payload" http://127.0.0.1:3000/api/matches/evaluate | python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
+          test "$first_match_id" = "$second_match_id"
+          curl --fail --silent "http://127.0.0.1:3000/api/matches?opportunity_id=$opportunity_id" | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 1; assert data['items'][0]['id'] == '$first_match_id'"
       - name: Verify PostgreSQL persistence after restart
         run: |
           before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
@@ -180,6 +198,8 @@ jobs:
           occurrences_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.source_occurrence')"
           compensations_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_compensation')"
           skills_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_skill')"
+          matches_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_assessment')"
+          factors_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_factor')"
           docker compose -f compose.yaml -f compose.ci.yaml restart postgres
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
           after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
@@ -189,6 +209,8 @@ jobs:
           occurrences_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.source_occurrence')"
           compensations_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_compensation')"
           skills_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_skill')"
+          matches_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_assessment')"
+          factors_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_factor')"
           test -n "$before"
           test "$before" = "$after"
           test "$companies_before" = "220"
@@ -203,6 +225,10 @@ jobs:
           test "$compensations_before" = "$compensations_after"
           test "$skills_before" = "2"
           test "$skills_before" = "$skills_after"
+          test "$matches_before" = "1"
+          test "$matches_before" = "$matches_after"
+          test "$factors_before" = "8"
+          test "$factors_before" = "$factors_after"
       - name: Collect logs on failure
         if: failure()
         run: docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --tail=300

@@ -775,6 +775,26 @@ Além disso:
 - [ ] UNKNOWN não vira FALSE implicitamente;
 - [ ] nenhum atributo sensível entra no score.
 
+Estado implementado da primeira fatia:
+
+- snapshots imutáveis e autocontidos da oportunidade e do perfil usados no cálculo;
+- ruleset `matching-v1` com os oito pesos documentados e missing policies explícitas;
+- hard filters de lifecycle, modalidade, país, autorização, timezone, senioridade e
+  contrato, sempre preservando `UNKNOWN` quando falta evidência;
+- score em `Decimal`, confiança separada do score e verdicts calculados sobre o valor
+  interno sem arredondamento intermediário;
+- `MatchAssessment` e `MatchFactor` imutáveis no PostgreSQL, com versões, evidências,
+  explicações e hash dos snapshots mais a data UTC usada para recência;
+- API de avaliação, listagem e detalhe explicável;
+- golden cases para match completo, salário ausente, país incompatível, senioridade
+  ambígua, skills parciais e vaga antiga;
+- smoke test no CI cobrindo perfil ativo, avaliação idempotente e persistência após
+  reinício do PostgreSQL.
+
+Próximo incremento: Fase 6, análise semântica estruturada com Ollama apenas para
+assessments elegíveis ou que exijam revisão, mantendo o resultado determinístico
+como base imutável.
+
 ---
 
 # Fase 6 — Ollama
