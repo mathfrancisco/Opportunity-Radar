@@ -43,14 +43,21 @@ A importação é idempotente: reexecutar não duplica empresa.
 
 ## 3. Rodar o ciclo
 
-1. Habilitar uma fonte em `/sources` (só depois de revisar termos e homologar o
-   collector — o gate é da Fase 2 e continua valendo).
-2. Executar a fonte pela própria tela, ou por `POST /api/sources/{id}/runs`.
-3. O worker normaliza os itens pendentes a cada 60 segundos; para forçar,
+1. Importe as definições pesquisadas com `make import-companies`.
+2. Revise os termos das fontes públicas e execute
+   `make enable-sources TERMS_REVIEWED=1`. O comando faz um probe de um item por
+   fonte e habilita somente os coletores cujo endpoint e schema respondem
+   corretamente. Use `DRY_RUN=1` para listar os candidatos sem alterar o banco.
+3. Execute `make collect` para coletar todas as fontes habilitadas. O comando
+   continua nas fontes seguintes quando uma falha e imprime um resumo JSON. Use
+   `SOURCE_TYPE=ashby,lever` ou `MAX_ITEMS=100` para limitar a execução.
+4. Execute a fonte pela própria tela, ou por `POST /api/sources/{id}/runs`, quando
+   precisar de uma coleta individual.
+5. O worker normaliza os itens pendentes a cada 60 segundos; para forçar,
    `POST /api/opportunities/normalizations/pending`.
-4. Avaliar em `/inbox` ou por `POST /api/matches/evaluate`.
-5. Analisar com Ollama pelo detalhe da oportunidade.
-6. Registrar a candidatura e acompanhá-la em `/applications`.
+6. Avalie em `/inbox` ou por `POST /api/matches/evaluate`.
+7. Analise com Ollama pelo detalhe da oportunidade.
+8. Registre a candidatura e acompanhe-a em `/applications`.
 
 ---
 

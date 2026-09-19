@@ -1,12 +1,11 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help bootstrap dev up down restart status logs migrate test test-integration check doctor import-companies collect backup restore-check
+.PHONY: help bootstrap dev up down restart status logs migrate test test-integration check doctor import-companies enable-sources collect backup restore-check
 
 help:
-	@echo "Targets: bootstrap dev up down restart status logs migrate import-companies"
+	@echo "Targets: bootstrap dev up down restart status logs migrate import-companies enable-sources collect"
 	@echo "Operations: doctor backup restore-check"
 	@echo "Validation (run only when requested): test test-integration check"
-	@echo "Planned: collect"
 
 bootstrap:
 	@test -f .env || cp .env.example .env
@@ -51,6 +50,10 @@ doctor:
 import-companies:
 	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/import_research_catalog.py $(if $(FILE),--input "/workspace/$(FILE)",--input /workspace/docs/pesquisas/auditoria-186-empresas.md --input /workspace/docs/pesquisas/empresas-adicionais.md) $(if $(DRY_RUN),--dry-run,) $(if $(RESUME),--resume,) $(if $(REPORT),--report "/workspace/$(REPORT)",)
 
+enable-sources:
+	@test "$(TERMS_REVIEWED)" = "1" || (echo "Use TERMS_REVIEWED=1 after reviewing the public source terms." && exit 2)
+	@docker compose run --rm --build -v "$(CURDIR):/workspace" api python scripts/enable_sources.py --accept-terms $(if $(DRY_RUN),--dry-run,) $(if $(EXCLUDE_REMOTIVE),--exclude-remotive,) $(if $(MAX_ITEMS),--max-items "$(MAX_ITEMS)",)
+
 backup:
 	@docker compose run --rm -v "$(CURDIR)/data/backups:/app/data/backups" api python scripts/backup.py $(if $(LABEL),--label "$(LABEL)",)
 
@@ -58,8 +61,7 @@ restore-check:
 	@docker compose run --rm -v "$(CURDIR)/data/backups:/app/data/backups" api python scripts/restore_check.py $(if $(DUMP),--dump "$(DUMP)",)
 
 collect:
-	@echo "Target '$@' belongs to a later MVP phase and is not implemented yet."
-	@exit 2
+	@docker compose run --rm --build -v "$(CURDIR):/workspace" api python scripts/collect.py $(if $(SOURCE_ID),--source-id "$(SOURCE_ID)",) $(if $(SOURCE_TYPE),--source-type "$(SOURCE_TYPE)",) $(if $(KEYWORDS),--keywords "$(KEYWORDS)",) $(if $(MODE),--mode "$(MODE)",) $(if $(MAX_ITEMS),--max-items "$(MAX_ITEMS)",)
 
 .DEFAULT:
 	@echo "Target '$@' is not implemented yet."
