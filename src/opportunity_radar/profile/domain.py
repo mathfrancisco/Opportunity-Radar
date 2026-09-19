@@ -70,6 +70,7 @@ class EmploymentPreference:
     compensation_min: Decimal | None = None
     compensation_max: Decimal | None = None
     compensation_currency: str | None = None
+    compensation_period: str | None = None
     relocation_allowed: bool = False
     sponsorship_required: bool = False
 
@@ -103,6 +104,15 @@ class ProfileSnapshot:
             and preferences.compensation_min > preferences.compensation_max
         ):
             raise InvalidProfileSnapshotError("compensation minimum must not exceed maximum")
+        if preferences.compensation_period not in {
+            None,
+            "YEAR",
+            "MONTH",
+            "WEEK",
+            "DAY",
+            "HOUR",
+        }:
+            raise InvalidProfileSnapshotError("compensation period must be normalized")
         if (preferences.timezone_start_hour is None) != (preferences.timezone_end_hour is None):
             raise InvalidProfileSnapshotError(
                 "timezone window must include both start and end hours"

@@ -283,6 +283,141 @@ produzem `REVIEW_REQUIRED`. A taxonomia inicial `skills-v1` resolve aliases como
 evidência de cada ocorrência. Esses dados aparecem na listagem e no
 detalhe de oportunidades.
 
+### 7.7 Estado do matching determinístico
+
+O endpoint `POST /api/matches/evaluate` avalia uma oportunidade contra a versão
+ativa do perfil ou contra uma versão informada explicitamente. O motor aplica
+hard filters com estados `TRUE`, `FALSE` e `UNKNOWN`, calcula oito fatores com
+pesos e políticas de ausência versionados e persiste score, confiança, verdict,
+explicações e evidências. Ausência de país permitido, autorização, timezone ou
+senioridade preferida permanece desconhecida e não é convertida em reprovação.
+
+Cada `MatchAssessment` conserva os snapshots exatos usados, a versão da
+oportunidade, do perfil, das regras e da taxonomia. Um hash inclui esses dados e
+a data UTC usada na recência. Repetir a mesma combinação no mesmo dia é
+idempotente; uma mudança de conteúdo, versão ou data de referência produz um novo
+registro histórico.
+`GET /api/matches` oferece listagem paginada e filtros por oportunidade e perfil,
+enquanto `GET /api/matches/{id}` retorna todos os hard filters e fatores.
+
+### 7.8 Estado da análise semântica
+
+`POST /api/matches/{id}/analysis` acrescenta a camada consultiva do Ollama a um
+assessment que já concluiu. O prompt é um artefato versionado em
+`prompts/opportunity_analysis/v1/`, e `output.schema.json` é gerado de
+`OUTPUT_SCHEMA` por `scripts/export_prompt_schema.py`, com gate no CI: schema no
+disco e validador não podem divergir.
+
+A resposta do modelo é validada contra um schema fechado que não possui score,
+eligibility, verdict nem disqualifier. A tabela `matching.match_analysis` também
+não tem essas colunas, então a IA não sobrescreve a decisão determinística por
+construção, e não por convenção.
+
+Modelo fora do ar, timeout, JSON inválido ou resposta fora do contrato viram
+estado — `AI_FAILED` com código de falha — e não erro HTTP: o assessment continua
+completo. Análise concluída é reusada do banco, sobrevivendo a reinício;
+tentativas degradadas ficam como histórico e não bloqueiam nova execução.
+`{"refresh": true}` força nova chamada e acrescenta uma linha, sem editar a
+anterior. Com `OLLAMA_ANALYSIS_ENABLED=false` a rota continua respondendo `200`,
+com `AI_SKIPPED`.
+
+O detalhe e a listagem de assessments trazem `analysis` com o estado corrente.
+
+### 7.9 Estado do dashboard
+
+As telas leem por read models em `src/opportunity_radar/dashboard/`: SQL otimizado
+para a interface, sem carregar agregados e sem colocar joins de dashboard nos
+repositories de cada contexto.
+
+`GET /api/overview` resume o ciclo: novas oportunidades na janela de sete dias,
+contagem por verdict, análises degradadas, itens brutos ainda não normalizados e
+fontes cuja última execução falhou. Candidaturas e follow-ups voltam `null`, não
+`0` — o pipeline chega na fase 8, e ausência de dado não é dado zerado.
+
+`GET /api/inbox` devolve cada oportunidade com a avaliação mais recente, filtrando
+por verdict, score mínimo, empresa, modalidade, status e data, com busca por título
+ou empresa e ordenação por prioridade, recência ou score. Oportunidade ainda não
+avaliada continua na lista: escondê-la faria a tela discordar do catálogo sem dizer
+por quê.
+
+`GET /api/source-health` devolve cada fonte com o resultado do último run:
+status, duração, contadores e erro. Fonte que nunca executou reporta ausência, não
+zero. A rota não é `/sources/health` porque esse caminho já é um id de fonte.
+
+No frontend, `/` é a Visão geral, `/inbox` é a Opportunity Inbox,
+`/opportunities/{id}` é o detalhe, `/companies` e `/companies/{id}` são o
+catálogo, `/sources` são as fontes e execuções, `/profile` são os critérios de
+decisão e `/status` é a checagem de ambiente. Os cartões da Visão geral são links que já abrem a inbox
+filtrada, e os filtros vivem na URL, então uma seleção é compartilhável e
+sobrevive ao reload.
+
+O detalhe é montado sobre `GET /api/opportunities/{id}` e
+`GET /api/matches?opportunity_id=`, sem endpoint novo. Ele mostra o conteúdo
+canônico, a remuneração com a evidência textual que a originou, as skills com a
+versão da taxonomia, cada ocorrência com o item bruto correspondente, e então a
+decisão: score, verdict, confiança, filtros eliminatórios, fatores com peso e
+explicação, e a análise semântica. As versões de regras, taxonomia, perfil e
+conteúdo aparecem junto, porque é o que torna a decisão reproduzível. A análise
+pode ser disparada da tela; se o modelo falhar, o estado degradado aparece ao
+lado da decisão determinística, que continua completa.
+
+A tela de fontes mostra habilitação, evidência, termos revisados, homologação do
+collector e o último run de cada fonte, com histórico por fonte e execução
+manual. Fonte desabilitada não executa, e a tela diz o motivo em vez de esconder
+o botão.
+
+A tela de perfil edita skills, modalidades, contratos, países, janela de
+timezone, remuneração, relocação e patrocínio. Salvar encadeia criar, publicar e
+ativar carregando o lock que cada passo devolve, então uma edição concorrente
+falha com conflito em vez de vencer calada. Avaliações antigas continuam
+apontando para a versão de perfil que as produziu.
+
+O detalhe da empresa reúne aliases, domínio, fontes com método e data de
+verificação, a verificação mais recente entre elas e as últimas vagas coletadas,
+reusando a inbox filtrada por empresa em vez de uma query nova.
+
+### 7.10 Estado do pipeline de candidaturas
+
+`crm.application_process` guarda a candidatura e `crm.stage_history` guarda como
+ela chegou ao estágio atual. A candidatura é mutável; o histórico é append-only
+com trigger que bloqueia `UPDATE`. O estágio atual fica nas duas pontas de
+propósito: o histórico responde como chegamos aqui, a coluna responde onde
+estamos sem reprocessar nada.
+
+A tabela de transições vive em `pipeline/domain.py` e é pura. Estágio terminal
+não tem saída — corrigir um engano é abrir nova candidatura, não reabrir
+histórico —, e de qualquer estágio vivo é sempre possível recusar, desistir ou
+encerrar. A API devolve as transições legais junto da candidatura, então a
+interface nunca oferece um movimento que o domínio recusaria.
+
+Um índice parcial único garante uma candidatura ativa por oportunidade e versão
+de perfil. Encerrar libera a vaga para uma nova candidatura em outro ciclo, e é
+por isso que a inbox considera aplicada apenas quem tem candidatura ativa.
+Transição e próxima ação exigem `expected_version`, então edição concorrente
+falha com conflito em vez de sobrescrever.
+
+Oportunidade e candidatura seguem separadas: encerrar uma não encerra a outra.
+
+### 7.11 Operação
+
+Todo processo emite JSON em stdout, uma linha por evento. A API aceita e devolve
+`X-Correlation-ID`; quando o cliente não manda um, a API gera. O id viaja em
+context var, então um log escrito dentro de um collector carrega a requisição ou
+o lote a que pertence sem que o id precise atravessar assinaturas. Cada passada
+de normalização do worker abre o próprio id.
+
+`make doctor` responde, para cada verificação, o que foi inspecionado, o que foi
+encontrado e o que fazer. Aviso não derruba o código de saída: Ollama fora do ar
+é degradação esperada, não ambiente quebrado.
+
+`make backup` grava o dump e um manifesto com a revisão do Alembic e a contagem
+de cada tabela do fluxo vertical. `make restore-check` restaura num banco
+descartável, roda as mesmas contagens e compara com o manifesto — criar o arquivo
+não é o critério. O banco de trabalho não é tocado, e divergência sai com código
+1 dizendo qual tabela divergiu.
+
+O runbook operacional está em `docs/30-runbook.md`.
+
 ---
 
 ## 8. Arquitetura final

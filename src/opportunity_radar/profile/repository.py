@@ -24,6 +24,11 @@ class SqlAlchemyProfileRepository:
             self._versions().where(ProfileVersionModel.status == "ACTIVE")
         ).unique().one_or_none()
 
+    def version(self, version_id: UUID) -> ProfileVersionModel | None:
+        return self.session.scalars(
+            self._versions().where(ProfileVersionModel.id == version_id)
+        ).unique().one_or_none()
+
     def versions(self) -> list[ProfileVersionModel]:
         return list(
             self.session.scalars(

@@ -1,0 +1,437 @@
+"""The inbox read model must agree with the catalogue and with the latest decision."""
+
+from __future__ import annotations
+
+import os
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from uuid import UUID, uuid4
+
+import pytest
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from opportunity_radar.acquisition.models import SourceDefinitionModel, SourceRunModel
+from opportunity_radar.companies.models import Company
+from opportunity_radar.dashboard.queries import (
+    InboxOrder,
+    InboxQuery,
+    list_opportunity_inbox,
+    list_source_health,
+    summarize_overview,
+)
+from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
+from opportunity_radar.opportunities.models import OpportunityModel
+from opportunity_radar.pipeline.domain import ApplicationStage
+from opportunity_radar.pipeline.service import PipelineService
+from opportunity_radar.platform.database import create_database_engine
+from opportunity_radar.profile.models import (
+    CareerProfileModel,
+    EmploymentPreferenceModel,
+    ProfileVersionModel,
+)
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        os.environ.get("RUN_DATABASE_INTEGRATION") != "1",
+        reason="database integration is enabled only in the isolated CI database",
+    ),
+]
+
+NOW = datetime.now(UTC)
+
+
+def _profile_version(session: Session) -> ProfileVersionModel:
+    profile = session.scalar(select(CareerProfileModel).limit(1))
+    if profile is None:
+        profile = CareerProfileModel(version=1)
+        session.add(profile)
+        session.flush()
+    version = ProfileVersionModel(
+        career_profile_id=profile.id,
+        number=(
+            session.scalar(
+                select(func.coalesce(func.max(ProfileVersionModel.number), 0)).where(
+                    ProfileVersionModel.career_profile_id == profile.id
+                )
+            )
+            or 0
+        )
+        + 1,
+        status="DRAFT",
+    )
+    session.add(version)
+    session.flush()
+    # Loading a version as a domain object requires its preference row.
+    session.add(EmploymentPreferenceModel(profile_version_id=version.id))
+    session.flush()
+    return version
+
+
+def _company(session: Session, priority: str) -> Company:
+    marker = uuid4().hex[:12]
+    company = Company(
+        canonical_name=f"Dashboard {marker}",
+        normalized_name=f"dashboard-{marker}",
+        priority=priority,
+    )
+    session.add(company)
+    session.flush()
+    return company
+
+
+def _opportunity(
+    session: Session,
+    company: Company,
+    *,
+    title: str,
+    published_at: datetime | None,
+    lifecycle_status: str = "ACTIVE",
+    work_mode: str = "REMOTE",
+) -> OpportunityModel:
+    opportunity = OpportunityModel(
+        fingerprint=uuid4().hex,
+        fingerprint_version="v1",
+        canonical_title=title,
+        normalized_title=title.lower(),
+        canonical_company_id=company.id,
+        company_name=company.canonical_name,
+        work_mode=work_mode,
+        seniority="SENIOR",
+        contract_type="FULL_TIME",
+        lifecycle_status=lifecycle_status,
+        published_at=published_at,
+        version=1,
+    )
+    session.add(opportunity)
+    session.flush()
+    return opportunity
+
+
+def _assessment(
+    session: Session,
+    opportunity: OpportunityModel,
+    profile_version_id: UUID,
+    *,
+    verdict: str,
+    score: str,
+    assessed_at: datetime,
+) -> MatchAssessmentModel:
+    assessment = MatchAssessmentModel(
+        opportunity_id=opportunity.id,
+        opportunity_version=opportunity.version,
+        profile_version_id=profile_version_id,
+        input_hash=uuid4().hex + uuid4().hex,
+        rules_version="matching-v1",
+        taxonomy_version="skills-v1",
+        opportunity_snapshot={"work_mode": opportunity.work_mode},
+        profile_snapshot={"skills": ["python"]},
+        eligibility="ELIGIBLE",
+        eligibility_details=[],
+        verdict=verdict,
+        score=Decimal(score),
+        confidence=Decimal("0.900"),
+        assessed_at=assessed_at,
+    )
+    session.add(assessment)
+    session.flush()
+    return assessment
+
+
+def test_inbox_keeps_unassessed_opportunities_and_uses_the_latest_decision() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        profile_version = _profile_version(session)
+        company = _company(session, "high")
+        assessed = _opportunity(
+            session, company, title="Assessed role", published_at=NOW - timedelta(days=1)
+        )
+        never_assessed = _opportunity(
+            session, company, title="Fresh role", published_at=NOW
+        )
+        _assessment(
+            session,
+            assessed,
+            profile_version.id,
+            verdict="WATCHLIST",
+            score="40.0000",
+            assessed_at=NOW - timedelta(hours=2),
+        )
+        current = _assessment(
+            session,
+            assessed,
+            profile_version.id,
+            verdict="HIGH_PRIORITY",
+            score="91.5000",
+            assessed_at=NOW,
+        )
+        session.add(
+            MatchAnalysisModel(
+                assessment_id=current.id,
+                cache_key=uuid4().hex + uuid4().hex,
+                status="AI_COMPLETED",
+                summary="Strong match.",
+                recommended_review=False,
+                model_id="llama3.2:3b",
+                prompt_version="opportunity_analysis/v1",
+                schema_version="analysis-v1",
+                analyzed_at=NOW,
+            )
+        )
+        session.commit()
+
+        page = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, order=InboxOrder.SCORE)
+        )
+
+        assert page.total == 2
+        by_id = {item.opportunity_id: item for item in page.items}
+        assert by_id[assessed.id].verdict == "HIGH_PRIORITY"
+        assert by_id[assessed.id].score == Decimal("91.5000")
+        assert by_id[assessed.id].assessment_id == current.id
+        assert by_id[assessed.id].analysis_status == "AI_COMPLETED"
+        assert by_id[assessed.id].analysis_recommended_review is False
+        assert by_id[assessed.id].company_priority == "HIGH"
+        assert by_id[never_assessed.id].assessment_id is None
+        assert by_id[never_assessed.id].verdict is None
+        assert page.items[0].opportunity_id == assessed.id
+
+
+def test_inbox_filters_by_verdict_score_search_and_only_assessed() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        profile_version = _profile_version(session)
+        company = _company(session, "normal")
+        strong = _opportunity(
+            session, company, title="Staff Platform Engineer", published_at=NOW
+        )
+        weak = _opportunity(
+            session, company, title="Junior Support Analyst", published_at=NOW
+        )
+        _opportunity(session, company, title="Unscored Role", published_at=NOW)
+        _assessment(
+            session,
+            strong,
+            profile_version.id,
+            verdict="RECOMMENDED",
+            score="82.0000",
+            assessed_at=NOW,
+        )
+        _assessment(
+            session,
+            weak,
+            profile_version.id,
+            verdict="LOW_MATCH",
+            score="12.0000",
+            assessed_at=NOW,
+        )
+        session.commit()
+
+        base = InboxQuery(company_id=company.id)
+        assert list_opportunity_inbox(session, base).total == 3
+
+        only_assessed = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, only_assessed=True)
+        )
+        assert only_assessed.total == 2
+
+        recommended = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, verdicts=("RECOMMENDED",))
+        )
+        assert [item.opportunity_id for item in recommended.items] == [strong.id]
+
+        scored = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, minimum_score=Decimal("50"))
+        )
+        assert [item.opportunity_id for item in scored.items] == [strong.id]
+
+        searched = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search="junior support")
+        )
+        assert [item.opportunity_id for item in searched.items] == [weak.id]
+
+
+def test_inbox_orders_by_priority_recency_and_score() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        profile_version = _profile_version(session)
+        high = _company(session, "high")
+        low = _company(session, "low")
+        old_high = _opportunity(
+            session, high, title="Old at high", published_at=NOW - timedelta(days=30)
+        )
+        new_low = _opportunity(session, low, title="New at low", published_at=NOW)
+        _assessment(
+            session,
+            old_high,
+            profile_version.id,
+            verdict="RECOMMENDED",
+            score="70.0000",
+            assessed_at=NOW,
+        )
+        _assessment(
+            session,
+            new_low,
+            profile_version.id,
+            verdict="HIGH_PRIORITY",
+            score="95.0000",
+            assessed_at=NOW,
+        )
+        session.commit()
+
+        def ids(order: InboxOrder, company_id: UUID | None = None) -> list[UUID]:
+            page = list_opportunity_inbox(
+                session,
+                InboxQuery(order=order, company_id=company_id, only_assessed=True, limit=200),
+            )
+            return [
+                item.opportunity_id
+                for item in page.items
+                if item.opportunity_id in {old_high.id, new_low.id}
+            ]
+
+        assert ids(InboxOrder.PRIORITY) == [old_high.id, new_low.id]
+        assert ids(InboxOrder.RECENCY) == [new_low.id, old_high.id]
+        assert ids(InboxOrder.SCORE) == [new_low.id, old_high.id]
+
+
+def test_inbox_knows_whether_an_opportunity_was_already_applied_to() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        profile_version = _profile_version(session)
+        company = _company(session, "normal")
+        applied_to = _opportunity(session, company, title="Applied role", published_at=NOW)
+        untouched = _opportunity(session, company, title="Open role", published_at=NOW)
+        session.commit()
+
+        application = PipelineService(session).start(
+            applied_to.id,
+            profile_version_id=profile_version.id,
+            stage=ApplicationStage.APPLIED,
+            next_action="Enviar follow-up",
+            next_action_at=NOW + timedelta(days=2),
+        )
+
+        applied_page = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, applied=True)
+        )
+        open_page = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, applied=False)
+        )
+
+        assert [item.opportunity_id for item in applied_page.items] == [applied_to.id]
+        assert [item.opportunity_id for item in open_page.items] == [untouched.id]
+        item = applied_page.items[0]
+        assert item.applied is True
+        assert item.application_id == application.id
+        assert item.application_stage == "APPLIED"
+        assert item.application_next_action_at is not None
+        assert open_page.items[0].applied is False
+
+        summary = summarize_overview(session, now=NOW)
+        assert summary.applications_active >= 1
+        assert summary.applications_by_stage.get("APPLIED", 0) >= 1
+        assert summary.follow_ups_due >= 1
+        assert summary.follow_up_window_days == 7
+
+        # Closing the application frees the opportunity again.
+        PipelineService(session).transition(
+            application.id,
+            target=ApplicationStage.WITHDRAWN,
+            expected_version=application.version,
+        )
+        reopened = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, applied=False)
+        )
+        assert {item.opportunity_id for item in reopened.items} == {
+            applied_to.id,
+            untouched.id,
+        }
+
+
+def test_source_health_reports_the_last_run_and_keeps_never_run_sources() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        marker = uuid4().hex[:8]
+        failed = SourceDefinitionModel(
+            source_type="manual",
+            name=f"Failing {marker}",
+            enabled=True,
+            evidence_status="confirmed",
+            terms_reviewed=True,
+            collector_local_tested=True,
+        )
+        never_run = SourceDefinitionModel(
+            source_type="manual",
+            name=f"Idle {marker}",
+            enabled=False,
+        )
+        session.add_all([failed, never_run])
+        session.flush()
+        session.add_all(
+            [
+                SourceRunModel(
+                    source_definition_id=failed.id,
+                    status="SUCCEEDED",
+                    started_at=NOW - timedelta(hours=3),
+                    finished_at=NOW - timedelta(hours=3) + timedelta(seconds=5),
+                    items_seen=2,
+                    items_persisted=2,
+                ),
+                SourceRunModel(
+                    source_definition_id=failed.id,
+                    status="FAILED",
+                    started_at=NOW - timedelta(minutes=10),
+                    finished_at=NOW - timedelta(minutes=9),
+                    error_code="TRANSPORT_ERROR",
+                    error_summary="connection reset",
+                ),
+            ]
+        )
+        session.commit()
+
+        by_id = {item.source_definition_id: item for item in list_source_health(session)}
+
+        assert by_id[failed.id].last_run_status == "FAILED"
+        assert by_id[failed.id].last_run_error_code == "TRANSPORT_ERROR"
+        assert by_id[failed.id].last_run_duration_seconds == 60
+        assert by_id[failed.id].terms_reviewed is True
+        # A source that never ran reports absence, not a zeroed run.
+        assert by_id[never_run.id].last_run_status is None
+        assert by_id[never_run.id].last_run_items_seen is None
+        assert by_id[never_run.id].last_run_duration_seconds is None
+
+        failing = list_source_health(session, only_failing=True)
+        failing_ids = {item.source_definition_id for item in failing}
+        assert failed.id in failing_ids
+        assert never_run.id not in failing_ids
+
+
+def test_overview_counts_reflect_the_catalogue_and_flag_the_missing_pipeline() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        profile_version = _profile_version(session)
+        company = _company(session, "high")
+        opportunity = _opportunity(session, company, title="Overview role", published_at=NOW)
+        _assessment(
+            session,
+            opportunity,
+            profile_version.id,
+            verdict="HIGH_PRIORITY",
+            score="88.0000",
+            assessed_at=NOW,
+        )
+        session.commit()
+
+        summary = summarize_overview(session)
+
+        assert summary.opportunities_total >= 1
+        assert summary.opportunities_active >= 1
+        assert summary.new_opportunities >= 1
+        assert summary.new_opportunity_window_days == 7
+        assert summary.assessed_opportunities >= 1
+        assert summary.verdict_counts.get("HIGH_PRIORITY", 0) >= 1
+        assert summary.sources_failing == len(summary.failing_sources)
+        assert summary.applications_active == sum(summary.applications_by_stage.values())
+        assert summary.follow_ups_due <= summary.applications_active

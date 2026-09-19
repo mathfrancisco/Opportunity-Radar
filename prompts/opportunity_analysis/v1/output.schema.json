@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "inferences": {
+      "items": {
+        "maxLength": 500,
+        "type": "string"
+      },
+      "maxItems": 20,
+      "type": "array"
+    },
+    "recommended_review": {
+      "type": "boolean"
+    },
+    "risks": {
+      "items": {
+        "maxLength": 500,
+        "type": "string"
+      },
+      "maxItems": 20,
+      "type": "array"
+    },
+    "strengths": {
+      "items": {
+        "maxLength": 500,
+        "type": "string"
+      },
+      "maxItems": 20,
+      "type": "array"
+    },
+    "summary": {
+      "maxLength": 2000,
+      "type": "string"
+    },
+    "unknowns": {
+      "items": {
+        "maxLength": 500,
+        "type": "string"
+      },
+      "maxItems": 20,
+      "type": "array"
+    }
+  },
+  "required": [
+    "summary",
+    "strengths",
+    "risks",
+    "inferences",
+    "unknowns",
+    "recommended_review"
+  ],
+  "title": "OpportunityAnalysis",
+  "type": "object"
+}

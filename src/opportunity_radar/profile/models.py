@@ -207,6 +207,11 @@ class EmploymentPreferenceModel(Base):
             name="ck_preference_compensation",
         ),
         CheckConstraint(
+            "compensation_period IS NULL OR compensation_period IN "
+            "('YEAR', 'MONTH', 'WEEK', 'DAY', 'HOUR')",
+            name="ck_preference_compensation_period",
+        ),
+        CheckConstraint(
             "(timezone_start_hour IS NULL AND timezone_end_hour IS NULL) OR "
             "(timezone_start_hour IS NOT NULL AND timezone_end_hour IS NOT NULL "
             "AND timezone_start_hour >= 0 AND timezone_start_hour < timezone_end_hour "
@@ -239,6 +244,7 @@ class EmploymentPreferenceModel(Base):
     compensation_min: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     compensation_max: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     compensation_currency: Mapped[str | None] = mapped_column(String(3))
+    compensation_period: Mapped[str | None] = mapped_column(String(16))
     relocation_allowed: Mapped[bool] = mapped_column(nullable=False, default=False)
     sponsorship_required: Mapped[bool] = mapped_column(nullable=False, default=False)
     profile_version: Mapped[ProfileVersionModel] = relationship(

@@ -44,6 +44,12 @@ class ProfileService:
             raise ProfileNotFoundError("no active profile version")
         return self._to_domain(version)
 
+    def get_version(self, version_id: UUID) -> ProfileVersion:
+        version = self.repository.version(version_id)
+        if version is None:
+            raise ProfileNotFoundError("profile version not found")
+        return self._to_domain(version)
+
     def list_versions(self) -> list[ProfileVersion]:
         return [self._to_domain(version) for version in self.repository.versions()]
 
@@ -188,6 +194,7 @@ class ProfileService:
             compensation_min=preferences.compensation_min,
             compensation_max=preferences.compensation_max,
             compensation_currency=preferences.compensation_currency,
+            compensation_period=preferences.compensation_period,
             relocation_allowed=preferences.relocation_allowed,
             sponsorship_required=preferences.sponsorship_required,
         )
@@ -235,6 +242,7 @@ class ProfileService:
                 compensation_min=preference.compensation_min,
                 compensation_max=preference.compensation_max,
                 compensation_currency=preference.compensation_currency,
+                compensation_period=preference.compensation_period,
                 relocation_allowed=preference.relocation_allowed,
                 sponsorship_required=preference.sponsorship_required,
             ),

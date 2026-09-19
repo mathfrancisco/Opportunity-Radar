@@ -775,6 +775,25 @@ Além disso:
 - [ ] UNKNOWN não vira FALSE implicitamente;
 - [ ] nenhum atributo sensível entra no score.
 
+Estado implementado da primeira fatia:
+
+- snapshots imutáveis e autocontidos da oportunidade e do perfil usados no cálculo;
+- ruleset `matching-v1` com os oito pesos documentados e missing policies explícitas;
+- hard filters de lifecycle, modalidade, país, autorização, timezone, senioridade e
+  contrato, sempre preservando `UNKNOWN` quando falta evidência;
+- score em `Decimal`, confiança separada do score e verdicts calculados sobre o valor
+  interno sem arredondamento intermediário;
+- `MatchAssessment` e `MatchFactor` imutáveis no PostgreSQL, com versões, evidências,
+  explicações e hash dos snapshots mais a data UTC usada para recência;
+- API de avaliação, listagem e detalhe explicável;
+- golden cases para match completo, salário ausente, país incompatível, senioridade
+  ambígua, skills parciais e vaga antiga;
+- smoke test no CI cobrindo perfil ativo, avaliação idempotente e persistência após
+  reinício do PostgreSQL.
+
+Esta base sustenta a Fase 6: a análise semântica lê o resultado determinístico e nunca
+o reescreve.
+
 ---
 
 # Fase 6 — Ollama
@@ -861,12 +880,37 @@ schema version
 
 ## 46. Critério de aceite
 
-- [ ] resposta válida segue schema;
-- [ ] JSON inválido é tratado;
-- [ ] timeout é tratado;
-- [ ] modelo indisponível não derruba fluxo;
-- [ ] cache evita repetição idêntica;
-- [ ] IA não sobrescreve disqualifier.
+- [x] resposta válida segue schema;
+- [x] JSON inválido é tratado;
+- [x] timeout é tratado;
+- [x] modelo indisponível não derruba fluxo;
+- [x] cache evita repetição idêntica;
+- [x] IA não sobrescreve disqualifier.
+
+Estado implementado:
+
+- contrato puro em `matching/analysis.py`: value object consultivo, schema fechado,
+  estados de degradação e chave de cache;
+- adapter `matching/ollama.py` sobre `/api/chat`, com `format`, `temperature: 0`,
+  timeout, retry de falha retentável e classificação de erro;
+- artefatos versionados em `prompts/opportunity_analysis/v1/`, carregados por
+  `matching/prompts.py` com recusa explícita em caso de divergência;
+- `output.schema.json` gerado de `OUTPUT_SCHEMA` por
+  `scripts/export_prompt_schema.py`, com gate `--check` no CI;
+- `matching.match_analysis` append-only, com trigger que bloqueia `UPDATE` e sem
+  qualquer coluna de decisão — o modelo não tem onde gravar score ou disqualifier;
+- reuso da análise concluída no banco antes de chamar o modelo, então o cache sobrevive
+  a reinício; falha e skip ficam como histórico e não bloqueiam nova tentativa;
+- `POST /api/matches/{id}/analysis` respondendo `200` inclusive degradado, e `analysis`
+  exposta no detalhe e na listagem de assessments;
+- `OLLAMA_ANALYSIS_ENABLED=false` troca o adapter pelo `NullAnalysisAdapter`;
+- E2E no compose exercitando análise, reuso e persistência após reinício do PostgreSQL,
+  com o stub respondendo `/api/chat` sem baixar modelo.
+
+Detalhes do contrato em `docs/21-ollama-prompts.md`.
+
+Próximo incremento: Fase 7, dashboard — começando por Overview e Opportunity Inbox
+sobre os contratos já estáveis de Opportunity, Matching e análise semântica.
 
 ---
 
@@ -1032,6 +1076,54 @@ ver saúde das fontes
 
 sem acessar terminal.
 
+Esse percurso está coberto: abrir, filtrar, abrir a recomendação, entender o score, ver
+a evidência e conferir a saúde das fontes já funcionam pela interface. Iniciar
+candidatura é o único passo que continua dependendo da Fase 8.
+
+Estado implementado (itens 27 a 32 da ordem prática):
+
+- read models em `src/opportunity_radar/dashboard/`, conforme §9.4 do doc 06: as telas
+  leem por query service com SQL otimizado, sem carregar agregados e sem poluir os
+  repositories de cada contexto com joins de dashboard;
+- `GET /api/overview`: novas oportunidades na janela de sete dias, contagem por verdict,
+  análises degradadas, itens brutos pendentes e fontes cuja última execução falhou;
+- `GET /api/inbox`: oportunidade com a avaliação mais recente, filtros de verdict, score
+  mínimo, empresa, modalidade, status e data, busca por título ou empresa, ordenação por
+  prioridade, recência ou score, e paginação;
+- oportunidade ainda não avaliada continua na inbox — escondê-la faria a tela discordar
+  do catálogo em silêncio;
+- telas Visão geral (`/`) e Oportunidades (`/inbox`), com estados de loading, vazio,
+  erro com retry e degradado; navegação compartilhada em `components/PageShell`;
+- os cartões da Visão geral são links que já chegam na inbox filtrada;
+- o estado da tela vive na URL, então um filtro é compartilhável e sobrevive ao reload;
+- Opportunity Detail em `/opportunities/{id}`, montada sobre os contratos já existentes
+  de oportunidade e matching, sem endpoint novo: título, empresa, localização,
+  modalidade, descrição, remuneração com evidência textual, skills com taxonomia,
+  ocorrências e fingerprint, score, verdict, confiança, filtros eliminatórios,
+  fatores com peso e explicação, análise semântica e as versões de regras, taxonomia,
+  perfil e conteúdo usadas na decisão;
+- a análise pode ser disparada da própria tela, e falha do modelo aparece como estado
+  degradado ao lado da decisão determinística, que continua completa;
+- `GET /api/source-health` como `GetSourceHealthQuery`: cada fonte com o último run,
+  status, duração, contadores e erro; fonte que nunca executou reporta ausência, não
+  zero. A rota não é `/sources/health` porque esse caminho é um id de fonte;
+- tela Fontes e execuções em `/sources`: estado de habilitação, evidência, termos e
+  homologação, resultado do último run, histórico por fonte e execução manual. Fonte
+  desabilitada não executa, e a tela diz o motivo em vez de esconder o botão;
+- tela Perfil em `/profile`: skills, modalidades, contratos, países, janela de timezone,
+  remuneração, relocação e patrocínio. Salvar encadeia criar, publicar e ativar,
+  carregando o lock de cada passo, então edição concorrente falha com conflito em vez de
+  vencer em silêncio; avaliações antigas continuam apontando para a versão que as gerou;
+- Companies ganhou detalhe em `/companies/{id}`: aliases, domínio, fontes com método e
+  data de verificação, última verificação consolidada e as últimas vagas da empresa,
+  reusando a inbox filtrada em vez de uma query nova.
+
+Completado junto da Fase 8:
+
+- filtro de aplicada/não aplicada na Inbox, com o estágio da candidatura no cartão;
+- ação de iniciar candidatura no detalhe, substituindo o botão desabilitado;
+- candidaturas ativas e follow-ups na Overview, agora com número real.
+
 ---
 
 # Fase 8 — Pipeline básico
@@ -1086,12 +1178,40 @@ A lista exata deve alinhar-se ao documento de workflows.
 
 ## 61. Critério de aceite
 
-- [ ] iniciar candidatura;
-- [ ] mudar estágio;
-- [ ] histórico permanece;
-- [ ] próxima ação pode ser definida;
-- [ ] filtro da Inbox sabe se vaga já foi aplicada;
-- [ ] restart preserva pipeline.
+- [x] iniciar candidatura;
+- [x] mudar estágio;
+- [x] histórico permanece;
+- [x] próxima ação pode ser definida;
+- [x] filtro da Inbox sabe se vaga já foi aplicada;
+- [x] restart preserva pipeline.
+
+Estado implementado:
+
+- `crm.application_process` e `crm.stage_history`, conforme §19 do doc 11: a candidatura
+  é mutável, o histórico é append-only com trigger que bloqueia `UPDATE`;
+- tabela de transições pura em `pipeline/domain.py`, com os dez estágios do §59. Estágio
+  terminal não tem saída: corrigir um engano é abrir nova candidatura, não reabrir
+  histórico. De qualquer estágio vivo é sempre possível recusar, desistir ou encerrar;
+- estágio atual guardado na candidatura e derivável do histórico: o histórico responde
+  como chegou aqui, a coluna responde onde está sem reprocessar nada;
+- índice parcial único garantindo uma candidatura ativa por oportunidade e versão de
+  perfil; encerrar libera a vaga para uma nova candidatura em outro ciclo;
+- controle otimista por `expected_version` em transição e próxima ação, então edição
+  concorrente falha com conflito em vez de sobrescrever;
+- `applied_at` gravado na primeira entrada em `APPLIED` e nunca reescrito depois;
+  encerrar limpa a próxima ação, porque candidatura encerrada não deve nada;
+- API respondendo também quais transições são legais a partir do estágio atual, então a
+  interface nunca oferece um movimento que o domínio recusaria;
+- tela `/applications` com as candidaturas ativas por estágio, próxima ação em destaque
+  quando vencida, e as encerradas resumidas por desfecho;
+- painel de candidatura no detalhe da oportunidade, com histórico completo;
+- E2E cobrindo iniciar, recusar duplicata, recusar transição ilegal, mudar estágio,
+  definir próxima ação, filtrar a inbox por aplicada e conferir a persistência da
+  candidatura e do histórico após reinício do PostgreSQL.
+
+Fora do escopo desta fase, como o §67 previa: `crm.follow_up` como entidade própria com
+lifecycle `PENDING/DONE/CANCELLED/SKIPPED`, contatos e entrevistas. O follow-up aqui é o
+básico — uma próxima ação com data na própria candidatura.
 
 ---
 
@@ -1169,13 +1289,35 @@ Somente criar dump não atende o critério.
 
 ## 66. Critério de aceite
 
-- [ ] logs identificam falhas;
-- [ ] source error não derruba sistema;
-- [ ] restore funciona;
-- [ ] runbook funciona;
-- [ ] E2E passa;
-- [ ] máquina limpa consegue executar;
-- [ ] documentação corresponde ao comportamento real.
+- [x] logs identificam falhas;
+- [x] source error não derruba sistema;
+- [x] restore funciona;
+- [x] runbook funciona;
+- [x] E2E passa;
+- [x] máquina limpa consegue executar;
+- [x] documentação corresponde ao comportamento real.
+
+Estado implementado:
+
+- logs estruturados em JSON, uma linha por evento, com `correlation_id` propagado por
+  context var — um log escrito dentro de um collector carrega a requisição ou o lote a
+  que pertence sem passar o id por assinatura;
+- `X-Correlation-ID` aceito e devolvido pela API; cada passada de normalização do worker
+  abre o próprio id, então um lote inteiro é rastreável;
+- `scripts/doctor.py` respondendo três coisas por verificação: o que foi inspecionado, o
+  que foi encontrado e o que fazer. Aviso não vira falha — Ollama fora do ar é degradação
+  esperada, não ambiente quebrado — e sem `DATABASE_URL` as verificações dependentes são
+  puladas para não enterrar o único problema real;
+- `make backup` gravando dump e manifesto com a revisão do Alembic e a contagem de cada
+  tabela do fluxo vertical;
+- `make restore-check` restaurando num banco descartável, rodando as mesmas contagens e
+  comparando com o manifesto. O banco de trabalho não é tocado; divergência sai com
+  código 1 dizendo qual tabela divergiu. Criar o arquivo não é o critério, como o §65
+  exige;
+- `docs/30-runbook.md` com subir do zero, popular catálogo, rodar o ciclo, ler logs,
+  backup, restauração e o que fazer quando cada parte quebra;
+- E2E do compose cobrindo o gate de backup e restauração, o doctor em modo JSON e a
+  presença do correlation id nos logs estruturados.
 
 ---
 

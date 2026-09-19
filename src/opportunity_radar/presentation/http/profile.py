@@ -61,6 +61,7 @@ class PreferenceBody(BaseModel):
     compensation_min: Decimal | None = Field(default=None, ge=0)
     compensation_max: Decimal | None = Field(default=None, ge=0)
     compensation_currency: str | None = Field(default=None, min_length=3, max_length=3)
+    compensation_period: str | None = Field(default=None, max_length=16)
     relocation_allowed: bool = False
     sponsorship_required: bool = False
 
