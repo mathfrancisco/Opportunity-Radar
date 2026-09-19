@@ -11,12 +11,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from opportunity_radar.dashboard.queries import (
+    FAILING_RUN_STATUSES,
     InboxItem,
     InboxOrder,
     InboxQuery,
     OverviewSummary,
     SourceHealth,
     list_opportunity_inbox,
+    list_source_health,
     summarize_overview,
 )
 from opportunity_radar.opportunities.domain import OpportunityStatus, WorkMode
@@ -63,9 +65,27 @@ class SourceHealthResponse(BaseModel):
     name: str
     source_type: str
     enabled: bool
+    evidence_status: str
+    terms_reviewed: bool
+    collector_local_tested: bool
+    schedule: str | None
+    last_run_id: UUID | None
     last_run_status: str | None
+    last_run_started_at: datetime | None
     last_run_finished_at: datetime | None
+    last_run_duration_seconds: float | None
+    last_run_error_code: str | None
     last_run_error: str | None
+    last_run_items_seen: int | None
+    last_run_items_persisted: int | None
+    last_run_items_skipped: int | None
+    last_run_items_invalid: int | None
+
+
+class SourceHealthListResponse(BaseModel):
+    items: list[SourceHealthResponse]
+    total: int
+    failing: int
 
 
 class OverviewResponse(BaseModel):
@@ -126,6 +146,21 @@ def list_inbox(
         offset=page.offset,
         limit=page.limit,
         order=order.value,
+    )
+
+
+@router.get("/source-health", response_model=SourceHealthListResponse)
+def list_sources_health(
+    only_failing: bool = False,
+    session: Session = Depends(get_session),
+) -> SourceHealthListResponse:
+    """Named `/source-health` rather than `/sources/health`: that path is a source id."""
+    items = list_source_health(session, only_failing=only_failing)
+    failing = sum(1 for item in items if item.last_run_status in FAILING_RUN_STATUSES)
+    return SourceHealthListResponse(
+        items=[_source_response(item) for item in items],
+        total=len(items),
+        failing=failing,
     )
 
 
@@ -191,7 +226,19 @@ def _source_response(source: SourceHealth) -> SourceHealthResponse:
         name=source.name,
         source_type=source.source_type,
         enabled=source.enabled,
+        evidence_status=source.evidence_status,
+        terms_reviewed=source.terms_reviewed,
+        collector_local_tested=source.collector_local_tested,
+        schedule=source.schedule,
+        last_run_id=source.last_run_id,
         last_run_status=source.last_run_status,
+        last_run_started_at=source.last_run_started_at,
         last_run_finished_at=source.last_run_finished_at,
+        last_run_duration_seconds=source.last_run_duration_seconds,
+        last_run_error_code=source.last_run_error_code,
         last_run_error=source.last_run_error,
+        last_run_items_seen=source.last_run_items_seen,
+        last_run_items_persisted=source.last_run_items_persisted,
+        last_run_items_skipped=source.last_run_items_skipped,
+        last_run_items_invalid=source.last_run_items_invalid,
     )

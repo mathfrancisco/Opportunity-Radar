@@ -130,6 +130,7 @@ function ItemCard({ item }: { item: InboxItem }) {
 export function InboxPage() {
   const [params, setParams] = useSearchParams()
   const verdict = params.get('verdict') ?? ''
+  const companyId = params.get('company_id') ?? ''
   const workMode = params.get('work_mode') ?? ''
   const lifecycleStatus = params.get('lifecycle_status') ?? ''
   const minimumScore = params.get('minimum_score') ?? ''
@@ -147,6 +148,7 @@ export function InboxPage() {
     pageSize,
     verdicts: verdict ? [verdict] : undefined,
     minimumScore: minimumScore || undefined,
+    companyId: companyId || undefined,
     workMode: workMode || undefined,
     lifecycleStatus: lifecycleStatus || undefined,
     onlyAssessed,
@@ -282,6 +284,19 @@ export function InboxPage() {
         />
         Somente oportunidades já avaliadas
       </label>
+
+      {companyId && (
+        <p className="mt-4 text-sm text-[#547068]">
+          Filtrando por uma empresa.{' '}
+          <button
+            className="font-medium underline"
+            onClick={() => update({ company_id: null })}
+            type="button"
+          >
+            Remover filtro
+          </button>
+        </p>
+      )}
 
       <p className="mt-4 text-sm text-[#6d827b]">
         O filtro de candidatura (aplicada ou não) chega com o pipeline, na fase 8.

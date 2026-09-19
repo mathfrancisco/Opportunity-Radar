@@ -73,6 +73,79 @@ function parseCompany(value: unknown): Company | null {
   }
 }
 
+export interface CompanyDetailSource {
+  id: string
+  name: string
+  url: string
+  status: string
+  externalKey: string | null
+  verificationMethod: string | null
+  evidence: string | null
+  lastVerifiedAt: string | null
+}
+
+export interface CompanyDetail {
+  id: string
+  name: string
+  domain: string | null
+  priority: string
+  status: string
+  verificationState: string
+  aliases: string[]
+  sources: CompanyDetailSource[]
+  /** The most recent verification across sources, or null when none was verified. */
+  lastVerifiedAt: string | null
+}
+
+function parseDetailSource(value: unknown): CompanyDetailSource | null {
+  if (!isRecord(value) || typeof value.id !== 'string') return null
+  return {
+    id: value.id,
+    name: typeof value.name === 'string' ? value.name : 'fonte',
+    url: typeof value.url === 'string' ? value.url : '',
+    status: typeof value.status === 'string' ? value.status : 'unknown',
+    externalKey: typeof value.external_key === 'string' ? value.external_key : null,
+    verificationMethod:
+      typeof value.verification_method === 'string' ? value.verification_method : null,
+    evidence: typeof value.evidence === 'string' ? value.evidence : null,
+    lastVerifiedAt:
+      typeof value.last_verified_at === 'string' ? value.last_verified_at : null,
+  }
+}
+
+export async function getCompany(companyId: string): Promise<CompanyDetail> {
+  const response = await fetch(apiUrl(`/companies/${companyId}`), {
+    headers: { Accept: 'application/json' },
+  })
+  if (response.status === 404) throw new Error('Empresa não encontrada.')
+  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  const body: unknown = await response.json()
+  if (!isRecord(body) || typeof body.id !== 'string') {
+    throw new Error('A API retornou uma empresa inválida.')
+  }
+  const sources = (Array.isArray(body.sources) ? body.sources : [])
+    .map(parseDetailSource)
+    .filter((source): source is CompanyDetailSource => source !== null)
+  const verifiedDates = sources
+    .map((source) => source.lastVerifiedAt)
+    .filter((value): value is string => value !== null)
+    .sort()
+  return {
+    id: body.id,
+    name: typeof body.name === 'string' ? body.name : 'Empresa',
+    domain: optionalString(body.domain) ?? null,
+    priority: typeof body.priority === 'string' ? body.priority : 'normal',
+    status: typeof body.status === 'string' ? body.status : 'unknown',
+    verificationState:
+      typeof body.verification_state === 'string' ? body.verification_state : 'unknown',
+    aliases: (Array.isArray(body.aliases) ? body.aliases : [])
+      .map((alias) => (isRecord(alias) && typeof alias.alias === 'string' ? alias.alias : null))
+      .filter((alias): alias is string => alias !== null),
+    sources,
+    lastVerifiedAt: verifiedDates.at(-1) ?? null,
+  }
+}
+
 export async function getCompanies({
   page,
   pageSize,

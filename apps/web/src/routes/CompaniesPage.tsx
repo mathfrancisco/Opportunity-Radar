@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { PageShell } from '../components/PageShell'
 import { type Company } from '../features/companies/api'
 import { useCompanies } from '../features/companies/useCompanies'
@@ -37,7 +38,14 @@ function CompanyList({ companies }: { companies: Company[] }) {
             {companies.map((company) => (
               <tr className="border-t border-[#e4ebe4]" key={company.id}>
                 <td className="px-5 py-4">
-                  <p className="font-semibold">{company.name}</p>
+                  <p className="font-semibold">
+                    <Link
+                      className="underline decoration-[#d7f06f] decoration-2 underline-offset-4"
+                      to={`/companies/${company.id}`}
+                    >
+                      {company.name}
+                    </Link>
+                  </p>
                   <p className="mt-1 text-[#6d827b]">{display(company.domain)}</p>
                 </td>
                 <td className="px-5 py-4">{display(company.priority)}</td>
@@ -55,7 +63,14 @@ function CompanyList({ companies }: { companies: Company[] }) {
       <div className="grid gap-3 md:hidden">
         {companies.map((company) => (
           <article className="rounded-2xl border border-[#dce4dc] p-4" key={company.id}>
-            <h2 className="font-semibold">{company.name}</h2>
+            <h2 className="font-semibold">
+              <Link
+                className="underline decoration-[#d7f06f] decoration-2 underline-offset-4"
+                to={`/companies/${company.id}`}
+              >
+                {company.name}
+              </Link>
+            </h2>
             <p className="mt-1 text-sm text-[#6d827b]">{display(company.domain)}</p>
             <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
               <div>

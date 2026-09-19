@@ -5,6 +5,8 @@ const navigation = [
   { to: '/', label: 'Visão geral' },
   { to: '/inbox', label: 'Oportunidades' },
   { to: '/companies', label: 'Empresas' },
+  { to: '/sources', label: 'Fontes' },
+  { to: '/profile', label: 'Perfil' },
   { to: '/status', label: 'Status' },
 ] as const
 

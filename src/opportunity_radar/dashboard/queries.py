@@ -100,6 +100,8 @@ class InboxQuery:
 
 @dataclass(frozen=True, slots=True)
 class SourceHealth:
+    """A source plus the outcome of its last run, which is what the screen decides on."""
+
     source_definition_id: UUID
     name: str
     source_type: str
@@ -107,6 +109,23 @@ class SourceHealth:
     last_run_status: str | None
     last_run_finished_at: datetime | None
     last_run_error: str | None
+    evidence_status: str = "unverified"
+    terms_reviewed: bool = False
+    collector_local_tested: bool = False
+    schedule: str | None = None
+    last_run_id: UUID | None = None
+    last_run_started_at: datetime | None = None
+    last_run_error_code: str | None = None
+    last_run_items_seen: int | None = None
+    last_run_items_persisted: int | None = None
+    last_run_items_skipped: int | None = None
+    last_run_items_invalid: int | None = None
+
+    @property
+    def last_run_duration_seconds(self) -> float | None:
+        if self.last_run_started_at is None or self.last_run_finished_at is None:
+            return None
+        return (self.last_run_finished_at - self.last_run_started_at).total_seconds()
 
 
 @dataclass(frozen=True, slots=True)
@@ -321,7 +340,7 @@ def summarize_overview(
         .select_from(analyses)
         .where(analyses.c.status != "AI_COMPLETED")
     )
-    failing = _failing_sources(session)
+    failing = list_source_health(session, only_failing=True)
     return OverviewSummary(
         opportunities_total=_count(session, select(func.count(OpportunityModel.id))),
         opportunities_active=_count(
@@ -371,12 +390,19 @@ def _pending_normalizations(session: Session) -> int:
     )
 
 
-def _failing_sources(session: Session) -> tuple[SourceHealth, ...]:
+def _latest_runs() -> Any:
     ranked = select(
+        SourceRunModel.id.label("run_id"),
         SourceRunModel.source_definition_id.label("source_definition_id"),
         SourceRunModel.status.label("status"),
+        SourceRunModel.started_at.label("started_at"),
         SourceRunModel.finished_at.label("finished_at"),
+        SourceRunModel.error_code.label("error_code"),
         SourceRunModel.error_summary.label("error_summary"),
+        SourceRunModel.items_seen.label("items_seen"),
+        SourceRunModel.items_persisted.label("items_persisted"),
+        SourceRunModel.items_skipped.label("items_skipped"),
+        SourceRunModel.items_invalid.label("items_invalid"),
         func.row_number()
         .over(
             partition_by=SourceRunModel.source_definition_id,
@@ -387,21 +413,46 @@ def _failing_sources(session: Session) -> tuple[SourceHealth, ...]:
         )
         .label("position"),
     ).subquery("ranked_runs")
-    latest = select(ranked).where(ranked.c.position == 1).subquery("latest_run")
-    rows = session.execute(
+    return select(ranked).where(ranked.c.position == 1).subquery("latest_run")
+
+
+def list_source_health(
+    session: Session,
+    *,
+    only_failing: bool = False,
+) -> tuple[SourceHealth, ...]:
+    """Every source with its last run. A source that never ran reports `None`, not zero."""
+    latest = _latest_runs()
+    statement = (
         select(
             SourceDefinitionModel.id,
             SourceDefinitionModel.name,
             SourceDefinitionModel.source_type,
             SourceDefinitionModel.enabled,
+            SourceDefinitionModel.evidence_status,
+            SourceDefinitionModel.terms_reviewed,
+            SourceDefinitionModel.collector_local_tested,
+            SourceDefinitionModel.schedule,
+            latest.c.run_id,
             latest.c.status,
+            latest.c.started_at,
             latest.c.finished_at,
+            latest.c.error_code,
             latest.c.error_summary,
+            latest.c.items_seen,
+            latest.c.items_persisted,
+            latest.c.items_skipped,
+            latest.c.items_invalid,
         )
         .select_from(SourceDefinitionModel)
-        .join(latest, latest.c.source_definition_id == SourceDefinitionModel.id)
-        .where(latest.c.status.in_(FAILING_RUN_STATUSES))
-        .order_by(latest.c.finished_at.desc().nulls_last(), SourceDefinitionModel.name)
+        .outerjoin(latest, latest.c.source_definition_id == SourceDefinitionModel.id)
+    )
+    if only_failing:
+        statement = statement.where(latest.c.status.in_(FAILING_RUN_STATUSES))
+    rows = session.execute(
+        statement.order_by(
+            latest.c.finished_at.desc().nulls_last(), SourceDefinitionModel.name
+        )
     ).all()
     return tuple(
         SourceHealth(
@@ -409,9 +460,20 @@ def _failing_sources(session: Session) -> tuple[SourceHealth, ...]:
             name=row[1],
             source_type=row[2],
             enabled=row[3],
-            last_run_status=row[4],
-            last_run_finished_at=row[5],
-            last_run_error=row[6],
+            evidence_status=row[4],
+            terms_reviewed=row[5],
+            collector_local_tested=row[6],
+            schedule=row[7],
+            last_run_id=row[8],
+            last_run_status=row[9],
+            last_run_started_at=row[10],
+            last_run_finished_at=row[11],
+            last_run_error_code=row[12],
+            last_run_error=row[13],
+            last_run_items_seen=row[14],
+            last_run_items_persisted=row[15],
+            last_run_items_skipped=row[16],
+            last_run_items_invalid=row[17],
         )
         for row in rows
     )
@@ -427,5 +489,6 @@ __all__ = [
     "OverviewSummary",
     "SourceHealth",
     "list_opportunity_inbox",
+    "list_source_health",
     "summarize_overview",
 ]

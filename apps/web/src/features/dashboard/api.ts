@@ -39,6 +39,7 @@ export interface InboxParams {
   pageSize: number
   verdicts?: string[]
   minimumScore?: string
+  companyId?: string
   workMode?: string
   lifecycleStatus?: string
   onlyAssessed?: boolean
@@ -138,6 +139,7 @@ export async function getInbox({
   pageSize,
   verdicts,
   minimumScore,
+  companyId,
   workMode,
   lifecycleStatus,
   onlyAssessed,
@@ -151,6 +153,7 @@ export async function getInbox({
   })
   verdicts?.forEach((verdict) => params.append('verdict', verdict))
   if (minimumScore) params.set('minimum_score', minimumScore)
+  if (companyId) params.set('company_id', companyId)
   if (workMode) params.set('work_mode', workMode)
   if (lifecycleStatus) params.set('lifecycle_status', lifecycleStatus)
   if (onlyAssessed) params.set('only_assessed', 'true')

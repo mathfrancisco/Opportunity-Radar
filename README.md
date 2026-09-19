@@ -340,9 +340,14 @@ ou empresa e ordenação por prioridade, recência ou score. Oportunidade ainda 
 avaliada continua na lista: escondê-la faria a tela discordar do catálogo sem dizer
 por quê.
 
+`GET /api/source-health` devolve cada fonte com o resultado do último run:
+status, duração, contadores e erro. Fonte que nunca executou reporta ausência, não
+zero. A rota não é `/sources/health` porque esse caminho já é um id de fonte.
+
 No frontend, `/` é a Visão geral, `/inbox` é a Opportunity Inbox,
-`/opportunities/{id}` é o detalhe, `/companies` é o catálogo e `/status` é a
-checagem de ambiente. Os cartões da Visão geral são links que já abrem a inbox
+`/opportunities/{id}` é o detalhe, `/companies` e `/companies/{id}` são o
+catálogo, `/sources` são as fontes e execuções, `/profile` são os critérios de
+decisão e `/status` é a checagem de ambiente. Os cartões da Visão geral são links que já abrem a inbox
 filtrada, e os filtros vivem na URL, então uma seleção é compartilhável e
 sobrevive ao reload.
 
@@ -355,6 +360,21 @@ explicação, e a análise semântica. As versões de regras, taxonomia, perfil 
 conteúdo aparecem junto, porque é o que torna a decisão reproduzível. A análise
 pode ser disparada da tela; se o modelo falhar, o estado degradado aparece ao
 lado da decisão determinística, que continua completa.
+
+A tela de fontes mostra habilitação, evidência, termos revisados, homologação do
+collector e o último run de cada fonte, com histórico por fonte e execução
+manual. Fonte desabilitada não executa, e a tela diz o motivo em vez de esconder
+o botão.
+
+A tela de perfil edita skills, modalidades, contratos, países, janela de
+timezone, remuneração, relocação e patrocínio. Salvar encadeia criar, publicar e
+ativar carregando o lock que cada passo devolve, então uma edição concorrente
+falha com conflito em vez de vencer calada. Avaliações antigas continuam
+apontando para a versão de perfil que as produziu.
+
+O detalhe da empresa reúne aliases, domínio, fontes com método e data de
+verificação, a verificação mais recente entre elas e as últimas vagas coletadas,
+reusando a inbox filtrada por empresa em vez de uma query nova.
 
 ---
 

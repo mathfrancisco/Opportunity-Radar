@@ -1076,7 +1076,11 @@ ver saúde das fontes
 
 sem acessar terminal.
 
-Estado implementado (itens 27, 28 e 29 da ordem prática):
+Esse percurso está coberto: abrir, filtrar, abrir a recomendação, entender o score, ver
+a evidência e conferir a saúde das fontes já funcionam pela interface. Iniciar
+candidatura é o único passo que continua dependendo da Fase 8.
+
+Estado implementado (itens 27 a 32 da ordem prática):
 
 - read models em `src/opportunity_radar/dashboard/`, conforme §9.4 do doc 06: as telas
   leem por query service com SQL otimizado, sem carregar agregados e sem poluir os
@@ -1099,11 +1103,23 @@ Estado implementado (itens 27, 28 e 29 da ordem prática):
   fatores com peso e explicação, análise semântica e as versões de regras, taxonomia,
   perfil e conteúdo usadas na decisão;
 - a análise pode ser disparada da própria tela, e falha do modelo aparece como estado
-  degradado ao lado da decisão determinística, que continua completa.
+  degradado ao lado da decisão determinística, que continua completa;
+- `GET /api/source-health` como `GetSourceHealthQuery`: cada fonte com o último run,
+  status, duração, contadores e erro; fonte que nunca executou reporta ausência, não
+  zero. A rota não é `/sources/health` porque esse caminho é um id de fonte;
+- tela Fontes e execuções em `/sources`: estado de habilitação, evidência, termos e
+  homologação, resultado do último run, histórico por fonte e execução manual. Fonte
+  desabilitada não executa, e a tela diz o motivo em vez de esconder o botão;
+- tela Perfil em `/profile`: skills, modalidades, contratos, países, janela de timezone,
+  remuneração, relocação e patrocínio. Salvar encadeia criar, publicar e ativar,
+  carregando o lock de cada passo, então edição concorrente falha com conflito em vez de
+  vencer em silêncio; avaliações antigas continuam apontando para a versão que as gerou;
+- Companies ganhou detalhe em `/companies/{id}`: aliases, domínio, fontes com método e
+  data de verificação, última verificação consolidada e as últimas vagas da empresa,
+  reusando a inbox filtrada em vez de uma query nova.
 
 O que a fase ainda deve entregar:
 
-- Sources/Executions e Profile/Preferences;
 - filtro de aplicada/não aplicada, a ação de iniciar candidatura no detalhe e os blocos
   de candidaturas e follow-up da Overview, que dependem do `ApplicationProcess` da Fase
   8. Até lá a API devolve `null` nesses campos, e não `0`: ausência de pipeline não é

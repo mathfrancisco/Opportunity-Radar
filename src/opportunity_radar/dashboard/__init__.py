@@ -14,6 +14,7 @@ from opportunity_radar.dashboard.queries import (
     OverviewSummary,
     SourceHealth,
     list_opportunity_inbox,
+    list_source_health,
     summarize_overview,
 )
 
@@ -25,5 +26,6 @@ __all__ = [
     "OverviewSummary",
     "SourceHealth",
     "list_opportunity_inbox",
+    "list_source_health",
     "summarize_overview",
 ]

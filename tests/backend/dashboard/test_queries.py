@@ -11,11 +11,13 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.models import SourceDefinitionModel, SourceRunModel
 from opportunity_radar.companies.models import Company
 from opportunity_radar.dashboard.queries import (
     InboxOrder,
     InboxQuery,
     list_opportunity_inbox,
+    list_source_health,
     summarize_overview,
 )
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
@@ -283,6 +285,64 @@ def test_inbox_orders_by_priority_recency_and_score() -> None:
         assert ids(InboxOrder.PRIORITY) == [old_high.id, new_low.id]
         assert ids(InboxOrder.RECENCY) == [new_low.id, old_high.id]
         assert ids(InboxOrder.SCORE) == [new_low.id, old_high.id]
+
+
+def test_source_health_reports_the_last_run_and_keeps_never_run_sources() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        marker = uuid4().hex[:8]
+        failed = SourceDefinitionModel(
+            source_type="manual",
+            name=f"Failing {marker}",
+            enabled=True,
+            evidence_status="confirmed",
+            terms_reviewed=True,
+            collector_local_tested=True,
+        )
+        never_run = SourceDefinitionModel(
+            source_type="manual",
+            name=f"Idle {marker}",
+            enabled=False,
+        )
+        session.add_all([failed, never_run])
+        session.flush()
+        session.add_all(
+            [
+                SourceRunModel(
+                    source_definition_id=failed.id,
+                    status="SUCCEEDED",
+                    started_at=NOW - timedelta(hours=3),
+                    finished_at=NOW - timedelta(hours=3) + timedelta(seconds=5),
+                    items_seen=2,
+                    items_persisted=2,
+                ),
+                SourceRunModel(
+                    source_definition_id=failed.id,
+                    status="FAILED",
+                    started_at=NOW - timedelta(minutes=10),
+                    finished_at=NOW - timedelta(minutes=9),
+                    error_code="TRANSPORT_ERROR",
+                    error_summary="connection reset",
+                ),
+            ]
+        )
+        session.commit()
+
+        by_id = {item.source_definition_id: item for item in list_source_health(session)}
+
+        assert by_id[failed.id].last_run_status == "FAILED"
+        assert by_id[failed.id].last_run_error_code == "TRANSPORT_ERROR"
+        assert by_id[failed.id].last_run_duration_seconds == 60
+        assert by_id[failed.id].terms_reviewed is True
+        # A source that never ran reports absence, not a zeroed run.
+        assert by_id[never_run.id].last_run_status is None
+        assert by_id[never_run.id].last_run_items_seen is None
+        assert by_id[never_run.id].last_run_duration_seconds is None
+
+        failing = list_source_health(session, only_failing=True)
+        failing_ids = {item.source_definition_id for item in failing}
+        assert failed.id in failing_ids
+        assert never_run.id not in failing_ids
 
 
 def test_overview_counts_reflect_the_catalogue_and_flag_the_missing_pipeline() -> None:

@@ -220,8 +220,20 @@ jobs:
           inbox_opportunity_id="$(curl --fail --silent http://127.0.0.1:3000/api/inbox | python -c "import json,sys; print(json.load(sys.stdin)['items'][0]['opportunity_id'])")"
           curl --fail --silent "http://127.0.0.1:3000/api/opportunities/$inbox_opportunity_id" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['fingerprint_version'] == 'v1'; assert len(data['occurrences']) == 2; assert len(data['normalization_results']) == 2; assert len(data['compensations']) == 2"
+          curl --fail --silent 'http://127.0.0.1:3000/api/source-health' | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 8; assert data['failing'] == 0; ran=[item for item in data['items'] if item['last_run_status'] is not None]; assert len(ran) == 1; assert ran[0]['last_run_status'] == 'SUCCEEDED'; assert ran[0]['last_run_items_seen'] == 2; assert ran[0]['last_run_items_skipped'] == 2; assert ran[0]['last_run_duration_seconds'] >= 0; idle=[item for item in data['items'] if item['last_run_id'] is None]; assert len(idle) == 7; assert all(item['last_run_items_seen'] is None for item in idle)"
+          curl --fail --silent 'http://127.0.0.1:3000/api/source-health?only_failing=true' | \
+            python -c "import json,sys; assert json.load(sys.stdin)['total'] == 0"
+          curl --fail --silent http://127.0.0.1:3000/api/profile | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'ACTIVE'; assert {skill['canonical_name'] for skill in data['skills']} == {'python', 'react'}; assert data['preferences']['countries'] == ['BR']"
+          company_id="$(curl --fail --silent 'http://127.0.0.1:3000/api/companies?page_size=1' | python -c "import json,sys; print(json.load(sys.stdin)['items'][0]['id'])")"
+          curl --fail --silent "http://127.0.0.1:3000/api/companies/$company_id" | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['id'] == '$company_id'; assert isinstance(data['aliases'], list); assert isinstance(data['sources'], list)"
           curl --fail --retry 10 --retry-all-errors --retry-delay 2 --silent --output /dev/null http://127.0.0.1:3000/inbox
           curl --fail --silent --output /dev/null "http://127.0.0.1:3000/opportunities/$inbox_opportunity_id"
+          curl --fail --silent --output /dev/null http://127.0.0.1:3000/sources
+          curl --fail --silent --output /dev/null http://127.0.0.1:3000/profile
+          curl --fail --silent --output /dev/null "http://127.0.0.1:3000/companies/$company_id"
       - name: Verify PostgreSQL persistence after restart
         run: |
           before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
