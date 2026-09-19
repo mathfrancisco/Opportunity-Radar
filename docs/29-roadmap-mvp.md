@@ -1076,6 +1076,30 @@ ver saúde das fontes
 
 sem acessar terminal.
 
+Estado implementado da primeira fatia (itens 27 e 28 da ordem prática):
+
+- read models em `src/opportunity_radar/dashboard/`, conforme §9.4 do doc 06: as telas
+  leem por query service com SQL otimizado, sem carregar agregados e sem poluir os
+  repositories de cada contexto com joins de dashboard;
+- `GET /api/overview`: novas oportunidades na janela de sete dias, contagem por verdict,
+  análises degradadas, itens brutos pendentes e fontes cuja última execução falhou;
+- `GET /api/inbox`: oportunidade com a avaliação mais recente, filtros de verdict, score
+  mínimo, empresa, modalidade, status e data, busca por título ou empresa, ordenação por
+  prioridade, recência ou score, e paginação;
+- oportunidade ainda não avaliada continua na inbox — escondê-la faria a tela discordar
+  do catálogo em silêncio;
+- telas Visão geral (`/`) e Oportunidades (`/inbox`), com estados de loading, vazio,
+  erro com retry e degradado; navegação compartilhada em `components/PageShell`;
+- os cartões da Visão geral são links que já chegam na inbox filtrada;
+- o estado da tela vive na URL, então um filtro é compartilhável e sobrevive ao reload.
+
+O que a fase ainda deve entregar:
+
+- Opportunity Detail, Sources/Executions e Profile/Preferences;
+- filtro de aplicada/não aplicada e os blocos de candidaturas e follow-up da Overview,
+  que dependem do `ApplicationProcess` da Fase 8. Até lá a API devolve `null` nesses
+  campos, e não `0`: ausência de pipeline não é pipeline vazio.
+
 ---
 
 # Fase 8 — Pipeline básico

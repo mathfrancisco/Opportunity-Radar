@@ -1,0 +1,431 @@
+"""Query services behind the Overview and the Opportunity Inbox.
+
+Both screens need the same join that no single aggregate owns: an opportunity, the most
+recent assessment of it, the most recent semantic analysis of that assessment, and the
+company that published it. Building it here keeps the repositories of each context about
+one aggregate, as section 8.2 of docs/06-estrutura-projeto-mvp.md requires.
+
+Every row exposes the assessment as optional. An opportunity that was never evaluated is
+still in the inbox: hiding it would make the screen quietly disagree with the catalogue.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from enum import StrEnum
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy import Select, case, func, literal, select
+from sqlalchemy.orm import Session
+
+from opportunity_radar.acquisition.models import (
+    RawItemModel,
+    SourceDefinitionModel,
+    SourceRunModel,
+)
+from opportunity_radar.companies.models import Company
+from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
+from opportunity_radar.opportunities.models import (
+    NormalizationResultModel,
+    OpportunityModel,
+)
+
+NEW_OPPORTUNITY_WINDOW_DAYS = 7
+FAILING_RUN_STATUSES = ("FAILED", "PARTIAL")
+
+# Ordering only. The catalogue stores priority in lower case; matching uppercases it.
+_PRIORITY_RANK = {"high": 3, "normal": 2, "low": 1, "blocked": 0}
+
+
+class InboxOrder(StrEnum):
+    PRIORITY = "priority"
+    RECENCY = "recency"
+    SCORE = "score"
+
+
+@dataclass(frozen=True, slots=True)
+class InboxItem:
+    opportunity_id: UUID
+    title: str
+    company_id: UUID | None
+    company_name: str | None
+    company_priority: str | None
+    location: str | None
+    work_mode: str
+    seniority: str
+    contract_type: str
+    lifecycle_status: str
+    published_at: datetime | None
+    opportunity_version: int
+    assessment_id: UUID | None = None
+    verdict: str | None = None
+    eligibility: str | None = None
+    score: Decimal | None = None
+    confidence: Decimal | None = None
+    rules_version: str | None = None
+    assessed_at: datetime | None = None
+    analysis_status: str | None = None
+    analysis_recommended_review: bool | None = None
+    analysis_summary: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class InboxPage:
+    items: tuple[InboxItem, ...]
+    total: int
+    offset: int
+    limit: int
+
+
+@dataclass(frozen=True, slots=True)
+class InboxQuery:
+    """Filters from section 50 of the roadmap, minus the ones phase 8 has to enable."""
+
+    verdicts: tuple[str, ...] = ()
+    minimum_score: Decimal | None = None
+    company_id: UUID | None = None
+    work_mode: str | None = None
+    lifecycle_status: str | None = None
+    published_after: datetime | None = None
+    only_assessed: bool = False
+    search: str | None = None
+    profile_version_id: UUID | None = None
+    order: InboxOrder = InboxOrder.PRIORITY
+    offset: int = 0
+    limit: int = 50
+
+
+@dataclass(frozen=True, slots=True)
+class SourceHealth:
+    source_definition_id: UUID
+    name: str
+    source_type: str
+    enabled: bool
+    last_run_status: str | None
+    last_run_finished_at: datetime | None
+    last_run_error: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class OverviewSummary:
+    opportunities_total: int
+    opportunities_active: int
+    new_opportunities: int
+    assessed_opportunities: int
+    verdict_counts: dict[str, int] = field(default_factory=dict)
+    analyses_degraded: int = 0
+    sources_total: int = 0
+    sources_enabled: int = 0
+    sources_failing: int = 0
+    failing_sources: tuple[SourceHealth, ...] = ()
+    pending_normalizations: int = 0
+    new_opportunity_window_days: int = NEW_OPPORTUNITY_WINDOW_DAYS
+    # Phase 8 owns ApplicationProcess. Reporting 0 here would read as "nothing in flight"
+    # instead of "not built yet", so the screen gets an explicit absence.
+    applications_active: int | None = None
+    follow_ups_due: int | None = None
+
+
+def _latest_assessments(profile_version_id: UUID | None) -> Any:
+    ranked = select(
+        MatchAssessmentModel.id.label("assessment_id"),
+        MatchAssessmentModel.opportunity_id.label("opportunity_id"),
+        MatchAssessmentModel.verdict.label("verdict"),
+        MatchAssessmentModel.eligibility.label("eligibility"),
+        MatchAssessmentModel.score.label("score"),
+        MatchAssessmentModel.confidence.label("confidence"),
+        MatchAssessmentModel.rules_version.label("rules_version"),
+        MatchAssessmentModel.assessed_at.label("assessed_at"),
+        func.row_number()
+        .over(
+            partition_by=MatchAssessmentModel.opportunity_id,
+            order_by=(
+                MatchAssessmentModel.assessed_at.desc(),
+                MatchAssessmentModel.id.desc(),
+            ),
+        )
+        .label("position"),
+    )
+    if profile_version_id is not None:
+        ranked = ranked.where(
+            MatchAssessmentModel.profile_version_id == profile_version_id
+        )
+    numbered = ranked.subquery("ranked_assessments")
+    return select(numbered).where(numbered.c.position == 1).subquery("latest_assessment")
+
+
+def _latest_analyses() -> Any:
+    ranked = select(
+        MatchAnalysisModel.assessment_id.label("assessment_id"),
+        MatchAnalysisModel.status.label("status"),
+        MatchAnalysisModel.recommended_review.label("recommended_review"),
+        MatchAnalysisModel.summary.label("summary"),
+        func.row_number()
+        .over(
+            partition_by=MatchAnalysisModel.assessment_id,
+            order_by=(
+                MatchAnalysisModel.analyzed_at.desc(),
+                MatchAnalysisModel.id.desc(),
+            ),
+        )
+        .label("position"),
+    ).subquery("ranked_analyses")
+    return select(ranked).where(ranked.c.position == 1).subquery("latest_analysis")
+
+
+def _priority_rank() -> Any:
+    return case(
+        _PRIORITY_RANK,
+        value=func.lower(func.coalesce(Company.priority, literal("normal"))),
+        else_=2,
+    )
+
+
+def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
+    assessments = _latest_assessments(query.profile_version_id)
+    analyses = _latest_analyses()
+    statement = (
+        select(
+            OpportunityModel.id,
+            OpportunityModel.canonical_title,
+            OpportunityModel.canonical_company_id,
+            OpportunityModel.company_name,
+            Company.priority,
+            OpportunityModel.location_text,
+            OpportunityModel.work_mode,
+            OpportunityModel.seniority,
+            OpportunityModel.contract_type,
+            OpportunityModel.lifecycle_status,
+            OpportunityModel.published_at,
+            OpportunityModel.version,
+            assessments.c.assessment_id,
+            assessments.c.verdict,
+            assessments.c.eligibility,
+            assessments.c.score,
+            assessments.c.confidence,
+            assessments.c.rules_version,
+            assessments.c.assessed_at,
+            analyses.c.status,
+            analyses.c.recommended_review,
+            analyses.c.summary,
+        )
+        .select_from(OpportunityModel)
+        .outerjoin(assessments, assessments.c.opportunity_id == OpportunityModel.id)
+        .outerjoin(Company, Company.id == OpportunityModel.canonical_company_id)
+        .outerjoin(analyses, analyses.c.assessment_id == assessments.c.assessment_id)
+    )
+    return statement.where(*_inbox_filters(query, assessments)), assessments, analyses
+
+
+def _inbox_filters(query: InboxQuery, assessments: Any) -> list[Any]:
+    filters: list[Any] = []
+    if query.verdicts:
+        filters.append(assessments.c.verdict.in_(query.verdicts))
+    if query.minimum_score is not None:
+        filters.append(assessments.c.score >= query.minimum_score)
+    if query.only_assessed:
+        filters.append(assessments.c.assessment_id.is_not(None))
+    if query.company_id is not None:
+        filters.append(OpportunityModel.canonical_company_id == query.company_id)
+    if query.work_mode:
+        filters.append(OpportunityModel.work_mode == query.work_mode)
+    if query.lifecycle_status:
+        filters.append(OpportunityModel.lifecycle_status == query.lifecycle_status)
+    if query.published_after is not None:
+        filters.append(OpportunityModel.published_at >= query.published_after)
+    if query.search and query.search.strip():
+        pattern = f"%{query.search.strip().lower()}%"
+        filters.append(
+            func.lower(OpportunityModel.canonical_title).like(pattern)
+            | func.lower(func.coalesce(OpportunityModel.company_name, "")).like(pattern)
+        )
+    return filters
+
+
+def _inbox_ordering(order: InboxOrder, assessments: Any) -> list[Any]:
+    recency = OpportunityModel.published_at.desc().nulls_last()
+    score = assessments.c.score.desc().nulls_last()
+    if order is InboxOrder.RECENCY:
+        return [recency, score, OpportunityModel.id]
+    if order is InboxOrder.SCORE:
+        return [score, recency, OpportunityModel.id]
+    return [_priority_rank().desc(), score, recency, OpportunityModel.id]
+
+
+def list_opportunity_inbox(session: Session, query: InboxQuery) -> InboxPage:
+    statement, assessments, _ = _inbox_statement(query)
+    total = (
+        session.scalar(select(func.count()).select_from(statement.subquery("inbox"))) or 0
+    )
+    rows = session.execute(
+        statement.order_by(*_inbox_ordering(query.order, assessments))
+        .offset(query.offset)
+        .limit(query.limit)
+    ).all()
+    return InboxPage(
+        items=tuple(_inbox_item(row) for row in rows),
+        total=total,
+        offset=query.offset,
+        limit=query.limit,
+    )
+
+
+def _inbox_item(row: Any) -> InboxItem:
+    return InboxItem(
+        opportunity_id=row[0],
+        title=row[1],
+        company_id=row[2],
+        company_name=row[3],
+        company_priority=row[4].upper() if row[4] else None,
+        location=row[5],
+        work_mode=row[6],
+        seniority=row[7],
+        contract_type=row[8],
+        lifecycle_status=row[9],
+        published_at=row[10],
+        opportunity_version=row[11],
+        assessment_id=row[12],
+        verdict=row[13],
+        eligibility=row[14],
+        score=row[15],
+        confidence=row[16],
+        rules_version=row[17],
+        assessed_at=row[18],
+        analysis_status=row[19],
+        analysis_recommended_review=row[20],
+        analysis_summary=row[21],
+    )
+
+
+def summarize_overview(
+    session: Session,
+    *,
+    profile_version_id: UUID | None = None,
+    now: datetime | None = None,
+) -> OverviewSummary:
+    reference = now or datetime.now(UTC)
+    since = reference - timedelta(days=NEW_OPPORTUNITY_WINDOW_DAYS)
+    assessments = _latest_assessments(profile_version_id)
+    analyses = _latest_analyses()
+
+    verdict_rows = session.execute(
+        select(assessments.c.verdict, func.count()).group_by(assessments.c.verdict)
+    ).all()
+    verdict_counts = {str(verdict): int(count) for verdict, count in verdict_rows}
+
+    degraded = session.scalar(
+        select(func.count())
+        .select_from(analyses)
+        .where(analyses.c.status != "AI_COMPLETED")
+    )
+    failing = _failing_sources(session)
+    return OverviewSummary(
+        opportunities_total=_count(session, select(func.count(OpportunityModel.id))),
+        opportunities_active=_count(
+            session,
+            select(func.count(OpportunityModel.id)).where(
+                OpportunityModel.lifecycle_status == "ACTIVE"
+            ),
+        ),
+        new_opportunities=_count(
+            session,
+            select(func.count(OpportunityModel.id)).where(
+                OpportunityModel.created_at >= since
+            ),
+        ),
+        assessed_opportunities=_count(
+            session, select(func.count()).select_from(assessments)
+        ),
+        verdict_counts=verdict_counts,
+        analyses_degraded=int(degraded or 0),
+        sources_total=_count(session, select(func.count(SourceDefinitionModel.id))),
+        sources_enabled=_count(
+            session,
+            select(func.count(SourceDefinitionModel.id)).where(
+                SourceDefinitionModel.enabled.is_(True)
+            ),
+        ),
+        sources_failing=len(failing),
+        failing_sources=failing,
+        pending_normalizations=_pending_normalizations(session),
+    )
+
+
+def _count(session: Session, statement: Select[Any]) -> int:
+    return int(session.scalar(statement) or 0)
+
+
+def _pending_normalizations(session: Session) -> int:
+    """Raw items preserved but not yet turned into an opportunity."""
+    return _count(
+        session,
+        select(func.count(RawItemModel.id))
+        .outerjoin(
+            NormalizationResultModel,
+            NormalizationResultModel.raw_item_id == RawItemModel.id,
+        )
+        .where(NormalizationResultModel.id.is_(None)),
+    )
+
+
+def _failing_sources(session: Session) -> tuple[SourceHealth, ...]:
+    ranked = select(
+        SourceRunModel.source_definition_id.label("source_definition_id"),
+        SourceRunModel.status.label("status"),
+        SourceRunModel.finished_at.label("finished_at"),
+        SourceRunModel.error_summary.label("error_summary"),
+        func.row_number()
+        .over(
+            partition_by=SourceRunModel.source_definition_id,
+            order_by=(
+                func.coalesce(SourceRunModel.finished_at, SourceRunModel.started_at).desc(),
+                SourceRunModel.id.desc(),
+            ),
+        )
+        .label("position"),
+    ).subquery("ranked_runs")
+    latest = select(ranked).where(ranked.c.position == 1).subquery("latest_run")
+    rows = session.execute(
+        select(
+            SourceDefinitionModel.id,
+            SourceDefinitionModel.name,
+            SourceDefinitionModel.source_type,
+            SourceDefinitionModel.enabled,
+            latest.c.status,
+            latest.c.finished_at,
+            latest.c.error_summary,
+        )
+        .select_from(SourceDefinitionModel)
+        .join(latest, latest.c.source_definition_id == SourceDefinitionModel.id)
+        .where(latest.c.status.in_(FAILING_RUN_STATUSES))
+        .order_by(latest.c.finished_at.desc().nulls_last(), SourceDefinitionModel.name)
+    ).all()
+    return tuple(
+        SourceHealth(
+            source_definition_id=row[0],
+            name=row[1],
+            source_type=row[2],
+            enabled=row[3],
+            last_run_status=row[4],
+            last_run_finished_at=row[5],
+            last_run_error=row[6],
+        )
+        for row in rows
+    )
+
+
+__all__ = [
+    "FAILING_RUN_STATUSES",
+    "NEW_OPPORTUNITY_WINDOW_DAYS",
+    "InboxItem",
+    "InboxOrder",
+    "InboxPage",
+    "InboxQuery",
+    "OverviewSummary",
+    "SourceHealth",
+    "list_opportunity_inbox",
+    "summarize_overview",
+]

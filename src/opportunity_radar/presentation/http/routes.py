@@ -4,6 +4,7 @@ from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.health import ollama_health, ready_health
 from opportunity_radar.presentation.http.acquisition import router as acquisition_router
 from opportunity_radar.presentation.http.companies import router as companies_router
+from opportunity_radar.presentation.http.dashboard import router as dashboard_router
 from opportunity_radar.presentation.http.matching import router as matching_router
 from opportunity_radar.presentation.http.opportunities import router as opportunities_router
 from opportunity_radar.presentation.http.profile import router as profile_router
@@ -11,6 +12,7 @@ from opportunity_radar.presentation.http.profile import router as profile_router
 router = APIRouter()
 router.include_router(acquisition_router)
 router.include_router(companies_router)
+router.include_router(dashboard_router)
 router.include_router(matching_router)
 router.include_router(opportunities_router)
 router.include_router(profile_router)

@@ -323,6 +323,28 @@ com `AI_SKIPPED`.
 
 O detalhe e a listagem de assessments trazem `analysis` com o estado corrente.
 
+### 7.9 Estado do dashboard
+
+As telas leem por read models em `src/opportunity_radar/dashboard/`: SQL otimizado
+para a interface, sem carregar agregados e sem colocar joins de dashboard nos
+repositories de cada contexto.
+
+`GET /api/overview` resume o ciclo: novas oportunidades na janela de sete dias,
+contagem por verdict, análises degradadas, itens brutos ainda não normalizados e
+fontes cuja última execução falhou. Candidaturas e follow-ups voltam `null`, não
+`0` — o pipeline chega na fase 8, e ausência de dado não é dado zerado.
+
+`GET /api/inbox` devolve cada oportunidade com a avaliação mais recente, filtrando
+por verdict, score mínimo, empresa, modalidade, status e data, com busca por título
+ou empresa e ordenação por prioridade, recência ou score. Oportunidade ainda não
+avaliada continua na lista: escondê-la faria a tela discordar do catálogo sem dizer
+por quê.
+
+No frontend, `/` é a Visão geral, `/inbox` é a Opportunity Inbox, `/companies` é o
+catálogo e `/status` é a checagem de ambiente. Os cartões da Visão geral são links
+que já abrem a inbox filtrada, e os filtros vivem na URL, então uma seleção é
+compartilhável e sobrevive ao reload.
+
 ---
 
 ## 8. Arquitetura final
