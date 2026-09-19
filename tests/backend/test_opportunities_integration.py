@@ -28,7 +28,15 @@ def test_normalizes_and_deduplicates_manual_evidence_with_provenance() -> None:
     database_url = os.environ["DATABASE_URL"]
     engine = create_database_engine(database_url)
     with engine.begin() as connection:
-        connection.execute(text("TRUNCATE acquisition.source_definition CASCADE"))
+        # Opportunities are truncated explicitly: the ones other database-backed tests
+        # create directly are not reachable from the acquisition cascade, and this test
+        # asserts on the whole catalogue.
+        connection.execute(
+            text(
+                "TRUNCATE acquisition.source_definition, "
+                "opportunities.opportunity CASCADE"
+            )
+        )
 
     client = TestClient(create_app(Settings(database_url=database_url)))
     source = client.post(
