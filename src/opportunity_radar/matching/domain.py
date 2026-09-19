@@ -20,7 +20,6 @@ from opportunity_radar.opportunities.domain import (
     WorkMode,
 )
 
-
 ZERO = Decimal("0")
 ONE = Decimal("1")
 HALF = Decimal("0.5")

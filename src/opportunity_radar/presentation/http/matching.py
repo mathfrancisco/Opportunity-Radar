@@ -14,9 +14,9 @@ from opportunity_radar.matching.models import (
     MatchFactorModel,
 )
 from opportunity_radar.matching.service import (
+    MatchingService,
     MatchNotFoundError,
     MatchOpportunityNotFoundError,
-    MatchingService,
 )
 from opportunity_radar.presentation.http.dependencies import (
     get_analysis_adapter,

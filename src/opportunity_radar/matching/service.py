@@ -24,15 +24,15 @@ from opportunity_radar.matching.analysis import (
 )
 from opportunity_radar.matching.domain import (
     CompanyPriority,
-    EligibilityStatus,
-    Verdict,
     CompensationEvidenceSnapshot,
     CompensationSnapshot,
+    EligibilityStatus,
     MatchFactor,
     MatchResult,
     OpportunitySnapshot,
-    ProfileWorkAuthorization,
     ProfileSnapshot,
+    ProfileWorkAuthorization,
+    Verdict,
     default_rule_set,
     evaluate_match,
 )
