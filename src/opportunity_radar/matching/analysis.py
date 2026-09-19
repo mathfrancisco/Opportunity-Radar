@@ -315,7 +315,20 @@ def analysis_cache_key(
 
 
 class SemanticAnalysisPort(Protocol):
-    """What the matching application depends on. Implemented by adapters."""
+    """What the matching application depends on. Implemented by adapters.
+
+    `model` and `prompt_version` are part of the port because the caller persists the
+    cache key, and a key that ignored them would survive a model or prompt change it
+    should have invalidated.
+    """
+
+    @property
+    def model(self) -> str:
+        ...
+
+    @property
+    def prompt_version(self) -> str:
+        ...
 
     async def analyze(self, request: AnalysisRequest) -> AnalysisOutcome:
         ...
@@ -323,6 +336,14 @@ class SemanticAnalysisPort(Protocol):
 
 class NullAnalysisAdapter:
     """Adapter used when the semantic layer is disabled. Always degrades cleanly."""
+
+    @property
+    def model(self) -> str:
+        return "disabled"
+
+    @property
+    def prompt_version(self) -> str:
+        return "disabled"
 
     async def analyze(self, request: AnalysisRequest) -> AnalysisOutcome:
         del request

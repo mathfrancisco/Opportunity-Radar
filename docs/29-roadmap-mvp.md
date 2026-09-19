@@ -791,9 +791,8 @@ Estado implementado da primeira fatia:
 - smoke test no CI cobrindo perfil ativo, avaliação idempotente e persistência após
   reinício do PostgreSQL.
 
-Próximo incremento: Fase 6, análise semântica estruturada com Ollama apenas para
-assessments elegíveis ou que exijam revisão, mantendo o resultado determinístico
-como base imutável.
+Esta base sustenta a Fase 6: a análise semântica lê o resultado determinístico e nunca
+o reescreve.
 
 ---
 
@@ -881,12 +880,37 @@ schema version
 
 ## 46. Critério de aceite
 
-- [ ] resposta válida segue schema;
-- [ ] JSON inválido é tratado;
-- [ ] timeout é tratado;
-- [ ] modelo indisponível não derruba fluxo;
-- [ ] cache evita repetição idêntica;
-- [ ] IA não sobrescreve disqualifier.
+- [x] resposta válida segue schema;
+- [x] JSON inválido é tratado;
+- [x] timeout é tratado;
+- [x] modelo indisponível não derruba fluxo;
+- [x] cache evita repetição idêntica;
+- [x] IA não sobrescreve disqualifier.
+
+Estado implementado:
+
+- contrato puro em `matching/analysis.py`: value object consultivo, schema fechado,
+  estados de degradação e chave de cache;
+- adapter `matching/ollama.py` sobre `/api/chat`, com `format`, `temperature: 0`,
+  timeout, retry de falha retentável e classificação de erro;
+- artefatos versionados em `prompts/opportunity_analysis/v1/`, carregados por
+  `matching/prompts.py` com recusa explícita em caso de divergência;
+- `output.schema.json` gerado de `OUTPUT_SCHEMA` por
+  `scripts/export_prompt_schema.py`, com gate `--check` no CI;
+- `matching.match_analysis` append-only, com trigger que bloqueia `UPDATE` e sem
+  qualquer coluna de decisão — o modelo não tem onde gravar score ou disqualifier;
+- reuso da análise concluída no banco antes de chamar o modelo, então o cache sobrevive
+  a reinício; falha e skip ficam como histórico e não bloqueiam nova tentativa;
+- `POST /api/matches/{id}/analysis` respondendo `200` inclusive degradado, e `analysis`
+  exposta no detalhe e na listagem de assessments;
+- `OLLAMA_ANALYSIS_ENABLED=false` troca o adapter pelo `NullAnalysisAdapter`;
+- E2E no compose exercitando análise, reuso e persistência após reinício do PostgreSQL,
+  com o stub respondendo `/api/chat` sem baixar modelo.
+
+Detalhes do contrato em `docs/21-ollama-prompts.md`.
+
+Próximo incremento: Fase 7, dashboard — começando por Overview e Opportunity Inbox
+sobre os contratos já estáveis de Opportunity, Matching e análise semântica.
 
 ---
 

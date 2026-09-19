@@ -300,6 +300,29 @@ registro histórico.
 `GET /api/matches` oferece listagem paginada e filtros por oportunidade e perfil,
 enquanto `GET /api/matches/{id}` retorna todos os hard filters e fatores.
 
+### 7.8 Estado da análise semântica
+
+`POST /api/matches/{id}/analysis` acrescenta a camada consultiva do Ollama a um
+assessment que já concluiu. O prompt é um artefato versionado em
+`prompts/opportunity_analysis/v1/`, e `output.schema.json` é gerado de
+`OUTPUT_SCHEMA` por `scripts/export_prompt_schema.py`, com gate no CI: schema no
+disco e validador não podem divergir.
+
+A resposta do modelo é validada contra um schema fechado que não possui score,
+eligibility, verdict nem disqualifier. A tabela `matching.match_analysis` também
+não tem essas colunas, então a IA não sobrescreve a decisão determinística por
+construção, e não por convenção.
+
+Modelo fora do ar, timeout, JSON inválido ou resposta fora do contrato viram
+estado — `AI_FAILED` com código de falha — e não erro HTTP: o assessment continua
+completo. Análise concluída é reusada do banco, sobrevivendo a reinício;
+tentativas degradadas ficam como histórico e não bloqueiam nova execução.
+`{"refresh": true}` força nova chamada e acrescenta uma linha, sem editar a
+anterior. Com `OLLAMA_ANALYSIS_ENABLED=false` a rota continua respondendo `200`,
+com `AI_SKIPPED`.
+
+O detalhe e a listagem de assessments trazem `analysis` com o estado corrente.
+
 ---
 
 ## 8. Arquitetura final

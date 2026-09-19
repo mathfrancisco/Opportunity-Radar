@@ -12,7 +12,11 @@ from uuid import UUID
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, selectinload
 
-from opportunity_radar.matching.models import MatchAssessmentModel, MatchFactorModel
+from opportunity_radar.matching.models import (
+    MatchAnalysisModel,
+    MatchAssessmentModel,
+    MatchFactorModel,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +36,25 @@ class AssessmentRecord:
     confidence: Decimal
     assessed_at: datetime
     status: str = "COMPLETED"
+
+
+@dataclass(frozen=True, slots=True)
+class AnalysisRecord:
+    assessment_id: UUID
+    cache_key: str
+    status: str
+    schema_version: str
+    analyzed_at: datetime
+    failure_code: str | None = None
+    detail: str | None = None
+    summary: str | None = None
+    strengths: tuple[str, ...] = ()
+    risks: tuple[str, ...] = ()
+    inferences: tuple[str, ...] = ()
+    unknowns: tuple[str, ...] = ()
+    recommended_review: bool | None = None
+    model_id: str | None = None
+    prompt_version: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,8 +161,50 @@ class SqlAlchemyMatchingRepository:
         self.session.add(assessment)
         return assessment
 
+    def get_completed_analysis(self, assessment_id: UUID) -> MatchAnalysisModel | None:
+        """The reusable analysis: a completed one survives restarts, a degraded one does not."""
+        return self.session.scalars(
+            select(MatchAnalysisModel)
+            .where(
+                MatchAnalysisModel.assessment_id == assessment_id,
+                MatchAnalysisModel.status == "AI_COMPLETED",
+            )
+            .order_by(MatchAnalysisModel.analyzed_at.desc(), MatchAnalysisModel.id)
+            .limit(1)
+        ).one_or_none()
+
+    def latest_analysis(self, assessment_id: UUID) -> MatchAnalysisModel | None:
+        return self.session.scalars(
+            select(MatchAnalysisModel)
+            .where(MatchAnalysisModel.assessment_id == assessment_id)
+            .order_by(MatchAnalysisModel.analyzed_at.desc(), MatchAnalysisModel.id)
+            .limit(1)
+        ).first()
+
+    def add_analysis(self, record: AnalysisRecord) -> MatchAnalysisModel:
+        analysis = MatchAnalysisModel(
+            assessment_id=record.assessment_id,
+            cache_key=record.cache_key,
+            status=record.status,
+            failure_code=record.failure_code,
+            detail=record.detail,
+            summary=record.summary,
+            strengths=list(record.strengths),
+            risks=list(record.risks),
+            inferences=list(record.inferences),
+            unknowns=list(record.unknowns),
+            recommended_review=record.recommended_review,
+            model_id=record.model_id,
+            prompt_version=record.prompt_version,
+            schema_version=record.schema_version,
+            analyzed_at=record.analyzed_at,
+        )
+        self.session.add(analysis)
+        return analysis
+
     @staticmethod
     def _assessments() -> Select[tuple[MatchAssessmentModel]]:
         return select(MatchAssessmentModel).options(
-            selectinload(MatchAssessmentModel.factors)
+            selectinload(MatchAssessmentModel.factors),
+            selectinload(MatchAssessmentModel.analyses),
         )

@@ -53,6 +53,8 @@ jobs:
         run: ruff check .
       - name: Type check
         run: mypy
+      - name: Verify the prompt schema artifact matches OUTPUT_SCHEMA
+        run: python scripts/export_prompt_schema.py --check
 
   backend-tests:
     name: Backend / tests and migrations
@@ -189,6 +191,18 @@ jobs:
           test "$first_match_id" = "$second_match_id"
           curl --fail --silent "http://127.0.0.1:3000/api/matches?opportunity_id=$opportunity_id" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 1; assert data['items'][0]['id'] == '$first_match_id'"
+          echo "MATCH_ID=$first_match_id" >> "$GITHUB_ENV"
+      - name: Verify semantic analysis without overriding the deterministic result
+        run: |
+          first_analysis="$(curl --fail --silent --request POST "http://127.0.0.1:3000/api/matches/$MATCH_ID/analysis")"
+          first_analysis_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'AI_COMPLETED'; assert data['schema_version'] == 'analysis-v1'; assert data['prompt_version'] == 'opportunity_analysis/v1'; assert data['summary']; assert len(data['cache_key']) == 64; print(data['id'])" <<< "$first_analysis")"
+          curl --fail --silent --request POST "http://127.0.0.1:3000/api/matches/$MATCH_ID/analysis" | \
+            python -c "import json,sys; assert json.load(sys.stdin)['id'] == '$first_analysis_id'"
+          curl --fail --silent "http://127.0.0.1:3000/api/matches/$MATCH_ID" | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['verdict'] == 'REVIEW_REQUIRED'; assert data['eligibility'] == 'UNKNOWN'; assert len(data['factors']) == 8; assert data['analysis']['id'] == '$first_analysis_id'; assert data['analysis']['status'] == 'AI_COMPLETED'"
+          unknown_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST \
+            http://127.0.0.1:3000/api/matches/00000000-0000-0000-0000-000000000000/analysis)"
+          test "$unknown_status" = "404"
       - name: Verify PostgreSQL persistence after restart
         run: |
           before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
@@ -200,6 +214,7 @@ jobs:
           skills_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_skill')"
           matches_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_assessment')"
           factors_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_factor')"
+          analyses_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
           docker compose -f compose.yaml -f compose.ci.yaml restart postgres
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
           after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
@@ -211,6 +226,7 @@ jobs:
           skills_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_skill')"
           matches_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_assessment')"
           factors_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_factor')"
+          analyses_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
           test -n "$before"
           test "$before" = "$after"
           test "$companies_before" = "220"
@@ -229,6 +245,8 @@ jobs:
           test "$matches_before" = "$matches_after"
           test "$factors_before" = "8"
           test "$factors_before" = "$factors_after"
+          test "$analyses_before" = "1"
+          test "$analyses_before" = "$analyses_after"
       - name: Collect logs on failure
         if: failure()
         run: docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --tail=300

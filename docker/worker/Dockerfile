@@ -11,6 +11,7 @@ RUN addgroup --system app && adduser --system --ingroup app app
 COPY pyproject.toml requirements.txt README.md ./
 COPY src ./src
 COPY apps ./apps
+COPY prompts ./prompts
 COPY alembic.ini ./
 COPY migrations ./migrations
 RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir --no-deps .

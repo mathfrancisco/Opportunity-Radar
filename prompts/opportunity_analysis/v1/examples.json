@@ -1,0 +1,60 @@
+[
+  {
+    "name": "eligible_with_missing_compensation",
+    "note": "Compensation absent from the payload stays an unknown and never becomes a risk invented by the model.",
+    "output": {
+      "summary": "Senior backend role whose required stack matches the profile; compensation is not disclosed, so the financial fit cannot be assessed from this posting.",
+      "strengths": [
+        "Required Python and PostgreSQL experience is present in the profile",
+        "Remote work mode matches the accepted work modes"
+      ],
+      "risks": [
+        "The posting does not state a salary range"
+      ],
+      "inferences": [],
+      "unknowns": [
+        "Compensation range",
+        "Required timezone overlap"
+      ],
+      "recommended_review": false
+    }
+  },
+  {
+    "name": "ambiguous_seniority_requires_review",
+    "note": "An ambiguity a human should resolve before applying is the only reason to set recommended_review.",
+    "output": {
+      "summary": "The title says Senior but the described responsibilities read as a lead role, so the level advertised and the level expected may differ.",
+      "strengths": [
+        "Company is marked as high priority in the catalogue"
+      ],
+      "risks": [
+        "Scope described in the posting exceeds the advertised seniority"
+      ],
+      "inferences": [
+        "Treated the described responsibilities as the stronger signal of the real level"
+      ],
+      "unknowns": [
+        "Team size and reporting line"
+      ],
+      "recommended_review": true
+    }
+  },
+  {
+    "name": "sparse_payload",
+    "note": "A thin posting yields short lists rather than fabricated detail.",
+    "output": {
+      "summary": "The posting carries a title and a company only; there is not enough content to judge technical fit.",
+      "strengths": [],
+      "risks": [
+        "The posting body is effectively empty"
+      ],
+      "inferences": [],
+      "unknowns": [
+        "Required skills",
+        "Location and work mode",
+        "Contract type"
+      ],
+      "recommended_review": true
+    }
+  }
+]

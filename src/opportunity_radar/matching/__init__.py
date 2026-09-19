@@ -35,8 +35,20 @@ from opportunity_radar.matching.domain import (
     evaluate_eligibility,
     evaluate_match,
 )
+from opportunity_radar.matching.prompts import (
+    DEFAULT_PROMPT_NAME,
+    PROMPT_FAMILY,
+    PromptArtifactError,
+    PromptArtifacts,
+    load_prompt,
+)
 
 __all__ = [
+    "DEFAULT_PROMPT_NAME",
+    "PROMPT_FAMILY",
+    "PromptArtifactError",
+    "PromptArtifacts",
+    "load_prompt",
     "ANALYSIS_SCHEMA_VERSION",
     "OUTPUT_SCHEMA",
     "AnalysisError",

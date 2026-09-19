@@ -8,6 +8,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -98,6 +99,11 @@ class MatchAssessmentModel(Base):
     factors: Mapped[list["MatchFactorModel"]] = relationship(
         back_populates="assessment", cascade="all, delete-orphan"
     )
+    analyses: Mapped[list["MatchAnalysisModel"]] = relationship(
+        back_populates="assessment",
+        cascade="all, delete-orphan",
+        order_by="MatchAnalysisModel.analyzed_at",
+    )
 
 
 class MatchFactorModel(Base):
@@ -156,3 +162,74 @@ class MatchFactorModel(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     assessment: Mapped[MatchAssessmentModel] = relationship(back_populates="factors")
+
+
+class MatchAnalysisModel(Base):
+    """Semantic layer of an assessment whose deterministic result already completed.
+
+    Append-only history rather than one mutable row: a degraded attempt is evidence of
+    what the system knew at that moment, and retrying must not erase it. The current
+    analysis is the most recent row; a completed one is reused instead of re-prompting,
+    which is the cache from section 45 surviving a restart.
+
+    The table carries no score, verdict or eligibility on purpose — those live on the
+    assessment and the model has no column to write them into.
+    """
+
+    __tablename__ = "match_analysis"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('AI_PENDING', 'AI_COMPLETED', 'AI_FAILED', 'AI_SKIPPED')",
+            name="ck_match_analysis_status",
+        ),
+        CheckConstraint(
+            "status <> 'AI_COMPLETED' OR (summary IS NOT NULL AND model_id IS NOT NULL "
+            "AND recommended_review IS NOT NULL)",
+            name="ck_match_analysis_completed_payload",
+        ),
+        CheckConstraint(
+            "status <> 'AI_FAILED' OR failure_code IS NOT NULL",
+            name="ck_match_analysis_failed_code",
+        ),
+        CheckConstraint(
+            "char_length(cache_key) = 64", name="ck_match_analysis_cache_key"
+        ),
+        Index("ix_match_analysis_assessment_analyzed", "assessment_id", "analyzed_at"),
+        Index("ix_match_analysis_cache_key", "cache_key"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    assessment_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.match_assessment.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    cache_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    failure_code: Mapped[str | None] = mapped_column(String(32))
+    detail: Mapped[str | None] = mapped_column(Text)
+    summary: Mapped[str | None] = mapped_column(Text)
+    strengths: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    risks: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    inferences: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    unknowns: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    recommended_review: Mapped[bool | None] = mapped_column(Boolean)
+    model_id: Mapped[str | None] = mapped_column(String(128))
+    prompt_version: Mapped[str | None] = mapped_column(String(64))
+    schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    analyzed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    assessment: Mapped[MatchAssessmentModel] = relationship(back_populates="analyses")

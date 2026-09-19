@@ -14,8 +14,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from opportunity_radar.companies.models import Company
+from opportunity_radar.matching.analysis import (
+    ANALYSIS_SCHEMA_VERSION,
+    AnalysisOutcome,
+    AnalysisRequest,
+    AnalysisStatus,
+    SemanticAnalysisPort,
+    analysis_cache_key,
+)
 from opportunity_radar.matching.domain import (
     CompanyPriority,
+    EligibilityStatus,
+    Verdict,
     CompensationEvidenceSnapshot,
     CompensationSnapshot,
     MatchFactor,
@@ -26,8 +36,9 @@ from opportunity_radar.matching.domain import (
     default_rule_set,
     evaluate_match,
 )
-from opportunity_radar.matching.models import MatchAssessmentModel
+from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
 from opportunity_radar.matching.repository import (
+    AnalysisRecord,
     AssessmentRecord,
     FactorRecord,
     SqlAlchemyMatchingRepository,
@@ -133,6 +144,47 @@ class MatchingService:
         if assessment is None:
             raise MatchNotFoundError(str(assessment_id))
         return assessment
+
+    async def analyze(
+        self,
+        assessment_id: UUID,
+        adapter: SemanticAnalysisPort,
+        *,
+        refresh: bool = False,
+    ) -> MatchAnalysisModel:
+        """Attach the advisory semantic layer to an assessment that already concluded.
+
+        Section 44 of the roadmap: the deterministic decision is read, never rewritten.
+        Whatever the model does — answer, time out, disappear — this returns a persisted
+        row and the assessment keeps its score, verdict and factors untouched.
+        """
+        assessment = self.get(assessment_id)
+        if not refresh:
+            cached = self.repository.get_completed_analysis(assessment_id)
+            if cached is not None:
+                return cached
+
+        request = _analysis_request(assessment)
+        outcome = await adapter.analyze(request)
+        cache_key = analysis_cache_key(
+            request,
+            model_id=adapter.model,
+            prompt_version=adapter.prompt_version,
+        )
+        analysis = self.repository.add_analysis(
+            _analysis_record(
+                assessment_id=assessment.id,
+                cache_key=cache_key,
+                outcome=outcome,
+                analyzed_at=datetime.now(UTC),
+            )
+        )
+        self.session.commit()
+        self.session.refresh(analysis)
+        return analysis
+
+    def latest_analysis(self, assessment_id: UUID) -> MatchAnalysisModel | None:
+        return self.repository.latest_analysis(assessment_id)
 
     def list(
         self,
@@ -378,6 +430,57 @@ def _assessment_record(
         score=result.score,
         confidence=result.confidence,
         assessed_at=assessed_at,
+    )
+
+
+def _analysis_request(assessment: MatchAssessmentModel) -> AnalysisRequest:
+    """Build the prompt input from persisted state only, so an analysis is reproducible."""
+    return AnalysisRequest(
+        opportunity_id=assessment.opportunity_id,
+        opportunity_content_version=assessment.opportunity_version,
+        profile_version_id=assessment.profile_version_id,
+        rules_version=assessment.rules_version,
+        taxonomy_version=assessment.taxonomy_version,
+        eligibility=EligibilityStatus(assessment.eligibility),
+        verdict=Verdict(assessment.verdict),
+        score=assessment.score,
+        opportunity_snapshot=assessment.opportunity_snapshot,
+        profile_snapshot=assessment.profile_snapshot,
+    )
+
+
+def _analysis_record(
+    *,
+    assessment_id: UUID,
+    cache_key: str,
+    outcome: AnalysisOutcome,
+    analyzed_at: datetime,
+) -> AnalysisRecord:
+    analysis = outcome.analysis
+    if outcome.status is not AnalysisStatus.AI_COMPLETED or analysis is None:
+        return AnalysisRecord(
+            assessment_id=assessment_id,
+            cache_key=cache_key,
+            status=outcome.status.value,
+            schema_version=ANALYSIS_SCHEMA_VERSION,
+            analyzed_at=analyzed_at,
+            failure_code=outcome.failure_code.value if outcome.failure_code else None,
+            detail=outcome.detail,
+        )
+    return AnalysisRecord(
+        assessment_id=assessment_id,
+        cache_key=cache_key,
+        status=outcome.status.value,
+        schema_version=analysis.schema_version,
+        analyzed_at=analyzed_at,
+        summary=analysis.summary,
+        strengths=analysis.strengths,
+        risks=analysis.risks,
+        inferences=analysis.inferences,
+        unknowns=analysis.unknowns,
+        recommended_review=analysis.recommended_review,
+        model_id=analysis.model_id,
+        prompt_version=analysis.prompt_version,
     )
 
 

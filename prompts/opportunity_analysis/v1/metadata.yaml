@@ -1,0 +1,23 @@
+prompt_version: opportunity_analysis/v1
+schema_version: analysis-v1
+created_at: "2026-09-17"
+default_model: llama3.2:3b
+temperature: 0
+response_format: json_schema
+summary: >-
+  Advisory semantic analysis of one opportunity against one profile. Carries no score,
+  no eligibility and no disqualifier, so it can never override the deterministic result.
+variables:
+  - schema_version
+  - deterministic_result
+  - opportunity
+  - profile
+artifacts:
+  - system.md
+  - user.md.j2
+  - output.schema.json
+  - examples.json
+notes: >-
+  output.schema.json is generated from matching.analysis.OUTPUT_SCHEMA by
+  scripts/export_prompt_schema.py. Edit the Python constant, never this file: the loader
+  refuses to start when the two drift apart.

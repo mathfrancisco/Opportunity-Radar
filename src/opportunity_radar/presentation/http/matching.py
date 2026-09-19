@@ -7,13 +7,21 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from opportunity_radar.matching.models import MatchAssessmentModel, MatchFactorModel
+from opportunity_radar.matching.analysis import SemanticAnalysisPort
+from opportunity_radar.matching.models import (
+    MatchAnalysisModel,
+    MatchAssessmentModel,
+    MatchFactorModel,
+)
 from opportunity_radar.matching.service import (
     MatchNotFoundError,
     MatchOpportunityNotFoundError,
     MatchingService,
 )
-from opportunity_radar.presentation.http.dependencies import get_session
+from opportunity_radar.presentation.http.dependencies import (
+    get_analysis_adapter,
+    get_session,
+)
 from opportunity_radar.profile.domain import ProfileNotFoundError
 
 router = APIRouter(prefix="/matches", tags=["matching"])
@@ -36,6 +44,32 @@ class MatchFactorResponse(BaseModel):
     evidence_refs: list[Any]
 
 
+class MatchAnalysisResponse(BaseModel):
+    """Advisory layer. Carries no score, verdict or eligibility by construction."""
+
+    id: UUID
+    assessment_id: UUID
+    status: str
+    failure_code: str | None
+    detail: str | None
+    summary: str | None
+    strengths: list[str]
+    risks: list[str]
+    inferences: list[str]
+    unknowns: list[str]
+    recommended_review: bool | None
+    model_id: str | None
+    prompt_version: str | None
+    schema_version: str
+    cache_key: str
+    analyzed_at: str
+    created_at: str
+
+
+class AnalyzeMatchBody(BaseModel):
+    refresh: bool = False
+
+
 class MatchAssessmentResponse(BaseModel):
     id: UUID
     opportunity_id: UUID
@@ -55,6 +89,7 @@ class MatchAssessmentResponse(BaseModel):
     assessed_at: str
     created_at: str
     factors: list[MatchFactorResponse]
+    analysis: MatchAnalysisResponse | None = None
 
 
 class MatchAssessmentListResponse(BaseModel):
@@ -112,6 +147,28 @@ def list_matches(
     )
 
 
+@router.post("/{assessment_id}/analysis", response_model=MatchAnalysisResponse)
+async def analyze_match(
+    assessment_id: UUID,
+    body: AnalyzeMatchBody | None = None,
+    session: Session = Depends(get_session),
+    adapter: SemanticAnalysisPort = Depends(get_analysis_adapter),
+) -> MatchAnalysisResponse:
+    """Always 200 when the assessment exists: a degraded model is a status, not an error."""
+    try:
+        analysis = await MatchingService(session).analyze(
+            assessment_id,
+            adapter,
+            refresh=body.refresh if body is not None else False,
+        )
+    except MatchNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "match_not_found", "message": "Match assessment not found."},
+        ) from error
+    return _analysis_response(analysis)
+
+
 @router.get("/{assessment_id}", response_model=MatchAssessmentResponse)
 def get_match(
     assessment_id: UUID,
@@ -149,6 +206,38 @@ def _assessment_response(assessment: MatchAssessmentModel) -> MatchAssessmentRes
             _factor_response(item)
             for item in sorted(assessment.factors, key=lambda value: value.factor_code)
         ],
+        analysis=_latest_analysis_response(assessment),
+    )
+
+
+def _latest_analysis_response(
+    assessment: MatchAssessmentModel,
+) -> MatchAnalysisResponse | None:
+    if not assessment.analyses:
+        return None
+    latest = max(assessment.analyses, key=lambda item: (item.analyzed_at, item.id))
+    return _analysis_response(latest)
+
+
+def _analysis_response(analysis: MatchAnalysisModel) -> MatchAnalysisResponse:
+    return MatchAnalysisResponse(
+        id=analysis.id,
+        assessment_id=analysis.assessment_id,
+        status=analysis.status,
+        failure_code=analysis.failure_code,
+        detail=analysis.detail,
+        summary=analysis.summary,
+        strengths=[str(item) for item in analysis.strengths],
+        risks=[str(item) for item in analysis.risks],
+        inferences=[str(item) for item in analysis.inferences],
+        unknowns=[str(item) for item in analysis.unknowns],
+        recommended_review=analysis.recommended_review,
+        model_id=analysis.model_id,
+        prompt_version=analysis.prompt_version,
+        schema_version=analysis.schema_version,
+        cache_key=analysis.cache_key,
+        analyzed_at=analysis.analyzed_at.isoformat(),
+        created_at=analysis.created_at.isoformat(),
     )
 
 

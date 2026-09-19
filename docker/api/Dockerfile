@@ -12,6 +12,7 @@ COPY pyproject.toml requirements.txt README.md ./
 COPY src ./src
 COPY apps ./apps
 COPY scripts ./scripts
+COPY prompts ./prompts
 COPY alembic.ini ./
 COPY migrations ./migrations
 RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir --no-deps .

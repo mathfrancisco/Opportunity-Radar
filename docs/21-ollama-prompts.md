@@ -4,8 +4,8 @@ Este documento descreve o contrato da camada semântica. Ele complementa
 `docs/20-matching-scoring.md` §37–§41 e §50, e o critério de aceite da Fase 6 em
 `docs/29-roadmap-mvp.md` §46.
 
-Estado: **adapter implementado (TASK-101)**. Os artefatos versionados de prompt
-(`prompts/opportunity_analysis/v1/`) são entrega da TASK-102 e ainda não existem.
+Estado: **Fase 6 implementada**. O adapter veio na TASK-101; os artefatos versionados de
+prompt, a persistência e a exposição na API vieram na TASK-102.
 
 ---
 
@@ -28,12 +28,55 @@ Se o Ollama falhar, ficar indisponível ou devolver algo fora do schema, o
 | Arquivo | Papel |
 |---|---|
 | `src/opportunity_radar/matching/analysis.py` | contrato puro: value object, schema, cache key, política, porta |
+| `src/opportunity_radar/matching/prompts.py` | carga estrita dos artefatos versionados |
 | `src/opportunity_radar/matching/ollama.py` | adapter HTTP: `/api/chat`, timeout, retry, classificação de falha, cache |
+| `src/opportunity_radar/matching/models.py` | `matching.match_analysis`, histórico append-only |
+| `src/opportunity_radar/matching/service.py` | `MatchingService.analyze`, reuso e persistência |
+| `src/opportunity_radar/presentation/http/matching.py` | `POST /api/matches/{id}/analysis` |
 | `src/opportunity_radar/platform/config.py` | configuração de runtime |
 | `src/opportunity_radar/platform/health.py` | sinal degradado via `/api/tags` |
 
 `analysis.py` não importa `httpx` e não conhece `/api/chat`. O domínio depende de
 `SemanticAnalysisPort`, não do Ollama.
+
+---
+
+## 2.1 Artefatos versionados
+
+```text
+prompts/
+└── opportunity_analysis/
+    └── v1/
+        ├── system.md
+        ├── user.md.j2
+        ├── output.schema.json
+        ├── examples.json
+        └── metadata.yaml
+```
+
+`prompts.py` recusa a carga quando:
+
+- o diretório da versão não existe;
+- algum artefato está vazio, ilegível ou mal formado;
+- `output.schema.json` diverge de `OUTPUT_SCHEMA`;
+- `metadata.yaml` declara `prompt_version` ou `schema_version` diferente do código;
+- as variáveis declaradas em `metadata.yaml` não são exatamente as do template.
+
+Na renderização, variável faltante e variável não usada também são erro. Um prompt que
+perde silenciosamente um campo mudaria o comportamento do modelo sem mudar nenhum
+validador.
+
+`user.md.j2` mantém a extensão Jinja pelo layout documentado, mas apenas `{{ nome }}` é
+suportado: o payload é um único documento JSON, então laços e condicionais só
+acrescentariam dependência e não-determinismo. Cada valor é substituído já codificado em
+JSON, e é isso que torna o template renderizado um JSON válido.
+
+`output.schema.json` é gerado de `OUTPUT_SCHEMA`:
+
+```bash
+python scripts/export_prompt_schema.py           # regenera
+python scripts/export_prompt_schema.py --check   # falha se estiver defasado (gate de CI)
+```
 
 ---
 
@@ -128,7 +171,44 @@ Deliberadamente **fora** da chave: id do assessment, timestamp, score e verdict 
 duas execuções sobre entradas equivalentes devem acertar a mesma entrada.
 
 Qualquer mudança em um componente relevante é cache miss. Falhas nunca são cacheadas.
-O cache atual é em memória e limitado (`ollama_analysis_cache_entries`, LRU).
+
+São duas camadas:
+
+| Camada | Escopo | Sobrevive a restart |
+|---|---|:--:|
+| LRU em memória do adapter (`ollama_analysis_cache_entries`) | processo | não |
+| `matching.match_analysis` com `status = AI_COMPLETED` | banco | sim |
+
+`MatchingService.analyze` consulta o banco antes de chamar o adapter. Só análise
+concluída é reusada: `AI_FAILED` e `AI_SKIPPED` ficam registrados como histórico e não
+bloqueiam nova tentativa. `refresh=true` força nova chamada e **acrescenta** uma linha.
+
+---
+
+## 6.1 Persistência
+
+`matching.match_analysis` é append-only, com trigger que bloqueia `UPDATE`. Uma tentativa
+degradada é evidência do que o sistema sabia naquele momento; repetir não pode apagá-la.
+A análise corrente é a linha mais recente por `analyzed_at`.
+
+A tabela não tem coluna de `score`, `verdict`, `eligibility` ou `disqualifier`. O modelo
+não tem onde escrevê-los, então o critério "IA não sobrescreve disqualifier" é estrutural,
+não uma regra de aplicação.
+
+---
+
+## 6.2 API
+
+| Rota | Comportamento |
+|---|---|
+| `POST /api/matches/{id}/analysis` | executa ou reusa; corpo opcional `{"refresh": true}` |
+| `GET /api/matches/{id}` | inclui `analysis` com a análise corrente, ou `null` |
+| `GET /api/matches` | idem para cada item |
+
+A rota responde `200` com o estado degradado quando o modelo falha; `404` apenas quando
+o assessment não existe. Falha do Ollama não é erro HTTP: é `status` no corpo.
+
+---
 
 ## 7. Configuração
 
@@ -144,31 +224,42 @@ O cache atual é em memória e limitado (`ollama_analysis_cache_entries`, LRU).
 | `OLLAMA_ANALYSIS_RETRY_AFTER_SECONDS` | `0.5` | espera entre tentativas |
 | `OLLAMA_ANALYSIS_CACHE_ENTRIES` | `256` | tamanho do cache em memória |
 
-As quatro últimas ainda não estão listadas em `.env.example` (fora do escopo da
-TASK-101); os padrões em `platform/config.py` cobrem a execução local.
+Todas estão em `.env.example` e em `compose.yaml`; os padrões em `platform/config.py`
+cobrem a execução local sem configuração extra.
+
+`OLLAMA_ANALYSIS_ENABLED=false` troca o adapter pelo `NullAnalysisAdapter`: a chamada
+continua respondendo `200`, com `AI_SKIPPED`.
 
 ---
 
 ## 8. Testes
 
-`tests/backend/matching/test_analysis.py` cobre o contrato puro;
-`tests/backend/matching/test_ollama_adapter.py` cobre o adapter com `httpx.MockTransport`.
-Nenhum teste sobe modelo real, conforme §63 do doc 20.
+| Arquivo | Cobertura |
+|---|---|
+| `tests/backend/matching/test_analysis.py` | contrato puro |
+| `tests/backend/matching/test_ollama_adapter.py` | adapter com `httpx.MockTransport` |
+| `tests/backend/matching/test_prompts.py` | artefatos versionados e renderização |
+| `tests/backend/matching/test_analysis_persistence.py` | persistência, reuso e degradação |
 
-Casos cobertos: JSON válido; JSON inválido; campo ausente; tipo
+Nenhum teste sobe modelo real, conforme §63 do doc 20. No compose E2E, o stub em
+`tests/e2e/fake_ollama.py` responde `/api/chat` com uma análise válida enquanto mantém
+`/api/tags` vazio, então o ciclo completo é exercitado sem baixar modelo no CI.
+
+Casos cobertos no contrato e no adapter: JSON válido; JSON inválido; campo ausente; tipo
 errado; campo fora do contrato; envelope malformado; conteúdo vazio; timeout; modelo
 indisponível; 429/5xx; retry com sucesso; esgotamento do orçamento de retry; cache hit;
 cache miss por versão de conteúdo; falha não cacheada; skip por política.
 
+Casos cobertos na persistência: análise concluída reusada sem segunda chamada; falha
+registrada sem bloquear nova tentativa; camada desligada gerando `AI_SKIPPED`; `refresh`
+acrescentando linha em vez de editar; score, verdict e fatores inalterados depois da
+análise.
+
 ---
 
-## 9. Pendente (TASK-102)
+## 9. Fora do escopo desta fase
 
-- `prompts/opportunity_analysis/v1/system.md`, `user.md.j2`, `output.schema.json`,
-  `examples.json`, `metadata.yaml`;
-- geração de `output.schema.json` a partir de `OUTPUT_SCHEMA`;
-- persistência da análise junto ao `MatchAssessment` e exposição na API de
-  explicabilidade.
-
-O prompt embutido em `ollama.py` é mínimo e explícito, e existe apenas para o contrato
-ser testável ponta a ponta até a TASK-102 substituí-lo por artefatos versionados.
+- fila assíncrona de análise (o estado `AI_PENDING` já existe para isso, mas hoje só o
+  fluxo síncrono grava linhas);
+- `prompts/opportunity_analysis/v2` e comparação entre versões de prompt;
+- cache compartilhado entre processos além da própria tabela.

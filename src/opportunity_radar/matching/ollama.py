@@ -18,7 +18,6 @@ import httpx
 
 from opportunity_radar.matching.analysis import (
     ANALYSIS_SCHEMA_VERSION,
-    OUTPUT_SCHEMA,
     AnalysisError,
     AnalysisFailureCode,
     AnalysisOutcome,
@@ -31,22 +30,15 @@ from opportunity_radar.matching.analysis import (
     parse_analysis,
     skipped_outcome,
 )
-
-DEFAULT_PROMPT_VERSION = "opportunity_analysis/v1"
-_CHAT_PATH = "/api/chat"
-
-# TASK-102 replaces these with versioned artifacts under prompts/opportunity_analysis/.
-# Until then the adapter carries a minimal, explicit instruction so the contract is
-# testable end to end.
-_SYSTEM_PROMPT = (
-    "You analyse a single job opportunity against a candidate profile.\n"
-    "You do not decide eligibility and you do not produce a score: those are computed "
-    "deterministically before you are called, and your output never overrides them.\n"
-    "Use only the facts present in the payload. State anything you had to assume under "
-    "'inferences', and anything the payload does not answer under 'unknowns'. Never "
-    "invent compensation, work authorisation or location.\n"
-    "Reply with a single JSON object matching the requested schema. No prose outside it."
+from opportunity_radar.matching.prompts import (
+    DEFAULT_PROMPT_NAME,
+    PROMPT_FAMILY,
+    PromptArtifacts,
+    load_prompt,
 )
+
+DEFAULT_PROMPT_VERSION = f"{PROMPT_FAMILY}/{DEFAULT_PROMPT_NAME}"
+_CHAT_PATH = "/api/chat"
 
 
 class _AnalysisCache:
@@ -94,7 +86,7 @@ class OllamaAnalysisAdapter:
         retry_after_seconds: float = 0.5,
         sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
         policy: AnalysisPolicy | None = None,
-        prompt_version: str = DEFAULT_PROMPT_VERSION,
+        prompt: PromptArtifacts | None = None,
         cache_max_entries: int = 256,
     ) -> None:
         if client is not None and client_factory is not None:
@@ -122,7 +114,7 @@ class OllamaAnalysisAdapter:
         self._retry_after_seconds = retry_after_seconds
         self._sleeper = sleeper
         self._policy = policy or AnalysisPolicy()
-        self._prompt_version = prompt_version
+        self._prompt = prompt or load_prompt()
         self._cache = _AnalysisCache(cache_max_entries)
 
     @property
@@ -131,7 +123,7 @@ class OllamaAnalysisAdapter:
 
     @property
     def prompt_version(self) -> str:
-        return self._prompt_version
+        return self._prompt.version
 
     async def analyze(self, request: AnalysisRequest) -> AnalysisOutcome:
         """Never raises for an external failure: callers get a classified outcome."""
@@ -141,7 +133,7 @@ class OllamaAnalysisAdapter:
         key = analysis_cache_key(
             request,
             model_id=self._model,
-            prompt_version=self._prompt_version,
+            prompt_version=self._prompt.version,
         )
         cached = self._cache.get(key)
         if cached is not None:
@@ -198,36 +190,39 @@ class OllamaAnalysisAdapter:
         return parse_analysis(
             self._content(response),
             model_id=self._model,
-            prompt_version=self._prompt_version,
+            prompt_version=self._prompt.version,
         )
 
     def _chat_payload(self, request: AnalysisRequest) -> dict[str, Any]:
         return {
             "model": self._model,
             "stream": False,
-            "format": OUTPUT_SCHEMA,
+            "format": self._prompt.output_schema,
             "options": {"temperature": 0},
             "messages": [
-                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "system", "content": self._prompt.system},
                 {"role": "user", "content": self._user_content(request)},
             ],
         }
 
     def _user_content(self, request: AnalysisRequest) -> str:
-        payload = {
-            "schema_version": ANALYSIS_SCHEMA_VERSION,
-            "deterministic_result": {
-                "eligibility": request.eligibility.value,
-                "verdict": request.verdict.value,
-                "score": str(request.score),
-                "rules_version": request.rules_version,
-                "taxonomy_version": request.taxonomy_version,
-                "authoritative": True,
-            },
-            "opportunity": dict(request.opportunity_snapshot),
-            "profile": dict(request.profile_snapshot),
+        """Render the versioned template. Values arrive JSON-encoded, so the result parses."""
+        deterministic_result = {
+            "eligibility": request.eligibility.value,
+            "verdict": request.verdict.value,
+            "score": str(request.score),
+            "rules_version": request.rules_version,
+            "taxonomy_version": request.taxonomy_version,
+            "authoritative": True,
         }
-        return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        return self._prompt.render_user(
+            {
+                "schema_version": _encode(ANALYSIS_SCHEMA_VERSION),
+                "deterministic_result": _encode(deterministic_result),
+                "opportunity": _encode(dict(request.opportunity_snapshot)),
+                "profile": _encode(dict(request.profile_snapshot)),
+            }
+        )
 
     @staticmethod
     def _raise_for_status(response: httpx.Response) -> None:
@@ -294,6 +289,10 @@ class OllamaAnalysisAdapter:
                 "ollama analysis content is not valid JSON",
                 retryable=True,
             ) from error
+
+
+def _encode(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
 
 __all__ = ["DEFAULT_PROMPT_VERSION", "OllamaAnalysisAdapter"]
