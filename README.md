@@ -376,6 +376,28 @@ O detalhe da empresa reúne aliases, domínio, fontes com método e data de
 verificação, a verificação mais recente entre elas e as últimas vagas coletadas,
 reusando a inbox filtrada por empresa em vez de uma query nova.
 
+### 7.10 Estado do pipeline de candidaturas
+
+`crm.application_process` guarda a candidatura e `crm.stage_history` guarda como
+ela chegou ao estágio atual. A candidatura é mutável; o histórico é append-only
+com trigger que bloqueia `UPDATE`. O estágio atual fica nas duas pontas de
+propósito: o histórico responde como chegamos aqui, a coluna responde onde
+estamos sem reprocessar nada.
+
+A tabela de transições vive em `pipeline/domain.py` e é pura. Estágio terminal
+não tem saída — corrigir um engano é abrir nova candidatura, não reabrir
+histórico —, e de qualquer estágio vivo é sempre possível recusar, desistir ou
+encerrar. A API devolve as transições legais junto da candidatura, então a
+interface nunca oferece um movimento que o domínio recusaria.
+
+Um índice parcial único garante uma candidatura ativa por oportunidade e versão
+de perfil. Encerrar libera a vaga para uma nova candidatura em outro ciclo, e é
+por isso que a inbox considera aplicada apenas quem tem candidatura ativa.
+Transição e próxima ação exigem `expected_version`, então edição concorrente
+falha com conflito em vez de sobrescrever.
+
+Oportunidade e candidatura seguem separadas: encerrar uma não encerra a outra.
+
 ---
 
 ## 8. Arquitetura final

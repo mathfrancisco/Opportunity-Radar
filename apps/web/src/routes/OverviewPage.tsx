@@ -133,12 +133,11 @@ function Summary({ overview }: { overview: Overview }) {
         />
         <Tile
           label="Candidaturas ativas"
-          value={overview.applicationsActive === null ? '—' : String(overview.applicationsActive)}
-          hint={
-            overview.applicationsActive === null
-              ? 'O pipeline chega na fase 8'
-              : 'Em andamento'
-          }
+          value={String(overview.applicationsActive)}
+          hint={`${overview.followUpsDue} follow-up${
+            overview.followUpsDue === 1 ? '' : 's'
+          } nos próximos ${overview.followUpWindowDays} dias`}
+          to="/applications"
         />
       </div>
 

@@ -24,6 +24,10 @@ export interface InboxItem {
   analysisStatus: string | null
   analysisRecommendedReview: boolean | null
   analysisSummary: string | null
+  applied: boolean
+  applicationId: string | null
+  applicationStage: string | null
+  applicationNextActionAt: string | null
 }
 
 export interface InboxPage {
@@ -43,6 +47,7 @@ export interface InboxParams {
   workMode?: string
   lifecycleStatus?: string
   onlyAssessed?: boolean
+  applied?: boolean
   search?: string
   order?: InboxOrder
 }
@@ -70,9 +75,10 @@ export interface Overview {
   sourcesFailing: number
   failingSources: FailingSource[]
   pendingNormalizations: number
-  /** Null means phase 8 has not built the pipeline yet — it does not mean zero. */
-  applicationsActive: number | null
-  followUpsDue: number | null
+  applicationsActive: number
+  applicationsByStage: Record<string, number>
+  followUpsDue: number
+  followUpWindowDays: number
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -87,8 +93,12 @@ function count(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
-function optionalCount(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
+function countMap(value: unknown): Record<string, number> {
+  const result: Record<string, number> = {}
+  if (isRecord(value)) {
+    for (const [key, entry] of Object.entries(value)) result[key] = count(entry)
+  }
+  return result
 }
 
 function flag(value: unknown): boolean | null {
@@ -118,6 +128,10 @@ function parseInboxItem(value: unknown): InboxItem | null {
     analysisStatus: text(value.analysis_status),
     analysisRecommendedReview: flag(value.analysis_recommended_review),
     analysisSummary: text(value.analysis_summary),
+    applied: value.applied === true,
+    applicationId: text(value.application_id),
+    applicationStage: text(value.application_stage),
+    applicationNextActionAt: text(value.application_next_action_at),
   }
 }
 
@@ -143,6 +157,7 @@ export async function getInbox({
   workMode,
   lifecycleStatus,
   onlyAssessed,
+  applied,
   search,
   order = 'priority',
 }: InboxParams): Promise<InboxPage> {
@@ -157,6 +172,7 @@ export async function getInbox({
   if (workMode) params.set('work_mode', workMode)
   if (lifecycleStatus) params.set('lifecycle_status', lifecycleStatus)
   if (onlyAssessed) params.set('only_assessed', 'true')
+  if (applied !== undefined) params.set('applied', applied ? 'true' : 'false')
   if (search?.trim()) params.set('search', search.trim())
 
   const response = await fetch(apiUrl(`/inbox?${params.toString()}`), {
@@ -183,12 +199,7 @@ export async function getOverview(): Promise<Overview> {
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
   const body: unknown = await response.json()
   if (!isRecord(body)) throw new Error('A API retornou um resumo inválido.')
-  const verdictCounts: Record<string, number> = {}
-  if (isRecord(body.verdict_counts)) {
-    for (const [verdict, value] of Object.entries(body.verdict_counts)) {
-      verdictCounts[verdict] = count(value)
-    }
-  }
+  const verdictCounts = countMap(body.verdict_counts)
   return {
     opportunitiesTotal: count(body.opportunities_total),
     opportunitiesActive: count(body.opportunities_active),
@@ -206,7 +217,9 @@ export async function getOverview(): Promise<Overview> {
           .filter((source): source is FailingSource => source !== null)
       : [],
     pendingNormalizations: count(body.pending_normalizations),
-    applicationsActive: optionalCount(body.applications_active),
-    followUpsDue: optionalCount(body.follow_ups_due),
+    applicationsActive: count(body.applications_active),
+    applicationsByStage: countMap(body.applications_by_stage),
+    followUpsDue: count(body.follow_ups_due),
+    followUpWindowDays: count(body.follow_up_window_days),
   }
 }

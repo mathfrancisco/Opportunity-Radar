@@ -22,6 +22,7 @@ describe('getInbox', () => {
       workMode: 'REMOTE',
       lifecycleStatus: 'ACTIVE',
       onlyAssessed: true,
+      applied: false,
       search: '  plataforma  ',
       order: 'score',
     })
@@ -29,7 +30,7 @@ describe('getInbox', () => {
     expect(fetch).toHaveBeenCalledWith(
       '/api/inbox?offset=25&limit=25&order=score&verdict=HIGH_PRIORITY&verdict=RECOMMENDED' +
         '&minimum_score=70&work_mode=REMOTE&lifecycle_status=ACTIVE&only_assessed=true' +
-        '&search=plataforma',
+        '&applied=false&search=plataforma',
       expect.any(Object),
     )
   })
@@ -60,6 +61,10 @@ describe('getInbox', () => {
           analysis_status: null,
           analysis_recommended_review: null,
           analysis_summary: null,
+          applied: false,
+          application_id: null,
+          application_stage: null,
+          application_next_action_at: null,
         },
       ],
       total: 1,
@@ -73,6 +78,8 @@ describe('getInbox', () => {
     expect(page.items[0].opportunityId).toBe('opportunity-1')
     expect(page.items[0].verdict).toBeNull()
     expect(page.items[0].score).toBeNull()
+    expect(page.items[0].applied).toBe(false)
+    expect(page.items[0].applicationStage).toBeNull()
     expect(page.order).toBe('priority')
   })
 
@@ -83,7 +90,7 @@ describe('getInbox', () => {
 })
 
 describe('getOverview', () => {
-  it('preserva a ausência do pipeline como null, não como zero', async () => {
+  it('traz o pipeline por estágio e a janela de follow-up', async () => {
     respond({
       opportunities_total: 12,
       opportunities_active: 9,
@@ -107,8 +114,10 @@ describe('getOverview', () => {
         },
       ],
       pending_normalizations: 4,
-      applications_active: null,
-      follow_ups_due: null,
+      applications_active: 3,
+      applications_by_stage: { APPLIED: 2, INTERVIEW: 1 },
+      follow_ups_due: 1,
+      follow_up_window_days: 7,
     })
 
     const overview = await getOverview()
@@ -116,8 +125,10 @@ describe('getOverview', () => {
     expect(overview.opportunitiesTotal).toBe(12)
     expect(overview.verdictCounts).toEqual({ HIGH_PRIORITY: 2, RECOMMENDED: 3 })
     expect(overview.failingSources[0].name).toBe('Ashby Supabase')
-    expect(overview.applicationsActive).toBeNull()
-    expect(overview.followUpsDue).toBeNull()
+    expect(overview.applicationsActive).toBe(3)
+    expect(overview.applicationsByStage).toEqual({ APPLIED: 2, INTERVIEW: 1 })
+    expect(overview.followUpsDue).toBe(1)
+    expect(overview.followUpWindowDays).toBe(7)
   })
 
   it('propaga o status quando a API falha', async () => {

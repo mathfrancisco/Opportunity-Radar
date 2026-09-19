@@ -22,6 +22,8 @@ from opportunity_radar.dashboard.queries import (
 )
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
 from opportunity_radar.opportunities.models import OpportunityModel
+from opportunity_radar.pipeline.domain import ApplicationStage
+from opportunity_radar.pipeline.service import PipelineService
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
 
@@ -285,6 +287,60 @@ def test_inbox_orders_by_priority_recency_and_score() -> None:
         assert ids(InboxOrder.PRIORITY) == [old_high.id, new_low.id]
         assert ids(InboxOrder.RECENCY) == [new_low.id, old_high.id]
         assert ids(InboxOrder.SCORE) == [new_low.id, old_high.id]
+
+
+def test_inbox_knows_whether_an_opportunity_was_already_applied_to() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        profile_version = _profile_version(session)
+        company = _company(session, "normal")
+        applied_to = _opportunity(session, company, title="Applied role", published_at=NOW)
+        untouched = _opportunity(session, company, title="Open role", published_at=NOW)
+        session.commit()
+
+        application = PipelineService(session).start(
+            applied_to.id,
+            profile_version_id=profile_version.id,
+            stage=ApplicationStage.APPLIED,
+            next_action="Enviar follow-up",
+            next_action_at=NOW + timedelta(days=2),
+        )
+
+        applied_page = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, applied=True)
+        )
+        open_page = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, applied=False)
+        )
+
+        assert [item.opportunity_id for item in applied_page.items] == [applied_to.id]
+        assert [item.opportunity_id for item in open_page.items] == [untouched.id]
+        item = applied_page.items[0]
+        assert item.applied is True
+        assert item.application_id == application.id
+        assert item.application_stage == "APPLIED"
+        assert item.application_next_action_at is not None
+        assert open_page.items[0].applied is False
+
+        summary = summarize_overview(session, now=NOW)
+        assert summary.applications_active >= 1
+        assert summary.applications_by_stage.get("APPLIED", 0) >= 1
+        assert summary.follow_ups_due >= 1
+        assert summary.follow_up_window_days == 7
+
+        # Closing the application frees the opportunity again.
+        PipelineService(session).transition(
+            application.id,
+            target=ApplicationStage.WITHDRAWN,
+            expected_version=application.version,
+        )
+        reopened = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, applied=False)
+        )
+        assert {item.opportunity_id for item in reopened.items} == {
+            applied_to.id,
+            untouched.id,
+        }
 
 
 def test_source_health_reports_the_last_run_and_keeps_never_run_sources() -> None:

@@ -4,6 +4,7 @@ import { CompanyDetailPage } from '../routes/CompanyDetailPage'
 import { InboxPage } from '../routes/InboxPage'
 import { OpportunityDetailPage } from '../routes/OpportunityDetailPage'
 import { OverviewPage } from '../routes/OverviewPage'
+import { PipelinePage } from '../routes/PipelinePage'
 import { ProfilePage } from '../routes/ProfilePage'
 import { SourcesPage } from '../routes/SourcesPage'
 import { StatusPage } from '../routes/StatusPage'
@@ -14,6 +15,7 @@ export function App() {
       <Route path="/" element={<OverviewPage />} />
       <Route path="/inbox" element={<InboxPage />} />
       <Route path="/opportunities/:opportunityId" element={<OpportunityDetailPage />} />
+      <Route path="/applications" element={<PipelinePage />} />
       <Route path="/companies" element={<CompaniesPage />} />
       <Route path="/companies/:companyId" element={<CompanyDetailPage />} />
       <Route path="/sources" element={<SourcesPage />} />

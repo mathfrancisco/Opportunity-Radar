@@ -234,6 +234,29 @@ jobs:
           curl --fail --silent --output /dev/null http://127.0.0.1:3000/sources
           curl --fail --silent --output /dev/null http://127.0.0.1:3000/profile
           curl --fail --silent --output /dev/null "http://127.0.0.1:3000/companies/$company_id"
+          echo "OPPORTUNITY_ID=$inbox_opportunity_id" >> "$GITHUB_ENV"
+      - name: Verify the application pipeline through the public API
+        run: |
+          application="$(curl --fail --silent --json "{\"opportunity_id\":\"$OPPORTUNITY_ID\"}" http://127.0.0.1:3000/api/applications)"
+          application_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['current_stage'] == 'INTERESTED'; assert data['status'] == 'ACTIVE'; assert data['version'] == 1; assert len(data['history']) == 1; assert data['history'][0]['from_stage'] is None; print(data['id'])" <<< "$application")"
+          duplicate_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --json "{\"opportunity_id\":\"$OPPORTUNITY_ID\"}" http://127.0.0.1:3000/api/applications)"
+          test "$duplicate_status" = "409"
+          illegal_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --json '{"stage":"OFFER","expected_version":1}' "http://127.0.0.1:3000/api/applications/$application_id/transitions")"
+          test "$illegal_status" = "422"
+          curl --fail --silent --json '{"stage":"APPLIED","expected_version":1,"reason":"submitted"}' \
+            "http://127.0.0.1:3000/api/applications/$application_id/transitions" | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['current_stage'] == 'APPLIED'; assert data['version'] == 2; assert data['applied_at'] is not None; assert len(data['history']) == 2"
+          curl --fail --silent --request PATCH --json '{"expected_version":2,"next_action":"Enviar follow-up","next_action_at":"2030-01-01T12:00:00Z"}' \
+            "http://127.0.0.1:3000/api/applications/$application_id/next-action" | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['next_action'] == 'Enviar follow-up'; assert data['version'] == 3"
+          curl --fail --silent "http://127.0.0.1:3000/api/inbox?applied=true" | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 1; item=data['items'][0]; assert item['applied'] is True; assert item['application_stage'] == 'APPLIED'; assert item['application_id'] == '$application_id'"
+          curl --fail --silent "http://127.0.0.1:3000/api/inbox?applied=false" | \
+            python -c "import json,sys; assert json.load(sys.stdin)['total'] == 0"
+          curl --fail --silent http://127.0.0.1:3000/api/overview | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['applications_active'] == 1; assert data['applications_by_stage'] == {'APPLIED': 1}; assert data['follow_ups_due'] == 0; assert data['follow_up_window_days'] == 7"
+          curl --fail --silent --output /dev/null http://127.0.0.1:3000/applications
+          echo "APPLICATION_ID=$application_id" >> "$GITHUB_ENV"
       - name: Verify PostgreSQL persistence after restart
         run: |
           before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
@@ -246,6 +269,8 @@ jobs:
           matches_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_assessment')"
           factors_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_factor')"
           analyses_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
+          applications_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM crm.application_process')"
+          history_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM crm.stage_history')"
           docker compose -f compose.yaml -f compose.ci.yaml restart postgres
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
           after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
@@ -258,6 +283,8 @@ jobs:
           matches_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_assessment')"
           factors_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_factor')"
           analyses_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
+          applications_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM crm.application_process')"
+          history_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM crm.stage_history')"
           test -n "$before"
           test "$before" = "$after"
           test "$companies_before" = "220"
@@ -278,6 +305,12 @@ jobs:
           test "$factors_before" = "$factors_after"
           test "$analyses_before" = "1"
           test "$analyses_before" = "$analyses_after"
+          test "$applications_before" = "1"
+          test "$applications_before" = "$applications_after"
+          test "$history_before" = "2"
+          test "$history_before" = "$history_after"
+          curl --fail --silent "http://127.0.0.1:3000/api/applications/$APPLICATION_ID" | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['current_stage'] == 'APPLIED'; assert data['next_action'] == 'Enviar follow-up'; assert len(data['history']) == 2"
       - name: Collect logs on failure
         if: failure()
         run: docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --tail=300

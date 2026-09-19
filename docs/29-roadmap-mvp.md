@@ -1118,12 +1118,11 @@ Estado implementado (itens 27 a 32 da ordem prática):
   data de verificação, última verificação consolidada e as últimas vagas da empresa,
   reusando a inbox filtrada em vez de uma query nova.
 
-O que a fase ainda deve entregar:
+Completado junto da Fase 8:
 
-- filtro de aplicada/não aplicada, a ação de iniciar candidatura no detalhe e os blocos
-  de candidaturas e follow-up da Overview, que dependem do `ApplicationProcess` da Fase
-  8. Até lá a API devolve `null` nesses campos, e não `0`: ausência de pipeline não é
-  pipeline vazio, e o botão do detalhe fica desabilitado dizendo por quê.
+- filtro de aplicada/não aplicada na Inbox, com o estágio da candidatura no cartão;
+- ação de iniciar candidatura no detalhe, substituindo o botão desabilitado;
+- candidaturas ativas e follow-ups na Overview, agora com número real.
 
 ---
 
@@ -1179,12 +1178,40 @@ A lista exata deve alinhar-se ao documento de workflows.
 
 ## 61. Critério de aceite
 
-- [ ] iniciar candidatura;
-- [ ] mudar estágio;
-- [ ] histórico permanece;
-- [ ] próxima ação pode ser definida;
-- [ ] filtro da Inbox sabe se vaga já foi aplicada;
-- [ ] restart preserva pipeline.
+- [x] iniciar candidatura;
+- [x] mudar estágio;
+- [x] histórico permanece;
+- [x] próxima ação pode ser definida;
+- [x] filtro da Inbox sabe se vaga já foi aplicada;
+- [x] restart preserva pipeline.
+
+Estado implementado:
+
+- `crm.application_process` e `crm.stage_history`, conforme §19 do doc 11: a candidatura
+  é mutável, o histórico é append-only com trigger que bloqueia `UPDATE`;
+- tabela de transições pura em `pipeline/domain.py`, com os dez estágios do §59. Estágio
+  terminal não tem saída: corrigir um engano é abrir nova candidatura, não reabrir
+  histórico. De qualquer estágio vivo é sempre possível recusar, desistir ou encerrar;
+- estágio atual guardado na candidatura e derivável do histórico: o histórico responde
+  como chegou aqui, a coluna responde onde está sem reprocessar nada;
+- índice parcial único garantindo uma candidatura ativa por oportunidade e versão de
+  perfil; encerrar libera a vaga para uma nova candidatura em outro ciclo;
+- controle otimista por `expected_version` em transição e próxima ação, então edição
+  concorrente falha com conflito em vez de sobrescrever;
+- `applied_at` gravado na primeira entrada em `APPLIED` e nunca reescrito depois;
+  encerrar limpa a próxima ação, porque candidatura encerrada não deve nada;
+- API respondendo também quais transições são legais a partir do estágio atual, então a
+  interface nunca oferece um movimento que o domínio recusaria;
+- tela `/applications` com as candidaturas ativas por estágio, próxima ação em destaque
+  quando vencida, e as encerradas resumidas por desfecho;
+- painel de candidatura no detalhe da oportunidade, com histórico completo;
+- E2E cobrindo iniciar, recusar duplicata, recusar transição ilegal, mudar estágio,
+  definir próxima ação, filtrar a inbox por aplicada e conferir a persistência da
+  candidatura e do histórico após reinício do PostgreSQL.
+
+Fora do escopo desta fase, como o §67 previa: `crm.follow_up` como entidade própria com
+lifecycle `PENDING/DONE/CANCELLED/SKIPPED`, contatos e entrevistas. O follow-up aqui é o
+básico — uma próxima ação com data na própria candidatura.
 
 ---
 

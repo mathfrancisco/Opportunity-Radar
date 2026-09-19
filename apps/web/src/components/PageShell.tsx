@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 const navigation = [
   { to: '/', label: 'Visão geral' },
   { to: '/inbox', label: 'Oportunidades' },
+  { to: '/applications', label: 'Candidaturas' },
   { to: '/companies', label: 'Empresas' },
   { to: '/sources', label: 'Fontes' },
   { to: '/profile', label: 'Perfil' },

@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { ApplicationPanel } from '../components/ApplicationPanel'
 import { PageShell } from '../components/PageShell'
 import {
   type EligibilityDetail,
@@ -507,19 +508,7 @@ export function OpportunityDetailPage() {
             </Section>
 
             <Section title="Candidatura">
-              <div className="rounded-2xl border border-dashed border-[#c8d4c8] p-5">
-                <button
-                  className="rounded-xl bg-[#17322d] px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-                  disabled
-                  type="button"
-                >
-                  Iniciar candidatura
-                </button>
-                <p className="mt-3 text-sm text-[#547068]">
-                  O acompanhamento de candidatura chega na fase 8, junto do
-                  ApplicationProcess.
-                </p>
-              </div>
+              <ApplicationPanel opportunityId={opportunity.data.id} />
             </Section>
           </>
         )}

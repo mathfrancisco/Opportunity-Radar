@@ -50,6 +50,10 @@ class InboxItemResponse(BaseModel):
     analysis_status: str | None
     analysis_recommended_review: bool | None
     analysis_summary: str | None
+    applied: bool
+    application_id: UUID | None
+    application_stage: str | None
+    application_next_action_at: datetime | None
 
 
 class InboxPageResponse(BaseModel):
@@ -101,10 +105,10 @@ class OverviewResponse(BaseModel):
     sources_failing: int
     failing_sources: list[SourceHealthResponse]
     pending_normalizations: int
-    # Null, never zero: phase 8 owns the pipeline, and zero would read as "nothing in
-    # flight" instead of "not built yet".
-    applications_active: int | None
-    follow_ups_due: int | None
+    applications_active: int
+    applications_by_stage: dict[str, int]
+    follow_ups_due: int
+    follow_up_window_days: int
 
 
 @router.get("/inbox", response_model=InboxPageResponse)
@@ -116,6 +120,7 @@ def list_inbox(
     lifecycle_status: OpportunityStatus | None = None,
     published_after: datetime | None = None,
     only_assessed: bool = False,
+    applied: bool | None = None,
     search: str | None = None,
     profile_version_id: UUID | None = None,
     order: InboxOrder = InboxOrder.PRIORITY,
@@ -133,6 +138,7 @@ def list_inbox(
             lifecycle_status=lifecycle_status.value if lifecycle_status else None,
             published_after=published_after,
             only_assessed=only_assessed,
+            applied=applied,
             search=search,
             profile_version_id=profile_version_id,
             order=order,
@@ -198,6 +204,10 @@ def _inbox_item_response(item: InboxItem) -> InboxItemResponse:
         analysis_status=item.analysis_status,
         analysis_recommended_review=item.analysis_recommended_review,
         analysis_summary=item.analysis_summary,
+        applied=item.applied,
+        application_id=item.application_id,
+        application_stage=item.application_stage,
+        application_next_action_at=item.application_next_action_at,
     )
 
 
@@ -216,7 +226,9 @@ def _overview_response(summary: OverviewSummary) -> OverviewResponse:
         failing_sources=[_source_response(item) for item in summary.failing_sources],
         pending_normalizations=summary.pending_normalizations,
         applications_active=summary.applications_active,
+        applications_by_stage=summary.applications_by_stage,
         follow_ups_due=summary.follow_ups_due,
+        follow_up_window_days=summary.follow_up_window_days,
     )
 
 

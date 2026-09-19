@@ -7,6 +7,7 @@ from opportunity_radar.presentation.http.companies import router as companies_ro
 from opportunity_radar.presentation.http.dashboard import router as dashboard_router
 from opportunity_radar.presentation.http.matching import router as matching_router
 from opportunity_radar.presentation.http.opportunities import router as opportunities_router
+from opportunity_radar.presentation.http.pipeline import router as pipeline_router
 from opportunity_radar.presentation.http.profile import router as profile_router
 
 router = APIRouter()
@@ -15,6 +16,7 @@ router.include_router(companies_router)
 router.include_router(dashboard_router)
 router.include_router(matching_router)
 router.include_router(opportunities_router)
+router.include_router(pipeline_router)
 router.include_router(profile_router)
 
 

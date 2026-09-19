@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { PageShell } from '../components/PageShell'
 import { type InboxItem, type InboxOrder, inboxOrders } from '../features/dashboard/api'
 import { useInbox } from '../features/dashboard/useInbox'
+import { type ApplicationStage, stageLabels } from '../features/pipeline/api'
 
 const pageSize = 25
 
@@ -84,6 +85,12 @@ function ItemCard({ item }: { item: InboxItem }) {
         </div>
         <div className="flex flex-col items-end gap-2">
           <VerdictBadge verdict={item.verdict} />
+          {item.applied && (
+            <span className="inline-flex rounded-full border border-[#b6d36a] bg-[#eef6d8] px-3 py-1 text-xs font-medium text-[#42571c]">
+              Candidatura: {stageLabels[item.applicationStage as ApplicationStage] ??
+                item.applicationStage}
+            </span>
+          )}
           <span className="text-2xl font-semibold tracking-[-0.03em]">
             {formatScore(item.score)}
           </span>
@@ -135,6 +142,7 @@ export function InboxPage() {
   const lifecycleStatus = params.get('lifecycle_status') ?? ''
   const minimumScore = params.get('minimum_score') ?? ''
   const onlyAssessed = params.get('only_assessed') === 'true'
+  const appliedFilter = params.get('applied') ?? ''
   const search = params.get('search') ?? ''
   const rawOrder = params.get('order') ?? 'priority'
   const order: InboxOrder = inboxOrders.includes(rawOrder as InboxOrder)
@@ -152,6 +160,7 @@ export function InboxPage() {
     workMode: workMode || undefined,
     lifecycleStatus: lifecycleStatus || undefined,
     onlyAssessed,
+    applied: appliedFilter === '' ? undefined : appliedFilter === 'true',
     search: search || undefined,
     order,
   })
@@ -298,9 +307,27 @@ export function InboxPage() {
         </p>
       )}
 
-      <p className="mt-4 text-sm text-[#6d827b]">
-        O filtro de candidatura (aplicada ou não) chega com o pipeline, na fase 8.
-      </p>
+      <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+        <span className="text-[#6d827b]">Candidatura</span>
+        {[
+          { value: '', label: 'Todas' },
+          { value: 'true', label: 'Já aplicada' },
+          { value: 'false', label: 'Ainda não aplicada' },
+        ].map((option) => (
+          <button
+            className={`rounded-full border px-4 py-2 font-medium ${
+              appliedFilter === option.value
+                ? 'border-[#17322d] bg-[#17322d] text-white'
+                : 'border-[#c8d4c8] bg-white hover:border-[#17322d]'
+            }`}
+            key={option.value || 'all'}
+            onClick={() => update({ applied: option.value || null })}
+            type="button"
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
 
       <div className="mt-8 grid gap-3" aria-live="polite">
         {inbox.isPending && (

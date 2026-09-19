@@ -32,8 +32,10 @@ from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
     OpportunityModel,
 )
+from opportunity_radar.pipeline.models import ApplicationProcessModel
 
 NEW_OPPORTUNITY_WINDOW_DAYS = 7
+FOLLOW_UP_WINDOW_DAYS = 7
 FAILING_RUN_STATUSES = ("FAILED", "PARTIAL")
 
 # Ordering only. The catalogue stores priority in lower case; matching uppercases it.
@@ -70,6 +72,15 @@ class InboxItem:
     analysis_status: str | None = None
     analysis_recommended_review: bool | None = None
     analysis_summary: str | None = None
+    application_id: UUID | None = None
+    application_stage: str | None = None
+    application_next_action_at: datetime | None = None
+
+    @property
+    def applied(self) -> bool:
+        """Whether an active candidacy exists. A closed one leaves the opportunity open
+        to being applied to again, so it does not count."""
+        return self.application_id is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +102,7 @@ class InboxQuery:
     lifecycle_status: str | None = None
     published_after: datetime | None = None
     only_assessed: bool = False
+    applied: bool | None = None
     search: str | None = None
     profile_version_id: UUID | None = None
     order: InboxOrder = InboxOrder.PRIORITY
@@ -142,10 +154,11 @@ class OverviewSummary:
     failing_sources: tuple[SourceHealth, ...] = ()
     pending_normalizations: int = 0
     new_opportunity_window_days: int = NEW_OPPORTUNITY_WINDOW_DAYS
-    # Phase 8 owns ApplicationProcess. Reporting 0 here would read as "nothing in flight"
-    # instead of "not built yet", so the screen gets an explicit absence.
-    applications_active: int | None = None
-    follow_ups_due: int | None = None
+    applications_active: int = 0
+    applications_by_stage: dict[str, int] = field(default_factory=dict)
+    #: Active applications whose next action is already due or falls inside the window.
+    follow_ups_due: int = 0
+    follow_up_window_days: int = FOLLOW_UP_WINDOW_DAYS
 
 
 def _latest_assessments(profile_version_id: UUID | None) -> Any:
@@ -195,6 +208,20 @@ def _latest_analyses() -> Any:
     return select(ranked).where(ranked.c.position == 1).subquery("latest_analysis")
 
 
+def _active_applications() -> Any:
+    """At most one active application per opportunity and profile, enforced in the DB."""
+    return (
+        select(
+            ApplicationProcessModel.id.label("application_id"),
+            ApplicationProcessModel.opportunity_id.label("opportunity_id"),
+            ApplicationProcessModel.current_stage.label("current_stage"),
+            ApplicationProcessModel.next_action_at.label("next_action_at"),
+        )
+        .where(ApplicationProcessModel.status == "ACTIVE")
+        .subquery("active_application")
+    )
+
+
 def _priority_rank() -> Any:
     return case(
         _PRIORITY_RANK,
@@ -206,6 +233,7 @@ def _priority_rank() -> Any:
 def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
     assessments = _latest_assessments(query.profile_version_id)
     analyses = _latest_analyses()
+    applications = _active_applications()
     statement = (
         select(
             OpportunityModel.id,
@@ -230,16 +258,24 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
             analyses.c.status,
             analyses.c.recommended_review,
             analyses.c.summary,
+            applications.c.application_id,
+            applications.c.current_stage,
+            applications.c.next_action_at,
         )
         .select_from(OpportunityModel)
         .outerjoin(assessments, assessments.c.opportunity_id == OpportunityModel.id)
         .outerjoin(Company, Company.id == OpportunityModel.canonical_company_id)
         .outerjoin(analyses, analyses.c.assessment_id == assessments.c.assessment_id)
+        .outerjoin(applications, applications.c.opportunity_id == OpportunityModel.id)
     )
-    return statement.where(*_inbox_filters(query, assessments)), assessments, analyses
+    return (
+        statement.where(*_inbox_filters(query, assessments, applications)),
+        assessments,
+        analyses,
+    )
 
 
-def _inbox_filters(query: InboxQuery, assessments: Any) -> list[Any]:
+def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> list[Any]:
     filters: list[Any] = []
     if query.verdicts:
         filters.append(assessments.c.verdict.in_(query.verdicts))
@@ -247,6 +283,12 @@ def _inbox_filters(query: InboxQuery, assessments: Any) -> list[Any]:
         filters.append(assessments.c.score >= query.minimum_score)
     if query.only_assessed:
         filters.append(assessments.c.assessment_id.is_not(None))
+    if query.applied is not None:
+        filters.append(
+            applications.c.application_id.is_not(None)
+            if query.applied
+            else applications.c.application_id.is_(None)
+        )
     if query.company_id is not None:
         filters.append(OpportunityModel.canonical_company_id == query.company_id)
     if query.work_mode:
@@ -316,6 +358,9 @@ def _inbox_item(row: Any) -> InboxItem:
         analysis_status=row[19],
         analysis_recommended_review=row[20],
         analysis_summary=row[21],
+        application_id=row[22],
+        application_stage=row[23],
+        application_next_action_at=row[24],
     )
 
 
@@ -341,6 +386,12 @@ def summarize_overview(
         .where(analyses.c.status != "AI_COMPLETED")
     )
     failing = list_source_health(session, only_failing=True)
+    stage_rows = session.execute(
+        select(ApplicationProcessModel.current_stage, func.count())
+        .where(ApplicationProcessModel.status == "ACTIVE")
+        .group_by(ApplicationProcessModel.current_stage)
+    ).all()
+    applications_by_stage = {str(stage): int(total) for stage, total in stage_rows}
     return OverviewSummary(
         opportunities_total=_count(session, select(func.count(OpportunityModel.id))),
         opportunities_active=_count(
@@ -370,6 +421,17 @@ def summarize_overview(
         sources_failing=len(failing),
         failing_sources=failing,
         pending_normalizations=_pending_normalizations(session),
+        applications_active=sum(applications_by_stage.values()),
+        applications_by_stage=applications_by_stage,
+        follow_ups_due=_count(
+            session,
+            select(func.count(ApplicationProcessModel.id)).where(
+                ApplicationProcessModel.status == "ACTIVE",
+                ApplicationProcessModel.next_action_at.is_not(None),
+                ApplicationProcessModel.next_action_at
+                <= reference + timedelta(days=FOLLOW_UP_WINDOW_DAYS),
+            ),
+        ),
     )
 
 
@@ -481,6 +543,7 @@ def list_source_health(
 
 __all__ = [
     "FAILING_RUN_STATUSES",
+    "FOLLOW_UP_WINDOW_DAYS",
     "NEW_OPPORTUNITY_WINDOW_DAYS",
     "InboxItem",
     "InboxOrder",
