@@ -150,19 +150,19 @@ Criar um ambiente vazio, versionado e reproduzível.
 
 ## 6. Tarefas
 
-- [ ] criar estrutura de diretórios;
-- [ ] configurar Python project;
-- [ ] configurar Node project;
-- [ ] criar container backend;
-- [ ] criar container frontend;
-- [ ] criar PostgreSQL;
-- [ ] criar Ollama;
-- [ ] criar `compose.yaml`;
-- [ ] criar migrations iniciais;
-- [ ] criar `/health/live`;
-- [ ] criar `/health/ready`;
-- [ ] criar `make up/down/logs/test`;
-- [ ] validar persistência de volume.
+- [x] criar estrutura de diretórios;
+- [x] configurar Python project;
+- [x] configurar Node project;
+- [x] criar container backend;
+- [x] criar container frontend;
+- [x] criar PostgreSQL;
+- [x] criar Ollama;
+- [x] criar `compose.yaml`;
+- [x] criar migrations iniciais;
+- [x] criar `/health/live`;
+- [x] criar `/health/ready`;
+- [x] criar `make up/down/logs/test`;
+- [x] validar persistência de volume.
 
 ---
 
@@ -321,12 +321,12 @@ manual_review_required
 
 ## 15. Critério de aceite
 
-- [ ] dry-run não altera catálogo;
-- [ ] import final funciona;
-- [ ] reimport é idempotente;
-- [ ] ambiguidades são reportadas;
-- [ ] empresas aparecem na dashboard/API;
-- [ ] Notion não é dependência do fluxo de importação.
+- [x] dry-run não altera catálogo;
+- [x] import final funciona;
+- [x] reimport é idempotente;
+- [x] ambiguidades são reportadas;
+- [x] empresas aparecem na dashboard/API;
+- [x] Notion não é dependência do fluxo de importação.
 
 ---
 
@@ -417,12 +417,12 @@ externa. ATS identificado não equivale a endpoint homologado.
 
 ## 20. Critério de aceite
 
-- [ ] SourceRun possui lifecycle;
-- [ ] RawItem é preservado;
-- [ ] repetição não duplica identidade externa;
-- [ ] parser não cria Opportunity;
-- [ ] erros possuem código estável;
-- [ ] execução manual é visível na API.
+- [x] SourceRun possui lifecycle;
+- [x] RawItem é preservado;
+- [x] repetição não duplica identidade externa;
+- [x] parser não cria Opportunity;
+- [x] erros possuem código estável;
+- [x] execução manual é visível na API.
 
 ---
 
@@ -544,15 +544,15 @@ Estado implementado:
 
 Cada fonte:
 
-- [ ] possui fixtures;
-- [ ] contract tests;
-- [ ] erros isolados;
-- [ ] métricas;
-- [ ] idempotência;
-- [ ] timeout;
-- [ ] retry;
-- [ ] sem regra de matching;
-- [ ] payload bruto salvo.
+- [x] possui fixtures;
+- [x] contract tests;
+- [x] erros isolados;
+- [x] métricas;
+- [x] idempotência;
+- [x] timeout;
+- [x] retry;
+- [x] sem regra de matching;
+- [x] payload bruto salvo.
 
 Globalmente:
 
@@ -652,13 +652,13 @@ mesmo external ID
 
 ## 34. Critério de aceite
 
-- [ ] reprocessamento idempotente;
-- [ ] duas fontes equivalentes podem gerar uma Opportunity;
-- [ ] SourceOccurrences preservadas;
-- [ ] fingerprint versionado;
-- [ ] merge explicável;
-- [ ] status funciona;
-- [ ] procedência aparece na API.
+- [x] reprocessamento idempotente;
+- [x] duas fontes equivalentes podem gerar uma Opportunity;
+- [x] SourceOccurrences preservadas;
+- [x] fingerprint versionado;
+- [x] merge explicável;
+- [x] status funciona;
+- [x] procedência aparece na API.
 
 Estado implementado da primeira fatia:
 
@@ -769,11 +769,11 @@ mesmas explicações
 
 Além disso:
 
-- [ ] hard disqualifier domina verdict;
-- [ ] score fica 0–100;
-- [ ] fatores somam corretamente;
-- [ ] UNKNOWN não vira FALSE implicitamente;
-- [ ] nenhum atributo sensível entra no score.
+- [x] hard disqualifier domina verdict;
+- [x] score fica 0–100;
+- [x] fatores somam corretamente;
+- [x] UNKNOWN não vira FALSE implicitamente;
+- [x] nenhum atributo sensível entra no score.
 
 Estado implementado da primeira fatia:
 
@@ -1642,19 +1642,19 @@ backup + restore + E2E + clean machine
 
 O MVP precisa possuir:
 
-- [ ] migrations;
-- [ ] rollback operacional documentado;
-- [ ] testes do comportamento crítico;
-- [ ] tratamento de erros;
-- [ ] observabilidade mínima;
-- [ ] nenhum secret versionado;
-- [ ] loading/empty/error/retry na UI;
-- [ ] documentação atualizada;
-- [ ] demonstração ponta a ponta;
-- [ ] restore validado;
-- [ ] idempotência comprovada;
-- [ ] procedência visível;
-- [ ] decisões de matching reproduzíveis.
+- [x] migrations;
+- [x] rollback operacional documentado;
+- [x] testes do comportamento crítico;
+- [x] tratamento de erros;
+- [x] observabilidade mínima;
+- [x] nenhum secret versionado;
+- [x] loading/empty/error/retry na UI;
+- [x] documentação atualizada;
+- [x] demonstração ponta a ponta;
+- [x] restore validado;
+- [x] idempotência comprovada;
+- [x] procedência visível;
+- [x] decisões de matching reproduzíveis.
 
 ---
 
