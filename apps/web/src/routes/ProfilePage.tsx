@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useState } from 'react'
 import { PageShell } from '../components/PageShell'
 import {
   emptyPreferences,
@@ -58,27 +58,48 @@ function Versions({ versions }: { versions: ProfileVersion[] }) {
   )
 }
 
+interface ProfileDraftState {
+  versionId: string | null
+  skillsText: string
+  preferences: ProfilePreferences
+}
+
+function profileDraft(version: ProfileVersion | null | undefined): ProfileDraftState {
+  return {
+    versionId: version?.id ?? null,
+    skillsText: version?.skills.map((skill) => skill.canonicalName).join(', ') ?? '',
+    preferences: version?.preferences ?? emptyPreferences,
+  }
+}
+
+function useProfileDraft(version: ProfileVersion | null | undefined) {
+  const versionId = version?.id ?? null
+  const [draft, setDraft] = useState(() => profileDraft(version))
+
+  // A version is immutable. Resetting by key keeps the editor in sync when the active
+  // version changes, without copying query data into state from an effect.
+  if (draft.versionId !== versionId) {
+    setDraft(profileDraft(version))
+  }
+
+  return {
+    skillsText: draft.skillsText,
+    preferences: draft.preferences,
+    setSkillsText: (skillsText: string) =>
+      setDraft((current) => ({ ...current, skillsText })),
+    updatePreferences: (changes: Partial<ProfilePreferences>) =>
+      setDraft((current) => ({
+        ...current,
+        preferences: { ...current.preferences, ...changes },
+      })),
+  }
+}
+
 export function ProfilePage() {
   const active = useActiveProfile()
   const versions = useProfileVersions()
   const save = useSaveProfile()
-
-  const [skillsText, setSkillsText] = useState('')
-  const [preferences, setPreferences] = useState<ProfilePreferences>(emptyPreferences)
-  const [loadedVersionId, setLoadedVersionId] = useState<string | null>(null)
-
-  // The form starts as a copy of the active version; editing it drafts the next one.
-  useEffect(() => {
-    const version = active.data
-    if (!version || version.id === loadedVersionId) return
-    setSkillsText(version.skills.map((skill) => skill.canonicalName).join(', '))
-    setPreferences(version.preferences)
-    setLoadedVersionId(version.id)
-  }, [active.data, loadedVersionId])
-
-  function update(changes: Partial<ProfilePreferences>) {
-    setPreferences((current) => ({ ...current, ...changes }))
-  }
+  const { skillsText, preferences, setSkillsText, updatePreferences } = useProfileDraft(active.data)
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -145,7 +166,9 @@ export function ProfilePage() {
                 <label className="flex items-center gap-2 text-sm" key={mode}>
                   <input
                     checked={preferences.workModes.includes(mode)}
-                    onChange={() => update({ workModes: toggle(preferences.workModes, mode) })}
+                    onChange={() =>
+                      updatePreferences({ workModes: toggle(preferences.workModes, mode) })
+                    }
                     type="checkbox"
                   />
                   {mode}
@@ -162,7 +185,7 @@ export function ProfilePage() {
                   <input
                     checked={preferences.contracts.includes(contract)}
                     onChange={() =>
-                      update({ contracts: toggle(preferences.contracts, contract) })
+                      updatePreferences({ contracts: toggle(preferences.contracts, contract) })
                     }
                     type="checkbox"
                   />
@@ -180,7 +203,9 @@ export function ProfilePage() {
             </span>
             <input
               className="mt-2 w-full rounded-xl border border-[#c8d4c8] bg-white px-4 py-3"
-              onChange={(event) => update({ countries: toList(event.target.value.toUpperCase()) })}
+              onChange={(event) =>
+                updatePreferences({ countries: toList(event.target.value.toUpperCase()) })
+              }
               placeholder="BR, PT"
               value={preferences.countries.join(', ')}
             />
@@ -194,7 +219,7 @@ export function ProfilePage() {
                 max={23}
                 min={0}
                 onChange={(event) =>
-                  update({ timezoneStartHour: hourValue(event.target.value) })
+                  updatePreferences({ timezoneStartHour: hourValue(event.target.value) })
                 }
                 type="number"
                 value={preferences.timezoneStartHour ?? ''}
@@ -207,7 +232,7 @@ export function ProfilePage() {
                 max={23}
                 min={0}
                 onChange={(event) =>
-                  update({ timezoneEndHour: hourValue(event.target.value) })
+                  updatePreferences({ timezoneEndHour: hourValue(event.target.value) })
                 }
                 type="number"
                 value={preferences.timezoneEndHour ?? ''}
@@ -222,7 +247,7 @@ export function ProfilePage() {
                 className="mt-2 w-full rounded-xl border border-[#c8d4c8] bg-white px-4 py-3"
                 min={0}
                 onChange={(event) =>
-                  update({ compensationMin: event.target.value || null })
+                  updatePreferences({ compensationMin: event.target.value || null })
                 }
                 type="number"
                 value={preferences.compensationMin ?? ''}
@@ -234,7 +259,7 @@ export function ProfilePage() {
                 className="mt-2 w-full rounded-xl border border-[#c8d4c8] bg-white px-4 py-3"
                 min={0}
                 onChange={(event) =>
-                  update({ compensationMax: event.target.value || null })
+                  updatePreferences({ compensationMax: event.target.value || null })
                 }
                 type="number"
                 value={preferences.compensationMax ?? ''}
@@ -246,7 +271,7 @@ export function ProfilePage() {
                 className="mt-2 w-full rounded-xl border border-[#c8d4c8] bg-white px-4 py-3"
                 maxLength={3}
                 onChange={(event) =>
-                  update({ compensationCurrency: event.target.value.toUpperCase() || null })
+                  updatePreferences({ compensationCurrency: event.target.value.toUpperCase() || null })
                 }
                 placeholder="USD"
                 value={preferences.compensationCurrency ?? ''}
@@ -257,7 +282,7 @@ export function ProfilePage() {
               <select
                 className="mt-2 w-full rounded-xl border border-[#c8d4c8] bg-white px-4 py-3"
                 onChange={(event) =>
-                  update({ compensationPeriod: event.target.value || null })
+                  updatePreferences({ compensationPeriod: event.target.value || null })
                 }
                 value={preferences.compensationPeriod ?? ''}
               >
@@ -275,7 +300,7 @@ export function ProfilePage() {
             <label className="flex items-center gap-2">
               <input
                 checked={preferences.relocationAllowed}
-                onChange={(event) => update({ relocationAllowed: event.target.checked })}
+                onChange={(event) => updatePreferences({ relocationAllowed: event.target.checked })}
                 type="checkbox"
               />
               Aceito relocação
@@ -283,7 +308,7 @@ export function ProfilePage() {
             <label className="flex items-center gap-2">
               <input
                 checked={preferences.sponsorshipRequired}
-                onChange={(event) => update({ sponsorshipRequired: event.target.checked })}
+                onChange={(event) => updatePreferences({ sponsorshipRequired: event.target.checked })}
                 type="checkbox"
               />
               Preciso de patrocínio de visto
