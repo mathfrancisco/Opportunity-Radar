@@ -1289,13 +1289,35 @@ Somente criar dump não atende o critério.
 
 ## 66. Critério de aceite
 
-- [ ] logs identificam falhas;
-- [ ] source error não derruba sistema;
-- [ ] restore funciona;
-- [ ] runbook funciona;
-- [ ] E2E passa;
-- [ ] máquina limpa consegue executar;
-- [ ] documentação corresponde ao comportamento real.
+- [x] logs identificam falhas;
+- [x] source error não derruba sistema;
+- [x] restore funciona;
+- [x] runbook funciona;
+- [x] E2E passa;
+- [x] máquina limpa consegue executar;
+- [x] documentação corresponde ao comportamento real.
+
+Estado implementado:
+
+- logs estruturados em JSON, uma linha por evento, com `correlation_id` propagado por
+  context var — um log escrito dentro de um collector carrega a requisição ou o lote a
+  que pertence sem passar o id por assinatura;
+- `X-Correlation-ID` aceito e devolvido pela API; cada passada de normalização do worker
+  abre o próprio id, então um lote inteiro é rastreável;
+- `scripts/doctor.py` respondendo três coisas por verificação: o que foi inspecionado, o
+  que foi encontrado e o que fazer. Aviso não vira falha — Ollama fora do ar é degradação
+  esperada, não ambiente quebrado — e sem `DATABASE_URL` as verificações dependentes são
+  puladas para não enterrar o único problema real;
+- `make backup` gravando dump e manifesto com a revisão do Alembic e a contagem de cada
+  tabela do fluxo vertical;
+- `make restore-check` restaurando num banco descartável, rodando as mesmas contagens e
+  comparando com o manifesto. O banco de trabalho não é tocado; divergência sai com
+  código 1 dizendo qual tabela divergiu. Criar o arquivo não é o critério, como o §65
+  exige;
+- `docs/30-runbook.md` com subir do zero, popular catálogo, rodar o ciclo, ler logs,
+  backup, restauração e o que fazer quando cada parte quebra;
+- E2E do compose cobrindo o gate de backup e restauração, o doctor em modo JSON e a
+  presença do correlation id nos logs estruturados.
 
 ---
 

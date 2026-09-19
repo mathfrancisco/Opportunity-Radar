@@ -398,6 +398,26 @@ falha com conflito em vez de sobrescrever.
 
 Oportunidade e candidatura seguem separadas: encerrar uma não encerra a outra.
 
+### 7.11 Operação
+
+Todo processo emite JSON em stdout, uma linha por evento. A API aceita e devolve
+`X-Correlation-ID`; quando o cliente não manda um, a API gera. O id viaja em
+context var, então um log escrito dentro de um collector carrega a requisição ou
+o lote a que pertence sem que o id precise atravessar assinaturas. Cada passada
+de normalização do worker abre o próprio id.
+
+`make doctor` responde, para cada verificação, o que foi inspecionado, o que foi
+encontrado e o que fazer. Aviso não derruba o código de saída: Ollama fora do ar
+é degradação esperada, não ambiente quebrado.
+
+`make backup` grava o dump e um manifesto com a revisão do Alembic e a contagem
+de cada tabela do fluxo vertical. `make restore-check` restaura num banco
+descartável, roda as mesmas contagens e compara com o manifesto — criar o arquivo
+não é o critério. O banco de trabalho não é tocado, e divergência sai com código
+1 dizendo qual tabela divergiu.
+
+O runbook operacional está em `docs/30-runbook.md`.
+
 ---
 
 ## 8. Arquitetura final

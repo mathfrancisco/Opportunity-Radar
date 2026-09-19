@@ -4,8 +4,9 @@
 
 help:
 	@echo "Targets: bootstrap dev up down restart status logs migrate import-companies"
-	@echo "Validation (run only when requested): test test-integration check doctor"
-	@echo "Planned: collect backup restore-check"
+	@echo "Operations: doctor backup restore-check"
+	@echo "Validation (run only when requested): test test-integration check"
+	@echo "Planned: collect"
 
 bootstrap:
 	@test -f .env || cp .env.example .env
@@ -45,12 +46,18 @@ check:
 
 doctor:
 	@docker compose ps
-	@docker compose exec -T api python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5); print('API healthy')"
+	@docker compose exec -T api python scripts/doctor.py
 
 import-companies:
 	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/import_research_catalog.py $(if $(FILE),--input "/workspace/$(FILE)",--input /workspace/docs/pesquisas/auditoria-186-empresas.md --input /workspace/docs/pesquisas/empresas-adicionais.md) $(if $(DRY_RUN),--dry-run,) $(if $(RESUME),--resume,) $(if $(REPORT),--report "/workspace/$(REPORT)",)
 
-collect backup restore-check:
+backup:
+	@docker compose run --rm -v "$(CURDIR)/data/backups:/app/data/backups" api python scripts/backup.py $(if $(LABEL),--label "$(LABEL)",)
+
+restore-check:
+	@docker compose run --rm -v "$(CURDIR)/data/backups:/app/data/backups" api python scripts/restore_check.py $(if $(DUMP),--dump "$(DUMP)",)
+
+collect:
 	@echo "Target '$@' belongs to a later MVP phase and is not implemented yet."
 	@exit 2
 
