@@ -93,14 +93,17 @@ def test_starting_recording_and_closing_keeps_the_whole_history() -> None:
         assert len(application.history) == 1
         assert application.history[0].from_stage is None
 
+        # The service returns the same identity the session already holds, so the version
+        # has to be read before the move to mean anything.
+        version_before = application.version
         applied = service.transition(
             application.id,
             target=ApplicationStage.APPLIED,
-            expected_version=application.version,
+            expected_version=version_before,
             reason="submitted",
         )
         assert applied.applied_at is not None
-        assert applied.version == application.version + 1
+        assert applied.version == version_before + 1
 
         interviewing = service.transition(
             applied.id,
