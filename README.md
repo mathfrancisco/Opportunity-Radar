@@ -340,10 +340,21 @@ ou empresa e ordenação por prioridade, recência ou score. Oportunidade ainda 
 avaliada continua na lista: escondê-la faria a tela discordar do catálogo sem dizer
 por quê.
 
-No frontend, `/` é a Visão geral, `/inbox` é a Opportunity Inbox, `/companies` é o
-catálogo e `/status` é a checagem de ambiente. Os cartões da Visão geral são links
-que já abrem a inbox filtrada, e os filtros vivem na URL, então uma seleção é
-compartilhável e sobrevive ao reload.
+No frontend, `/` é a Visão geral, `/inbox` é a Opportunity Inbox,
+`/opportunities/{id}` é o detalhe, `/companies` é o catálogo e `/status` é a
+checagem de ambiente. Os cartões da Visão geral são links que já abrem a inbox
+filtrada, e os filtros vivem na URL, então uma seleção é compartilhável e
+sobrevive ao reload.
+
+O detalhe é montado sobre `GET /api/opportunities/{id}` e
+`GET /api/matches?opportunity_id=`, sem endpoint novo. Ele mostra o conteúdo
+canônico, a remuneração com a evidência textual que a originou, as skills com a
+versão da taxonomia, cada ocorrência com o item bruto correspondente, e então a
+decisão: score, verdict, confiança, filtros eliminatórios, fatores com peso e
+explicação, e a análise semântica. As versões de regras, taxonomia, perfil e
+conteúdo aparecem junto, porque é o que torna a decisão reproduzível. A análise
+pode ser disparada da tela; se o modelo falhar, o estado degradado aparece ao
+lado da decisão determinística, que continua completa.
 
 ---
 

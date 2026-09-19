@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { PageShell } from '../components/PageShell'
 import { type InboxItem, type InboxOrder, inboxOrders } from '../features/dashboard/api'
 import { useInbox } from '../features/dashboard/useInbox'
@@ -70,7 +70,14 @@ function ItemCard({ item }: { item: InboxItem }) {
     <article className="rounded-2xl border border-[#dce4dc] bg-white p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold">{item.title}</h2>
+          <h2 className="font-semibold">
+            <Link
+              className="underline decoration-[#d7f06f] decoration-2 underline-offset-4"
+              to={`/opportunities/${item.opportunityId}`}
+            >
+              {item.title}
+            </Link>
+          </h2>
           <p className="mt-1 text-sm text-[#6d827b]">
             {display(item.companyName)} · {display(item.location)}
           </p>

@@ -11,7 +11,8 @@ const navigation = [
 export type NavigationPath = (typeof navigation)[number]['to']
 
 interface PageShellProps {
-  current: NavigationPath
+  /** Omitted on pages that are reached from a link rather than from the nav. */
+  current?: NavigationPath
   eyebrow: string
   title: string
   description?: string

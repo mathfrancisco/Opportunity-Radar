@@ -1076,7 +1076,7 @@ ver saúde das fontes
 
 sem acessar terminal.
 
-Estado implementado da primeira fatia (itens 27 e 28 da ordem prática):
+Estado implementado (itens 27, 28 e 29 da ordem prática):
 
 - read models em `src/opportunity_radar/dashboard/`, conforme §9.4 do doc 06: as telas
   leem por query service com SQL otimizado, sem carregar agregados e sem poluir os
@@ -1091,14 +1091,23 @@ Estado implementado da primeira fatia (itens 27 e 28 da ordem prática):
 - telas Visão geral (`/`) e Oportunidades (`/inbox`), com estados de loading, vazio,
   erro com retry e degradado; navegação compartilhada em `components/PageShell`;
 - os cartões da Visão geral são links que já chegam na inbox filtrada;
-- o estado da tela vive na URL, então um filtro é compartilhável e sobrevive ao reload.
+- o estado da tela vive na URL, então um filtro é compartilhável e sobrevive ao reload;
+- Opportunity Detail em `/opportunities/{id}`, montada sobre os contratos já existentes
+  de oportunidade e matching, sem endpoint novo: título, empresa, localização,
+  modalidade, descrição, remuneração com evidência textual, skills com taxonomia,
+  ocorrências e fingerprint, score, verdict, confiança, filtros eliminatórios,
+  fatores com peso e explicação, análise semântica e as versões de regras, taxonomia,
+  perfil e conteúdo usadas na decisão;
+- a análise pode ser disparada da própria tela, e falha do modelo aparece como estado
+  degradado ao lado da decisão determinística, que continua completa.
 
 O que a fase ainda deve entregar:
 
-- Opportunity Detail, Sources/Executions e Profile/Preferences;
-- filtro de aplicada/não aplicada e os blocos de candidaturas e follow-up da Overview,
-  que dependem do `ApplicationProcess` da Fase 8. Até lá a API devolve `null` nesses
-  campos, e não `0`: ausência de pipeline não é pipeline vazio.
+- Sources/Executions e Profile/Preferences;
+- filtro de aplicada/não aplicada, a ação de iniciar candidatura no detalhe e os blocos
+  de candidaturas e follow-up da Overview, que dependem do `ApplicationProcess` da Fase
+  8. Até lá a API devolve `null` nesses campos, e não `0`: ausência de pipeline não é
+  pipeline vazio, e o botão do detalhe fica desabilitado dizendo por quê.
 
 ---
 
