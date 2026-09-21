@@ -9,8 +9,8 @@ from enum import StrEnum
 from typing import Any, TypeVar
 from uuid import UUID
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from opportunity_radar.companies.models import Company
