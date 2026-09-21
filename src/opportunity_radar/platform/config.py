@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     analysis_retry_attempt_window_seconds: int = 86400
     analysis_retry_max_attempts: int = 3
     analysis_claim_lease_seconds: int = 900
+    collection_backoff_base_seconds: int = 300
+    collection_backoff_ceiling_seconds: int = 86400
+    greenhouse_base_url: str = "https://boards-api.greenhouse.io"
 
     @property
     def analysis_eligible_verdicts(self) -> tuple[str, ...]:

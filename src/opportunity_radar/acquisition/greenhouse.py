@@ -26,6 +26,7 @@ from opportunity_radar.acquisition.domain import (
 
 _BOARD_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 _PARSER_VERSION = "greenhouse-job-board-v1"
+DEFAULT_BASE_URL = "https://boards-api.greenhouse.io"
 
 
 class GreenhouseCollector:
@@ -44,6 +45,10 @@ class GreenhouseCollector:
         max_retries: int = 2,
         retry_after_seconds: float = 1.0,
         sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        # Overridable so the autonomous cycle can be exercised against a local board.
+        # Proving that the worker collects on its own requires a source it can actually
+        # reach, and a gate that depends on a third party is not a gate.
+        base_url: str = DEFAULT_BASE_URL,
     ) -> None:
         if client is not None and client_factory is not None:
             raise ValueError("provide either client or client_factory, not both")
@@ -60,6 +65,7 @@ class GreenhouseCollector:
         self._max_retries = max_retries
         self._retry_after_seconds = retry_after_seconds
         self._sleeper = sleeper
+        self._base_url = base_url.rstrip("/")
 
     async def healthcheck(
         self, context: HealthcheckContext | None = None
@@ -112,7 +118,7 @@ class GreenhouseCollector:
         board: str,
         request: CollectionRequest,
     ) -> list[Mapping[str, Any]]:
-        url = f"https://boards-api.greenhouse.io/v1/boards/{quote(board)}/jobs"
+        url = f"{self._base_url}/v1/boards/{quote(board)}/jobs"
         policy = request.network_policy
         max_retries = policy.max_retries if policy is not None else self._max_retries
         retry_delay = (

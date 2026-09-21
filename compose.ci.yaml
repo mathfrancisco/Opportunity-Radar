@@ -10,3 +10,29 @@ services:
       timeout: 2s
       retries: 15
       start_period: 2s
+
+  # A local job board, so the scheduled collection gate proves the worker runs on its own
+  # instead of proving that a third party was reachable that morning.
+  jobboard:
+    image: python:3.12-alpine
+    command: ["python", "/stub/fake_job_board.py"]
+    volumes:
+      - ./tests/e2e:/stub:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8477/v1/boards/radar-ci/jobs', timeout=2)"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 2s
+    networks: [app_net]
+
+  worker:
+    environment:
+      GREENHOUSE_BASE_URL: http://jobboard:8477
+      # The pass has to come round inside the gate's patience, and a failed source must be
+      # retried within it rather than a real five-minute backoff later.
+      COLLECTION_BACKOFF_BASE_SECONDS: 5
+      COLLECTION_BACKOFF_CEILING_SECONDS: 30
+    depends_on:
+      jobboard:
+        condition: service_started

@@ -39,6 +39,7 @@ from opportunity_radar.acquisition.models import (
 )
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.repository import AcquisitionRepository
+from opportunity_radar.acquisition.scheduling import SourceSchedulingState
 
 COLLECTED_ITEM_V1_KEY = "collected_item_v1"
 
@@ -224,6 +225,24 @@ class AcquisitionService:
         self.session.commit()
         self.session.refresh(source)
         return source
+
+    def scheduling_state(
+        self, source: SourceDefinitionModel, *, timezone: str
+    ) -> SourceSchedulingState:
+        """Everything the clock-driven job needs to decide about one source.
+
+        Built here so the worker never has to parse a rate-limit policy itself: the
+        throttle the job honours and the throttle `execute` enforces come from the same
+        reader, and cannot disagree.
+        """
+        policy = _network_policy(source.rate_limit_policy or {})
+        return SourceSchedulingState(
+            schedule=source.schedule,
+            timezone=timezone,
+            history=self.repository.run_history(source.id),
+            last_http_attempt_at=source.last_http_attempt_at,
+            minimum_run_interval_seconds=policy.minimum_run_interval_seconds,
+        )
 
     def get_run(self, run_id: UUID) -> SourceRunModel | None:
         return self.repository.get_run(run_id)

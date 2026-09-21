@@ -1,6 +1,6 @@
 # CARD F10-06 — Ação manual e gate E2E do ciclo
 
-- **Status:** In progress
+- **Status:** Done
 - **Fase:** 10 — Ciclo autônomo
 - **Depende de:** F10-01, F10-02, F10-03, F10-04, F10-05
 - **Bloqueia:** Fases 11 e 12
@@ -44,23 +44,46 @@ fica explicitamente visível; não pode mascará-la como sucesso.
 
 ## Critérios de aceite
 
-- [ ] **Avaliar agora** está disponível no detalhe e cria ou retorna assessment
+- [x] **Avaliar agora** está disponível no detalhe e cria ou retorna assessment
       sem duplicá-lo.
-- [ ] O cenário E2E inicia com as três pré-condições atendidas.
-- [ ] Fonte habilitada e agendada executa sozinha; fonte sem schedule não.
-- [ ] `RawItem`, Opportunity normalizada e assessment aparecem sem terminal.
-- [ ] Inbox mostra a vaga com score.
-- [ ] Análise é anexada ou é exibida como estado degradado explícito.
-- [ ] Falha de fonte não interrompe os outros jobs.
-- [ ] Cada rodada é rastreável por correlation id.
-- [ ] Histórico expõe `execution_trigger` sem confundir `CollectionMode`.
-- [ ] Reinício do worker não duplica assessment nem análise concluída.
+- [x] O cenário E2E inicia com as três pré-condições atendidas.
+- [x] Fonte habilitada e agendada executa sozinha; fonte sem schedule não.
+- [x] `RawItem`, Opportunity normalizada e assessment aparecem sem terminal.
+- [x] Inbox mostra a vaga com score.
+- [x] Análise é anexada ou é exibida como estado degradado explícito.
+- [x] Falha de fonte não interrompe os outros jobs.
+- [x] Cada rodada é rastreável por correlation id.
+- [x] Histórico expõe `execution_trigger` sem confundir `CollectionMode`.
+- [x] Reinício do worker não duplica assessment nem análise concluída.
 
 ## Verificação
 
 Adicionar testes de componente e API para a ação manual, e estender o cenário
 Compose/E2E para o ciclo autônomo, incluindo Ollama indisponível, reinício do
 worker, fonte sem schedule e falha isolada de fonte.
+
+O gate está em `.github/workflows/pipeline.yml`, no job `e2e`, passos
+"Verify the autonomous cycle without a terminal" e "Verify the kill switches
+reach the worker". Ele roda depois de `docker compose up -d` e confere, sem
+nenhum comando de terminal no meio: coleta agendada com `execution_trigger`
+`SCHEDULED`, fonte sem schedule parada, falha isolada de fonte, normalização,
+score na Inbox, análise concluída ou degradação explícita, rastreabilidade por
+correlation id e ausência de duplicata após reiniciar o worker.
+
+## Decisões de implementação
+
+O gate coleta de um board local (`tests/e2e/fake_job_board.py`, serviço
+`jobboard` no `compose.ci.yaml`), com `GREENHOUSE_BASE_URL` apontado para ele.
+Provar que o worker coleta sozinho exige uma fonte que ele consiga alcançar, e
+um gate que depende de terceiro não é um gate.
+
+As pré-condições continuam explícitas e não são criadas pelo Compose: migrations
+aplicadas, `ProfileVersion` ativa e fonte homologada, habilitada e agendada. O
+gate as afirma antes de seguir.
+
+A ação manual de análise agora pode responder 409 quando o job detém a claim do
+F10-02. O gate e o cliente web tratam isso como "tente de novo", não como falha:
+devolver a análise anterior apresentaria estado velho como resposta da chamada.
 
 ## Arquivos prováveis
 

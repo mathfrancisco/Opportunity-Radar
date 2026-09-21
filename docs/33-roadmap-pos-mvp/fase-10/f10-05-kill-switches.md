@@ -1,6 +1,6 @@
 # CARD F10-05 — Kill switches
 
-- **Status:** In progress
+- **Status:** Done
 - **Fase:** 10 — Ciclo autônomo
 - **Depende de:** Nenhum
 - **Bloqueia:** F10-06
@@ -39,16 +39,29 @@ alterar uma variável exige reiniciar o worker para reconstruir o scheduler.
 
 ## Critérios de aceite
 
-- [ ] Cada variável controla somente seu job funcional correspondente.
-- [ ] Job desligado não aparece no scheduler.
-- [ ] Log de inicialização lista estado de todos os jobs funcionais.
-- [ ] `heartbeat` continua ativo com todas as variáveis desligadas.
-- [ ] Configuração padrão mantém os jobs previstos para a fase habilitados.
+- [x] Cada variável controla somente seu job funcional correspondente.
+- [x] Job desligado não aparece no scheduler.
+- [x] Log de inicialização lista estado de todos os jobs funcionais.
+- [x] `heartbeat` continua ativo com todas as variáveis desligadas.
+- [x] Configuração padrão mantém os jobs previstos para a fase habilitados.
 
 ## Verificação
 
 Criar testes de configuração e de scheduler que cubram cada flag isoladamente,
 todas desligadas e preservação do heartbeat.
+
+Entregue em `tests/backend/test_worker.py`. O gate E2E do F10-06 recria o worker
+com as quatro variáveis desligadas e confere o log de inicialização.
+
+## Correção durante a fase
+
+O log de inicialização era montado a partir das settings, e por isso anunciava
+`analyze_pending` ativo enquanto esse job sequer existia. Agora é derivado do
+scheduler construído: um job não registrado não pode ser reportado como ativo.
+
+O `compose.yaml` não repassava nenhuma `WORKER_*_ENABLED` ao container. O worker
+herda apenas aquele bloco de environment, então o kill switch existia no código
+mas não era operável — que é exatamente o que este card prometia.
 
 ## Arquivos prováveis
 
