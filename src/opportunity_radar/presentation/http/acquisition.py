@@ -311,7 +311,7 @@ def _run_response(run: SourceRunModel) -> SourceRunResponse:
         id=run.id,
         source_definition_id=run.source_definition_id,
         source_name=run.source_definition.name if run.source_definition else None,
-        execution_trigger=run.execution_trigger,
+        execution_trigger=ExecutionTrigger(run.execution_trigger),
         status=run.status,
         started_at=run.started_at,
         finished_at=run.finished_at,
