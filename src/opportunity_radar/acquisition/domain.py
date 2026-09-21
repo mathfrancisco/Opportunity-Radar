@@ -69,6 +69,13 @@ class CollectionMode(StrEnum):
     MANUAL = "MANUAL"
 
 
+class ExecutionTrigger(StrEnum):
+    """The actor that initiated a source run, independently of collection mode."""
+
+    ON_DEMAND = "ON_DEMAND"
+    SCHEDULED = "SCHEDULED"
+
+
 class ManualInputKind(StrEnum):
     URL = "URL"
     TEXT = "TEXT"
@@ -160,6 +167,7 @@ class CollectionNetworkPolicy:
 class CollectionRequest:
     source_definition_id: UUID | None = None
     mode: CollectionMode = CollectionMode.DISCOVERY
+    execution_trigger: ExecutionTrigger = ExecutionTrigger.ON_DEMAND
     company_reference: str | None = None
     company_name: str | None = None
     api_region: str | None = None
@@ -253,6 +261,7 @@ class SourceRun:
     """Lifecycle and counters for one bounded collection attempt."""
 
     source_definition_id: UUID
+    execution_trigger: ExecutionTrigger = ExecutionTrigger.ON_DEMAND
     id: UUID = field(default_factory=uuid4)
     status: SourceRunStatus = SourceRunStatus.PENDING
     started_at: datetime | None = None

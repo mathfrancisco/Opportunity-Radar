@@ -16,6 +16,7 @@ from opportunity_radar.acquisition.domain import (
     CollectionMode,
     CollectionRequest,
     CollectorCapabilities,
+    ExecutionTrigger,
     HealthResult,
 )
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
@@ -182,6 +183,35 @@ def test_run_deduplicates_identical_identity_but_preserves_changed_payload() -> 
     assert run.items_skipped == 1
     assert run.checkpoint_after == "cursor-2"
     assert session.committed
+
+
+def test_run_defaults_to_on_demand_execution_trigger() -> None:
+    service, _ = _service(_Collector())
+
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+        )
+    )
+
+    assert run.execution_trigger == ExecutionTrigger.ON_DEMAND.value
+
+
+def test_run_persists_scheduled_execution_trigger() -> None:
+    service, _ = _service(_Collector())
+
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(
+                mode=CollectionMode.DISCOVERY,
+                execution_trigger=ExecutionTrigger.SCHEDULED,
+            ),
+        )
+    )
+
+    assert run.execution_trigger == ExecutionTrigger.SCHEDULED.value
 
 
 def test_collector_failure_after_evidence_marks_run_partial() -> None:

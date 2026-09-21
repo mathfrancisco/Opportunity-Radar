@@ -66,6 +66,7 @@ def test_manual_acquisition_is_idempotent_and_visible() -> None:
 
     assert first.status_code == 201
     assert first.json()["status"] == "SUCCEEDED"
+    assert first.json()["execution_trigger"] == "ON_DEMAND"
     assert first.json()["items_seen"] == 3
     assert first.json()["items_persisted"] == 3
     assert repeated.status_code == 201
@@ -76,6 +77,7 @@ def test_manual_acquisition_is_idempotent_and_visible() -> None:
     assert runs.status_code == 200
     assert runs.json()["total"] == 2
     assert runs.json()["items"][0]["source_name"] == "Manual MVP intake"
+    assert runs.json()["items"][0]["execution_trigger"] == "ON_DEMAND"
 
     run_detail = client.get(f"/source-runs/{first.json()['id']}")
     assert run_detail.status_code == 200

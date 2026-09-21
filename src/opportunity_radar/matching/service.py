@@ -9,9 +9,9 @@ from enum import StrEnum
 from typing import Any, TypeVar
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
 
 from opportunity_radar.companies.models import Company
 from opportunity_radar.matching.analysis import (
@@ -91,16 +91,9 @@ class MatchingService:
             if profile_version_id is not None
             else profile_service.get_active()
         )
-        taxonomy_version = _taxonomy_version(opportunity)
         assessed_at = datetime.now(UTC)
-        opportunity_snapshot = _opportunity_snapshot(self.session, opportunity, profile)
-        profile_snapshot = _profile_snapshot(profile)
-        input_hash = _input_hash(
-            opportunity_snapshot,
-            profile_snapshot,
-            rules_version=RULES_VERSION,
-            taxonomy_version=taxonomy_version,
-            reference_date=assessed_at.date().isoformat(),
+        taxonomy_version, opportunity_snapshot, profile_snapshot, input_hash = (
+            self._evaluation_identity(opportunity, profile, assessed_at)
         )
         existing = self.repository.get_existing(
             input_hash=input_hash,
@@ -138,6 +131,52 @@ class MatchingService:
         loaded = self.repository.get(assessment.id)
         assert loaded is not None
         return loaded
+
+    def pending_evaluation_ids(self, *, limit: int) -> list[UUID]:
+        """Return eligible opportunities missing an assessment for today's exact inputs."""
+        profile = ProfileService(self.session).get_active()
+        assessed_at = datetime.now(UTC)
+        candidates = self.session.scalars(
+            select(OpportunityModel)
+            .where(OpportunityModel.lifecycle_status.in_(("DISCOVERED", "ACTIVE")))
+            .options(
+                selectinload(OpportunityModel.compensations),
+                selectinload(OpportunityModel.skills),
+            )
+            .order_by(OpportunityModel.created_at, OpportunityModel.id)
+        )
+        pending: list[UUID] = []
+        for opportunity in candidates:
+            _, _, _, input_hash = self._evaluation_identity(
+                opportunity, profile, assessed_at
+            )
+            if self.repository.get_existing(input_hash=input_hash) is None:
+                pending.append(opportunity.id)
+                if len(pending) >= limit:
+                    break
+        return pending
+
+    def _evaluation_identity(
+        self,
+        opportunity: OpportunityModel,
+        profile: ProfileVersion,
+        assessed_at: datetime,
+    ) -> tuple[str, OpportunitySnapshot, ProfileSnapshot, str]:
+        taxonomy_version = _taxonomy_version(opportunity)
+        opportunity_snapshot = _opportunity_snapshot(self.session, opportunity, profile)
+        profile_snapshot = _profile_snapshot(profile)
+        return (
+            taxonomy_version,
+            opportunity_snapshot,
+            profile_snapshot,
+            _input_hash(
+                opportunity_snapshot,
+                profile_snapshot,
+                rules_version=RULES_VERSION,
+                taxonomy_version=taxonomy_version,
+                reference_date=assessed_at.date().isoformat(),
+            ),
+        )
 
     def get(self, assessment_id: UUID) -> MatchAssessmentModel:
         assessment = self.repository.get(assessment_id)

@@ -10,6 +10,7 @@ import {
 } from '../features/matching/api'
 import {
   useAnalyzeAssessment,
+  useEvaluateOpportunity,
   useLatestAssessment,
 } from '../features/matching/useAssessment'
 import { type OpportunityDetail } from '../features/opportunities/api'
@@ -413,6 +414,7 @@ export function OpportunityDetailPage() {
   const { opportunityId = '' } = useParams()
   const opportunity = useOpportunity(opportunityId)
   const assessment = useLatestAssessment(opportunityId)
+  const evaluate = useEvaluateOpportunity(opportunityId)
 
   return (
     <PageShell
@@ -477,6 +479,18 @@ export function OpportunityDetailPage() {
             </Section>
 
             <Section title="Decisão">
+              <div className="mb-4 flex flex-wrap items-center gap-3">
+                <button
+                  className="rounded-xl bg-[#17322d] px-5 py-3 text-sm font-semibold text-white hover:bg-[#25483f] disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={evaluate.isPending}
+                  onClick={() => evaluate.mutate()}
+                  type="button"
+                >
+                  {evaluate.isPending ? 'Avaliando…' : 'Avaliar agora'}
+                </button>
+                {evaluate.isSuccess && <span className="text-sm text-[#547068]">Avaliação atualizada.</span>}
+                {evaluate.isError && <span className="text-sm text-[#9b3e2e]">Não foi possível avaliar agora.</span>}
+              </div>
               {assessment.isPending && (
                 <p className="rounded-2xl bg-[#eef3df] p-5 text-[#5c694e]">
                   Carregando a avaliação…

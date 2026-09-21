@@ -97,6 +97,10 @@ class SourceRunModel(Base):
             name="ck_source_run_status",
         ),
         CheckConstraint(
+            "execution_trigger IN ('ON_DEMAND', 'SCHEDULED')",
+            name="ck_source_run_execution_trigger",
+        ),
+        CheckConstraint(
             "items_seen >= 0 AND items_persisted >= 0 AND items_skipped >= 0 "
             "AND items_invalid >= 0 AND http_requests >= 0 AND retry_count >= 0 "
             "AND rate_limit_events >= 0",
@@ -119,6 +123,12 @@ class SourceRunModel(Base):
         PG_UUID(as_uuid=True),
         ForeignKey("acquisition.source_definition.id", ondelete="RESTRICT"),
         nullable=False,
+    )
+    execution_trigger: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="ON_DEMAND",
+        server_default=text("'ON_DEMAND'"),
     )
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

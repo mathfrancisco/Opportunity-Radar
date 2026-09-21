@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     ollama_analysis_cache_entries: int = 256
     frontend_origin: str = "http://localhost:3000"
     collection_timezone: str = "UTC"
+    worker_collect_enabled: bool = True
+    worker_normalize_enabled: bool = True
+    worker_match_enabled: bool = True
+    worker_analyze_enabled: bool = True
+    worker_evaluate_batch_size: int = 50
 
 
 @lru_cache

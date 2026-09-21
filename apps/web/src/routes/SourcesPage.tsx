@@ -66,6 +66,7 @@ function RunHistory({ sourceId }: { sourceId: string }) {
         <thead className="bg-[#f2f5ef] text-xs uppercase tracking-[0.08em] text-[#6d827b]">
           <tr>
             <th className="px-4 py-3 font-semibold">Status</th>
+            <th className="px-4 py-3 font-semibold">Origem</th>
             <th className="px-4 py-3 font-semibold">Início</th>
             <th className="px-4 py-3 font-semibold">Itens</th>
             <th className="px-4 py-3 font-semibold">Erro</th>
@@ -77,6 +78,7 @@ function RunHistory({ sourceId }: { sourceId: string }) {
               <td className="px-4 py-3">
                 <StatusBadge status={run.status} />
               </td>
+              <td className="px-4 py-3">{run.executionTrigger}</td>
               <td className="px-4 py-3">{formatDate(run.startedAt)}</td>
               <td className="px-4 py-3">
                 {run.itemsPersisted} persistidos / {run.itemsSeen} vistos

@@ -75,6 +75,7 @@ describe('runSource', () => {
         id: 'run-1',
         source_definition_id: 'source-1',
         source_name: 'CI manual intake',
+        execution_trigger: 'ON_DEMAND',
         status: 'SUCCEEDED',
         started_at: '2026-09-17T10:00:00Z',
         finished_at: '2026-09-17T10:00:05Z',
@@ -97,6 +98,7 @@ describe('runSource', () => {
     const run = await runSource('source-1')
 
     expect(run.status).toBe('SUCCEEDED')
+    expect(run.executionTrigger).toBe('ON_DEMAND')
     expect(run.itemsPersisted).toBe(2)
   })
 

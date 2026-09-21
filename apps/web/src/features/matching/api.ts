@@ -168,6 +168,18 @@ export async function getLatestAssessment(
   return first === undefined ? null : parseAssessment(first)
 }
 
+export async function evaluateOpportunity(opportunityId: string): Promise<MatchAssessment> {
+  const response = await fetch(apiUrl('/matches/evaluate'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ opportunity_id: opportunityId }),
+  })
+  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  const assessment = parseAssessment(await response.json())
+  if (assessment === null) throw new Error('A API retornou uma avaliação inválida.')
+  return assessment
+}
+
 export async function analyzeAssessment(
   assessmentId: string,
   options: { refresh?: boolean } = {},

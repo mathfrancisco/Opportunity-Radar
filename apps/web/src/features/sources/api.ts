@@ -32,6 +32,7 @@ export interface SourceRun {
   id: string
   sourceDefinitionId: string
   sourceName: string | null
+  executionTrigger: string
   status: string
   startedAt: string | null
   finishedAt: string | null
@@ -95,6 +96,7 @@ function parseRun(value: unknown): SourceRun | null {
     id: value.id,
     sourceDefinitionId: required(value.source_definition_id),
     sourceName: text(value.source_name),
+    executionTrigger: required(value.execution_trigger, 'ON_DEMAND'),
     status: required(value.status, 'UNKNOWN'),
     startedAt: text(value.started_at),
     finishedAt: text(value.finished_at),

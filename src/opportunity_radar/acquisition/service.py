@@ -281,11 +281,16 @@ class AcquisitionService:
         run_telemetry = CollectionTelemetry()
 
         checkpoint_before = source.checkpoint.cursor if source.checkpoint else None
-        run = SourceRun(source_definition_id=source.id, checkpoint_before=checkpoint_before)
+        run = SourceRun(
+            source_definition_id=source.id,
+            execution_trigger=request.execution_trigger,
+            checkpoint_before=checkpoint_before,
+        )
         run.start()
         persisted_run = SourceRunModel(
             id=run.id,
             source_definition_id=source.id,
+            execution_trigger=run.execution_trigger.value,
             status=run.status.value,
             started_at=run.started_at,
             checkpoint_before=checkpoint_before,

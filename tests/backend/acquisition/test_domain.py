@@ -9,6 +9,7 @@ from opportunity_radar.acquisition.domain import (
     CollectionMode,
     CollectionNetworkPolicy,
     CollectionRequest,
+    ExecutionTrigger,
     HealthResult,
     ManualInput,
     ManualInputKind,
@@ -42,6 +43,19 @@ def test_source_run_enforces_lifecycle_and_metrics() -> None:
     assert run.items_invalid == 1
     assert run.http_requests == 1
     assert run.retry_count == 1
+
+
+def test_execution_trigger_is_independent_from_collection_mode() -> None:
+    request = CollectionRequest(
+        mode=CollectionMode.INCREMENTAL,
+        execution_trigger=ExecutionTrigger.SCHEDULED,
+    )
+    run = SourceRun(
+        source_definition_id=uuid4(), execution_trigger=request.execution_trigger
+    )
+
+    assert request.mode is CollectionMode.INCREMENTAL
+    assert run.execution_trigger is ExecutionTrigger.SCHEDULED
 
 
 def test_failed_run_requires_structured_error() -> None:
