@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import signal
-from asyncio import run
-from datetime import UTC, datetime
+from asyncio import run as run_async
+from datetime import datetime
 from pathlib import Path
 from threading import Event
 from zoneinfo import ZoneInfo
@@ -137,7 +137,7 @@ def collect_enabled_sources(engine: Engine, *, timezone: str = "UTC") -> None:
                         correlation_id=correlation_id,
                         execution_trigger=ExecutionTrigger.SCHEDULED,
                     )
-                    run(service.execute(source.id, request))
+                    run_async(service.execute(source.id, request))
                 except Exception:
                     session.rollback()
                     logger.exception(
