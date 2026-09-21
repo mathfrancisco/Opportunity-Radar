@@ -194,9 +194,11 @@ jobs:
           echo "MATCH_ID=$first_match_id" >> "$GITHUB_ENV"
       - name: Verify semantic analysis without overriding the deterministic result
         run: |
-          first_analysis="$(curl --fail --silent --request POST "http://127.0.0.1:3000/api/matches/$MATCH_ID/analysis")"
+          # The worker analyses the same assessments, and a live claim answers 409 rather
+          # than handing back another holder's stale row. Retrying is the intended reply.
+          first_analysis="$(curl --fail --retry 10 --retry-all-errors --retry-delay 3 --silent --request POST "http://127.0.0.1:3000/api/matches/$MATCH_ID/analysis")"
           first_analysis_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'AI_COMPLETED'; assert data['schema_version'] == 'analysis-v1'; assert data['prompt_version'] == 'opportunity_analysis/v1'; assert data['summary']; assert len(data['cache_key']) == 64; print(data['id'])" <<< "$first_analysis")"
-          curl --fail --silent --request POST "http://127.0.0.1:3000/api/matches/$MATCH_ID/analysis" | \
+          curl --fail --retry 10 --retry-all-errors --retry-delay 3 --silent --request POST "http://127.0.0.1:3000/api/matches/$MATCH_ID/analysis" | \
             python -c "import json,sys; assert json.load(sys.stdin)['id'] == '$first_analysis_id'"
           curl --fail --silent "http://127.0.0.1:3000/api/matches/$MATCH_ID" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['verdict'] == 'REVIEW_REQUIRED'; assert data['eligibility'] == 'UNKNOWN'; assert len(data['factors']) == 8; assert data['analysis']['id'] == '$first_analysis_id'; assert data['analysis']['status'] == 'AI_COMPLETED'"
@@ -330,6 +332,95 @@ jobs:
           grep -iq "x-correlation-id: $correlation_id" /tmp/headers
           docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --no-log-prefix api | \
             python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; matched=[line for line in lines if line.get('correlation_id') == '$correlation_id']; assert matched, 'no structured log carried the correlation id'; assert any(line.get('path') == '/overview' and line.get('status_code') == 200 for line in matched), matched"
+      - name: Verify the autonomous cycle without a terminal
+        run: |
+          compose="docker compose -f compose.yaml -f compose.ci.yaml"
+          api="http://127.0.0.1:3000/api"
+
+          # Wait for a condition the worker reaches on its own. Nothing in this step pokes
+          # the cycle: every assertion below must become true because a job ran.
+          wait_for() {
+            description="$1"; shift
+            for _ in $(seq 1 60); do
+              if eval "$@" >/dev/null 2>&1; then return 0; fi
+              sleep 5
+            done
+            echo "timed out waiting for: $description" >&2
+            $compose logs --no-color --tail=200 worker >&2
+            return 1
+          }
+          count_rows() {
+            $compose exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc "$1" | tr -d '[:space:]'
+          }
+
+          # The three preconditions the compose stack deliberately does not bootstrap.
+          test -n "$(count_rows 'SELECT version_num FROM alembic_version')"
+          curl --fail --silent "$api/profile" | \
+            python -c "import json,sys; assert json.load(sys.stdin)['status'] == 'ACTIVE'"
+          homologated='"enabled":true,"evidence_status":"confirmed","terms_reviewed":true,"collector_local_tested":true,"reviewed_at":"2026-09-01T00:00:00Z"'
+          create_source() {
+            curl --fail --silent --json "$1" "$api/sources" | \
+              python -c "import json,sys; print(json.load(sys.stdin)['id'])"
+          }
+          scheduled_id="$(create_source "{\"source_type\":\"greenhouse\",\"name\":\"CI scheduled board\",\"schedule\":\"* * * * *\",$homologated,\"configuration\":{\"board_token\":\"radar-ci\",\"company_name\":\"Radar CI\"}}")"
+          unscheduled_id="$(create_source "{\"source_type\":\"greenhouse\",\"name\":\"CI unscheduled board\",$homologated,\"configuration\":{\"board_token\":\"radar-ci\",\"company_name\":\"Radar CI\"}}")"
+          broken_id="$(create_source "{\"source_type\":\"greenhouse\",\"name\":\"CI missing board\",\"schedule\":\"* * * * *\",$homologated,\"configuration\":{\"board_token\":\"radar-absent\",\"company_name\":\"Radar CI\"}}")"
+
+          # Collection: the enabled, scheduled source runs by the clock, as SCHEDULED.
+          wait_for "the scheduled source to collect" \
+            "curl --fail --silent '$api/source-runs?source_id=$scheduled_id' | python -c \"import json,sys; data=json.load(sys.stdin); assert any(item['status'] == 'SUCCEEDED' and item['execution_trigger'] == 'SCHEDULED' and item['items_persisted'] >= 1 for item in data['items'])\""
+          scheduled_run="$(curl --fail --silent "$api/source-runs?source_id=$scheduled_id" | python -c "import json,sys; data=json.load(sys.stdin); run=next(item for item in data['items'] if item['status'] == 'SUCCEEDED'); assert run['correlation_id']; print(run['correlation_id'])")"
+
+          # One unreachable source does not cost the others their pass.
+          wait_for "the unreachable source to fail" \
+            "curl --fail --silent '$api/source-runs?source_id=$broken_id' | python -c \"import json,sys; data=json.load(sys.stdin); assert any(item['status'] == 'FAILED' for item in data['items'])\""
+          curl --fail --silent "$api/source-runs?source_id=$scheduled_id" | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert any(item['status'] == 'SUCCEEDED' for item in data['items'])"
+
+          # A source without a schedule stays idle however long the worker runs.
+          curl --fail --silent "$api/source-runs?source_id=$unscheduled_id" | \
+            python -c "import json,sys; assert json.load(sys.stdin)['total'] == 0"
+
+          # Normalisation, scoring and the Inbox, with no terminal command in between.
+          wait_for "the collected posting to reach the Inbox with a score" \
+            "curl --fail --silent '$api/inbox?search=Senior%20Python%20Engineer' | python -c \"import json,sys; data=json.load(sys.stdin); assert any(item['company_name'] == 'Radar CI' and item['score'] is not None for item in data['items'])\""
+          autonomous="$(curl --fail --silent "$api/inbox?search=Senior%20Python%20Engineer" | python -c "import json,sys; data=json.load(sys.stdin); item=next(entry for entry in data['items'] if entry['company_name'] == 'Radar CI'); print(item['opportunity_id'])")"
+
+          # The semantic layer is attached or the degradation is visible. Silence is not an
+          # accepted outcome: a missing analysis would read as an analysis that passed.
+          wait_for "the semantic layer to resolve" \
+            "curl --fail --silent '$api/matches?opportunity_id=$autonomous' | python -c \"import json,sys; data=json.load(sys.stdin); assert data['total'] >= 1; analysis=data['items'][0]['analysis']; assert analysis is not None; assert analysis['status'] in ('AI_COMPLETED', 'AI_FAILED', 'AI_SKIPPED')\""
+
+          # Every round is greppable: the run carries the correlation id its pass logged.
+          $compose logs --no-color --no-log-prefix worker | \
+            python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; assert any(line.get('correlation_id') == '$scheduled_run' for line in lines), 'no worker log carried the run correlation id'"
+
+          # A restart re-reads the same state and must add nothing to it.
+          assessments_before="$(count_rows 'SELECT count(*) FROM matching.match_assessment')"
+          analyses_before="$(count_rows "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
+          $compose restart worker
+          curl --fail --retry 30 --retry-all-errors --retry-delay 2 --silent --output /dev/null http://127.0.0.1:8000/health/ready
+          sleep 150
+          test "$assessments_before" = "$(count_rows 'SELECT count(*) FROM matching.match_assessment')"
+          test "$analyses_before" = "$(count_rows "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
+          test "0" = "$(count_rows "SELECT count(*) FROM matching.match_analysis_claim")"
+      - name: Verify the kill switches reach the worker
+        run: |
+          compose="docker compose -f compose.yaml -f compose.ci.yaml"
+          WORKER_COLLECT_ENABLED=false WORKER_NORMALIZE_ENABLED=false \
+            WORKER_MATCH_ENABLED=false WORKER_ANALYZE_ENABLED=false \
+            $compose up --detach --force-recreate worker
+          # The container reports "Started" before the interpreter has booted. Waiting for
+          # the ready file is what makes the startup log readable: the worker touches it
+          # after the scheduler is built, which is after the line this step asserts on.
+          for _ in $(seq 1 30); do
+            status="$(docker inspect --format '{{.State.Health.Status}}' "$($compose ps -q worker)")"
+            if [ "$status" = "healthy" ]; then break; fi
+            sleep 2
+          done
+          test "$status" = "healthy"
+          $compose logs --no-color --no-log-prefix worker | \
+            python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; configured=[line for line in lines if line.get('message') == 'worker jobs configured']; assert configured, 'the worker never reported its job configuration'; jobs=configured[-1]['jobs']; assert jobs == {'collect_enabled_sources': False, 'normalize_opportunities': False, 'evaluate_pending': False, 'analyze_pending': False}, jobs"
       - name: Collect logs on failure
         if: failure()
         run: docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --tail=300

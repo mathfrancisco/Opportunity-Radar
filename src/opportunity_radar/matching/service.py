@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Any, TypeVar
+from typing import Any, Sequence, TypeVar
 from uuid import UUID
 
 from sqlalchemy import select
@@ -62,6 +62,19 @@ from opportunity_radar.profile.service import ProfileService
 
 RULES_VERSION = "matching-v1"
 
+# Section 50: the semantic layer is spent where it can still change a decision. A verdict
+# the rules already settled downwards gets no model time.
+DEFAULT_ANALYSIS_VERDICTS: tuple[str, ...] = (
+    Verdict.HIGH_PRIORITY.value,
+    Verdict.RECOMMENDED.value,
+    Verdict.WATCHLIST.value,
+    Verdict.REVIEW_REQUIRED.value,
+)
+DEFAULT_ANALYSIS_COOLDOWN = timedelta(hours=1)
+DEFAULT_ANALYSIS_ATTEMPT_WINDOW = timedelta(hours=24)
+DEFAULT_ANALYSIS_MAX_ATTEMPTS = 3
+DEFAULT_ANALYSIS_CLAIM_LEASE = timedelta(minutes=15)
+
 
 class MatchNotFoundError(LookupError):
     pass
@@ -69,6 +82,10 @@ class MatchNotFoundError(LookupError):
 
 class MatchOpportunityNotFoundError(LookupError):
     pass
+
+
+class AnalysisInProgressError(RuntimeError):
+    """Another holder — the job or the manual action — owns this analysis right now."""
 
 
 class MatchingService:
@@ -190,37 +207,86 @@ class MatchingService:
         adapter: SemanticAnalysisPort,
         *,
         refresh: bool = False,
+        owner: str = "manual",
+        lease: timedelta = DEFAULT_ANALYSIS_CLAIM_LEASE,
     ) -> MatchAnalysisModel:
         """Attach the advisory semantic layer to an assessment that already concluded.
 
         Section 44 of the roadmap: the deterministic decision is read, never rewritten.
         Whatever the model does — answer, time out, disappear — this returns a persisted
         row and the assessment keeps its score, verdict and factors untouched.
+
+        The claim is what keeps the job and the manual action from prompting the same
+        assessment twice. It is taken after the cache lookup, so a reader of an already
+        completed analysis never waits on a claim it does not need.
         """
-        assessment = self.get(assessment_id)
+        self.get(assessment_id)  # Fail on an unknown assessment before taking a claim.
         if not refresh:
             cached = self.repository.get_completed_analysis(assessment_id)
             if cached is not None:
                 return cached
 
-        request = _analysis_request(assessment)
-        outcome = await adapter.analyze(request)
-        cache_key = analysis_cache_key(
-            request,
-            model_id=adapter.model,
-            prompt_version=adapter.prompt_version,
-        )
-        analysis = self.repository.add_analysis(
-            _analysis_record(
-                assessment_id=assessment.id,
-                cache_key=cache_key,
-                outcome=outcome,
-                analyzed_at=datetime.now(UTC),
+        now = datetime.now(UTC)
+        if not self.repository.acquire_analysis_claim(
+            assessment_id, owner=owner, now=now, lease=lease
+        ):
+            self.session.rollback()
+            raise AnalysisInProgressError(str(assessment_id))
+        # The claim is only exclusive once other transactions can see it.
+        self.session.commit()
+        try:
+            if not refresh:
+                # The previous holder may have completed while we waited for the lease.
+                cached = self.repository.get_completed_analysis(assessment_id)
+                if cached is not None:
+                    return cached
+
+            request = _analysis_request(self.get(assessment_id))
+            outcome = await adapter.analyze(request)
+            cache_key = analysis_cache_key(
+                request,
+                model_id=adapter.model,
+                prompt_version=adapter.prompt_version,
+            )
+            analysis = self.repository.add_analysis(
+                _analysis_record(
+                    assessment_id=assessment_id,
+                    cache_key=cache_key,
+                    outcome=outcome,
+                    analyzed_at=datetime.now(UTC),
+                )
+            )
+            self.session.commit()
+            self.session.refresh(analysis)
+            return analysis
+        finally:
+            # Releasing must succeed even when the body failed, so the assessment is not
+            # retired from the queue until the lease would have expired on its own.
+            self.session.rollback()
+            self.repository.release_analysis_claim(assessment_id, owner=owner)
+            self.session.commit()
+
+    def pending_analysis_ids(
+        self,
+        *,
+        limit: int,
+        eligible_verdicts: Sequence[str] = DEFAULT_ANALYSIS_VERDICTS,
+        cooldown: timedelta = DEFAULT_ANALYSIS_COOLDOWN,
+        attempt_window: timedelta = DEFAULT_ANALYSIS_ATTEMPT_WINDOW,
+        max_attempts: int = DEFAULT_ANALYSIS_MAX_ATTEMPTS,
+        now: datetime | None = None,
+    ) -> list[UUID]:
+        """Current assessments whose semantic layer is eligible and off cooldown."""
+        return list(
+            self.repository.pending_analysis_ids(
+                eligible_verdicts=eligible_verdicts,
+                limit=limit,
+                now=now or datetime.now(UTC),
+                cooldown=cooldown,
+                attempt_window=attempt_window,
+                max_attempts=max_attempts,
             )
         )
-        self.session.commit()
-        self.session.refresh(analysis)
-        return analysis
 
     def latest_analysis(self, assessment_id: UUID) -> MatchAnalysisModel | None:
         return self.repository.latest_analysis(assessment_id)

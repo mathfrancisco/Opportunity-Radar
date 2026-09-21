@@ -24,3 +24,13 @@ bootstrap explícito do ambiente.
 Não criar uma fila distribuída, Redis, Celery ou efeitos colaterais de
 bootstrap no Compose. `heartbeat` continua obrigatório e não recebe kill
 switch.
+
+## Estado
+
+Os seis cards estão `Done`. O gate E2E do F10-06 prova o ciclo completo depois
+de `docker compose up -d`, e as Fases 11 e 12 estão liberadas.
+
+Uma pendência de teste ficou registrada e não bloqueia o gate:
+`tests/backend/acquisition/test_collection_job.py` está `skip` porque os
+cenários do resumo por fonte só passam em banco limpo. O motivo e o caminho da
+correção estão no [F10-03](f10-03-coleta-agendada.md).

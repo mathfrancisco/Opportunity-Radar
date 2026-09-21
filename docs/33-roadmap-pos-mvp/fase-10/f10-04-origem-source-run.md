@@ -1,6 +1,6 @@
 # CARD F10-04 — Origem da execução em SourceRun
 
-- **Status:** In progress
+- **Status:** Done
 - **Fase:** 10 — Ciclo autônomo
 - **Depende de:** Nenhum
 - **Bloqueia:** F10-03, F10-06
@@ -41,13 +41,13 @@ de migration ou teste correspondente.
 
 ## Critérios de aceite
 
-- [ ] Migration preserva todos os `SourceRun` existentes.
-- [ ] Cada novo run tem `execution_trigger` válido.
-- [ ] Runs do job usam `SCHEDULED`.
-- [ ] Runs por comando, API ou UI usam `ON_DEMAND`.
-- [ ] API expõe a origem no histórico.
-- [ ] UI diferencia origem de `CollectionMode` sem renomear este último.
-- [ ] Testes confirmam que origem e modo coexistem sem ambiguidade.
+- [x] Migration preserva todos os `SourceRun` existentes.
+- [x] Cada novo run tem `execution_trigger` válido.
+- [x] Runs do job usam `SCHEDULED`.
+- [x] Runs por comando, API ou UI usam `ON_DEMAND`.
+- [x] API expõe a origem no histórico.
+- [x] UI diferencia origem de `CollectionMode` sem renomear este último.
+- [x] Testes confirmam que origem e modo coexistem sem ambiguidade.
 
 ## Verificação
 

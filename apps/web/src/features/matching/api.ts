@@ -189,6 +189,11 @@ export async function analyzeAssessment(
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ refresh: options.refresh === true }),
   })
+  // 409 is the worker holding the same analysis. Saying so beats a bare status code,
+  // because waiting and retrying is the correct response and a generic failure hides that.
+  if (response.status === 409) {
+    throw new Error('Esta análise já está em andamento. Tente novamente em instantes.')
+  }
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
   const analysis = parseAnalysis(await response.json())
   if (analysis === null) throw new Error('A API retornou uma análise inválida.')

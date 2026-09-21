@@ -1,6 +1,6 @@
 # CARD F10-02 — Análise automática, retry e claim
 
-- **Status:** Backlog
+- **Status:** Done
 - **Fase:** 10 — Ciclo autônomo
 - **Depende de:** F10-01
 - **Bloqueia:** F10-06
@@ -42,25 +42,50 @@ concorrência e reinício, e proteger a cache key da análise.
 
 ## Critérios de aceite
 
-- [ ] Analisa somente assessment atual com verdict configurado como elegível.
-- [ ] Consulta o cache antes de chamar Ollama.
-- [ ] Aplica limite de chamadas por passada.
-- [ ] Falhas respeitam cooldown e teto de tentativas.
-- [ ] Sucesso limpa estado de retry.
-- [ ] `AI_COMPLETED` só é refeito com `refresh` explícito.
-- [ ] Ação manual concorrente e job não gravam duas análises concluídas.
-- [ ] Falha de Ollama não interrompe avaliação determinística.
+- [x] Analisa somente assessment atual com verdict configurado como elegível.
+- [x] Consulta o cache antes de chamar Ollama.
+- [x] Aplica limite de chamadas por passada.
+- [x] Falhas respeitam cooldown e teto de tentativas.
+- [x] Sucesso limpa estado de retry.
+- [x] `AI_COMPLETED` só é refeito com `refresh` explícito.
+- [x] Ação manual concorrente e job não gravam duas análises concluídas.
+- [x] Falha de Ollama não interrompe avaliação determinística.
 
 ## Verificação
 
 Criar testes de seleção por verdict, cache, cooldown, limite de 24 horas,
 claim concorrente, refresh e degradação quando Ollama falha.
 
-## Arquivos prováveis
+Entregue em `tests/backend/matching/test_analysis_queue.py`, que roda no job
+`backend-tests` do pipeline com `RUN_DATABASE_INTEGRATION=1`.
+
+## Decisões de implementação
+
+O estado de retry é derivado do histórico de `match_analysis`, não persistido à
+parte: as linhas `AI_FAILED` e `AI_SKIPPED` dentro da janela são as tentativas, e
+uma `AI_COMPLETED` tira o assessment da fila. Por isso o sucesso limpa o retry
+sem apagar evidência.
+
+A claim é a tabela `matching.match_analysis_claim`, uma linha por assessment, com
+lease que expira. A exclusão mútua precisa atravessar processos — job e API são
+processos distintos — e o vencimento impede que um holder morto aposente o
+assessment para sempre.
+
+"Assessment atual" aqui é o mais recente por oportunidade. A identidade formal de
+atualidade é escopo do F11-01 e não foi antecipada.
+
+## Arquivos alterados
 
 - `src/opportunity_radar/worker.py`
-- `src/opportunity_radar/matching/analysis.py`
-- `src/opportunity_radar/matching/ollama.py`
+- `src/opportunity_radar/matching/adapters.py`
+- `src/opportunity_radar/matching/service.py`
 - `src/opportunity_radar/matching/repository.py`
 - `src/opportunity_radar/matching/models.py`
-- `tests/` de matching e worker
+- `migrations/versions/20260921_0011_match_analysis_claim.py`
+- `src/opportunity_radar/platform/config.py`
+- `src/opportunity_radar/presentation/http/matching.py`
+- `src/opportunity_radar/presentation/http/dependencies.py`
+- `apps/web/src/features/matching/api.ts`
+- `.env.example`
+- `tests/backend/matching/test_analysis_queue.py`
+- `tests/backend/test_worker.py`

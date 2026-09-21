@@ -1,6 +1,6 @@
 # CARD F10-01 — Avaliação automática e identidade atual
 
-- **Status:** In progress
+- **Status:** Done
 - **Fase:** 10 — Ciclo autônomo
 - **Depende de:** Nenhum
 - **Bloqueia:** F10-02, F10-06
@@ -45,19 +45,23 @@ de modo que reinício do worker não crie duplicata.
 
 ## Critérios de aceite
 
-- [ ] Seleciona somente `DISCOVERED` e `ACTIVE` sem assessment atual.
-- [ ] Cria no máximo um assessment por oportunidade e dia UTC para a mesma
+- [x] Seleciona somente `DISCOVERED` e `ACTIVE` sem assessment atual.
+- [x] Cria no máximo um assessment por oportunidade e dia UTC para a mesma
       identidade.
-- [ ] Nova versão de oportunidade entra na fila sem esperar o próximo dia.
-- [ ] Falha de uma oportunidade não aborta o lote.
-- [ ] Ausência de perfil ativo é registrada como estado degradado.
-- [ ] Reinício do worker não duplica assessment.
-- [ ] Cada passada possui correlation id próprio.
+- [x] Nova versão de oportunidade entra na fila sem esperar o próximo dia.
+- [x] Falha de uma oportunidade não aborta o lote.
+- [x] Ausência de perfil ativo é registrada como estado degradado.
+- [x] Reinício do worker não duplica assessment.
+- [x] Cada passada possui correlation id próprio.
 
 ## Verificação
 
 Criar testes de serviço e de job para seleção, identidade diária, mudança de
 versão, idempotência, falha isolada e ausência de perfil ativo.
+
+Entregue em `tests/backend/matching/test_evaluation_queue.py`, que roda no job
+`backend-tests` do pipeline com `RUN_DATABASE_INTEGRATION=1`. O ciclo sem
+terminal é coberto pelo gate E2E do F10-06.
 
 ## Arquivos prováveis
 

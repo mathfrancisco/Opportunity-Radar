@@ -14,6 +14,7 @@ from opportunity_radar.matching.models import (
     MatchFactorModel,
 )
 from opportunity_radar.matching.service import (
+    AnalysisInProgressError,
     MatchingService,
     MatchNotFoundError,
     MatchOpportunityNotFoundError,
@@ -154,7 +155,11 @@ async def analyze_match(
     session: Session = Depends(get_session),
     adapter: SemanticAnalysisPort = Depends(get_analysis_adapter),
 ) -> MatchAnalysisResponse:
-    """Always 200 when the assessment exists: a degraded model is a status, not an error."""
+    """200 whenever this call owned the analysis: a degraded model is a status, not an error.
+
+    The one exception is a live claim held elsewhere. Returning the previous analysis there
+    would present stale state as the answer to this request, so the conflict is explicit.
+    """
     try:
         analysis = await MatchingService(session).analyze(
             assessment_id,
@@ -165,6 +170,14 @@ async def analyze_match(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "match_not_found", "message": "Match assessment not found."},
+        ) from error
+    except AnalysisInProgressError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "analysis_in_progress",
+                "message": "This assessment is already being analyzed.",
+            },
         ) from error
     return _analysis_response(analysis)
 

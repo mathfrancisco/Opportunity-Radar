@@ -1,5 +1,6 @@
 """Persistence queries for Acquisition."""
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -11,6 +12,9 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
     SourceRunModel,
 )
+from opportunity_radar.acquisition.scheduling import SourceRunHistory
+
+_UNFINISHED_RUN_STATUSES = ("PENDING", "RUNNING")
 
 
 class AcquisitionRepository:
@@ -59,6 +63,42 @@ class AcquisitionRepository:
             or 0
         )
         return runs, total
+
+    def run_history(self, source_id: UUID, *, sample: int = 32) -> SourceRunHistory:
+        """Reduce recent runs to the scheduling facts: last attempt and the failure streak.
+
+        Derived from the runs themselves rather than kept in a counter column, so the
+        streak cannot drift from the history an operator is reading, and a successful run
+        clears the backoff by existing instead of by a separate write.
+        """
+        rows = self.session.execute(
+            select(
+                SourceRunModel.status,
+                SourceRunModel.started_at,
+                SourceRunModel.finished_at,
+            )
+            .where(SourceRunModel.source_definition_id == source_id)
+            .order_by(SourceRunModel.started_at.desc(), SourceRunModel.id.desc())
+            .limit(sample)
+        ).all()
+        if not rows:
+            return SourceRunHistory()
+        consecutive_failures = 0
+        last_failure_at: datetime | None = None
+        for status, started_at, finished_at in rows:
+            if status in _UNFINISHED_RUN_STATUSES:
+                # Still in flight: it has decided nothing yet, in either direction.
+                continue
+            if status != "FAILED":
+                break
+            consecutive_failures += 1
+            if last_failure_at is None:
+                last_failure_at = finished_at or started_at
+        return SourceRunHistory(
+            last_started_at=rows[0].started_at,
+            consecutive_failures=consecutive_failures,
+            last_failure_at=last_failure_at,
+        )
 
     def identical_raw_item_exists(
         self, *, source_id: UUID, identity_key: str, payload_hash: str

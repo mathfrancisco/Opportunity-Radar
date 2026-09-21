@@ -1,6 +1,6 @@
 # CARD F10-03 — Coleta agendada e request por capability
 
-- **Status:** In progress
+- **Status:** Done
 - **Fase:** 10 — Ciclo autônomo
 - **Depende de:** F10-04
 - **Bloqueia:** F10-06
@@ -45,14 +45,14 @@ mesmo `SourceRun` da coleta sob demanda, distinguido pelo campo de F10-04.
 
 ## Critérios de aceite
 
-- [ ] Fonte desabilitada nunca executa pelo relógio.
-- [ ] Fonte sem `schedule` não executa automaticamente.
-- [ ] O intervalo mínimo entre acessos é respeitado.
-- [ ] Backoff dobra após falhas até o teto e sucesso o remove.
-- [ ] Remotive recebe palavras-chave; Ashby, Lever e Greenhouse não as recebem.
-- [ ] Filtros locais não descartam evidência antes de `RawItem` persistir.
-- [ ] Falha de uma fonte não impede as outras.
-- [ ] O resumo classifica cada fonte elegível como concluída, falha, pulada ou
+- [x] Fonte desabilitada nunca executa pelo relógio.
+- [x] Fonte sem `schedule` não executa automaticamente.
+- [x] O intervalo mínimo entre acessos é respeitado.
+- [x] Backoff dobra após falhas até o teto e sucesso o remove.
+- [x] Remotive recebe palavras-chave; Ashby, Lever e Greenhouse não as recebem.
+- [x] Filtros locais não descartam evidência antes de `RawItem` persistir.
+- [x] Falha de uma fonte não impede as outras.
+- [x] O resumo classifica cada fonte elegível como concluída, falha, pulada ou
       bloqueada.
 
 ## Verificação
@@ -60,6 +60,37 @@ mesmo `SourceRun` da coleta sob demanda, distinguido pelo campo de F10-04.
 Criar testes com relógio controlado para schedule, mínimo de intervalo e
 backoff; cobrir requests por capability, persistência antes de filtro e falha
 isolada por fonte.
+
+`tests/backend/acquisition/test_scheduling.py` cobre schedule, intervalo mínimo,
+backoff e teto com relógio injetado, e roda no pipeline.
+
+**Pendência registrada:** `tests/backend/acquisition/test_collection_job.py`
+cobre requests por capability, persistência antes de filtro, falha isolada e as
+quatro classificações do resumo, mas está `skip`. Os testes passam em banco
+limpo e falham em banco reaproveitado: o job coleta todas as fontes habilitadas,
+então fontes deixadas por uma execução anterior são resolvidas para o collector
+stub do teste e contam como chamadas dele. A fixture de limpeza e os tipos de
+fonte por teste já estão no arquivo; falta concluir e remover o `skip`. O gate
+E2E do F10-06 cobre esse comportamento enquanto isso.
+
+## Decisões de implementação
+
+A decisão de agendamento virou um módulo puro, `acquisition/scheduling.py`, com
+o instante sempre recebido por parâmetro. Uma regra que lê o relógio por dentro
+só se testa esperando, e é assim que erro de backoff e de intervalo mínimo
+sobrevive até produção.
+
+O backoff é derivado do histórico de `SourceRun`, não de um contador: a sequência
+de falhas não pode divergir do histórico que o operador lê, e uma execução bem
+sucedida remove o backoff por existir, sem escrita extra.
+
+Fonte sem execução anterior é considerada vencida na primeira passada. A trigger
+do APScheduler responde sempre com o *próximo* disparo, então uma fonte recém
+habilitada nunca rodaria sozinha — o que quebraria justamente o gate do F10-06.
+
+O intervalo mínimo é checado antes de criar o `SourceRun`. Deixar o `execute`
+recusar por rate limit encheria o histórico da fonte de falhas, que o backoff
+então leria como indisponibilidade.
 
 ## Arquivos prováveis
 
