@@ -4,19 +4,25 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Sequence
 from uuid import UUID
 
-from sqlalchemy import Select, func, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import Select, delete, func, literal, select, tuple_
+from sqlalchemy.dialects.postgresql import insert as postgres_insert
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from opportunity_radar.matching.models import (
+    MatchAnalysisClaimModel,
     MatchAnalysisModel,
     MatchAssessmentModel,
     MatchFactorModel,
 )
+
+# A degraded attempt is what the retry budget counts. `AI_PENDING` is not an attempt and
+# `AI_COMPLETED` ends the budget by removing the assessment from the queue entirely.
+ANALYSIS_ATTEMPT_STATUSES = ("AI_FAILED", "AI_SKIPPED")
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,6 +186,128 @@ class SqlAlchemyMatchingRepository:
             .order_by(MatchAnalysisModel.analyzed_at.desc(), MatchAnalysisModel.id)
             .limit(1)
         ).first()
+
+    def pending_analysis_ids(
+        self,
+        *,
+        eligible_verdicts: Sequence[str],
+        limit: int,
+        now: datetime,
+        cooldown: timedelta,
+        attempt_window: timedelta,
+        max_attempts: int,
+        # `Sequence` rather than `list`: the class already binds `list` to a method above,
+        # which shadows the builtin for every annotation declared after it.
+    ) -> Sequence[UUID]:
+        """Assessments whose semantic layer is worth attempting right now.
+
+        Four independent reasons to stay out of the queue, and none of them deletes
+        history: the verdict is not worth the model's time, the analysis already
+        completed, a newer assessment superseded this one, or the retry budget says wait.
+        """
+        if not eligible_verdicts or limit <= 0 or max_attempts <= 0:
+            return []
+        completed = aliased(MatchAnalysisModel)
+        cooling = aliased(MatchAnalysisModel)
+        attempted = aliased(MatchAnalysisModel)
+        superseding = aliased(MatchAssessmentModel)
+
+        has_completed = (
+            select(literal(1))
+            .where(
+                completed.assessment_id == MatchAssessmentModel.id,
+                completed.status == "AI_COMPLETED",
+            )
+            .exists()
+        )
+        # Ordering by the same pair the query orders by keeps "newer" total: two
+        # assessments written in the same instant still have one winner.
+        is_superseded = (
+            select(literal(1))
+            .where(
+                superseding.opportunity_id == MatchAssessmentModel.opportunity_id,
+                tuple_(superseding.assessed_at, superseding.id)
+                > tuple_(MatchAssessmentModel.assessed_at, MatchAssessmentModel.id),
+            )
+            .exists()
+        )
+        in_cooldown = (
+            select(literal(1))
+            .where(
+                cooling.assessment_id == MatchAssessmentModel.id,
+                cooling.status.in_(ANALYSIS_ATTEMPT_STATUSES),
+                cooling.analyzed_at > now - cooldown,
+            )
+            .exists()
+        )
+        attempts = (
+            select(func.count())
+            .select_from(attempted)
+            .where(
+                attempted.assessment_id == MatchAssessmentModel.id,
+                attempted.status.in_(ANALYSIS_ATTEMPT_STATUSES),
+                attempted.analyzed_at > now - attempt_window,
+            )
+            .scalar_subquery()
+        )
+        return list(
+            self.session.scalars(
+                select(MatchAssessmentModel.id)
+                .where(
+                    MatchAssessmentModel.verdict.in_(tuple(eligible_verdicts)),
+                    ~has_completed,
+                    ~is_superseded,
+                    ~in_cooldown,
+                    attempts < max_attempts,
+                )
+                .order_by(
+                    MatchAssessmentModel.assessed_at.desc(), MatchAssessmentModel.id
+                )
+                .limit(limit)
+            )
+        )
+
+    def acquire_analysis_claim(
+        self,
+        assessment_id: UUID,
+        *,
+        owner: str,
+        now: datetime,
+        lease: timedelta,
+    ) -> bool:
+        """Take the lease, or report that a live holder already has it.
+
+        A single statement rather than read-then-write: two processes reaching here at the
+        same instant must not both conclude the claim was free. The conflict clause lets an
+        expired lease be taken over, so a crashed holder blocks the assessment for at most
+        one lease.
+        """
+        expires_at = now + lease
+        statement = (
+            postgres_insert(MatchAnalysisClaimModel)
+            .values(
+                assessment_id=assessment_id,
+                owner=owner,
+                claimed_at=now,
+                expires_at=expires_at,
+            )
+            .on_conflict_do_update(
+                index_elements=[MatchAnalysisClaimModel.assessment_id],
+                set_={"owner": owner, "claimed_at": now, "expires_at": expires_at},
+                where=MatchAnalysisClaimModel.expires_at <= now,
+            )
+            .returning(MatchAnalysisClaimModel.assessment_id)
+        )
+        return self.session.execute(statement).scalar_one_or_none() is not None
+
+    def release_analysis_claim(self, assessment_id: UUID, *, owner: str) -> None:
+        """Release only our own lease: a lease already taken over is not ours to drop."""
+        self.session.execute(
+            delete(MatchAnalysisClaimModel).where(
+                MatchAnalysisClaimModel.assessment_id == assessment_id,
+                MatchAnalysisClaimModel.owner == owner,
+            )
+        )
 
     def add_analysis(self, record: AnalysisRecord) -> MatchAnalysisModel:
         analysis = MatchAnalysisModel(

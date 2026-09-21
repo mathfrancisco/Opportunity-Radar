@@ -233,3 +233,37 @@ class MatchAnalysisModel(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     assessment: Mapped[MatchAssessmentModel] = relationship(back_populates="analyses")
+
+
+class MatchAnalysisClaimModel(Base):
+    """Exclusive lease over the semantic analysis of a single assessment.
+
+    Mutual exclusion between the worker job and the manual action lives in the database
+    rather than in process memory: the two run in different processes, so nothing in a
+    single interpreter could keep them from prompting the same assessment twice.
+
+    The lease expires instead of being held forever. A holder killed mid-analysis leaves a
+    row behind, and a row that can never be released would silently retire an assessment
+    from the queue — the expiry is what makes the claim survive a restart without becoming
+    a permanent block.
+
+    One row per assessment: the primary key is the exclusion.
+    """
+
+    __tablename__ = "match_analysis_claim"
+    __table_args__ = (
+        CheckConstraint(
+            "expires_at > claimed_at", name="ck_match_analysis_claim_window"
+        ),
+        Index("ix_match_analysis_claim_expires_at", "expires_at"),
+        {"schema": SCHEMA},
+    )
+
+    assessment_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.match_assessment.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    owner: Mapped[str] = mapped_column(String(64), nullable=False)
+    claimed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

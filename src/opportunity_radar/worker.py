@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import signal
 from asyncio import run as run_async
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Event
 from zoneinfo import ZoneInfo
@@ -18,7 +18,13 @@ from opportunity_radar.acquisition.domain import (
     ExecutionTrigger,
 )
 from opportunity_radar.acquisition.service import AcquisitionService
-from opportunity_radar.matching.service import MatchingService
+from opportunity_radar.matching.adapters import build_analysis_adapter
+from opportunity_radar.matching.analysis import AnalysisStatus, SemanticAnalysisPort
+from opportunity_radar.matching.service import (
+    DEFAULT_ANALYSIS_VERDICTS,
+    AnalysisInProgressError,
+    MatchingService,
+)
 from opportunity_radar.opportunities.service import OpportunityService
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.database import create_database_engine
@@ -30,6 +36,16 @@ from opportunity_radar.platform.logging import (
 from opportunity_radar.profile.domain import ProfileNotFoundError
 
 WORKER_READY_FILE = Path("/tmp/opportunity-radar-worker-ready")
+
+# Every functional job the worker can schedule, mapped to its scheduler id. The startup log
+# is derived from this map against the built scheduler, never from the settings: a job that
+# is not registered must never be reported as active, whatever its kill switch says.
+FUNCTIONAL_JOB_IDS = {
+    "collect_enabled_sources": "collect-enabled-sources",
+    "normalize_opportunities": "normalize-opportunities",
+    "evaluate_pending": "evaluate-pending",
+    "analyze_pending": "analyze-pending",
+}
 
 logger = get_logger("opportunity_radar.worker")
 
@@ -99,6 +115,74 @@ def evaluate_pending(engine: Engine, *, batch_size: int = 50) -> None:
                 )
 
 
+def analyze_pending(
+    engine: Engine,
+    adapter: SemanticAnalysisPort,
+    *,
+    batch_size: int = 10,
+    eligible_verdicts: tuple[str, ...] = (),
+    cooldown_seconds: int = 3600,
+    attempt_window_seconds: int = 86400,
+    max_attempts: int = 3,
+    lease_seconds: int = 900,
+) -> None:
+    """Attach the semantic layer to current assessments, one claim at a time.
+
+    The adapter classifies its own failures instead of raising, so an Ollama that is down
+    degrades this job alone: evaluation keeps running and the failure is persisted as the
+    history entry that the cooldown then reads.
+    """
+    with correlation_scope() as correlation_id:
+        with Session(engine) as session:
+            service = MatchingService(session)
+            pending = service.pending_analysis_ids(
+                limit=batch_size,
+                eligible_verdicts=eligible_verdicts or DEFAULT_ANALYSIS_VERDICTS,
+                cooldown=timedelta(seconds=cooldown_seconds),
+                attempt_window=timedelta(seconds=attempt_window_seconds),
+                max_attempts=max_attempts,
+            )
+            completed = degraded = claimed_elsewhere = failed = 0
+            for assessment_id in pending:
+                try:
+                    analysis = run_async(
+                        service.analyze(
+                            assessment_id,
+                            adapter,
+                            owner=correlation_id,
+                            lease=timedelta(seconds=lease_seconds),
+                        )
+                    )
+                except AnalysisInProgressError:
+                    # The manual action or another worker holds it. Not an error.
+                    claimed_elsewhere += 1
+                    continue
+                except Exception:
+                    session.rollback()
+                    failed += 1
+                    logger.exception(
+                        "assessment analysis failed",
+                        extra={"job": "analyze", "assessment_id": str(assessment_id)},
+                    )
+                    continue
+                if analysis.status == AnalysisStatus.AI_COMPLETED.value:
+                    completed += 1
+                else:
+                    degraded += 1
+            if pending:
+                logger.info(
+                    "analysis batch finished",
+                    extra={
+                        "job": "analyze",
+                        "processed": len(pending),
+                        "succeeded": completed,
+                        "degraded": degraded,
+                        "claimed_elsewhere": claimed_elsewhere,
+                        "failed": failed,
+                    },
+                )
+
+
 def collect_enabled_sources(engine: Engine, *, timezone: str = "UTC") -> None:
     """Run only enabled sources whose five-field cron expression is due."""
     with correlation_scope() as correlation_id:
@@ -150,12 +234,6 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
     scheduler = BackgroundScheduler(timezone=settings.collection_timezone)
     engine = create_database_engine(settings.database_url)
     scheduler.add_job(heartbeat, "interval", minutes=5, id="heartbeat", replace_existing=True)
-    jobs = {
-        "collect_enabled_sources": settings.worker_collect_enabled,
-        "normalize_opportunities": settings.worker_normalize_enabled,
-        "evaluate_pending": settings.worker_match_enabled,
-        "analyze_pending": settings.worker_analyze_enabled,
-    }
     if settings.worker_normalize_enabled:
         scheduler.add_job(
             normalize_opportunities,
@@ -191,6 +269,29 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             coalesce=True,
             max_instances=1,
         )
+    if settings.worker_analyze_enabled:
+        scheduler.add_job(
+            analyze_pending,
+            "interval",
+            seconds=120,
+            args=(engine, build_analysis_adapter(settings)),
+            kwargs={
+                "batch_size": settings.worker_analyze_batch_size,
+                "eligible_verdicts": settings.analysis_eligible_verdicts,
+                "cooldown_seconds": settings.analysis_retry_cooldown_seconds,
+                "attempt_window_seconds": settings.analysis_retry_attempt_window_seconds,
+                "max_attempts": settings.analysis_retry_max_attempts,
+                "lease_seconds": settings.analysis_claim_lease_seconds,
+            },
+            id="analyze-pending",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+        )
+    jobs = {
+        name: scheduler.get_job(job_id) is not None
+        for name, job_id in FUNCTIONAL_JOB_IDS.items()
+    }
     logger.info("worker jobs configured", extra={"jobs": jobs})
     return scheduler
 

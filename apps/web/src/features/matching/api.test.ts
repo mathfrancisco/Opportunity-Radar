@@ -112,4 +112,13 @@ describe('analyzeAssessment', () => {
     expect(analysis.failureCode).toBe('TRANSPORT_ERROR')
     expect(analysis.summary).toBeNull()
   })
+
+  it('explica a análise já em andamento em vez de mostrar o código do conflito', async () => {
+    respond(
+      { detail: { code: 'analysis_in_progress', message: 'Already being analyzed.' } },
+      409,
+    )
+
+    await expect(analyzeAssessment('assessment-1')).rejects.toThrow('já está em andamento')
+  })
 })

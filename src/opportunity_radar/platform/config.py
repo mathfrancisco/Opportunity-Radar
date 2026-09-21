@@ -26,6 +26,22 @@ class Settings(BaseSettings):
     worker_match_enabled: bool = True
     worker_analyze_enabled: bool = True
     worker_evaluate_batch_size: int = 50
+    # The local model competes with the rest of the machine for CPU, so a pass is capped
+    # well below the evaluation batch: analysis falls behind on purpose, never the rules.
+    worker_analyze_batch_size: int = 10
+    worker_analyze_verdicts: str = "HIGH_PRIORITY,RECOMMENDED,WATCHLIST,REVIEW_REQUIRED"
+    analysis_retry_cooldown_seconds: int = 3600
+    analysis_retry_attempt_window_seconds: int = 86400
+    analysis_retry_max_attempts: int = 3
+    analysis_claim_lease_seconds: int = 900
+
+    @property
+    def analysis_eligible_verdicts(self) -> tuple[str, ...]:
+        return tuple(
+            item.strip().upper()
+            for item in self.worker_analyze_verdicts.split(",")
+            if item.strip()
+        )
 
 
 @lru_cache
