@@ -12,13 +12,13 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-from opportunity_radar.matching.service import MatchingService
 from opportunity_radar.acquisition.domain import (
     CollectionMode,
     CollectionRequest,
     ExecutionTrigger,
 )
 from opportunity_radar.acquisition.service import AcquisitionService
+from opportunity_radar.matching.service import MatchingService
 from opportunity_radar.opportunities.service import OpportunityService
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.database import create_database_engine
