@@ -788,6 +788,60 @@ def infer_seniority(
     return Seniority(result)
 
 
+SENIORITY_MAPPING_VERSION = "seniority-v1"
+
+# Collector payloads are intentionally listed even when they have no approved level
+# field. Adding a field here is part of that collector's homologation, not a heuristic.
+HOMOLOGATED_SENIORITY_FIELDS: dict[str, tuple[str, ...]] = {
+    "ashby": (),
+    "greenhouse": (),
+    "lever": (),
+    "manual": ("seniority",),
+    "remotive": (),
+}
+
+
+def seniority_classification(
+    title: str | None, metadata: Mapping[str, Any], *, source_type: str = "manual"
+) -> tuple[Seniority, dict[str, str | None]]:
+    """Classify only explicit, reviewable seniority evidence.
+
+    A structured value wins only when it maps unambiguously; conflicting structured and
+    title values deliberately remain UNKNOWN rather than silently favoring either.
+    """
+    structured_keys = HOMOLOGATED_SENIORITY_FIELDS.get(source_type, ())
+    external = next(
+        (
+            value.strip()
+            for key, value in metadata.items()
+            if key.casefold() in structured_keys
+            and isinstance(value, str)
+            and value.strip()
+        ),
+        None,
+    )
+    structured = infer_seniority(None, None, {"seniority": external} if external else {})
+    title_value = infer_seniority(title, None, {})
+    conflict = (
+        structured is not Seniority.UNKNOWN
+        and title_value is not Seniority.UNKNOWN
+        and structured is not title_value
+    )
+    value = (
+        Seniority.UNKNOWN
+        if conflict or (external is not None and structured is Seniority.UNKNOWN)
+        else structured if external is not None else title_value
+    )
+    return value, {
+        "code": "SENIORITY_CLASSIFICATION",
+        "source": "conflict" if conflict else "structured" if external else "title",
+        "external_value": external,
+        "mapping_version": SENIORITY_MAPPING_VERSION,
+        "collector": source_type,
+        "value": value.value,
+    }
+
+
 def infer_contract_type(
     title: str | None, location_text: str | None, metadata: Mapping[str, Any]
 ) -> ContractType:
@@ -864,7 +918,9 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
     normalized_location = normalize_location(location_text)
     normalized_url = normalize_url(source_url)
     work_mode = infer_work_mode(original_title, location_text, value.metadata)
-    seniority = infer_seniority(original_title, location_text, value.metadata)
+    seniority, _ = seniority_classification(
+        original_title, value.metadata, source_type=value.source_type
+    )
     contract_type = infer_contract_type(original_title, location_text, value.metadata)
     return CanonicalCandidate(
         original_title=original_title,

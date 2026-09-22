@@ -16,9 +16,11 @@ from opportunity_radar.dashboard.queries import (
     InboxOrder,
     InboxQuery,
     OverviewSummary,
+    SourceCoverageReport,
     SourceHealth,
     list_opportunity_inbox,
     list_source_health,
+    source_coverage_report,
     summarize_overview,
 )
 from opportunity_radar.opportunities.domain import OpportunityStatus, WorkMode
@@ -88,12 +90,32 @@ class SourceHealthResponse(BaseModel):
     last_run_items_persisted: int | None
     last_run_items_skipped: int | None
     last_run_items_invalid: int | None
+    seniority_counts: dict[str, int]
 
 
 class SourceHealthListResponse(BaseModel):
     items: list[SourceHealthResponse]
     total: int
     failing: int
+
+
+class SourceCoverageResponse(BaseModel):
+    source_definition_id: UUID
+    name: str
+    state: str
+    run_status: str | None
+    raw_items: int
+
+
+class SourceCoverageReportResponse(BaseModel):
+    correlation_id: str | None
+    catalog_companies: int
+    catalog_source_records: int
+    proposed_sources: int
+    homologated_sources: int
+    enabled_sources: int
+    eligible_sources: int
+    sources: list[SourceCoverageResponse]
 
 
 class OverviewResponse(BaseModel):
@@ -171,6 +193,16 @@ def list_sources_health(
         items=[_source_response(item) for item in items],
         total=len(items),
         failing=failing,
+    )
+
+
+@router.get("/source-coverage", response_model=SourceCoverageReportResponse)
+def get_source_coverage(
+    correlation_id: str | None = None,
+    session: Session = Depends(get_session),
+) -> SourceCoverageReportResponse:
+    return _source_coverage_response(
+        source_coverage_report(session, correlation_id=correlation_id)
     )
 
 
@@ -261,4 +293,29 @@ def _source_response(source: SourceHealth) -> SourceHealthResponse:
         last_run_items_persisted=source.last_run_items_persisted,
         last_run_items_skipped=source.last_run_items_skipped,
         last_run_items_invalid=source.last_run_items_invalid,
+        seniority_counts=source.seniority_counts,
+    )
+
+
+def _source_coverage_response(
+    report: SourceCoverageReport,
+) -> SourceCoverageReportResponse:
+    return SourceCoverageReportResponse(
+        correlation_id=report.correlation_id,
+        catalog_companies=report.catalog_companies,
+        catalog_source_records=report.catalog_source_records,
+        proposed_sources=report.proposed_sources,
+        homologated_sources=report.homologated_sources,
+        enabled_sources=report.enabled_sources,
+        eligible_sources=report.eligible_sources,
+        sources=[
+            SourceCoverageResponse(
+                source_definition_id=source.source_definition_id,
+                name=source.name,
+                state=source.state,
+                run_status=source.run_status,
+                raw_items=source.raw_items,
+            )
+            for source in report.sources
+        ],
     )

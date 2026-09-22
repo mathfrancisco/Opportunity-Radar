@@ -26,13 +26,14 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
     SourceRunModel,
 )
-from opportunity_radar.companies.models import Company
+from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.matching import currency
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
 from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
     OpportunityModel,
+    SourceOccurrenceModel,
 )
 from opportunity_radar.pipeline.models import ApplicationProcessModel
 
@@ -138,12 +139,34 @@ class SourceHealth:
     last_run_items_persisted: int | None = None
     last_run_items_skipped: int | None = None
     last_run_items_invalid: int | None = None
+    seniority_counts: dict[str, int] = field(default_factory=dict)
 
     @property
     def last_run_duration_seconds(self) -> float | None:
         if self.last_run_started_at is None or self.last_run_finished_at is None:
             return None
         return (self.last_run_finished_at - self.last_run_started_at).total_seconds()
+
+
+@dataclass(frozen=True, slots=True)
+class SourceCoverage:
+    source_definition_id: UUID
+    name: str
+    state: str
+    run_status: str | None
+    raw_items: int
+
+
+@dataclass(frozen=True, slots=True)
+class SourceCoverageReport:
+    correlation_id: str | None
+    catalog_companies: int
+    catalog_source_records: int
+    proposed_sources: int
+    homologated_sources: int
+    enabled_sources: int
+    eligible_sources: int
+    sources: tuple[SourceCoverage, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -542,6 +565,21 @@ def list_source_health(
             latest.c.finished_at.desc().nulls_last(), SourceDefinitionModel.name
         )
     ).all()
+    seniority_rows = session.execute(
+        select(
+            SourceOccurrenceModel.source_definition_id,
+            OpportunityModel.seniority,
+            func.count(),
+        )
+        .join(
+            OpportunityModel,
+            OpportunityModel.id == SourceOccurrenceModel.opportunity_id,
+        )
+        .group_by(SourceOccurrenceModel.source_definition_id, OpportunityModel.seniority)
+    ).all()
+    seniority_by_source: dict[UUID, dict[str, int]] = {}
+    for source_id, seniority, count in seniority_rows:
+        seniority_by_source.setdefault(source_id, {})[seniority] = count
     return tuple(
         SourceHealth(
             source_definition_id=row[0],
@@ -562,8 +600,93 @@ def list_source_health(
             last_run_items_persisted=row[15],
             last_run_items_skipped=row[16],
             last_run_items_invalid=row[17],
+            seniority_counts=seniority_by_source.get(row[0], {}),
         )
         for row in rows
+    )
+
+
+def source_coverage_report(
+    session: Session, *, correlation_id: str | None = None
+) -> SourceCoverageReport:
+    """Reconcile catalogue and source execution without mistaking zero items for failure."""
+    sources = session.scalars(
+        select(SourceDefinitionModel).order_by(SourceDefinitionModel.name)
+    ).all()
+    source_ids = [source.id for source in sources]
+    run_statement = select(SourceRunModel).where(
+        SourceRunModel.source_definition_id.in_(source_ids)
+    )
+    if correlation_id is not None:
+        run_statement = run_statement.where(
+            SourceRunModel.correlation_id == correlation_id
+        )
+    runs = session.scalars(
+        run_statement.order_by(
+            SourceRunModel.finished_at.desc().nulls_last(), SourceRunModel.id.desc()
+        )
+    ).all()
+    latest_by_source: dict[UUID, SourceRunModel] = {}
+    for run in runs:
+        latest_by_source.setdefault(run.source_definition_id, run)
+    run_ids = [run.id for run in latest_by_source.values()]
+    raw_items = (
+        dict(
+            session.execute(
+                select(RawItemModel.source_definition_id, func.count())
+                .where(RawItemModel.source_run_id.in_(run_ids))
+                .group_by(RawItemModel.source_definition_id)
+            ).all()
+        )
+        if run_ids
+        else {}
+    )
+    eligible = [
+        source
+        for source in sources
+        if source.enabled
+        and (
+            source.source_type == "manual"
+            or (
+                source.evidence_status == "confirmed"
+                and source.reviewed_at is not None
+                and source.terms_reviewed
+                and source.collector_local_tested
+            )
+        )
+    ]
+    eligible_ids = {source.id for source in eligible}
+    coverage = []
+    for source in sources:
+        run = latest_by_source.get(source.id)
+        if not source.enabled:
+            state = "NOT_ENABLED"
+        elif source.id not in eligible_ids:
+            state = "CONFIGURATION_BLOCKED"
+        elif run is None:
+            state = "NOT_RUN"
+        elif run.status == "SUCCEEDED" and run.items_seen == 0:
+            state = "SUCCEEDED_ZERO"
+        else:
+            state = run.status
+        coverage.append(
+            SourceCoverage(
+                source_definition_id=source.id,
+                name=source.name,
+                state=state,
+                run_status=run.status if run else None,
+                raw_items=raw_items.get(source.id, 0),
+            )
+        )
+    return SourceCoverageReport(
+        correlation_id=correlation_id,
+        catalog_companies=session.scalar(select(func.count(Company.id))) or 0,
+        catalog_source_records=session.scalar(select(func.count(CompanySource.id))) or 0,
+        proposed_sources=sum(not source.enabled for source in sources),
+        homologated_sources=len(eligible),
+        enabled_sources=sum(source.enabled for source in sources),
+        eligible_sources=len(eligible),
+        sources=tuple(coverage),
     )
 
 
@@ -577,7 +700,10 @@ __all__ = [
     "InboxQuery",
     "OverviewSummary",
     "SourceHealth",
+    "SourceCoverage",
+    "SourceCoverageReport",
     "list_opportunity_inbox",
     "list_source_health",
+    "source_coverage_report",
     "summarize_overview",
 ]

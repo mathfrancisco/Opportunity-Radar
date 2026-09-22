@@ -18,6 +18,7 @@ from opportunity_radar.dashboard.queries import (
     InboxQuery,
     list_opportunity_inbox,
     list_source_health,
+    source_coverage_report,
     summarize_overview,
 )
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
@@ -461,6 +462,44 @@ def test_source_health_reports_the_last_run_and_keeps_never_run_sources() -> Non
         failing_ids = {item.source_definition_id for item in failing}
         assert failed.id in failing_ids
         assert never_run.id not in failing_ids
+
+
+def test_source_coverage_distinguishes_disabled_not_run_and_successful_zero() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        marker = uuid4().hex[:8]
+        zero = SourceDefinitionModel(
+            source_type="manual", name=f"Zero {marker}", enabled=True
+        )
+        idle = SourceDefinitionModel(
+            source_type="manual", name=f"Idle {marker}", enabled=True
+        )
+        proposal = SourceDefinitionModel(
+            source_type="manual", name=f"Proposal {marker}", enabled=False
+        )
+        session.add_all([zero, idle, proposal])
+        session.flush()
+        session.add(
+            SourceRunModel(
+                source_definition_id=zero.id,
+                status="SUCCEEDED",
+                correlation_id="coverage-round",
+                started_at=NOW - timedelta(minutes=2),
+                finished_at=NOW - timedelta(minutes=1),
+            )
+        )
+        session.commit()
+
+        report = source_coverage_report(session, correlation_id="coverage-round")
+        by_id = {source.source_definition_id: source for source in report.sources}
+
+        assert report.correlation_id == "coverage-round"
+        assert report.enabled_sources >= 2
+        assert report.eligible_sources >= 2
+        assert by_id[zero.id].state == "SUCCEEDED_ZERO"
+        assert by_id[zero.id].raw_items == 0
+        assert by_id[idle.id].state == "NOT_RUN"
+        assert by_id[proposal.id].state == "NOT_ENABLED"
 
 
 def test_overview_counts_reflect_the_catalogue_and_flag_the_missing_pipeline() -> None:
