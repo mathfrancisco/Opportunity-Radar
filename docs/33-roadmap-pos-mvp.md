@@ -592,17 +592,17 @@ Manter o sistema saudável quando ninguém está olhando.
 
 ## 26. Critério de aceite
 
-- [ ] três falhas consecutivas enviam um único alerta pelo webhook configurado;
-- [ ] o primeiro sucesso envia recuperação e uma nova sequência pode abrir outro alerta;
-- [ ] retenção nunca apaga o envelope de `RawItem` nem a procedência;
-- [ ] migration e backfill preservam todos os payloads antes de ativar a política;
-- [ ] expiração de payload é auditável e só ocorre depois de 12 meses por padrão;
-- [ ] API e UI distinguem payload retido de payload expirado;
-- [ ] métricas distinguem fonte saudável de fonte degradada nas duas janelas;
-- [ ] métricas permitem separar ausência real de vagas de fonte que não executou;
-- [ ] `doctor` reporta job ausente, atrasado, falho ou saudável a partir do estado
+- [x] três falhas consecutivas enviam um único alerta pelo webhook configurado;
+- [x] o primeiro sucesso envia recuperação e uma nova sequência pode abrir outro alerta;
+- [x] retenção nunca apaga o envelope de `RawItem` nem a procedência;
+- [x] migration e backfill preservam todos os payloads antes de ativar a política;
+- [x] expiração de payload é auditável e só ocorre depois de 12 meses por padrão;
+- [x] API e UI distinguem payload retido de payload expirado;
+- [x] métricas distinguem fonte saudável de fonte degradada nas duas janelas;
+- [x] métricas permitem separar ausência real de vagas de fonte que não executou;
+- [x] `doctor` reporta job ausente, atrasado, falho ou saudável a partir do estado
       persistido;
-- [ ] um soak test controlado de 72 horas, ou sua simulação acelerada com relógio
+- [x] um soak test controlado de 72 horas, ou sua simulação acelerada com relógio
       controlado, não exige intervenção e cobre alerta e recuperação.
 
 ---
@@ -729,6 +729,11 @@ vinte ou mais fontes homologadas, com cobertura e qualidade mensuradas
 ```text
 sistema roda 72 horas sem intervenção e avisa quando não consegue
 ```
+
+Atingido em 22 de setembro de 2026. O gate é `make soak` (`scripts/soak_gate.py`), que
+replica as 72 horas contra relógio controlado, roteiriza a queda e a recuperação de uma
+fonte e falha se algum job ficar silenciosamente falho, se o alerta duplicar ou se a
+retenção perder envelope ou procedência. Ele roda no CI a cada alteração de código.
 
 ---
 

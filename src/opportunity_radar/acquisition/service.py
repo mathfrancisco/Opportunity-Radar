@@ -16,6 +16,10 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.alerts import (
+    SourceAlertNotifier,
+    SourceAlertService,
+)
 from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.collectors import CollectorRegistry, ManualCollector
 from opportunity_radar.acquisition.domain import (
@@ -33,6 +37,7 @@ from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.models import (
     RawItemModel,
+    RawItemPayloadModel,
     SourceCheckpointModel,
     SourceDefinitionModel,
     SourceRunModel,
@@ -41,8 +46,11 @@ from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.repository import AcquisitionRepository
 from opportunity_radar.acquisition.scheduling import SourceSchedulingState
 from opportunity_radar.companies.models import Company, CompanySource
+from opportunity_radar.platform.logging import get_logger
 
 COLLECTED_ITEM_V1_KEY = "collected_item_v1"
+
+logger = get_logger("opportunity_radar.acquisition.service")
 
 
 class SourceNotFoundError(AcquisitionError):
@@ -68,9 +76,12 @@ class AcquisitionService:
         registry: CollectorRegistry | None = None,
         repository: AcquisitionRepository | None = None,
         sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        alert_notifier: SourceAlertNotifier | None = None,
+        alerts: SourceAlertService | None = None,
     ) -> None:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
+        self.alerts = alerts or SourceAlertService(session, notifier=alert_notifier)
         self.registry = registry or CollectorRegistry(
             (
                 ManualCollector(),
@@ -500,7 +511,30 @@ class AcquisitionService:
             self.session.add(checkpoint)
         self.session.commit()
         self.session.refresh(persisted_run)
+        self._announce(source, persisted_run)
         return persisted_run
+
+    def _announce(
+        self, source: SourceDefinitionModel, run: SourceRunModel
+    ) -> None:
+        """Report what this run changed about the source being up.
+
+        Runs after the commit and swallows its own failures: the alert channel describes
+        collection, so it must never be able to decide the outcome of a collection.
+        """
+        try:
+            self.alerts.record_run_outcome(
+                source,
+                run,
+                consecutive_failures=self.repository.run_history(
+                    source.id
+                ).consecutive_failures,
+            )
+        except Exception:
+            logger.exception(
+                "source alert evaluation failed",
+                extra={"job": "alert", "source_id": str(source.id), "run_id": str(run.id)},
+            )
 
     def _persist_item(
         self,
@@ -528,20 +562,21 @@ class AcquisitionService:
         metadata[COLLECTED_ITEM_V1_KEY] = collected_item_v1(item, metadata)
         try:
             with self.session.begin_nested():
-                self.session.add(
-                    RawItemModel(
-                        source_run_id=run_id,
-                        source_definition_id=source_id,
-                        external_id=item.external_id,
-                        canonical_url=item.url,
-                        identity_key=identity_key,
-                        payload=payload,
-                        payload_hash=payload_hash,
-                        content_type=_string_or_none(metadata.get("content_type")),
-                        parser_version=_string_or_none(metadata.get("parser_version")),
-                        item_metadata=metadata,
-                    )
+                raw_item = RawItemModel(
+                    source_run_id=run_id,
+                    source_definition_id=source_id,
+                    external_id=item.external_id,
+                    canonical_url=item.url,
+                    identity_key=identity_key,
+                    payload_hash=payload_hash,
+                    content_type=_string_or_none(metadata.get("content_type")),
+                    parser_version=_string_or_none(metadata.get("parser_version")),
+                    item_metadata=metadata,
                 )
+                # Envelope and body are written together: an envelope whose content never
+                # arrived would be indistinguishable from one retention has expired.
+                raw_item.payload_record = RawItemPayloadModel(payload=payload)
+                self.session.add(raw_item)
                 self.session.flush()
         except IntegrityError:
             return False

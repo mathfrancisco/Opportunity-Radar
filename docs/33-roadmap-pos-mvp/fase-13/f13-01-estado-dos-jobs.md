@@ -1,6 +1,6 @@
 # CARD F13-01 — Estado persistente dos jobs
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 13 — Operação contínua
 - **Depende de:** Fases 10 e 11
 - **Bloqueia:** F13-02, F13-05, F13-06
@@ -38,11 +38,11 @@ unidade de trabalho nem um mecanismo de lock.
 
 ## Critérios de aceite
 
-- [ ] Cada job persiste tentativa, sucesso, falha, duração e próxima execução.
-- [ ] Reiniciar o worker preserva a evidência anterior.
-- [ ] Atraso é calculável a partir do schedule persistido.
-- [ ] Falha de um job não remove seu último sucesso.
-- [ ] Estado e logs permitem correlacionar uma passada específica.
+- [x] Cada job persiste tentativa, sucesso, falha, duração e próxima execução.
+- [x] Reiniciar o worker preserva a evidência anterior.
+- [x] Atraso é calculável a partir do schedule persistido.
+- [x] Falha de um job não remove seu último sucesso.
+- [x] Estado e logs permitem correlacionar uma passada específica.
 
 ## Verificação
 

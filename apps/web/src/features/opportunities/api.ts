@@ -28,6 +28,8 @@ export interface SourceOccurrence {
   firstSeenAt: string
   lastSeenAt: string
   sourcePublishedAt: string | null
+  payloadRetained: boolean
+  payloadExpiredAt: string | null
 }
 
 export interface NormalizationResult {
@@ -114,6 +116,10 @@ function parseOccurrence(value: unknown): SourceOccurrence | null {
     firstSeenAt: required(value.first_seen_at),
     lastSeenAt: required(value.last_seen_at),
     sourcePublishedAt: text(value.source_published_at),
+    // An older API that does not know about retention has every payload, so the absent
+    // field means retained rather than expired.
+    payloadRetained: value.payload_retained !== false,
+    payloadExpiredAt: text(value.payload_expired_at),
   }
 }
 

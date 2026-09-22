@@ -102,7 +102,96 @@ trabalho não é tocado em nenhum momento, e o descartável é removido ao final
 
 ---
 
-## 6. Quando algo quebra
+## 6. Operação contínua
+
+### Jobs do worker
+
+Cinco jobs funcionais rodam pelo relógio. Cada um grava o que fez em
+`platform.worker_job_state`: última tentativa, último sucesso, última falha, duração,
+próxima execução prevista e o `correlation_id` da passada.
+
+| Job | Intervalo | Kill switch |
+|---|---|---|
+| `collect_enabled_sources` | 60 s | `WORKER_COLLECT_ENABLED` |
+| `normalize_opportunities` | 60 s | `WORKER_NORMALIZE_ENABLED` |
+| `evaluate_pending` | 60 s | `WORKER_MATCH_ENABLED` |
+| `analyze_pending` | 120 s | `WORKER_ANALYZE_ENABLED` |
+| `expire_raw_payloads` | `PAYLOAD_RETENTION_INTERVAL_SECONDS` (6 h) | `WORKER_RETENTION_ENABLED` |
+
+Desligar um job é editar o `.env` e `make restart`. O log `worker jobs configured` na
+subida diz quais jobs o scheduler realmente registrou — ele é lido do scheduler, não das
+variáveis, então um job desligado nunca aparece como ativo.
+
+Para forçar uma passada sem esperar o relógio:
+
+```bash
+curl -X POST http://localhost:3000/api/sources/<id>/runs                  # coleta
+curl -X POST http://localhost:3000/api/opportunities/normalizations/pending
+curl -X POST http://localhost:3000/api/matches/evaluate -d '{"opportunity_id":"<id>"}'
+docker compose exec -T api python -c "from opportunity_radar.platform.config import get_settings; from opportunity_radar.platform.database import create_database_engine; from opportunity_radar.worker import expire_raw_payloads; s=get_settings(); expire_raw_payloads(create_database_engine(s.database_url), retention_days=s.payload_retention_days)"
+```
+
+`make doctor` classifica cada job habilitado como saudável, atrasado, falho ou ausente,
+a partir do estado persistido — um scheduler no ar não prova que um job executou.
+`DOCTOR_JOB_GRACE_SECONDS` define quanto atraso é tolerado antes de um job ser reportado
+como atrasado.
+
+### Alertas e recuperação de fonte
+
+Três falhas consecutivas de uma fonte abrem um incidente e enviam um webhook. Enquanto o
+incidente estiver aberto, novas falhas da mesma fonte não reenviam nada. O primeiro
+sucesso posterior fecha o incidente e envia o recovery.
+
+```bash
+SOURCE_ALERT_WEBHOOK_URL=https://exemplo/hook   # vazio desliga o envio, não o registro
+SOURCE_ALERT_FAILURE_THRESHOLD=3
+SOURCE_ALERT_TIMEOUT_SECONDS=5
+```
+
+Sem webhook configurado — ou com o canal fora do ar — o incidente continua sendo gravado
+em `acquisition.source_alert_incident`, o caso aparece em log estruturado e `make doctor`
+o reporta no check `source incidents`. Falha do canal nunca altera o resultado da coleta.
+
+### Métricas por fonte
+
+`GET /api/source-metrics` responde as janelas de 24 horas e sete dias com cobertura,
+volume, taxa de erro por código, taxa de dedupe, latência p95 e distribuição de
+senioridade com `UNKNOWN` e a versão do mapeamento. A Overview mostra as duas janelas.
+
+Uma taxa vem como `null` quando a janela não tem execução: fonte não medida e fonte
+perfeita não podem ser lidas do mesmo jeito. A cobertura separa `NOT_ENABLED`,
+`CONFIGURATION_BLOCKED`, `NOT_SCHEDULED`, `NOT_RUN`, `SUCCEEDED_ZERO`, `SUCCEEDED`,
+`PARTIAL` e `FAILED` — sucesso sem vagas não é falha, e falta de execução não é ausência
+de vagas.
+
+### Retenção do conteúdo bruto
+
+`RawItem` guarda o envelope imutável — fonte, run, identidade, hash e ocorrência — e
+`acquisition.raw_item_payload` guarda o conteúdo. Só o conteúdo expira, após
+`PAYLOAD_RETENTION_DAYS` (padrão 365) e somente para item com normalização terminal.
+Cada expiração grava uma linha append-only em `acquisition.payload_retention_event` com
+`raw_item_id`, data, versão da política e hash. Reexecutar a retenção não duplica
+histórico.
+
+A API e a tela da oportunidade marcam a ocorrência cujo conteúdo expirou: a procedência
+continua, o reprocessamento não.
+
+### Gate de 72 horas
+
+```bash
+make soak                 # 72 horas simuladas contra relógio controlado
+make soak HOURS=6         # janela curta, para checar o ambiente
+make soak JSON=1          # saída machine-readable
+```
+
+O gate roteiriza uma queda de fonte de três passadas e a recuperação seguinte, e falha
+com código 1 se algum job ficar silenciosamente falho, se o alerta duplicar, se o
+recovery não sair ou se a retenção perder envelope ou hash. Ele roda no CI a cada
+alteração de código.
+
+---
+
+## 7. Quando algo quebra
 
 ### API não sobe
 
@@ -149,7 +238,7 @@ da versão ativa mudou, e o conflito existe para não sobrescrever a alteração
 
 ---
 
-## 7. Reiniciar preservando dados
+## 8. Reiniciar preservando dados
 
 ```bash
 make restart
@@ -163,7 +252,7 @@ docker compose down --volumes
 
 ---
 
-## 8. Validação
+## 9. Validação
 
 Por decisão de projeto, validação roda no CI e não localmente por padrão. Quando for
 necessário rodar à mão:
@@ -172,4 +261,5 @@ necessário rodar à mão:
 make test               # testes unitários
 make test-integration   # testes que exigem PostgreSQL
 make check              # lint e tipos, backend e frontend
+make soak               # gate de 72 horas contra relógio controlado
 ```

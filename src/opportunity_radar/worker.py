@@ -12,6 +12,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.alerts import (
+    SourceAlertService,
+    build_source_alert_notifier,
+)
 from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.collectors import CollectorRegistry, ManualCollector
 from opportunity_radar.acquisition.domain import (
@@ -32,6 +36,7 @@ from opportunity_radar.matching.service import (
     AnalysisInProgressError,
     MatchingService,
 )
+from opportunity_radar.operations.retention import PayloadRetentionService
 from opportunity_radar.operations.service import observe_job
 from opportunity_radar.opportunities.service import OpportunityService
 from opportunity_radar.platform.config import Settings, get_settings
@@ -52,6 +57,7 @@ FUNCTIONAL_JOB_IDS = {
     "normalize_opportunities": "normalize-opportunities",
     "evaluate_pending": "evaluate-pending",
     "analyze_pending": "analyze-pending",
+    "expire_raw_payloads": "expire-raw-payloads",
 }
 
 logger = get_logger("opportunity_radar.worker")
@@ -196,6 +202,37 @@ def analyze_pending(
                 )
 
 
+def expire_raw_payloads(
+    engine: Engine,
+    *,
+    retention_days: int = 365,
+    batch_size: int = 500,
+    interval_seconds: int = 21600,
+    now: datetime | None = None,
+) -> None:
+    """Drop raw bodies the policy has released, and account for every one of them."""
+    with observe_job(
+        engine,
+        job_name="expire_raw_payloads",
+        interval=timedelta(seconds=interval_seconds),
+    ):
+        with Session(engine) as session:
+            outcome = PayloadRetentionService(
+                session, retention_days=retention_days, batch_size=batch_size
+            ).expire_due_payloads(now=now)
+        if outcome.expired:
+            logger.info(
+                "retention batch finished",
+                extra={
+                    "job": "retention",
+                    "examined": outcome.examined,
+                    "expired": outcome.expired,
+                    "policy_version": outcome.policy_version,
+                    "retention_days": outcome.retention_days,
+                },
+            )
+
+
 def collect_enabled_sources(
     engine: Engine,
     *,
@@ -297,9 +334,21 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
             RemotiveCollector(),
         )
     )
+    notifier = build_source_alert_notifier(
+        settings.source_alert_webhook_url,
+        timeout_seconds=settings.source_alert_timeout_seconds,
+    )
 
     def build(session: Session) -> AcquisitionService:
-        return AcquisitionService(session, registry=registry)
+        return AcquisitionService(
+            session,
+            registry=registry,
+            alerts=SourceAlertService(
+                session,
+                notifier=notifier,
+                threshold=settings.source_alert_failure_threshold,
+            ),
+        )
 
     return build
 
@@ -397,6 +446,26 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             replace_existing=True,
             coalesce=True,
             max_instances=1,
+        )
+    if settings.worker_retention_enabled:
+        scheduler.add_job(
+            expire_raw_payloads,
+            "interval",
+            seconds=settings.payload_retention_interval_seconds,
+            args=(engine,),
+            kwargs={
+                "retention_days": settings.payload_retention_days,
+                "batch_size": settings.payload_retention_batch_size,
+                "interval_seconds": settings.payload_retention_interval_seconds,
+            },
+            id="expire-raw-payloads",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+            # Six hours is the cadence, not the wait before the first pass: a job whose
+            # state only appears after six hours reads to the doctor as a job that is
+            # missing, which is the one thing operational state exists to rule out.
+            next_run_time=datetime.now(ZoneInfo(settings.collection_timezone)),
         )
     jobs = {
         name: scheduler.get_job(job_id) is not None

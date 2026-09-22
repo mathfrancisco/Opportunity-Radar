@@ -94,10 +94,12 @@ def test_normalizes_and_deduplicates_manual_evidence_with_provenance() -> None:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "UPDATE acquisition.raw_item "
+                "UPDATE acquisition.raw_item AS item "
                 "SET metadata = metadata - 'collected_item_v1' "
-                "WHERE canonical_url LIKE 'https://example.com/jobs/backend-1%' "
-                "OR payload->>'filename' = 'legacy-job.txt'"
+                "FROM acquisition.raw_item_payload AS body "
+                "WHERE body.raw_item_id = item.id "
+                "AND (item.canonical_url LIKE 'https://example.com/jobs/backend-1%' "
+                "OR body.payload->>'filename' = 'legacy-job.txt')"
             )
         )
 

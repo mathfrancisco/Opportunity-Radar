@@ -27,6 +27,7 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
 )
 from opportunity_radar.acquisition.remotive import RemotiveCollector
+from opportunity_radar.acquisition.scheduling import SourceRunHistory
 from opportunity_radar.acquisition.service import (
     COLLECTED_ITEM_V1_KEY,
     AcquisitionService,
@@ -58,11 +59,20 @@ class _MemorySession:
         del attribute_names
         return None
 
+    def scalar(self, statement: object) -> None:
+        """No incident has ever been opened in memory, which is what a query would say."""
+        del statement
+        return None
+
 
 class _MemoryRepository:
     def __init__(self, source: SourceDefinitionModel) -> None:
         self.source = source
         self.hashes: set[tuple[str, str]] = set()
+
+    def run_history(self, source_id: object, *, sample: int = 32) -> SourceRunHistory:
+        del source_id, sample
+        return SourceRunHistory()
 
     def get_source(self, source_id: object) -> SourceDefinitionModel | None:
         return self.source if source_id == self.source.id else None

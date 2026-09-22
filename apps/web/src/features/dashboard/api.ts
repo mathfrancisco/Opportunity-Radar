@@ -87,6 +87,55 @@ export interface Overview {
   followUpWindowDays: number
 }
 
+export const metricWindows = ['24h', '7d'] as const
+export type MetricWindow = (typeof metricWindows)[number]
+
+export interface SeniorityDistribution {
+  counts: Record<string, number>
+  percentages: Record<string, number>
+  known: number
+  unknown: number
+  total: number
+  mappingVersions: Record<string, number>
+  evidence: Record<string, number>
+}
+
+export interface SourceMetrics {
+  sourceDefinitionId: string
+  name: string
+  sourceType: string
+  enabled: boolean
+  schedule: string | null
+  coverageState: string
+  runs: number
+  runsSucceeded: number
+  runsPartial: number
+  runsFailed: number
+  itemsSeen: number
+  itemsPersisted: number
+  itemsSkipped: number
+  itemsInvalid: number
+  latencyP95Seconds: number | null
+  errorRate: number | null
+  dedupeRate: number | null
+  hasRuns: boolean
+  errorsByCode: Record<string, number>
+  seniority: SeniorityDistribution
+  incidentOpen: boolean
+}
+
+export interface SourceMetricsWindow {
+  window: string
+  since: string
+  until: string
+  sources: SourceMetrics[]
+}
+
+export interface SourceMetricsReport {
+  generatedAt: string
+  windows: SourceMetricsWindow[]
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
@@ -204,6 +253,90 @@ export async function getInbox({
     offset: count(body.offset),
     limit: typeof body.limit === 'number' ? body.limit : pageSize,
     order,
+  }
+}
+
+function optionalNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function rateMap(value: unknown): Record<string, number> {
+  const result: Record<string, number> = {}
+  if (isRecord(value)) {
+    for (const [key, entry] of Object.entries(value)) {
+      if (typeof entry === 'number' && Number.isFinite(entry)) result[key] = entry
+    }
+  }
+  return result
+}
+
+function parseSeniority(value: unknown): SeniorityDistribution {
+  const record = isRecord(value) ? value : {}
+  return {
+    counts: countMap(record.counts),
+    percentages: rateMap(record.percentages),
+    known: count(record.known),
+    unknown: count(record.unknown),
+    total: count(record.total),
+    mappingVersions: countMap(record.mapping_versions),
+    evidence: countMap(record.evidence),
+  }
+}
+
+function parseSourceMetrics(value: unknown): SourceMetrics | null {
+  if (!isRecord(value) || typeof value.source_definition_id !== 'string') return null
+  return {
+    sourceDefinitionId: value.source_definition_id,
+    name: typeof value.name === 'string' ? value.name : 'Fonte sem nome',
+    sourceType: text(value.source_type) ?? 'unknown',
+    enabled: value.enabled === true,
+    schedule: text(value.schedule),
+    coverageState: text(value.coverage_state) ?? 'NOT_RUN',
+    runs: count(value.runs),
+    runsSucceeded: count(value.runs_succeeded),
+    runsPartial: count(value.runs_partial),
+    runsFailed: count(value.runs_failed),
+    itemsSeen: count(value.items_seen),
+    itemsPersisted: count(value.items_persisted),
+    itemsSkipped: count(value.items_skipped),
+    itemsInvalid: count(value.items_invalid),
+    latencyP95Seconds: optionalNumber(value.latency_p95_seconds),
+    // Null is the answer when the window holds no run; it must not collapse to zero.
+    errorRate: optionalNumber(value.error_rate),
+    dedupeRate: optionalNumber(value.dedupe_rate),
+    hasRuns: value.has_runs === true,
+    errorsByCode: countMap(value.errors_by_code),
+    seniority: parseSeniority(value.seniority),
+    incidentOpen: value.incident_open === true,
+  }
+}
+
+export async function getSourceMetrics(): Promise<SourceMetricsReport> {
+  const response = await fetch(apiUrl('/source-metrics'), {
+    headers: { Accept: 'application/json' },
+  })
+  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  const body: unknown = await response.json()
+  if (!isRecord(body) || !Array.isArray(body.windows)) {
+    throw new Error('A API retornou métricas de fontes inválidas.')
+  }
+  return {
+    generatedAt: text(body.generated_at) ?? '',
+    windows: body.windows
+      .map((entry): SourceMetricsWindow | null => {
+        if (!isRecord(entry) || typeof entry.window !== 'string') return null
+        return {
+          window: entry.window,
+          since: text(entry.since) ?? '',
+          until: text(entry.until) ?? '',
+          sources: Array.isArray(entry.sources)
+            ? entry.sources
+                .map(parseSourceMetrics)
+                .filter((item): item is SourceMetrics => item !== null)
+            : [],
+        }
+      })
+      .filter((entry): entry is SourceMetricsWindow => entry !== null),
   }
 }
 

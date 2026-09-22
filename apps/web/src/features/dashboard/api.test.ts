@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getInbox, getOverview } from './api'
+import { getInbox, getOverview, getSourceMetrics } from './api'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -157,5 +157,111 @@ describe('getOverview', () => {
   it('propaga o status quando a API falha', async () => {
     respond({}, 503)
     await expect(getOverview()).rejects.toThrow('503')
+  })
+})
+
+describe('getSourceMetrics', () => {
+  it('preserva taxa ausente como ausente e não como zero', async () => {
+    respond({
+      generated_at: '2026-09-22T12:00:00Z',
+      windows: [
+        {
+          window: '24h',
+          since: '2026-09-21T12:00:00Z',
+          until: '2026-09-22T12:00:00Z',
+          sources: [
+            {
+              source_definition_id: 'source-1',
+              name: 'Greenhouse Radar',
+              source_type: 'greenhouse',
+              enabled: true,
+              schedule: '*/30 * * * *',
+              coverage_state: 'NOT_RUN',
+              runs: 0,
+              runs_succeeded: 0,
+              runs_partial: 0,
+              runs_failed: 0,
+              items_seen: 0,
+              items_persisted: 0,
+              items_skipped: 0,
+              items_invalid: 0,
+              latency_p95_seconds: null,
+              error_rate: null,
+              dedupe_rate: null,
+              has_runs: false,
+              errors_by_code: {},
+              seniority: {
+                counts: {},
+                percentages: {},
+                known: 0,
+                unknown: 0,
+                total: 0,
+                mapping_versions: {},
+                evidence: {},
+              },
+              incident_open: false,
+            },
+          ],
+        },
+      ],
+    })
+
+    const report = await getSourceMetrics()
+
+    expect(report.windows).toHaveLength(1)
+    const source = report.windows[0].sources[0]
+    expect(source.hasRuns).toBe(false)
+    expect(source.errorRate).toBeNull()
+    expect(source.dedupeRate).toBeNull()
+    expect(source.latencyP95Seconds).toBeNull()
+    expect(source.coverageState).toBe('NOT_RUN')
+  })
+
+  it('traz senioridade desconhecida com a procedência do mapeamento', async () => {
+    respond({
+      generated_at: '2026-09-22T12:00:00Z',
+      windows: [
+        {
+          window: '7d',
+          since: '2026-09-15T12:00:00Z',
+          until: '2026-09-22T12:00:00Z',
+          sources: [
+            {
+              source_definition_id: 'source-1',
+              coverage_state: 'SUCCEEDED',
+              runs: 4,
+              error_rate: 0.25,
+              dedupe_rate: 0.5,
+              has_runs: true,
+              errors_by_code: { SOURCE_TIMEOUT: 1 },
+              seniority: {
+                counts: { SENIOR: 1, UNKNOWN: 3 },
+                percentages: { SENIOR: 25, UNKNOWN: 75 },
+                known: 1,
+                unknown: 3,
+                total: 4,
+                mapping_versions: { 'seniority-v1': 4 },
+                evidence: { title: 4 },
+              },
+              incident_open: true,
+            },
+          ],
+        },
+      ],
+    })
+
+    const report = await getSourceMetrics()
+
+    const source = report.windows[0].sources[0]
+    expect(source.seniority.unknown).toBe(3)
+    expect(source.seniority.percentages.UNKNOWN).toBe(75)
+    expect(source.seniority.mappingVersions).toEqual({ 'seniority-v1': 4 })
+    expect(source.errorsByCode).toEqual({ SOURCE_TIMEOUT: 1 })
+    expect(source.incidentOpen).toBe(true)
+  })
+
+  it('rejeita respostas sem janelas', async () => {
+    respond({ generated_at: '2026-09-22T12:00:00Z' })
+    await expect(getSourceMetrics()).rejects.toThrow('métricas de fontes inválidas')
   })
 })

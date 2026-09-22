@@ -1,10 +1,10 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help bootstrap dev up down restart status logs migrate test test-integration check doctor import-companies enable-sources collect backup restore-check
+.PHONY: help bootstrap dev up down restart status logs migrate test test-integration check doctor soak import-companies enable-sources collect backup restore-check
 
 help:
 	@echo "Targets: bootstrap dev up down restart status logs migrate import-companies enable-sources collect"
-	@echo "Operations: doctor backup restore-check"
+	@echo "Operations: doctor soak backup restore-check"
 	@echo "Validation (run only when requested): test test-integration check"
 
 bootstrap:
@@ -46,6 +46,9 @@ check:
 doctor:
 	@docker compose ps
 	@docker compose exec -T api python scripts/doctor.py
+
+soak:
+	@docker compose run --rm api python scripts/soak_gate.py $(if $(HOURS),--hours "$(HOURS)",) $(if $(JSON),--json,)
 
 import-companies:
 	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/import_research_catalog.py $(if $(FILE),--input "/workspace/$(FILE)",--input /workspace/docs/pesquisas/auditoria-186-empresas.md --input /workspace/docs/pesquisas/empresas-adicionais.md) $(if $(DRY_RUN),--dry-run,) $(if $(RESUME),--resume,) $(if $(REPORT),--report "/workspace/$(REPORT)",)

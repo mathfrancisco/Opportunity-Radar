@@ -1,6 +1,6 @@
 # CARD F13-04 — Retenção auditável de payload
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 13 — Operação contínua
 - **Depende de:** F13-03
 - **Bloqueia:** F13-06
@@ -38,12 +38,12 @@ explícito, não como erro de serialização.
 
 ## Critérios de aceite
 
-- [ ] Política padrão expira somente payload com mais de 12 meses.
-- [ ] Itens pendentes ou sem normalização terminal não expiram.
-- [ ] Envelope e procedência permanecem disponíveis após a expiração.
-- [ ] Toda expiração grava histórico append-only com os campos exigidos.
-- [ ] Reexecutar a retenção não cria histórico duplicado.
-- [ ] API e UI informam indisponibilidade de reprocessamento após expiração.
+- [x] Política padrão expira somente payload com mais de 12 meses.
+- [x] Itens pendentes ou sem normalização terminal não expiram.
+- [x] Envelope e procedência permanecem disponíveis após a expiração.
+- [x] Toda expiração grava histórico append-only com os campos exigidos.
+- [x] Reexecutar a retenção não cria histórico duplicado.
+- [x] API e UI informam indisponibilidade de reprocessamento após expiração.
 
 ## Verificação
 
