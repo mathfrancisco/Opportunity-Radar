@@ -1,6 +1,6 @@
 # CARD F11-03 — Expor atualidade no contrato da Inbox
 
-- **Status:** Backlog
+- **Status:** Done
 - **Fase:** 11 — Reavaliação por mudança de versão
 - **Depende de:** F11-01
 - **Bloqueia:** F11-04
@@ -34,11 +34,11 @@ paginação, filtros e ordenação atuais.
 
 ## Critérios de aceite
 
-- [ ] Assessment atual sempre vence o fallback.
-- [ ] Assessment antigo retorna com `is_stale=true`.
-- [ ] O contrato expõe versões suficientes para explicar a desatualização.
-- [ ] Oportunidade nunca avaliada permanece na Inbox sem score inventado.
-- [ ] Paginação e filtros não duplicam oportunidades durante o backfill.
+- [x] Assessment atual sempre vence o fallback.
+- [x] Assessment antigo retorna com `is_stale=true`.
+- [x] O contrato expõe versões suficientes para explicar a desatualização.
+- [x] Oportunidade nunca avaliada permanece na Inbox sem score inventado.
+- [x] Paginação e filtros não duplicam oportunidades durante o backfill.
 
 ## Verificação
 

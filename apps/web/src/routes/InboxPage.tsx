@@ -116,6 +116,16 @@ function ItemCard({ item }: { item: InboxItem }) {
         </div>
       </dl>
 
+      {item.isStale && (
+        <p className="mt-4 rounded-xl border border-[#e3cf9a] bg-[#fbf3e2] p-3 text-sm text-[#7a5a16]" role="status">
+          Esta avaliação usa uma versão anterior do perfil ou da oportunidade. A
+          reavaliação está pendente; o resultado anterior continua disponível.
+          {item.assessmentProfileVersionId && item.currentProfileVersionId && (
+            <> Perfil avaliado: {item.assessmentProfileVersionId.slice(0, 8)} · perfil atual: {item.currentProfileVersionId.slice(0, 8)}.</>
+          )}
+        </p>
+      )}
+
       {item.analysisStatus && item.analysisStatus !== 'AI_COMPLETED' && (
         <p className="mt-4 text-sm text-[#7a5a16]">
           Análise semântica indisponível ({item.analysisStatus}). A decisão determinística

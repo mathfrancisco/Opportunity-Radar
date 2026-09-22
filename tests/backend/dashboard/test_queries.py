@@ -8,7 +8,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import SourceDefinitionModel, SourceRunModel
@@ -196,6 +196,61 @@ def test_inbox_keeps_unassessed_opportunities_and_uses_the_latest_decision() -> 
         assert by_id[never_assessed.id].assessment_id is None
         assert by_id[never_assessed.id].verdict is None
         assert page.items[0].opportunity_id == assessed.id
+
+
+def test_inbox_prefers_a_current_assessment_and_falls_back_to_a_stale_one() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        profile_version = _profile_version(session)
+        session.execute(
+            update(ProfileVersionModel)
+            .where(ProfileVersionModel.id != profile_version.id)
+            .values(status="ARCHIVED")
+        )
+        profile_version.status = "ACTIVE"
+        company = _company(session, "normal")
+        with_fresh = _opportunity(session, company, title="Current result", published_at=NOW)
+        fallback_only = _opportunity(session, company, title="Waiting result", published_at=NOW)
+        old_current = _assessment(
+            session,
+            with_fresh,
+            profile_version.id,
+            verdict="HIGH_PRIORITY",
+            score="91.0000",
+            assessed_at=NOW,
+        )
+        stale = _assessment(
+            session,
+            fallback_only,
+            profile_version.id,
+            verdict="WATCHLIST",
+            score="40.0000",
+            assessed_at=NOW,
+        )
+        with_fresh.version = fallback_only.version = 2
+        fresh = _assessment(
+            session,
+            with_fresh,
+            profile_version.id,
+            verdict="RECOMMENDED",
+            score="75.0000",
+            assessed_at=NOW - timedelta(hours=1),
+        )
+        session.commit()
+
+        items = {
+            item.opportunity_id: item
+            for item in list_opportunity_inbox(session, InboxQuery(company_id=company.id)).items
+        }
+
+        assert items[with_fresh.id].assessment_id == fresh.id
+        assert items[with_fresh.id].is_stale is False
+        assert items[with_fresh.id].assessment_opportunity_version == 2
+        assert items[with_fresh.id].current_profile_version_id == profile_version.id
+        assert items[fallback_only.id].assessment_id == stale.id
+        assert items[fallback_only.id].is_stale is True
+        assert items[fallback_only.id].assessment_opportunity_version == 1
+        assert old_current.id != fresh.id
 
 
 def test_inbox_filters_by_verdict_score_search_and_only_assessed() -> None:

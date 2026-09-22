@@ -51,6 +51,7 @@ export interface MatchAssessment {
   verdict: string
   score: string
   confidence: string
+  isStale: boolean
   assessedAt: string
   factors: MatchFactor[]
   analysis: MatchAnalysis | null
@@ -143,6 +144,7 @@ function parseAssessment(value: unknown): MatchAssessment | null {
     verdict: required(value.verdict, 'UNKNOWN'),
     score: required(value.score, '0'),
     confidence: required(value.confidence, '0'),
+    isStale: value.is_stale === true,
     assessedAt: required(value.assessed_at),
     factors: list(value.factors)
       .map(parseFactor)

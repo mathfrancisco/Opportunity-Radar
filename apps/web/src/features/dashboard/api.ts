@@ -15,11 +15,17 @@ export interface InboxItem {
   contractType: string
   lifecycleStatus: string
   publishedAt: string | null
+  opportunityVersion: number
   assessmentId: string | null
+  assessmentOpportunityVersion: number | null
+  assessmentProfileVersionId: string | null
+  currentProfileVersionId: string | null
   verdict: string | null
   eligibility: string | null
   score: string | null
   confidence: string | null
+  rulesVersion: string | null
+  isStale: boolean | null
   assessedAt: string | null
   analysisStatus: string | null
   analysisRecommendedReview: boolean | null
@@ -119,11 +125,20 @@ function parseInboxItem(value: unknown): InboxItem | null {
     contractType: text(value.contract_type) ?? 'UNKNOWN',
     lifecycleStatus: text(value.lifecycle_status) ?? 'UNKNOWN',
     publishedAt: text(value.published_at),
+    opportunityVersion: typeof value.opportunity_version === 'number' ? value.opportunity_version : 1,
     assessmentId: text(value.assessment_id),
+    assessmentOpportunityVersion:
+      typeof value.assessment_opportunity_version === 'number'
+        ? value.assessment_opportunity_version
+        : null,
+    assessmentProfileVersionId: text(value.assessment_profile_version_id),
+    currentProfileVersionId: text(value.current_profile_version_id),
     verdict: text(value.verdict),
     eligibility: text(value.eligibility),
     score: text(value.score),
     confidence: text(value.confidence),
+    rulesVersion: text(value.rules_version),
+    isStale: typeof value.is_stale === 'boolean' ? value.is_stale : null,
     assessedAt: text(value.assessed_at),
     analysisStatus: text(value.analysis_status),
     analysisRecommendedReview: flag(value.analysis_recommended_review),

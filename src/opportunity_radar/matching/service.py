@@ -9,11 +9,12 @@ from enum import StrEnum
 from typing import Any, Sequence, TypeVar
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import literal, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, aliased
 
 from opportunity_radar.companies.models import Company
+from opportunity_radar.matching import currency
 from opportunity_radar.matching.analysis import (
     ANALYSIS_SCHEMA_VERSION,
     AnalysisOutcome,
@@ -57,7 +58,7 @@ from opportunity_radar.opportunities.models import (
     OpportunitySkillModel,
 )
 from opportunity_radar.opportunities.repository import OpportunityRepository
-from opportunity_radar.profile.domain import ProfileVersion
+from opportunity_radar.profile.domain import ProfileNotFoundError, ProfileVersion
 from opportunity_radar.profile.service import ProfileService
 
 RULES_VERSION = "matching-v1"
@@ -149,29 +150,90 @@ class MatchingService:
         assert loaded is not None
         return loaded
 
-    def pending_evaluation_ids(self, *, limit: int) -> list[UUID]:
-        """Return eligible opportunities missing an assessment for today's exact inputs."""
+    def pending_evaluation_ids(self, *, limit: int, now: datetime | None = None) -> list[UUID]:
+        """Eligible opportunities with no assessment for the current identity today.
+
+        Asked in SQL against the identity components rather than by rebuilding a snapshot
+        hash per opportunity: the read model has to ask the same question over the whole
+        catalogue, and a rule that only one side can express is a rule the two sides will
+        eventually disagree on.
+        """
         profile = ProfileService(self.session).get_active()
-        assessed_at = datetime.now(UTC)
-        candidates = self.session.scalars(
-            select(OpportunityModel)
-            .where(OpportunityModel.lifecycle_status.in_(("DISCOVERED", "ACTIVE")))
-            .options(
-                selectinload(OpportunityModel.compensations),
-                selectinload(OpportunityModel.skills),
+        reference_date = currency.reference_day(now or datetime.now(UTC))
+        assessment = aliased(MatchAssessmentModel)
+        already_evaluated = (
+            select(literal(1))
+            .where(
+                assessment.opportunity_id == OpportunityModel.id,
+                assessment.opportunity_version == OpportunityModel.version,
+                assessment.profile_version_id == profile.id,
+                assessment.rules_version == RULES_VERSION,
+                assessment.taxonomy_version == currency.opportunity_taxonomy_version(),
+                currency.assessment_reference_day(assessment.assessed_at)
+                == reference_date,
             )
-            .order_by(OpportunityModel.created_at, OpportunityModel.id)
+            .exists()
         )
-        pending: list[UUID] = []
-        for opportunity in candidates:
-            _, _, _, input_hash = self._evaluation_identity(
-                opportunity, profile, assessed_at
+        return list(
+            self.session.scalars(
+                select(OpportunityModel.id)
+                .where(
+                    OpportunityModel.lifecycle_status.in_(("DISCOVERED", "ACTIVE")),
+                    ~already_evaluated,
+                )
+                .order_by(OpportunityModel.created_at, OpportunityModel.id)
+                .limit(limit)
             )
-            if self.repository.get_existing(input_hash=input_hash) is None:
-                pending.append(opportunity.id)
-                if len(pending) >= limit:
-                    break
-        return pending
+        )
+
+    def evaluation_identity(
+        self,
+        opportunity: OpportunityModel,
+        profile: ProfileVersion,
+        *,
+        assessed_at: datetime,
+    ) -> currency.EvaluationIdentity:
+        """The identity the worker and the read model both compare against."""
+        return currency.EvaluationIdentity.build(
+            opportunity_id=opportunity.id,
+            opportunity_version=opportunity.version,
+            profile_version_id=profile.id,
+            rules_version=RULES_VERSION,
+            taxonomy_version=_taxonomy_version(opportunity),
+            assessed_at=assessed_at,
+        )
+
+    def current_assessment(self, opportunity_id: UUID) -> MatchAssessmentModel | None:
+        """The most recent assessment that still describes the current inputs, if any.
+
+        The ORM twin of what the Inbox resolves in SQL. Returning `None` means every
+        stored assessment is stale, not that the opportunity was never scored.
+        """
+        opportunity = OpportunityRepository(self.session).get(opportunity_id)
+        if opportunity is None:
+            raise MatchOpportunityNotFoundError(str(opportunity_id))
+        profile = ProfileService(self.session).get_active()
+        identity = self.evaluation_identity(
+            opportunity, profile, assessed_at=datetime.now(UTC)
+        )
+        assessments, _ = self.repository.list(opportunity_id=opportunity_id, limit=200)
+        return next(
+            (item for item in assessments if identity.describes(item)),
+            None,
+        )
+
+    def is_stale(self, assessment: MatchAssessmentModel) -> bool:
+        """Whether an assessment still describes the active matching inputs."""
+        opportunity = OpportunityRepository(self.session).get(assessment.opportunity_id)
+        if opportunity is None:
+            return True
+        try:
+            profile = ProfileService(self.session).get_active()
+        except ProfileNotFoundError:
+            return True
+        return self.evaluation_identity(
+            opportunity, profile, assessed_at=datetime.now(UTC)
+        ).is_stale(assessment)
 
     def _evaluation_identity(
         self,
