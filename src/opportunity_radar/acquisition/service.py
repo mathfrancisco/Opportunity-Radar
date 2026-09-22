@@ -37,10 +37,10 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
     SourceRunModel,
 )
-from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.repository import AcquisitionRepository
 from opportunity_radar.acquisition.scheduling import SourceSchedulingState
+from opportunity_radar.companies.models import Company, CompanySource
 
 COLLECTED_ITEM_V1_KEY = "collected_item_v1"
 
