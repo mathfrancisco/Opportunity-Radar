@@ -5,6 +5,7 @@ export function useLatestAssessment(opportunityId: string) {
   return useQuery({
     queryKey: ['assessment', opportunityId],
     queryFn: () => getLatestAssessment(opportunityId),
+    refetchInterval: 15_000,
   })
 }
 

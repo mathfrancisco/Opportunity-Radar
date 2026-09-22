@@ -7,6 +7,7 @@ export interface MatchFactor {
   contribution: string
   status: string
   confidence: string
+  isStale: boolean
   missingPolicy: string
   explanation: string
   evidenceRefs: unknown[]
@@ -85,6 +86,7 @@ function parseFactor(value: unknown): MatchFactor | null {
     contribution: required(value.contribution, '0'),
     status: required(value.status, 'UNKNOWN'),
     confidence: required(value.confidence, '0'),
+    isStale: value.is_stale === true,
     missingPolicy: required(value.missing_policy, 'NEUTRAL'),
     explanation: required(value.explanation),
     evidenceRefs: list(value.evidence_refs),

@@ -1,6 +1,6 @@
 # CARD F11-02 — Executar reavaliação retomável
 
-- **Status:** Backlog
+- **Status:** Done
 - **Fase:** 11 — Reavaliação por mudança de versão
 - **Depende de:** F11-01, F10-01
 - **Bloqueia:** F11-04
@@ -36,11 +36,11 @@ claim e os limites de lote seguem o mesmo mecanismo da avaliação automática.
 
 ## Critérios de aceite
 
-- [ ] Ativar um perfil novo torna os assessments anteriores pendentes.
-- [ ] Atualizar o conteúdo da oportunidade gera assessment para a nova versão.
-- [ ] Bump de ruleset ou taxonomia produz o mesmo comportamento.
-- [ ] Reinício no meio do lote retoma o trabalho sem duplicar resultado.
-- [ ] Assessments anteriores continuam legíveis e inalterados.
+- [x] Ativar um perfil novo torna os assessments anteriores pendentes.
+- [x] Atualizar o conteúdo da oportunidade gera assessment para a nova versão.
+- [x] Bump de ruleset ou taxonomia produz o mesmo comportamento.
+- [x] Reinício no meio do lote retoma o trabalho sem duplicar resultado.
+- [x] Assessments anteriores continuam legíveis e inalterados.
 
 ## Verificação
 

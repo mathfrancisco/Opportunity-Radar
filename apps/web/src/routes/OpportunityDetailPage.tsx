@@ -381,6 +381,12 @@ function Decision({
           {formatNumber(assessment.confidence, 2)}
         </span>
       </div>
+      {assessment.isStale && (
+        <p className="mt-3 rounded-xl border border-[#e3cf9a] bg-[#fbf3e2] p-3 text-sm text-[#7a5a16]" role="status">
+          Esta decisão foi calculada com dados anteriores. Uma reavaliação está pendente;
+          os detalhes abaixo permanecem disponíveis como histórico.
+        </p>
+      )}
       <p className="mt-2 text-xs text-[#6d827b]">
         Regras {assessment.rulesVersion} · taxonomia {assessment.taxonomyVersion} · perfil{' '}
         {assessment.profileVersionId.slice(0, 8)} · avaliada em{' '}

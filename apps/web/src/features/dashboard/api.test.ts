@@ -83,6 +83,29 @@ describe('getInbox', () => {
     expect(page.order).toBe('priority')
   })
 
+  it('preserva o aviso de avaliação desatualizada recebido da API', async () => {
+    respond({
+      items: [{
+        opportunity_id: 'opportunity-1',
+        opportunity_version: 3,
+        assessment_id: 'assessment-1',
+        assessment_opportunity_version: 2,
+        assessment_profile_version_id: 'profile-old',
+        current_profile_version_id: 'profile-current',
+        is_stale: true,
+      }],
+      total: 1,
+      offset: 0,
+      limit: 25,
+    })
+
+    const page = await getInbox({ page: 1, pageSize: 25 })
+
+    expect(page.items[0].isStale).toBe(true)
+    expect(page.items[0].assessmentProfileVersionId).toBe('profile-old')
+    expect(page.items[0].currentProfileVersionId).toBe('profile-current')
+  })
+
   it('rejeita respostas sem uma coleção de itens', async () => {
     respond({ total: 0 })
     await expect(getInbox({ page: 1, pageSize: 25 })).rejects.toThrow('inbox inválida')

@@ -41,11 +41,15 @@ class InboxItemResponse(BaseModel):
     published_at: datetime | None
     opportunity_version: int
     assessment_id: UUID | None
+    assessment_opportunity_version: int | None
+    assessment_profile_version_id: UUID | None
+    current_profile_version_id: UUID | None
     verdict: str | None
     eligibility: str | None
     score: str | None
     confidence: str | None
     rules_version: str | None
+    is_stale: bool | None
     assessed_at: datetime | None
     analysis_status: str | None
     analysis_recommended_review: bool | None
@@ -195,11 +199,15 @@ def _inbox_item_response(item: InboxItem) -> InboxItemResponse:
         published_at=item.published_at,
         opportunity_version=item.opportunity_version,
         assessment_id=item.assessment_id,
+        assessment_opportunity_version=item.assessment_opportunity_version,
+        assessment_profile_version_id=item.assessment_profile_version_id,
+        current_profile_version_id=item.current_profile_version_id,
         verdict=item.verdict,
         eligibility=item.eligibility,
         score=str(item.score) if item.score is not None else None,
         confidence=str(item.confidence) if item.confidence is not None else None,
         rules_version=item.rules_version,
+        is_stale=item.is_stale,
         assessed_at=item.assessed_at,
         analysis_status=item.analysis_status,
         analysis_recommended_review=item.analysis_recommended_review,

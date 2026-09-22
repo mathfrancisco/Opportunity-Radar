@@ -1,6 +1,6 @@
 # CARD F11-04 — Mostrar assessment desatualizado na UI
 
-- **Status:** Backlog
+- **Status:** Done
 - **Fase:** 11 — Reavaliação por mudança de versão
 - **Depende de:** F11-02, F11-03
 - **Bloqueia:** Gate da Fase 11
@@ -35,11 +35,11 @@ anterior e que a reavaliação está pendente.
 
 ## Critérios de aceite
 
-- [ ] Antes do backfill, o card antigo aparece com aviso.
-- [ ] Durante o backfill, a oportunidade não desaparece nem duplica.
-- [ ] Depois do backfill, o aviso some e o novo resultado aparece.
-- [ ] Alterar modalidade aceita de `REMOTE` para `ONSITE` muda o verdict da fixture.
-- [ ] O estado é compreensível por leitor de tela.
+- [x] Antes do backfill, o card antigo aparece com aviso.
+- [x] Durante o backfill, a oportunidade não desaparece nem duplica.
+- [x] Depois do backfill, o aviso some e o novo resultado aparece.
+- [x] Alterar modalidade aceita de `REMOTE` para `ONSITE` muda o verdict da fixture.
+- [x] O estado é compreensível por leitor de tela.
 
 ## Verificação
 

@@ -58,7 +58,7 @@ from opportunity_radar.opportunities.models import (
     OpportunitySkillModel,
 )
 from opportunity_radar.opportunities.repository import OpportunityRepository
-from opportunity_radar.profile.domain import ProfileVersion
+from opportunity_radar.profile.domain import ProfileNotFoundError, ProfileVersion
 from opportunity_radar.profile.service import ProfileService
 
 RULES_VERSION = "matching-v1"
@@ -221,6 +221,19 @@ class MatchingService:
             (item for item in assessments if identity.describes(item)),
             None,
         )
+
+    def is_stale(self, assessment: MatchAssessmentModel) -> bool:
+        """Whether an assessment still describes the active matching inputs."""
+        opportunity = OpportunityRepository(self.session).get(assessment.opportunity_id)
+        if opportunity is None:
+            return True
+        try:
+            profile = ProfileService(self.session).get_active()
+        except ProfileNotFoundError:
+            return True
+        return self.evaluation_identity(
+            opportunity, profile, assessed_at=datetime.now(UTC)
+        ).is_stale(assessment)
 
     def _evaluation_identity(
         self,

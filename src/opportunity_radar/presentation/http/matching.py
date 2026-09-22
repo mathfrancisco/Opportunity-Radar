@@ -87,6 +87,7 @@ class MatchAssessmentResponse(BaseModel):
     verdict: str
     score: str
     confidence: str
+    is_stale: bool
     assessed_at: str
     created_at: str
     factors: list[MatchFactorResponse]
@@ -106,7 +107,8 @@ def evaluate_match(
     session: Session = Depends(get_session),
 ) -> MatchAssessmentResponse:
     try:
-        assessment = MatchingService(session).evaluate(
+        service = MatchingService(session)
+        assessment = service.evaluate(
             body.opportunity_id,
             profile_version_id=body.profile_version_id,
         )
@@ -123,7 +125,7 @@ def evaluate_match(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "profile_not_found", "message": str(error)},
         ) from error
-    return _assessment_response(assessment)
+    return _assessment_response(assessment, is_stale=service.is_stale(assessment))
 
 
 @router.get("", response_model=MatchAssessmentListResponse)
@@ -134,14 +136,18 @@ def list_matches(
     limit: int = Query(default=50, ge=1, le=200),
     session: Session = Depends(get_session),
 ) -> MatchAssessmentListResponse:
-    items, total = MatchingService(session).list(
+    service = MatchingService(session)
+    items, total = service.list(
         opportunity_id=opportunity_id,
         profile_version_id=profile_version_id,
         offset=offset,
         limit=limit,
     )
     return MatchAssessmentListResponse(
-        items=[_assessment_response(item) for item in items],
+        items=[
+            _assessment_response(item, is_stale=service.is_stale(item))
+            for item in items
+        ],
         total=total,
         offset=offset,
         limit=limit,
@@ -188,7 +194,9 @@ def get_match(
     session: Session = Depends(get_session),
 ) -> MatchAssessmentResponse:
     try:
-        return _assessment_response(MatchingService(session).get(assessment_id))
+        service = MatchingService(session)
+        assessment = service.get(assessment_id)
+        return _assessment_response(assessment, is_stale=service.is_stale(assessment))
     except MatchNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -196,7 +204,9 @@ def get_match(
         ) from error
 
 
-def _assessment_response(assessment: MatchAssessmentModel) -> MatchAssessmentResponse:
+def _assessment_response(
+    assessment: MatchAssessmentModel, *, is_stale: bool = False
+) -> MatchAssessmentResponse:
     return MatchAssessmentResponse(
         id=assessment.id,
         opportunity_id=assessment.opportunity_id,
@@ -213,6 +223,7 @@ def _assessment_response(assessment: MatchAssessmentModel) -> MatchAssessmentRes
         verdict=assessment.verdict,
         score=str(assessment.score),
         confidence=str(assessment.confidence),
+        is_stale=is_stale,
         assessed_at=assessment.assessed_at.isoformat(),
         created_at=assessment.created_at.isoformat(),
         factors=[

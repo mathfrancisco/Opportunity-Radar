@@ -27,7 +27,9 @@ from opportunity_radar.acquisition.models import (
     SourceRunModel,
 )
 from opportunity_radar.companies.models import Company
+from opportunity_radar.matching import currency
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
+from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
     OpportunityModel,
@@ -63,11 +65,15 @@ class InboxItem:
     published_at: datetime | None
     opportunity_version: int
     assessment_id: UUID | None = None
+    assessment_opportunity_version: int | None = None
+    assessment_profile_version_id: UUID | None = None
+    current_profile_version_id: UUID | None = None
     verdict: str | None = None
     eligibility: str | None = None
     score: Decimal | None = None
     confidence: Decimal | None = None
     rules_version: str | None = None
+    is_stale: bool | None = None
     assessed_at: datetime | None = None
     analysis_status: str | None = None
     analysis_recommended_review: bool | None = None
@@ -162,19 +168,27 @@ class OverviewSummary:
 
 
 def _latest_assessments(profile_version_id: UUID | None) -> Any:
+    current = currency.is_current_assessment(
+        MatchAssessmentModel.__table__, rules_version=RULES_VERSION
+    )
     ranked = select(
         MatchAssessmentModel.id.label("assessment_id"),
         MatchAssessmentModel.opportunity_id.label("opportunity_id"),
+        MatchAssessmentModel.opportunity_version.label("assessment_opportunity_version"),
+        MatchAssessmentModel.profile_version_id.label("assessment_profile_version_id"),
+        currency.active_profile_version_id().label("current_profile_version_id"),
         MatchAssessmentModel.verdict.label("verdict"),
         MatchAssessmentModel.eligibility.label("eligibility"),
         MatchAssessmentModel.score.label("score"),
         MatchAssessmentModel.confidence.label("confidence"),
         MatchAssessmentModel.rules_version.label("rules_version"),
+        (~current).label("is_stale"),
         MatchAssessmentModel.assessed_at.label("assessed_at"),
         func.row_number()
         .over(
             partition_by=MatchAssessmentModel.opportunity_id,
             order_by=(
+                current.desc(),
                 MatchAssessmentModel.assessed_at.desc(),
                 MatchAssessmentModel.id.desc(),
             ),
@@ -249,11 +263,15 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
             OpportunityModel.published_at,
             OpportunityModel.version,
             assessments.c.assessment_id,
+            assessments.c.assessment_opportunity_version,
+            assessments.c.assessment_profile_version_id,
+            assessments.c.current_profile_version_id,
             assessments.c.verdict,
             assessments.c.eligibility,
             assessments.c.score,
             assessments.c.confidence,
             assessments.c.rules_version,
+            assessments.c.is_stale,
             assessments.c.assessed_at,
             analyses.c.status,
             analyses.c.recommended_review,
@@ -349,18 +367,22 @@ def _inbox_item(row: Any) -> InboxItem:
         published_at=row[10],
         opportunity_version=row[11],
         assessment_id=row[12],
-        verdict=row[13],
-        eligibility=row[14],
-        score=row[15],
-        confidence=row[16],
-        rules_version=row[17],
-        assessed_at=row[18],
-        analysis_status=row[19],
-        analysis_recommended_review=row[20],
-        analysis_summary=row[21],
-        application_id=row[22],
-        application_stage=row[23],
-        application_next_action_at=row[24],
+        assessment_opportunity_version=row[13],
+        assessment_profile_version_id=row[14],
+        current_profile_version_id=row[15],
+        verdict=row[16],
+        eligibility=row[17],
+        score=row[18],
+        confidence=row[19],
+        rules_version=row[20],
+        is_stale=row[21],
+        assessed_at=row[22],
+        analysis_status=row[23],
+        analysis_recommended_review=row[24],
+        analysis_summary=row[25],
+        application_id=row[26],
+        application_stage=row[27],
+        application_next_action_at=row[28],
     )
 
 
