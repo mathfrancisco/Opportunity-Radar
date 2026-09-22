@@ -387,6 +387,11 @@ def _scheduled_request(
 def build_scheduler(settings: Settings) -> BackgroundScheduler:
     scheduler = BackgroundScheduler(timezone=settings.collection_timezone)
     engine = create_database_engine(settings.database_url)
+    # An interval trigger fires one interval after startup, which leaves every functional
+    # job with no observable state for its first minute — indistinguishable, to the doctor
+    # and to an operator, from a job that was never registered. Each job therefore takes a
+    # first pass immediately; they are idempotent, coalesced and capped to one instance.
+    first_run = datetime.now(ZoneInfo(settings.collection_timezone))
     scheduler.add_job(heartbeat, "interval", minutes=5, id="heartbeat", replace_existing=True)
     if settings.worker_normalize_enabled:
         scheduler.add_job(
@@ -398,6 +403,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             replace_existing=True,
             coalesce=True,
             max_instances=1,
+            next_run_time=first_run,
         )
     if settings.worker_collect_enabled:
         scheduler.add_job(
@@ -415,6 +421,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             replace_existing=True,
             coalesce=True,
             max_instances=1,
+            next_run_time=first_run,
         )
     if settings.worker_match_enabled:
         scheduler.add_job(
@@ -427,6 +434,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             replace_existing=True,
             coalesce=True,
             max_instances=1,
+            next_run_time=first_run,
         )
     if settings.worker_analyze_enabled:
         scheduler.add_job(
@@ -446,6 +454,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             replace_existing=True,
             coalesce=True,
             max_instances=1,
+            next_run_time=first_run,
         )
     if settings.worker_retention_enabled:
         scheduler.add_job(
@@ -465,7 +474,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             # Six hours is the cadence, not the wait before the first pass: a job whose
             # state only appears after six hours reads to the doctor as a job that is
             # missing, which is the one thing operational state exists to rule out.
-            next_run_time=datetime.now(ZoneInfo(settings.collection_timezone)),
+            next_run_time=first_run,
         )
     jobs = {
         name: scheduler.get_job(job_id) is not None

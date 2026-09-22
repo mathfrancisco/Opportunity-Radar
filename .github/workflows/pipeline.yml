@@ -269,6 +269,17 @@ jobs:
             python -c "import json,sys; data=json.load(sys.stdin); assert data['applications_active'] == 1; assert data['applications_by_stage'] == {'APPLIED': 1}; assert data['follow_ups_due'] == 0; assert data['follow_up_window_days'] == 7"
           curl --fail --silent --output /dev/null http://127.0.0.1:3000/applications
           echo "APPLICATION_ID=$application_id" >> "$GITHUB_ENV"
+      - name: Verify structured logs and the doctor
+        run: |
+          docker compose -f compose.yaml -f compose.ci.yaml exec -T api \
+            python scripts/doctor.py --json | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'ok', data; names={check['name'] for check in data['checks']}; assert {'environment', 'database', 'catalogue', 'prompts', 'worker jobs', 'source incidents'} <= names; catalogue=next(check for check in data['checks'] if check['name'] == 'catalogue'); assert catalogue['facts']['companies'] == 220; jobs=next(check for check in data['checks'] if check['name'] == 'worker jobs'); assert jobs['status'] == 'ok', jobs; assert set(jobs['facts']['healthy']) == {'collect_enabled_sources', 'normalize_opportunities', 'evaluate_pending', 'analyze_pending', 'expire_raw_payloads'}, jobs; incidents=next(check for check in data['checks'] if check['name'] == 'source incidents'); assert incidents['facts']['webhook_configured'] is False"
+          correlation_id="ci-$(date +%s)"
+          curl --fail --silent --output /dev/null --dump-header /tmp/headers \
+            --header "X-Correlation-ID: $correlation_id" http://127.0.0.1:3000/api/overview
+          grep -iq "x-correlation-id: $correlation_id" /tmp/headers
+          docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --no-log-prefix api | \
+            python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; matched=[line for line in lines if line.get('correlation_id') == '$correlation_id']; assert matched, 'no structured log carried the correlation id'; assert any(line.get('path') == '/overview' and line.get('status_code') == 200 for line in matched), matched"
       - name: Verify PostgreSQL persistence after restart
         run: |
           before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
@@ -336,17 +347,6 @@ jobs:
             python -c "import json,pathlib; manifest=json.loads(pathlib.Path('data/backups/ci-e2e.manifest.json').read_text()); counts=manifest['counts']; assert counts['companies'] == 220, counts; assert counts['opportunities'] == 1, counts; assert counts['applications'] == 1, counts; assert counts['stage_history'] == 2, counts; assert manifest['bytes'] > 0"
           docker compose -f compose.yaml -f compose.ci.yaml exec -T api \
             python scripts/restore_check.py --dump data/backups/ci-e2e.dump
-      - name: Verify structured logs and the doctor
-        run: |
-          docker compose -f compose.yaml -f compose.ci.yaml exec -T api \
-            python scripts/doctor.py --json | \
-            python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'ok', data; names={check['name'] for check in data['checks']}; assert {'environment', 'database', 'catalogue', 'prompts', 'worker jobs', 'source incidents'} <= names; catalogue=next(check for check in data['checks'] if check['name'] == 'catalogue'); assert catalogue['facts']['companies'] == 220; jobs=next(check for check in data['checks'] if check['name'] == 'worker jobs'); assert jobs['status'] != 'fail', jobs; incidents=next(check for check in data['checks'] if check['name'] == 'source incidents'); assert incidents['facts']['webhook_configured'] is False"
-          correlation_id="ci-$(date +%s)"
-          curl --fail --silent --output /dev/null --dump-header /tmp/headers \
-            --header "X-Correlation-ID: $correlation_id" http://127.0.0.1:3000/api/overview
-          grep -iq "x-correlation-id: $correlation_id" /tmp/headers
-          docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --no-log-prefix api | \
-            python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; matched=[line for line in lines if line.get('correlation_id') == '$correlation_id']; assert matched, 'no structured log carried the correlation id'; assert any(line.get('path') == '/overview' and line.get('status_code') == 200 for line in matched), matched"
       - name: Verify the autonomous cycle without a terminal
         run: |
           compose="docker compose -f compose.yaml -f compose.ci.yaml"

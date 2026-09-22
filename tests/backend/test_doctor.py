@@ -85,11 +85,40 @@ def test_a_job_inside_its_grace_is_not_late() -> None:
     assert result["healthy"] == ["job"]
 
 
-def test_a_job_that_never_succeeded_is_failing() -> None:
+def test_a_first_pass_still_running_is_not_reported_as_a_failure() -> None:
     states = {
         "job": _State(
             last_success_at=None,
             last_failure_at=None,
+            next_run_at=NOW + timedelta(seconds=30),
+        )
+    }
+
+    result = classify_worker_jobs(states, ["job"], now=NOW, grace=GRACE)
+
+    assert result["failing"] == []
+    assert result["healthy"] == ["job"]
+
+
+def test_a_first_pass_that_never_finishes_becomes_late() -> None:
+    states = {
+        "job": _State(
+            last_success_at=None,
+            last_failure_at=None,
+            next_run_at=NOW - timedelta(hours=1),
+        )
+    }
+
+    result = classify_worker_jobs(states, ["job"], now=NOW, grace=GRACE)
+
+    assert result["late"] == ["job"]
+
+
+def test_a_job_that_only_ever_failed_is_failing() -> None:
+    states = {
+        "job": _State(
+            last_success_at=None,
+            last_failure_at=NOW - timedelta(seconds=10),
             next_run_at=NOW + timedelta(seconds=30),
         )
     }

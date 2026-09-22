@@ -236,6 +236,11 @@ def classify_worker_jobs(
     Failure is decided before lateness on purpose: a job that failed its last pass is
     broken whether or not the next one is overdue, and reporting it as merely late would
     send the operator to the scheduler instead of to the error.
+
+    A job that has recorded an attempt but neither an outcome is running its first pass,
+    not failing it. Left as a failure, every worker would look broken for the length of one
+    job on every start. It becomes late once its next run is overdue, which is the real
+    symptom of a pass that never finishes.
     """
     missing: list[str] = []
     failing: list[str] = []
@@ -245,9 +250,9 @@ def classify_worker_jobs(
         state = states.get(name)
         if state is None:
             missing.append(name)
-        elif state.last_success_at is None or (
-            state.last_failure_at is not None
-            and state.last_failure_at > state.last_success_at
+        elif state.last_failure_at is not None and (
+            state.last_success_at is None
+            or state.last_failure_at > state.last_success_at
         ):
             failing.append(name)
         elif state.next_run_at is not None and now > state.next_run_at + grace:
