@@ -28,6 +28,8 @@ COPY pyproject.toml requirements.txt README.md ./
 COPY src ./src
 COPY apps ./apps
 COPY scripts ./scripts
+# The catalog importer defaults to these two audited inputs at runtime.
+COPY docs/pesquisas/auditoria-186-empresas.md docs/pesquisas/empresas-adicionais.md ./docs/pesquisas/
 COPY prompts ./prompts
 COPY alembic.ini ./
 COPY migrations ./migrations

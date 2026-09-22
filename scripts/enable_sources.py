@@ -167,6 +167,19 @@ def _eligible(source: SourceDefinitionModel, *, include_remotive: bool) -> bool:
     return False
 
 
+def _probe_candidate(source: SourceDefinitionModel, *, include_remotive: bool) -> bool:
+    """A configured public endpoint can be probed before it is homologated."""
+    if source.enabled or source.source_type not in RESEARCHED_TYPES:
+        return False
+    if source.source_type == "remotive":
+        return include_remotive
+    try:
+        _request(source, max_items=1)
+    except ValueError:
+        return False
+    return True
+
+
 def activate_sources(
     session: Session,
     *,
@@ -174,8 +187,9 @@ def activate_sources(
     include_remotive: bool,
     dry_run: bool,
     max_items: int,
+    probe_only: bool = False,
 ) -> dict[str, Any]:
-    if not accept_terms:
+    if not accept_terms and not probe_only:
         raise ValueError(
             "pass --accept-terms after reviewing the public source terms before enabling"
         )
@@ -187,7 +201,13 @@ def activate_sources(
         )
     )
     candidates = [
-        source for source in sources if _eligible(source, include_remotive=include_remotive)
+        source
+        for source in sources
+        if (
+            _probe_candidate(source, include_remotive=include_remotive)
+            if probe_only
+            else _eligible(source, include_remotive=include_remotive)
+        )
     ]
     if dry_run:
         return {
@@ -202,6 +222,12 @@ def activate_sources(
     results = asyncio.run(
         _probe_all(candidates, registry, max_items=max_items)
     )
+    if probe_only:
+        return {
+            "status": "probe_completed",
+            "candidates": len(candidates),
+            "probes": [result.as_dict() for result in results],
+        }
     activated: list[str] = []
     for source, result in zip(candidates, results, strict=True):
         if not result.ok:
@@ -247,6 +273,11 @@ def main() -> int:
         help="leave the public Remotive feed disabled",
     )
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--probe-only",
+        action="store_true",
+        help="test public endpoints without recording terms or enabling sources",
+    )
     parser.add_argument("--max-items", type=int, default=1, choices=range(1, 11))
     args = parser.parse_args()
     database_url = os.environ.get("DATABASE_URL")
@@ -260,11 +291,12 @@ def main() -> int:
                 include_remotive=not args.exclude_remotive,
                 dry_run=args.dry_run,
                 max_items=args.max_items,
+                probe_only=args.probe_only,
             )
         except ValueError as error:
             parser.error(str(error))
     print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
-    return 0 if report["status"] in {"dry_run", "completed"} else 1
+    return 0 if report["status"] in {"dry_run", "probe_completed", "completed"} else 1
 
 
 if __name__ == "__main__":
