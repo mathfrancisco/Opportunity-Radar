@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from opportunity_radar.companies.models import Company
 from opportunity_radar.companies.repository import CompanyRepository
+from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.presentation.http.dependencies import get_session
 
 router = APIRouter(prefix="/companies", tags=["companies"])
@@ -56,6 +57,13 @@ class CompanyPageResponse(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+class SourceProposalResponse(BaseModel):
+    result: str
+    source_id: UUID | None
+    evidence: str | None
+    enabled: bool = False
 
 
 def company_response(company: Company) -> CompanyResponse:
@@ -129,3 +137,19 @@ def get_company(
             detail={"code": "company_not_found", "message": "Company not found."},
         )
     return company_response(company)
+
+
+@router.post("/{company_id}/detect-source", response_model=SourceProposalResponse)
+def detect_source(
+    company_id: UUID, session: Session = Depends(get_session)
+) -> SourceProposalResponse:
+    proposal, result = AcquisitionService(session).propose_company_source(company_id)
+    if proposal is None:
+        return SourceProposalResponse(result=result, source_id=None, evidence=None)
+    evidence = proposal.configuration.get("discovery_evidence")
+    return SourceProposalResponse(
+        result=result,
+        source_id=proposal.id,
+        evidence=evidence if isinstance(evidence, str) else None,
+        enabled=proposal.enabled,
+    )

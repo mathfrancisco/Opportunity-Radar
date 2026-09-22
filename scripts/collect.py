@@ -65,12 +65,16 @@ async def _collect(
     report: list[dict[str, Any]] = []
     for source in sources:
         try:
+            collector = service.registry.resolve(source.source_type)
+            supported_keywords = (
+                keywords if collector.capabilities.keyword_search else ()
+            )
             run = await service.execute(
                 source.id,
                 CollectionRequest(
                     source_definition_id=source.id,
                     mode=mode,
-                    keywords=keywords,
+                    keywords=supported_keywords,
                     max_items=max_items,
                     correlation_id=correlation_id,
                 ),
@@ -90,6 +94,7 @@ async def _collect(
                     "retry_count": run.retry_count,
                     "error_code": run.error_code,
                     "error_summary": run.error_summary,
+                    "keywords_skipped": bool(keywords and not supported_keywords),
                 }
             )
         except AcquisitionError as error:

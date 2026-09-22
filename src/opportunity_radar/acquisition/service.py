@@ -37,6 +37,7 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
     SourceRunModel,
 )
+from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.repository import AcquisitionRepository
 from opportunity_radar.acquisition.scheduling import SourceSchedulingState
@@ -170,6 +171,53 @@ class AcquisitionService:
 
     def get_source(self, source_id: UUID) -> SourceDefinitionModel | None:
         return self.repository.get_source(source_id)
+
+    def propose_company_source(
+        self, company_id: UUID
+    ) -> tuple[SourceDefinitionModel | None, str]:
+        """Turn one researched ATS record into an inert, auditable proposal.
+
+        Discovery records evidence; it never crosses the terms/test/enable gate.
+        """
+        company = self.session.get(Company, company_id)
+        if company is None:
+            raise SourceNotFoundError(company_id)
+        candidate = self.session.scalar(
+            select(CompanySource)
+            .where(
+                CompanySource.company_id == company_id,
+                CompanySource.source_type.in_(("ashby", "lever", "greenhouse")),
+                CompanySource.external_key.is_not(None),
+            )
+            .order_by(CompanySource.id)
+        )
+        if candidate is None:
+            return None, "not_detected"
+        existing = self.session.scalar(
+            select(SourceDefinitionModel).where(
+                SourceDefinitionModel.company_source_id == candidate.id,
+                SourceDefinitionModel.source_type == candidate.source_type,
+            )
+        )
+        if existing is not None:
+            return existing, "already_proposed"
+        identifier_key = {
+            "ashby": "board_identifier",
+            "lever": "site_identifier",
+            "greenhouse": "board_token",
+        }[candidate.source_type]
+        proposal = self.create_source(
+            source_type=candidate.source_type,
+            name=f"Proposed {company.canonical_name} {candidate.source_type}",
+            company_source_id=candidate.id,
+            configuration={
+                "company_name": company.canonical_name,
+                identifier_key: candidate.external_key,
+                "discovery_evidence": candidate.evidence_note or candidate.endpoint,
+            },
+            evidence_status="ats_identified",
+        )
+        return proposal, "proposed"
 
     def update_source_controls(
         self,
