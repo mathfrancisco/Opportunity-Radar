@@ -32,12 +32,12 @@ from opportunity_radar.matching.service import (
     AnalysisInProgressError,
     MatchingService,
 )
+from opportunity_radar.operations.service import observe_job
 from opportunity_radar.opportunities.service import OpportunityService
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.logging import (
     configure_logging,
-    correlation_scope,
     get_logger,
 )
 from opportunity_radar.profile.domain import ProfileNotFoundError
@@ -64,7 +64,9 @@ def heartbeat() -> None:
 
 def normalize_opportunities(engine: Engine) -> None:
     """Each pass gets its own correlation id, so one batch is greppable end to end."""
-    with correlation_scope():
+    with observe_job(
+        engine, job_name="normalize_opportunities", interval=timedelta(seconds=60)
+    ):
         with Session(engine) as session:
             try:
                 batch = OpportunityService(session).normalize_pending()
@@ -86,7 +88,9 @@ def normalize_opportunities(engine: Engine) -> None:
 
 def evaluate_pending(engine: Engine, *, batch_size: int = 50) -> None:
     """Evaluate each eligible opportunity independently for the current identity."""
-    with correlation_scope():
+    with observe_job(
+        engine, job_name="evaluate_pending", interval=timedelta(seconds=60)
+    ):
         with Session(engine) as session:
             service = MatchingService(session)
             try:
@@ -139,7 +143,9 @@ def analyze_pending(
     degrades this job alone: evaluation keeps running and the failure is persisted as the
     history entry that the cooldown then reads.
     """
-    with correlation_scope() as correlation_id:
+    with observe_job(
+        engine, job_name="analyze_pending", interval=timedelta(seconds=120)
+    ) as correlation_id:
         with Session(engine) as session:
             service = MatchingService(session)
             pending = service.pending_analysis_ids(
@@ -208,7 +214,9 @@ def collect_enabled_sources(
     moment = now or datetime.now(ZoneInfo(timezone))
     backoff_base = timedelta(seconds=backoff_base_seconds)
     backoff_ceiling = timedelta(seconds=backoff_ceiling_seconds)
-    with correlation_scope() as correlation_id:
+    with observe_job(
+        engine, job_name="collect_enabled_sources", interval=timedelta(seconds=60)
+    ) as correlation_id:
         with Session(engine) as session:
             service = service_factory(session)
             sources, _ = service.list_sources(offset=0, limit=100)
