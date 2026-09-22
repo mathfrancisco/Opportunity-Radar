@@ -1,6 +1,6 @@
 # CARD F12-01 — Baseline e relatório de cobertura de fontes
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 12 — Escala e qualidade de fontes
 - **Depende de:** Fase 10 — coleta agendada com resultado por fonte
 - **Bloqueia:** F12-05; métricas de cobertura da Fase 13

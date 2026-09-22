@@ -1,6 +1,6 @@
 # CARD F12-04 — Detecção de fonte pela UI da empresa
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 12 — Escala e qualidade de fontes
 - **Depende de:** F12-03 — descoberta de fontes com evidência
 - **Bloqueia:** Descoberta assistida por operadores

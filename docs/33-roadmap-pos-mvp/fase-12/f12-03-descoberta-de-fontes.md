@@ -1,6 +1,6 @@
 # CARD F12-03 — Descoberta de fontes com evidência
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 12 — Escala e qualidade de fontes
 - **Depende de:** Fase 10 — operação de coleta estável
 - **Bloqueia:** F12-04; F12-05

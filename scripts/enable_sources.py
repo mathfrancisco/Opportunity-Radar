@@ -28,7 +28,12 @@ from opportunity_radar.companies.models import CompanySource  # noqa: F401
 from opportunity_radar.platform.database import create_database_engine
 
 RESEARCHED_TYPES = ("ashby", "lever", "greenhouse", "remotive")
-GREENHOUSE_CONFIRMED_BOARDS = {"assemblyai"}
+PUBLIC_ENDPOINT_REFERENCES = {
+    "ashby": "https://developers.ashbyhq.com/docs/public-job-posting-api",
+    "greenhouse": "https://docs.greenhouse.io/job-board.html",
+    "lever": "https://github.com/lever/postings-api",
+    "remotive": "https://remotive.com/api-documentation",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,19 +159,6 @@ async def _probe(
         )
 
 
-def _eligible(source: SourceDefinitionModel, *, include_remotive: bool) -> bool:
-    if source.enabled or source.source_type not in RESEARCHED_TYPES:
-        return False
-    if source.source_type == "remotive":
-        return include_remotive
-    if source.evidence_status == "confirmed":
-        return True
-    if source.source_type == "greenhouse":
-        board_token = source.configuration.get("board_token")
-        return board_token in GREENHOUSE_CONFIRMED_BOARDS
-    return False
-
-
 def _probe_candidate(source: SourceDefinitionModel, *, include_remotive: bool) -> bool:
     """A configured public endpoint can be probed before it is homologated."""
     if source.enabled or source.source_type not in RESEARCHED_TYPES:
@@ -178,6 +170,20 @@ def _probe_candidate(source: SourceDefinitionModel, *, include_remotive: bool) -
     except ValueError:
         return False
     return True
+
+
+def _homologation_audit(result: ProbeResult, reviewed_at: datetime) -> dict[str, Any]:
+    """Keep the operator-approved gate and its technical proof with the source."""
+    return {
+        "public_endpoint_reference": PUBLIC_ENDPOINT_REFERENCES[result.source_type],
+        "terms_review": "operator-confirmed via --accept-terms",
+        "reviewed_at": reviewed_at.isoformat(),
+        "collector_local_test": {
+            "status": "passed",
+            "items_seen": result.items_seen,
+            "http_requests": result.http_requests,
+        },
+    }
 
 
 def activate_sources(
@@ -203,11 +209,7 @@ def activate_sources(
     candidates = [
         source
         for source in sources
-        if (
-            _probe_candidate(source, include_remotive=include_remotive)
-            if probe_only
-            else _eligible(source, include_remotive=include_remotive)
-        )
+        if _probe_candidate(source, include_remotive=include_remotive)
     ]
     if dry_run:
         return {
@@ -232,11 +234,16 @@ def activate_sources(
     for source, result in zip(candidates, results, strict=True):
         if not result.ok:
             continue
+        reviewed_at = datetime.now(UTC)
         source.enabled = True
         source.evidence_status = "confirmed"
-        source.reviewed_at = datetime.now(UTC)
+        source.reviewed_at = reviewed_at
         source.terms_reviewed = True
         source.collector_local_tested = True
+        source.configuration = {
+            **source.configuration,
+            "homologation_audit": _homologation_audit(result, reviewed_at),
+        }
         source.version += 1
         activated.append(source.name)
     session.commit()
