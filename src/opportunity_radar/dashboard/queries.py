@@ -627,20 +627,17 @@ def source_coverage_report(
         )
     ).all()
     latest_by_source: dict[UUID, SourceRunModel] = {}
-    for run in runs:
-        latest_by_source.setdefault(run.source_definition_id, run)
-    run_ids = [run.id for run in latest_by_source.values()]
-    raw_items = (
-        dict(
-            session.execute(
-                select(RawItemModel.source_definition_id, func.count())
-                .where(RawItemModel.source_run_id.in_(run_ids))
-                .group_by(RawItemModel.source_definition_id)
-            ).all()
-        )
-        if run_ids
-        else {}
-    )
+    for source_run in runs:
+        latest_by_source.setdefault(source_run.source_definition_id, source_run)
+    run_ids = [source_run.id for source_run in latest_by_source.values()]
+    raw_items: dict[UUID, int] = {}
+    if run_ids:
+        raw_item_rows = session.execute(
+            select(RawItemModel.source_definition_id, func.count())
+            .where(RawItemModel.source_run_id.in_(run_ids))
+            .group_by(RawItemModel.source_definition_id)
+        ).all()
+        raw_items = {source_id: item_count for source_id, item_count in raw_item_rows}
     eligible = [
         source
         for source in sources
@@ -658,7 +655,7 @@ def source_coverage_report(
     eligible_ids = {source.id for source in eligible}
     coverage = []
     for source in sources:
-        run = latest_by_source.get(source.id)
+        run: SourceRunModel | None = latest_by_source.get(source.id)
         if not source.enabled:
             state = "NOT_ENABLED"
         elif source.id not in eligible_ids:
