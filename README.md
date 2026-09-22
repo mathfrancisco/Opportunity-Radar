@@ -598,6 +598,18 @@ Cada fase precisa terminar com um slice testável antes da próxima expansão.
 
 ## 16. Mapa da documentação
 
+### Roadmaps em execução
+
+Estes são os documentos de escopo vigentes, com seus cards atômicos:
+
+- [Roadmap do MVP](docs/29-roadmap-mvp.md) — concluído;
+- [Roadmap pós-MVP](docs/33-roadmap-pos-mvp.md) e seus
+  [cards](docs/33-roadmap-pos-mvp/README.md) — Fases 10 a 13, concluídas;
+- [Roadmap de interface](docs/34-roadmap-interface.md) e seus
+  [cards](docs/34-roadmap-interface/README.md) — Fases 14 e 15, em aberto;
+- [Runbook operacional](docs/30-runbook.md).
+
+
 ### Produto e arquitetura
 
 1. [Visão, objetivos e escopo](docs/01-visao-escopo.md)

@@ -22,6 +22,12 @@ aceite e verificação.
 3. Concluir a Fase 13 depois que reavaliação e cobertura estiverem estáveis.
 4. Atualizar a documentação ao longo das fases e fechar DOC-01 antes do aceite final.
 
+## Continuação
+
+Com a Fase 13 concluída, o ciclo opera sozinho. O que ainda exige terminal é o cadastro, e
+a interface acumulou dívida visual enquanto crescia. Os dois pontos seguem em
+[Cards do roadmap de interface](../34-roadmap-interface/README.md).
+
 ## Status dos cards
 
 - `Backlog`: escopo registrado, mas dependências ainda não confirmadas.
