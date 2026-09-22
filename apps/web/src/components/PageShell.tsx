@@ -32,14 +32,14 @@ export function PageShell({
   footer,
 }: PageShellProps) {
   return (
-    <main className="min-h-screen bg-[#f2f5ef] px-5 py-7 text-[#17322d] sm:px-10 sm:py-10">
-      <div className="mx-auto min-h-[calc(100vh-3.5rem)] max-w-5xl rounded-[2rem] border border-[#ced8ce] bg-[#fbfcf8] p-7 shadow-[0_24px_70px_rgba(23,50,45,0.10)] sm:p-12">
+    <main className="min-h-screen bg-canvas px-5 py-7 text-ink sm:px-10 sm:py-10">
+      <div className="mx-auto min-h-[calc(100vh-3.5rem)] max-w-5xl rounded-[2rem] border border-line-soft bg-raised p-7 shadow-[0_24px_70px_rgba(23,50,45,0.10)] sm:p-12">
         <header
           className="flex flex-wrap items-center justify-between gap-4"
           aria-label="Opportunity Radar"
         >
           <Link className="flex items-center gap-3" to="/">
-            <span className="grid h-10 w-10 place-items-center rounded-full bg-[#d7f06f] text-lg font-black">
+            <span className="grid h-10 w-10 place-items-center rounded-full bg-accent text-lg font-black">
               ◉
             </span>
             <span className="text-lg font-semibold tracking-tight">Opportunity Radar</span>
@@ -49,14 +49,14 @@ export function PageShell({
               item.to === current ? (
                 <Link
                   aria-current="page"
-                  className="text-[#17322d] underline decoration-[#d7f06f] decoration-2 underline-offset-4"
+                  className="text-ink underline decoration-accent decoration-2 underline-offset-4"
                   key={item.to}
                   to={item.to}
                 >
                   {item.label}
                 </Link>
               ) : (
-                <Link className="text-[#547068] hover:text-[#17322d]" key={item.to} to={item.to}>
+                <Link className="text-subtle hover:text-ink" key={item.to} to={item.to}>
                   {item.label}
                 </Link>
               ),
@@ -65,16 +65,16 @@ export function PageShell({
         </header>
 
         <section className="py-10 sm:py-14">
-          <p className="text-sm font-medium text-[#547068]">{eyebrow}</p>
+          <p className="text-sm font-medium text-subtle">{eyebrow}</p>
           <h1 className="mt-2 text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">{title}</h1>
           {description && (
-            <p className="mt-3 max-w-2xl leading-7 text-[#547068]">{description}</p>
+            <p className="mt-3 max-w-2xl leading-7 text-subtle">{description}</p>
           )}
           {children}
         </section>
 
         {footer && (
-          <footer className="border-t border-[#dce4dc] pt-5 text-sm text-[#6d827b]">
+          <footer className="border-t border-line pt-5 text-sm text-muted">
             {footer}
           </footer>
         )}

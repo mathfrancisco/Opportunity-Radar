@@ -22,10 +22,10 @@ const coverageLabels: Record<string, string> = {
 }
 
 const coverageTone: Record<string, string> = {
-  SUCCEEDED: 'border-[#b6d36a] bg-[#eef6d8] text-[#42571c]',
-  SUCCEEDED_ZERO: 'border-[#c8d4c8] bg-[#f2f5ef] text-[#41594f]',
-  PARTIAL: 'border-[#e3cf9a] bg-[#fbf3e2] text-[#7a5a16]',
-  FAILED: 'border-[#e8cfc6] bg-[#fdf3f0] text-[#9b3e2e]',
+  SUCCEEDED: 'border-success-line bg-success-surface text-success-ink',
+  SUCCEEDED_ZERO: 'border-line-strong bg-canvas text-neutral-ink',
+  PARTIAL: 'border-warning-line bg-warning-surface text-warning-ink',
+  FAILED: 'border-danger-line bg-danger-surface text-danger-ink',
 }
 
 const verdictLabels: Record<string, string> = {
@@ -59,28 +59,28 @@ function Tile({
 }) {
   const body = (
     <>
-      <p className="text-sm text-[#6d827b]">{label}</p>
+      <p className="text-sm text-muted">{label}</p>
       <p className="mt-2 text-3xl font-semibold tracking-[-0.03em]">{value}</p>
-      {hint && <p className="mt-2 text-sm text-[#547068]">{hint}</p>}
+      {hint && <p className="mt-2 text-sm text-subtle">{hint}</p>}
     </>
   )
   if (to) {
     return (
       <Link
-        className="rounded-2xl border border-[#dce4dc] bg-white p-5 transition hover:border-[#17322d]"
+        className="rounded-2xl border border-line bg-surface p-5 transition hover:border-ink"
         to={to}
       >
         {body}
       </Link>
     )
   }
-  return <div className="rounded-2xl border border-[#dce4dc] bg-white p-5">{body}</div>
+  return <div className="rounded-2xl border border-line bg-surface p-5">{body}</div>
 }
 
 function FailingSources({ sources }: { sources: FailingSource[] }) {
   if (sources.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-[#c8d4c8] p-5 text-[#547068]">
+      <p className="rounded-2xl border border-dashed border-line-strong p-5 text-subtle">
         Nenhuma fonte falhou na última execução.
       </p>
     )
@@ -89,21 +89,21 @@ function FailingSources({ sources }: { sources: FailingSource[] }) {
     <ul className="grid gap-3">
       {sources.map((source) => (
         <li
-          className="rounded-2xl border border-[#e8cfc6] bg-[#fdf3f0] p-5"
+          className="rounded-2xl border border-danger-line bg-danger-surface p-5"
           key={source.sourceDefinitionId}
         >
           <p className="font-semibold">
             {source.name}{' '}
-            <span className="font-normal text-[#6d827b]">({source.sourceType})</span>
+            <span className="font-normal text-muted">({source.sourceType})</span>
           </p>
-          <p className="mt-1 text-sm text-[#9b3e2e]">
+          <p className="mt-1 text-sm text-danger-ink">
             Última execução: {source.lastRunStatus ?? 'desconhecida'}
             {source.lastRunFinishedAt
               ? ` em ${new Date(source.lastRunFinishedAt).toLocaleString('pt-BR')}`
               : ''}
           </p>
           {source.lastRunError && (
-            <p className="mt-2 text-sm text-[#547068]">{source.lastRunError}</p>
+            <p className="mt-2 text-sm text-subtle">{source.lastRunError}</p>
           )}
         </li>
       ))}
@@ -120,19 +120,19 @@ function seconds(value: number | null) {
 }
 
 function SourceMetricsRow({ source }: { source: SourceMetrics }) {
-  const tone = coverageTone[source.coverageState] ?? 'border-[#c8d4c8] bg-[#f2f5ef] text-[#41594f]'
+  const tone = coverageTone[source.coverageState] ?? 'border-line-strong bg-canvas text-neutral-ink'
   const { seniority } = source
   const knownLevels = Object.entries(seniority.counts)
     .filter(([level]) => level !== 'UNKNOWN')
     .sort(([, a], [, b]) => b - a)
   const mappings = Object.keys(seniority.mappingVersions)
   return (
-    <tr className="border-t border-[#e4ebe4] align-top">
+    <tr className="border-t border-divider align-top">
       <td className="px-4 py-3">
         <p className="font-medium">{source.name}</p>
-        <p className="text-xs text-[#6d827b]">{source.sourceType}</p>
+        <p className="text-xs text-muted">{source.sourceType}</p>
         {source.incidentOpen && (
-          <p className="mt-1 text-xs font-semibold text-[#9b3e2e]">Incidente aberto</p>
+          <p className="mt-1 text-xs font-semibold text-danger-ink">Incidente aberto</p>
         )}
       </td>
       <td className="px-4 py-3">
@@ -143,20 +143,20 @@ function SourceMetricsRow({ source }: { source: SourceMetrics }) {
       <td className="px-4 py-3 text-sm">
         {source.runs} execuç{source.runs === 1 ? 'ão' : 'ões'}
         <br />
-        <span className="text-xs text-[#6d827b]">
+        <span className="text-xs text-muted">
           {source.itemsPersisted} persistidos / {source.itemsSeen} vistos
         </span>
       </td>
       <td className="px-4 py-3 text-sm">
-        <span className="text-xs text-[#6d827b]">erro</span> {percent(source.errorRate)}
+        <span className="text-xs text-muted">erro</span> {percent(source.errorRate)}
         <br />
-        <span className="text-xs text-[#6d827b]">dedupe</span> {percent(source.dedupeRate)}
+        <span className="text-xs text-muted">dedupe</span> {percent(source.dedupeRate)}
         <br />
-        <span className="text-xs text-[#6d827b]">p95</span> {seconds(source.latencyP95Seconds)}
+        <span className="text-xs text-muted">p95</span> {seconds(source.latencyP95Seconds)}
       </td>
       <td className="px-4 py-3 text-sm">
         {Object.keys(source.errorsByCode).length === 0 ? (
-          <span className="text-[#6d827b]">—</span>
+          <span className="text-muted">—</span>
         ) : (
           <ul className="text-xs">
             {Object.entries(source.errorsByCode).map(([code, total]) => (
@@ -169,7 +169,7 @@ function SourceMetricsRow({ source }: { source: SourceMetrics }) {
       </td>
       <td className="px-4 py-3 text-sm">
         {seniority.total === 0 ? (
-          <span className="text-[#6d827b]">sem vagas normalizadas na janela</span>
+          <span className="text-muted">sem vagas normalizadas na janela</span>
         ) : (
           <>
             <p>
@@ -178,7 +178,7 @@ function SourceMetricsRow({ source }: { source: SourceMetrics }) {
               {seniority.known}
             </p>
             {knownLevels.length > 0 && (
-              <p className="mt-1 text-xs text-[#6d827b]">
+              <p className="mt-1 text-xs text-muted">
                 {knownLevels
                   .map(
                     ([level, total]) =>
@@ -187,7 +187,7 @@ function SourceMetricsRow({ source }: { source: SourceMetrics }) {
                   .join(' · ')}
               </p>
             )}
-            <p className="mt-1 text-xs text-[#6d827b]">
+            <p className="mt-1 text-xs text-muted">
               mapeamento {mappings.length > 0 ? mappings.join(', ') : 'sem procedência'}
               {Object.keys(seniority.evidence).length > 0 &&
                 ` · evidência ${Object.entries(seniority.evidence)
@@ -204,7 +204,7 @@ function SourceMetricsRow({ source }: { source: SourceMetrics }) {
 function SourceMetricsTable({ window }: { window: SourceMetricsWindow }) {
   if (window.sources.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-[#c8d4c8] p-5 text-[#547068]">
+      <p className="rounded-2xl border border-dashed border-line-strong p-5 text-subtle">
         Nenhuma fonte cadastrada.
       </p>
     )
@@ -212,7 +212,7 @@ function SourceMetricsTable({ window }: { window: SourceMetricsWindow }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-left text-sm">
-        <thead className="bg-[#f2f5ef] text-xs uppercase tracking-[0.08em] text-[#6d827b]">
+        <thead className="bg-canvas text-xs uppercase tracking-[0.08em] text-muted">
           <tr>
             <th className="px-4 py-3 font-semibold">Fonte</th>
             <th className="px-4 py-3 font-semibold">Cobertura</th>
@@ -248,8 +248,8 @@ function SourceMetricsSection() {
               aria-pressed={item.window === active?.window}
               className={`rounded-full border px-4 py-2 text-sm ${
                 item.window === active?.window
-                  ? 'border-[#17322d] bg-[#17322d] text-white'
-                  : 'border-[#c8d4c8] bg-white'
+                  ? 'border-ink bg-ink text-white'
+                  : 'border-line-strong bg-surface'
               }`}
               key={item.window}
               onClick={() => setSelected(item.window)}
@@ -262,12 +262,12 @@ function SourceMetricsSection() {
       </div>
       <div className="mt-4" aria-live="polite">
         {metrics.isPending && (
-          <p className="rounded-2xl bg-[#eef3df] p-5 text-[#5c694e]">
+          <p className="rounded-2xl bg-info-surface p-5 text-info-ink">
             Carregando métricas…
           </p>
         )}
         {metrics.isError && (
-          <div className="rounded-2xl bg-[#f9e4df] p-5 text-[#9b3e2e]">
+          <div className="rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
             <p>Não foi possível carregar as métricas por fonte.</p>
             <button
               className="mt-3 font-semibold underline"
@@ -346,10 +346,10 @@ function Summary({ overview }: { overview: Overview }) {
             {verdicts.map((verdict) => (
               <li key={verdict}>
                 <Link
-                  className="flex items-baseline gap-2 rounded-full border border-[#c8d4c8] bg-white px-4 py-2 text-sm hover:border-[#17322d]"
+                  className="flex items-baseline gap-2 rounded-full border border-line-strong bg-surface px-4 py-2 text-sm hover:border-ink"
                   to={`/inbox?verdict=${verdict}`}
                 >
-                  <span className="text-[#547068]">{verdictLabels[verdict] ?? verdict}</span>
+                  <span className="text-subtle">{verdictLabels[verdict] ?? verdict}</span>
                   <span className="font-semibold">{overview.verdictCounts[verdict]}</span>
                 </Link>
               </li>
@@ -383,12 +383,12 @@ export function OverviewPage() {
     >
       <div aria-live="polite">
         {overview.isPending && (
-          <p className="mt-8 rounded-2xl bg-[#eef3df] p-5 text-[#5c694e]">
+          <p className="mt-8 rounded-2xl bg-info-surface p-5 text-info-ink">
             Carregando o resumo…
           </p>
         )}
         {overview.isError && (
-          <div className="mt-8 rounded-2xl bg-[#f9e4df] p-5 text-[#9b3e2e]">
+          <div className="mt-8 rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
             <p>Não foi possível carregar o resumo.</p>
             <button
               className="mt-3 font-semibold underline"

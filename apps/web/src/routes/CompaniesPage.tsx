@@ -23,9 +23,9 @@ function sourceNames(company: Company) {
 function CompanyList({ companies }: { companies: Company[] }) {
   return (
     <>
-      <div className="hidden overflow-hidden rounded-2xl border border-[#dce4dc] md:block">
+      <div className="hidden overflow-hidden rounded-2xl border border-line md:block">
         <table className="w-full border-collapse text-left text-sm">
-          <thead className="bg-[#f2f5ef] text-xs uppercase tracking-[0.08em] text-[#6d827b]">
+          <thead className="bg-canvas text-xs uppercase tracking-[0.08em] text-muted">
             <tr>
               <th className="px-5 py-4 font-semibold">Empresa</th>
               <th className="px-5 py-4 font-semibold">Prioridade</th>
@@ -36,22 +36,22 @@ function CompanyList({ companies }: { companies: Company[] }) {
           </thead>
           <tbody>
             {companies.map((company) => (
-              <tr className="border-t border-[#e4ebe4]" key={company.id}>
+              <tr className="border-t border-divider" key={company.id}>
                 <td className="px-5 py-4">
                   <p className="font-semibold">
                     <Link
-                      className="underline decoration-[#d7f06f] decoration-2 underline-offset-4"
+                      className="underline decoration-accent decoration-2 underline-offset-4"
                       to={`/companies/${company.id}`}
                     >
                       {company.name}
                     </Link>
                   </p>
-                  <p className="mt-1 text-[#6d827b]">{display(company.domain)}</p>
+                  <p className="mt-1 text-muted">{display(company.domain)}</p>
                 </td>
                 <td className="px-5 py-4">{display(company.priority)}</td>
                 <td className="px-5 py-4">{display(company.status)}</td>
                 <td className="px-5 py-4">{display(company.verificationState)}</td>
-                <td className="max-w-64 px-5 py-4 text-[#547068]">
+                <td className="max-w-64 px-5 py-4 text-subtle">
                   {sourceNames(company)}
                 </td>
               </tr>
@@ -62,32 +62,32 @@ function CompanyList({ companies }: { companies: Company[] }) {
 
       <div className="grid gap-3 md:hidden">
         {companies.map((company) => (
-          <article className="rounded-2xl border border-[#dce4dc] p-4" key={company.id}>
+          <article className="rounded-2xl border border-line p-4" key={company.id}>
             <h2 className="font-semibold">
               <Link
-                className="underline decoration-[#d7f06f] decoration-2 underline-offset-4"
+                className="underline decoration-accent decoration-2 underline-offset-4"
                 to={`/companies/${company.id}`}
               >
                 {company.name}
               </Link>
             </h2>
-            <p className="mt-1 text-sm text-[#6d827b]">{display(company.domain)}</p>
+            <p className="mt-1 text-sm text-muted">{display(company.domain)}</p>
             <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
               <div>
-                <dt className="text-[#6d827b]">Prioridade</dt>
+                <dt className="text-muted">Prioridade</dt>
                 <dd className="mt-1 font-medium">{display(company.priority)}</dd>
               </div>
               <div>
-                <dt className="text-[#6d827b]">Status</dt>
+                <dt className="text-muted">Status</dt>
                 <dd className="mt-1 font-medium">{display(company.status)}</dd>
               </div>
               <div>
-                <dt className="text-[#6d827b]">Verificação</dt>
+                <dt className="text-muted">Verificação</dt>
                 <dd className="mt-1 font-medium">{display(company.verificationState)}</dd>
               </div>
             </dl>
-            <p className="mt-4 text-sm text-[#547068]">
-              <span className="font-medium text-[#17322d]">Fontes: </span>
+            <p className="mt-4 text-sm text-subtle">
+              <span className="font-medium text-ink">Fontes: </span>
               {sourceNames(company)}
             </p>
           </article>
@@ -122,14 +122,14 @@ export function CompaniesPage() {
           Buscar empresas
         </label>
         <input
-          className="min-w-0 flex-1 rounded-xl border border-[#c8d4c8] bg-white px-4 py-3 outline-none focus:border-[#17322d] focus:ring-2 focus:ring-[#d7f06f]"
+          className="min-w-0 flex-1 rounded-xl border border-line-strong bg-surface px-4 py-3 outline-none focus:border-ink focus:ring-2 focus:ring-accent"
           id="company-search"
           onChange={(event) => setInput(event.target.value)}
           placeholder="Nome ou domínio"
           value={input}
         />
         <button
-          className="rounded-xl bg-[#17322d] px-5 py-3 font-semibold text-white hover:bg-[#25483f] focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#d7f06f]"
+          className="rounded-xl bg-ink px-5 py-3 font-semibold text-white hover:bg-ink-hover focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-accent"
           type="submit"
         >
           Buscar
@@ -138,12 +138,12 @@ export function CompaniesPage() {
 
       <div className="mt-8" aria-live="polite">
         {companies.isPending && (
-          <p className="rounded-2xl bg-[#eef3df] p-5 text-[#5c694e]">
+          <p className="rounded-2xl bg-info-surface p-5 text-info-ink">
             Carregando empresas…
           </p>
         )}
         {companies.isError && (
-          <div className="rounded-2xl bg-[#f9e4df] p-5 text-[#9b3e2e]">
+          <div className="rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
             <p>Não foi possível carregar as empresas.</p>
             <button
               className="mt-3 font-semibold underline"
@@ -155,13 +155,13 @@ export function CompaniesPage() {
           </div>
         )}
         {companies.data?.items.length === 0 && (
-          <p className="rounded-2xl border border-dashed border-[#c8d4c8] p-8 text-[#547068]">
+          <p className="rounded-2xl border border-dashed border-line-strong p-8 text-subtle">
             Nenhuma empresa encontrada{query ? ` para “${query}”` : ''}.
           </p>
         )}
         {companies.data && companies.data.items.length > 0 && (
           <>
-            <p className="mb-4 text-sm text-[#6d827b]">
+            <p className="mb-4 text-sm text-muted">
               {companies.data.total} empresa
               {companies.data.total === 1 ? '' : 's'} encontrada
               {companies.data.total === 1 ? '' : 's'}.
@@ -173,18 +173,18 @@ export function CompaniesPage() {
                 className="mt-6 flex items-center justify-between gap-4"
               >
                 <button
-                  className="rounded-xl border border-[#c8d4c8] px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-xl border border-line-strong px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-40"
                   disabled={page === 1}
                   onClick={() => setPage((current) => current - 1)}
                   type="button"
                 >
                   Anterior
                 </button>
-                <span className="text-sm text-[#6d827b]">
+                <span className="text-sm text-muted">
                   Página {page} de {totalPages}
                 </span>
                 <button
-                  className="rounded-xl border border-[#c8d4c8] px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-xl border border-line-strong px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-40"
                   disabled={page >= totalPages}
                   onClick={() => setPage((current) => current + 1)}
                   type="button"

@@ -13,7 +13,7 @@ function formatDate(value: string | null) {
 function Sources({ company }: { company: CompanyDetail }) {
   if (company.sources.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-[#c8d4c8] p-5 text-[#547068]">
+      <p className="rounded-2xl border border-dashed border-line-strong p-5 text-subtle">
         Nenhuma fonte associada. A pesquisa registrou a empresa, mas nenhum endpoint foi
         confirmado.
       </p>
@@ -22,19 +22,19 @@ function Sources({ company }: { company: CompanyDetail }) {
   return (
     <ul className="grid gap-3">
       {company.sources.map((source) => (
-        <li className="rounded-2xl border border-[#dce4dc] bg-white p-5 text-sm" key={source.id}>
+        <li className="rounded-2xl border border-line bg-surface p-5 text-sm" key={source.id}>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="font-semibold">{source.name}</span>
-            <span className="text-[#6d827b]">{source.status}</span>
+            <span className="text-muted">{source.status}</span>
           </div>
-          {source.url && <p className="mt-1 break-all text-[#547068]">{source.url}</p>}
-          <p className="mt-2 text-xs text-[#6d827b]">
+          {source.url && <p className="mt-1 break-all text-subtle">{source.url}</p>}
+          <p className="mt-2 text-xs text-muted">
             Verificação: {source.verificationMethod ?? 'não informada'} · última em{' '}
             {formatDate(source.lastVerifiedAt)}
             {source.externalKey ? ` · chave ${source.externalKey}` : ''}
           </p>
           {source.evidence && (
-            <p className="mt-2 text-[#547068]">{source.evidence}</p>
+            <p className="mt-2 text-subtle">{source.evidence}</p>
           )}
         </li>
       ))}
@@ -46,11 +46,11 @@ function LatestOpportunities({ companyId }: { companyId: string }) {
   const inbox = useInbox({ page: 1, pageSize: 5, companyId, order: 'recency' })
 
   if (inbox.isPending) {
-    return <p className="text-sm text-[#547068]">Carregando vagas…</p>
+    return <p className="text-sm text-subtle">Carregando vagas…</p>
   }
   if (inbox.isError) {
     return (
-      <div className="rounded-2xl bg-[#f9e4df] p-5 text-sm text-[#9b3e2e]">
+      <div className="rounded-2xl bg-danger-surface-strong p-5 text-sm text-danger-ink">
         <p>Não foi possível carregar as vagas desta empresa.</p>
         <button
           className="mt-3 font-semibold underline"
@@ -64,7 +64,7 @@ function LatestOpportunities({ companyId }: { companyId: string }) {
   }
   if (!inbox.data || inbox.data.items.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-[#c8d4c8] p-5 text-[#547068]">
+      <p className="rounded-2xl border border-dashed border-line-strong p-5 text-subtle">
         Nenhuma vaga coletada desta empresa até agora.
       </p>
     )
@@ -74,16 +74,16 @@ function LatestOpportunities({ companyId }: { companyId: string }) {
       <ul className="grid gap-2">
         {inbox.data.items.map((item) => (
           <li
-            className="flex flex-wrap items-baseline justify-between gap-3 rounded-2xl border border-[#dce4dc] bg-white p-4 text-sm"
+            className="flex flex-wrap items-baseline justify-between gap-3 rounded-2xl border border-line bg-surface p-4 text-sm"
             key={item.opportunityId}
           >
             <Link
-              className="font-medium underline decoration-[#d7f06f] decoration-2 underline-offset-4"
+              className="font-medium underline decoration-accent decoration-2 underline-offset-4"
               to={`/opportunities/${item.opportunityId}`}
             >
               {item.title}
             </Link>
-            <span className="text-[#6d827b]">
+            <span className="text-muted">
               {item.workMode} · {item.verdict ?? 'não avaliada'}
               {item.score ? ` · ${Number(item.score).toFixed(1)}` : ''}
             </span>
@@ -93,7 +93,7 @@ function LatestOpportunities({ companyId }: { companyId: string }) {
       {inbox.data.total > inbox.data.items.length && (
         <p className="mt-3 text-sm">
           <Link
-            className="underline decoration-[#d7f06f] decoration-2 underline-offset-4"
+            className="underline decoration-accent decoration-2 underline-offset-4"
             to={`/inbox?company_id=${companyId}`}
           >
             Ver todas as {inbox.data.total} vagas
@@ -117,7 +117,7 @@ export function CompanyDetailPage() {
     >
       <p className="mt-2">
         <Link
-          className="text-sm text-[#547068] underline decoration-[#d7f06f] decoration-2 underline-offset-4"
+          className="text-sm text-subtle underline decoration-accent decoration-2 underline-offset-4"
           to="/companies"
         >
           ← Voltar para as empresas
@@ -126,12 +126,12 @@ export function CompanyDetailPage() {
 
       <div aria-live="polite">
         {company.isPending && (
-          <p className="mt-8 rounded-2xl bg-[#eef3df] p-5 text-[#5c694e]">
+          <p className="mt-8 rounded-2xl bg-info-surface p-5 text-info-ink">
             Carregando empresa…
           </p>
         )}
         {company.isError && (
-          <div className="mt-8 rounded-2xl bg-[#f9e4df] p-5 text-[#9b3e2e]">
+          <div className="mt-8 rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
             <p>{company.error.message}</p>
             <button
               className="mt-3 font-semibold underline"
@@ -148,19 +148,19 @@ export function CompanyDetailPage() {
         <>
           <dl className="mt-8 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
             <div>
-              <dt className="text-[#6d827b]">Prioridade</dt>
+              <dt className="text-muted">Prioridade</dt>
               <dd className="mt-1 font-medium">{company.data.priority}</dd>
             </div>
             <div>
-              <dt className="text-[#6d827b]">Status no radar</dt>
+              <dt className="text-muted">Status no radar</dt>
               <dd className="mt-1 font-medium">{company.data.status}</dd>
             </div>
             <div>
-              <dt className="text-[#6d827b]">Verificação</dt>
+              <dt className="text-muted">Verificação</dt>
               <dd className="mt-1 font-medium">{company.data.verificationState}</dd>
             </div>
             <div>
-              <dt className="text-[#6d827b]">Última verificação</dt>
+              <dt className="text-muted">Última verificação</dt>
               <dd className="mt-1 font-medium">{formatDate(company.data.lastVerifiedAt)}</dd>
             </div>
           </dl>
@@ -169,12 +169,12 @@ export function CompanyDetailPage() {
             <h2 className="text-lg font-semibold">Aliases</h2>
             <div className="mt-4">
               {company.data.aliases.length === 0 ? (
-                <p className="text-sm text-[#547068]">Nenhum alias registrado.</p>
+                <p className="text-sm text-subtle">Nenhum alias registrado.</p>
               ) : (
                 <ul className="flex flex-wrap gap-2">
                   {company.data.aliases.map((alias) => (
                     <li
-                      className="rounded-full border border-[#c8d4c8] bg-white px-4 py-2 text-sm"
+                      className="rounded-full border border-line-strong bg-surface px-4 py-2 text-sm"
                       key={alias}
                     >
                       {alias}
@@ -188,7 +188,7 @@ export function CompanyDetailPage() {
           <section className="mt-10">
             <h2 className="text-lg font-semibold">Fontes</h2>
             <button
-              className="mt-3 rounded-xl border border-[#17322d] px-4 py-2 text-sm font-medium hover:bg-[#eef3df] disabled:opacity-50"
+              className="mt-3 rounded-xl border border-ink px-4 py-2 text-sm font-medium hover:bg-info-surface disabled:opacity-50"
               disabled={detectSource.isPending}
               onClick={() => detectSource.mutate()}
               type="button"
@@ -196,7 +196,7 @@ export function CompanyDetailPage() {
               {detectSource.isPending ? 'Detectando…' : 'Detectar fonte'}
             </button>
             {detectSource.data && (
-              <p className="mt-3 text-sm text-[#547068]" role="status">
+              <p className="mt-3 text-sm text-subtle" role="status">
                 {detectSource.data.result === 'not_detected'
                   ? 'Nenhum ATS detectável foi encontrado.'
                   : detectSource.data.result === 'already_proposed'
@@ -205,7 +205,7 @@ export function CompanyDetailPage() {
                 {detectSource.data.evidence ? ` Evidência: ${detectSource.data.evidence}` : ''}
               </p>
             )}
-            {detectSource.isError && <p className="mt-3 text-sm text-[#9b3e2e]">Não foi possível detectar a fonte.</p>}
+            {detectSource.isError && <p className="mt-3 text-sm text-danger-ink">Não foi possível detectar a fonte.</p>}
             <div className="mt-4">
               <Sources company={company.data} />
             </div>

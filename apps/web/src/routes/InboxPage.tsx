@@ -26,12 +26,12 @@ const workModes = ['REMOTE', 'HYBRID', 'ONSITE', 'UNKNOWN']
 const lifecycleStatuses = ['DISCOVERED', 'ACTIVE', 'STALE', 'CLOSED']
 
 const verdictTone: Record<string, string> = {
-  HIGH_PRIORITY: 'border-[#b6d36a] bg-[#eef6d8] text-[#42571c]',
-  RECOMMENDED: 'border-[#b6d36a] bg-[#f3f8e6] text-[#42571c]',
-  REVIEW_REQUIRED: 'border-[#e3cf9a] bg-[#fbf3e2] text-[#7a5a16]',
-  WATCHLIST: 'border-[#c8d4c8] bg-[#f2f5ef] text-[#41594f]',
-  LOW_MATCH: 'border-[#c8d4c8] bg-[#f2f5ef] text-[#6d827b]',
-  INELIGIBLE: 'border-[#e8cfc6] bg-[#fdf3f0] text-[#9b3e2e]',
+  HIGH_PRIORITY: 'border-success-line bg-success-surface text-success-ink',
+  RECOMMENDED: 'border-success-line bg-success-surface-soft text-success-ink',
+  REVIEW_REQUIRED: 'border-warning-line bg-warning-surface text-warning-ink',
+  WATCHLIST: 'border-line-strong bg-canvas text-neutral-ink',
+  LOW_MATCH: 'border-line-strong bg-canvas text-muted',
+  INELIGIBLE: 'border-danger-line bg-danger-surface text-danger-ink',
 }
 
 function display(value: string | null) {
@@ -53,12 +53,12 @@ function formatScore(value: string | null) {
 function VerdictBadge({ verdict }: { verdict: string | null }) {
   if (!verdict) {
     return (
-      <span className="inline-flex rounded-full border border-dashed border-[#c8d4c8] px-3 py-1 text-xs text-[#6d827b]">
+      <span className="inline-flex rounded-full border border-dashed border-line-strong px-3 py-1 text-xs text-muted">
         Não avaliada
       </span>
     )
   }
-  const tone = verdictTone[verdict] ?? 'border-[#c8d4c8] bg-[#f2f5ef] text-[#41594f]'
+  const tone = verdictTone[verdict] ?? 'border-line-strong bg-canvas text-neutral-ink'
   return (
     <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${tone}`}>
       {verdictLabels[verdict] ?? verdict}
@@ -68,25 +68,25 @@ function VerdictBadge({ verdict }: { verdict: string | null }) {
 
 function ItemCard({ item }: { item: InboxItem }) {
   return (
-    <article className="rounded-2xl border border-[#dce4dc] bg-white p-5">
+    <article className="rounded-2xl border border-line bg-surface p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold">
             <Link
-              className="underline decoration-[#d7f06f] decoration-2 underline-offset-4"
+              className="underline decoration-accent decoration-2 underline-offset-4"
               to={`/opportunities/${item.opportunityId}`}
             >
               {item.title}
             </Link>
           </h2>
-          <p className="mt-1 text-sm text-[#6d827b]">
+          <p className="mt-1 text-sm text-muted">
             {display(item.companyName)} · {display(item.location)}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
           <VerdictBadge verdict={item.verdict} />
           {item.applied && (
-            <span className="inline-flex rounded-full border border-[#b6d36a] bg-[#eef6d8] px-3 py-1 text-xs font-medium text-[#42571c]">
+            <span className="inline-flex rounded-full border border-success-line bg-success-surface px-3 py-1 text-xs font-medium text-success-ink">
               Candidatura: {stageLabels[item.applicationStage as ApplicationStage] ??
                 item.applicationStage}
             </span>
@@ -99,25 +99,25 @@ function ItemCard({ item }: { item: InboxItem }) {
 
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         <div>
-          <dt className="text-[#6d827b]">Modalidade</dt>
+          <dt className="text-muted">Modalidade</dt>
           <dd className="mt-1 font-medium">{item.workMode}</dd>
         </div>
         <div>
-          <dt className="text-[#6d827b]">Senioridade</dt>
+          <dt className="text-muted">Senioridade</dt>
           <dd className="mt-1 font-medium">{item.seniority}</dd>
         </div>
         <div>
-          <dt className="text-[#6d827b]">Status</dt>
+          <dt className="text-muted">Status</dt>
           <dd className="mt-1 font-medium">{item.lifecycleStatus}</dd>
         </div>
         <div>
-          <dt className="text-[#6d827b]">Publicada</dt>
+          <dt className="text-muted">Publicada</dt>
           <dd className="mt-1 font-medium">{formatDate(item.publishedAt)}</dd>
         </div>
       </dl>
 
       {item.isStale && (
-        <p className="mt-4 rounded-xl border border-[#e3cf9a] bg-[#fbf3e2] p-3 text-sm text-[#7a5a16]" role="status">
+        <p className="mt-4 rounded-xl border border-warning-line bg-warning-surface p-3 text-sm text-warning-ink" role="status">
           Esta avaliação usa uma versão anterior do perfil ou da oportunidade. A
           reavaliação está pendente; o resultado anterior continua disponível.
           {item.assessmentProfileVersionId && item.currentProfileVersionId && (
@@ -127,16 +127,16 @@ function ItemCard({ item }: { item: InboxItem }) {
       )}
 
       {item.analysisStatus && item.analysisStatus !== 'AI_COMPLETED' && (
-        <p className="mt-4 text-sm text-[#7a5a16]">
+        <p className="mt-4 text-sm text-warning-ink">
           Análise semântica indisponível ({item.analysisStatus}). A decisão determinística
           permanece completa.
         </p>
       )}
       {item.analysisSummary && (
-        <p className="mt-4 text-sm leading-6 text-[#547068]">{item.analysisSummary}</p>
+        <p className="mt-4 text-sm leading-6 text-subtle">{item.analysisSummary}</p>
       )}
       {item.analysisRecommendedReview === true && (
-        <p className="mt-2 text-sm font-medium text-[#7a5a16]">
+        <p className="mt-2 text-sm font-medium text-warning-ink">
           A análise sugere revisão humana antes de aplicar.
         </p>
       )}
@@ -203,14 +203,14 @@ export function InboxPage() {
           Buscar oportunidades
         </label>
         <input
-          className="min-w-0 flex-1 rounded-xl border border-[#c8d4c8] bg-white px-4 py-3 outline-none focus:border-[#17322d] focus:ring-2 focus:ring-[#d7f06f]"
+          className="min-w-0 flex-1 rounded-xl border border-line-strong bg-surface px-4 py-3 outline-none focus:border-ink focus:ring-2 focus:ring-accent"
           id="inbox-search"
           onChange={(event) => setSearchInput(event.target.value)}
           placeholder="Título ou empresa"
           value={searchInput}
         />
         <button
-          className="rounded-xl bg-[#17322d] px-5 py-3 font-semibold text-white hover:bg-[#25483f] focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-[#d7f06f]"
+          className="rounded-xl bg-ink px-5 py-3 font-semibold text-white hover:bg-ink-hover focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-accent"
           type="submit"
         >
           Buscar
@@ -219,9 +219,9 @@ export function InboxPage() {
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <label className="text-sm">
-          <span className="text-[#6d827b]">Verdict</span>
+          <span className="text-muted">Verdict</span>
           <select
-            className="mt-1 w-full rounded-xl border border-[#c8d4c8] bg-white px-3 py-2"
+            className="mt-1 w-full rounded-xl border border-line-strong bg-surface px-3 py-2"
             onChange={(event) => update({ verdict: event.target.value })}
             value={verdict}
           >
@@ -235,9 +235,9 @@ export function InboxPage() {
         </label>
 
         <label className="text-sm">
-          <span className="text-[#6d827b]">Modalidade</span>
+          <span className="text-muted">Modalidade</span>
           <select
-            className="mt-1 w-full rounded-xl border border-[#c8d4c8] bg-white px-3 py-2"
+            className="mt-1 w-full rounded-xl border border-line-strong bg-surface px-3 py-2"
             onChange={(event) => update({ work_mode: event.target.value })}
             value={workMode}
           >
@@ -251,9 +251,9 @@ export function InboxPage() {
         </label>
 
         <label className="text-sm">
-          <span className="text-[#6d827b]">Status</span>
+          <span className="text-muted">Status</span>
           <select
-            className="mt-1 w-full rounded-xl border border-[#c8d4c8] bg-white px-3 py-2"
+            className="mt-1 w-full rounded-xl border border-line-strong bg-surface px-3 py-2"
             onChange={(event) => update({ lifecycle_status: event.target.value })}
             value={lifecycleStatus}
           >
@@ -267,9 +267,9 @@ export function InboxPage() {
         </label>
 
         <label className="text-sm">
-          <span className="text-[#6d827b]">Score mínimo</span>
+          <span className="text-muted">Score mínimo</span>
           <input
-            className="mt-1 w-full rounded-xl border border-[#c8d4c8] bg-white px-3 py-2"
+            className="mt-1 w-full rounded-xl border border-line-strong bg-surface px-3 py-2"
             max={100}
             min={0}
             onChange={(event) => update({ minimum_score: event.target.value })}
@@ -279,9 +279,9 @@ export function InboxPage() {
         </label>
 
         <label className="text-sm">
-          <span className="text-[#6d827b]">Ordenar por</span>
+          <span className="text-muted">Ordenar por</span>
           <select
-            className="mt-1 w-full rounded-xl border border-[#c8d4c8] bg-white px-3 py-2"
+            className="mt-1 w-full rounded-xl border border-line-strong bg-surface px-3 py-2"
             onChange={(event) => update({ order: event.target.value })}
             value={order}
           >
@@ -294,7 +294,7 @@ export function InboxPage() {
         </label>
       </div>
 
-      <label className="mt-4 flex items-center gap-2 text-sm text-[#547068]">
+      <label className="mt-4 flex items-center gap-2 text-sm text-subtle">
         <input
           checked={onlyAssessed}
           className="h-4 w-4"
@@ -305,7 +305,7 @@ export function InboxPage() {
       </label>
 
       {companyId && (
-        <p className="mt-4 text-sm text-[#547068]">
+        <p className="mt-4 text-sm text-subtle">
           Filtrando por uma empresa.{' '}
           <button
             className="font-medium underline"
@@ -318,7 +318,7 @@ export function InboxPage() {
       )}
 
       <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-        <span className="text-[#6d827b]">Candidatura</span>
+        <span className="text-muted">Candidatura</span>
         {[
           { value: '', label: 'Todas' },
           { value: 'true', label: 'Já aplicada' },
@@ -327,8 +327,8 @@ export function InboxPage() {
           <button
             className={`rounded-full border px-4 py-2 font-medium ${
               appliedFilter === option.value
-                ? 'border-[#17322d] bg-[#17322d] text-white'
-                : 'border-[#c8d4c8] bg-white hover:border-[#17322d]'
+                ? 'border-ink bg-ink text-white'
+                : 'border-line-strong bg-surface hover:border-ink'
             }`}
             key={option.value || 'all'}
             onClick={() => update({ applied: option.value || null })}
@@ -341,12 +341,12 @@ export function InboxPage() {
 
       <div className="mt-8 grid gap-3" aria-live="polite">
         {inbox.isPending && (
-          <p className="rounded-2xl bg-[#eef3df] p-5 text-[#5c694e]">
+          <p className="rounded-2xl bg-info-surface p-5 text-info-ink">
             Carregando oportunidades…
           </p>
         )}
         {inbox.isError && (
-          <div className="rounded-2xl bg-[#f9e4df] p-5 text-[#9b3e2e]">
+          <div className="rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
             <p>Não foi possível carregar a inbox.</p>
             <button
               className="mt-3 font-semibold underline"
@@ -358,13 +358,13 @@ export function InboxPage() {
           </div>
         )}
         {inbox.data?.items.length === 0 && (
-          <p className="rounded-2xl border border-dashed border-[#c8d4c8] p-8 text-[#547068]">
+          <p className="rounded-2xl border border-dashed border-line-strong p-8 text-subtle">
             Nenhuma oportunidade encontrada com esses filtros.
           </p>
         )}
         {inbox.data && inbox.data.items.length > 0 && (
           <>
-            <p className="text-sm text-[#6d827b]">
+            <p className="text-sm text-muted">
               {inbox.data.total} oportunidade{inbox.data.total === 1 ? '' : 's'} encontrada
               {inbox.data.total === 1 ? '' : 's'}.
             </p>
@@ -377,18 +377,18 @@ export function InboxPage() {
                 className="mt-2 flex items-center justify-between gap-4"
               >
                 <button
-                  className="rounded-xl border border-[#c8d4c8] px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-xl border border-line-strong px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-40"
                   disabled={page === 1}
                   onClick={() => update({ page: String(page - 1) })}
                   type="button"
                 >
                   Anterior
                 </button>
-                <span className="text-sm text-[#6d827b]">
+                <span className="text-sm text-muted">
                   Página {page} de {totalPages}
                 </span>
                 <button
-                  className="rounded-xl border border-[#c8d4c8] px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-xl border border-line-strong px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-40"
                   disabled={page >= totalPages}
                   onClick={() => update({ page: String(page + 1) })}
                   type="button"

@@ -33,9 +33,9 @@ function isOverdue(value: string | null) {
 function Card({ application }: { application: Application }) {
   const due = formatDate(application.nextActionAt)
   return (
-    <li className="rounded-2xl border border-[#dce4dc] bg-white p-4 text-sm">
+    <li className="rounded-2xl border border-line bg-surface p-4 text-sm">
       <Link
-        className="font-medium underline decoration-[#d7f06f] decoration-2 underline-offset-4"
+        className="font-medium underline decoration-accent decoration-2 underline-offset-4"
         to={`/opportunities/${application.opportunityId}`}
       >
         Ver oportunidade
@@ -43,16 +43,16 @@ function Card({ application }: { application: Application }) {
       {application.nextAction ? (
         <p
           className={`mt-2 ${
-            isOverdue(application.nextActionAt) ? 'text-[#9b3e2e]' : 'text-[#547068]'
+            isOverdue(application.nextActionAt) ? 'text-danger-ink' : 'text-subtle'
           }`}
         >
           {application.nextAction}
           {due ? ` · ${due}` : ''}
         </p>
       ) : (
-        <p className="mt-2 text-[#6d827b]">Sem próxima ação definida.</p>
+        <p className="mt-2 text-muted">Sem próxima ação definida.</p>
       )}
-      <p className="mt-2 text-xs text-[#6d827b]">
+      <p className="mt-2 text-xs text-muted">
         {application.history.length} movimento
         {application.history.length === 1 ? '' : 's'} no histórico
       </p>
@@ -72,7 +72,7 @@ function Board({ applications }: { applications: Application[] }) {
 
   if (columns.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-[#c8d4c8] p-8 text-[#547068]">
+      <p className="rounded-2xl border border-dashed border-line-strong p-8 text-subtle">
         Nenhuma candidatura ativa. Comece pela inbox: abra uma oportunidade e registre o
         interesse.
       </p>
@@ -85,7 +85,7 @@ function Board({ applications }: { applications: Application[] }) {
         <section key={stage}>
           <h2 className="flex items-baseline justify-between text-sm font-semibold">
             <span>{stageLabels[stage]}</span>
-            <span className="text-[#6d827b]">{(byStage.get(stage) ?? []).length}</span>
+            <span className="text-muted">{(byStage.get(stage) ?? []).length}</span>
           </h2>
           <ul className="mt-3 grid gap-2">
             {(byStage.get(stage) ?? []).map((application) => (
@@ -114,10 +114,10 @@ function Closed({ applications }: { applications: Application[] }) {
       <ul className="mt-4 flex flex-wrap gap-3">
         {counts.map((entry) => (
           <li
-            className="rounded-full border border-[#c8d4c8] bg-white px-4 py-2 text-sm"
+            className="rounded-full border border-line-strong bg-surface px-4 py-2 text-sm"
             key={entry.stage}
           >
-            <span className="text-[#547068]">{stageLabels[entry.stage]}</span>{' '}
+            <span className="text-subtle">{stageLabels[entry.stage]}</span>{' '}
             <span className="font-semibold">{entry.total}</span>
           </li>
         ))}
@@ -139,12 +139,12 @@ export function PipelinePage() {
     >
       <div className="mt-8" aria-live="polite">
         {active.isPending && (
-          <p className="rounded-2xl bg-[#eef3df] p-5 text-[#5c694e]">
+          <p className="rounded-2xl bg-info-surface p-5 text-info-ink">
             Carregando candidaturas…
           </p>
         )}
         {active.isError && (
-          <div className="rounded-2xl bg-[#f9e4df] p-5 text-[#9b3e2e]">
+          <div className="rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
             <p>Não foi possível carregar as candidaturas.</p>
             <button
               className="mt-3 font-semibold underline"

@@ -1,9 +1,57 @@
 @import "tailwindcss";
 
+/*
+ * Tokens nomeados pelo papel, não pelo tom.
+ *
+ * O valor de um token é revisável; o de um literal espalhado por vinte arquivos não é.
+ * Cada token abaixo substitui uma cor que já estava em uso, e o contraste de cada par
+ * texto/fundo está medido em docs/35-design-tokens.md.
+ */
+@theme {
+  --color-canvas: #f2f5ef;
+  --color-surface: #ffffff;
+  --color-raised: #fbfcf8;
+  --color-panel: #f7faf6;
+
+  --color-ink: #17322d;
+  --color-ink-hover: #25483f;
+  --color-subtle: #547068;
+  /* Escurecido de #6d827b, que reprovava em AA sobre cartão e sobre o fundo da página. */
+  --color-muted: #61746e;
+  --color-neutral-ink: #41594f;
+
+  --color-line: #dce4dc;
+  --color-line-strong: #c8d4c8;
+  --color-line-soft: #ced8ce;
+  --color-divider: #e4ebe4;
+  --color-accent: #d7f06f;
+
+  --color-success-surface: #eef6d8;
+  --color-success-surface-soft: #f3f8e6;
+  --color-success-surface-strong: #deefde;
+  --color-success-line: #b6d36a;
+  --color-success-ink: #42571c;
+  --color-success-ink-strong: #216142;
+
+  --color-warning-surface: #fbf3e2;
+  --color-warning-surface-strong: #f7edca;
+  --color-warning-line: #e3cf9a;
+  --color-warning-ink: #7a5a16;
+  --color-warning-ink-strong: #8b5c13;
+
+  --color-danger-surface: #fdf3f0;
+  --color-danger-surface-strong: #f9e4df;
+  --color-danger-line: #e8cfc6;
+  --color-danger-ink: #9b3e2e;
+
+  --color-info-surface: #eef3df;
+  --color-info-ink: #5c694e;
+}
+
 :root {
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  color: #17322d;
-  background: #f2f5ef;
+  color: var(--color-ink);
+  background: var(--color-canvas);
 }
 
 body { margin: 0; min-width: 320px; }
@@ -20,21 +68,21 @@ body { margin: 0; min-width: 320px; }
 }
 
 .status-dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: currentColor; }
-.status-loading { color: #5c694e; background: #eef3df; }
-.status-error { color: #9b3e2e; background: #f9e4df; }
-.status-degraded { color: #8b5c13; background: #f7edca; }
-.status-ready { color: #216142; background: #deefde; }
+.status-loading { color: var(--color-info-ink); background: var(--color-info-surface); }
+.status-error { color: var(--color-danger-ink); background: var(--color-danger-surface-strong); }
+.status-degraded { color: var(--color-warning-ink-strong); background: var(--color-warning-surface-strong); }
+.status-ready { color: var(--color-success-ink-strong); background: var(--color-success-surface-strong); }
 
 .retry-button {
   margin-top: 1rem;
   border: 0;
   border-radius: 0.7rem;
-  background: #17322d;
-  color: white;
+  background: var(--color-ink);
+  color: var(--color-surface);
   cursor: pointer;
   font: inherit;
   font-weight: 600;
   padding: 0.7rem 1rem;
 }
 
-.retry-button:focus-visible { outline: 3px solid #d7f06f; outline-offset: 3px; }
+.retry-button:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
