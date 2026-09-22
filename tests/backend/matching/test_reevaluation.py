@@ -256,7 +256,13 @@ def test_a_pass_reports_what_it_processed() -> None:
     previous_level = logger.level
     logger.setLevel(logging.INFO)
     try:
-        evaluate_pending(engine, batch_size=50)
+        for _ in range(200):
+            evaluate_pending(engine, batch_size=50)
+            with _session() as session:
+                if _assessment_count(session, opportunity_id) == 1:
+                    break
+        else:  # pragma: no cover - only reached if the queue never reaches this item
+            pytest.fail("the queue never reached the opportunity under test")
     finally:
         logger.removeHandler(handler)
         logger.setLevel(previous_level)

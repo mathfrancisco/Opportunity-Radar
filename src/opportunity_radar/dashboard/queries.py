@@ -199,6 +199,10 @@ def _latest_assessments(profile_version_id: UUID | None) -> Any:
         ranked = ranked.where(
             MatchAssessmentModel.profile_version_id == profile_version_id
         )
+    ranked = ranked.join(
+        OpportunityModel,
+        OpportunityModel.id == MatchAssessmentModel.opportunity_id,
+    )
     numbered = ranked.subquery("ranked_assessments")
     return select(numbered).where(numbered.c.position == 1).subquery("latest_assessment")
 
