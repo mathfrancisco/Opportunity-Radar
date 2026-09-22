@@ -21,3 +21,9 @@ local_backups
 .idea
 .vscode
 docs
+!docs/
+docs/*
+!docs/pesquisas/
+docs/pesquisas/*
+!docs/pesquisas/auditoria-186-empresas.md
+!docs/pesquisas/empresas-adicionais.md
