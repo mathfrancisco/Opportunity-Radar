@@ -9,9 +9,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.companies.models import Company
 from opportunity_radar.companies.repository import CompanyRepository
-from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.presentation.http.dependencies import get_session
 
 router = APIRouter(prefix="/companies", tags=["companies"])

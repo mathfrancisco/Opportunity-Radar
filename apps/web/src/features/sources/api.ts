@@ -98,8 +98,12 @@ function parseHealth(value: unknown): SourceHealth | null {
     lastRunItemsSkipped: optionalNumber(value.last_run_items_skipped),
     lastRunItemsInvalid: optionalNumber(value.last_run_items_invalid),
     seniorityCounts: isRecord(value.seniority_counts)
-      ? Object.fromEntries(
-          Object.entries(value.seniority_counts).filter(([, count]) => typeof count === 'number'),
+      ? Object.entries(value.seniority_counts).reduce<Record<string, number>>(
+          (counts, [level, count]) => {
+            if (typeof count === 'number') counts[level] = count
+            return counts
+          },
+          {},
         )
       : {},
   }
