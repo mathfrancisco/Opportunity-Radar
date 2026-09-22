@@ -23,6 +23,7 @@ from opportunity_radar.opportunities.domain import (
     infer_work_mode,
     normalize_title,
     normalize_url,
+    seniority_classification,
 )
 
 
@@ -62,6 +63,37 @@ def test_infers_only_explicit_unambiguous_taxonomy_evidence() -> None:
         is ContractType.FULL_TIME
     )
     assert infer_contract_type("Engineer", None, {}) is ContractType.UNKNOWN
+
+
+def test_seniority_classification_records_precedence_and_conflicts() -> None:
+    title_value, title_reason = seniority_classification("Junior Engineer", {})
+    structured_value, structured_reason = seniority_classification(
+        "Engineer", {"seniority": "Mid"}
+    )
+    conflict_value, conflict_reason = seniority_classification(
+        "Senior Engineer", {"seniority": "Junior"}
+    )
+    unmapped_value, unmapped_reason = seniority_classification(
+        "Principal Engineer", {"seniority": "Principal"}
+    )
+
+    assert title_value is Seniority.JUNIOR
+    assert title_reason["source"] == "title"
+    assert structured_value is Seniority.MID
+    assert structured_reason["source"] == "structured"
+    assert structured_reason["external_value"] == "Mid"
+    assert conflict_value is Seniority.UNKNOWN
+    assert conflict_reason["source"] == "conflict"
+    assert unmapped_value is Seniority.UNKNOWN
+    assert unmapped_reason["source"] == "structured"
+
+
+def test_structured_seniority_conflict_keeps_candidate_unknown() -> None:
+    candidate = build_candidate(
+        _input(title="Senior Engineer", metadata={"seniority": "Junior"})
+    )
+
+    assert candidate.seniority is Seniority.UNKNOWN
 
 
 def test_fingerprint_matches_exact_evidence_and_separates_company_and_day() -> None:

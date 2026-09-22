@@ -23,6 +23,7 @@ from opportunity_radar.opportunities.domain import (
     OpportunityStatus,
     SkillClassification,
     build_candidate,
+    seniority_classification,
 )
 from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
@@ -36,7 +37,7 @@ from opportunity_radar.opportunities.repository import (
     RawItemEvidence,
 )
 
-NORMALIZER_VERSION = "v2"
+NORMALIZER_VERSION = "v3"
 
 
 class RawItemNotFoundError(LookupError):
@@ -86,6 +87,11 @@ class OpportunityService:
         try:
             normalization_input = _normalization_input(evidence)
             candidate = build_candidate(normalization_input)
+            _, seniority_reason = seniority_classification(
+                normalization_input.title,
+                normalization_input.metadata,
+                source_type=normalization_input.source_type,
+            )
         except (NormalizationError, TypeError, ValueError) as error:
             result = NormalizationResultModel(
                 raw_item_id=raw_item_id,
@@ -222,7 +228,7 @@ class OpportunityService:
             status=result_status,
             normalizer_version=NORMALIZER_VERSION,
             identity_decision=decision,
-            reasons=reasons,
+            reasons=[*reasons, seniority_reason],
         )
         self.session.add(result)
         self.session.commit()

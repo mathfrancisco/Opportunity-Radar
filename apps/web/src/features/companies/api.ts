@@ -97,6 +97,13 @@ export interface CompanyDetail {
   lastVerifiedAt: string | null
 }
 
+export interface SourceProposal {
+  result: 'proposed' | 'already_proposed' | 'not_detected'
+  sourceId: string | null
+  evidence: string | null
+  enabled: boolean
+}
+
 function parseDetailSource(value: unknown): CompanyDetailSource | null {
   if (!isRecord(value) || typeof value.id !== 'string') return null
   return {
@@ -143,6 +150,26 @@ export async function getCompany(companyId: string): Promise<CompanyDetail> {
       .filter((alias): alias is string => alias !== null),
     sources,
     lastVerifiedAt: verifiedDates.at(-1) ?? null,
+  }
+}
+
+export async function detectCompanySource(companyId: string): Promise<SourceProposal> {
+  const response = await fetch(apiUrl(`/companies/${companyId}/detect-source`), {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+  })
+  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  const body: unknown = await response.json()
+  if (!isRecord(body) || typeof body.result !== 'string') {
+    throw new Error('A API retornou uma proposta inválida.')
+  }
+  return {
+    result: body.result === 'proposed' || body.result === 'already_proposed'
+      ? body.result
+      : 'not_detected',
+    sourceId: typeof body.source_id === 'string' ? body.source_id : null,
+    evidence: typeof body.evidence === 'string' ? body.evidence : null,
+    enabled: body.enabled === true,
   }
 }
 

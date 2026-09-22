@@ -12,9 +12,12 @@ from opportunity_radar.dashboard.queries import (
     InboxPage,
     InboxQuery,
     OverviewSummary,
+    SourceCoverage,
+    SourceCoverageReport,
     SourceHealth,
     list_opportunity_inbox,
     list_source_health,
+    source_coverage_report,
     summarize_overview,
 )
 
@@ -24,8 +27,11 @@ __all__ = [
     "InboxPage",
     "InboxQuery",
     "OverviewSummary",
+    "SourceCoverage",
+    "SourceCoverageReport",
     "SourceHealth",
     "list_opportunity_inbox",
     "list_source_health",
+    "source_coverage_report",
     "summarize_overview",
 ]

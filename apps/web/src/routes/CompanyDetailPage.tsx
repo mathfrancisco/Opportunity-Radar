@@ -1,7 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { PageShell } from '../components/PageShell'
 import { type CompanyDetail } from '../features/companies/api'
-import { useCompany } from '../features/companies/useCompanies'
+import { useCompany, useDetectCompanySource } from '../features/companies/useCompanies'
 import { useInbox } from '../features/dashboard/useInbox'
 
 function formatDate(value: string | null) {
@@ -107,6 +107,7 @@ function LatestOpportunities({ companyId }: { companyId: string }) {
 export function CompanyDetailPage() {
   const { companyId = '' } = useParams()
   const company = useCompany(companyId)
+  const detectSource = useDetectCompanySource(companyId)
 
   return (
     <PageShell
@@ -186,6 +187,25 @@ export function CompanyDetailPage() {
 
           <section className="mt-10">
             <h2 className="text-lg font-semibold">Fontes</h2>
+            <button
+              className="mt-3 rounded-xl border border-[#17322d] px-4 py-2 text-sm font-medium hover:bg-[#eef3df] disabled:opacity-50"
+              disabled={detectSource.isPending}
+              onClick={() => detectSource.mutate()}
+              type="button"
+            >
+              {detectSource.isPending ? 'Detectando…' : 'Detectar fonte'}
+            </button>
+            {detectSource.data && (
+              <p className="mt-3 text-sm text-[#547068]" role="status">
+                {detectSource.data.result === 'not_detected'
+                  ? 'Nenhum ATS detectável foi encontrado.'
+                  : detectSource.data.result === 'already_proposed'
+                    ? 'A proposta já existe e continua desabilitada.'
+                    : 'Proposta criada e desabilitada; aguarda revisão e homologação.'}
+                {detectSource.data.evidence ? ` Evidência: ${detectSource.data.evidence}` : ''}
+              </p>
+            )}
+            {detectSource.isError && <p className="mt-3 text-sm text-[#9b3e2e]">Não foi possível detectar a fonte.</p>}
             <div className="mt-4">
               <Sources company={company.data} />
             </div>

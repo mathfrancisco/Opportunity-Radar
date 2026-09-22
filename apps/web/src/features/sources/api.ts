@@ -20,12 +20,22 @@ export interface SourceHealth {
   lastRunItemsPersisted: number | null
   lastRunItemsSkipped: number | null
   lastRunItemsInvalid: number | null
+  seniorityCounts: Record<string, number>
 }
 
 export interface SourceHealthList {
   items: SourceHealth[]
   total: number
   failing: number
+}
+
+export interface SourceCoverageReport {
+  catalogCompanies: number
+  catalogSourceRecords: number
+  proposedSources: number
+  homologatedSources: number
+  enabledSources: number
+  eligibleSources: number
 }
 
 export interface SourceRun {
@@ -87,6 +97,15 @@ function parseHealth(value: unknown): SourceHealth | null {
     lastRunItemsPersisted: optionalNumber(value.last_run_items_persisted),
     lastRunItemsSkipped: optionalNumber(value.last_run_items_skipped),
     lastRunItemsInvalid: optionalNumber(value.last_run_items_invalid),
+    seniorityCounts: isRecord(value.seniority_counts)
+      ? Object.entries(value.seniority_counts).reduce<Record<string, number>>(
+          (counts, [level, count]) => {
+            if (typeof count === 'number') counts[level] = count
+            return counts
+          },
+          {},
+        )
+      : {},
   }
 }
 
@@ -123,6 +142,23 @@ export async function getSourceHealth(): Promise<SourceHealthList> {
     items: body.items.map(parseHealth).filter((item): item is SourceHealth => item !== null),
     total: count(body.total),
     failing: count(body.failing),
+  }
+}
+
+export async function getSourceCoverage(): Promise<SourceCoverageReport> {
+  const response = await fetch(apiUrl('/source-coverage'), {
+    headers: { Accept: 'application/json' },
+  })
+  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  const body: unknown = await response.json()
+  if (!isRecord(body)) throw new Error('A API retornou uma cobertura inválida.')
+  return {
+    catalogCompanies: count(body.catalog_companies),
+    catalogSourceRecords: count(body.catalog_source_records),
+    proposedSources: count(body.proposed_sources),
+    homologatedSources: count(body.homologated_sources),
+    enabledSources: count(body.enabled_sources),
+    eligibleSources: count(body.eligible_sources),
   }
 }
 

@@ -3,6 +3,7 @@ import { PageShell } from '../components/PageShell'
 import { type SourceHealth } from '../features/sources/api'
 import {
   useRunSource,
+  useSourceCoverage,
   useSourceHealth,
   useSourceRuns,
 } from '../features/sources/useSources'
@@ -149,6 +150,14 @@ function SourceCard({
         </div>
       </dl>
 
+      <p className="mt-4 text-xs text-[#6d827b]">
+        Senioridade: {Object.entries(source.seniorityCounts).length === 0
+          ? 'sem vagas normalizadas'
+          : Object.entries(source.seniorityCounts)
+              .map(([level, count]) => `${level} ${count}`)
+              .join(' · ')}
+      </p>
+
       {source.lastRunError && (
         <p className="mt-4 rounded-2xl border border-[#e8cfc6] bg-[#fdf3f0] p-4 text-sm text-[#9b3e2e]">
           {source.lastRunErrorCode ? `${source.lastRunErrorCode}: ` : ''}
@@ -195,6 +204,7 @@ function SourceCard({
 
 export function SourcesPage() {
   const health = useSourceHealth()
+  const coverage = useSourceCoverage()
   const [expanded, setExpanded] = useState<string | null>(null)
 
   return (
@@ -204,6 +214,13 @@ export function SourcesPage() {
       title="Fontes e execuções"
       description="O que cada fonte produziu na última execução, e o que fazer quando ela falha. Uma fonte só executa depois de habilitada."
     >
+      {coverage.data && (
+        <section className="mt-8 grid gap-3 rounded-2xl border border-[#dce4dc] bg-[#f7faf6] p-5 text-sm sm:grid-cols-3">
+          <p><span className="text-[#6d827b]">Catálogo</span><br /><strong>{coverage.data.catalogCompanies}</strong> empresas · {coverage.data.catalogSourceRecords} registros</p>
+          <p><span className="text-[#6d827b]">Propostas / homologadas</span><br /><strong>{coverage.data.proposedSources}</strong> / {coverage.data.homologatedSources}</p>
+          <p><span className="text-[#6d827b]">Habilitadas / elegíveis</span><br /><strong>{coverage.data.enabledSources}</strong> / {coverage.data.eligibleSources}</p>
+        </section>
+      )}
       <div className="mt-8 grid gap-3" aria-live="polite">
         {health.isPending && (
           <p className="rounded-2xl bg-[#eef3df] p-5 text-[#5c694e]">Carregando fontes…</p>
