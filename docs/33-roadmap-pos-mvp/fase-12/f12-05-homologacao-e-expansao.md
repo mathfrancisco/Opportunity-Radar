@@ -1,6 +1,6 @@
 # CARD F12-05 — Homologação e expansão para 20+ fontes
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 12 — Escala e qualidade de fontes
 - **Depende de:** F12-01, F12-02 e F12-03
 - **Bloqueia:** Milestone K — Catálogo produtivo; Fase 13
@@ -59,6 +59,16 @@ uma segunda fonte remota — e manter a falha de cada fonte isolada.
 - Rodada de coleta com fontes expandidas confirma isolamento de falha e estados de
   cobertura.
 - Dashboard confirma distribuição de senioridade e taxa de `UNKNOWN` por fonte.
+
+## Evidência de conclusão
+
+- O PostgreSQL Docker contém 22 fontes habilitadas, todas com `terms_reviewed` e
+  `collector_local_tested` verdadeiros.
+- As 15 fontes homologadas nesta rodada guardam em `configuration.homologation_audit` a
+  referência pública do provider, o aceite explícito do operador e a telemetria do probe.
+- A rodada `phase-12-homologation-20260922` concluiu 22 de 22 `SourceRun` com `SUCCEEDED`;
+  cada fonte leu um item. Cinco itens já conhecidos foram deduplicados, o que é distinto de
+  uma falha de coleta.
 
 ## Arquivos prováveis
 

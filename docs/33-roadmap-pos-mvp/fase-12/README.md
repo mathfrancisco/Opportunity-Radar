@@ -23,3 +23,10 @@ confundir empresa catalogada com uma fonte executável.
 
 Nenhum card autoriza habilitar uma fonte só porque um ATS foi identificado. Cada fonte
 segue o gate de termos, teste local e homologação explícita antes de poder executar.
+
+## Conclusão operacional
+
+Em 22 de setembro de 2026, o ambiente Docker local concluiu a homologação de 22 fontes.
+Todas ficaram habilitadas com termos aprovados pelo operador e teste do collector
+registrados; uma rodada correlacionada executou 22 `SourceRun` com sucesso, limitada a um
+item por fonte.

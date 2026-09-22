@@ -1,6 +1,6 @@
 # CARD F12-02 — Senioridade com procedência e métricas UNKNOWN
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 12 — Escala e qualidade de fontes
 - **Depende de:** Fase 10 — coleta e normalização por fonte
 - **Bloqueia:** F12-05; métricas de senioridade da Fase 13
