@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.alerts import SourceAlertService
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
     AcquisitionErrorCode,
@@ -26,7 +27,7 @@ from opportunity_radar.acquisition.models import (
     SourceRunModel,
 )
 from opportunity_radar.acquisition.service import AcquisitionService, SourceNotFoundError
-from opportunity_radar.presentation.http.dependencies import get_session
+from opportunity_radar.presentation.http.dependencies import get_alert_service, get_session
 
 router = APIRouter(tags=["acquisition"])
 
@@ -202,6 +203,7 @@ async def execute_source(
     source_id: UUID,
     body: CreateRunBody,
     session: Session = Depends(get_session),
+    alerts: SourceAlertService = Depends(get_alert_service),
 ) -> SourceRunResponse:
     try:
         manual_inputs = tuple(_manual_input(item) for item in body.inputs)
@@ -216,7 +218,7 @@ async def execute_source(
             max_items=body.max_items,
             correlation_id=body.correlation_id,
         )
-        run = await AcquisitionService(session).execute(source_id, request)
+        run = await AcquisitionService(session, alerts=alerts).execute(source_id, request)
     except AcquisitionError as error:
         _raise_acquisition_error(error)
     except ValueError as error:

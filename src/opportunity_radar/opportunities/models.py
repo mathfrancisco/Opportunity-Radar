@@ -18,12 +18,14 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    select,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, column_property, mapped_column, relationship
 
+from opportunity_radar.acquisition.models import RawItemPayloadModel
 from opportunity_radar.platform.database import Base
 
 SCHEMA = "opportunities"
@@ -167,6 +169,15 @@ class SourceOccurrenceModel(Base):
     )
     source_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: When retention expired the raw body this occurrence came from, and `None` while it
+    #: is still there. Read as a column rather than through the payload relationship so a
+    #: list of occurrences never drags every raw payload into memory to answer it.
+    payload_expired_at: Mapped[datetime | None] = column_property(
+        select(RawItemPayloadModel.expired_at)
+        .where(RawItemPayloadModel.raw_item_id == raw_item_id)
+        .correlate_except(RawItemPayloadModel)
+        .scalar_subquery()
+    )
     opportunity: Mapped[OpportunityModel] = relationship(back_populates="occurrences")
     normalization_results: Mapped[list["NormalizationResultModel"]] = relationship(
         back_populates="source_occurrence"

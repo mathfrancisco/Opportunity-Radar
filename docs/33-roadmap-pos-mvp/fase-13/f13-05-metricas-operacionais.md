@@ -1,6 +1,6 @@
 # CARD F13-05 — Métricas operacionais de fonte
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 13 — Operação contínua
 - **Depende de:** F13-01, Fase 12
 - **Bloqueia:** F13-06
@@ -39,12 +39,12 @@ junto da distribuição para evitar inferência sem procedência.
 
 ## Critérios de aceite
 
-- [ ] API entrega todas as métricas requeridas para 24 horas e sete dias.
-- [ ] Overview diferencia fonte saudável, degradada, vazia e não executada.
-- [ ] Taxa de erro é segmentada por código.
-- [ ] Cobertura permite separar ausência de vagas de falta de execução.
-- [ ] Senioridade mostra `UNKNOWN` sem conversão implícita.
-- [ ] Contagem, percentual e procedência aparecem por fonte.
+- [x] API entrega todas as métricas requeridas para 24 horas e sete dias.
+- [x] Overview diferencia fonte saudável, degradada, vazia e não executada.
+- [x] Taxa de erro é segmentada por código.
+- [x] Cobertura permite separar ausência de vagas de falta de execução.
+- [x] Senioridade mostra `UNKNOWN` sem conversão implícita.
+- [x] Contagem, percentual e procedência aparecem por fonte.
 
 ## Verificação
 

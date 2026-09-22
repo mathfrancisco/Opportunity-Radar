@@ -99,6 +99,12 @@ jobs:
           test "$(alembic current | awk '{print $1}')" = "$(alembic heads | awk '{print $1}')"
       - name: Run backend tests
         run: pytest -q
+      - name: Run the 72-hour soak gate against a controlled clock
+        # The local model is not part of this gate: with no Ollama reachable, every
+        # analysis pass would spend its timeout proving something the e2e job proves.
+        env:
+          OLLAMA_ANALYSIS_ENABLED: "false"
+        run: python scripts/soak_gate.py --json
 
   frontend:
     name: Frontend / lint, types, tests and build
@@ -221,11 +227,15 @@ jobs:
             python -c "import json,sys; assert json.load(sys.stdin)['total'] == 1"
           inbox_opportunity_id="$(curl --fail --silent http://127.0.0.1:3000/api/inbox | python -c "import json,sys; print(json.load(sys.stdin)['items'][0]['opportunity_id'])")"
           curl --fail --silent "http://127.0.0.1:3000/api/opportunities/$inbox_opportunity_id" | \
-            python -c "import json,sys; data=json.load(sys.stdin); assert data['fingerprint_version'] == 'v1'; assert len(data['occurrences']) == 2; assert len(data['normalization_results']) == 2; assert len(data['compensations']) == 2"
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['fingerprint_version'] == 'v1'; assert len(data['occurrences']) == 2; assert len(data['normalization_results']) == 2; assert len(data['compensations']) == 2; assert all(item['payload_retained'] and item['payload_expired_at'] is None for item in data['occurrences'])"
           curl --fail --silent 'http://127.0.0.1:3000/api/source-health' | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 8; assert data['failing'] == 0; ran=[item for item in data['items'] if item['last_run_status'] is not None]; assert len(ran) == 1; assert ran[0]['last_run_status'] == 'SUCCEEDED'; assert ran[0]['last_run_items_seen'] == 2; assert ran[0]['last_run_items_skipped'] == 2; assert ran[0]['last_run_duration_seconds'] >= 0; idle=[item for item in data['items'] if item['last_run_id'] is None]; assert len(idle) == 7; assert all(item['last_run_items_seen'] is None for item in idle)"
           curl --fail --silent 'http://127.0.0.1:3000/api/source-health?only_failing=true' | \
             python -c "import json,sys; assert json.load(sys.stdin)['total'] == 0"
+          curl --fail --silent 'http://127.0.0.1:3000/api/source-metrics' | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert [item['window'] for item in data['windows']] == ['24h', '7d']; day=data['windows'][0]; assert len(day['sources']) == 8; ran=[item for item in day['sources'] if item['has_runs']]; assert len(ran) == 1, ran; assert ran[0]['runs'] == 2; assert ran[0]['dedupe_rate'] == 0.5; assert ran[0]['error_rate'] == 0.0; assert ran[0]['coverage_state'] == 'SUCCEEDED'; assert ran[0]['seniority']['unknown'] == 0; assert ran[0]['seniority']['counts']['SENIOR'] == 2; assert ran[0]['seniority']['mapping_versions'] == {'seniority-v1': 2}; idle=[item for item in day['sources'] if not item['has_runs']]; assert all(item['error_rate'] is None and item['dedupe_rate'] is None for item in idle); assert {item['coverage_state'] for item in idle} == {'NOT_ENABLED'}"
+          metrics_status="$(curl --silent --output /dev/null --write-out '%{http_code}' 'http://127.0.0.1:3000/api/source-metrics?window=90d')"
+          test "$metrics_status" = "422"
           curl --fail --silent http://127.0.0.1:3000/api/profile | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'ACTIVE'; assert {skill['canonical_name'] for skill in data['skills']} == {'python', 'react'}; assert data['preferences']['countries'] == ['BR']"
           company_id="$(curl --fail --silent 'http://127.0.0.1:3000/api/companies?page_size=1' | python -c "import json,sys; print(json.load(sys.stdin)['items'][0]['id'])")"
@@ -259,11 +269,23 @@ jobs:
             python -c "import json,sys; data=json.load(sys.stdin); assert data['applications_active'] == 1; assert data['applications_by_stage'] == {'APPLIED': 1}; assert data['follow_ups_due'] == 0; assert data['follow_up_window_days'] == 7"
           curl --fail --silent --output /dev/null http://127.0.0.1:3000/applications
           echo "APPLICATION_ID=$application_id" >> "$GITHUB_ENV"
+      - name: Verify structured logs and the doctor
+        run: |
+          docker compose -f compose.yaml -f compose.ci.yaml exec -T api \
+            python scripts/doctor.py --json | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'ok', data; names={check['name'] for check in data['checks']}; assert {'environment', 'database', 'catalogue', 'prompts', 'worker jobs', 'source incidents'} <= names; catalogue=next(check for check in data['checks'] if check['name'] == 'catalogue'); assert catalogue['facts']['companies'] == 220; jobs=next(check for check in data['checks'] if check['name'] == 'worker jobs'); assert jobs['status'] == 'ok', jobs; assert set(jobs['facts']['healthy']) == {'collect_enabled_sources', 'normalize_opportunities', 'evaluate_pending', 'analyze_pending', 'expire_raw_payloads'}, jobs; incidents=next(check for check in data['checks'] if check['name'] == 'source incidents'); assert incidents['facts']['webhook_configured'] is False"
+          correlation_id="ci-$(date +%s)"
+          curl --fail --silent --output /dev/null --dump-header /tmp/headers \
+            --header "X-Correlation-ID: $correlation_id" http://127.0.0.1:3000/api/overview
+          grep -iq "x-correlation-id: $correlation_id" /tmp/headers
+          docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --no-log-prefix api | \
+            python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; matched=[line for line in lines if line.get('correlation_id') == '$correlation_id']; assert matched, 'no structured log carried the correlation id'; assert any(line.get('path') == '/overview' and line.get('status_code') == 200 for line in matched), matched"
       - name: Verify PostgreSQL persistence after restart
         run: |
           before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
           companies_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM company_radar.company')"
           raw_items_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM acquisition.raw_item')"
+          payloads_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM acquisition.raw_item_payload WHERE payload IS NOT NULL')"
           opportunities_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity')"
           occurrences_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.source_occurrence')"
           compensations_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_compensation')"
@@ -278,6 +300,7 @@ jobs:
           after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
           companies_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM company_radar.company')"
           raw_items_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM acquisition.raw_item')"
+          payloads_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM acquisition.raw_item_payload WHERE payload IS NOT NULL')"
           opportunities_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity')"
           occurrences_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.source_occurrence')"
           compensations_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_compensation')"
@@ -293,6 +316,9 @@ jobs:
           test "$companies_before" = "$companies_after"
           test "$raw_items_before" = "2"
           test "$raw_items_before" = "$raw_items_after"
+          # Envelope and body are one-to-one, and retention has expired nothing yet.
+          test "$payloads_before" = "2"
+          test "$payloads_before" = "$payloads_after"
           test "$opportunities_before" = "1"
           test "$opportunities_before" = "$opportunities_after"
           test "$occurrences_before" = "2"
@@ -321,17 +347,6 @@ jobs:
             python -c "import json,pathlib; manifest=json.loads(pathlib.Path('data/backups/ci-e2e.manifest.json').read_text()); counts=manifest['counts']; assert counts['companies'] == 220, counts; assert counts['opportunities'] == 1, counts; assert counts['applications'] == 1, counts; assert counts['stage_history'] == 2, counts; assert manifest['bytes'] > 0"
           docker compose -f compose.yaml -f compose.ci.yaml exec -T api \
             python scripts/restore_check.py --dump data/backups/ci-e2e.dump
-      - name: Verify structured logs and the doctor
-        run: |
-          docker compose -f compose.yaml -f compose.ci.yaml exec -T api \
-            python scripts/doctor.py --json | \
-            python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'ok', data; names={check['name'] for check in data['checks']}; assert {'environment', 'database', 'catalogue', 'prompts'} <= names; catalogue=next(check for check in data['checks'] if check['name'] == 'catalogue'); assert catalogue['facts']['companies'] == 220"
-          correlation_id="ci-$(date +%s)"
-          curl --fail --silent --output /dev/null --dump-header /tmp/headers \
-            --header "X-Correlation-ID: $correlation_id" http://127.0.0.1:3000/api/overview
-          grep -iq "x-correlation-id: $correlation_id" /tmp/headers
-          docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --no-log-prefix api | \
-            python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; matched=[line for line in lines if line.get('correlation_id') == '$correlation_id']; assert matched, 'no structured log carried the correlation id'; assert any(line.get('path') == '/overview' and line.get('status_code') == 200 for line in matched), matched"
       - name: Verify the autonomous cycle without a terminal
         run: |
           compose="docker compose -f compose.yaml -f compose.ci.yaml"
@@ -409,6 +424,7 @@ jobs:
           compose="docker compose -f compose.yaml -f compose.ci.yaml"
           WORKER_COLLECT_ENABLED=false WORKER_NORMALIZE_ENABLED=false \
             WORKER_MATCH_ENABLED=false WORKER_ANALYZE_ENABLED=false \
+            WORKER_RETENTION_ENABLED=false \
             $compose up --detach --force-recreate worker
           # The container reports "Started" before the interpreter has booted. Waiting for
           # the ready file is what makes the startup log readable: the worker touches it
@@ -420,7 +436,7 @@ jobs:
           done
           test "$status" = "healthy"
           $compose logs --no-color --no-log-prefix worker | \
-            python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; configured=[line for line in lines if line.get('message') == 'worker jobs configured']; assert configured, 'the worker never reported its job configuration'; jobs=configured[-1]['jobs']; assert jobs == {'collect_enabled_sources': False, 'normalize_opportunities': False, 'evaluate_pending': False, 'analyze_pending': False}, jobs"
+            python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; configured=[line for line in lines if line.get('message') == 'worker jobs configured']; assert configured, 'the worker never reported its job configuration'; jobs=configured[-1]['jobs']; assert jobs == {'collect_enabled_sources': False, 'normalize_opportunities': False, 'evaluate_pending': False, 'analyze_pending': False, 'expire_raw_payloads': False}, jobs"
       - name: Collect logs on failure
         if: failure()
         run: docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --tail=300

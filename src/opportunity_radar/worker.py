@@ -12,6 +12,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.alerts import (
+    SourceAlertService,
+    build_source_alert_notifier,
+)
 from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.collectors import CollectorRegistry, ManualCollector
 from opportunity_radar.acquisition.domain import (
@@ -32,12 +36,13 @@ from opportunity_radar.matching.service import (
     AnalysisInProgressError,
     MatchingService,
 )
+from opportunity_radar.operations.retention import PayloadRetentionService
+from opportunity_radar.operations.service import observe_job
 from opportunity_radar.opportunities.service import OpportunityService
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.logging import (
     configure_logging,
-    correlation_scope,
     get_logger,
 )
 from opportunity_radar.profile.domain import ProfileNotFoundError
@@ -52,6 +57,7 @@ FUNCTIONAL_JOB_IDS = {
     "normalize_opportunities": "normalize-opportunities",
     "evaluate_pending": "evaluate-pending",
     "analyze_pending": "analyze-pending",
+    "expire_raw_payloads": "expire-raw-payloads",
 }
 
 logger = get_logger("opportunity_radar.worker")
@@ -64,7 +70,9 @@ def heartbeat() -> None:
 
 def normalize_opportunities(engine: Engine) -> None:
     """Each pass gets its own correlation id, so one batch is greppable end to end."""
-    with correlation_scope():
+    with observe_job(
+        engine, job_name="normalize_opportunities", interval=timedelta(seconds=60)
+    ):
         with Session(engine) as session:
             try:
                 batch = OpportunityService(session).normalize_pending()
@@ -86,7 +94,9 @@ def normalize_opportunities(engine: Engine) -> None:
 
 def evaluate_pending(engine: Engine, *, batch_size: int = 50) -> None:
     """Evaluate each eligible opportunity independently for the current identity."""
-    with correlation_scope():
+    with observe_job(
+        engine, job_name="evaluate_pending", interval=timedelta(seconds=60)
+    ):
         with Session(engine) as session:
             service = MatchingService(session)
             try:
@@ -139,7 +149,9 @@ def analyze_pending(
     degrades this job alone: evaluation keeps running and the failure is persisted as the
     history entry that the cooldown then reads.
     """
-    with correlation_scope() as correlation_id:
+    with observe_job(
+        engine, job_name="analyze_pending", interval=timedelta(seconds=120)
+    ) as correlation_id:
         with Session(engine) as session:
             service = MatchingService(session)
             pending = service.pending_analysis_ids(
@@ -190,6 +202,37 @@ def analyze_pending(
                 )
 
 
+def expire_raw_payloads(
+    engine: Engine,
+    *,
+    retention_days: int = 365,
+    batch_size: int = 500,
+    interval_seconds: int = 21600,
+    now: datetime | None = None,
+) -> None:
+    """Drop raw bodies the policy has released, and account for every one of them."""
+    with observe_job(
+        engine,
+        job_name="expire_raw_payloads",
+        interval=timedelta(seconds=interval_seconds),
+    ):
+        with Session(engine) as session:
+            outcome = PayloadRetentionService(
+                session, retention_days=retention_days, batch_size=batch_size
+            ).expire_due_payloads(now=now)
+        if outcome.expired:
+            logger.info(
+                "retention batch finished",
+                extra={
+                    "job": "retention",
+                    "examined": outcome.examined,
+                    "expired": outcome.expired,
+                    "policy_version": outcome.policy_version,
+                    "retention_days": outcome.retention_days,
+                },
+            )
+
+
 def collect_enabled_sources(
     engine: Engine,
     *,
@@ -208,7 +251,9 @@ def collect_enabled_sources(
     moment = now or datetime.now(ZoneInfo(timezone))
     backoff_base = timedelta(seconds=backoff_base_seconds)
     backoff_ceiling = timedelta(seconds=backoff_ceiling_seconds)
-    with correlation_scope() as correlation_id:
+    with observe_job(
+        engine, job_name="collect_enabled_sources", interval=timedelta(seconds=60)
+    ) as correlation_id:
         with Session(engine) as session:
             service = service_factory(session)
             sources, _ = service.list_sources(offset=0, limit=100)
@@ -289,9 +334,21 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
             RemotiveCollector(),
         )
     )
+    notifier = build_source_alert_notifier(
+        settings.source_alert_webhook_url,
+        timeout_seconds=settings.source_alert_timeout_seconds,
+    )
 
     def build(session: Session) -> AcquisitionService:
-        return AcquisitionService(session, registry=registry)
+        return AcquisitionService(
+            session,
+            registry=registry,
+            alerts=SourceAlertService(
+                session,
+                notifier=notifier,
+                threshold=settings.source_alert_failure_threshold,
+            ),
+        )
 
     return build
 
@@ -330,6 +387,11 @@ def _scheduled_request(
 def build_scheduler(settings: Settings) -> BackgroundScheduler:
     scheduler = BackgroundScheduler(timezone=settings.collection_timezone)
     engine = create_database_engine(settings.database_url)
+    # An interval trigger fires one interval after startup, which leaves every functional
+    # job with no observable state for its first minute — indistinguishable, to the doctor
+    # and to an operator, from a job that was never registered. Each job therefore takes a
+    # first pass immediately; they are idempotent, coalesced and capped to one instance.
+    first_run = datetime.now(ZoneInfo(settings.collection_timezone))
     scheduler.add_job(heartbeat, "interval", minutes=5, id="heartbeat", replace_existing=True)
     if settings.worker_normalize_enabled:
         scheduler.add_job(
@@ -341,6 +403,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             replace_existing=True,
             coalesce=True,
             max_instances=1,
+            next_run_time=first_run,
         )
     if settings.worker_collect_enabled:
         scheduler.add_job(
@@ -358,6 +421,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             replace_existing=True,
             coalesce=True,
             max_instances=1,
+            next_run_time=first_run,
         )
     if settings.worker_match_enabled:
         scheduler.add_job(
@@ -370,6 +434,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             replace_existing=True,
             coalesce=True,
             max_instances=1,
+            next_run_time=first_run,
         )
     if settings.worker_analyze_enabled:
         scheduler.add_job(
@@ -389,6 +454,27 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             replace_existing=True,
             coalesce=True,
             max_instances=1,
+            next_run_time=first_run,
+        )
+    if settings.worker_retention_enabled:
+        scheduler.add_job(
+            expire_raw_payloads,
+            "interval",
+            seconds=settings.payload_retention_interval_seconds,
+            args=(engine,),
+            kwargs={
+                "retention_days": settings.payload_retention_days,
+                "batch_size": settings.payload_retention_batch_size,
+                "interval_seconds": settings.payload_retention_interval_seconds,
+            },
+            id="expire-raw-payloads",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+            # Six hours is the cadence, not the wait before the first pass: a job whose
+            # state only appears after six hours reads to the doctor as a job that is
+            # missing, which is the one thing operational state exists to rule out.
+            next_run_time=first_run,
         )
     jobs = {
         name: scheduler.get_job(job_id) is not None

@@ -509,6 +509,12 @@ def _legacy_collected_item_v1(evidence: RawItemEvidence) -> dict[str, Any]:
     """Adapt pre-contract RawItems without changing their immutable evidence."""
     raw_item = evidence.raw_item
     payload = raw_item.payload
+    if payload is None:
+        # Only pre-contract items reach here, and only they can be unreadable: retention
+        # expires the body, so the adapter says so rather than reading an empty object.
+        raise NormalizationError(
+            "raw item payload is no longer retained; it cannot be reprocessed"
+        )
     metadata = dict(raw_item.item_metadata)
     metadata.pop(COLLECTED_ITEM_V1_KEY, None)
     company_name = evidence.company_name or _mapping_string(

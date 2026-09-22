@@ -13,8 +13,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.request import urlopen
@@ -153,6 +154,182 @@ def check_tables(settings: Settings) -> Check:
     return Check("catalogue", OK, "catalogue is populated", facts=counts)
 
 
+#: Each functional job and the kill switch that decides whether it should be running. A
+#: job that is switched off is not missing, and must never be reported as broken.
+WORKER_JOB_SWITCHES = {
+    "collect_enabled_sources": "worker_collect_enabled",
+    "normalize_opportunities": "worker_normalize_enabled",
+    "evaluate_pending": "worker_match_enabled",
+    "analyze_pending": "worker_analyze_enabled",
+    "expire_raw_payloads": "worker_retention_enabled",
+}
+
+
+def check_worker_jobs(settings: Settings, *, now: datetime | None = None) -> Check:
+    """Say which jobs are healthy, late, failing or absent, from persisted state alone.
+
+    A scheduler that is up proves nothing about a job that never ran, so nothing here is
+    read from the process: the worker writes what it did, and this reads it back.
+    """
+    moment = now or datetime.now(UTC)
+    grace = timedelta(seconds=settings.doctor_job_grace_seconds)
+    expected = [
+        name
+        for name, switch in WORKER_JOB_SWITCHES.items()
+        if getattr(settings, switch)
+    ]
+    try:
+        engine = create_database_engine(settings.database_url)
+        with engine.connect() as connection:
+            rows = connection.execute(
+                text(
+                    "SELECT job_name, last_success_at, last_failure_at, next_run_at, "
+                    "last_error FROM platform.worker_job_state"
+                )
+            ).all()
+    except Exception as error:
+        return Check(
+            "worker jobs",
+            FAIL,
+            f"could not read the job state: {error}",
+            "confirm the migrations ran with `make migrate`",
+        )
+
+    states = {row.job_name: row for row in rows}
+    if not states:
+        return Check(
+            "worker jobs",
+            WARN,
+            "no job has recorded a pass yet",
+            "start the worker with `make up`, or wait for its first pass",
+            {"expected": expected},
+        )
+
+    facts = classify_worker_jobs(states, expected, now=moment, grace=grace)
+    facts["disabled"] = sorted(set(WORKER_JOB_SWITCHES) - set(expected))
+    broken = facts["missing"] + facts["failing"] + facts["late"]
+    if broken:
+        return Check(
+            "worker jobs",
+            FAIL,
+            f"{len(broken)} job(s) are not operating: {', '.join(sorted(broken))}",
+            "read the worker logs for the named job, then restart it with `make restart`",
+            facts,
+        )
+    return Check(
+        "worker jobs",
+        OK,
+        f"{len(facts['healthy'])} job(s) ran on schedule",
+        facts=facts,
+    )
+
+
+def classify_worker_jobs(
+    states: Mapping[str, Any],
+    expected: Sequence[str],
+    *,
+    now: datetime,
+    grace: timedelta,
+) -> dict[str, list[str]]:
+    """Sort the expected jobs into the four states an operator can act on.
+
+    Failure is decided before lateness on purpose: a job that failed its last pass is
+    broken whether or not the next one is overdue, and reporting it as merely late would
+    send the operator to the scheduler instead of to the error.
+
+    A job that has recorded an attempt but neither an outcome is running its first pass,
+    not failing it. Left as a failure, every worker would look broken for the length of one
+    job on every start. It becomes late once its next run is overdue, which is the real
+    symptom of a pass that never finishes.
+    """
+    missing: list[str] = []
+    failing: list[str] = []
+    late: list[str] = []
+    healthy: list[str] = []
+    for name in expected:
+        state = states.get(name)
+        if state is None:
+            missing.append(name)
+        elif state.last_failure_at is not None and (
+            state.last_success_at is None
+            or state.last_failure_at > state.last_success_at
+        ):
+            failing.append(name)
+        elif state.next_run_at is not None and now > state.next_run_at + grace:
+            late.append(name)
+        else:
+            healthy.append(name)
+    return {
+        "missing": sorted(missing),
+        "failing": sorted(failing),
+        "late": sorted(late),
+        "healthy": sorted(healthy),
+    }
+
+
+def check_source_incidents(settings: Settings) -> Check:
+    """Open source incidents, and whether anything would have been sent about them."""
+    try:
+        engine = create_database_engine(settings.database_url)
+        with engine.connect() as connection:
+            open_incidents = connection.execute(
+                text(
+                    "SELECT source.name AS name, incident.consecutive_failures AS "
+                    "failures, incident.alert_delivery AS delivery "
+                    "FROM acquisition.source_alert_incident AS incident "
+                    "JOIN acquisition.source_definition AS source "
+                    "ON source.id = incident.source_definition_id "
+                    "WHERE incident.recovered_at IS NULL "
+                    "ORDER BY incident.opened_at"
+                )
+            ).all()
+    except Exception as error:
+        return Check(
+            "source incidents",
+            FAIL,
+            f"could not read source incidents: {error}",
+            "confirm the migrations ran with `make migrate`",
+        )
+
+    webhook = bool(settings.source_alert_webhook_url.strip())
+    facts: dict[str, Any] = {
+        "webhook_configured": webhook,
+        "open_incidents": [
+            {
+                "source": row.name,
+                "consecutive_failures": row.failures,
+                "alert_delivery": row.delivery,
+            }
+            for row in open_incidents
+        ],
+    }
+    if not webhook and open_incidents:
+        return Check(
+            "source incidents",
+            WARN,
+            f"{len(open_incidents)} source(s) are down and no webhook is configured",
+            "set SOURCE_ALERT_WEBHOOK_URL, or watch this check",
+            facts,
+        )
+    if open_incidents:
+        return Check(
+            "source incidents",
+            WARN,
+            f"{len(open_incidents)} source(s) are down",
+            "read the run history of the named source and fix or disable it",
+            facts,
+        )
+    if not webhook:
+        return Check(
+            "source incidents",
+            WARN,
+            "no source is down, but an outage would only be reported here",
+            "set SOURCE_ALERT_WEBHOOK_URL to be told without opening the doctor",
+            facts,
+        )
+    return Check("source incidents", OK, "no source incident is open", facts=facts)
+
+
 def check_prompts(root: Path) -> Check:
     directory = root / "prompts" / "opportunity_analysis" / "v1"
     required = ("system.md", "user.md.j2", "output.schema.json", "metadata.yaml")
@@ -201,6 +378,8 @@ def run_checks(root: Path) -> list[Check]:
     checks.append(check_database(settings))
     if checks[-1].status == OK:
         checks.append(check_tables(settings))
+        checks.append(check_worker_jobs(settings))
+        checks.append(check_source_incidents(settings))
     checks.append(check_ollama(settings))
     return checks
 

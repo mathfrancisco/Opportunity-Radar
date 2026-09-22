@@ -90,6 +90,31 @@ describe('getOpportunity', () => {
     expect(detail.occurrences[0].sourceUrl).toBe('https://example.com/jobs/ci-1')
     expect(detail.normalizationResults[0].identityDecision).toBe('NEW')
     expect(detail.publishedAt).toBeNull()
+    // The response predates retention, so the payload is still there to reprocess.
+    expect(detail.occurrences[0].payloadRetained).toBe(true)
+    expect(detail.occurrences[0].payloadExpiredAt).toBeNull()
+  })
+
+  it('mostra a ocorrência cujo conteúdo bruto a retenção já expirou', async () => {
+    respond({
+      id: 'opportunity-1',
+      occurrences: [
+        {
+          id: 'occurrence-1',
+          raw_item_id: 'raw-1',
+          source_definition_id: 'source-1',
+          first_seen_at: '2025-09-17T10:00:00Z',
+          last_seen_at: '2025-09-17T10:00:00Z',
+          payload_retained: false,
+          payload_expired_at: '2026-09-22T00:00:00Z',
+        },
+      ],
+    })
+
+    const detail = await getOpportunity('opportunity-1')
+
+    expect(detail.occurrences[0].payloadRetained).toBe(false)
+    expect(detail.occurrences[0].payloadExpiredAt).toBe('2026-09-22T00:00:00Z')
   })
 
   it('traduz 404 em uma mensagem própria', async () => {

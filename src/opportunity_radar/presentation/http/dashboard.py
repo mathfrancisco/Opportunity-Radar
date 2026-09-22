@@ -6,10 +6,16 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from opportunity_radar.dashboard.metrics import (
+    METRIC_WINDOWS,
+    SourceMetricsWindow,
+    SourceWindowMetrics,
+    source_metrics,
+)
 from opportunity_radar.dashboard.queries import (
     FAILING_RUN_STATUSES,
     InboxItem,
@@ -118,6 +124,54 @@ class SourceCoverageReportResponse(BaseModel):
     sources: list[SourceCoverageResponse]
 
 
+class SeniorityDistributionResponse(BaseModel):
+    counts: dict[str, int]
+    percentages: dict[str, float]
+    known: int
+    unknown: int
+    total: int
+    mapping_versions: dict[str, int]
+    evidence: dict[str, int]
+
+
+class SourceMetricsResponse(BaseModel):
+    source_definition_id: UUID
+    name: str
+    source_type: str
+    enabled: bool
+    schedule: str | None
+    coverage_state: str
+    runs: int
+    runs_succeeded: int
+    runs_partial: int
+    runs_failed: int
+    items_seen: int
+    items_persisted: int
+    items_skipped: int
+    items_invalid: int
+    latency_p95_seconds: float | None
+    #: `null` rather than zero when the window holds no run: an unmeasured rate and a
+    #: perfect one must not read the same.
+    error_rate: float | None
+    dedupe_rate: float | None
+    has_runs: bool
+    errors_by_code: dict[str, int]
+    seniority: SeniorityDistributionResponse
+    incident_open: bool
+
+
+class SourceMetricsWindowResponse(BaseModel):
+    window: str
+    since: datetime
+    until: datetime
+    sources: list[SourceMetricsResponse]
+
+
+class SourceMetricsReportResponse(BaseModel):
+    generated_at: datetime
+    windows: list[SourceMetricsWindowResponse]
+
+
 class OverviewResponse(BaseModel):
     opportunities_total: int
     opportunities_active: int
@@ -206,6 +260,30 @@ def get_source_coverage(
     )
 
 
+@router.get("/source-metrics", response_model=SourceMetricsReportResponse)
+def get_source_metrics(
+    window: str | None = Query(
+        default=None, description="Restrict the answer to one window: 24h or 7d."
+    ),
+    session: Session = Depends(get_session),
+) -> SourceMetricsReportResponse:
+    """Both windows by default, because one of them alone hides a slow degradation."""
+    if window is not None and window not in METRIC_WINDOWS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "unknown_metric_window",
+                "message": f"Window must be one of: {', '.join(METRIC_WINDOWS)}.",
+            },
+        )
+    selected = None if window is None else {window: METRIC_WINDOWS[window]}
+    report = source_metrics(session, windows=selected)
+    return SourceMetricsReportResponse(
+        generated_at=report.generated_at,
+        windows=[_metrics_window_response(item) for item in report.windows],
+    )
+
+
 @router.get("/overview", response_model=OverviewResponse)
 def get_overview(
     profile_version_id: UUID | None = None,
@@ -248,6 +326,51 @@ def _inbox_item_response(item: InboxItem) -> InboxItemResponse:
         application_id=item.application_id,
         application_stage=item.application_stage,
         application_next_action_at=item.application_next_action_at,
+    )
+
+
+def _metrics_window_response(
+    window: SourceMetricsWindow,
+) -> SourceMetricsWindowResponse:
+    return SourceMetricsWindowResponse(
+        window=window.window,
+        since=window.since,
+        until=window.until,
+        sources=[_source_metrics_response(source) for source in window.sources],
+    )
+
+
+def _source_metrics_response(source: SourceWindowMetrics) -> SourceMetricsResponse:
+    return SourceMetricsResponse(
+        source_definition_id=source.source_definition_id,
+        name=source.name,
+        source_type=source.source_type,
+        enabled=source.enabled,
+        schedule=source.schedule,
+        coverage_state=source.coverage_state,
+        runs=source.runs,
+        runs_succeeded=source.runs_succeeded,
+        runs_partial=source.runs_partial,
+        runs_failed=source.runs_failed,
+        items_seen=source.items_seen,
+        items_persisted=source.items_persisted,
+        items_skipped=source.items_skipped,
+        items_invalid=source.items_invalid,
+        latency_p95_seconds=source.latency_p95_seconds,
+        error_rate=source.error_rate,
+        dedupe_rate=source.dedupe_rate,
+        has_runs=source.has_runs,
+        errors_by_code=source.errors_by_code,
+        seniority=SeniorityDistributionResponse(
+            counts=source.seniority.counts,
+            percentages=source.seniority.percentages,
+            known=source.seniority.known,
+            unknown=source.seniority.unknown,
+            total=source.seniority.total,
+            mapping_versions=source.seniority.mapping_versions,
+            evidence=source.seniority.evidence,
+        ),
+        incident_open=source.incident_open,
     )
 
 

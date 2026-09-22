@@ -1,6 +1,6 @@
 # CARD F13-06 — Doctor e soak gate de 72 horas
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 13 — Operação contínua
 - **Depende de:** F13-01, F13-02, F13-04, F13-05
 - **Bloqueia:** Encerramento da Fase 13 e milestone L
@@ -37,12 +37,12 @@ de atraso, 12 meses de retenção e sequência de três falhas.
 
 ## Critérios de aceite
 
-- [ ] `doctor` identifica job ausente, atrasado, falho e saudável.
-- [ ] Diagnóstico inclui incidentes de fonte e configuração de webhook.
-- [ ] Gate de 72 horas não exige terminal ou intervenção manual após bootstrap.
-- [ ] Gate cobre alerta único após três falhas e recovery no primeiro sucesso.
-- [ ] Gate confirma métricas e retenção sem perda de envelope ou procedência.
-- [ ] Simulação acelerada usa relógio controlado e preserva os limites temporais.
+- [x] `doctor` identifica job ausente, atrasado, falho e saudável.
+- [x] Diagnóstico inclui incidentes de fonte e configuração de webhook.
+- [x] Gate de 72 horas não exige terminal ou intervenção manual após bootstrap.
+- [x] Gate cobre alerta único após três falhas e recovery no primeiro sucesso.
+- [x] Gate confirma métricas e retenção sem perda de envelope ou procedência.
+- [x] Simulação acelerada usa relógio controlado e preserva os limites temporais.
 
 ## Verificação
 

@@ -1,6 +1,6 @@
 # CARD F13-03 — Separação do envelope e payload
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 13 — Operação contínua
 - **Depende de:** Nenhum
 - **Bloqueia:** F13-04
@@ -37,11 +37,11 @@ proveniência.
 
 ## Critérios de aceite
 
-- [ ] Cada payload existente é preservado após a migration e o backfill.
-- [ ] Backfill pode ser reexecutado sem duplicar payloads.
-- [ ] `RawItem` preserva ID, hash, fonte, `SourceRun` e `SourceOccurrence`.
-- [ ] Leitores atuais obtêm o mesmo conteúdo bruto antes da retenção.
-- [ ] Validação falha se houver item sem payload onde o legado tinha conteúdo.
+- [x] Cada payload existente é preservado após a migration e o backfill.
+- [x] Backfill pode ser reexecutado sem duplicar payloads.
+- [x] `RawItem` preserva ID, hash, fonte, `SourceRun` e `SourceOccurrence`.
+- [x] Leitores atuais obtêm o mesmo conteúdo bruto antes da retenção.
+- [x] Validação falha se houver item sem payload onde o legado tinha conteúdo.
 
 ## Verificação
 

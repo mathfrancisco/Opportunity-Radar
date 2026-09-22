@@ -9,6 +9,7 @@ from sqlalchemy import engine_from_config, pool
 from opportunity_radar.acquisition import models as acquisition_models  # noqa: F401
 from opportunity_radar.companies import models as company_models  # noqa: F401
 from opportunity_radar.matching import models as matching_models  # noqa: F401
+from opportunity_radar.operations import models as operation_models  # noqa: F401
 from opportunity_radar.opportunities import models as opportunity_models  # noqa: F401
 from opportunity_radar.pipeline import models as pipeline_models  # noqa: F401
 from opportunity_radar.platform.database import Base

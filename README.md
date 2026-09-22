@@ -476,7 +476,11 @@ O PostgreSQL é organizado por schemas alinhados aos bounded contexts. Alguns co
 | `CompanySource` | endpoint ou fonte associada à empresa |
 | `SourceDefinition` | configuração de um coletor |
 | `SourceRun` | execução delimitada de uma fonte |
-| `RawItem` | conteúdo bruto coletado |
+| `RawItem` | envelope imutável do item coletado: fonte, run, identidade e hash |
+| `RawItemPayload` | conteúdo bruto do item, sujeito à política de retenção |
+| `SourceAlertIncident` | episódio de indisponibilidade de uma fonte, do alerta ao recovery |
+| `PayloadRetentionEvent` | histórico append-only de cada expiração de conteúdo bruto |
+| `WorkerJobState` | estado operacional observado de cada job do worker |
 | `Opportunity` | vaga canônica consolidada |
 | `SourceOccurrence` | ocorrência da vaga em uma fonte |
 | `MatchAssessment` | avaliação versionada de aderência |
@@ -555,6 +559,20 @@ Mesmo sendo local, o sistema precisa responder rapidamente a perguntas como:
 - qual versão de regra gerou determinado score?
 
 Para isso, execuções recebem identificadores de correlação, logs são estruturados e métricas operacionais são persistidas ou exportadas conforme a fase do projeto.
+
+A operação contínua entregue na Fase 13 acrescenta:
+
+- estado persistido por job do worker — tentativa, sucesso, falha, duração e próxima
+  execução — que o `scripts/doctor.py` lê para distinguir job saudável, atrasado, falho e
+  ausente, mesmo depois de um reinício;
+- incidente por fonte que abre com três falhas consecutivas, envia um único alerta e um
+  recovery no primeiro sucesso, registrado mesmo quando não há webhook configurado;
+- métricas por fonte em 24 horas e sete dias, com cobertura, taxa de erro por código,
+  dedupe, latência p95 e senioridade que mantém `UNKNOWN` visível e com procedência;
+- retenção auditável do conteúdo bruto: o payload expira em 12 meses por padrão, o
+  envelope `RawItem` permanece, e cada expiração gera histórico append-only.
+
+O detalhe operacional está no [runbook](docs/30-runbook.md).
 
 ---
 

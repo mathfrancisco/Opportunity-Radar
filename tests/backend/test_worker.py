@@ -16,6 +16,7 @@ def test_worker_scheduler_has_a_heartbeat_job() -> None:
     assert scheduler.get_job("normalize-opportunities") is not None
     assert scheduler.get_job("evaluate-pending") is not None
     assert scheduler.get_job("analyze-pending") is not None
+    assert scheduler.get_job("expire-raw-payloads") is not None
 
 
 def test_worker_kill_switches_only_remove_functional_jobs() -> None:
@@ -26,6 +27,7 @@ def test_worker_kill_switches_only_remove_functional_jobs() -> None:
             worker_normalize_enabled=False,
             worker_match_enabled=False,
             worker_analyze_enabled=False,
+            worker_retention_enabled=False,
         )
     )
 
@@ -40,6 +42,7 @@ def test_each_kill_switch_removes_only_its_own_job() -> None:
         "worker_normalize_enabled": "normalize-opportunities",
         "worker_match_enabled": "evaluate-pending",
         "worker_analyze_enabled": "analyze-pending",
+        "worker_retention_enabled": "expire-raw-payloads",
     }
     for switch, disabled_job in switches.items():
         scheduler = build_scheduler(

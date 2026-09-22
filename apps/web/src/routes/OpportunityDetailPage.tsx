@@ -178,6 +178,15 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
               {formatDate(occurrence.lastSeenAt)}
             </p>
             <p className="mt-1 text-xs text-[#6d827b]">raw item {occurrence.rawItemId}</p>
+            {!occurrence.payloadRetained && (
+              <p className="mt-2 rounded-xl border border-[#e3cf9a] bg-[#fbf3e2] px-3 py-2 text-xs text-[#7a5a16]">
+                Conteúdo bruto expirado pela retenção
+                {occurrence.payloadExpiredAt
+                  ? ` em ${formatDate(occurrence.payloadExpiredAt)}`
+                  : ''}
+                . A procedência permanece; o reprocessamento não está mais disponível.
+              </p>
+            )}
           </li>
         ))}
       </ul>

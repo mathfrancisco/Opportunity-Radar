@@ -1,6 +1,6 @@
 # CARD F13-02 — Alertas e recovery de fontes
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 13 — Operação contínua
 - **Depende de:** F13-01
 - **Bloqueia:** F13-06
@@ -37,12 +37,12 @@ e os marcos de alerta/recovery para que reinícios não dupliquem mensagens.
 
 ## Critérios de aceite
 
-- [ ] Três falhas consecutivas enviam um único alerta com webhook configurado.
-- [ ] Quarta e demais falhas do incidente não reenviam o alerta.
-- [ ] Primeiro sucesso envia recovery e encerra o incidente.
-- [ ] Nova sequência de três falhas abre novo incidente.
-- [ ] Sem webhook, o caso aparece em log estruturado e no `doctor`.
-- [ ] Falha do webhook não aborta a coleta nem outras fontes.
+- [x] Três falhas consecutivas enviam um único alerta com webhook configurado.
+- [x] Quarta e demais falhas do incidente não reenviam o alerta.
+- [x] Primeiro sucesso envia recovery e encerra o incidente.
+- [x] Nova sequência de três falhas abre novo incidente.
+- [x] Sem webhook, o caso aparece em log estruturado e no `doctor`.
+- [x] Falha do webhook não aborta a coleta nem outras fontes.
 
 ## Verificação
 

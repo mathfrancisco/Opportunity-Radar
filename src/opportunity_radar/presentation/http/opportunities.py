@@ -46,6 +46,10 @@ class SourceOccurrenceResponse(BaseModel):
     last_seen_at: datetime
     source_published_at: datetime | None
     source_updated_at: datetime | None
+    #: Whether the raw body behind this occurrence can still be reprocessed. The envelope
+    #: above stays either way, so `False` means "no longer reprocessable", not "lost".
+    payload_retained: bool
+    payload_expired_at: datetime | None
 
 
 class NormalizationResultResponse(BaseModel):
@@ -332,6 +336,8 @@ def _occurrence_response(
         last_seen_at=occurrence.last_seen_at,
         source_published_at=occurrence.source_published_at,
         source_updated_at=occurrence.source_updated_at,
+        payload_retained=occurrence.payload_expired_at is None,
+        payload_expired_at=occurrence.payload_expired_at,
     )
 
 
