@@ -26,6 +26,15 @@ services:
       start_period: 2s
     networks: [app_net]
 
+  # The API probes and runs sources on demand, so it has to read the same local board the
+  # worker does: a probe that reached the real Greenhouse would make the gate depend on it.
+  api:
+    environment:
+      GREENHOUSE_BASE_URL: http://jobboard:8477
+    depends_on:
+      jobboard:
+        condition: service_started
+
   worker:
     environment:
       GREENHOUSE_BASE_URL: http://jobboard:8477

@@ -1,6 +1,6 @@
 # CARD F14-06 — Teste ao vivo do collector pela interface
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-23
 - **Fase:** 14 — Cadastro e curadoria pela interface
 - **Depende de:** F14-02
 - **Bloqueia:** Milestone M
@@ -70,15 +70,47 @@ duas coisas aparecem separadas no painel.
 
 ## Critérios de aceite
 
-- [ ] Uma fonte externa criada pela tela chega a `confirmed` só por uma sonda bem-sucedida.
-- [ ] Sonda que falha não altera a fonte e mostra o código e o resumo do domínio.
-- [ ] Nenhuma sonda persiste `RawItem`, `SourceRun` ou `Opportunity`.
-- [ ] Duas sondas seguidas da mesma fonte dentro do intervalo mínimo resultam numa só
+- [x] Uma fonte externa criada pela tela chega a `confirmed` só por uma sonda bem-sucedida.
+- [x] Sonda que falha não altera a fonte e mostra o código e o resumo do domínio.
+- [x] Nenhuma sonda persiste `RawItem`, `SourceRun` ou `Opportunity`.
+- [x] Duas sondas seguidas da mesma fonte dentro do intervalo mínimo resultam numa só
       requisição externa.
-- [ ] Termos revisados e habilitação continuam exigindo ação explícita depois da sonda.
-- [ ] Script e API usam a mesma função de sonda, e ambos gravam a tentativa.
-- [ ] O primeiro critério da §3.3 fecha: criar, sondar, homologar, habilitar e executar uma
+- [x] Termos revisados e habilitação continuam exigindo ação explícita depois da sonda.
+- [x] Script e API usam a mesma função de sonda, e ambos gravam a tentativa.
+- [x] O primeiro critério da §3.3 fecha: criar, sondar, homologar, habilitar e executar uma
       fonte externa sem terminal.
+
+## Nota de execução
+
+A sonda saiu do script para `acquisition/probing.py` (`run_probe`), e o script, a API e a
+tela usam essa função. `AcquisitionService.probe_source` trava a linha da fonte, confere
+versão, tipo e habilitação, grava a tentativa em `acquisition.source_probe` (migração
+`20260923_0017`) e só então faz a requisição. Dois cliques que disputam a mesma fonte veem a
+primeira tentativa, e o segundo recebe 429 com `Retry-After`. O espaçamento usa o intervalo
+de sondas (60 s) e também o `minimum_run_interval_seconds` da fonte, contado a partir da
+última requisição HTTP dela.
+
+Sonda que passa grava `evidence_status = confirmed`, `collector_local_tested = true` e o
+`homologation_audit` com o `probe_id` que produziu a evidência. Essa escrita é versionada:
+se a fonte mudou enquanto a requisição estava fora, nada é registrado e a API responde 409.
+Sonda que falha é resposta, não erro: 200 com o código e o resumo do domínio, e a fonte
+não muda.
+
+O script grava as tentativas dele na mesma tabela (`requested_by = script`), e o
+`homologation_audit` dele também passou a carregar o `probe_id`.
+
+O card previa usar o circuit breaker. No código, ele existe só como código de erro
+(`CIRCUIT_OPEN`), sem mecanismo por trás. A sonda respeita o que existe de fato: a política
+de rede da fonte, o intervalo mínimo e a trava de linha.
+
+Achado no caminho: a API montava os collectors sem a `GREENHOUSE_BASE_URL` configurada,
+que só o worker lia. Agora `acquisition/registry.py` monta o registry para os dois, e
+executar ou sondar pela tela lê o mesmo endpoint que o relógio do worker lê. No compose de
+CI, a API também aponta para o board local.
+
+Verificado no navegador contra a API e o board local: fonte Greenhouse criada pela tela,
+sonda confirmando a evidência, segundo clique recusado com o tempo de espera, termos e data
+registrados, habilitação e uma execução com sucesso. O passo E2E repete isso no compose.
 
 ## Verificação
 

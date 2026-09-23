@@ -9,6 +9,7 @@ import {
   getSourceHealth,
   getSourceRuns,
   normalizeRun,
+  probeSource,
   runSource,
   submitManualRun,
   updateSourceControls,
@@ -94,6 +95,17 @@ export function useManualIntake(sourceId: string) {
       refreshCatalogue(client)
       void client.invalidateQueries({ queryKey: ['source-runs', sourceId] })
       void client.invalidateQueries({ queryKey: ['inbox'] })
+    },
+  })
+}
+
+export function useProbeSource(sourceId: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (expectedVersion: number) => probeSource(sourceId, expectedVersion),
+    onSuccess: ({ source }) => {
+      client.setQueryData(['source', sourceId], source)
+      refreshCatalogue(client)
     },
   })
 }

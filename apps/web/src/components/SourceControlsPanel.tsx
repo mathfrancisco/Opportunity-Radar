@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { type ControlsDraft as Draft, draftFrom, missingForEnable } from '../features/sources/gate'
-import { useSource, useUpdateSourceControls } from '../features/sources/useSources'
+import { useProbeSource, useSource, useUpdateSourceControls } from '../features/sources/useSources'
 import { ConflictError } from '../lib/api'
 import { Button } from './Button'
 import { Field, controlClassName } from './Field'
@@ -12,6 +12,7 @@ export function SourceControlsPanel({ sourceId }: { sourceId: string }) {
   // theirs, and it survives a conflict reload: the intent stays, the version refreshes.
   const [draft, setDraft] = useState<Draft | null>(null)
   const update = useUpdateSourceControls(sourceId)
+  const probe = useProbeSource(sourceId)
 
   if (source.isPending) return <LoadingState className="mt-4">Carregando homologação…</LoadingState>
   if (source.isError || !source.data) {
@@ -81,6 +82,54 @@ export function SourceControlsPanel({ sourceId }: { sourceId: string }) {
               value={current.reviewedOn}
             />
           </Field>
+        </div>
+      )}
+
+      {record.sourceType !== 'manual' && !record.enabled && (
+        <div className="mt-4 rounded-xl border border-line bg-surface p-3 text-sm">
+          <p className="font-medium">Teste do collector</p>
+          <p className="mt-1 text-subtle">
+            Pede um item ao endpoint público e descarta o que leu. Se o collector entender a
+            resposta, a evidência fica confirmada e o collector, testado. Termos revisados e a
+            habilitação continuam com você.
+          </p>
+          <Button
+            className="mt-3"
+            disabled={probe.isPending}
+            onClick={() => {
+              update.reset()
+              probe.mutate(record.version)
+            }}
+            size="sm"
+            variant="secondary"
+          >
+            {probe.isPending ? 'Testando…' : 'Testar o collector agora'}
+          </Button>
+          {probe.data && (
+            <p
+              className={`mt-3 ${probe.data.probe.status === 'PASSED' ? 'text-success-ink' : 'text-danger-ink'}`}
+              role="status"
+            >
+              {probe.data.probe.status === 'PASSED'
+                ? `O collector leu o endpoint (${probe.data.probe.itemsSeen} item, ${probe.data.probe.httpRequests} requisição). Evidência confirmada.`
+                : `O teste falhou: ${probe.data.probe.errorCode ?? 'erro'} — ${probe.data.probe.detail ?? 'sem detalhe'}. A fonte não mudou.`}
+            </p>
+          )}
+          {probe.isError &&
+            (probe.error instanceof ConflictError ? (
+              <ConflictNotice
+                className="mt-3"
+                onReload={() => {
+                  probe.reset()
+                  void source.refetch()
+                }}
+              >
+                A fonte mudou enquanto o teste rodava, e nada foi registrado. Recarregue e teste
+                de novo.
+              </ConflictNotice>
+            ) : (
+              <ErrorState className="mt-3">{probe.error.message}</ErrorState>
+            ))}
         </div>
       )}
 

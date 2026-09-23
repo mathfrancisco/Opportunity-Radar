@@ -16,17 +16,13 @@ from opportunity_radar.acquisition.alerts import (
     SourceAlertService,
     build_source_alert_notifier,
 )
-from opportunity_radar.acquisition.ashby import AshbyCollector
-from opportunity_radar.acquisition.collectors import CollectorRegistry, ManualCollector
 from opportunity_radar.acquisition.domain import (
     CollectionMode,
     CollectionRequest,
     ExecutionTrigger,
 )
-from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
-from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.models import SourceDefinitionModel
-from opportunity_radar.acquisition.remotive import RemotiveCollector
+from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.scheduling import CollectionGate, evaluate_gate
 from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.matching.adapters import build_analysis_adapter
@@ -325,15 +321,7 @@ def collect_enabled_sources(
 
 def collection_service_factory(settings: Settings) -> Callable[[Session], AcquisitionService]:
     """Build the collectors once per worker, with the endpoints this deployment points at."""
-    registry = CollectorRegistry(
-        (
-            ManualCollector(),
-            AshbyCollector(),
-            LeverCollector(),
-            GreenhouseCollector(base_url=settings.greenhouse_base_url),
-            RemotiveCollector(),
-        )
-    )
+    registry = build_collector_registry(greenhouse_base_url=settings.greenhouse_base_url)
     notifier = build_source_alert_notifier(
         settings.source_alert_webhook_url,
         timeout_seconds=settings.source_alert_timeout_seconds,

@@ -381,3 +381,49 @@ class SourceCheckpointModel(Base):
 def prevent_raw_item_mutation(_: object, __: object, ___: object) -> None:
     """Raw evidence is append-only; a changed payload creates a new row."""
     raise ValueError("RawItem is immutable")
+
+
+class SourceProbeModel(Base):
+    """One live test of a source's collector against its public endpoint.
+
+    A probe proves the collector understands the endpoint; it never keeps what it read.
+    Every attempt is written, passed or failed, because a confirmed evidence status has
+    to point at the attempt that produced it, and a failed one is what explains why a
+    source is still unverified.
+    """
+
+    __tablename__ = "source_probe"
+    __table_args__ = (
+        CheckConstraint(
+            "requested_by IN ('interface', 'script')",
+            name="ck_source_probe_requested_by",
+        ),
+        CheckConstraint(
+            "status IN ('RUNNING', 'PASSED', 'FAILED')",
+            name="ck_source_probe_status",
+        ),
+        Index("ix_source_probe_source_started", "source_definition_id", "started_at"),
+        {"schema": "acquisition"},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    source_definition_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("acquisition.source_definition.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    requested_by: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="RUNNING")
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    items_seen: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    http_requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    detail: Mapped[str | None] = mapped_column(Text)
+    # True only when this attempt is what wrote the confirmed evidence: a probe that passed
+    # after the source changed under it recorded nothing.
+    evidence_recorded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

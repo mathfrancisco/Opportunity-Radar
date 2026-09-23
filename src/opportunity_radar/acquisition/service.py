@@ -13,7 +13,7 @@ from math import ceil, isfinite
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -41,7 +41,14 @@ from opportunity_radar.acquisition.models import (
     RawItemPayloadModel,
     SourceCheckpointModel,
     SourceDefinitionModel,
+    SourceProbeModel,
     SourceRunModel,
+)
+from opportunity_radar.acquisition.probing import (
+    PROBE_TYPES,
+    ProbeOutcome,
+    collector_test_audit,
+    run_probe,
 )
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.repository import AcquisitionRepository
@@ -75,6 +82,25 @@ class SourceVersionConflictError(AcquisitionError):
             "source definition was changed; refresh it before updating",
         )
         self.source_id = source_id
+
+
+class SourceProbeTooSoonError(AcquisitionError):
+    """A probe asked for before the source's spacing allows another request."""
+
+    def __init__(self, retry_after_seconds: int) -> None:
+        super().__init__(
+            AcquisitionErrorCode.SOURCE_RATE_LIMITED,
+            f"this source was probed or collected too recently; retry in "
+            f"{retry_after_seconds} seconds",
+            retryable=True,
+        )
+        self.retry_after_seconds = retry_after_seconds
+
+
+# A double click must not become two requests to someone else's board, and an impatient
+# operator must not be able to hammer one either.
+PROBE_MIN_INTERVAL_SECONDS = 60
+PROBE_MAX_ITEMS = 1
 
 
 class SourceDisabledError(AcquisitionError):
@@ -302,6 +328,168 @@ class AcquisitionService:
         self.session.commit()
         self.session.refresh(source)
         return source
+
+    async def probe_source(
+        self,
+        source_id: UUID,
+        *,
+        expected_version: int,
+        requested_by: str = "interface",
+    ) -> tuple[SourceProbeModel, SourceDefinitionModel]:
+        """Test the collector against the public endpoint and, if it reads, confirm evidence.
+
+        The probe is written before the request goes out, under a lock on the source, so
+        two clicks that race both see the first attempt and only one reaches the network.
+        A passing probe confirms the evidence and marks the collector tested; it never
+        marks terms reviewed and never enables — those stay explicit steps of the gate.
+        What the probe read is discarded: nothing becomes a RawItem outside a SourceRun.
+        """
+        source = self.session.scalar(
+            select(SourceDefinitionModel)
+            .where(SourceDefinitionModel.id == source_id)
+            .with_for_update()
+        )
+        if source is None:
+            raise SourceNotFoundError(source_id)
+        if source.version != expected_version:
+            self.session.rollback()
+            raise SourceVersionConflictError(source_id)
+        if source.source_type not in PROBE_TYPES:
+            self.session.rollback()
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                f"{source.source_type} sources have no public endpoint to probe",
+                field="source_type",
+            )
+        if source.enabled:
+            self.session.rollback()
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                "an enabled source is proven by its own runs; disable it before probing",
+                field="enabled",
+            )
+        network_policy = _network_policy(source.rate_limit_policy or {})
+        wait = self._probe_wait(source, network_policy)
+        if wait > 0:
+            self.session.rollback()
+            raise SourceProbeTooSoonError(wait)
+
+        probe = SourceProbeModel(
+            source_definition_id=source.id,
+            requested_by=requested_by,
+            status="RUNNING",
+            started_at=datetime.now(UTC),
+        )
+        self.session.add(probe)
+        self.session.commit()
+
+        outcome = await run_probe(
+            source.source_type,
+            dict(source.configuration or {}),
+            self.registry,
+            max_items=PROBE_MAX_ITEMS,
+            network_policy=network_policy,
+        )
+        return self._record_probe(source, probe, outcome, expected_version)
+
+    def _probe_wait(
+        self, source: SourceDefinitionModel, policy: CollectionNetworkPolicy
+    ) -> int:
+        """Seconds until this source may be asked again, by probe or by the run spacing."""
+        now = datetime.now(UTC)
+        waits = [0.0]
+        last_probe = self.session.scalar(
+            select(func.max(SourceProbeModel.started_at)).where(
+                SourceProbeModel.source_definition_id == source.id
+            )
+        )
+        if last_probe is not None:
+            waits.append(PROBE_MIN_INTERVAL_SECONDS - (now - last_probe).total_seconds())
+        run_interval = policy.minimum_run_interval_seconds
+        if run_interval and source.last_http_attempt_at is not None:
+            waits.append(run_interval - (now - source.last_http_attempt_at).total_seconds())
+        return ceil(max(waits))
+
+    def _record_probe(
+        self,
+        source: SourceDefinitionModel,
+        probe: SourceProbeModel,
+        outcome: ProbeOutcome,
+        expected_version: int,
+    ) -> tuple[SourceProbeModel, SourceDefinitionModel]:
+        finished_at = datetime.now(UTC)
+        probe.status = "PASSED" if outcome.ok else "FAILED"
+        probe.finished_at = finished_at
+        probe.items_seen = outcome.items_seen
+        probe.http_requests = outcome.http_requests
+        probe.error_code = outcome.error_code
+        probe.detail = outcome.detail
+        if outcome.last_http_attempt_at is not None:
+            self.session.execute(
+                update(SourceDefinitionModel)
+                .where(SourceDefinitionModel.id == source.id)
+                .values(last_http_attempt_at=outcome.last_http_attempt_at)
+            )
+        if outcome.ok:
+            configuration = dict(source.configuration or {})
+            existing_audit = configuration.get("homologation_audit")
+            configuration["homologation_audit"] = {
+                **(existing_audit if isinstance(existing_audit, dict) else {}),
+                **collector_test_audit(
+                    source.source_type,
+                    outcome,
+                    probe_id=str(probe.id),
+                    probed_at=finished_at,
+                    requested_by=probe.requested_by,
+                ),
+            }
+            # Written only if nobody changed the source while the request was out: evidence
+            # about a board is not evidence about whatever the source says now.
+            confirmed = self.session.scalar(
+                update(SourceDefinitionModel)
+                .where(
+                    SourceDefinitionModel.id == source.id,
+                    SourceDefinitionModel.version == expected_version,
+                    SourceDefinitionModel.enabled.is_(False),
+                )
+                .values(
+                    evidence_status="confirmed",
+                    collector_local_tested=True,
+                    configuration=configuration,
+                    version=SourceDefinitionModel.version + 1,
+                )
+                .returning(SourceDefinitionModel.id)
+            )
+            probe.evidence_recorded = confirmed is not None
+        self.session.commit()
+        self.session.refresh(source)
+        self.session.refresh(probe)
+        return probe, source
+
+    def record_script_probe(
+        self,
+        source: SourceDefinitionModel,
+        outcome: ProbeOutcome,
+        started_at: datetime,
+        *,
+        evidence_recorded: bool,
+    ) -> SourceProbeModel:
+        """Keeps the enable script's attempts in the same history as the interface's."""
+        probe = SourceProbeModel(
+            source_definition_id=source.id,
+            requested_by="script",
+            status="PASSED" if outcome.ok else "FAILED",
+            started_at=started_at,
+            finished_at=datetime.now(UTC),
+            items_seen=outcome.items_seen,
+            http_requests=outcome.http_requests,
+            error_code=outcome.error_code,
+            detail=outcome.detail,
+            evidence_recorded=evidence_recorded,
+        )
+        self.session.add(probe)
+        self.session.flush()
+        return probe
 
     def scheduling_state(
         self, source: SourceDefinitionModel, *, timezone: str

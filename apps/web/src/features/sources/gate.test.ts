@@ -30,13 +30,14 @@ describe('missingForEnable', () => {
     expect(missingForEnable(external, draft)).toEqual([])
   })
 
-  it('explica que evidência não confirmada não se resolve pela tela', () => {
+  it('aponta o teste do collector quando a evidência não está confirmada', () => {
     const unverified = { ...external, evidenceStatus: 'ats_identified' }
     const draft = { ...draftFrom(unverified), termsReviewed: true, collectorLocalTested: true }
 
     const missing = missingForEnable(unverified, draft)
     expect(missing).toHaveLength(1)
     expect(missing[0]).toContain('ats_identified')
+    expect(missing[0]).toContain('teste do collector')
   })
 
   it('pede data de revisão quando nenhuma foi registrada', () => {
