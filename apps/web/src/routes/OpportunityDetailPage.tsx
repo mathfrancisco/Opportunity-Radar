@@ -1,7 +1,11 @@
 import { type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ApplicationPanel } from '../components/ApplicationPanel'
+import { Button } from '../components/Button'
+import { Card } from '../components/Card'
+import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
+import { EmptyState, ErrorState, LoadingState } from '../components/states'
 import {
   type EligibilityDetail,
   type MatchAnalysis,
@@ -14,16 +18,8 @@ import {
   useLatestAssessment,
 } from '../features/matching/useAssessment'
 import { type OpportunityDetail } from '../features/opportunities/api'
+import { verdictLabels } from '../features/matching/verdicts'
 import { useOpportunity } from '../features/opportunities/useOpportunity'
-
-const verdictLabels: Record<string, string> = {
-  HIGH_PRIORITY: 'Alta prioridade',
-  RECOMMENDED: 'Recomendada',
-  WATCHLIST: 'Observação',
-  REVIEW_REQUIRED: 'Revisão necessária',
-  LOW_MATCH: 'Baixa aderência',
-  INELIGIBLE: 'Inelegível',
-}
 
 const resultLabels: Record<string, string> = {
   TRUE: 'Atende',
@@ -49,8 +45,8 @@ function formatNumber(value: string | null, digits = 1) {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="mt-10">
-      <h2 className="text-lg font-semibold">{title}</h2>
+    <section className="mt-section">
+      <h2 className="text-section">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   )
@@ -60,35 +56,35 @@ function Facts({ opportunity }: { opportunity: OpportunityDetail }) {
   return (
     <dl className="mt-8 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
       <div>
-        <dt className="text-[#6d827b]">Empresa</dt>
+        <dt className="text-muted">Empresa</dt>
         <dd className="mt-1 font-medium">{display(opportunity.companyName)}</dd>
       </div>
       <div>
-        <dt className="text-[#6d827b]">Localização</dt>
+        <dt className="text-muted">Localização</dt>
         <dd className="mt-1 font-medium">{display(opportunity.location)}</dd>
       </div>
       <div>
-        <dt className="text-[#6d827b]">Modalidade</dt>
+        <dt className="text-muted">Modalidade</dt>
         <dd className="mt-1 font-medium">{opportunity.workMode}</dd>
       </div>
       <div>
-        <dt className="text-[#6d827b]">Senioridade</dt>
+        <dt className="text-muted">Senioridade</dt>
         <dd className="mt-1 font-medium">{opportunity.seniority}</dd>
       </div>
       <div>
-        <dt className="text-[#6d827b]">Contrato</dt>
+        <dt className="text-muted">Contrato</dt>
         <dd className="mt-1 font-medium">{opportunity.contractType}</dd>
       </div>
       <div>
-        <dt className="text-[#6d827b]">Status</dt>
+        <dt className="text-muted">Status</dt>
         <dd className="mt-1 font-medium">{opportunity.lifecycleStatus}</dd>
       </div>
       <div>
-        <dt className="text-[#6d827b]">Publicada</dt>
+        <dt className="text-muted">Publicada</dt>
         <dd className="mt-1 font-medium">{formatDate(opportunity.publishedAt)}</dd>
       </div>
       <div>
-        <dt className="text-[#6d827b]">Versão do conteúdo</dt>
+        <dt className="text-muted">Versão do conteúdo</dt>
         <dd className="mt-1 font-medium">{opportunity.version}</dd>
       </div>
     </dl>
@@ -98,32 +94,27 @@ function Facts({ opportunity }: { opportunity: OpportunityDetail }) {
 function Compensation({ opportunity }: { opportunity: OpportunityDetail }) {
   if (opportunity.compensations.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-[#c8d4c8] p-5 text-[#547068]">
-        Nenhuma remuneração declarada nas fontes. Ausência de dado não vira zero nem
-        penalidade.
-      </p>
+      <EmptyState>Nenhuma remuneração declarada nas fontes. Ausência de dado não vira zero nem
+        penalidade.</EmptyState>
     )
   }
   return (
     <ul className="grid gap-3">
       {opportunity.compensations.map((item, index) => (
-        <li
-          className="rounded-2xl border border-[#dce4dc] bg-white p-5 text-sm"
-          key={`${item.rawItemId}-${index}`}
-        >
+        <Card as="li" className="text-sm" key={`${item.rawItemId}-${index}`}>
           <p className="font-semibold">
             {display(item.minimum)} – {display(item.maximum)} {display(item.currency)}{' '}
-            <span className="font-normal text-[#6d827b]">
+            <span className="font-normal text-muted">
               ({item.period}, {item.grossNet})
             </span>
           </p>
           {item.evidenceText && (
-            <p className="mt-2 text-[#547068]">“{item.evidenceText}”</p>
+            <p className="mt-2 text-subtle">“{item.evidenceText}”</p>
           )}
-          <p className="mt-2 text-xs text-[#6d827b]">
+          <p className="mt-2 text-xs text-muted">
             Evidência: {display(item.evidenceSource)} · raw item {item.rawItemId}
           </p>
-        </li>
+        </Card>
       ))}
     </ul>
   )
@@ -131,17 +122,17 @@ function Compensation({ opportunity }: { opportunity: OpportunityDetail }) {
 
 function Skills({ opportunity }: { opportunity: OpportunityDetail }) {
   if (opportunity.skills.length === 0) {
-    return <p className="text-[#547068]">Nenhuma skill extraída.</p>
+    return <p className="text-subtle">Nenhuma skill extraída.</p>
   }
   return (
     <ul className="flex flex-wrap gap-2">
       {opportunity.skills.map((skill) => (
         <li
-          className="rounded-full border border-[#c8d4c8] bg-white px-4 py-2 text-sm"
+          className="rounded-full border border-line-strong bg-surface px-4 py-2 text-sm"
           key={skill.canonicalName}
         >
           <span className="font-medium">{skill.displayName}</span>{' '}
-          <span className="text-[#6d827b]">
+          <span className="text-muted">
             {skill.requirement.toLowerCase()} · {skill.taxonomyVersion}
           </span>
         </li>
@@ -155,14 +146,11 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
     <>
       <ul className="grid gap-3">
         {opportunity.occurrences.map((occurrence) => (
-          <li
-            className="rounded-2xl border border-[#dce4dc] bg-white p-5 text-sm"
-            key={occurrence.id}
-          >
+          <Card as="li" className="text-sm" key={occurrence.id}>
             <p className="font-medium">
               {occurrence.sourceUrl ? (
                 <a
-                  className="underline decoration-[#d7f06f] decoration-2 underline-offset-4"
+                  className="break-anywhere underline decoration-accent decoration-2 underline-offset-4"
                   href={occurrence.sourceUrl}
                   rel="noreferrer"
                   target="_blank"
@@ -173,13 +161,15 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
                 `Ocorrência ${occurrence.externalId ?? occurrence.id}`
               )}
             </p>
-            <p className="mt-2 text-[#6d827b]">
+            <p className="mt-2 text-muted">
               Primeira vez {formatDate(occurrence.firstSeenAt)} · última{' '}
               {formatDate(occurrence.lastSeenAt)}
             </p>
-            <p className="mt-1 text-xs text-[#6d827b]">raw item {occurrence.rawItemId}</p>
+            <p className="break-anywhere mt-1 text-xs text-muted">
+              raw item {occurrence.rawItemId}
+            </p>
             {!occurrence.payloadRetained && (
-              <p className="mt-2 rounded-xl border border-[#e3cf9a] bg-[#fbf3e2] px-3 py-2 text-xs text-[#7a5a16]">
+              <p className="mt-2 rounded-xl border border-warning-line bg-warning-surface px-3 py-2 text-xs text-warning-ink">
                 Conteúdo bruto expirado pela retenção
                 {occurrence.payloadExpiredAt
                   ? ` em ${formatDate(occurrence.payloadExpiredAt)}`
@@ -187,10 +177,10 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
                 . A procedência permanece; o reprocessamento não está mais disponível.
               </p>
             )}
-          </li>
+          </Card>
         ))}
       </ul>
-      <p className="mt-4 text-sm text-[#6d827b]">
+      <p className="break-anywhere mt-4 text-sm text-muted">
         Fingerprint {opportunity.fingerprint} ({opportunity.fingerprintVersion}) ·{' '}
         {opportunity.normalizationResults.length} resultado
         {opportunity.normalizationResults.length === 1 ? '' : 's'} de normalização.
@@ -200,12 +190,12 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
 }
 
 function Eligibility({ details }: { details: EligibilityDetail[] }) {
-  if (details.length === 0) return <p className="text-[#547068]">Nenhum filtro avaliado.</p>
+  if (details.length === 0) return <p className="text-subtle">Nenhum filtro avaliado.</p>
   return (
     <ul className="grid gap-2">
       {details.map((detail) => (
         <li
-          className="rounded-2xl border border-[#dce4dc] bg-white p-4 text-sm"
+          className="rounded-2xl border border-line bg-surface p-4 text-sm"
           key={detail.code}
         >
           <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -213,16 +203,16 @@ function Eligibility({ details }: { details: EligibilityDetail[] }) {
             <span
               className={
                 detail.result === 'FALSE'
-                  ? 'text-[#9b3e2e]'
+                  ? 'text-danger-ink'
                   : detail.result === 'UNKNOWN'
-                    ? 'text-[#7a5a16]'
-                    : 'text-[#42571c]'
+                    ? 'text-warning-ink'
+                    : 'text-success-ink'
               }
             >
               {resultLabels[detail.result] ?? detail.result}
             </span>
           </div>
-          <p className="mt-1 text-[#547068]">{detail.reason}</p>
+          <p className="mt-1 text-subtle">{detail.reason}</p>
         </li>
       ))}
     </ul>
@@ -230,39 +220,30 @@ function Eligibility({ details }: { details: EligibilityDetail[] }) {
 }
 
 function Factors({ factors }: { factors: MatchFactor[] }) {
-  if (factors.length === 0) return <p className="text-[#547068]">Nenhum fator calculado.</p>
+  if (factors.length === 0) return <p className="text-subtle">Nenhum fator calculado.</p>
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-left text-sm">
-        <thead className="bg-[#f2f5ef] text-xs uppercase tracking-[0.08em] text-[#6d827b]">
-          <tr>
-            <th className="px-4 py-3 font-semibold">Fator</th>
-            <th className="px-4 py-3 font-semibold">Peso</th>
-            <th className="px-4 py-3 font-semibold">Contribuição</th>
-            <th className="px-4 py-3 font-semibold">Estado</th>
-            <th className="px-4 py-3 font-semibold">Explicação</th>
-          </tr>
-        </thead>
-        <tbody>
-          {factors.map((factor) => (
-            <tr className="border-t border-[#e4ebe4]" key={factor.factorCode}>
+    <DataTable
+      caption="Fatores que compõem o score desta avaliação"
+      columns={['Fator', 'Peso', 'Contribuição', 'Estado', 'Explicação']}
+      stickyFirstColumn
+    >
+      {factors.map((factor) => (
+            <tr className="border-t border-divider" key={factor.factorCode}>
               <td className="px-4 py-3 font-medium">{factor.factorCode}</td>
               <td className="px-4 py-3">{formatNumber(factor.weight, 2)}</td>
               <td className="px-4 py-3">{formatNumber(factor.contribution, 2)}</td>
               <td className="px-4 py-3">
                 {factor.status}
                 {factor.status === 'UNKNOWN' && (
-                  <span className="block text-xs text-[#6d827b]">
+                  <span className="block text-xs text-muted">
                     {factor.missingPolicy}
                   </span>
                 )}
               </td>
-              <td className="px-4 py-3 text-[#547068]">{factor.explanation}</td>
+              <td className="px-4 py-3 text-subtle">{factor.explanation}</td>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+      ))}
+    </DataTable>
   )
 }
 
@@ -282,28 +263,26 @@ function Analysis({
   return (
     <>
       {analysis === null && (
-        <p className="rounded-2xl border border-dashed border-[#c8d4c8] p-5 text-[#547068]">
-          Nenhuma análise semântica registrada para esta avaliação.
-        </p>
+        <EmptyState>Nenhuma análise semântica registrada para esta avaliação.</EmptyState>
       )}
       {analysis && analysis.status !== 'AI_COMPLETED' && (
-        <div className="rounded-2xl border border-[#e3cf9a] bg-[#fbf3e2] p-5 text-sm">
-          <p className="font-medium text-[#7a5a16]">
+        <div className="rounded-2xl border border-warning-line bg-warning-surface p-5 text-sm">
+          <p className="font-medium text-warning-ink">
             Camada semântica degradada ({analysis.status}
             {analysis.failureCode ? `, ${analysis.failureCode}` : ''}).
           </p>
-          <p className="mt-2 text-[#547068]">
+          <p className="mt-2 text-subtle">
             {analysis.detail ?? 'A decisão determinística acima permanece completa.'}
           </p>
         </div>
       )}
       {analysis?.status === 'AI_COMPLETED' && (
-        <div className="rounded-2xl border border-[#dce4dc] bg-white p-5 text-sm">
-          <p className="leading-6">{analysis.summary}</p>
+        <Card className="text-sm">
+          <p className="text-body">{analysis.summary}</p>
           {analysis.strengths.length > 0 && (
             <>
               <h3 className="mt-4 font-semibold">Pontos fortes</h3>
-              <ul className="mt-2 list-disc pl-5 text-[#547068]">
+              <ul className="mt-2 list-disc pl-5 text-subtle">
                 {analysis.strengths.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
@@ -313,7 +292,7 @@ function Analysis({
           {analysis.risks.length > 0 && (
             <>
               <h3 className="mt-4 font-semibold">Riscos</h3>
-              <ul className="mt-2 list-disc pl-5 text-[#547068]">
+              <ul className="mt-2 list-disc pl-5 text-subtle">
                 {analysis.risks.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
@@ -323,7 +302,7 @@ function Analysis({
           {analysis.unknowns.length > 0 && (
             <>
               <h3 className="mt-4 font-semibold">O anúncio não responde</h3>
-              <ul className="mt-2 list-disc pl-5 text-[#547068]">
+              <ul className="mt-2 list-disc pl-5 text-subtle">
                 {analysis.unknowns.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
@@ -331,36 +310,34 @@ function Analysis({
             </>
           )}
           {analysis.recommendedReview && (
-            <p className="mt-4 font-medium text-[#7a5a16]">
+            <p className="mt-4 font-medium text-warning-ink">
               A análise sugere revisão humana antes de aplicar.
             </p>
           )}
-          <p className="mt-4 text-xs text-[#6d827b]">
+          <p className="mt-4 text-xs text-muted">
             {analysis.modelId} · {analysis.promptVersion} · {analysis.schemaVersion} ·{' '}
             {formatDate(analysis.analyzedAt)}
           </p>
-        </div>
+        </Card>
       )}
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button
-          className="rounded-xl bg-[#17322d] px-5 py-3 text-sm font-semibold text-white hover:bg-[#25483f] disabled:cursor-not-allowed disabled:opacity-40"
+        <Button
           disabled={running}
           onClick={() => onRun(analysis?.status === 'AI_COMPLETED')}
-          type="button"
         >
           {running
             ? 'Analisando…'
             : analysis?.status === 'AI_COMPLETED'
               ? 'Analisar novamente'
               : 'Analisar com Ollama'}
-        </button>
-        <span className="text-xs text-[#6d827b]">
+        </Button>
+        <span className="text-xs text-muted">
           A análise é consultiva: não altera score, verdict nem elegibilidade da avaliação{' '}
           {assessment.id.slice(0, 8)}.
         </span>
       </div>
       {failed && (
-        <p className="mt-3 text-sm text-[#9b3e2e]">
+        <p className="mt-3 text-sm text-danger-ink">
           Não foi possível falar com a API. Tente novamente.
         </p>
       )}
@@ -379,24 +356,24 @@ function Decision({
   return (
     <>
       <div className="flex flex-wrap items-baseline gap-4">
-        <span className="text-4xl font-semibold tracking-[-0.03em]">
+        <span className="text-metric-lg">
           {formatNumber(assessment.score)}
         </span>
-        <span className="rounded-full border border-[#c8d4c8] bg-white px-4 py-2 text-sm font-medium">
+        <span className="rounded-full border border-line-strong bg-surface px-4 py-2 text-sm font-medium">
           {verdictLabels[assessment.verdict] ?? assessment.verdict}
         </span>
-        <span className="text-sm text-[#6d827b]">
+        <span className="text-sm text-muted">
           Elegibilidade {assessment.eligibility} · confiança{' '}
           {formatNumber(assessment.confidence, 2)}
         </span>
       </div>
       {assessment.isStale && (
-        <p className="mt-3 rounded-xl border border-[#e3cf9a] bg-[#fbf3e2] p-3 text-sm text-[#7a5a16]" role="status">
+        <p className="mt-3 rounded-xl border border-warning-line bg-warning-surface p-3 text-sm text-warning-ink" role="status">
           Esta decisão foi calculada com dados anteriores. Uma reavaliação está pendente;
           os detalhes abaixo permanecem disponíveis como histórico.
         </p>
       )}
-      <p className="mt-2 text-xs text-[#6d827b]">
+      <p className="mt-2 text-xs text-muted">
         Regras {assessment.rulesVersion} · taxonomia {assessment.taxonomyVersion} · perfil{' '}
         {assessment.profileVersionId.slice(0, 8)} · avaliada em{' '}
         {formatDate(assessment.assessedAt)} · hash {assessment.inputHash.slice(0, 12)}…
@@ -443,30 +420,19 @@ export function OpportunityDetailPage() {
     >
       <p className="mt-2">
         <Link
-          className="text-sm text-[#547068] underline decoration-[#d7f06f] decoration-2 underline-offset-4"
+          className="text-sm text-subtle underline decoration-accent decoration-2 underline-offset-4"
           to="/inbox"
         >
           ← Voltar para as oportunidades
         </Link>
       </p>
 
-      <div aria-live="polite">
+      <div>
         {opportunity.isPending && (
-          <p className="mt-8 rounded-2xl bg-[#eef3df] p-5 text-[#5c694e]">
-            Carregando oportunidade…
-          </p>
+          <LoadingState className="mt-8">Carregando oportunidade…</LoadingState>
         )}
         {opportunity.isError && (
-          <div className="mt-8 rounded-2xl bg-[#f9e4df] p-5 text-[#9b3e2e]">
-            <p>{opportunity.error.message}</p>
-            <button
-              className="mt-3 font-semibold underline"
-              onClick={() => void opportunity.refetch()}
-              type="button"
-            >
-              Tentar novamente
-            </button>
-          </div>
+          <ErrorState className="mt-8" onRetry={() => void opportunity.refetch()}>{opportunity.error.message}</ErrorState>
         )}
 
         {opportunity.data && (
@@ -475,7 +441,7 @@ export function OpportunityDetailPage() {
 
             {opportunity.data.description && (
               <Section title="Descrição">
-                <p className="whitespace-pre-line leading-7 text-[#547068]">
+                <p className="whitespace-pre-line text-body text-subtle">
                   {opportunity.data.description}
                 </p>
               </Section>
@@ -495,38 +461,23 @@ export function OpportunityDetailPage() {
 
             <Section title="Decisão">
               <div className="mb-4 flex flex-wrap items-center gap-3">
-                <button
-                  className="rounded-xl bg-[#17322d] px-5 py-3 text-sm font-semibold text-white hover:bg-[#25483f] disabled:cursor-not-allowed disabled:opacity-40"
+                <Button
                   disabled={evaluate.isPending}
                   onClick={() => evaluate.mutate()}
-                  type="button"
                 >
                   {evaluate.isPending ? 'Avaliando…' : 'Avaliar agora'}
-                </button>
-                {evaluate.isSuccess && <span className="text-sm text-[#547068]">Avaliação atualizada.</span>}
-                {evaluate.isError && <span className="text-sm text-[#9b3e2e]">Não foi possível avaliar agora.</span>}
+                </Button>
+                {evaluate.isSuccess && <span className="text-sm text-subtle">Avaliação atualizada.</span>}
+                {evaluate.isError && <span className="text-sm text-danger-ink">Não foi possível avaliar agora.</span>}
               </div>
               {assessment.isPending && (
-                <p className="rounded-2xl bg-[#eef3df] p-5 text-[#5c694e]">
-                  Carregando a avaliação…
-                </p>
+                <LoadingState>Carregando a avaliação…</LoadingState>
               )}
               {assessment.isError && (
-                <div className="rounded-2xl bg-[#f9e4df] p-5 text-[#9b3e2e]">
-                  <p>Não foi possível carregar a avaliação.</p>
-                  <button
-                    className="mt-3 font-semibold underline"
-                    onClick={() => void assessment.refetch()}
-                    type="button"
-                  >
-                    Tentar novamente
-                  </button>
-                </div>
+                <ErrorState onRetry={() => void assessment.refetch()}>Não foi possível carregar a avaliação.</ErrorState>
               )}
               {assessment.data === null && (
-                <p className="rounded-2xl border border-dashed border-[#c8d4c8] p-5 text-[#547068]">
-                  Esta oportunidade ainda não foi avaliada contra o perfil ativo.
-                </p>
+                <EmptyState>Esta oportunidade ainda não foi avaliada contra o perfil ativo.</EmptyState>
               )}
               {assessment.data && (
                 <Decision

@@ -1,6 +1,14 @@
 import { useState } from 'react'
+import { Button } from '../components/Button'
+import { Card } from '../components/Card'
+import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
+import { CardListSkeleton, PanelSkeleton } from '../components/skeletons'
+import { EmptyState, ErrorState } from '../components/states'
+import { StatusBadge } from '../components/StatusBadge'
+import { Unavailable } from '../components/Unavailable'
 import { type SourceHealth } from '../features/sources/api'
+import { runStatusLabels, runStatusTones } from '../features/sources/states'
 import {
   useRunSource,
   useSourceCoverage,
@@ -8,76 +16,61 @@ import {
   useSourceRuns,
 } from '../features/sources/useSources'
 
-const statusTone: Record<string, string> = {
-  SUCCEEDED: 'border-[#b6d36a] bg-[#eef6d8] text-[#42571c]',
-  PARTIAL: 'border-[#e3cf9a] bg-[#fbf3e2] text-[#7a5a16]',
-  FAILED: 'border-[#e8cfc6] bg-[#fdf3f0] text-[#9b3e2e]',
-  RUNNING: 'border-[#c8d4c8] bg-[#f2f5ef] text-[#41594f]',
-  PENDING: 'border-[#c8d4c8] bg-[#f2f5ef] text-[#41594f]',
-  CANCELLED: 'border-[#c8d4c8] bg-[#f2f5ef] text-[#6d827b]',
-}
-
 function formatDate(value: string | null) {
-  if (!value) return '—'
+  if (!value) return <Unavailable reason="nunca executada" />
   const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString('pt-BR')
+  return Number.isNaN(parsed.getTime()) ? (
+    <Unavailable reason="data inválida" />
+  ) : (
+    parsed.toLocaleString('pt-BR')
+  )
 }
 
 function formatDuration(seconds: number | null) {
-  if (seconds === null) return '—'
+  if (seconds === null) return <Unavailable reason="nunca executada" />
   if (seconds < 60) return `${seconds.toFixed(1)} s`
   return `${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s`
 }
 
-function StatusBadge({ status }: { status: string | null }) {
-  if (status === null) {
-    return (
-      <span className="inline-flex rounded-full border border-dashed border-[#c8d4c8] px-3 py-1 text-xs text-[#6d827b]">
-        Nunca executada
-      </span>
-    )
-  }
-  const tone = statusTone[status] ?? 'border-[#c8d4c8] bg-[#f2f5ef] text-[#41594f]'
+function RunStatus({ status }: { status: string | null }) {
   return (
-    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${tone}`}>
-      {status}
-    </span>
+    <StatusBadge
+      absent="Nunca executada"
+      labels={runStatusLabels}
+      tones={runStatusTones}
+      value={status}
+    />
   )
 }
 
-function RunHistory({ sourceId }: { sourceId: string }) {
+function RunHistory({ sourceId, id }: { sourceId: string; id: string }) {
   const runs = useSourceRuns(sourceId)
 
   if (runs.isPending) {
-    return <p className="mt-4 text-sm text-[#547068]">Carregando execuções…</p>
+    return <p className="mt-4 text-sm text-subtle">Carregando execuções…</p>
   }
   if (runs.isError) {
     return (
-      <p className="mt-4 text-sm text-[#9b3e2e]">
+      <p className="mt-4 text-sm text-danger-ink">
         Não foi possível carregar o histórico desta fonte.
       </p>
     )
   }
   if (!runs.data || runs.data.length === 0) {
-    return <p className="mt-4 text-sm text-[#547068]">Nenhuma execução registrada.</p>
+    return <p className="mt-4 text-sm text-subtle">Nenhuma execução registrada.</p>
   }
   return (
-    <div className="mt-4 overflow-x-auto">
-      <table className="w-full border-collapse text-left text-sm">
-        <thead className="bg-[#f2f5ef] text-xs uppercase tracking-[0.08em] text-[#6d827b]">
-          <tr>
-            <th className="px-4 py-3 font-semibold">Status</th>
-            <th className="px-4 py-3 font-semibold">Origem</th>
-            <th className="px-4 py-3 font-semibold">Início</th>
-            <th className="px-4 py-3 font-semibold">Itens</th>
-            <th className="px-4 py-3 font-semibold">Erro</th>
-          </tr>
-        </thead>
-        <tbody>
-          {runs.data.map((run) => (
-            <tr className="border-t border-[#e4ebe4]" key={run.id}>
+    <DataTable
+      caption="Execuções recentes desta fonte"
+      className="mt-4"
+      columns={['Status', 'Origem', 'Início', 'Itens', 'Erro']}
+      id={id}
+      stickyFirstColumn
+    >
+      {runs.data.map((run) => (
+            <tr className="border-t border-divider" key={run.id}>
               <td className="px-4 py-3">
-                <StatusBadge status={run.status} />
+                <RunStatus status={run.status} />
               </td>
               <td className="px-4 py-3">{run.executionTrigger}</td>
               <td className="px-4 py-3">{formatDate(run.startedAt)}</td>
@@ -86,14 +79,16 @@ function RunHistory({ sourceId }: { sourceId: string }) {
                 {run.itemsSkipped > 0 && ` · ${run.itemsSkipped} repetidos`}
                 {run.itemsInvalid > 0 && ` · ${run.itemsInvalid} inválidos`}
               </td>
-              <td className="px-4 py-3 text-[#547068]">
-                {run.errorCode ? `${run.errorCode}: ${run.errorSummary ?? ''}` : '—'}
+              <td className="px-4 py-3 text-subtle">
+                {run.errorCode ? (
+                  `${run.errorCode}: ${run.errorSummary ?? ''}`
+                ) : (
+                  <Unavailable reason="sem erro" />
+                )}
               </td>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+      ))}
+    </DataTable>
   )
 }
 
@@ -108,49 +103,54 @@ function SourceCard({
 }) {
   const run = useRunSource()
   const blocked = !source.enabled
+  const runHistoryId = `runs-${source.sourceDefinitionId}`
 
   return (
-    <article className="rounded-2xl border border-[#dce4dc] bg-white p-5">
+    <Card as="article">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold">
             {source.name}{' '}
-            <span className="font-normal text-[#6d827b]">({source.sourceType})</span>
+            <span className="font-normal text-muted">({source.sourceType})</span>
           </h2>
-          <p className="mt-1 text-sm text-[#6d827b]">
+          <p className="mt-1 text-sm text-muted">
             {source.enabled ? 'Habilitada' : 'Desabilitada'} · evidência{' '}
             {source.evidenceStatus} · termos{' '}
             {source.termsReviewed ? 'revisados' : 'não revisados'} · collector{' '}
             {source.collectorLocalTested ? 'homologado' : 'não homologado'}
           </p>
         </div>
-        <StatusBadge status={source.lastRunStatus} />
+        <RunStatus status={source.lastRunStatus} />
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         <div>
-          <dt className="text-[#6d827b]">Última execução</dt>
+          <dt className="text-muted">Última execução</dt>
           <dd className="mt-1 font-medium">{formatDate(source.lastRunFinishedAt)}</dd>
         </div>
         <div>
-          <dt className="text-[#6d827b]">Duração</dt>
+          <dt className="text-muted">Duração</dt>
           <dd className="mt-1 font-medium">
             {formatDuration(source.lastRunDurationSeconds)}
           </dd>
         </div>
         <div>
-          <dt className="text-[#6d827b]">Itens persistidos</dt>
+          <dt className="text-muted">Itens persistidos</dt>
           <dd className="mt-1 font-medium">
-            {source.lastRunItemsPersisted === null ? '—' : source.lastRunItemsPersisted}
+            {source.lastRunItemsPersisted === null ? (
+              <Unavailable reason="nunca executada" />
+            ) : (
+              source.lastRunItemsPersisted
+            )}
           </dd>
         </div>
         <div>
-          <dt className="text-[#6d827b]">Agendamento</dt>
+          <dt className="text-muted">Agendamento</dt>
           <dd className="mt-1 font-medium">{source.schedule ?? 'manual'}</dd>
         </div>
       </dl>
 
-      <p className="mt-4 text-xs text-[#6d827b]">
+      <p className="mt-4 text-xs text-muted">
         Senioridade: {Object.entries(source.seniorityCounts).length === 0
           ? 'sem vagas normalizadas'
           : Object.entries(source.seniorityCounts)
@@ -159,46 +159,46 @@ function SourceCard({
       </p>
 
       {source.lastRunError && (
-        <p className="mt-4 rounded-2xl border border-[#e8cfc6] bg-[#fdf3f0] p-4 text-sm text-[#9b3e2e]">
+        <p className="break-anywhere mt-4 rounded-2xl border border-danger-line bg-danger-surface p-4 text-sm text-danger-ink">
           {source.lastRunErrorCode ? `${source.lastRunErrorCode}: ` : ''}
           {source.lastRunError}
         </p>
       )}
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button
-          className="rounded-xl bg-[#17322d] px-5 py-3 text-sm font-semibold text-white hover:bg-[#25483f] disabled:cursor-not-allowed disabled:opacity-40"
+        <Button
           disabled={blocked || run.isPending}
           onClick={() => run.mutate(source.sourceDefinitionId)}
-          type="button"
         >
           {run.isPending ? 'Executando…' : 'Executar agora'}
-        </button>
-        <button
-          className="rounded-xl border border-[#c8d4c8] px-4 py-2 text-sm font-medium"
+        </Button>
+        <Button
+          aria-controls={runHistoryId}
+          aria-expanded={expanded}
           onClick={onToggle}
-          type="button"
+          size="sm"
+          variant="secondary"
         >
           {expanded ? 'Ocultar execuções' : 'Ver execuções'}
-        </button>
+        </Button>
         {blocked && (
-          <span className="text-xs text-[#6d827b]">
+          <span className="text-xs text-muted">
             Fonte desabilitada: habilite após revisar termos e homologar o collector.
           </span>
         )}
       </div>
 
       {run.isError && (
-        <p className="mt-3 text-sm text-[#9b3e2e]">{run.error.message}</p>
+        <p className="mt-3 text-sm text-danger-ink">{run.error.message}</p>
       )}
       {run.isSuccess && (
-        <p className="mt-3 text-sm text-[#547068]">
+        <p className="mt-3 text-sm text-subtle">
           Execução {run.data.status} · {run.data.itemsPersisted} itens persistidos.
         </p>
       )}
 
-      {expanded && <RunHistory sourceId={source.sourceDefinitionId} />}
-    </article>
+      {expanded && <RunHistory id={runHistoryId} sourceId={source.sourceDefinitionId} />}
+    </Card>
   )
 }
 
@@ -214,37 +214,33 @@ export function SourcesPage() {
       title="Fontes e execuções"
       description="O que cada fonte produziu na última execução, e o que fazer quando ela falha. Uma fonte só executa depois de habilitada."
     >
+      {/* A cobertura é uma consulta própria e chega antes ou depois da lista; sem o espaço
+          reservado, a que chega por último empurra a outra. */}
+      {coverage.isPending && (
+        <div className="mt-8">
+          <PanelSkeleton label="Carregando a cobertura…" />
+        </div>
+      )}
       {coverage.data && (
-        <section className="mt-8 grid gap-3 rounded-2xl border border-[#dce4dc] bg-[#f7faf6] p-5 text-sm sm:grid-cols-3">
-          <p><span className="text-[#6d827b]">Catálogo</span><br /><strong>{coverage.data.catalogCompanies}</strong> empresas · {coverage.data.catalogSourceRecords} registros</p>
-          <p><span className="text-[#6d827b]">Propostas / homologadas</span><br /><strong>{coverage.data.proposedSources}</strong> / {coverage.data.homologatedSources}</p>
-          <p><span className="text-[#6d827b]">Habilitadas / elegíveis</span><br /><strong>{coverage.data.enabledSources}</strong> / {coverage.data.eligibleSources}</p>
+        <section className="mt-8 grid gap-3 rounded-2xl border border-line bg-panel p-5 text-sm sm:grid-cols-3">
+          <p><span className="text-muted">Catálogo</span><br /><strong>{coverage.data.catalogCompanies}</strong> empresas · {coverage.data.catalogSourceRecords} registros</p>
+          <p><span className="text-muted">Propostas / homologadas</span><br /><strong>{coverage.data.proposedSources}</strong> / {coverage.data.homologatedSources}</p>
+          <p><span className="text-muted">Habilitadas / elegíveis</span><br /><strong>{coverage.data.enabledSources}</strong> / {coverage.data.eligibleSources}</p>
         </section>
       )}
-      <div className="mt-8 grid gap-3" aria-live="polite">
+      <div className="mt-8 grid gap-3">
         {health.isPending && (
-          <p className="rounded-2xl bg-[#eef3df] p-5 text-[#5c694e]">Carregando fontes…</p>
+          <CardListSkeleton label="Carregando fontes…" />
         )}
         {health.isError && (
-          <div className="rounded-2xl bg-[#f9e4df] p-5 text-[#9b3e2e]">
-            <p>Não foi possível carregar as fontes.</p>
-            <button
-              className="mt-3 font-semibold underline"
-              onClick={() => void health.refetch()}
-              type="button"
-            >
-              Tentar novamente
-            </button>
-          </div>
+          <ErrorState onRetry={() => void health.refetch()}>Não foi possível carregar as fontes.</ErrorState>
         )}
         {health.data?.items.length === 0 && (
-          <p className="rounded-2xl border border-dashed border-[#c8d4c8] p-8 text-[#547068]">
-            Nenhuma fonte cadastrada.
-          </p>
+          <EmptyState>Nenhuma fonte cadastrada.</EmptyState>
         )}
         {health.data && health.data.items.length > 0 && (
           <>
-            <p className="text-sm text-[#6d827b]">
+            <p className="text-sm text-muted">
               {health.data.total} fonte{health.data.total === 1 ? '' : 's'} ·{' '}
               {health.data.failing} com falha na última execução.
             </p>

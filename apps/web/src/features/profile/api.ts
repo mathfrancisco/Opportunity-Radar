@@ -1,4 +1,4 @@
-import { apiUrl } from '../../lib/api'
+import { apiUrl, requestFailure } from '../../lib/api'
 
 export interface ProfileSkill {
   canonicalName: string
@@ -123,7 +123,15 @@ function serializePreferences(preferences: ProfilePreferences) {
 }
 
 async function readVersion(response: Response, what: string): Promise<ProfileVersion> {
-  if (!response.ok) throw new Error(`A API respondeu com ${response.status} ao ${what}.`)
+  if (!response.ok) {
+    // A versão do perfil é o lock: um 409 aqui é sempre outra edição, nunca uma falha de rede.
+    throw requestFailure(
+      response.status,
+      response.status === 409
+        ? `O perfil mudou enquanto você editava, então nada foi gravado ao ${what}.`
+        : `A API respondeu com ${response.status} ao ${what}.`,
+    )
+  }
   const version = parseVersion(await response.json())
   if (version === null) throw new Error('A API retornou um perfil inválido.')
   return version

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ConflictError } from '../../lib/api'
 import { getActiveProfile, saveProfileVersion } from './api'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -125,7 +126,8 @@ describe('saveProfileVersion', () => {
         },
         1,
       ),
-    ).rejects.toThrow('409')
+      // Um conflito é tipado: a tela oferece reler o perfil, e não repetir a escrita.
+    ).rejects.toBeInstanceOf(ConflictError)
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

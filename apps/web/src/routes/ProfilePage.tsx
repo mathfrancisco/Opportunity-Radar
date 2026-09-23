@@ -1,5 +1,8 @@
 import { type FormEvent, useState } from 'react'
+import { Button } from '../components/Button'
 import { PageShell } from '../components/PageShell'
+import { ConflictNotice, EmptyState, ErrorState, LoadingState } from '../components/states'
+import { ConflictError } from '../lib/api'
 import {
   emptyPreferences,
   type ProfilePreferences,
@@ -35,7 +38,7 @@ function hourValue(value: string): number | null {
 
 function Versions({ versions }: { versions: ProfileVersion[] }) {
   if (versions.length === 0) {
-    return <p className="text-sm text-[#547068]">Nenhuma versão registrada.</p>
+    return <p className="text-sm text-subtle">Nenhuma versão registrada.</p>
   }
   return (
     <ul className="grid gap-2">
@@ -43,11 +46,11 @@ function Versions({ versions }: { versions: ProfileVersion[] }) {
         .sort((left, right) => right.number - left.number)
         .map((version) => (
           <li
-            className="flex flex-wrap items-baseline justify-between gap-3 rounded-2xl border border-[#dce4dc] bg-white p-4 text-sm"
+            className="flex flex-wrap items-baseline justify-between gap-3 rounded-2xl border border-line bg-surface p-4 text-sm"
             key={version.id}
           >
             <span className="font-medium">Versão {version.number}</span>
-            <span className="text-[#6d827b]">
+            <span className="text-muted">
               {version.status} · {version.skills.length} skill
               {version.skills.length === 1 ? '' : 's'} ·{' '}
               {version.preferences.countries.join(', ') || 'sem países'}
@@ -121,28 +124,15 @@ export function ProfilePage() {
       title="Perfil e preferências"
       description="O que o matching considera ao avaliar uma vaga. Salvar cria uma nova versão e a ativa; as avaliações anteriores continuam apontando para a versão que as produziu."
     >
-      <div aria-live="polite">
+      <div>
         {active.isPending && (
-          <p className="mt-8 rounded-2xl bg-[#eef3df] p-5 text-[#5c694e]">
-            Carregando perfil…
-          </p>
+          <LoadingState className="mt-8">Carregando perfil…</LoadingState>
         )}
         {active.isError && (
-          <div className="mt-8 rounded-2xl bg-[#f9e4df] p-5 text-[#9b3e2e]">
-            <p>Não foi possível carregar o perfil.</p>
-            <button
-              className="mt-3 font-semibold underline"
-              onClick={() => void active.refetch()}
-              type="button"
-            >
-              Tentar novamente
-            </button>
-          </div>
+          <ErrorState className="mt-8" onRetry={() => void active.refetch()}>Não foi possível carregar o perfil.</ErrorState>
         )}
         {active.isSuccess && active.data === null && (
-          <p className="mt-8 rounded-2xl border border-dashed border-[#c8d4c8] p-5 text-[#547068]">
-            Nenhum perfil ativo ainda. Preencha o formulário para criar a primeira versão.
-          </p>
+          <EmptyState className="mt-8">Nenhum perfil ativo ainda. Preencha o formulário para criar a primeira versão.</EmptyState>
         )}
       </div>
 
@@ -150,9 +140,9 @@ export function ProfilePage() {
         <form className="mt-8 grid gap-6" onSubmit={submit}>
           <label className="text-sm">
             <span className="font-medium">Skills</span>
-            <span className="block text-[#6d827b]">Separadas por vírgula.</span>
+            <span className="block text-muted">Separadas por vírgula.</span>
             <input
-              className="mt-2 w-full rounded-xl border border-[#c8d4c8] bg-white px-4 py-3"
+              className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
               onChange={(event) => setSkillsText(event.target.value)}
               placeholder="python, react, postgresql"
               value={skillsText}
@@ -197,12 +187,12 @@ export function ProfilePage() {
 
           <label className="text-sm">
             <span className="font-medium">Países</span>
-            <span className="block text-[#6d827b]">
+            <span className="block text-muted">
               Códigos ISO separados por vírgula. Lista vazia mantém o país da vaga como
               desconhecido, e desconhecido não reprova.
             </span>
             <input
-              className="mt-2 w-full rounded-xl border border-[#c8d4c8] bg-white px-4 py-3"
+              className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
               onChange={(event) =>
                 updatePreferences({ countries: toList(event.target.value.toUpperCase()) })
               }
@@ -215,7 +205,7 @@ export function ProfilePage() {
             <label className="text-sm">
               <span className="font-medium">Início da janela de timezone</span>
               <input
-                className="mt-2 w-full rounded-xl border border-[#c8d4c8] bg-white px-4 py-3"
+                className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
                 max={23}
                 min={0}
                 onChange={(event) =>
@@ -228,7 +218,7 @@ export function ProfilePage() {
             <label className="text-sm">
               <span className="font-medium">Fim da janela de timezone</span>
               <input
-                className="mt-2 w-full rounded-xl border border-[#c8d4c8] bg-white px-4 py-3"
+                className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
                 max={23}
                 min={0}
                 onChange={(event) =>
@@ -244,7 +234,7 @@ export function ProfilePage() {
             <label className="text-sm">
               <span className="font-medium">Remuneração mínima</span>
               <input
-                className="mt-2 w-full rounded-xl border border-[#c8d4c8] bg-white px-4 py-3"
+                className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
                 min={0}
                 onChange={(event) =>
                   updatePreferences({ compensationMin: event.target.value || null })
@@ -256,7 +246,7 @@ export function ProfilePage() {
             <label className="text-sm">
               <span className="font-medium">Remuneração máxima</span>
               <input
-                className="mt-2 w-full rounded-xl border border-[#c8d4c8] bg-white px-4 py-3"
+                className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
                 min={0}
                 onChange={(event) =>
                   updatePreferences({ compensationMax: event.target.value || null })
@@ -268,7 +258,7 @@ export function ProfilePage() {
             <label className="text-sm">
               <span className="font-medium">Moeda</span>
               <input
-                className="mt-2 w-full rounded-xl border border-[#c8d4c8] bg-white px-4 py-3"
+                className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
                 maxLength={3}
                 onChange={(event) =>
                   updatePreferences({ compensationCurrency: event.target.value.toUpperCase() || null })
@@ -280,7 +270,7 @@ export function ProfilePage() {
             <label className="text-sm">
               <span className="font-medium">Período</span>
               <select
-                className="mt-2 w-full rounded-xl border border-[#c8d4c8] bg-white px-4 py-3"
+                className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
                 onChange={(event) =>
                   updatePreferences({ compensationPeriod: event.target.value || null })
                 }
@@ -316,25 +306,26 @@ export function ProfilePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              className="rounded-xl bg-[#17322d] px-5 py-3 text-sm font-semibold text-white hover:bg-[#25483f] disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={save.isPending}
-              type="submit"
-            >
+            <Button disabled={save.isPending} type="submit">
               {save.isPending ? 'Salvando…' : 'Salvar como nova versão e ativar'}
-            </button>
+            </Button>
             {active.data && (
-              <span className="text-xs text-[#6d827b]">
+              <span className="text-xs text-muted">
                 Versão ativa {active.data.number} · lock {active.data.profileLockVersion}
               </span>
             )}
           </div>
 
-          {save.isError && (
-            <p className="text-sm text-[#9b3e2e]">{save.error.message}</p>
-          )}
+          {save.isError &&
+            (save.error instanceof ConflictError ? (
+              <ConflictNotice onReload={() => void active.refetch()}>
+                {save.error.message}
+              </ConflictNotice>
+            ) : (
+              <p className="text-sm text-danger-ink">{save.error.message}</p>
+            ))}
           {save.isSuccess && (
-            <p className="text-sm text-[#42571c]">
+            <p className="text-sm text-success-ink">
               Versão {save.data.number} ativa. Avaliações antigas continuam apontando para
               a versão que as produziu.
             </p>
@@ -342,14 +333,14 @@ export function ProfilePage() {
         </form>
       )}
 
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Versões</h2>
+      <section className="mt-section">
+        <h2 className="text-section">Versões</h2>
         <div className="mt-4">
           {versions.isPending && (
-            <p className="text-sm text-[#547068]">Carregando versões…</p>
+            <p className="text-sm text-subtle">Carregando versões…</p>
           )}
           {versions.isError && (
-            <p className="text-sm text-[#9b3e2e]">
+            <p className="text-sm text-danger-ink">
               Não foi possível carregar o histórico de versões.
             </p>
           )}

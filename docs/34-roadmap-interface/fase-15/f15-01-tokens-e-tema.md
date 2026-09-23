@@ -1,6 +1,6 @@
 # CARD F15-01 — Tokens de design e tema
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 15 — Design, consistência e acesso
 - **Depende de:** Nenhum
 - **Bloqueia:** F15-02
@@ -42,13 +42,13 @@ contraste — nesse caso, o ajuste é registrado no card com o valor antigo e o 
 
 ## Critérios de aceite
 
-- [ ] Nenhum literal hexadecimal permanece em `apps/web/src/routes/` e
+- [x] Nenhum literal hexadecimal permanece em `apps/web/src/routes/` e
       `apps/web/src/components/`.
-- [ ] Todo token declarado é usado ao menos uma vez.
-- [ ] Texto sobre fundo atinge contraste AA em todas as combinações documentadas.
-- [ ] A aparência das telas permanece equivalente, salvo os ajustes de contraste
+- [x] Todo token declarado é usado ao menos uma vez.
+- [x] Texto sobre fundo atinge contraste AA em todas as combinações documentadas.
+- [x] A aparência das telas permanece equivalente, salvo os ajustes de contraste
       registrados.
-- [ ] A verificação de literais roda no pipeline.
+- [x] A verificação de literais roda no pipeline.
 
 ## Verificação
 

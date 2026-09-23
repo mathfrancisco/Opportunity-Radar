@@ -1,4 +1,9 @@
 import { type FormEvent, useState } from 'react'
+import { Button } from './Button'
+import { Card } from './Card'
+import { ConflictNotice, EmptyState, ErrorState, LoadingState } from './states'
+import { ConflictError } from '../lib/api'
+import { Field, controlClassName } from './Field'
 import {
   type Application,
   type StageHistoryEntry,
@@ -35,15 +40,15 @@ function History({ entries }: { entries: StageHistoryEntry[] }) {
   return (
     <ol className="mt-4 grid gap-2">
       {entries.map((entry) => (
-        <li className="rounded-2xl border border-[#dce4dc] bg-white p-4 text-sm" key={entry.id}>
+        <li className="rounded-2xl border border-line bg-surface p-4 text-sm" key={entry.id}>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="font-medium">
               {entry.fromStage ? `${label(entry.fromStage)} → ` : ''}
               {label(entry.toStage)}
             </span>
-            <span className="text-[#6d827b]">{formatDate(entry.occurredAt)}</span>
+            <span className="text-muted">{formatDate(entry.occurredAt)}</span>
           </div>
-          {entry.notes && <p className="mt-2 text-[#547068]">{entry.notes}</p>}
+          {entry.notes && <p className="mt-2 text-subtle">{entry.notes}</p>}
         </li>
       ))}
     </ol>
@@ -53,9 +58,12 @@ function History({ entries }: { entries: StageHistoryEntry[] }) {
 function Tracker({
   application,
   opportunityId,
+  onReload,
 }: {
   application: Application
   opportunityId: string
+  /** Re-reads the candidacy after a conflict, so the operator decides on the new version. */
+  onReload: () => void
 }) {
   const transition = useTransitionApplication(opportunityId)
   const nextAction = useSetNextAction(opportunityId)
@@ -74,10 +82,10 @@ function Tracker({
   }
 
   return (
-    <div className="rounded-2xl border border-[#dce4dc] bg-white p-5">
+    <Card>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <span className="text-lg font-semibold">{label(application.currentStage)}</span>
-        <span className="text-sm text-[#6d827b]">
+        <span className="text-section">{label(application.currentStage)}</span>
+        <span className="text-sm text-muted">
           Iniciada em {formatDate(application.startedAt)}
           {application.appliedAt ? ` · enviada em ${formatDate(application.appliedAt)}` : ''}
           {closed ? ` · encerrada em ${formatDate(application.closedAt)}` : ''}
@@ -85,7 +93,7 @@ function Tracker({
       </div>
 
       {closed ? (
-        <p className="mt-4 text-sm text-[#547068]">
+        <p className="mt-4 text-sm text-subtle">
           Candidatura encerrada como {label(application.outcome ?? 'CLOSED')}. O histórico
           continua disponível, e a oportunidade pode receber uma nova candidatura.
         </p>
@@ -93,8 +101,7 @@ function Tracker({
         <>
           <div className="mt-4 flex flex-wrap gap-2">
             {application.allowedTransitions.map((stage) => (
-              <button
-                className="rounded-xl border border-[#c8d4c8] px-4 py-2 text-sm font-medium hover:border-[#17322d] disabled:cursor-not-allowed disabled:opacity-40"
+              <Button
                 disabled={transition.isPending}
                 key={stage}
                 onClick={() =>
@@ -104,56 +111,61 @@ function Tracker({
                     expectedVersion: application.version,
                   })
                 }
-                type="button"
+                size="sm"
+                variant="secondary"
               >
                 {label(stage)}
-              </button>
+              </Button>
             ))}
           </div>
-          {transition.isError && (
-            <p className="mt-3 text-sm text-[#9b3e2e]">{transition.error.message}</p>
-          )}
+          {transition.isError &&
+            (transition.error instanceof ConflictError ? (
+              <ConflictNotice className="mt-3" onReload={onReload}>
+                {transition.error.message}
+              </ConflictNotice>
+            ) : (
+              <p className="mt-3 text-sm text-danger-ink">{transition.error.message}</p>
+            ))}
 
           <form className="mt-6 grid gap-3 sm:grid-cols-[2fr_1fr_auto]" onSubmit={saveNextAction}>
-            <label className="text-sm">
-              <span className="text-[#6d827b]">Próxima ação</span>
+            <Field label="Próxima ação">
               <input
-                className="mt-1 w-full rounded-xl border border-[#c8d4c8] bg-white px-4 py-2"
+                className={controlClassName}
                 onChange={(event) => setActionText(event.target.value)}
                 placeholder="Enviar follow-up ao recrutador"
                 value={actionText}
               />
-            </label>
-            <label className="text-sm">
-              <span className="text-[#6d827b]">Quando</span>
+            </Field>
+            <Field label="Quando">
               <input
-                className="mt-1 w-full rounded-xl border border-[#c8d4c8] bg-white px-4 py-2"
+                className={controlClassName}
                 onChange={(event) => setActionDue(event.target.value)}
                 type="datetime-local"
                 value={actionDue}
               />
-            </label>
-            <button
-              className="self-end rounded-xl bg-[#17322d] px-5 py-2 text-sm font-semibold text-white hover:bg-[#25483f] disabled:opacity-40"
-              disabled={nextAction.isPending}
-              type="submit"
-            >
+            </Field>
+            <Button className="self-end" disabled={nextAction.isPending} type="submit">
               Salvar
-            </button>
+            </Button>
           </form>
-          {nextAction.isError && (
-            <p className="mt-3 text-sm text-[#9b3e2e]">{nextAction.error.message}</p>
-          )}
+          {nextAction.isError &&
+            (nextAction.error instanceof ConflictError ? (
+              <ConflictNotice className="mt-3" onReload={onReload}>
+                {nextAction.error.message}
+              </ConflictNotice>
+            ) : (
+              <p className="mt-3 text-sm text-danger-ink">{nextAction.error.message}</p>
+            ))}
         </>
       )}
 
       {application.notes && (
-        <p className="mt-4 text-sm text-[#547068]">{application.notes}</p>
+        <p className="mt-4 text-sm text-subtle">{application.notes}</p>
       )}
 
       <h3 className="mt-6 text-sm font-semibold">Histórico</h3>
       <History entries={application.history} />
-    </div>
+    </Card>
   )
 }
 
@@ -163,53 +175,53 @@ export function ApplicationPanel({ opportunityId }: { opportunityId: string }) {
 
   if (application.isPending) {
     return (
-      <p className="rounded-2xl bg-[#eef3df] p-5 text-[#5c694e]">Carregando candidatura…</p>
+      <LoadingState>Carregando candidatura…</LoadingState>
     )
   }
   if (application.isError) {
     return (
-      <div className="rounded-2xl bg-[#f9e4df] p-5 text-[#9b3e2e]">
-        <p>Não foi possível carregar a candidatura.</p>
-        <button
-          className="mt-3 font-semibold underline"
-          onClick={() => void application.refetch()}
-          type="button"
-        >
-          Tentar novamente
-        </button>
-      </div>
+      <ErrorState onRetry={() => void application.refetch()}>Não foi possível carregar a candidatura.</ErrorState>
     )
   }
   if (application.data === null) {
     return (
-      <div className="rounded-2xl border border-dashed border-[#c8d4c8] p-5">
+      <EmptyState>
         <div className="flex flex-wrap gap-3">
-          <button
-            className="rounded-xl bg-[#17322d] px-5 py-3 text-sm font-semibold text-white hover:bg-[#25483f] disabled:opacity-40"
+          <Button
             disabled={start.isPending}
             onClick={() => start.mutate({ opportunityId, stage: 'INTERESTED' })}
-            type="button"
           >
             {start.isPending ? 'Iniciando…' : 'Registrar interesse'}
-          </button>
-          <button
-            className="rounded-xl border border-[#c8d4c8] px-5 py-3 text-sm font-medium hover:border-[#17322d] disabled:opacity-40"
+          </Button>
+          <Button
             disabled={start.isPending}
             onClick={() => start.mutate({ opportunityId, stage: 'APPLIED' })}
-            type="button"
+            variant="secondary"
           >
             Já me candidatei
-          </button>
+          </Button>
         </div>
-        <p className="mt-3 text-sm text-[#547068]">
+        <p className="mt-3 text-sm text-subtle">
           A candidatura é acompanhada em separado da oportunidade: encerrar uma não
           encerra a outra.
         </p>
-        {start.isError && (
-          <p className="mt-3 text-sm text-[#9b3e2e]">{start.error.message}</p>
-        )}
-      </div>
+        {start.isError &&
+          (start.error instanceof ConflictError ? (
+            // 409 aqui é uma candidatura ativa que já existe: reler mostra qual é.
+            <ConflictNotice className="mt-3" onReload={() => void application.refetch()}>
+              {start.error.message}
+            </ConflictNotice>
+          ) : (
+            <p className="mt-3 text-sm text-danger-ink">{start.error.message}</p>
+          ))}
+      </EmptyState>
     )
   }
-  return <Tracker application={application.data} opportunityId={opportunityId} />
+  return (
+    <Tracker
+      application={application.data}
+      onReload={() => void application.refetch()}
+      opportunityId={opportunityId}
+    />
+  )
 }

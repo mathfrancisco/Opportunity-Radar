@@ -98,11 +98,12 @@ Cards de execução: [Fase 15](34-roadmap-interface/fase-15/README.md).
 
 ### 4.1 Entregáveis
 
-- tema de design com tokens de cor, tipografia, espaçamento e raio;
+- tema de design com tokens de cor, tipografia, espaçamento, raio e elevação;
 - componentes compartilhados para botão, badge de status, cartão, tabela e campo;
 - um único padrão para carregando, vazio, erro e conflito;
 - acessibilidade verificável: rótulos, foco visível, contraste e navegação por teclado;
-- comportamento responsivo definido para as tabelas densas.
+- comportamento responsivo definido para as tabelas densas;
+- hierarquia declarada na Visão geral, navegação agrupada e carregamento sem salto.
 
 ### 4.2 Regras
 
@@ -115,12 +116,19 @@ Cards de execução: [Fase 15](34-roadmap-interface/fase-15/README.md).
 
 ### 4.3 Critério de aceite
 
-- [ ] nenhuma cor hexadecimal literal permanece nos componentes de rota;
-- [ ] status de fonte e de execução usam um único componente e um único mapa de tom;
-- [ ] carregando, vazio, erro e conflito têm uma implementação compartilhada por tela;
-- [ ] cada campo de formulário tem rótulo associado, erro programaticamente vinculado e
+- [x] nenhuma cor hexadecimal literal permanece nos componentes de rota;
+- [x] status de fonte e de execução usam um único componente e um único mapa de tom;
+- [x] carregando, vazio, erro e conflito têm uma implementação compartilhada por tela;
+- [x] cada campo de formulário tem rótulo associado, erro programaticamente vinculado e
       foco visível;
-- [ ] tabelas densas rolam dentro do próprio contêiner, sem rolagem horizontal da página.
+- [x] tabelas densas rolam dentro do próprio contêiner, sem rolagem horizontal da página;
+- [x] nenhum valor arbitrário de tipografia, raio ou sombra resta nas telas;
+- [x] a Visão geral responde primeiro o que exige ação hoje;
+- [x] a navegação mostra grupo e seção ativa, inclusive em tela estreita;
+- [x] carregar uma tela não desloca o conteúdo quando o dado chega.
+
+Fase 15 concluída em 2026-09-23, com os nove cards em
+[fase-15](34-roadmap-interface/fase-15/README.md). O Milestone N depende só dela.
 
 ---
 
@@ -133,6 +141,8 @@ Cards de execução: [Fase 15](34-roadmap-interface/fase-15/README.md).
 4. F14-04 e F14-05: empresa e vínculo, que exigem contrato novo de API.
 5. F15-03 a F15-05: estados, acessibilidade e responsividade, aplicados ao conjunto já
    completo de telas.
+6. F15-06 a F15-09: escala de forma, hierarquia da Visão geral, navegação e carregamento —
+   a camada que separa uma interface consistente de uma interface acabada.
 
 ---
 

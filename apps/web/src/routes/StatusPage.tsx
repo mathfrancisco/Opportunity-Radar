@@ -1,3 +1,4 @@
+import { Button } from '../components/Button'
 import { PageShell } from '../components/PageShell'
 import { useReadiness } from '../features/health/useReadiness'
 
@@ -48,19 +49,18 @@ export function StatusPage() {
       description={readiness.data?.detail ?? view.description}
       footer="Descubra oportunidades, preserve evidências e decida com contexto."
     >
-      <div aria-live="polite" className="mt-6">
-        <div className={`status status-${view.tone}`}>
+      <div className="mt-6">
+        {/* O estado é o conteúdo desta tela, e não um substituto enquanto ela carrega. */}
+        <div className={`status status-${view.tone}`} role="status">
           <span aria-hidden="true" className="status-dot" />
           {view.label}
         </div>
         {readiness.isError && (
-          <button
-            className="retry-button"
-            onClick={() => void readiness.refetch()}
-            type="button"
-          >
-            Tentar novamente
-          </button>
+          <div>
+            <Button className="mt-4" onClick={() => void readiness.refetch()}>
+              Tentar novamente
+            </Button>
+          </div>
         )}
       </div>
     </PageShell>

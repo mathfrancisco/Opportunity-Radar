@@ -1,4 +1,4 @@
-import { apiUrl } from '../../lib/api'
+import { apiUrl, requestFailure } from '../../lib/api'
 
 export interface SourceHealth {
   sourceDefinitionId: string
@@ -193,7 +193,7 @@ export async function runSource(sourceId: string): Promise<SourceRun> {
   if (!response.ok) {
     const detail = isRecord(body) && isRecord(body.detail) ? body.detail : null
     const message = detail && typeof detail.message === 'string' ? detail.message : null
-    throw new Error(message ?? `A API respondeu com ${response.status}.`)
+    throw requestFailure(response.status, message)
   }
   const run = parseRun(body)
   if (run === null) throw new Error('A API retornou uma execução inválida.')

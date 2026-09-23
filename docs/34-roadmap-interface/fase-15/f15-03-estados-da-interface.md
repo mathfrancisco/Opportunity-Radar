@@ -1,6 +1,6 @@
 # CARD F15-03 — Estados de carregamento, vazio, erro e conflito
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 15 — Design, consistência e acesso
 - **Depende de:** F15-02
 - **Bloqueia:** Milestone N
@@ -42,16 +42,28 @@ versionados — perfil, candidatura e, a partir da Fase 14, fonte e empresa.
 
 ## Critérios de aceite
 
-- [ ] As quatro variantes existem uma vez e são usadas por todas as rotas.
-- [ ] Toda mudança de estado é anunciada em região viva.
-- [ ] Taxa ou métrica indisponível aparece como indisponível, nunca como zero.
-- [ ] Erro recuperável oferece nova tentativa; conflito oferece recarregar o registro.
-- [ ] Nenhuma rota mantém bloco próprio de carregando, vazio ou erro.
+- [x] As quatro variantes existem uma vez e são usadas por todas as rotas.
+- [x] Toda mudança de estado é anunciada em região viva.
+- [x] Taxa ou métrica indisponível aparece como indisponível, nunca como zero.
+- [x] Erro recuperável oferece nova tentativa; conflito oferece recarregar o registro.
+- [x] Nenhuma rota mantém bloco próprio de carregando, vazio ou erro.
 
 ## Verificação
 
 Teste de unidade por variante, incluindo o caso de valor `null`; percorrer cada rota com a
 API fora do ar, com resposta vazia e com conflito forçado.
+
+## Nota de execução
+
+O conflito passou a ser um tipo, e não uma mensagem: `requestFailure` em `lib/api.ts`
+devolve `ConflictError` para 409, e as escritas versionadas — perfil e candidatura — o
+propagam. Sem isso, a tela não teria como distinguir "o registro mudou, releia" de "a
+requisição falhou, tente de novo", e repetir uma escrita conflitante é o caminho mais
+curto para uma das duas edições sumir.
+
+As regiões vivas saíram dos contêineres das rotas e foram para os próprios componentes de
+estado: uma `aria-live` em volta de uma tabela inteira anuncia a tabela inteira a cada
+refetch, e um alerta aninhado nela seria anunciado duas vezes.
 
 ## Arquivos prováveis
 

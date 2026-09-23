@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom'
 import { PageShell } from '../components/PageShell'
+import { Bone, Skeleton } from '../components/skeletons'
+import { EmptyState, ErrorState } from '../components/states'
 import {
   type Application,
   type ApplicationStage,
@@ -33,9 +35,9 @@ function isOverdue(value: string | null) {
 function Card({ application }: { application: Application }) {
   const due = formatDate(application.nextActionAt)
   return (
-    <li className="rounded-2xl border border-[#dce4dc] bg-white p-4 text-sm">
+    <li className="rounded-2xl border border-line bg-surface p-4 text-sm">
       <Link
-        className="font-medium underline decoration-[#d7f06f] decoration-2 underline-offset-4"
+        className="font-medium underline decoration-accent decoration-2 underline-offset-4"
         to={`/opportunities/${application.opportunityId}`}
       >
         Ver oportunidade
@@ -43,20 +45,47 @@ function Card({ application }: { application: Application }) {
       {application.nextAction ? (
         <p
           className={`mt-2 ${
-            isOverdue(application.nextActionAt) ? 'text-[#9b3e2e]' : 'text-[#547068]'
+            isOverdue(application.nextActionAt) ? 'text-danger-ink' : 'text-subtle'
           }`}
         >
           {application.nextAction}
           {due ? ` · ${due}` : ''}
         </p>
       ) : (
-        <p className="mt-2 text-[#6d827b]">Sem próxima ação definida.</p>
+        <p className="mt-2 text-muted">Sem próxima ação definida.</p>
       )}
-      <p className="mt-2 text-xs text-[#6d827b]">
+      <p className="mt-2 text-xs text-muted">
         {application.history.length} movimento
         {application.history.length === 1 ? '' : 's'} no histórico
       </p>
     </li>
+  )
+}
+
+/** Three stage columns with two cards each: the board's shape before the board. */
+function BoardSkeleton() {
+  return (
+    <Skeleton label="Carregando candidaturas…">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {[0, 1, 2].map((column) => (
+          <div key={column}>
+            <div className="flex items-center justify-between py-1">
+              <Bone className="w-28" />
+              <Bone className="w-4" />
+            </div>
+            <div className="mt-3 grid gap-2">
+              {[0, 1].map((card) => (
+                <div className="rounded-2xl border border-line bg-surface p-4" key={card}>
+                  <Bone className="w-24" />
+                  <Bone className="mt-3 w-4/5" />
+                  <Bone className="mt-3 w-1/2" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Skeleton>
   )
 }
 
@@ -72,10 +101,8 @@ function Board({ applications }: { applications: Application[] }) {
 
   if (columns.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-[#c8d4c8] p-8 text-[#547068]">
-        Nenhuma candidatura ativa. Comece pela inbox: abra uma oportunidade e registre o
-        interesse.
-      </p>
+      <EmptyState>Nenhuma candidatura ativa. Comece pela inbox: abra uma oportunidade e registre o
+        interesse.</EmptyState>
     )
   }
 
@@ -85,7 +112,7 @@ function Board({ applications }: { applications: Application[] }) {
         <section key={stage}>
           <h2 className="flex items-baseline justify-between text-sm font-semibold">
             <span>{stageLabels[stage]}</span>
-            <span className="text-[#6d827b]">{(byStage.get(stage) ?? []).length}</span>
+            <span className="text-muted">{(byStage.get(stage) ?? []).length}</span>
           </h2>
           <ul className="mt-3 grid gap-2">
             {(byStage.get(stage) ?? []).map((application) => (
@@ -109,15 +136,15 @@ function Closed({ applications }: { applications: Application[] }) {
     .filter((entry) => entry.total > 0)
 
   return (
-    <section className="mt-10">
-      <h2 className="text-lg font-semibold">Encerradas</h2>
+    <section className="mt-section">
+      <h2 className="text-section">Encerradas</h2>
       <ul className="mt-4 flex flex-wrap gap-3">
         {counts.map((entry) => (
           <li
-            className="rounded-full border border-[#c8d4c8] bg-white px-4 py-2 text-sm"
+            className="rounded-full border border-line-strong bg-surface px-4 py-2 text-sm"
             key={entry.stage}
           >
-            <span className="text-[#547068]">{stageLabels[entry.stage]}</span>{' '}
+            <span className="text-subtle">{stageLabels[entry.stage]}</span>{' '}
             <span className="font-semibold">{entry.total}</span>
           </li>
         ))}
@@ -137,23 +164,12 @@ export function PipelinePage() {
       title="Candidaturas"
       description="Cada candidatura com o estágio em que está e o que você deve fazer a seguir. A oportunidade segue o ciclo dela; a candidatura segue o seu."
     >
-      <div className="mt-8" aria-live="polite">
+      <div className="mt-8">
         {active.isPending && (
-          <p className="rounded-2xl bg-[#eef3df] p-5 text-[#5c694e]">
-            Carregando candidaturas…
-          </p>
+          <BoardSkeleton />
         )}
         {active.isError && (
-          <div className="rounded-2xl bg-[#f9e4df] p-5 text-[#9b3e2e]">
-            <p>Não foi possível carregar as candidaturas.</p>
-            <button
-              className="mt-3 font-semibold underline"
-              onClick={() => void active.refetch()}
-              type="button"
-            >
-              Tentar novamente
-            </button>
-          </div>
+          <ErrorState onRetry={() => void active.refetch()}>Não foi possível carregar as candidaturas.</ErrorState>
         )}
         {active.data && <Board applications={active.data.items} />}
       </div>
