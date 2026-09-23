@@ -1,6 +1,6 @@
 # CARD F15-05 — Responsividade e densidade
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 15 — Design, consistência e acesso
 - **Depende de:** F15-02
 - **Bloqueia:** Milestone N
@@ -44,16 +44,27 @@ resposta é cartão com todos os campos, não tabela truncada.
 
 ## Critérios de aceite
 
-- [ ] Nenhuma rota rola horizontalmente no documento em largura de 360 px.
-- [ ] Tabelas largas rolam dentro do próprio contêiner.
-- [ ] Nenhuma coluna necessária a uma decisão é omitida sem equivalente visível.
-- [ ] Alvos de toque respeitam o mínimo definido pelos tokens.
-- [ ] URL e texto longo quebram sem estourar o contêiner.
+- [x] Nenhuma rota rola horizontalmente no documento em largura de 360 px.
+- [x] Tabelas largas rolam dentro do próprio contêiner.
+- [x] Nenhuma coluna necessária a uma decisão é omitida sem equivalente visível.
+- [x] Alvos de toque respeitam o mínimo definido pelos tokens.
+- [x] URL e texto longo quebram sem estourar o contêiner.
 
 ## Verificação
 
 Percorrer as nove rotas em 360 px, 768 px e 1280 px conferindo a rolagem do documento;
 revisar cada tabela contra a lista de colunas que sustentam decisão.
+
+## Nota de execução
+
+A primeira coluna das tabelas densas fica fixa em vez de rolar junto: seis números sem o
+nome da fonte ao lado não pertencem a ninguém. A tabela de empresas manteve a estratégia
+que já tinha — tabela em tela larga, cartões em tela estreita —, que é exatamente a
+alternativa que este card pede quando a linha não cabe.
+
+Nenhuma coluna foi escondida. A de cobertura é a que separa "não executou" de "sem vagas",
+e some junto com a distinção se a resposta ao aperto for esconder coluna.
+
 
 ## Arquivos prováveis
 

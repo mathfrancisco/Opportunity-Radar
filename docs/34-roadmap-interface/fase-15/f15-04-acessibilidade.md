@@ -1,6 +1,6 @@
 # CARD F15-04 — Acessibilidade e navegação por teclado
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 15 — Design, consistência e acesso
 - **Depende de:** F15-02
 - **Bloqueia:** Milestone N
@@ -42,18 +42,31 @@ que só existe como intenção não sobrevive à próxima tela.
 
 ## Critérios de aceite
 
-- [ ] Todo elemento interativo tem foco visível com contraste AA.
-- [ ] Todo campo tem rótulo associado e, em erro, `aria-invalid` e descrição vinculada.
-- [ ] Tabelas associam cabeçalho às células.
-- [ ] Existe link para pular ao conteúdo e a rota ativa é anunciada.
-- [ ] As nove rotas são percorríveis só com teclado, incluindo executar uma fonte e
+- [x] Todo elemento interativo tem foco visível com contraste AA.
+- [x] Todo campo tem rótulo associado e, em erro, `aria-invalid` e descrição vinculada.
+- [x] Tabelas associam cabeçalho às células.
+- [x] Existe link para pular ao conteúdo e a rota ativa é anunciada.
+- [x] As nove rotas são percorríveis só com teclado, incluindo executar uma fonte e
       submeter um formulário.
-- [ ] Nenhuma informação é transmitida apenas por cor.
+- [x] Nenhuma informação é transmitida apenas por cor.
 
 ## Verificação
 
 Percurso por teclado documentado por rota; verificação automática de acessibilidade nos
 testes de componente; tabela de contraste conferida contra os tokens da F15-01.
+
+## Nota de execução
+
+O anel de foco usa `ink`, não `accent`. O verde-limão sobre superfície clara fica em torno
+de 1.2:1 — visível para quem já sabe onde procurar, invisível para quem depende dele. Sobre
+o botão primário, que é escuro, o anel inverte para `accent` pelo mesmo critério: o
+contorno contrasta com o que está atrás dele.
+
+O erro de campo virou mecanismo antes de virar uso: `Field` liga o texto ao controle por
+`aria-describedby` e marca `aria-invalid`. Hoje nenhuma tela tem erro por campo — os
+formulários da Fase 14 é que vão tê-los, e vão encontrar o padrão pronto em vez de
+inventar o seu.
+
 
 ## Arquivos prováveis
 

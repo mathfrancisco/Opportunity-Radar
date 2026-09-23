@@ -30,11 +30,11 @@ function CompanyList({ companies }: { companies: Company[] }) {
         <table className="w-full border-collapse text-left text-sm">
           <thead className="bg-canvas text-xs uppercase tracking-[0.08em] text-muted">
             <tr>
-              <th className="px-5 py-4 font-semibold">Empresa</th>
-              <th className="px-5 py-4 font-semibold">Prioridade</th>
-              <th className="px-5 py-4 font-semibold">Status</th>
-              <th className="px-5 py-4 font-semibold">Verificação</th>
-              <th className="px-5 py-4 font-semibold">Fontes</th>
+              <th className="px-5 py-4 font-semibold" scope="col">Empresa</th>
+              <th className="px-5 py-4 font-semibold" scope="col">Prioridade</th>
+              <th className="px-5 py-4 font-semibold" scope="col">Status</th>
+              <th className="px-5 py-4 font-semibold" scope="col">Verificação</th>
+              <th className="px-5 py-4 font-semibold" scope="col">Fontes</th>
             </tr>
           </thead>
           <tbody>
@@ -54,7 +54,7 @@ function CompanyList({ companies }: { companies: Company[] }) {
                 <td className="px-5 py-4">{display(company.priority)}</td>
                 <td className="px-5 py-4">{display(company.status)}</td>
                 <td className="px-5 py-4">{display(company.verificationState)}</td>
-                <td className="max-w-64 px-5 py-4 text-subtle">
+                <td className="break-anywhere max-w-64 px-5 py-4 text-subtle">
                   {sourceNames(company)}
                 </td>
               </tr>

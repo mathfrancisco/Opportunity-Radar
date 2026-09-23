@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { ApplicationPanel } from '../components/ApplicationPanel'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
+import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
 import { EmptyState, ErrorState, LoadingState } from '../components/states'
 import {
@@ -149,7 +150,7 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
             <p className="font-medium">
               {occurrence.sourceUrl ? (
                 <a
-                  className="underline decoration-accent decoration-2 underline-offset-4"
+                  className="break-anywhere underline decoration-accent decoration-2 underline-offset-4"
                   href={occurrence.sourceUrl}
                   rel="noreferrer"
                   target="_blank"
@@ -164,7 +165,9 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
               Primeira vez {formatDate(occurrence.firstSeenAt)} · última{' '}
               {formatDate(occurrence.lastSeenAt)}
             </p>
-            <p className="mt-1 text-xs text-muted">raw item {occurrence.rawItemId}</p>
+            <p className="break-anywhere mt-1 text-xs text-muted">
+              raw item {occurrence.rawItemId}
+            </p>
             {!occurrence.payloadRetained && (
               <p className="mt-2 rounded-xl border border-warning-line bg-warning-surface px-3 py-2 text-xs text-warning-ink">
                 Conteúdo bruto expirado pela retenção
@@ -177,7 +180,7 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
           </Card>
         ))}
       </ul>
-      <p className="mt-4 text-sm text-muted">
+      <p className="break-anywhere mt-4 text-sm text-muted">
         Fingerprint {opportunity.fingerprint} ({opportunity.fingerprintVersion}) ·{' '}
         {opportunity.normalizationResults.length} resultado
         {opportunity.normalizationResults.length === 1 ? '' : 's'} de normalização.
@@ -219,19 +222,12 @@ function Eligibility({ details }: { details: EligibilityDetail[] }) {
 function Factors({ factors }: { factors: MatchFactor[] }) {
   if (factors.length === 0) return <p className="text-subtle">Nenhum fator calculado.</p>
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-left text-sm">
-        <thead className="bg-canvas text-xs uppercase tracking-[0.08em] text-muted">
-          <tr>
-            <th className="px-4 py-3 font-semibold">Fator</th>
-            <th className="px-4 py-3 font-semibold">Peso</th>
-            <th className="px-4 py-3 font-semibold">Contribuição</th>
-            <th className="px-4 py-3 font-semibold">Estado</th>
-            <th className="px-4 py-3 font-semibold">Explicação</th>
-          </tr>
-        </thead>
-        <tbody>
-          {factors.map((factor) => (
+    <DataTable
+      caption="Fatores que compõem o score desta avaliação"
+      columns={['Fator', 'Peso', 'Contribuição', 'Estado', 'Explicação']}
+      stickyFirstColumn
+    >
+      {factors.map((factor) => (
             <tr className="border-t border-divider" key={factor.factorCode}>
               <td className="px-4 py-3 font-medium">{factor.factorCode}</td>
               <td className="px-4 py-3">{formatNumber(factor.weight, 2)}</td>
@@ -246,10 +242,8 @@ function Factors({ factors }: { factors: MatchFactor[] }) {
               </td>
               <td className="px-4 py-3 text-subtle">{factor.explanation}</td>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+      ))}
+    </DataTable>
   )
 }
 

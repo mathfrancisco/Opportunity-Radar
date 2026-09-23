@@ -42,7 +42,7 @@ function RunStatus({ status }: { status: string | null }) {
   )
 }
 
-function RunHistory({ sourceId }: { sourceId: string }) {
+function RunHistory({ sourceId, id }: { sourceId: string; id: string }) {
   const runs = useSourceRuns(sourceId)
 
   if (runs.isPending) {
@@ -63,6 +63,8 @@ function RunHistory({ sourceId }: { sourceId: string }) {
       caption="Execuções recentes desta fonte"
       className="mt-4"
       columns={['Status', 'Origem', 'Início', 'Itens', 'Erro']}
+      id={id}
+      stickyFirstColumn
     >
       {runs.data.map((run) => (
             <tr className="border-t border-divider" key={run.id}>
@@ -100,6 +102,7 @@ function SourceCard({
 }) {
   const run = useRunSource()
   const blocked = !source.enabled
+  const runHistoryId = `runs-${source.sourceDefinitionId}`
 
   return (
     <Card as="article">
@@ -155,7 +158,7 @@ function SourceCard({
       </p>
 
       {source.lastRunError && (
-        <p className="mt-4 rounded-2xl border border-danger-line bg-danger-surface p-4 text-sm text-danger-ink">
+        <p className="break-anywhere mt-4 rounded-2xl border border-danger-line bg-danger-surface p-4 text-sm text-danger-ink">
           {source.lastRunErrorCode ? `${source.lastRunErrorCode}: ` : ''}
           {source.lastRunError}
         </p>
@@ -168,7 +171,13 @@ function SourceCard({
         >
           {run.isPending ? 'Executando…' : 'Executar agora'}
         </Button>
-        <Button onClick={onToggle} size="sm" variant="secondary">
+        <Button
+          aria-controls={runHistoryId}
+          aria-expanded={expanded}
+          onClick={onToggle}
+          size="sm"
+          variant="secondary"
+        >
           {expanded ? 'Ocultar execuções' : 'Ver execuções'}
         </Button>
         {blocked && (
@@ -187,7 +196,7 @@ function SourceCard({
         </p>
       )}
 
-      {expanded && <RunHistory sourceId={source.sourceDefinitionId} />}
+      {expanded && <RunHistory id={runHistoryId} sourceId={source.sourceDefinitionId} />}
     </Card>
   )
 }

@@ -56,3 +56,42 @@ describe('DataTable', () => {
     expect(container.querySelector('caption')).toBeNull()
   })
 })
+
+describe('DataTable em tela estreita', () => {
+  it('fixa a primeira coluna quando ela é quem nomeia a linha', () => {
+    const container = render(
+      <DataTable columns={['Fonte', 'Cobertura']} stickyFirstColumn>
+        <tr>
+          <td>Greenhouse</td>
+          <td>Saudável</td>
+        </tr>
+      </DataTable>,
+    )
+
+    expect(container.querySelector('table')?.className).toContain('td:first-child]:sticky')
+  })
+
+  it('deixa a tabela solta quando não há coluna a fixar', () => {
+    const container = render(
+      <DataTable columns={['Status']}>
+        <tr>
+          <td>Sucesso</td>
+        </tr>
+      </DataTable>,
+    )
+
+    expect(container.querySelector('table')?.className).not.toContain('sticky')
+  })
+
+  it('aceita um id para o botão que a expande apontar', () => {
+    const container = render(
+      <DataTable columns={['Status']} id="runs-1">
+        <tr>
+          <td>Sucesso</td>
+        </tr>
+      </DataTable>,
+    )
+
+    expect(container.querySelector('#runs-1')).not.toBeNull()
+  })
+})

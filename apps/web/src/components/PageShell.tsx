@@ -33,6 +33,14 @@ export function PageShell({
 }: PageShellProps) {
   return (
     <main className="min-h-screen bg-canvas px-5 py-7 text-ink sm:px-10 sm:py-10">
+      {/* Primeiro alvo de tabulação: sete links de navegação antes do conteúdo, em toda
+          página, é o que torna o teclado inutilizável sem isto. */}
+      <a
+        className="sr-only focus:not-sr-only focus:absolute focus:left-6 focus:top-6 focus:z-10 focus:rounded-xl focus:bg-ink focus:px-5 focus:py-3 focus:text-sm focus:font-semibold focus:text-surface"
+        href="#conteudo"
+      >
+        Pular para o conteúdo
+      </a>
       <div className="mx-auto min-h-[calc(100vh-3.5rem)] max-w-5xl rounded-[2rem] border border-line-soft bg-raised p-7 shadow-[0_24px_70px_rgba(23,50,45,0.10)] sm:p-12">
         <header
           className="flex flex-wrap items-center justify-between gap-4"
@@ -49,14 +57,18 @@ export function PageShell({
               item.to === current ? (
                 <Link
                   aria-current="page"
-                  className="text-ink underline decoration-accent decoration-2 underline-offset-4"
+                  className="rounded-sm text-ink underline decoration-accent decoration-2 underline-offset-4"
                   key={item.to}
                   to={item.to}
                 >
                   {item.label}
                 </Link>
               ) : (
-                <Link className="text-subtle hover:text-ink" key={item.to} to={item.to}>
+                <Link
+                  className="rounded-sm text-subtle hover:text-ink"
+                  key={item.to}
+                  to={item.to}
+                >
                   {item.label}
                 </Link>
               ),
@@ -64,7 +76,7 @@ export function PageShell({
           </nav>
         </header>
 
-        <section className="py-10 sm:py-14">
+        <section className="py-10 sm:py-14" id="conteudo" tabIndex={-1}>
           <p className="text-sm font-medium text-subtle">{eyebrow}</p>
           <h1 className="mt-2 text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">{title}</h1>
           {description && (

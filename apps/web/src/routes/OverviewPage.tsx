@@ -104,8 +104,8 @@ function SourceMetricsRow({ source }: { source: SourceMetrics }) {
   const mappings = Object.keys(seniority.mappingVersions)
   return (
     <tr className="border-t border-divider align-top">
-      <td className="px-4 py-3">
-        <p className="font-medium">{source.name}</p>
+      <td className="min-w-40 px-4 py-3">
+        <p className="break-anywhere font-medium">{source.name}</p>
         <p className="text-xs text-muted">{source.sourceType}</p>
         {source.incidentOpen && (
           <p className="mt-1 text-xs font-semibold text-danger-ink">Incidente aberto</p>
@@ -189,6 +189,7 @@ function SourceMetricsTable({ window }: { window: SourceMetricsWindow }) {
     <DataTable
       caption={`Métricas por fonte na janela de ${window.window}`}
       columns={['Fonte', 'Cobertura', 'Volume', 'Taxas', 'Erros por código', 'Senioridade']}
+      stickyFirstColumn
     >
       {window.sources.map((source) => (
         <SourceMetricsRow key={source.sourceDefinitionId} source={source} />

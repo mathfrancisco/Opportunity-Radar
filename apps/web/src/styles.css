@@ -56,6 +56,23 @@
 
 body { margin: 0; min-width: 320px; }
 
+/*
+ * Foco visível por padrão, em tudo.
+ *
+ * O anel usa `ink` e não `accent`: o contorno precisa contrastar com o que está atrás
+ * dele, e o verde-limão sobre superfície clara fica em torno de 1.2:1 — visível para quem
+ * já sabe onde procurar, invisível para quem navega por teclado. Sobre fundo escuro o
+ * botão inverte o anel para `accent`, pelo mesmo motivo.
+ */
+:focus-visible {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 3px;
+  border-radius: 0.35rem;
+}
+
+/* Um endereço de vaga não pode empurrar a página inteira para o lado. */
+.break-anywhere { overflow-wrap: anywhere; }
+
 .status {
   display: inline-flex;
   align-items: center;
