@@ -437,6 +437,45 @@ jobs:
           test "$status" = "healthy"
           $compose logs --no-color --no-log-prefix worker | \
             python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; configured=[line for line in lines if line.get('message') == 'worker jobs configured']; assert configured, 'the worker never reported its job configuration'; jobs=configured[-1]['jobs']; assert jobs == {'collect_enabled_sources': False, 'normalize_opportunities': False, 'evaluate_pending': False, 'analyze_pending': False, 'expire_raw_payloads': False}, jobs"
+      - name: Verify catalogue curation through the public API
+        run: |
+          api="http://127.0.0.1:3000/api"
+          # A company registered by the interface grows the catalogue by one, and the same
+          # name typed again answers with the existing record instead of a second one.
+          total_before="$(curl --fail --silent "$api/companies?page_size=1" | python -c "import json,sys; print(json.load(sys.stdin)['total'])")"
+          company="$(curl --fail --silent --json '{"name":"CI Curated Company","domain":"https://www.ci-curated.example/careers","priority":"high"}' "$api/companies")"
+          company_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['outcome'] == 'created'; assert data['company']['domain'] == 'ci-curated.example'; print(data['company']['id'])" <<< "$company")"
+          curl --fail --silent "$api/companies?page_size=1" | \
+            python -c "import json,sys; assert json.load(sys.stdin)['total'] == $total_before + 1"
+          curl --fail --silent --json '{"name":"ci curated company"}' "$api/companies" | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['outcome'] == 'matched'; assert data['company']['id'] == '$company_id'"
+          domain_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --json '{"name":"CI Stranger","domain":"ci-curated.example"}' "$api/companies")"
+          test "$domain_status" = "409"
+
+          # An ATS registered by hand becomes an inert proposal, once.
+          curl --fail --silent --json '{"source_type":"greenhouse","endpoint":"https://boards.greenhouse.io/ci-curated","external_key":"ci-curated","evidence_note":"Registered by the CI curation gate."}' \
+            "$api/companies/$company_id/sources" | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['version'] == 1; assert len(data['revisions']) == 1"
+          proposal="$(curl --fail --silent --request POST "$api/companies/$company_id/detect-source")"
+          proposal_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['result'] == 'proposed'; assert data['enabled'] is False; print(data['source_id'])" <<< "$proposal")"
+          curl --fail --silent --request POST "$api/companies/$company_id/detect-source" | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['result'] == 'already_proposed'; assert data['source_id'] == '$proposal_id'"
+          proposed="$(curl --fail --silent "$api/sources/$proposal_id")"
+          python -c "import json,sys; data=json.load(sys.stdin); assert data['enabled'] is False; assert data['evidence_status'] == 'ats_identified'" <<< "$proposed"
+
+          # A stale homologation write is a conflict, not a configuration error.
+          version="$(python -c "import json,sys; print(json.load(sys.stdin)['version'])" <<< "$proposed")"
+          controls="{\"enabled\":false,\"terms_reviewed\":true,\"collector_local_tested\":false,\"expected_version\":$version}"
+          curl --fail --silent --request PATCH --json "$controls" "$api/sources/$proposal_id" >/dev/null
+          stale_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --request PATCH --json "$controls" "$api/sources/$proposal_id")"
+          test "$stale_status" = "409"
+
+          # A manual run is normalized item by item, as the intake screen shows it.
+          manual_id="$(curl --fail --silent --json '{"source_type":"manual","name":"CI curation intake","enabled":true}' "$api/sources" | python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
+          run_id="$(curl --fail --silent --json '{"inputs":[{"kind":"TEXT","value":"Platform Engineer at CI Curated. Remote.","metadata":{"title":"Platform Engineer","company_name":"CI Curated Company"}}]}' "$api/sources/$manual_id/runs" | python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
+          curl --fail --silent --request POST "$api/opportunities/normalizations/runs/$run_id" | \
+            python -c "import json,sys; items=json.load(sys.stdin)['items']; assert len(items) == 1; assert items[0]['result']['status'] in {'SUCCEEDED', 'REVIEW_REQUIRED', 'FAILED'}"
+          curl --fail --silent --output /dev/null "http://127.0.0.1:3000/companies/$company_id"
       - name: Collect logs on failure
         if: failure()
         run: docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --tail=300

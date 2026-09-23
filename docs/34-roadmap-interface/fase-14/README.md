@@ -6,13 +6,13 @@ registrar uma vaga avulsa, cadastrar uma empresa e vinculá-la a uma fonte.
 A ordem preserva a dependência real de contrato: fonte e vaga usam API que já existe;
 empresa e vínculo exigem endpoints novos.
 
-| Ordem | Card | Depende de |
-| --- | --- | --- |
-| 1 | [F14-01 — cadastro de fonte](f14-01-cadastro-de-fonte.md) | Fase 13 |
-| 2 | [F14-02 — homologação e kill switch](f14-02-homologacao-de-fonte.md) | F14-01 |
-| 3 | [F14-03 — entrada manual de vaga](f14-03-entrada-manual-de-vaga.md) | F14-01 |
-| 4 | [F14-04 — cadastro de empresa](f14-04-cadastro-de-empresa.md) | Fase 13 |
-| 5 | [F14-05 — vínculo entre empresa e fonte](f14-05-vinculo-empresa-fonte.md) | F14-04 |
+| Ordem | Card | Depende de | Status |
+| --- | --- | --- | --- |
+| 1 | [F14-01 — cadastro de fonte](f14-01-cadastro-de-fonte.md) | Fase 13 | Concluído |
+| 2 | [F14-02 — homologação e kill switch](f14-02-homologacao-de-fonte.md) | F14-01 | Concluído |
+| 3 | [F14-03 — entrada manual de vaga](f14-03-entrada-manual-de-vaga.md) | F14-01 | Concluído |
+| 4 | [F14-04 — cadastro de empresa](f14-04-cadastro-de-empresa.md) | Fase 13 | Concluído |
+| 5 | [F14-05 — vínculo entre empresa e fonte](f14-05-vinculo-empresa-fonte.md) | F14-04 | Concluído |
 
 F14-04 pode seguir em paralelo com F14-01. F14-02, F14-03 e F14-05 encerram a fase e
 liberam o Milestone M.
