@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
 from math import ceil, isfinite
@@ -59,6 +60,21 @@ class SourceNotFoundError(AcquisitionError):
             AcquisitionErrorCode.INVALID_CONFIGURATION,
             f"source not found: {source_id}",
         )
+
+
+class SourceVersionConflictError(AcquisitionError):
+    """The source changed after the caller read it.
+
+    A conflict, not a configuration error: the recovery is to read the source again and
+    decide, never to resend the same payload over someone else's change.
+    """
+
+    def __init__(self, source_id: UUID) -> None:
+        super().__init__(
+            AcquisitionErrorCode.INVALID_CONFIGURATION,
+            "source definition was changed; refresh it before updating",
+        )
+        self.source_id = source_id
 
 
 class SourceDisabledError(AcquisitionError):
@@ -115,29 +131,37 @@ class AcquisitionService:
             raise AcquisitionError(
                 AcquisitionErrorCode.INVALID_CONFIGURATION,
                 "source name cannot be empty",
+                field="name",
             )
-        self.registry.resolve(normalized_type)
+        with _refusing_field("source_type"):
+            self.registry.resolve(normalized_type)
         source_configuration = dict(configuration or {})
-        _reject_secret_configuration(source_configuration)
+        with _refusing_field("configuration"):
+            _reject_secret_configuration(source_configuration)
         source_rate_limit_policy = dict(rate_limit_policy or {})
-        _network_policy(source_rate_limit_policy)
+        with _refusing_field("rate_limit_policy"):
+            _network_policy(source_rate_limit_policy)
         if normalized_type == "ashby":
-            AshbyCollector.validate_board_identifier(
-                _required_string(source_configuration, "board_identifier")
-            )
+            with _refusing_field("configuration.board_identifier"):
+                AshbyCollector.validate_board_identifier(
+                    _required_string(source_configuration, "board_identifier")
+                )
         if normalized_type == "lever":
-            LeverCollector.validate_site_slug(
-                _required_string(source_configuration, "site_identifier")
-            )
-            LeverCollector.validate_instance(
-                _required_string(source_configuration, "api_region")
-                if "api_region" in source_configuration
-                else "global"
-            )
+            with _refusing_field("configuration.site_identifier"):
+                LeverCollector.validate_site_slug(
+                    _required_string(source_configuration, "site_identifier")
+                )
+            with _refusing_field("configuration.api_region"):
+                LeverCollector.validate_instance(
+                    _required_string(source_configuration, "api_region")
+                    if "api_region" in source_configuration
+                    else "global"
+                )
         if normalized_type == "greenhouse":
-            GreenhouseCollector.validate_board_token(
-                _required_string(source_configuration, "board_token")
-            )
+            with _refusing_field("configuration.board_token"):
+                GreenhouseCollector.validate_board_token(
+                    _required_string(source_configuration, "board_token")
+                )
         if enabled and normalized_type != "manual" and (
             evidence_status != "confirmed"
             or reviewed_at is None
@@ -244,10 +268,7 @@ class AcquisitionService:
         if source is None:
             raise SourceNotFoundError(source_id)
         if source.version != expected_version:
-            raise AcquisitionError(
-                AcquisitionErrorCode.INVALID_CONFIGURATION,
-                "source definition was changed; refresh it before updating",
-            )
+            raise SourceVersionConflictError(source_id)
         effective_reviewed_at = reviewed_at or source.reviewed_at
         if enabled and source.source_type != "manual" and (
             source.evidence_status != "confirmed"
@@ -277,10 +298,7 @@ class AcquisitionService:
         )
         if updated_id is None:
             self.session.rollback()
-            raise AcquisitionError(
-                AcquisitionErrorCode.INVALID_CONFIGURATION,
-                "source definition was changed; refresh it before updating",
-            )
+            raise SourceVersionConflictError(source_id)
         self.session.commit()
         self.session.refresh(source)
         return source
@@ -654,6 +672,17 @@ def _identity_key(
 
 def _string_or_none(value: object) -> str | None:
     return value if isinstance(value, str) else None
+
+
+@contextmanager
+def _refusing_field(field: str) -> Iterator[None]:
+    """Attributes a configuration refusal to the request field that caused it."""
+    try:
+        yield
+    except AcquisitionError as error:
+        if error.field is None:
+            error.field = field
+        raise
 
 
 def _required_string(configuration: Mapping[str, Any], key: str) -> str:

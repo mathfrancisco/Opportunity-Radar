@@ -13,6 +13,7 @@ from uuid import UUID
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.models import RawItemModel, SourceRunModel
 from opportunity_radar.acquisition.service import COLLECTED_ITEM_V1_KEY
 from opportunity_radar.opportunities.domain import (
     CanonicalCandidate,
@@ -41,6 +42,10 @@ NORMALIZER_VERSION = "v3"
 
 
 class RawItemNotFoundError(LookupError):
+    pass
+
+
+class SourceRunNotFoundError(LookupError):
     pass
 
 
@@ -234,6 +239,23 @@ class OpportunityService:
         self.session.commit()
         self.session.refresh(result)
         return result
+
+    def normalize_run(
+        self, source_run_id: UUID
+    ) -> list[tuple[RawItemModel, NormalizationResultModel]]:
+        """Normalize what one run preserved, and answer item by item.
+
+        The manual intake needs this shape: an operator who submitted three inputs wants
+        to know what became of each, not how the whole backlog moved. Normalization is
+        idempotent per raw item, so asking twice returns the recorded outcome.
+        A run that preserved nothing — every input already known — answers an empty list.
+        """
+        if self.session.get(SourceRunModel, source_run_id) is None:
+            raise SourceRunNotFoundError(source_run_id)
+        return [
+            (raw_item, self.normalize(raw_item.id))
+            for raw_item in self.repository.run_raw_items(source_run_id)
+        ]
 
     def normalize_pending(self, limit: int = 100) -> NormalizationBatch:
         if limit < 1 or limit > 500:

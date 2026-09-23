@@ -37,11 +37,15 @@ class AcquisitionError(Exception):
         summary: str,
         *,
         retryable: bool = False,
+        field: str | None = None,
     ) -> None:
         super().__init__(summary)
         self.code = code
         self.summary = summary
         self.retryable = retryable
+        # The request field that caused a configuration error, dotted for nested keys
+        # ("configuration.board_token"), so a form can show the refusal where it belongs.
+        self.field = field
 
 
 class InvalidSourceRunTransitionError(AcquisitionError):
