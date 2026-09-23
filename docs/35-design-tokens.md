@@ -18,7 +18,7 @@ O nome descreve o papel, não o tom. `text-muted` continua correto se o cinza mu
 | `line` | `#dce4dc` | borda padrão de cartão |
 | `line-strong` | `#c8d4c8` | borda de controle e de estado vazio |
 | `line-soft` | `#ced8ce` | borda da navegação |
-| `divider` | `#e4ebe4` | separador entre linhas de tabela |
+| `divider` | `#e4ebe4` | separador entre linhas de tabela e traço do esqueleto de carregamento |
 | `accent` | `#d7f06f` | sublinhado de link e anel de foco |
 
 ## Texto e ação

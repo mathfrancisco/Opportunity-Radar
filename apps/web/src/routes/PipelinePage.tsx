@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { PageShell } from '../components/PageShell'
-import { EmptyState, ErrorState, LoadingState } from '../components/states'
+import { Bone, Skeleton } from '../components/skeletons'
+import { EmptyState, ErrorState } from '../components/states'
 import {
   type Application,
   type ApplicationStage,
@@ -58,6 +59,33 @@ function Card({ application }: { application: Application }) {
         {application.history.length === 1 ? '' : 's'} no histórico
       </p>
     </li>
+  )
+}
+
+/** Three stage columns with two cards each: the board's shape before the board. */
+function BoardSkeleton() {
+  return (
+    <Skeleton label="Carregando candidaturas…">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {[0, 1, 2].map((column) => (
+          <div key={column}>
+            <div className="flex items-center justify-between py-1">
+              <Bone className="w-28" />
+              <Bone className="w-4" />
+            </div>
+            <div className="mt-3 grid gap-2">
+              {[0, 1].map((card) => (
+                <div className="rounded-2xl border border-line bg-surface p-4" key={card}>
+                  <Bone className="w-24" />
+                  <Bone className="mt-3 w-4/5" />
+                  <Bone className="mt-3 w-1/2" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Skeleton>
   )
 }
 
@@ -138,7 +166,7 @@ export function PipelinePage() {
     >
       <div className="mt-8">
         {active.isPending && (
-          <LoadingState>Carregando candidaturas…</LoadingState>
+          <BoardSkeleton />
         )}
         {active.isError && (
           <ErrorState onRetry={() => void active.refetch()}>Não foi possível carregar as candidaturas.</ErrorState>

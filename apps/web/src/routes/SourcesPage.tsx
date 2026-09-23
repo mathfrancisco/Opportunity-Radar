@@ -3,7 +3,8 @@ import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
-import { EmptyState, ErrorState, LoadingState } from '../components/states'
+import { CardListSkeleton, PanelSkeleton } from '../components/skeletons'
+import { EmptyState, ErrorState } from '../components/states'
 import { StatusBadge } from '../components/StatusBadge'
 import { Unavailable } from '../components/Unavailable'
 import { type SourceHealth } from '../features/sources/api'
@@ -213,6 +214,13 @@ export function SourcesPage() {
       title="Fontes e execuções"
       description="O que cada fonte produziu na última execução, e o que fazer quando ela falha. Uma fonte só executa depois de habilitada."
     >
+      {/* A cobertura é uma consulta própria e chega antes ou depois da lista; sem o espaço
+          reservado, a que chega por último empurra a outra. */}
+      {coverage.isPending && (
+        <div className="mt-8">
+          <PanelSkeleton label="Carregando a cobertura…" />
+        </div>
+      )}
       {coverage.data && (
         <section className="mt-8 grid gap-3 rounded-2xl border border-line bg-panel p-5 text-sm sm:grid-cols-3">
           <p><span className="text-muted">Catálogo</span><br /><strong>{coverage.data.catalogCompanies}</strong> empresas · {coverage.data.catalogSourceRecords} registros</p>
@@ -222,7 +230,7 @@ export function SourcesPage() {
       )}
       <div className="mt-8 grid gap-3">
         {health.isPending && (
-          <LoadingState>Carregando fontes…</LoadingState>
+          <CardListSkeleton label="Carregando fontes…" />
         )}
         {health.isError && (
           <ErrorState onRetry={() => void health.refetch()}>Não foi possível carregar as fontes.</ErrorState>

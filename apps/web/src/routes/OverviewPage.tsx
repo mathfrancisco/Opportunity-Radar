@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import { Card } from '../components/Card'
 import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
-import { EmptyState, ErrorState, LoadingState } from '../components/states'
+import { Bone, Skeleton, TableSkeleton } from '../components/skeletons'
+import { EmptyState, ErrorState } from '../components/states'
 import { StatusBadge } from '../components/StatusBadge'
+import { Toolbar } from '../components/Toolbar'
 import { Unavailable } from '../components/Unavailable'
 import {
   type FailingSource,
@@ -237,29 +239,27 @@ function SourceMetricsSection() {
 
   return (
     <section className="mt-section">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* A altura mínima é a dos botões de janela, que só existem depois da resposta. */}
+      <div className="flex min-h-10 flex-wrap items-center justify-between gap-3">
         <h2 className="text-section">Métricas operacionais por fonte</h2>
-        <div className="flex gap-2">
-          {windows.map((item) => (
-            <button
-              aria-pressed={item.window === active?.window}
-              className={`rounded-full border px-4 py-2 text-sm transition ${
-                item.window === active?.window
-                  ? 'border-ink bg-ink font-semibold text-surface'
-                  : 'border-line-strong bg-surface hover:border-ink'
-              }`}
-              key={item.window}
-              onClick={() => setSelected(item.window)}
-              type="button"
-            >
-              {item.window === '24h' ? '24 horas' : '7 dias'}
-            </button>
-          ))}
-        </div>
+        <Toolbar
+          label="Janela das métricas"
+          onChange={setSelected}
+          options={windows.map((item) => ({
+            value: item.window,
+            label: item.window === '24h' ? '24 horas' : '7 dias',
+          }))}
+          value={active?.window}
+        />
       </div>
       <div className="mt-4">
         {metrics.isPending && (
-          <LoadingState>Carregando métricas…</LoadingState>
+          <>
+            <Bone className="my-1 w-3/4" />
+            <div className="mt-4">
+              <TableSkeleton columns={6} label="Carregando métricas…" />
+            </div>
+          </>
         )}
         {metrics.isError && (
           <ErrorState onRetry={() => void metrics.refetch()}>Não foi possível carregar as métricas por fonte.</ErrorState>
@@ -274,6 +274,57 @@ function SourceMetricsSection() {
         )}
       </div>
     </section>
+  )
+}
+
+/**
+ * Os três blocos antes dos números: decisão com quatro cartões, acervo e operação com
+ * quatro linhas de apoio cada. Os títulos são os de verdade, porque não dependem do dado.
+ */
+function SummarySkeleton() {
+  // Uma linha de apoio com dica quebra em duas fora da tela larga; sem dica, fica em uma.
+  const supportLines = (hinted: boolean[]) => (
+    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      {hinted.map((hint, line) => (
+        <div className="py-1" key={line}>
+          <Bone className="w-3/4" />
+          {hint && <Bone className="mt-3 w-1/2 lg:hidden" />}
+        </div>
+      ))}
+    </div>
+  )
+  return (
+    <Skeleton label="Carregando o resumo…">
+      <section className="mt-8">
+        <p className="text-section">Decisão de hoje</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((tile) => (
+            <div className="rounded-2xl border border-line bg-surface p-5" key={tile}>
+              <Bone className="w-24" />
+              <Bone className="mt-4 h-8 w-12" />
+              {/* O cartão de follow-up traz uma dica, e a linha de cartões cresce com ela. */}
+              {tile === 3 && <Bone className="mt-4 w-28" />}
+            </div>
+          ))}
+        </div>
+        {/* As pílulas de veredito, que aparecem sempre que há alguma vaga avaliada. */}
+        <div className="mt-3 flex flex-wrap gap-3">
+          {[0, 1].map((pill) => (
+            <span className="block h-9 w-36 rounded-full border border-line bg-surface" key={pill} />
+          ))}
+        </div>
+      </section>
+      <section className="mt-section">
+        <p className="text-section">Acervo</p>
+        <Bone className="mt-3 w-2/3" />
+        {supportLines([true, true, true, false])}
+      </section>
+      <section className="mt-section">
+        <p className="text-section">Operação</p>
+        <Bone className="mt-3 w-1/2" />
+        {supportLines([true, true])}
+      </section>
+    </Skeleton>
   )
 }
 
@@ -462,7 +513,7 @@ export function OverviewPage() {
     >
       <div>
         {overview.isPending && (
-          <LoadingState className="mt-8">Carregando o resumo…</LoadingState>
+          <SummarySkeleton />
         )}
         {overview.isError && (
           <ErrorState className="mt-8" onRetry={() => void overview.refetch()}>Não foi possível carregar o resumo.</ErrorState>

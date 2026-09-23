@@ -1,6 +1,6 @@
 # CARD F15-09 — Carregamento sem salto de layout
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-23
 - **Fase:** 15 — Design, consistência e acesso
 - **Depende de:** F15-03, F15-06
 - **Bloqueia:** Milestone N
@@ -50,11 +50,34 @@ de tela repetir "carregando" dez vezes.
 
 ## Critérios de aceite
 
-- [ ] Listas e tabelas carregam com esqueleto na forma do conteúdo.
-- [ ] A posição vertical dos blocos não muda entre carregando e carregado.
-- [ ] O estado de carregamento é anunciado uma vez por região, não por item.
-- [ ] Com `prefers-reduced-motion`, o esqueleto não pulsa.
-- [ ] Bloco curto continua usando `LoadingState`, sem esqueleto inventado.
+- [x] Listas e tabelas carregam com esqueleto na forma do conteúdo.
+- [x] A posição vertical dos blocos não muda entre carregando e carregado.
+- [x] O estado de carregamento é anunciado uma vez por região, não por item.
+- [x] Com `prefers-reduced-motion`, o esqueleto não pulsa.
+- [x] Bloco curto continua usando `LoadingState`, sem esqueleto inventado.
+
+## Nota de execução
+
+`components/skeletons.tsx` tem o invólucro `Skeleton` — um `role="status"` com
+`aria-busy` e o mesmo texto que a faixa dizia, e a forma inteira sob `aria-hidden` — e as
+formas que nasceram das telas: lista de cartões, tabela, painel de três colunas. A
+pulsação é `motion-safe:animate-pulse`; com movimento reduzido a forma fica e o pulso some.
+
+Onde entrou esqueleto: Oportunidades e Fontes (lista de cartões), Empresas (tabela em tela
+larga, cartões na estreita, a mesma troca da lista real), Candidaturas (três colunas de
+estágio), e na Visão geral o resumo — os três blocos com os títulos reais — e a tabela de
+métricas por fonte. A faixa de cobertura de Fontes é uma consulta própria e ganhou espaço
+reservado, para que a que responde por último não empurre a outra. Os botões de janela das
+métricas também: a linha do título reserva a altura deles antes de existirem.
+
+Onde `LoadingState` ficou: detalhe de oportunidade, detalhe de empresa, perfil, avaliação e
+painel de candidatura. São um registro só, e a faixa já tem mais ou menos a altura dele.
+
+Medido na Visão geral com a resposta retida e depois liberada, pela posição de cada bloco:
+o deslocamento ficou em 4 px em 1280 px, 6 px em 768 px e 13 px em 360 px, onde antes a
+página inteira trocava uma faixa de cinco linhas pelo resumo. O resto é texto de tamanho
+variável — quantas pílulas de veredito existem, se a dica quebra linha —, que o esqueleto
+não tem como saber antes do dado.
 
 ## Verificação
 

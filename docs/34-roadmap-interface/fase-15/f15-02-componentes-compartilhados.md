@@ -61,6 +61,12 @@ no lugar de `SUCCEEDED` — porque o mapa único traz rótulo e tom juntos, e a 
 exibia o estado traduzido. A informação é a mesma; o vocabulário passou a ser um só. Estado
 sem tradução continua aparecendo pelo próprio código.
 
+`Toolbar` ficou para depois dos outros cinco e saiu em 2026-09-23, quando a duplicação
+apareceu inteira: o filtro de candidatura da Inbox e a janela de métricas da Visão geral
+eram o mesmo grupo de botões com `aria-pressed`, escrito duas vezes. O componente é um
+`group` e não um `toolbar` ARIA — este promete navegação por setas entre os itens, e
+aqui cada botão é uma parada de tabulação comum.
+
 ## Arquivos prováveis
 
 - `apps/web/src/components/`

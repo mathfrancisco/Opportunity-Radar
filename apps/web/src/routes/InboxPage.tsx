@@ -4,9 +4,11 @@ import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { Field, controlClassName } from '../components/Field'
 import { PageShell } from '../components/PageShell'
-import { EmptyState, ErrorState, LoadingState } from '../components/states'
+import { CardListSkeleton } from '../components/skeletons'
+import { EmptyState, ErrorState } from '../components/states'
 import { SearchBar } from '../components/SearchBar'
 import { StatusBadge } from '../components/StatusBadge'
+import { Toolbar } from '../components/Toolbar'
 import { type InboxItem, type InboxOrder, inboxOrders } from '../features/dashboard/api'
 import { useInbox } from '../features/dashboard/useInbox'
 import { verdictLabels, verdictTones } from '../features/matching/verdicts'
@@ -49,6 +51,12 @@ function VerdictBadge({ verdict }: { verdict: string | null }) {
     />
   )
 }
+
+const appliedOptions = [
+  { value: '', label: 'Todas' },
+  { value: 'true', label: 'Já aplicada' },
+  { value: 'false', label: 'Ainda não aplicada' },
+] as const
 
 function ItemCard({ item }: { item: InboxItem }) {
   return (
@@ -286,32 +294,18 @@ export function InboxPage() {
         </p>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-        <span className="text-muted">Candidatura</span>
-        {[
-          { value: '', label: 'Todas' },
-          { value: 'true', label: 'Já aplicada' },
-          { value: 'false', label: 'Ainda não aplicada' },
-        ].map((option) => (
-          <button
-            aria-pressed={appliedFilter === option.value}
-            className={`rounded-full border px-4 py-2 font-medium transition ${
-              appliedFilter === option.value
-                ? 'border-ink bg-ink text-surface'
-                : 'border-line-strong bg-surface hover:border-ink'
-            }`}
-            key={option.value || 'all'}
-            onClick={() => update({ applied: option.value || null })}
-            type="button"
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <Toolbar
+        className="mt-4"
+        label="Candidatura"
+        onChange={(value) => update({ applied: value || null })}
+        options={appliedOptions}
+        showLabel
+        value={appliedFilter}
+      />
 
       <div className="mt-8 grid gap-3">
         {inbox.isPending && (
-          <LoadingState>Carregando oportunidades…</LoadingState>
+          <CardListSkeleton count={5} label="Carregando oportunidades…" />
         )}
         {inbox.isError && (
           <ErrorState onRetry={() => void inbox.refetch()}>Não foi possível carregar a inbox.</ErrorState>

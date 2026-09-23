@@ -2,7 +2,8 @@ import { type FormEvent, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { PageShell } from '../components/PageShell'
-import { EmptyState, ErrorState, LoadingState } from '../components/states'
+import { CardListSkeleton, TableSkeleton } from '../components/skeletons'
+import { EmptyState, ErrorState } from '../components/states'
 import { SearchBar } from '../components/SearchBar'
 import { type Company } from '../features/companies/api'
 import { useCompanies } from '../features/companies/useCompanies'
@@ -131,7 +132,17 @@ export function CompaniesPage() {
 
       <div className="mt-8">
         {companies.isPending && (
-          <LoadingState>Carregando empresas…</LoadingState>
+          <>
+            {/* A mesma troca de forma da lista: tabela em tela larga, cartões na estreita. A
+                variante escondida sai também da árvore de acessibilidade, então o anúncio
+                continua sendo um só. */}
+            <div className="hidden md:block">
+              <TableSkeleton columns={5} label="Carregando empresas…" />
+            </div>
+            <div className="md:hidden">
+              <CardListSkeleton label="Carregando empresas…" />
+            </div>
+          </>
         )}
         {companies.isError && (
           <ErrorState onRetry={() => void companies.refetch()}>Não foi possível carregar as empresas.</ErrorState>
