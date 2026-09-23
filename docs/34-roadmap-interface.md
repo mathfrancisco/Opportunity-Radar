@@ -116,16 +116,19 @@ Cards de execução: [Fase 15](34-roadmap-interface/fase-15/README.md).
 
 ### 4.3 Critério de aceite
 
-- [ ] nenhuma cor hexadecimal literal permanece nos componentes de rota;
-- [ ] status de fonte e de execução usam um único componente e um único mapa de tom;
-- [ ] carregando, vazio, erro e conflito têm uma implementação compartilhada por tela;
-- [ ] cada campo de formulário tem rótulo associado, erro programaticamente vinculado e
+- [x] nenhuma cor hexadecimal literal permanece nos componentes de rota;
+- [x] status de fonte e de execução usam um único componente e um único mapa de tom;
+- [x] carregando, vazio, erro e conflito têm uma implementação compartilhada por tela;
+- [x] cada campo de formulário tem rótulo associado, erro programaticamente vinculado e
       foco visível;
-- [ ] tabelas densas rolam dentro do próprio contêiner, sem rolagem horizontal da página;
-- [ ] nenhum valor arbitrário de tipografia, raio ou sombra resta nas telas;
-- [ ] a Visão geral responde primeiro o que exige ação hoje;
-- [ ] a navegação mostra grupo e seção ativa, inclusive em tela estreita;
-- [ ] carregar uma tela não desloca o conteúdo quando o dado chega.
+- [x] tabelas densas rolam dentro do próprio contêiner, sem rolagem horizontal da página;
+- [x] nenhum valor arbitrário de tipografia, raio ou sombra resta nas telas;
+- [x] a Visão geral responde primeiro o que exige ação hoje;
+- [x] a navegação mostra grupo e seção ativa, inclusive em tela estreita;
+- [x] carregar uma tela não desloca o conteúdo quando o dado chega.
+
+Fase 15 concluída em 2026-09-23, com os nove cards em
+[fase-15](34-roadmap-interface/fase-15/README.md). O Milestone N depende só dela.
 
 ---
 
