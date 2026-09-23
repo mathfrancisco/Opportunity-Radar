@@ -1,6 +1,6 @@
 # CARD F15-08 — Navegação, orientação e ícones
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-23
 - **Fase:** 15 — Design, consistência e acesso
 - **Depende de:** F15-06
 - **Bloqueia:** Milestone N
@@ -53,12 +53,37 @@ o que cede é o texto do nome, não a marca.
 
 ## Critérios de aceite
 
-- [ ] A navegação mostra os grupos, e a seção ativa é identificável sem foco nem hover.
-- [ ] Em 360 px a navegação não quebra em mais de duas fileiras, nem esconde a seção ativa.
-- [ ] Cada item tem ícone e rótulo; nenhum item é só ícone.
-- [ ] `aria-current` continua na seção ativa e o link de pular ao conteúdo continua primeiro
+- [x] A navegação mostra os grupos, e a seção ativa é identificável sem foco nem hover.
+- [x] Em 360 px a navegação não quebra em mais de duas fileiras, nem esconde a seção ativa.
+- [x] Cada item tem ícone e rótulo; nenhum item é só ícone.
+- [x] `aria-current` continua na seção ativa e o link de pular ao conteúdo continua primeiro
       na ordem de tabulação.
-- [ ] Nenhuma rota mudou de endereço.
+- [x] Nenhuma rota mudou de endereço.
+
+## Nota de execução
+
+Três grupos com rótulo visível: **Dia a dia** (Visão geral, Oportunidades, Candidaturas),
+**Catálogo** (Empresas, Fontes, Perfil) e **Diagnóstico** (Status). Cada grupo é uma lista
+nomeada pelo próprio rótulo com `aria-labelledby`, então o leitor de tela ouve o grupo ao
+entrar nele, e a seção ativa uma vez só, por `aria-current`.
+
+A seção ativa virou superfície — pílula `ink` com texto `surface` e peso maior — no lugar
+do sublinhado fino, e é legível sem foco nem cursor.
+
+A navegação saiu da linha do nome e ganhou fileira própria. Em 1280 px os sete itens cabem
+sem rolar. Em tela estreita a fileira não quebra: rola na horizontal dentro do próprio
+contêiner, e ao abrir a página a seção ativa é trazida para dentro da vista — em 360 px a
+tela de Status abre com "Status" visível, sem rolagem do documento. Foi a escolha em vez
+de menu ou barra inferior porque nenhum dos dois mantém os grupos à vista, e o menu
+esconderia justamente a seção ativa.
+
+Os ícones são sete SVG inline em `components/icons.tsx`, com `aria-hidden` e traço em
+`currentColor`: acompanham o rótulo, nunca o substituem, e seguem o tom do item ativo sem
+token novo. A marca `◉` e o nome continuam onde estavam; com a navegação em fileira
+própria, nenhum dos dois precisou ceder espaço.
+
+Verificado em 360 px e 1280 px no navegador; `PageShell.test.tsx` cobre grupos, seção ativa
+única, ícone oculto do leitor de tela e o link de pular ao conteúdo como primeiro alvo.
 
 ## Verificação
 
