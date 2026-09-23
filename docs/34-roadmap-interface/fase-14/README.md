@@ -14,7 +14,7 @@ empresa e vínculo exigem endpoints novos.
 | 4 | [F14-04 — cadastro de empresa](f14-04-cadastro-de-empresa.md) | Fase 13 | Concluído |
 | 5 | [F14-05 — vínculo entre empresa e fonte](f14-05-vinculo-empresa-fonte.md) | F14-04 | Concluído |
 | 6 | [F14-06 — teste ao vivo do collector](f14-06-teste-ao-vivo-do-collector.md) | F14-02 | Concluído |
-| 7 | [F14-07 — correção do ATS alcança a proposta](f14-07-correcao-alcanca-a-proposta.md) | F14-05 | Backlog |
+| 7 | [F14-07 — correção do ATS alcança a proposta](f14-07-correcao-alcanca-a-proposta.md) | F14-05 | Concluído |
 
 F14-04 pode seguir em paralelo com F14-01. F14-02, F14-03 e F14-05 entregaram o cadastro
 pela tela.

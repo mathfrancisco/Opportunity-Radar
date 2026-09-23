@@ -50,6 +50,7 @@ from opportunity_radar.acquisition.probing import (
     collector_test_audit,
     run_probe,
 )
+from opportunity_radar.acquisition.proposals import IDENTIFIER_KEYS
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.repository import AcquisitionRepository
 from opportunity_radar.acquisition.scheduling import SourceSchedulingState
@@ -262,11 +263,7 @@ class AcquisitionService:
         )
         if existing is not None:
             return existing, "already_proposed"
-        identifier_key = {
-            "ashby": "board_identifier",
-            "lever": "site_identifier",
-            "greenhouse": "board_token",
-        }[candidate.source_type]
+        identifier_key = IDENTIFIER_KEYS[candidate.source_type]
         proposal = self.create_source(
             source_type=candidate.source_type,
             name=f"Proposed {company.canonical_name} {candidate.source_type}",
@@ -323,6 +320,77 @@ class AcquisitionService:
             .returning(SourceDefinitionModel.id)
         )
         if updated_id is None:
+            self.session.rollback()
+            raise SourceVersionConflictError(source_id)
+        self.session.commit()
+        self.session.refresh(source)
+        return source
+
+    def reopen_homologation(
+        self, source_id: UUID, *, expected_version: int
+    ) -> SourceDefinitionModel:
+        """Point a proposal back at its corrected ATS record and start its gate over.
+
+        Everything the gate held was about the board the source used to read: the evidence,
+        the reviewed terms, the tested collector and the review date. They are cleared
+        together with the key change, in one versioned write, and the audit that proved the
+        old board is kept aside rather than deleted. The source stops collecting.
+        """
+        source = self.repository.get_source(source_id)
+        if source is None:
+            raise SourceNotFoundError(source_id)
+        if source.version != expected_version:
+            raise SourceVersionConflictError(source_id)
+        record = (
+            self.session.get(CompanySource, source.company_source_id)
+            if source.company_source_id is not None
+            else None
+        )
+        if record is None:
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                "only a source proposed from a company ATS record can be reopened",
+                field="company_source_id",
+            )
+        if record.source_type != source.source_type:
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                f"the record now names {record.source_type}, and a {source.source_type} "
+                "source cannot change collector",
+                field="source_type",
+            )
+        configuration = dict(source.configuration or {})
+        previous = configuration.pop("homologation_audit", None)
+        history = configuration.get("reopened_homologations")
+        configuration["reopened_homologations"] = [
+            *(history if isinstance(history, list) else []),
+            {
+                "reopened_at": datetime.now(UTC).isoformat(),
+                "previous_key": configuration.get(IDENTIFIER_KEYS[source.source_type]),
+                "previous_evidence_status": source.evidence_status,
+                "previous_audit": previous,
+            },
+        ]
+        configuration[IDENTIFIER_KEYS[source.source_type]] = record.external_key
+        configuration["discovery_evidence"] = record.evidence_note or record.endpoint
+        updated = self.session.scalar(
+            update(SourceDefinitionModel)
+            .where(
+                SourceDefinitionModel.id == source_id,
+                SourceDefinitionModel.version == expected_version,
+            )
+            .values(
+                enabled=False,
+                terms_reviewed=False,
+                collector_local_tested=False,
+                reviewed_at=None,
+                evidence_status="ats_identified",
+                configuration=configuration,
+                version=SourceDefinitionModel.version + 1,
+            )
+            .returning(SourceDefinitionModel.id)
+        )
+        if updated is None:
             self.session.rollback()
             raise SourceVersionConflictError(source_id)
         self.session.commit()

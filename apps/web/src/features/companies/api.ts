@@ -84,6 +84,28 @@ export interface CompanyDetailSource {
   lastVerifiedAt: string | null
   version: number
   revisions: CompanySourceRevision[]
+  /** The source proposed from this record, as it reads today; null before any proposal. */
+  proposal: ProposedSource | null
+}
+
+export interface ProposedSource {
+  sourceId: string
+  sourceType: string
+  externalKey: string | null
+  enabled: boolean
+  evidenceStatus: string
+  termsReviewed: boolean
+  collectorLocalTested: boolean
+  version: number
+  /** The record was corrected after the proposal, and the proposal did not follow. */
+  outdated: boolean
+}
+
+export type ProposalOutcome = 'none' | 'updated' | 'outdated'
+
+export interface CompanySourceCorrection {
+  proposalOutcome: ProposalOutcome
+  source: CompanyDetailSource
 }
 
 /** One registration or correction of an ATS record, as the server kept it. */
@@ -173,6 +195,22 @@ function parseDetailSource(value: unknown): CompanyDetailSource | null {
             ]
           : [],
     ),
+    proposal: parseProposal(value.proposal),
+  }
+}
+
+function parseProposal(value: unknown): ProposedSource | null {
+  if (!isRecord(value) || typeof value.source_id !== 'string') return null
+  return {
+    sourceId: value.source_id,
+    sourceType: typeof value.source_type === 'string' ? value.source_type : 'unknown',
+    externalKey: typeof value.external_key === 'string' ? value.external_key : null,
+    enabled: value.enabled === true,
+    evidenceStatus: typeof value.evidence_status === 'string' ? value.evidence_status : 'unverified',
+    termsReviewed: value.terms_reviewed === true,
+    collectorLocalTested: value.collector_local_tested === true,
+    version: typeof value.version === 'number' ? value.version : 1,
+    outdated: value.outdated === true,
   }
 }
 
@@ -279,15 +317,30 @@ export async function updateCompanySource(
   companyId: string,
   sourceId: string,
   input: CompanySourceInput & { expectedVersion: number },
-): Promise<CompanyDetailSource> {
-  const source = parseDetailSource(
-    await send(`/companies/${companyId}/sources/${sourceId}`, 'PATCH', {
-      ...sourcePayload(input),
-      expected_version: input.expectedVersion,
-    }),
-  )
-  if (source === null) throw new Error('A API retornou uma fonte inválida.')
-  return source
+): Promise<CompanySourceCorrection> {
+  const body = await send(`/companies/${companyId}/sources/${sourceId}`, 'PATCH', {
+    ...sourcePayload(input),
+    expected_version: input.expectedVersion,
+  })
+  const source = isRecord(body) ? parseDetailSource(body.source) : null
+  if (!isRecord(body) || source === null) throw new Error('A API retornou uma fonte inválida.')
+  return {
+    proposalOutcome:
+      body.proposal_outcome === 'updated' || body.proposal_outcome === 'outdated'
+        ? body.proposal_outcome
+        : 'none',
+    source,
+  }
+}
+
+/**
+ * Points an outdated proposal at its corrected record and starts its gate over: disables
+ * it, clears evidence, terms, test and review date, all in one versioned write.
+ */
+export async function reopenHomologation(sourceId: string, expectedVersion: number) {
+  await send(`/sources/${sourceId}/reopen-homologation`, 'POST', {
+    expected_version: expectedVersion,
+  })
 }
 
 export async function detectCompanySource(companyId: string): Promise<SourceProposal> {

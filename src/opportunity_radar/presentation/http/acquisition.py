@@ -227,6 +227,24 @@ def update_source_controls(
     return _source_response(source)
 
 
+@router.post(
+    "/sources/{source_id}/reopen-homologation", response_model=SourceDefinitionResponse
+)
+def reopen_homologation(
+    source_id: UUID,
+    body: SourceProbeBody,
+    session: Session = Depends(get_session),
+) -> SourceDefinitionResponse:
+    """Disable a proposal, clear its gate and point it at its corrected ATS record."""
+    try:
+        source = AcquisitionService(session).reopen_homologation(
+            source_id, expected_version=body.expected_version
+        )
+    except AcquisitionError as error:
+        _raise_acquisition_error(error)
+    return _source_response(source)
+
+
 @router.post("/sources/{source_id}/probe", response_model=SourceProbeResponse)
 async def probe_source(
     source_id: UUID,

@@ -22,6 +22,11 @@ from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.domain import AcquisitionError
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.lever import LeverCollector
+from opportunity_radar.acquisition.proposals import (
+    ProposalChangedError,
+    ProposalFollowUp,
+    follow_correction,
+)
 from opportunity_radar.companies.domain import (
     AmbiguousCompanyIdentityError,
     CompanyCandidate,
@@ -264,7 +269,7 @@ class CompanyRegistration:
         endpoint: str,
         external_key: str,
         evidence_note: str,
-    ) -> CompanySource:
+    ) -> tuple[CompanySource, ProposalFollowUp]:
         source = self.repository.get_source(company_id, source_id)
         if source is None:
             raise CompanySourceNotFoundError(source_id)
@@ -308,8 +313,18 @@ class CompanyRegistration:
                 evidence_note=values["evidence_note"],
             )
         )
+        self.session.flush()
+        # The source proposed from this record either follows the correction in this same
+        # transaction, or is reported as outdated; it is never left silently disagreeing.
+        try:
+            follow_up = follow_correction(self.session, source)
+        except ProposalChangedError as error:
+            self.session.rollback()
+            raise CompanyVersionConflictError(
+                "the source proposed from this record changed; refresh it and correct again"
+            ) from error
         self._commit(duplicate="this company already has that ATS at that endpoint")
-        return source
+        return source, follow_up
 
     def _commit(self, *, duplicate: str | None = None) -> None:
         try:

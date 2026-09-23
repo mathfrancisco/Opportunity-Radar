@@ -8,8 +8,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.models import SourceDefinitionModel
+from opportunity_radar.acquisition.proposals import is_outdated, proposal_key
 from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.companies.registration import (
@@ -46,6 +49,21 @@ class CompanySourceRevisionResponse(BaseModel):
     evidence_note: str
 
 
+class ProposedSourceResponse(BaseModel):
+    """The source proposed from an ATS record, as it reads today."""
+
+    source_id: UUID
+    source_type: str
+    external_key: str | None
+    enabled: bool
+    evidence_status: str
+    terms_reviewed: bool
+    collector_local_tested: bool
+    version: int
+    # True when the record was corrected after the proposal and the proposal did not follow.
+    outdated: bool
+
+
 class CompanySourceResponse(BaseModel):
     id: UUID
     name: str
@@ -57,6 +75,7 @@ class CompanySourceResponse(BaseModel):
     last_verified_at: datetime | None
     version: int
     revisions: list[CompanySourceRevisionResponse]
+    proposal: ProposedSourceResponse | None = None
 
 
 class CompanyResponse(BaseModel):
@@ -102,6 +121,13 @@ class CompanySourceUpdateBody(CompanySourceBody):
     expected_version: int = Field(ge=1)
 
 
+class CompanySourceCorrectionResponse(BaseModel):
+    # `updated`: the proposal was inert and now reads the corrected board.
+    # `outdated`: the proposal was reviewed, tested or enabled and was left as it was.
+    proposal_outcome: Literal["none", "updated", "outdated"]
+    source: CompanySourceResponse
+
+
 class CompanyPageResponse(BaseModel):
     items: list[CompanyResponse]
     page: int
@@ -116,7 +142,28 @@ class SourceProposalResponse(BaseModel):
     enabled: bool = False
 
 
-def company_response(company: Company) -> CompanyResponse:
+def proposals_for(
+    session: Session, companies: list[Company]
+) -> dict[UUID, SourceDefinitionModel]:
+    """The source proposed from each ATS record, fetched once for a whole page."""
+    record_ids = [source.id for company in companies for source in company.sources]
+    if not record_ids:
+        return {}
+    proposals = session.scalars(
+        select(SourceDefinitionModel)
+        .where(SourceDefinitionModel.company_source_id.in_(record_ids))
+        .order_by(SourceDefinitionModel.created_at)
+    )
+    found: dict[UUID, SourceDefinitionModel] = {}
+    for proposal in proposals:
+        if proposal.company_source_id is not None:
+            found.setdefault(proposal.company_source_id, proposal)
+    return found
+
+
+def company_response(
+    company: Company, proposals: dict[UUID, SourceDefinitionModel] | None = None
+) -> CompanyResponse:
     return CompanyResponse(
         id=company.id,
         name=company.canonical_name,
@@ -129,7 +176,7 @@ def company_response(company: Company) -> CompanyResponse:
             for alias in company.aliases
         ],
         sources=[
-            company_source_response(source)
+            company_source_response(source, (proposals or {}).get(source.id))
             for source in sorted(
                 company.sources,
                 key=lambda item: (
@@ -145,7 +192,9 @@ def company_response(company: Company) -> CompanyResponse:
     )
 
 
-def company_source_response(source: CompanySource) -> CompanySourceResponse:
+def company_source_response(
+    source: CompanySource, proposal: SourceDefinitionModel | None = None
+) -> CompanySourceResponse:
     return CompanySourceResponse(
         id=source.id,
         name=source.source_type,
@@ -165,6 +214,21 @@ def company_source_response(source: CompanySource) -> CompanySourceResponse:
             )
             for revision in source.revisions
         ],
+        proposal=(
+            ProposedSourceResponse(
+                source_id=proposal.id,
+                source_type=proposal.source_type,
+                external_key=proposal_key(proposal),
+                enabled=proposal.enabled,
+                evidence_status=proposal.evidence_status,
+                terms_reviewed=proposal.terms_reviewed,
+                collector_local_tested=proposal.collector_local_tested,
+                version=proposal.version,
+                outdated=is_outdated(proposal, source),
+            )
+            if proposal is not None
+            else None
+        ),
     )
 
 
@@ -192,7 +256,7 @@ def register_company(
     return CompanyRegistrationResponse(
         outcome=result.outcome,
         aliases_added=result.aliases_added,
-        company=company_response(company),
+        company=company_response(company, proposals_for(session, [company])),
     )
 
 
@@ -212,8 +276,9 @@ def list_companies(
         priority=priority,
         radar_status=radar_status,
     )
+    proposals = proposals_for(session, companies)
     return CompanyPageResponse(
-        items=[company_response(company) for company in companies],
+        items=[company_response(company, proposals) for company in companies],
         page=page,
         page_size=page_size,
         total=total,
@@ -231,7 +296,7 @@ def get_company(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "company_not_found", "message": "Company not found."},
         )
-    return company_response(company)
+    return company_response(company, proposals_for(session, [company]))
 
 
 @router.patch("/{company_id}", response_model=CompanyResponse)
@@ -259,7 +324,7 @@ def update_company(
         _raise_registration_error(error)
     company = repository.get(company_id)
     assert company is not None
-    return company_response(company)
+    return company_response(company, proposals_for(session, [company]))
 
 
 @router.post(
@@ -283,17 +348,17 @@ def add_company_source(
 
 
 @router.patch(
-    "/{company_id}/sources/{source_id}", response_model=CompanySourceResponse
+    "/{company_id}/sources/{source_id}", response_model=CompanySourceCorrectionResponse
 )
 def update_company_source(
     company_id: UUID,
     source_id: UUID,
     body: CompanySourceUpdateBody,
     session: Session = Depends(get_session),
-) -> CompanySourceResponse:
+) -> CompanySourceCorrectionResponse:
     repository = CompanyRepository(session)
     try:
-        source = CompanyRegistration(repository).update_source(
+        source, follow_up = CompanyRegistration(repository).update_source(
             company_id, source_id, **body.model_dump()
         )
     except (
@@ -302,7 +367,10 @@ def update_company_source(
         CompanyRegistrationError,
     ) as error:
         _raise_registration_error(error)
-    return company_source_response(source)
+    return CompanySourceCorrectionResponse(
+        proposal_outcome=follow_up.outcome,
+        source=company_source_response(source, follow_up.proposal),
+    )
 
 
 def _raise_registration_error(error: Exception) -> NoReturn:

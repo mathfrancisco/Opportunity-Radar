@@ -128,9 +128,25 @@ describe('updateCompany', () => {
 
 describe('updateCompanySource', () => {
   it('corrige na versão lida, com a nota de evidência', async () => {
-    respond(companyBody.sources[0])
+    respond({
+      proposal_outcome: 'outdated',
+      source: {
+        ...companyBody.sources[0],
+        proposal: {
+          source_id: 'src-1',
+          source_type: 'greenhouse',
+          external_key: 'acmeold',
+          enabled: true,
+          evidence_status: 'confirmed',
+          terms_reviewed: true,
+          collector_local_tested: true,
+          version: 5,
+          outdated: true,
+        },
+      },
+    })
 
-    await updateCompanySource('company-1', 'cs-1', {
+    const correction = await updateCompanySource('company-1', 'cs-1', {
       sourceType: 'greenhouse',
       endpoint: 'https://boards.greenhouse.io/acme',
       externalKey: 'acme',
@@ -149,5 +165,7 @@ describe('updateCompanySource', () => {
       evidence_note: 'Board moved.',
       expected_version: 1,
     })
+    expect(correction.proposalOutcome).toBe('outdated')
+    expect(correction.source.proposal).toMatchObject({ externalKey: 'acmeold', outdated: true })
   })
 })

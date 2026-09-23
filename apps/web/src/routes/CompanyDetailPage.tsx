@@ -6,12 +6,18 @@ import { CompanyForm } from '../components/CompanyForm'
 import { CompanySourceForm } from '../components/CompanySourceForm'
 import { PageShell } from '../components/PageShell'
 import { EmptyState, ErrorState, LoadingState } from '../components/states'
-import { type CompanyDetail, type CompanyDetailSource } from '../features/companies/api'
+import {
+  type CompanyDetail,
+  type CompanyDetailSource,
+  type ProposalOutcome,
+} from '../features/companies/api'
 import {
   useCompany,
   useDetectCompanySource,
+  useReopenHomologation,
   useUpdateCompany,
 } from '../features/companies/useCompanies'
+import { ConflictError } from '../lib/api'
 import { useInbox } from '../features/dashboard/useInbox'
 
 function formatDate(value: string | null) {
@@ -58,6 +64,56 @@ function Revisions({ source }: { source: CompanyDetailSource }) {
   )
 }
 
+/**
+ * The source proposed from this record, next to the record itself. When the record was
+ * corrected after a proposal that had already been reviewed, tested or enabled, the two
+ * disagree, and bringing the proposal along is an explicit reopening of its gate.
+ */
+function Proposal({ companyId, source }: { companyId: string; source: CompanyDetailSource }) {
+  const reopen = useReopenHomologation(companyId)
+  const proposal = source.proposal
+  if (!proposal) return null
+  const state = proposal.enabled ? 'habilitada' : 'desabilitada'
+  return (
+    <div
+      className={`mt-3 rounded-xl p-3 text-xs ${proposal.outdated ? 'border border-warning-line bg-warning-surface text-warning-ink' : 'bg-panel text-subtle'}`}
+    >
+      <p>
+        Fonte proposta: chave {proposal.externalKey ?? '—'} · {state} · evidência{' '}
+        {proposal.evidenceStatus}
+      </p>
+      {proposal.outdated && (
+        <>
+          <p className="mt-2">
+            O registro foi corrigido para a chave {source.externalKey ?? '—'}, mas a fonte
+            proposta já tinha homologação ou teste sobre a chave antiga e não mudou. Reabrir a
+            homologação troca a chave e zera evidência, termos, teste e data de revisão
+            {proposal.enabled ? ' — e desabilita a fonte, que para de coletar' : ''}.
+          </p>
+          <Button
+            className="mt-2"
+            disabled={reopen.isPending}
+            onClick={() =>
+              reopen.mutate({ sourceId: proposal.sourceId, expectedVersion: proposal.version })
+            }
+            size="sm"
+            variant="secondary"
+          >
+            {reopen.isPending ? 'Reabrindo…' : 'Reabrir a homologação da fonte proposta'}
+          </Button>
+          {reopen.isError && (
+            <p className="mt-2 text-danger-ink" role="alert">
+              {reopen.error instanceof ConflictError
+                ? 'A fonte proposta mudou depois que a página carregou. Ela foi recarregada; confira e tente de novo.'
+                : reopen.error.message}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 function Sources({
   company,
   onCorrect,
@@ -88,6 +144,7 @@ function Sources({
           {source.evidence && (
             <p className="mt-2 text-subtle">{source.evidence}</p>
           )}
+          <Proposal companyId={company.id} source={source} />
           <Revisions source={source} />
           <Button className="mt-3" onClick={() => onCorrect(source)} size="sm" variant="secondary">
             Corrigir
@@ -157,7 +214,7 @@ export function CompanyDetailPage() {
   const [editing, setEditing] = useState(false)
   // 'new' registers an ATS record; a source corrects that one.
   const [sourceForm, setSourceForm] = useState<CompanyDetailSource | 'new' | null>(null)
-  const [savedSource, setSavedSource] = useState(false)
+  const [savedSource, setSavedSource] = useState<ProposalOutcome | null>(null)
 
   return (
     <PageShell
@@ -270,7 +327,7 @@ export function CompanyDetailPage() {
               <Button
                 disabled={detectSource.isPending}
                 onClick={() => {
-                  setSavedSource(false)
+                  setSavedSource(null)
                   detectSource.mutate()
                 }}
                 variant="secondary"
@@ -280,7 +337,7 @@ export function CompanyDetailPage() {
               {sourceForm === null && (
                 <Button
                   onClick={() => {
-                    setSavedSource(false)
+                    setSavedSource(null)
                     setSourceForm('new')
                   }}
                   variant="secondary"
@@ -313,9 +370,13 @@ export function CompanyDetailPage() {
             {detectSource.isError && (
               <ErrorState className="mt-3">{detectSource.error.message}</ErrorState>
             )}
-            {savedSource && sourceForm === null && (
+            {savedSource !== null && sourceForm === null && (
               <p className="mt-3 text-sm text-success-ink" role="status">
-                Registro salvo. Proponha a fonte para levá-lo à homologação.
+                {savedSource === 'updated'
+                  ? 'Registro corrigido, e a fonte proposta a partir dele passou a ler a chave nova.'
+                  : savedSource === 'outdated'
+                    ? 'Registro corrigido. A fonte proposta já tinha homologação ou teste e não mudou; veja abaixo como trazê-la junto.'
+                    : 'Registro salvo. Proponha a fonte para levá-lo à homologação.'}
               </p>
             )}
             {sourceForm !== null && (
@@ -331,9 +392,9 @@ export function CompanyDetailPage() {
                       if (latest) setSourceForm(latest)
                     })
                   }}
-                  onSaved={() => {
+                  onSaved={(outcome) => {
                     setSourceForm(null)
-                    setSavedSource(true)
+                    setSavedSource(outcome)
                   }}
                   source={sourceForm === 'new' ? null : sourceForm}
                 />
@@ -343,7 +404,7 @@ export function CompanyDetailPage() {
               <Sources
                 company={company.data}
                 onCorrect={(source) => {
-                  setSavedSource(false)
+                  setSavedSource(null)
                   setSourceForm(source)
                 }}
               />
