@@ -1,9 +1,17 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { Button } from '../components/Button'
 import { Card } from '../components/Card'
+import { CompanyForm } from '../components/CompanyForm'
+import { CompanySourceForm } from '../components/CompanySourceForm'
 import { PageShell } from '../components/PageShell'
 import { EmptyState, ErrorState, LoadingState } from '../components/states'
-import { type CompanyDetail } from '../features/companies/api'
-import { useCompany, useDetectCompanySource } from '../features/companies/useCompanies'
+import { type CompanyDetail, type CompanyDetailSource } from '../features/companies/api'
+import {
+  useCompany,
+  useDetectCompanySource,
+  useUpdateCompany,
+} from '../features/companies/useCompanies'
 import { useInbox } from '../features/dashboard/useInbox'
 
 function formatDate(value: string | null) {
@@ -12,7 +20,51 @@ function formatDate(value: string | null) {
   return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString('pt-BR')
 }
 
-function Sources({ company }: { company: CompanyDetail }) {
+const fieldLabels: Record<string, string> = {
+  source_type: 'ATS',
+  endpoint: 'endereço',
+  external_key: 'chave',
+}
+
+function describeChange(change: { from: unknown; to: unknown }) {
+  const shown = (value: unknown) => (value === null || value === undefined ? '—' : String(value))
+  return change.from === null ? shown(change.to) : `${shown(change.from)} → ${shown(change.to)}`
+}
+
+/** Every registration and correction of one ATS record, oldest first, with its reason. */
+function Revisions({ source }: { source: CompanyDetailSource }) {
+  if (source.revisions.length === 0) return null
+  return (
+    <details className="mt-3">
+      <summary className="cursor-pointer text-xs font-medium text-subtle">
+        Histórico ({source.revisions.length})
+      </summary>
+      <ol className="mt-2 grid gap-2">
+        {source.revisions.map((revision) => (
+          <li className="rounded-xl bg-panel p-3 text-xs" key={revision.version}>
+            <p className="text-muted">
+              Versão {revision.version} · {formatDate(revision.changedAt)}
+            </p>
+            <p className="mt-1">
+              {Object.entries(revision.changes)
+                .map(([field, change]) => `${fieldLabels[field] ?? field}: ${describeChange(change)}`)
+                .join(' · ')}
+            </p>
+            <p className="mt-1 text-subtle">{revision.evidenceNote}</p>
+          </li>
+        ))}
+      </ol>
+    </details>
+  )
+}
+
+function Sources({
+  company,
+  onCorrect,
+}: {
+  company: CompanyDetail
+  onCorrect: (source: CompanyDetailSource) => void
+}) {
   if (company.sources.length === 0) {
     return (
       <EmptyState>Nenhuma fonte associada. A pesquisa registrou a empresa, mas nenhum endpoint foi
@@ -36,6 +88,10 @@ function Sources({ company }: { company: CompanyDetail }) {
           {source.evidence && (
             <p className="mt-2 text-subtle">{source.evidence}</p>
           )}
+          <Revisions source={source} />
+          <Button className="mt-3" onClick={() => onCorrect(source)} size="sm" variant="secondary">
+            Corrigir
+          </Button>
         </Card>
       ))}
     </ul>
@@ -97,6 +153,11 @@ export function CompanyDetailPage() {
   const { companyId = '' } = useParams()
   const company = useCompany(companyId)
   const detectSource = useDetectCompanySource(companyId)
+  const update = useUpdateCompany(companyId)
+  const [editing, setEditing] = useState(false)
+  // 'new' registers an ATS record; a source corrects that one.
+  const [sourceForm, setSourceForm] = useState<CompanyDetailSource | 'new' | null>(null)
+  const [savedSource, setSavedSource] = useState(false)
 
   return (
     <PageShell
@@ -122,8 +183,44 @@ export function CompanyDetailPage() {
         )}
       </div>
 
+      {company.data && editing && (
+        <div className="mt-8">
+          <CompanyForm
+            company={company.data}
+            error={update.error}
+            onCancel={() => {
+              update.reset()
+              setEditing(false)
+            }}
+            onReload={() => {
+              update.reset()
+              void company.refetch()
+            }}
+            onSubmit={(input) =>
+              update.mutate(
+                { ...input, expectedVersion: company.data.version },
+                { onSuccess: () => setEditing(false) },
+              )
+            }
+            pending={update.isPending}
+          />
+        </div>
+      )}
+
       {company.data && (
         <>
+          {!editing && (
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <Button onClick={() => setEditing(true)} size="sm" variant="secondary">
+                Editar empresa
+              </Button>
+              {update.isSuccess && (
+                <p className="text-sm text-success-ink" role="status">
+                  Empresa salva, versão {update.data.version}.
+                </p>
+              )}
+            </div>
+          )}
           <dl className="mt-8 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
             <div>
               <dt className="text-muted">Prioridade</dt>
@@ -165,27 +262,91 @@ export function CompanyDetailPage() {
 
           <section className="mt-section">
             <h2 className="text-section">Fontes</h2>
-            <button
-              className="mt-3 rounded-xl border border-ink px-4 py-2 text-sm font-medium hover:bg-info-surface disabled:opacity-50"
-              disabled={detectSource.isPending}
-              onClick={() => detectSource.mutate()}
-              type="button"
-            >
-              {detectSource.isPending ? 'Detectando…' : 'Detectar fonte'}
-            </button>
+            <p className="mt-1 max-w-2xl text-sm text-muted">
+              Registre ou corrija o ATS da empresa e proponha a fonte a partir dele. A proposta
+              nasce desabilitada e é homologada na tela de fontes.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <Button
+                disabled={detectSource.isPending}
+                onClick={() => {
+                  setSavedSource(false)
+                  detectSource.mutate()
+                }}
+                variant="secondary"
+              >
+                {detectSource.isPending ? 'Propondo…' : 'Propor fonte a partir do ATS'}
+              </Button>
+              {sourceForm === null && (
+                <Button
+                  onClick={() => {
+                    setSavedSource(false)
+                    setSourceForm('new')
+                  }}
+                  variant="secondary"
+                >
+                  Registrar ATS
+                </Button>
+              )}
+            </div>
             {detectSource.data && (
               <p className="mt-3 text-sm text-subtle" role="status">
                 {detectSource.data.result === 'not_detected'
-                  ? 'Nenhum ATS detectável foi encontrado.'
+                  ? 'Nenhum ATS com chave registrada: registre o ATS da empresa e tente de novo.'
                   : detectSource.data.result === 'already_proposed'
-                    ? 'A proposta já existe e continua desabilitada.'
-                    : 'Proposta criada e desabilitada; aguarda revisão e homologação.'}
+                    ? 'A proposta já existe e não foi duplicada; ela continua desabilitada.'
+                    : 'Proposta criada e desabilitada; aguarda homologação.'}
                 {detectSource.data.evidence ? ` Evidência: ${detectSource.data.evidence}` : ''}
+                {detectSource.data.sourceId && (
+                  <>
+                    {' '}
+                    <Link
+                      className="font-medium text-ink underline decoration-accent decoration-2 underline-offset-4"
+                      to="/sources"
+                    >
+                      Ir para a homologação
+                    </Link>
+                  </>
+                )}
               </p>
             )}
-            {detectSource.isError && <p className="mt-3 text-sm text-danger-ink">Não foi possível detectar a fonte.</p>}
+            {detectSource.isError && (
+              <ErrorState className="mt-3">{detectSource.error.message}</ErrorState>
+            )}
+            {savedSource && sourceForm === null && (
+              <p className="mt-3 text-sm text-success-ink" role="status">
+                Registro salvo. Proponha a fonte para levá-lo à homologação.
+              </p>
+            )}
+            {sourceForm !== null && (
+              <div className="mt-4">
+                <CompanySourceForm
+                  companyId={companyId}
+                  key={sourceForm === 'new' ? 'new' : sourceForm.id}
+                  onCancel={() => setSourceForm(null)}
+                  onReload={() => {
+                    void company.refetch().then((fresh) => {
+                      if (sourceForm === 'new') return
+                      const latest = fresh.data?.sources.find((item) => item.id === sourceForm.id)
+                      if (latest) setSourceForm(latest)
+                    })
+                  }}
+                  onSaved={() => {
+                    setSourceForm(null)
+                    setSavedSource(true)
+                  }}
+                  source={sourceForm === 'new' ? null : sourceForm}
+                />
+              </div>
+            )}
             <div className="mt-4">
-              <Sources company={company.data} />
+              <Sources
+                company={company.data}
+                onCorrect={(source) => {
+                  setSavedSource(false)
+                  setSourceForm(source)
+                }}
+              />
             </div>
           </section>
 

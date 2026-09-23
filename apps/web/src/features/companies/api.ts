@@ -1,4 +1,4 @@
-import { apiUrl } from '../../lib/api'
+import { apiUrl, failureFrom } from '../../lib/api'
 
 export interface CompanySource {
   id?: string
@@ -82,6 +82,17 @@ export interface CompanyDetailSource {
   verificationMethod: string | null
   evidence: string | null
   lastVerifiedAt: string | null
+  version: number
+  revisions: CompanySourceRevision[]
+}
+
+/** One registration or correction of an ATS record, as the server kept it. */
+export interface CompanySourceRevision {
+  version: number
+  changedAt: string
+  /** Field name to the value it had before and after this change. */
+  changes: Record<string, { from: unknown; to: unknown }>
+  evidenceNote: string
 }
 
 export interface CompanyDetail {
@@ -95,6 +106,34 @@ export interface CompanyDetail {
   sources: CompanyDetailSource[]
   /** The most recent verification across sources, or null when none was verified. */
   lastVerifiedAt: string | null
+  version: number
+}
+
+export const companyPriorities = ['high', 'normal', 'low'] as const
+export const radarStatuses = ['active', 'paused'] as const
+
+export interface CompanyInput {
+  name: string
+  domain: string | null
+  priority: (typeof companyPriorities)[number]
+  radarStatus: (typeof radarStatuses)[number]
+  aliases: string[]
+}
+
+export interface CompanyRegistration {
+  /** `matched`: the name was already known and the existing company answered. */
+  outcome: 'created' | 'matched'
+  aliasesAdded: number
+  company: CompanyDetail
+}
+
+export const supportedAts = ['ashby', 'lever', 'greenhouse'] as const
+
+export interface CompanySourceInput {
+  sourceType: string
+  endpoint: string
+  externalKey: string
+  evidenceNote: string
 }
 
 export interface SourceProposal {
@@ -117,6 +156,23 @@ function parseDetailSource(value: unknown): CompanyDetailSource | null {
     evidence: typeof value.evidence === 'string' ? value.evidence : null,
     lastVerifiedAt:
       typeof value.last_verified_at === 'string' ? value.last_verified_at : null,
+    version: typeof value.version === 'number' ? value.version : 1,
+    revisions: (Array.isArray(value.revisions) ? value.revisions : []).flatMap(
+      (revision): CompanySourceRevision[] =>
+        isRecord(revision) && typeof revision.version === 'number'
+          ? [
+              {
+                version: revision.version,
+                changedAt: typeof revision.changed_at === 'string' ? revision.changed_at : '',
+                changes: isRecord(revision.changes)
+                  ? (revision.changes as CompanySourceRevision['changes'])
+                  : {},
+                evidenceNote:
+                  typeof revision.evidence_note === 'string' ? revision.evidence_note : '',
+              },
+            ]
+          : [],
+    ),
   }
 }
 
@@ -126,7 +182,10 @@ export async function getCompany(companyId: string): Promise<CompanyDetail> {
   })
   if (response.status === 404) throw new Error('Empresa não encontrada.')
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
-  const body: unknown = await response.json()
+  return parseCompanyDetail(await response.json())
+}
+
+function parseCompanyDetail(body: unknown): CompanyDetail {
   if (!isRecord(body) || typeof body.id !== 'string') {
     throw new Error('A API retornou uma empresa inválida.')
   }
@@ -150,7 +209,85 @@ export async function getCompany(companyId: string): Promise<CompanyDetail> {
       .filter((alias): alias is string => alias !== null),
     sources,
     lastVerifiedAt: verifiedDates.at(-1) ?? null,
+    version: typeof body.version === 'number' ? body.version : 1,
   }
+}
+
+async function send(path: string, method: string, payload: unknown): Promise<unknown> {
+  const response = await fetch(apiUrl(path), {
+    method,
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!response.ok) throw await failureFrom(response)
+  return response.json()
+}
+
+function companyPayload(input: CompanyInput) {
+  return {
+    name: input.name,
+    domain: input.domain,
+    priority: input.priority,
+    radar_status: input.radarStatus,
+    aliases: input.aliases,
+  }
+}
+
+export async function registerCompany(input: CompanyInput): Promise<CompanyRegistration> {
+  const body = await send('/companies', 'POST', companyPayload(input))
+  if (!isRecord(body)) throw new Error('A API retornou um cadastro inválido.')
+  return {
+    outcome: body.outcome === 'matched' ? 'matched' : 'created',
+    aliasesAdded: typeof body.aliases_added === 'number' ? body.aliases_added : 0,
+    company: parseCompanyDetail(body.company),
+  }
+}
+
+export async function updateCompany(
+  companyId: string,
+  input: CompanyInput & { expectedVersion: number },
+): Promise<CompanyDetail> {
+  return parseCompanyDetail(
+    await send(`/companies/${companyId}`, 'PATCH', {
+      ...companyPayload(input),
+      expected_version: input.expectedVersion,
+    }),
+  )
+}
+
+function sourcePayload(input: CompanySourceInput) {
+  return {
+    source_type: input.sourceType,
+    endpoint: input.endpoint,
+    external_key: input.externalKey,
+    evidence_note: input.evidenceNote,
+  }
+}
+
+export async function addCompanySource(
+  companyId: string,
+  input: CompanySourceInput,
+): Promise<CompanyDetailSource> {
+  const source = parseDetailSource(
+    await send(`/companies/${companyId}/sources`, 'POST', sourcePayload(input)),
+  )
+  if (source === null) throw new Error('A API retornou uma fonte inválida.')
+  return source
+}
+
+export async function updateCompanySource(
+  companyId: string,
+  sourceId: string,
+  input: CompanySourceInput & { expectedVersion: number },
+): Promise<CompanyDetailSource> {
+  const source = parseDetailSource(
+    await send(`/companies/${companyId}/sources/${sourceId}`, 'PATCH', {
+      ...sourcePayload(input),
+      expected_version: input.expectedVersion,
+    }),
+  )
+  if (source === null) throw new Error('A API retornou uma fonte inválida.')
+  return source
 }
 
 export async function detectCompanySource(companyId: string): Promise<SourceProposal> {

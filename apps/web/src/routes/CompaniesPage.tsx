@@ -1,12 +1,13 @@
 import { type FormEvent, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../components/Button'
+import { CompanyForm } from '../components/CompanyForm'
 import { PageShell } from '../components/PageShell'
 import { CardListSkeleton, TableSkeleton } from '../components/skeletons'
 import { EmptyState, ErrorState } from '../components/states'
 import { SearchBar } from '../components/SearchBar'
 import { type Company } from '../features/companies/api'
-import { useCompanies } from '../features/companies/useCompanies'
+import { useCompanies, useRegisterCompany } from '../features/companies/useCompanies'
 
 const pageSize = 25
 
@@ -106,6 +107,8 @@ export function CompaniesPage() {
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
   const companies = useCompanies({ page, pageSize, q: query })
+  const register = useRegisterCompany()
+  const [creating, setCreating] = useState(false)
   const totalPages = companies.data ? Math.ceil(companies.data.total / pageSize) : 0
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -121,6 +124,44 @@ export function CompaniesPage() {
       title="Empresas"
       description="Consulte as empresas monitoradas e as fontes associadas a cada uma."
     >
+      <div className="mt-8">
+        {creating ? (
+          <CompanyForm
+            company={null}
+            error={register.error}
+            onCancel={() => {
+              register.reset()
+              setCreating(false)
+            }}
+            onSubmit={(input) =>
+              register.mutate(input, { onSuccess: () => setCreating(false) })
+            }
+            pending={register.isPending}
+          />
+        ) : (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={() => setCreating(true)}>Nova empresa</Button>
+            {register.data && (
+              <p className="text-sm text-success-ink" role="status">
+                {register.data.outcome === 'created'
+                  ? 'Empresa cadastrada: '
+                  : 'O nome já era conhecido, e a empresa existente respondeu: '}
+                <Link
+                  className="font-medium text-ink underline decoration-accent decoration-2 underline-offset-4"
+                  to={`/companies/${register.data.company.id}`}
+                >
+                  {register.data.company.name}
+                </Link>
+                {register.data.outcome === 'matched' &&
+                  (register.data.aliasesAdded > 0
+                    ? ` — ${register.data.aliasesAdded} alias novo${register.data.aliasesAdded === 1 ? '' : 's'} registrado${register.data.aliasesAdded === 1 ? '' : 's'}.`
+                    : ' — nenhum alias novo, o nome digitado já estava registrado.')}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
       <SearchBar
         id="company-search"
         label="Buscar empresas"
