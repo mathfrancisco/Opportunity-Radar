@@ -1,6 +1,6 @@
 # CARD F14-03 — Entrada manual de vaga pela interface
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-23
 - **Fase:** 14 — Cadastro e curadoria pela interface
 - **Depende de:** F14-01
 - **Bloqueia:** Milestone M
@@ -43,18 +43,41 @@ erro depois.
 
 ## Critérios de aceite
 
-- [ ] Uma vaga por URL, uma por texto e uma por arquivo podem ser registradas pela tela.
-- [ ] A mesma submissão repetida é reportada como repetida, e não como nova.
-- [ ] O resultado mostra contadores do run e o desfecho da normalização por item.
-- [ ] Item normalizado com sucesso oferece link para a oportunidade.
-- [ ] Item que falhou na normalização mostra o motivo registrado pelo domínio.
-- [ ] Nenhuma vaga entra sem `SourceRun` e `RawItem` correspondentes.
+- [x] Uma vaga por URL, uma por texto e uma por arquivo podem ser registradas pela tela.
+- [x] A mesma submissão repetida é reportada como repetida, e não como nova.
+- [x] O resultado mostra contadores do run e o desfecho da normalização por item.
+- [x] Item normalizado com sucesso oferece link para a oportunidade.
+- [x] Item que falhou na normalização mostra o motivo registrado pelo domínio.
+- [x] Nenhuma vaga entra sem `SourceRun` e `RawItem` correspondentes.
 
 ## Verificação
 
 Registrar as três formas de entrada pela tela, repetir uma delas e conferir `items_skipped`;
 confirmar na API que cada oportunidade criada tem ocorrência e resultado de normalização
 apontando para o `RawItem` submetido.
+
+## Nota de execução
+
+A resposta do run diz quantos itens entraram, mas não quais. Para mostrar o desfecho item a
+item, a API ganhou `POST /opportunities/normalizations/runs/{run_id}`: ele normaliza os
+`RawItem` que aquele run preservou e responde um por um, com o resultado e a oportunidade.
+A normalização continua idempotente por item. Um run em que tudo se repetiu responde lista
+vazia, e a tela explica que repetida quer dizer já registrada, não perdida.
+
+O painel "Registrar vaga" aparece nos cartões de fonte manual habilitada. Se nenhuma fonte
+manual existe, a tela de fontes oferece criá-la pelo formulário de F14-01, já no tipo
+manual, em vez de criar uma implícita.
+
+Os metadados do formulário são os que o normalizador lê: `title`, `company_name`,
+`location_text` e `skills`. Senioridade não entrou: o normalizador a deriva do título e não
+lê metadado para isso, então um campo ali prometeria algo que o domínio ignora.
+
+Limites mostrados antes do envio: arquivo até 5 MB (o contrato aceita 7 000 000 caracteres
+de base64) e texto até 2048 caracteres, o `max_length` de `value`.
+
+Verificado no navegador: URL, texto e arquivo na mesma submissão, três oportunidades novas
+com link; repetida, `3 repetidas` e nenhuma nova; a oportunidade aberta tem ocorrência e
+resultado de normalização apontando para o `RawItem`.
 
 ## Arquivos prováveis
 

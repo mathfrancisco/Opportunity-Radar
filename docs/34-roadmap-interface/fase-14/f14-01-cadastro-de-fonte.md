@@ -1,6 +1,6 @@
 # CARD F14-01 — Cadastro de fonte pela interface
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-23
 - **Fase:** 14 — Cadastro e curadoria pela interface
 - **Depende de:** Fase 13
 - **Bloqueia:** F14-02, F14-03
@@ -43,18 +43,45 @@ já existir; se não, crie-o em `apps/web/src/components/` no formato que F15-02
 
 ## Critérios de aceite
 
-- [ ] Uma fonte de cada tipo suportado pode ser criada pela tela.
-- [ ] Campos de configuração mudam com o tipo escolhido e são exigidos quando obrigatórios.
-- [ ] Erro de validação aparece no campo correspondente, sem limpar o formulário.
-- [ ] A fonte criada aparece na lista já como desabilitada.
-- [ ] Nenhum caminho da tela cria fonte externa habilitada.
-- [ ] Tentar salvar segredo em configuração é recusado com a mensagem do servidor.
+- [x] Uma fonte de cada tipo suportado pode ser criada pela tela.
+- [x] Campos de configuração mudam com o tipo escolhido e são exigidos quando obrigatórios.
+- [x] Erro de validação aparece no campo correspondente, sem limpar o formulário.
+- [x] A fonte criada aparece na lista já como desabilitada.
+- [x] Nenhum caminho da tela cria fonte externa habilitada.
+- [x] Tentar salvar segredo em configuração é recusado com a mensagem do servidor.
 
 ## Verificação
 
 Criar por tela uma fonte de cada tipo, incluindo um caso inválido por tipo; conferir na API
 que o registro nasceu desabilitado e com a configuração esperada. Teste de unidade do
 cliente cobrindo o mapeamento de 422 por campo.
+
+## Nota de execução
+
+O formulário está na tela de fontes, atrás de "Nova fonte". Os campos de configuração mudam
+com o tipo, e o formulário nunca envia `enabled` nem `evidence_status`: toda fonte nasce
+desabilitada e com evidência `unverified`, sem caminho para outra coisa.
+
+Para o 422 chegar ao campo, o servidor passou a dizer qual campo recusou:
+`AcquisitionError` ganhou `field`, e a validação de `create_source` atribui cada recusa ao
+campo que a causou (`configuration.board_token`, `rate_limit_policy`, `configuration`).
+A validação do próprio FastAPI, que chega como lista com `loc`, cai no mesmo
+`FieldError` do cliente (`failureFrom` em `lib/api.ts`). Recusa sem campo aparece uma vez,
+acima das ações. Nos dois casos o que foi digitado fica.
+
+Como o formulário só tem campos conhecidos, "salvar segredo em configuração" não teria como
+acontecer, e o critério não seria demonstrável. Por isso existe o campo "Outros campos de
+configuração" (`chave=valor`): ele cobre as chaves opcionais que um collector aceita, e é
+nele que `api_key=...` é recusado com a mensagem do servidor, sob o próprio campo.
+
+A verificação pela tela achou um defeito do `Field` da Fase 15: o rótulo envolvia o
+controle, e um `select` dentro dele emprestava a opção escolhida ao nome acessível ("Tipo
+Greenhouse"). O `Field` agora nomeia o controle por `aria-labelledby`, e lê a dica por
+`aria-describedby` junto com o erro.
+
+Verificado no navegador contra a API real: uma fonte de cada tipo criada pela tela e
+conferida em `/api/sources` como desabilitada e com a configuração esperada; token inválido
+e segredo recusados no campo, sem limpar o formulário.
 
 ## Arquivos prováveis
 

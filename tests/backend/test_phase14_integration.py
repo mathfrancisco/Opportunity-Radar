@@ -95,7 +95,7 @@ def test_manual_run_is_normalized_item_by_item() -> None:
         {
             "kind": "TEXT",
             "value": f"Senior Python Engineer at Example {marker}. Remote, full time.",
-            "metadata": {"title": f"Senior Python Engineer {marker}", "company": "Example"},
+            "metadata": {"title": f"Senior Python Engineer {marker}", "company_name": "Example"},
         },
         {
             "kind": "FILE",
@@ -104,7 +104,7 @@ def test_manual_run_is_normalized_item_by_item() -> None:
             "content_base64": b64encode(
                 f"Staff Backend Engineer {marker}. Remote.".encode()
             ).decode(),
-            "metadata": {"title": f"Staff Backend Engineer {marker}", "company": "Example"},
+            "metadata": {"title": f"Staff Backend Engineer {marker}", "company_name": "Example"},
         },
     ]
 
