@@ -36,6 +36,35 @@ describe('Field', () => {
 
     expect(container.textContent).toContain('Entre 0 e 100')
   })
+
+  it('nomeia o controle só pelo rótulo, sem a opção escolhida no select', () => {
+    const container = render(
+      <Field label="Tipo">
+        <select defaultValue="greenhouse">
+          <option value="ashby">Ashby</option>
+          <option value="greenhouse">Greenhouse</option>
+        </select>
+      </Field>,
+    )
+    const select = container.querySelector('select')
+    const name = container.querySelector(`#${CSS.escape(select!.getAttribute('aria-labelledby')!)}`)
+
+    expect(name?.textContent).toBe('Tipo')
+  })
+
+  it('lê a dica junto com o controle', () => {
+    const container = render(
+      <Field hint="Entre 0 e 100" label="Score mínimo">
+        <input />
+      </Field>,
+    )
+    const input = container.querySelector('input')
+    const described = input?.getAttribute('aria-describedby')
+
+    expect(container.querySelector(`#${CSS.escape(described!)}`)?.textContent).toBe(
+      'Entre 0 e 100',
+    )
+  })
 })
 
 describe('Field em erro', () => {
