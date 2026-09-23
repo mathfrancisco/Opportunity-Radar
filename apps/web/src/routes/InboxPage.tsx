@@ -1,20 +1,17 @@
 import { type FormEvent, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { Button } from '../components/Button'
+import { Card } from '../components/Card'
+import { Field, controlClassName } from '../components/Field'
 import { PageShell } from '../components/PageShell'
+import { SearchBar } from '../components/SearchBar'
+import { StatusBadge } from '../components/StatusBadge'
 import { type InboxItem, type InboxOrder, inboxOrders } from '../features/dashboard/api'
 import { useInbox } from '../features/dashboard/useInbox'
+import { verdictLabels, verdictTones } from '../features/matching/verdicts'
 import { type ApplicationStage, stageLabels } from '../features/pipeline/api'
 
 const pageSize = 25
-
-const verdictLabels: Record<string, string> = {
-  HIGH_PRIORITY: 'Alta prioridade',
-  RECOMMENDED: 'Recomendada',
-  WATCHLIST: 'Observação',
-  REVIEW_REQUIRED: 'Revisão necessária',
-  LOW_MATCH: 'Baixa aderência',
-  INELIGIBLE: 'Inelegível',
-}
 
 const orderLabels: Record<InboxOrder, string> = {
   priority: 'Prioridade',
@@ -24,15 +21,6 @@ const orderLabels: Record<InboxOrder, string> = {
 
 const workModes = ['REMOTE', 'HYBRID', 'ONSITE', 'UNKNOWN']
 const lifecycleStatuses = ['DISCOVERED', 'ACTIVE', 'STALE', 'CLOSED']
-
-const verdictTone: Record<string, string> = {
-  HIGH_PRIORITY: 'border-success-line bg-success-surface text-success-ink',
-  RECOMMENDED: 'border-success-line bg-success-surface-soft text-success-ink',
-  REVIEW_REQUIRED: 'border-warning-line bg-warning-surface text-warning-ink',
-  WATCHLIST: 'border-line-strong bg-canvas text-neutral-ink',
-  LOW_MATCH: 'border-line-strong bg-canvas text-muted',
-  INELIGIBLE: 'border-danger-line bg-danger-surface text-danger-ink',
-}
 
 function display(value: string | null) {
   return value === null || value === '' ? '—' : value
@@ -51,24 +39,19 @@ function formatScore(value: string | null) {
 }
 
 function VerdictBadge({ verdict }: { verdict: string | null }) {
-  if (!verdict) {
-    return (
-      <span className="inline-flex rounded-full border border-dashed border-line-strong px-3 py-1 text-xs text-muted">
-        Não avaliada
-      </span>
-    )
-  }
-  const tone = verdictTone[verdict] ?? 'border-line-strong bg-canvas text-neutral-ink'
   return (
-    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${tone}`}>
-      {verdictLabels[verdict] ?? verdict}
-    </span>
+    <StatusBadge
+      absent="Não avaliada"
+      labels={verdictLabels}
+      tones={verdictTones}
+      value={verdict}
+    />
   )
 }
 
 function ItemCard({ item }: { item: InboxItem }) {
   return (
-    <article className="rounded-2xl border border-line bg-surface p-5">
+    <Card as="article">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold">
@@ -140,7 +123,7 @@ function ItemCard({ item }: { item: InboxItem }) {
           A análise sugere revisão humana antes de aplicar.
         </p>
       )}
-    </article>
+    </Card>
   )
 }
 
@@ -198,30 +181,19 @@ export function InboxPage() {
       title="Oportunidades"
       description="Tudo que o radar encontrou, com a decisão determinística mais recente de cada vaga. Oportunidades ainda não avaliadas continuam visíveis."
     >
-      <form className="mt-8 flex max-w-xl gap-3" onSubmit={submitSearch} role="search">
-        <label className="sr-only" htmlFor="inbox-search">
-          Buscar oportunidades
-        </label>
-        <input
-          className="min-w-0 flex-1 rounded-xl border border-line-strong bg-surface px-4 py-3 outline-none focus:border-ink focus:ring-2 focus:ring-accent"
-          id="inbox-search"
-          onChange={(event) => setSearchInput(event.target.value)}
-          placeholder="Título ou empresa"
-          value={searchInput}
-        />
-        <button
-          className="rounded-xl bg-ink px-5 py-3 font-semibold text-white hover:bg-ink-hover focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-accent"
-          type="submit"
-        >
-          Buscar
-        </button>
-      </form>
+      <SearchBar
+        id="inbox-search"
+        label="Buscar oportunidades"
+        onChange={setSearchInput}
+        onSubmit={submitSearch}
+        placeholder="Título ou empresa"
+        value={searchInput}
+      />
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <label className="text-sm">
-          <span className="text-muted">Verdict</span>
+        <Field label="Verdict">
           <select
-            className="mt-1 w-full rounded-xl border border-line-strong bg-surface px-3 py-2"
+            className={controlClassName}
             onChange={(event) => update({ verdict: event.target.value })}
             value={verdict}
           >
@@ -232,12 +204,11 @@ export function InboxPage() {
               </option>
             ))}
           </select>
-        </label>
+        </Field>
 
-        <label className="text-sm">
-          <span className="text-muted">Modalidade</span>
+        <Field label="Modalidade">
           <select
-            className="mt-1 w-full rounded-xl border border-line-strong bg-surface px-3 py-2"
+            className={controlClassName}
             onChange={(event) => update({ work_mode: event.target.value })}
             value={workMode}
           >
@@ -248,12 +219,11 @@ export function InboxPage() {
               </option>
             ))}
           </select>
-        </label>
+        </Field>
 
-        <label className="text-sm">
-          <span className="text-muted">Status</span>
+        <Field label="Status">
           <select
-            className="mt-1 w-full rounded-xl border border-line-strong bg-surface px-3 py-2"
+            className={controlClassName}
             onChange={(event) => update({ lifecycle_status: event.target.value })}
             value={lifecycleStatus}
           >
@@ -264,24 +234,22 @@ export function InboxPage() {
               </option>
             ))}
           </select>
-        </label>
+        </Field>
 
-        <label className="text-sm">
-          <span className="text-muted">Score mínimo</span>
+        <Field label="Score mínimo">
           <input
-            className="mt-1 w-full rounded-xl border border-line-strong bg-surface px-3 py-2"
+            className={controlClassName}
             max={100}
             min={0}
             onChange={(event) => update({ minimum_score: event.target.value })}
             type="number"
             value={minimumScore}
           />
-        </label>
+        </Field>
 
-        <label className="text-sm">
-          <span className="text-muted">Ordenar por</span>
+        <Field label="Ordenar por">
           <select
-            className="mt-1 w-full rounded-xl border border-line-strong bg-surface px-3 py-2"
+            className={controlClassName}
             onChange={(event) => update({ order: event.target.value })}
             value={order}
           >
@@ -291,7 +259,7 @@ export function InboxPage() {
               </option>
             ))}
           </select>
-        </label>
+        </Field>
       </div>
 
       <label className="mt-4 flex items-center gap-2 text-sm text-subtle">
@@ -376,25 +344,25 @@ export function InboxPage() {
                 aria-label="Paginação de oportunidades"
                 className="mt-2 flex items-center justify-between gap-4"
               >
-                <button
-                  className="rounded-xl border border-line-strong px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-40"
+                <Button
                   disabled={page === 1}
                   onClick={() => update({ page: String(page - 1) })}
-                  type="button"
+                  size="sm"
+                  variant="secondary"
                 >
                   Anterior
-                </button>
+                </Button>
                 <span className="text-sm text-muted">
                   Página {page} de {totalPages}
                 </span>
-                <button
-                  className="rounded-xl border border-line-strong px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-40"
+                <Button
                   disabled={page >= totalPages}
                   onClick={() => update({ page: String(page + 1) })}
-                  type="button"
+                  size="sm"
+                  variant="secondary"
                 >
                   Próxima
-                </button>
+                </Button>
               </nav>
             )}
           </>

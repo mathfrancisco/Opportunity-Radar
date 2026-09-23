@@ -1,4 +1,5 @@
 import { Link, useParams } from 'react-router-dom'
+import { Card } from '../components/Card'
 import { PageShell } from '../components/PageShell'
 import { type CompanyDetail } from '../features/companies/api'
 import { useCompany, useDetectCompanySource } from '../features/companies/useCompanies'
@@ -22,7 +23,7 @@ function Sources({ company }: { company: CompanyDetail }) {
   return (
     <ul className="grid gap-3">
       {company.sources.map((source) => (
-        <li className="rounded-2xl border border-line bg-surface p-5 text-sm" key={source.id}>
+        <Card as="li" className="text-sm" key={source.id}>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="font-semibold">{source.name}</span>
             <span className="text-muted">{source.status}</span>
@@ -36,7 +37,7 @@ function Sources({ company }: { company: CompanyDetail }) {
           {source.evidence && (
             <p className="mt-2 text-subtle">{source.evidence}</p>
           )}
-        </li>
+        </Card>
       ))}
     </ul>
   )

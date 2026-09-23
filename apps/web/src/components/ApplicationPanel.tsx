@@ -1,4 +1,7 @@
 import { type FormEvent, useState } from 'react'
+import { Button } from './Button'
+import { Card } from './Card'
+import { Field, controlClassName } from './Field'
 import {
   type Application,
   type StageHistoryEntry,
@@ -74,7 +77,7 @@ function Tracker({
   }
 
   return (
-    <div className="rounded-2xl border border-line bg-surface p-5">
+    <Card>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <span className="text-lg font-semibold">{label(application.currentStage)}</span>
         <span className="text-sm text-muted">
@@ -93,8 +96,7 @@ function Tracker({
         <>
           <div className="mt-4 flex flex-wrap gap-2">
             {application.allowedTransitions.map((stage) => (
-              <button
-                className="rounded-xl border border-line-strong px-4 py-2 text-sm font-medium hover:border-ink disabled:cursor-not-allowed disabled:opacity-40"
+              <Button
                 disabled={transition.isPending}
                 key={stage}
                 onClick={() =>
@@ -104,10 +106,11 @@ function Tracker({
                     expectedVersion: application.version,
                   })
                 }
-                type="button"
+                size="sm"
+                variant="secondary"
               >
                 {label(stage)}
-              </button>
+              </Button>
             ))}
           </div>
           {transition.isError && (
@@ -115,31 +118,25 @@ function Tracker({
           )}
 
           <form className="mt-6 grid gap-3 sm:grid-cols-[2fr_1fr_auto]" onSubmit={saveNextAction}>
-            <label className="text-sm">
-              <span className="text-muted">Próxima ação</span>
+            <Field label="Próxima ação">
               <input
-                className="mt-1 w-full rounded-xl border border-line-strong bg-surface px-4 py-2"
+                className={controlClassName}
                 onChange={(event) => setActionText(event.target.value)}
                 placeholder="Enviar follow-up ao recrutador"
                 value={actionText}
               />
-            </label>
-            <label className="text-sm">
-              <span className="text-muted">Quando</span>
+            </Field>
+            <Field label="Quando">
               <input
-                className="mt-1 w-full rounded-xl border border-line-strong bg-surface px-4 py-2"
+                className={controlClassName}
                 onChange={(event) => setActionDue(event.target.value)}
                 type="datetime-local"
                 value={actionDue}
               />
-            </label>
-            <button
-              className="self-end rounded-xl bg-ink px-5 py-2 text-sm font-semibold text-white hover:bg-ink-hover disabled:opacity-40"
-              disabled={nextAction.isPending}
-              type="submit"
-            >
+            </Field>
+            <Button className="self-end" disabled={nextAction.isPending} type="submit">
               Salvar
-            </button>
+            </Button>
           </form>
           {nextAction.isError && (
             <p className="mt-3 text-sm text-danger-ink">{nextAction.error.message}</p>
@@ -153,7 +150,7 @@ function Tracker({
 
       <h3 className="mt-6 text-sm font-semibold">Histórico</h3>
       <History entries={application.history} />
-    </div>
+    </Card>
   )
 }
 
@@ -184,22 +181,19 @@ export function ApplicationPanel({ opportunityId }: { opportunityId: string }) {
     return (
       <div className="rounded-2xl border border-dashed border-line-strong p-5">
         <div className="flex flex-wrap gap-3">
-          <button
-            className="rounded-xl bg-ink px-5 py-3 text-sm font-semibold text-white hover:bg-ink-hover disabled:opacity-40"
+          <Button
             disabled={start.isPending}
             onClick={() => start.mutate({ opportunityId, stage: 'INTERESTED' })}
-            type="button"
           >
             {start.isPending ? 'Iniciando…' : 'Registrar interesse'}
-          </button>
-          <button
-            className="rounded-xl border border-line-strong px-5 py-3 text-sm font-medium hover:border-ink disabled:opacity-40"
+          </Button>
+          <Button
             disabled={start.isPending}
             onClick={() => start.mutate({ opportunityId, stage: 'APPLIED' })}
-            type="button"
+            variant="secondary"
           >
             Já me candidatei
-          </button>
+          </Button>
         </div>
         <p className="mt-3 text-sm text-subtle">
           A candidatura é acompanhada em separado da oportunidade: encerrar uma não

@@ -1,6 +1,6 @@
 # CARD F15-02 — Componentes compartilhados
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 15 — Design, consistência e acesso
 - **Depende de:** F15-01
 - **Bloqueia:** F15-03, F15-04, F15-05
@@ -42,17 +42,24 @@ unificação. Um estado sem tradução mostra o próprio código, nunca um rótu
 
 ## Critérios de aceite
 
-- [ ] Cada componente extraído tem ao menos dois usos em rotas distintas.
-- [ ] Existe um único mapa de rótulo e tom por estado de execução e de cobertura.
-- [ ] Nenhuma rota declara classe de botão primário por conta própria.
-- [ ] Estado desconhecido é exibido pelo próprio código, sem virar "indefinido".
-- [ ] As telas informam exatamente o que informavam antes da migração.
+- [x] Cada componente extraído tem ao menos dois usos em rotas distintas.
+- [x] Existe um único mapa de rótulo e tom por estado de execução e de cobertura.
+- [x] Nenhuma rota declara classe de botão primário por conta própria.
+- [x] Estado desconhecido é exibido pelo próprio código, sem virar "indefinido".
+- [x] As telas informam exatamente o que informavam antes da migração.
 
 ## Verificação
 
 Teste de unidade por componente cobrindo variantes e estado desconhecido; revisão das nove
 rotas contra capturas anteriores; busca por classes duplicadas de botão como parte da
 revisão.
+
+## Nota de execução
+
+O histórico de execuções da tela de fontes passou a mostrar o rótulo do estado — `Sucesso`
+no lugar de `SUCCEEDED` — porque o mapa único traz rótulo e tom juntos, e a Overview já
+exibia o estado traduzido. A informação é a mesma; o vocabulário passou a ser um só. Estado
+sem tradução continua aparecendo pelo próprio código.
 
 ## Arquivos prováveis
 

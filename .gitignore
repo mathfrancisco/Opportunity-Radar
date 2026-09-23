@@ -24,6 +24,9 @@ data/backups/
 local_exports/
 local_backups/
 
+# Browser automation traces from a local render check
+.playwright-mcp/
+
 # Editors and operating systems
 .idea/
 .vscode/

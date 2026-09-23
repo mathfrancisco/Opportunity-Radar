@@ -1,6 +1,8 @@
 import { type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ApplicationPanel } from '../components/ApplicationPanel'
+import { Button } from '../components/Button'
+import { Card } from '../components/Card'
 import { PageShell } from '../components/PageShell'
 import {
   type EligibilityDetail,
@@ -14,16 +16,8 @@ import {
   useLatestAssessment,
 } from '../features/matching/useAssessment'
 import { type OpportunityDetail } from '../features/opportunities/api'
+import { verdictLabels } from '../features/matching/verdicts'
 import { useOpportunity } from '../features/opportunities/useOpportunity'
-
-const verdictLabels: Record<string, string> = {
-  HIGH_PRIORITY: 'Alta prioridade',
-  RECOMMENDED: 'Recomendada',
-  WATCHLIST: 'Observação',
-  REVIEW_REQUIRED: 'Revisão necessária',
-  LOW_MATCH: 'Baixa aderência',
-  INELIGIBLE: 'Inelegível',
-}
 
 const resultLabels: Record<string, string> = {
   TRUE: 'Atende',
@@ -107,10 +101,7 @@ function Compensation({ opportunity }: { opportunity: OpportunityDetail }) {
   return (
     <ul className="grid gap-3">
       {opportunity.compensations.map((item, index) => (
-        <li
-          className="rounded-2xl border border-line bg-surface p-5 text-sm"
-          key={`${item.rawItemId}-${index}`}
-        >
+        <Card as="li" className="text-sm" key={`${item.rawItemId}-${index}`}>
           <p className="font-semibold">
             {display(item.minimum)} – {display(item.maximum)} {display(item.currency)}{' '}
             <span className="font-normal text-muted">
@@ -123,7 +114,7 @@ function Compensation({ opportunity }: { opportunity: OpportunityDetail }) {
           <p className="mt-2 text-xs text-muted">
             Evidência: {display(item.evidenceSource)} · raw item {item.rawItemId}
           </p>
-        </li>
+        </Card>
       ))}
     </ul>
   )
@@ -155,10 +146,7 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
     <>
       <ul className="grid gap-3">
         {opportunity.occurrences.map((occurrence) => (
-          <li
-            className="rounded-2xl border border-line bg-surface p-5 text-sm"
-            key={occurrence.id}
-          >
+          <Card as="li" className="text-sm" key={occurrence.id}>
             <p className="font-medium">
               {occurrence.sourceUrl ? (
                 <a
@@ -187,7 +175,7 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
                 . A procedência permanece; o reprocessamento não está mais disponível.
               </p>
             )}
-          </li>
+          </Card>
         ))}
       </ul>
       <p className="mt-4 text-sm text-muted">
@@ -298,7 +286,7 @@ function Analysis({
         </div>
       )}
       {analysis?.status === 'AI_COMPLETED' && (
-        <div className="rounded-2xl border border-line bg-surface p-5 text-sm">
+        <Card className="text-sm">
           <p className="leading-6">{analysis.summary}</p>
           {analysis.strengths.length > 0 && (
             <>
@@ -339,21 +327,19 @@ function Analysis({
             {analysis.modelId} · {analysis.promptVersion} · {analysis.schemaVersion} ·{' '}
             {formatDate(analysis.analyzedAt)}
           </p>
-        </div>
+        </Card>
       )}
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button
-          className="rounded-xl bg-ink px-5 py-3 text-sm font-semibold text-white hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-40"
+        <Button
           disabled={running}
           onClick={() => onRun(analysis?.status === 'AI_COMPLETED')}
-          type="button"
         >
           {running
             ? 'Analisando…'
             : analysis?.status === 'AI_COMPLETED'
               ? 'Analisar novamente'
               : 'Analisar com Ollama'}
-        </button>
+        </Button>
         <span className="text-xs text-muted">
           A análise é consultiva: não altera score, verdict nem elegibilidade da avaliação{' '}
           {assessment.id.slice(0, 8)}.
@@ -495,14 +481,12 @@ export function OpportunityDetailPage() {
 
             <Section title="Decisão">
               <div className="mb-4 flex flex-wrap items-center gap-3">
-                <button
-                  className="rounded-xl bg-ink px-5 py-3 text-sm font-semibold text-white hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-40"
+                <Button
                   disabled={evaluate.isPending}
                   onClick={() => evaluate.mutate()}
-                  type="button"
                 >
                   {evaluate.isPending ? 'Avaliando…' : 'Avaliar agora'}
-                </button>
+                </Button>
                 {evaluate.isSuccess && <span className="text-sm text-subtle">Avaliação atualizada.</span>}
                 {evaluate.isError && <span className="text-sm text-danger-ink">Não foi possível avaliar agora.</span>}
               </div>

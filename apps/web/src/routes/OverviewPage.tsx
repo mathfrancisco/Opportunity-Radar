@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Card } from '../components/Card'
+import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
+import { StatusBadge } from '../components/StatusBadge'
 import {
   type FailingSource,
   type Overview,
@@ -8,43 +11,8 @@ import {
   type SourceMetricsWindow,
 } from '../features/dashboard/api'
 import { useOverview, useSourceMetrics } from '../features/dashboard/useOverview'
-
-const coverageLabels: Record<string, string> = {
-  NOT_ENABLED: 'Não habilitada',
-  CONFIGURATION_BLOCKED: 'Bloqueada por homologação',
-  NOT_SCHEDULED: 'Sem agendamento',
-  NOT_RUN: 'Não executou na janela',
-  SUCCEEDED_ZERO: 'Sucesso sem vagas',
-  SUCCEEDED: 'Saudável',
-  PARTIAL: 'Degradada',
-  FAILED: 'Falhou',
-  CANCELLED: 'Cancelada',
-}
-
-const coverageTone: Record<string, string> = {
-  SUCCEEDED: 'border-success-line bg-success-surface text-success-ink',
-  SUCCEEDED_ZERO: 'border-line-strong bg-canvas text-neutral-ink',
-  PARTIAL: 'border-warning-line bg-warning-surface text-warning-ink',
-  FAILED: 'border-danger-line bg-danger-surface text-danger-ink',
-}
-
-const verdictLabels: Record<string, string> = {
-  HIGH_PRIORITY: 'Alta prioridade',
-  RECOMMENDED: 'Recomendadas',
-  WATCHLIST: 'Observação',
-  REVIEW_REQUIRED: 'Revisão necessária',
-  LOW_MATCH: 'Baixa aderência',
-  INELIGIBLE: 'Inelegíveis',
-}
-
-const verdictOrder = [
-  'HIGH_PRIORITY',
-  'RECOMMENDED',
-  'REVIEW_REQUIRED',
-  'WATCHLIST',
-  'LOW_MATCH',
-  'INELIGIBLE',
-]
+import { verdictCountLabels, verdictOrder } from '../features/matching/verdicts'
+import { coverageLabels, coverageTones } from '../features/sources/states'
 
 function Tile({
   label,
@@ -74,7 +42,7 @@ function Tile({
       </Link>
     )
   }
-  return <div className="rounded-2xl border border-line bg-surface p-5">{body}</div>
+  return <Card>{body}</Card>
 }
 
 function FailingSources({ sources }: { sources: FailingSource[] }) {
@@ -120,7 +88,6 @@ function seconds(value: number | null) {
 }
 
 function SourceMetricsRow({ source }: { source: SourceMetrics }) {
-  const tone = coverageTone[source.coverageState] ?? 'border-line-strong bg-canvas text-neutral-ink'
   const { seniority } = source
   const knownLevels = Object.entries(seniority.counts)
     .filter(([level]) => level !== 'UNKNOWN')
@@ -136,9 +103,11 @@ function SourceMetricsRow({ source }: { source: SourceMetrics }) {
         )}
       </td>
       <td className="px-4 py-3">
-        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${tone}`}>
-          {coverageLabels[source.coverageState] ?? source.coverageState}
-        </span>
+        <StatusBadge
+          labels={coverageLabels}
+          tones={coverageTones}
+          value={source.coverageState}
+        />
       </td>
       <td className="px-4 py-3 text-sm">
         {source.runs} execuç{source.runs === 1 ? 'ão' : 'ões'}
@@ -210,25 +179,14 @@ function SourceMetricsTable({ window }: { window: SourceMetricsWindow }) {
     )
   }
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-left text-sm">
-        <thead className="bg-canvas text-xs uppercase tracking-[0.08em] text-muted">
-          <tr>
-            <th className="px-4 py-3 font-semibold">Fonte</th>
-            <th className="px-4 py-3 font-semibold">Cobertura</th>
-            <th className="px-4 py-3 font-semibold">Volume</th>
-            <th className="px-4 py-3 font-semibold">Taxas</th>
-            <th className="px-4 py-3 font-semibold">Erros por código</th>
-            <th className="px-4 py-3 font-semibold">Senioridade</th>
-          </tr>
-        </thead>
-        <tbody>
-          {window.sources.map((source) => (
-            <SourceMetricsRow key={source.sourceDefinitionId} source={source} />
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      caption={`Métricas por fonte na janela de ${window.window}`}
+      columns={['Fonte', 'Cobertura', 'Volume', 'Taxas', 'Erros por código', 'Senioridade']}
+    >
+      {window.sources.map((source) => (
+        <SourceMetricsRow key={source.sourceDefinitionId} source={source} />
+      ))}
+    </DataTable>
   )
 }
 
@@ -349,7 +307,7 @@ function Summary({ overview }: { overview: Overview }) {
                   className="flex items-baseline gap-2 rounded-full border border-line-strong bg-surface px-4 py-2 text-sm hover:border-ink"
                   to={`/inbox?verdict=${verdict}`}
                 >
-                  <span className="text-subtle">{verdictLabels[verdict] ?? verdict}</span>
+                  <span className="text-subtle">{verdictCountLabels[verdict] ?? verdict}</span>
                   <span className="font-semibold">{overview.verdictCounts[verdict]}</span>
                 </Link>
               </li>

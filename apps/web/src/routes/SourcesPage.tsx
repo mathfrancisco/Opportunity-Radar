@@ -1,21 +1,17 @@
 import { useState } from 'react'
+import { Button } from '../components/Button'
+import { Card } from '../components/Card'
+import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
+import { StatusBadge } from '../components/StatusBadge'
 import { type SourceHealth } from '../features/sources/api'
+import { runStatusLabels, runStatusTones } from '../features/sources/states'
 import {
   useRunSource,
   useSourceCoverage,
   useSourceHealth,
   useSourceRuns,
 } from '../features/sources/useSources'
-
-const statusTone: Record<string, string> = {
-  SUCCEEDED: 'border-success-line bg-success-surface text-success-ink',
-  PARTIAL: 'border-warning-line bg-warning-surface text-warning-ink',
-  FAILED: 'border-danger-line bg-danger-surface text-danger-ink',
-  RUNNING: 'border-line-strong bg-canvas text-neutral-ink',
-  PENDING: 'border-line-strong bg-canvas text-neutral-ink',
-  CANCELLED: 'border-line-strong bg-canvas text-muted',
-}
 
 function formatDate(value: string | null) {
   if (!value) return '—'
@@ -29,19 +25,14 @@ function formatDuration(seconds: number | null) {
   return `${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s`
 }
 
-function StatusBadge({ status }: { status: string | null }) {
-  if (status === null) {
-    return (
-      <span className="inline-flex rounded-full border border-dashed border-line-strong px-3 py-1 text-xs text-muted">
-        Nunca executada
-      </span>
-    )
-  }
-  const tone = statusTone[status] ?? 'border-line-strong bg-canvas text-neutral-ink'
+function RunStatus({ status }: { status: string | null }) {
   return (
-    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${tone}`}>
-      {status}
-    </span>
+    <StatusBadge
+      absent="Nunca executada"
+      labels={runStatusLabels}
+      tones={runStatusTones}
+      value={status}
+    />
   )
 }
 
@@ -62,22 +53,15 @@ function RunHistory({ sourceId }: { sourceId: string }) {
     return <p className="mt-4 text-sm text-subtle">Nenhuma execução registrada.</p>
   }
   return (
-    <div className="mt-4 overflow-x-auto">
-      <table className="w-full border-collapse text-left text-sm">
-        <thead className="bg-canvas text-xs uppercase tracking-[0.08em] text-muted">
-          <tr>
-            <th className="px-4 py-3 font-semibold">Status</th>
-            <th className="px-4 py-3 font-semibold">Origem</th>
-            <th className="px-4 py-3 font-semibold">Início</th>
-            <th className="px-4 py-3 font-semibold">Itens</th>
-            <th className="px-4 py-3 font-semibold">Erro</th>
-          </tr>
-        </thead>
-        <tbody>
-          {runs.data.map((run) => (
+    <DataTable
+      caption="Execuções recentes desta fonte"
+      className="mt-4"
+      columns={['Status', 'Origem', 'Início', 'Itens', 'Erro']}
+    >
+      {runs.data.map((run) => (
             <tr className="border-t border-divider" key={run.id}>
               <td className="px-4 py-3">
-                <StatusBadge status={run.status} />
+                <RunStatus status={run.status} />
               </td>
               <td className="px-4 py-3">{run.executionTrigger}</td>
               <td className="px-4 py-3">{formatDate(run.startedAt)}</td>
@@ -90,10 +74,8 @@ function RunHistory({ sourceId }: { sourceId: string }) {
                 {run.errorCode ? `${run.errorCode}: ${run.errorSummary ?? ''}` : '—'}
               </td>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+      ))}
+    </DataTable>
   )
 }
 
@@ -110,7 +92,7 @@ function SourceCard({
   const blocked = !source.enabled
 
   return (
-    <article className="rounded-2xl border border-line bg-surface p-5">
+    <Card as="article">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold">
@@ -124,7 +106,7 @@ function SourceCard({
             {source.collectorLocalTested ? 'homologado' : 'não homologado'}
           </p>
         </div>
-        <StatusBadge status={source.lastRunStatus} />
+        <RunStatus status={source.lastRunStatus} />
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
@@ -166,21 +148,15 @@ function SourceCard({
       )}
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button
-          className="rounded-xl bg-ink px-5 py-3 text-sm font-semibold text-white hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-40"
+        <Button
           disabled={blocked || run.isPending}
           onClick={() => run.mutate(source.sourceDefinitionId)}
-          type="button"
         >
           {run.isPending ? 'Executando…' : 'Executar agora'}
-        </button>
-        <button
-          className="rounded-xl border border-line-strong px-4 py-2 text-sm font-medium"
-          onClick={onToggle}
-          type="button"
-        >
+        </Button>
+        <Button onClick={onToggle} size="sm" variant="secondary">
           {expanded ? 'Ocultar execuções' : 'Ver execuções'}
-        </button>
+        </Button>
         {blocked && (
           <span className="text-xs text-muted">
             Fonte desabilitada: habilite após revisar termos e homologar o collector.
@@ -198,7 +174,7 @@ function SourceCard({
       )}
 
       {expanded && <RunHistory sourceId={source.sourceDefinitionId} />}
-    </article>
+    </Card>
   )
 }
 

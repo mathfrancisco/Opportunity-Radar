@@ -1,6 +1,8 @@
 import { type FormEvent, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Button } from '../components/Button'
 import { PageShell } from '../components/PageShell'
+import { SearchBar } from '../components/SearchBar'
 import { type Company } from '../features/companies/api'
 import { useCompanies } from '../features/companies/useCompanies'
 
@@ -117,24 +119,14 @@ export function CompaniesPage() {
       title="Empresas"
       description="Consulte as empresas monitoradas e as fontes associadas a cada uma."
     >
-      <form className="mt-8 flex max-w-xl gap-3" onSubmit={submit} role="search">
-        <label className="sr-only" htmlFor="company-search">
-          Buscar empresas
-        </label>
-        <input
-          className="min-w-0 flex-1 rounded-xl border border-line-strong bg-surface px-4 py-3 outline-none focus:border-ink focus:ring-2 focus:ring-accent"
-          id="company-search"
-          onChange={(event) => setInput(event.target.value)}
-          placeholder="Nome ou domínio"
-          value={input}
-        />
-        <button
-          className="rounded-xl bg-ink px-5 py-3 font-semibold text-white hover:bg-ink-hover focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-accent"
-          type="submit"
-        >
-          Buscar
-        </button>
-      </form>
+      <SearchBar
+        id="company-search"
+        label="Buscar empresas"
+        onChange={setInput}
+        onSubmit={submit}
+        placeholder="Nome ou domínio"
+        value={input}
+      />
 
       <div className="mt-8" aria-live="polite">
         {companies.isPending && (
@@ -172,25 +164,25 @@ export function CompaniesPage() {
                 aria-label="Paginação de empresas"
                 className="mt-6 flex items-center justify-between gap-4"
               >
-                <button
-                  className="rounded-xl border border-line-strong px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-40"
+                <Button
                   disabled={page === 1}
                   onClick={() => setPage((current) => current - 1)}
-                  type="button"
+                  size="sm"
+                  variant="secondary"
                 >
                   Anterior
-                </button>
+                </Button>
                 <span className="text-sm text-muted">
                   Página {page} de {totalPages}
                 </span>
-                <button
-                  className="rounded-xl border border-line-strong px-4 py-2 font-medium disabled:cursor-not-allowed disabled:opacity-40"
+                <Button
                   disabled={page >= totalPages}
                   onClick={() => setPage((current) => current + 1)}
-                  type="button"
+                  size="sm"
+                  variant="secondary"
                 >
                   Próxima
-                </button>
+                </Button>
               </nav>
             )}
           </>

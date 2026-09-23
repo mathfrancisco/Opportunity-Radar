@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from 'react'
+import { Button } from '../components/Button'
 import { PageShell } from '../components/PageShell'
 import {
   emptyPreferences,
@@ -316,13 +317,9 @@ export function ProfilePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              className="rounded-xl bg-ink px-5 py-3 text-sm font-semibold text-white hover:bg-ink-hover disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={save.isPending}
-              type="submit"
-            >
+            <Button disabled={save.isPending} type="submit">
               {save.isPending ? 'Salvando…' : 'Salvar como nova versão e ativar'}
-            </button>
+            </Button>
             {active.data && (
               <span className="text-xs text-muted">
                 Versão ativa {active.data.number} · lock {active.data.profileLockVersion}
