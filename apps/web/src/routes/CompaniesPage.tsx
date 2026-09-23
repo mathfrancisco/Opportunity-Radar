@@ -2,6 +2,7 @@ import { type FormEvent, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { PageShell } from '../components/PageShell'
+import { EmptyState, ErrorState, LoadingState } from '../components/states'
 import { SearchBar } from '../components/SearchBar'
 import { type Company } from '../features/companies/api'
 import { useCompanies } from '../features/companies/useCompanies'
@@ -128,28 +129,15 @@ export function CompaniesPage() {
         value={input}
       />
 
-      <div className="mt-8" aria-live="polite">
+      <div className="mt-8">
         {companies.isPending && (
-          <p className="rounded-2xl bg-info-surface p-5 text-info-ink">
-            Carregando empresas…
-          </p>
+          <LoadingState>Carregando empresas…</LoadingState>
         )}
         {companies.isError && (
-          <div className="rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
-            <p>Não foi possível carregar as empresas.</p>
-            <button
-              className="mt-3 font-semibold underline"
-              onClick={() => void companies.refetch()}
-              type="button"
-            >
-              Tentar novamente
-            </button>
-          </div>
+          <ErrorState onRetry={() => void companies.refetch()}>Não foi possível carregar as empresas.</ErrorState>
         )}
         {companies.data?.items.length === 0 && (
-          <p className="rounded-2xl border border-dashed border-line-strong p-8 text-subtle">
-            Nenhuma empresa encontrada{query ? ` para “${query}”` : ''}.
-          </p>
+          <EmptyState>Nenhuma empresa encontrada{query ? ` para “${query}”` : ''}.</EmptyState>
         )}
         {companies.data && companies.data.items.length > 0 && (
           <>

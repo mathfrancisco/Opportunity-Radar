@@ -4,6 +4,7 @@ import { ApplicationPanel } from '../components/ApplicationPanel'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { PageShell } from '../components/PageShell'
+import { EmptyState, ErrorState, LoadingState } from '../components/states'
 import {
   type EligibilityDetail,
   type MatchAnalysis,
@@ -92,10 +93,8 @@ function Facts({ opportunity }: { opportunity: OpportunityDetail }) {
 function Compensation({ opportunity }: { opportunity: OpportunityDetail }) {
   if (opportunity.compensations.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-line-strong p-5 text-subtle">
-        Nenhuma remuneração declarada nas fontes. Ausência de dado não vira zero nem
-        penalidade.
-      </p>
+      <EmptyState>Nenhuma remuneração declarada nas fontes. Ausência de dado não vira zero nem
+        penalidade.</EmptyState>
     )
   }
   return (
@@ -270,9 +269,7 @@ function Analysis({
   return (
     <>
       {analysis === null && (
-        <p className="rounded-2xl border border-dashed border-line-strong p-5 text-subtle">
-          Nenhuma análise semântica registrada para esta avaliação.
-        </p>
+        <EmptyState>Nenhuma análise semântica registrada para esta avaliação.</EmptyState>
       )}
       {analysis && analysis.status !== 'AI_COMPLETED' && (
         <div className="rounded-2xl border border-warning-line bg-warning-surface p-5 text-sm">
@@ -436,23 +433,12 @@ export function OpportunityDetailPage() {
         </Link>
       </p>
 
-      <div aria-live="polite">
+      <div>
         {opportunity.isPending && (
-          <p className="mt-8 rounded-2xl bg-info-surface p-5 text-info-ink">
-            Carregando oportunidade…
-          </p>
+          <LoadingState className="mt-8">Carregando oportunidade…</LoadingState>
         )}
         {opportunity.isError && (
-          <div className="mt-8 rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
-            <p>{opportunity.error.message}</p>
-            <button
-              className="mt-3 font-semibold underline"
-              onClick={() => void opportunity.refetch()}
-              type="button"
-            >
-              Tentar novamente
-            </button>
-          </div>
+          <ErrorState className="mt-8" onRetry={() => void opportunity.refetch()}>{opportunity.error.message}</ErrorState>
         )}
 
         {opportunity.data && (
@@ -491,26 +477,13 @@ export function OpportunityDetailPage() {
                 {evaluate.isError && <span className="text-sm text-danger-ink">Não foi possível avaliar agora.</span>}
               </div>
               {assessment.isPending && (
-                <p className="rounded-2xl bg-info-surface p-5 text-info-ink">
-                  Carregando a avaliação…
-                </p>
+                <LoadingState>Carregando a avaliação…</LoadingState>
               )}
               {assessment.isError && (
-                <div className="rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
-                  <p>Não foi possível carregar a avaliação.</p>
-                  <button
-                    className="mt-3 font-semibold underline"
-                    onClick={() => void assessment.refetch()}
-                    type="button"
-                  >
-                    Tentar novamente
-                  </button>
-                </div>
+                <ErrorState onRetry={() => void assessment.refetch()}>Não foi possível carregar a avaliação.</ErrorState>
               )}
               {assessment.data === null && (
-                <p className="rounded-2xl border border-dashed border-line-strong p-5 text-subtle">
-                  Esta oportunidade ainda não foi avaliada contra o perfil ativo.
-                </p>
+                <EmptyState>Esta oportunidade ainda não foi avaliada contra o perfil ativo.</EmptyState>
               )}
               {assessment.data && (
                 <Decision

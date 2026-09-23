@@ -1,6 +1,8 @@
 import { type FormEvent, useState } from 'react'
 import { Button } from '../components/Button'
 import { PageShell } from '../components/PageShell'
+import { ConflictNotice, EmptyState, ErrorState, LoadingState } from '../components/states'
+import { ConflictError } from '../lib/api'
 import {
   emptyPreferences,
   type ProfilePreferences,
@@ -122,28 +124,15 @@ export function ProfilePage() {
       title="Perfil e preferências"
       description="O que o matching considera ao avaliar uma vaga. Salvar cria uma nova versão e a ativa; as avaliações anteriores continuam apontando para a versão que as produziu."
     >
-      <div aria-live="polite">
+      <div>
         {active.isPending && (
-          <p className="mt-8 rounded-2xl bg-info-surface p-5 text-info-ink">
-            Carregando perfil…
-          </p>
+          <LoadingState className="mt-8">Carregando perfil…</LoadingState>
         )}
         {active.isError && (
-          <div className="mt-8 rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
-            <p>Não foi possível carregar o perfil.</p>
-            <button
-              className="mt-3 font-semibold underline"
-              onClick={() => void active.refetch()}
-              type="button"
-            >
-              Tentar novamente
-            </button>
-          </div>
+          <ErrorState className="mt-8" onRetry={() => void active.refetch()}>Não foi possível carregar o perfil.</ErrorState>
         )}
         {active.isSuccess && active.data === null && (
-          <p className="mt-8 rounded-2xl border border-dashed border-line-strong p-5 text-subtle">
-            Nenhum perfil ativo ainda. Preencha o formulário para criar a primeira versão.
-          </p>
+          <EmptyState className="mt-8">Nenhum perfil ativo ainda. Preencha o formulário para criar a primeira versão.</EmptyState>
         )}
       </div>
 
@@ -327,9 +316,14 @@ export function ProfilePage() {
             )}
           </div>
 
-          {save.isError && (
-            <p className="text-sm text-danger-ink">{save.error.message}</p>
-          )}
+          {save.isError &&
+            (save.error instanceof ConflictError ? (
+              <ConflictNotice onReload={() => void active.refetch()}>
+                {save.error.message}
+              </ConflictNotice>
+            ) : (
+              <p className="text-sm text-danger-ink">{save.error.message}</p>
+            ))}
           {save.isSuccess && (
             <p className="text-sm text-success-ink">
               Versão {save.data.number} ativa. Avaliações antigas continuam apontando para

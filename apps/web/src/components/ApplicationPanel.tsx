@@ -1,6 +1,8 @@
 import { type FormEvent, useState } from 'react'
 import { Button } from './Button'
 import { Card } from './Card'
+import { ConflictNotice, EmptyState, ErrorState, LoadingState } from './states'
+import { ConflictError } from '../lib/api'
 import { Field, controlClassName } from './Field'
 import {
   type Application,
@@ -56,9 +58,12 @@ function History({ entries }: { entries: StageHistoryEntry[] }) {
 function Tracker({
   application,
   opportunityId,
+  onReload,
 }: {
   application: Application
   opportunityId: string
+  /** Re-reads the candidacy after a conflict, so the operator decides on the new version. */
+  onReload: () => void
 }) {
   const transition = useTransitionApplication(opportunityId)
   const nextAction = useSetNextAction(opportunityId)
@@ -113,9 +118,14 @@ function Tracker({
               </Button>
             ))}
           </div>
-          {transition.isError && (
-            <p className="mt-3 text-sm text-danger-ink">{transition.error.message}</p>
-          )}
+          {transition.isError &&
+            (transition.error instanceof ConflictError ? (
+              <ConflictNotice className="mt-3" onReload={onReload}>
+                {transition.error.message}
+              </ConflictNotice>
+            ) : (
+              <p className="mt-3 text-sm text-danger-ink">{transition.error.message}</p>
+            ))}
 
           <form className="mt-6 grid gap-3 sm:grid-cols-[2fr_1fr_auto]" onSubmit={saveNextAction}>
             <Field label="Próxima ação">
@@ -138,9 +148,14 @@ function Tracker({
               Salvar
             </Button>
           </form>
-          {nextAction.isError && (
-            <p className="mt-3 text-sm text-danger-ink">{nextAction.error.message}</p>
-          )}
+          {nextAction.isError &&
+            (nextAction.error instanceof ConflictError ? (
+              <ConflictNotice className="mt-3" onReload={onReload}>
+                {nextAction.error.message}
+              </ConflictNotice>
+            ) : (
+              <p className="mt-3 text-sm text-danger-ink">{nextAction.error.message}</p>
+            ))}
         </>
       )}
 
@@ -160,26 +175,17 @@ export function ApplicationPanel({ opportunityId }: { opportunityId: string }) {
 
   if (application.isPending) {
     return (
-      <p className="rounded-2xl bg-info-surface p-5 text-info-ink">Carregando candidatura…</p>
+      <LoadingState>Carregando candidatura…</LoadingState>
     )
   }
   if (application.isError) {
     return (
-      <div className="rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
-        <p>Não foi possível carregar a candidatura.</p>
-        <button
-          className="mt-3 font-semibold underline"
-          onClick={() => void application.refetch()}
-          type="button"
-        >
-          Tentar novamente
-        </button>
-      </div>
+      <ErrorState onRetry={() => void application.refetch()}>Não foi possível carregar a candidatura.</ErrorState>
     )
   }
   if (application.data === null) {
     return (
-      <div className="rounded-2xl border border-dashed border-line-strong p-5">
+      <EmptyState>
         <div className="flex flex-wrap gap-3">
           <Button
             disabled={start.isPending}
@@ -199,11 +205,23 @@ export function ApplicationPanel({ opportunityId }: { opportunityId: string }) {
           A candidatura é acompanhada em separado da oportunidade: encerrar uma não
           encerra a outra.
         </p>
-        {start.isError && (
-          <p className="mt-3 text-sm text-danger-ink">{start.error.message}</p>
-        )}
-      </div>
+        {start.isError &&
+          (start.error instanceof ConflictError ? (
+            // 409 aqui é uma candidatura ativa que já existe: reler mostra qual é.
+            <ConflictNotice className="mt-3" onReload={() => void application.refetch()}>
+              {start.error.message}
+            </ConflictNotice>
+          ) : (
+            <p className="mt-3 text-sm text-danger-ink">{start.error.message}</p>
+          ))}
+      </EmptyState>
     )
   }
-  return <Tracker application={application.data} opportunityId={opportunityId} />
+  return (
+    <Tracker
+      application={application.data}
+      onReload={() => void application.refetch()}
+      opportunityId={opportunityId}
+    />
+  )
 }

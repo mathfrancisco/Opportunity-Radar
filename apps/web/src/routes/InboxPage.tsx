@@ -4,6 +4,7 @@ import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { Field, controlClassName } from '../components/Field'
 import { PageShell } from '../components/PageShell'
+import { EmptyState, ErrorState, LoadingState } from '../components/states'
 import { SearchBar } from '../components/SearchBar'
 import { StatusBadge } from '../components/StatusBadge'
 import { type InboxItem, type InboxOrder, inboxOrders } from '../features/dashboard/api'
@@ -307,28 +308,15 @@ export function InboxPage() {
         ))}
       </div>
 
-      <div className="mt-8 grid gap-3" aria-live="polite">
+      <div className="mt-8 grid gap-3">
         {inbox.isPending && (
-          <p className="rounded-2xl bg-info-surface p-5 text-info-ink">
-            Carregando oportunidades…
-          </p>
+          <LoadingState>Carregando oportunidades…</LoadingState>
         )}
         {inbox.isError && (
-          <div className="rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
-            <p>Não foi possível carregar a inbox.</p>
-            <button
-              className="mt-3 font-semibold underline"
-              onClick={() => void inbox.refetch()}
-              type="button"
-            >
-              Tentar novamente
-            </button>
-          </div>
+          <ErrorState onRetry={() => void inbox.refetch()}>Não foi possível carregar a inbox.</ErrorState>
         )}
         {inbox.data?.items.length === 0 && (
-          <p className="rounded-2xl border border-dashed border-line-strong p-8 text-subtle">
-            Nenhuma oportunidade encontrada com esses filtros.
-          </p>
+          <EmptyState>Nenhuma oportunidade encontrada com esses filtros.</EmptyState>
         )}
         {inbox.data && inbox.data.items.length > 0 && (
           <>

@@ -3,7 +3,9 @@ import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
+import { EmptyState, ErrorState, LoadingState } from '../components/states'
 import { StatusBadge } from '../components/StatusBadge'
+import { Unavailable } from '../components/Unavailable'
 import { type SourceHealth } from '../features/sources/api'
 import { runStatusLabels, runStatusTones } from '../features/sources/states'
 import {
@@ -14,13 +16,17 @@ import {
 } from '../features/sources/useSources'
 
 function formatDate(value: string | null) {
-  if (!value) return '—'
+  if (!value) return <Unavailable reason="nunca executada" />
   const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString('pt-BR')
+  return Number.isNaN(parsed.getTime()) ? (
+    <Unavailable reason="data inválida" />
+  ) : (
+    parsed.toLocaleString('pt-BR')
+  )
 }
 
 function formatDuration(seconds: number | null) {
-  if (seconds === null) return '—'
+  if (seconds === null) return <Unavailable reason="nunca executada" />
   if (seconds < 60) return `${seconds.toFixed(1)} s`
   return `${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s`
 }
@@ -71,7 +77,11 @@ function RunHistory({ sourceId }: { sourceId: string }) {
                 {run.itemsInvalid > 0 && ` · ${run.itemsInvalid} inválidos`}
               </td>
               <td className="px-4 py-3 text-subtle">
-                {run.errorCode ? `${run.errorCode}: ${run.errorSummary ?? ''}` : '—'}
+                {run.errorCode ? (
+                  `${run.errorCode}: ${run.errorSummary ?? ''}`
+                ) : (
+                  <Unavailable reason="sem erro" />
+                )}
               </td>
             </tr>
       ))}
@@ -123,7 +133,11 @@ function SourceCard({
         <div>
           <dt className="text-muted">Itens persistidos</dt>
           <dd className="mt-1 font-medium">
-            {source.lastRunItemsPersisted === null ? '—' : source.lastRunItemsPersisted}
+            {source.lastRunItemsPersisted === null ? (
+              <Unavailable reason="nunca executada" />
+            ) : (
+              source.lastRunItemsPersisted
+            )}
           </dd>
         </div>
         <div>
@@ -197,26 +211,15 @@ export function SourcesPage() {
           <p><span className="text-muted">Habilitadas / elegíveis</span><br /><strong>{coverage.data.enabledSources}</strong> / {coverage.data.eligibleSources}</p>
         </section>
       )}
-      <div className="mt-8 grid gap-3" aria-live="polite">
+      <div className="mt-8 grid gap-3">
         {health.isPending && (
-          <p className="rounded-2xl bg-info-surface p-5 text-info-ink">Carregando fontes…</p>
+          <LoadingState>Carregando fontes…</LoadingState>
         )}
         {health.isError && (
-          <div className="rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
-            <p>Não foi possível carregar as fontes.</p>
-            <button
-              className="mt-3 font-semibold underline"
-              onClick={() => void health.refetch()}
-              type="button"
-            >
-              Tentar novamente
-            </button>
-          </div>
+          <ErrorState onRetry={() => void health.refetch()}>Não foi possível carregar as fontes.</ErrorState>
         )}
         {health.data?.items.length === 0 && (
-          <p className="rounded-2xl border border-dashed border-line-strong p-8 text-subtle">
-            Nenhuma fonte cadastrada.
-          </p>
+          <EmptyState>Nenhuma fonte cadastrada.</EmptyState>
         )}
         {health.data && health.data.items.length > 0 && (
           <>

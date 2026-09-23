@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import { Card } from '../components/Card'
 import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
+import { EmptyState, ErrorState, LoadingState } from '../components/states'
 import { StatusBadge } from '../components/StatusBadge'
+import { Unavailable } from '../components/Unavailable'
 import {
   type FailingSource,
   type Overview,
@@ -48,9 +50,7 @@ function Tile({
 function FailingSources({ sources }: { sources: FailingSource[] }) {
   if (sources.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-line-strong p-5 text-subtle">
-        Nenhuma fonte falhou na última execução.
-      </p>
+      <EmptyState>Nenhuma fonte falhou na última execução.</EmptyState>
     )
   }
   return (
@@ -79,12 +79,21 @@ function FailingSources({ sources }: { sources: FailingSource[] }) {
   )
 }
 
+/** A window with no run behind it has no rate, and a rate of zero is a different fact. */
 function percent(value: number | null) {
-  return value === null ? 'sem dados' : `${(value * 100).toFixed(1)}%`
+  return value === null ? (
+    <Unavailable reason="sem execução na janela" />
+  ) : (
+    `${(value * 100).toFixed(1)}%`
+  )
 }
 
 function seconds(value: number | null) {
-  return value === null ? 'sem dados' : `${value.toFixed(1)} s`
+  return value === null ? (
+    <Unavailable reason="sem execução na janela" />
+  ) : (
+    `${value.toFixed(1)} s`
+  )
 }
 
 function SourceMetricsRow({ source }: { source: SourceMetrics }) {
@@ -125,7 +134,7 @@ function SourceMetricsRow({ source }: { source: SourceMetrics }) {
       </td>
       <td className="px-4 py-3 text-sm">
         {Object.keys(source.errorsByCode).length === 0 ? (
-          <span className="text-muted">—</span>
+          <Unavailable reason="nenhum erro registrado" />
         ) : (
           <ul className="text-xs">
             {Object.entries(source.errorsByCode).map(([code, total]) => (
@@ -173,9 +182,7 @@ function SourceMetricsRow({ source }: { source: SourceMetrics }) {
 function SourceMetricsTable({ window }: { window: SourceMetricsWindow }) {
   if (window.sources.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-line-strong p-5 text-subtle">
-        Nenhuma fonte cadastrada.
-      </p>
+      <EmptyState>Nenhuma fonte cadastrada.</EmptyState>
     )
   }
   return (
@@ -218,23 +225,12 @@ function SourceMetricsSection() {
           ))}
         </div>
       </div>
-      <div className="mt-4" aria-live="polite">
+      <div className="mt-4">
         {metrics.isPending && (
-          <p className="rounded-2xl bg-info-surface p-5 text-info-ink">
-            Carregando métricas…
-          </p>
+          <LoadingState>Carregando métricas…</LoadingState>
         )}
         {metrics.isError && (
-          <div className="rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
-            <p>Não foi possível carregar as métricas por fonte.</p>
-            <button
-              className="mt-3 font-semibold underline"
-              onClick={() => void metrics.refetch()}
-              type="button"
-            >
-              Tentar novamente
-            </button>
-          </div>
+          <ErrorState onRetry={() => void metrics.refetch()}>Não foi possível carregar as métricas por fonte.</ErrorState>
         )}
         {active && <SourceMetricsTable window={active} />}
       </div>
@@ -339,23 +335,12 @@ export function OverviewPage() {
       description="O estado do ciclo completo: o que chegou, o que já foi decidido e o que precisa de atenção."
       footer="Descubra oportunidades, preserve evidências e decida com contexto."
     >
-      <div aria-live="polite">
+      <div>
         {overview.isPending && (
-          <p className="mt-8 rounded-2xl bg-info-surface p-5 text-info-ink">
-            Carregando o resumo…
-          </p>
+          <LoadingState className="mt-8">Carregando o resumo…</LoadingState>
         )}
         {overview.isError && (
-          <div className="mt-8 rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
-            <p>Não foi possível carregar o resumo.</p>
-            <button
-              className="mt-3 font-semibold underline"
-              onClick={() => void overview.refetch()}
-              type="button"
-            >
-              Tentar novamente
-            </button>
-          </div>
+          <ErrorState className="mt-8" onRetry={() => void overview.refetch()}>Não foi possível carregar o resumo.</ErrorState>
         )}
         {overview.data && <Summary overview={overview.data} />}
       </div>

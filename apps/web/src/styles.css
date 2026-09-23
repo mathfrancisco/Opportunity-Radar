@@ -72,17 +72,3 @@ body { margin: 0; min-width: 320px; }
 .status-error { color: var(--color-danger-ink); background: var(--color-danger-surface-strong); }
 .status-degraded { color: var(--color-warning-ink-strong); background: var(--color-warning-surface-strong); }
 .status-ready { color: var(--color-success-ink-strong); background: var(--color-success-surface-strong); }
-
-.retry-button {
-  margin-top: 1rem;
-  border: 0;
-  border-radius: 0.7rem;
-  background: var(--color-ink);
-  color: var(--color-surface);
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  padding: 0.7rem 1rem;
-}
-
-.retry-button:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { PageShell } from '../components/PageShell'
+import { EmptyState, ErrorState, LoadingState } from '../components/states'
 import {
   type Application,
   type ApplicationStage,
@@ -72,10 +73,8 @@ function Board({ applications }: { applications: Application[] }) {
 
   if (columns.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-line-strong p-8 text-subtle">
-        Nenhuma candidatura ativa. Comece pela inbox: abra uma oportunidade e registre o
-        interesse.
-      </p>
+      <EmptyState>Nenhuma candidatura ativa. Comece pela inbox: abra uma oportunidade e registre o
+        interesse.</EmptyState>
     )
   }
 
@@ -137,23 +136,12 @@ export function PipelinePage() {
       title="Candidaturas"
       description="Cada candidatura com o estágio em que está e o que você deve fazer a seguir. A oportunidade segue o ciclo dela; a candidatura segue o seu."
     >
-      <div className="mt-8" aria-live="polite">
+      <div className="mt-8">
         {active.isPending && (
-          <p className="rounded-2xl bg-info-surface p-5 text-info-ink">
-            Carregando candidaturas…
-          </p>
+          <LoadingState>Carregando candidaturas…</LoadingState>
         )}
         {active.isError && (
-          <div className="rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
-            <p>Não foi possível carregar as candidaturas.</p>
-            <button
-              className="mt-3 font-semibold underline"
-              onClick={() => void active.refetch()}
-              type="button"
-            >
-              Tentar novamente
-            </button>
-          </div>
+          <ErrorState onRetry={() => void active.refetch()}>Não foi possível carregar as candidaturas.</ErrorState>
         )}
         {active.data && <Board applications={active.data.items} />}
       </div>

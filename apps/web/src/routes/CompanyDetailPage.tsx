@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { Card } from '../components/Card'
 import { PageShell } from '../components/PageShell'
+import { EmptyState, ErrorState, LoadingState } from '../components/states'
 import { type CompanyDetail } from '../features/companies/api'
 import { useCompany, useDetectCompanySource } from '../features/companies/useCompanies'
 import { useInbox } from '../features/dashboard/useInbox'
@@ -14,10 +15,8 @@ function formatDate(value: string | null) {
 function Sources({ company }: { company: CompanyDetail }) {
   if (company.sources.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-line-strong p-5 text-subtle">
-        Nenhuma fonte associada. A pesquisa registrou a empresa, mas nenhum endpoint foi
-        confirmado.
-      </p>
+      <EmptyState>Nenhuma fonte associada. A pesquisa registrou a empresa, mas nenhum endpoint foi
+        confirmado.</EmptyState>
     )
   }
   return (
@@ -51,23 +50,12 @@ function LatestOpportunities({ companyId }: { companyId: string }) {
   }
   if (inbox.isError) {
     return (
-      <div className="rounded-2xl bg-danger-surface-strong p-5 text-sm text-danger-ink">
-        <p>Não foi possível carregar as vagas desta empresa.</p>
-        <button
-          className="mt-3 font-semibold underline"
-          onClick={() => void inbox.refetch()}
-          type="button"
-        >
-          Tentar novamente
-        </button>
-      </div>
+      <ErrorState onRetry={() => void inbox.refetch()}>Não foi possível carregar as vagas desta empresa.</ErrorState>
     )
   }
   if (!inbox.data || inbox.data.items.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-line-strong p-5 text-subtle">
-        Nenhuma vaga coletada desta empresa até agora.
-      </p>
+      <EmptyState>Nenhuma vaga coletada desta empresa até agora.</EmptyState>
     )
   }
   return (
@@ -125,23 +113,12 @@ export function CompanyDetailPage() {
         </Link>
       </p>
 
-      <div aria-live="polite">
+      <div>
         {company.isPending && (
-          <p className="mt-8 rounded-2xl bg-info-surface p-5 text-info-ink">
-            Carregando empresa…
-          </p>
+          <LoadingState className="mt-8">Carregando empresa…</LoadingState>
         )}
         {company.isError && (
-          <div className="mt-8 rounded-2xl bg-danger-surface-strong p-5 text-danger-ink">
-            <p>{company.error.message}</p>
-            <button
-              className="mt-3 font-semibold underline"
-              onClick={() => void company.refetch()}
-              type="button"
-            >
-              Tentar novamente
-            </button>
-          </div>
+          <ErrorState className="mt-8" onRetry={() => void company.refetch()}>{company.error.message}</ErrorState>
         )}
       </div>
 
