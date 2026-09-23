@@ -6,7 +6,12 @@ from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from opportunity_radar.companies.domain import CompanyCandidate, normalize_name
-from opportunity_radar.companies.models import Company, CompanyAlias, CompanyImportBatch
+from opportunity_radar.companies.models import (
+    Company,
+    CompanyAlias,
+    CompanyImportBatch,
+    CompanySource,
+)
 
 
 class CompanyRepository:
@@ -38,6 +43,37 @@ class CompanyRepository:
                 matches.append(by_domain)
         return matches
 
+    def by_identity_names(self, normalized_names: tuple[str, ...]) -> list[Company]:
+        """Companies whose canonical name or any alias equals one of these keys."""
+        if not normalized_names:
+            return []
+        statement: Select[tuple[Company]] = (
+            select(Company)
+            .outerjoin(CompanyAlias)
+            .where(
+                or_(
+                    Company.normalized_name.in_(normalized_names),
+                    CompanyAlias.normalized_alias.in_(normalized_names),
+                )
+            )
+            .options(selectinload(Company.aliases))
+        )
+        return list(self.session.scalars(statement).unique())
+
+    def by_domain(self, normalized_domain: str) -> Company | None:
+        return self.session.scalar(
+            select(Company)
+            .where(Company.domain == normalized_domain)
+            .options(selectinload(Company.aliases))
+        )
+
+    def get_source(self, company_id: UUID, source_id: UUID) -> CompanySource | None:
+        return self.session.scalar(
+            select(CompanySource)
+            .where(CompanySource.id == source_id, CompanySource.company_id == company_id)
+            .options(selectinload(CompanySource.revisions))
+        )
+
     def list(
         self,
         *,
@@ -63,7 +99,10 @@ class CompanyRepository:
         statement = (
             select(Company)
             .where(*filters)
-            .options(selectinload(Company.aliases), selectinload(Company.sources))
+            .options(
+                selectinload(Company.aliases),
+                selectinload(Company.sources).selectinload(CompanySource.revisions),
+            )
         )
         companies = list(
             self.session.scalars(
@@ -75,7 +114,8 @@ class CompanyRepository:
 
     def get(self, company_id: UUID) -> Company | None:
         statement = select(Company).where(Company.id == company_id).options(
-            selectinload(Company.aliases), selectinload(Company.sources)
+            selectinload(Company.aliases),
+            selectinload(Company.sources).selectinload(CompanySource.revisions),
         )
         return self.session.scalar(statement)
 

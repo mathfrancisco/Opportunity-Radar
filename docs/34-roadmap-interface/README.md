@@ -12,7 +12,7 @@ verificação repetível no pipeline.
 
 | Fase | Objetivo | Cards | Entrada |
 | --- | --- | ---: | --- |
-| [Fase 14](fase-14/README.md) | Cadastrar e curar fonte, empresa e vaga pela interface | 5 | Fase 13 concluída |
+| [Fase 14](fase-14/README.md) | Cadastrar e curar fonte, empresa e vaga pela interface | 7 | Fase 13 concluída |
 | [Fase 15](fase-15/README.md) | Um sistema visual consistente, acessível e responsivo | 9 | Fase 13 concluída |
 
 ## Ordem macro
@@ -35,7 +35,9 @@ não extraído deve criá-lo lá, no formato que a Fase 15 define, em vez de est
 | F14-02 | F14-01 | Milestone M |
 | F14-03 | F14-01 | Milestone M |
 | F14-04 | Fase 13 | F14-05 |
-| F14-05 | F14-04 | Milestone M |
+| F14-05 | F14-04 | Milestone M, F14-07 |
+| F14-06 | F14-02 | Milestone M |
+| F14-07 | F14-05 | Nenhum |
 | F15-01 | Nenhum | F15-02 |
 | F15-02 | F15-01 | F15-03, F15-04, F15-05 |
 | F15-03 | F15-02 | F15-09, Milestone N |

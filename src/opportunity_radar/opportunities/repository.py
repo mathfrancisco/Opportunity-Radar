@@ -87,6 +87,16 @@ class OpportunityRepository:
                 select(func.pg_advisory_xact_lock(lock_key))
             ).scalar_one()
 
+    def run_raw_items(self, source_run_id: UUID) -> list[RawItemModel]:
+        """The evidence one run preserved, in the order it arrived."""
+        return list(
+            self.session.scalars(
+                select(RawItemModel)
+                .where(RawItemModel.source_run_id == source_run_id)
+                .order_by(RawItemModel.fetched_at, RawItemModel.id)
+            ).unique()
+        )
+
     def pending_raw_item_ids(
         self, limit: int, normalizer_version: str
     ) -> list[UUID]:

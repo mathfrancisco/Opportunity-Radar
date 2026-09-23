@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getSourceHealth, getSourceRuns, runSource } from './api'
+import {
+  createSource,
+  getSourceHealth,
+  getSourceRuns,
+  normalizeRun,
+  runSource,
+  submitManualRun,
+  updateSourceControls,
+} from './api'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -108,5 +116,130 @@ describe('runSource', () => {
       422,
     )
     await expect(runSource('source-1')).rejects.toThrow('Source is disabled.')
+  })
+})
+
+function sentBody(): Record<string, unknown> {
+  const call = vi.mocked(fetch).mock.calls[0]
+  return JSON.parse(String((call[1] as RequestInit).body)) as Record<string, unknown>
+}
+
+const sourceBody = {
+  id: 'source-9',
+  source_type: 'greenhouse',
+  name: 'Acme board',
+  enabled: false,
+  schedule: null,
+  priority: 100,
+  configuration: { board_token: 'acme' },
+  evidence_status: 'unverified',
+  reviewed_at: null,
+  terms_reviewed: false,
+  collector_local_tested: false,
+  version: 1,
+}
+
+describe('createSource', () => {
+  it('nunca envia habilitação: a fonte nasce desabilitada', async () => {
+    respond(sourceBody, 201)
+
+    const source = await createSource({
+      sourceType: 'greenhouse',
+      name: 'Acme board',
+      schedule: null,
+      priority: 100,
+      rateLimitPolicy: {},
+      configuration: { board_token: 'acme' },
+    })
+
+    const body = sentBody()
+    expect(body).not.toHaveProperty('enabled')
+    expect(body).not.toHaveProperty('evidence_status')
+    expect(body.configuration).toEqual({ board_token: 'acme' })
+    expect(source.enabled).toBe(false)
+    expect(source.version).toBe(1)
+  })
+})
+
+describe('updateSourceControls', () => {
+  it('envia a versão lida como expected_version', async () => {
+    respond({ ...sourceBody, terms_reviewed: true, version: 2 })
+
+    await updateSourceControls('source-9', {
+      enabled: false,
+      termsReviewed: true,
+      collectorLocalTested: false,
+      reviewedAt: null,
+      expectedVersion: 1,
+    })
+
+    expect(sentBody()).toMatchObject({ expected_version: 1, terms_reviewed: true })
+  })
+})
+
+describe('entrada manual', () => {
+  it('envia as entradas em modo manual, com o arquivo em base64', async () => {
+    respond({ id: 'run-1', status: 'SUCCEEDED', items_seen: 1, items_persisted: 1 }, 201)
+
+    await submitManualRun('source-manual', [
+      {
+        kind: 'FILE',
+        value: 'vaga.txt',
+        contentBase64: 'VmFnYQ==',
+        contentType: 'text/plain',
+        metadata: { title: 'Vaga' },
+      },
+    ])
+
+    const body = sentBody()
+    expect(body.mode).toBe('MANUAL')
+    expect(body.inputs).toEqual([
+      {
+        kind: 'FILE',
+        value: 'vaga.txt',
+        content_base64: 'VmFnYQ==',
+        content_type: 'text/plain',
+        metadata: { title: 'Vaga' },
+      },
+    ])
+  })
+
+  it('lê o desfecho da normalização item a item', async () => {
+    respond({
+      source_run_id: 'run-1',
+      items: [
+        {
+          raw_item_id: 'raw-1',
+          canonical_url: null,
+          result: {
+            status: 'SUCCEEDED',
+            identity_decision: 'NEW',
+            error_summary: null,
+            opportunity_id: 'opp-1',
+          },
+          opportunity: { title: 'Senior Python Engineer' },
+        },
+        {
+          raw_item_id: 'raw-2',
+          canonical_url: null,
+          result: {
+            status: 'FAILED',
+            identity_decision: null,
+            error_summary: 'title is required',
+            opportunity_id: null,
+          },
+          opportunity: null,
+        },
+      ],
+    })
+
+    const items = await normalizeRun('run-1')
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/opportunities/normalizations/runs/run-1',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(items[0]).toMatchObject({ opportunityId: 'opp-1', opportunityTitle: 'Senior Python Engineer' })
+    expect(items[1]).toMatchObject({ status: 'FAILED', errorSummary: 'title is required' })
   })
 })

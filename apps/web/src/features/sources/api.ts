@@ -1,4 +1,4 @@
-import { apiUrl, requestFailure } from '../../lib/api'
+import { apiUrl, failureFrom, requestFailure } from '../../lib/api'
 
 export interface SourceHealth {
   sourceDefinitionId: string
@@ -198,4 +198,178 @@ export async function runSource(sourceId: string): Promise<SourceRun> {
   const run = parseRun(body)
   if (run === null) throw new Error('A API retornou uma execução inválida.')
   return run
+}
+
+/** The collectors a source can be created for, with the configuration each one needs. */
+export const sourceTypes = ['ashby', 'lever', 'greenhouse', 'remotive', 'manual'] as const
+export type SourceType = (typeof sourceTypes)[number]
+
+export interface SourceDefinition {
+  id: string
+  sourceType: string
+  name: string
+  enabled: boolean
+  schedule: string | null
+  priority: number
+  configuration: Record<string, unknown>
+  evidenceStatus: string
+  reviewedAt: string | null
+  termsReviewed: boolean
+  collectorLocalTested: boolean
+  version: number
+}
+
+export interface NewSource {
+  sourceType: SourceType
+  name: string
+  schedule: string | null
+  priority: number
+  rateLimitPolicy: Record<string, number>
+  configuration: Record<string, string>
+}
+
+export interface SourceControls {
+  enabled: boolean
+  termsReviewed: boolean
+  collectorLocalTested: boolean
+  /** ISO date-time; null keeps the review date the source already has. */
+  reviewedAt: string | null
+  expectedVersion: number
+}
+
+export type ManualInputKind = 'URL' | 'TEXT' | 'FILE'
+
+export interface ManualInput {
+  kind: ManualInputKind
+  value: string
+  contentBase64?: string
+  contentType?: string
+  metadata: Record<string, string>
+}
+
+export interface RunNormalizationItem {
+  rawItemId: string
+  canonicalUrl: string | null
+  status: string
+  identityDecision: string | null
+  errorSummary: string | null
+  opportunityId: string | null
+  opportunityTitle: string | null
+}
+
+function parseSource(value: unknown): SourceDefinition | null {
+  if (!isRecord(value) || typeof value.id !== 'string') return null
+  return {
+    id: value.id,
+    sourceType: required(value.source_type, 'unknown'),
+    name: required(value.name, 'Fonte sem nome'),
+    enabled: value.enabled === true,
+    schedule: text(value.schedule),
+    priority: count(value.priority),
+    configuration: isRecord(value.configuration) ? value.configuration : {},
+    evidenceStatus: required(value.evidence_status, 'unverified'),
+    reviewedAt: text(value.reviewed_at),
+    termsReviewed: value.terms_reviewed === true,
+    collectorLocalTested: value.collector_local_tested === true,
+    version: count(value.version),
+  }
+}
+
+async function send(path: string, method: string, payload: unknown): Promise<unknown> {
+  const response = await fetch(apiUrl(path), {
+    method,
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+  })
+  if (!response.ok) throw await failureFrom(response)
+  return response.json()
+}
+
+export async function getSource(sourceId: string): Promise<SourceDefinition> {
+  const response = await fetch(apiUrl(`/sources/${sourceId}`), {
+    headers: { Accept: 'application/json' },
+  })
+  if (!response.ok) throw await failureFrom(response)
+  const source = parseSource(await response.json())
+  if (source === null) throw new Error('A API retornou uma fonte inválida.')
+  return source
+}
+
+/**
+ * Creates a source. It is born disabled, always: the form never sends `enabled`, and the
+ * gate that decides when an external source may run belongs to homologation, not here.
+ */
+export async function createSource(input: NewSource): Promise<SourceDefinition> {
+  const body = await send('/sources', 'POST', {
+    source_type: input.sourceType,
+    name: input.name,
+    schedule: input.schedule,
+    priority: input.priority,
+    rate_limit_policy: input.rateLimitPolicy,
+    configuration: input.configuration,
+  })
+  const source = parseSource(body)
+  if (source === null) throw new Error('A API retornou uma fonte inválida.')
+  return source
+}
+
+export async function updateSourceControls(
+  sourceId: string,
+  controls: SourceControls,
+): Promise<SourceDefinition> {
+  const body = await send(`/sources/${sourceId}`, 'PATCH', {
+    enabled: controls.enabled,
+    terms_reviewed: controls.termsReviewed,
+    collector_local_tested: controls.collectorLocalTested,
+    reviewed_at: controls.reviewedAt,
+    expected_version: controls.expectedVersion,
+  })
+  const source = parseSource(body)
+  if (source === null) throw new Error('A API retornou uma fonte inválida.')
+  return source
+}
+
+/** Submits manual inputs as one run. Repeated evidence comes back counted as skipped. */
+export async function submitManualRun(
+  sourceId: string,
+  inputs: ManualInput[],
+): Promise<SourceRun> {
+  const body = await send(`/sources/${sourceId}/runs`, 'POST', {
+    mode: 'MANUAL',
+    correlation_id: `manual-intake-${Date.now()}`,
+    inputs: inputs.map((input) => ({
+      kind: input.kind,
+      value: input.value,
+      content_base64: input.contentBase64 ?? null,
+      content_type: input.contentType ?? null,
+      metadata: input.metadata,
+    })),
+  })
+  const run = parseRun(body)
+  if (run === null) throw new Error('A API retornou uma execução inválida.')
+  return run
+}
+
+export async function normalizeRun(runId: string): Promise<RunNormalizationItem[]> {
+  const body = await send(`/opportunities/normalizations/runs/${runId}`, 'POST', undefined)
+  if (!isRecord(body) || !Array.isArray(body.items)) {
+    throw new Error('A API retornou uma normalização inválida.')
+  }
+  return body.items.flatMap((item): RunNormalizationItem[] => {
+    if (!isRecord(item) || typeof item.raw_item_id !== 'string' || !isRecord(item.result)) {
+      return []
+    }
+    const opportunity = isRecord(item.opportunity) ? item.opportunity : null
+    return [
+      {
+        rawItemId: item.raw_item_id,
+        canonicalUrl: text(item.canonical_url),
+        status: required(item.result.status, 'UNKNOWN'),
+        identityDecision: text(item.result.identity_decision),
+        errorSummary: text(item.result.error_summary),
+        opportunityId: text(item.result.opportunity_id),
+        opportunityTitle: opportunity ? text(opportunity.title) : null,
+      },
+    ]
+  })
 }

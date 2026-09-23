@@ -2,12 +2,15 @@ import { useState } from 'react'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { DataTable } from '../components/DataTable'
+import { ManualIntakePanel } from '../components/ManualIntakePanel'
 import { PageShell } from '../components/PageShell'
 import { CardListSkeleton, PanelSkeleton } from '../components/skeletons'
 import { EmptyState, ErrorState } from '../components/states'
+import { SourceControlsPanel } from '../components/SourceControlsPanel'
+import { SourceCreateForm } from '../components/SourceCreateForm'
 import { StatusBadge } from '../components/StatusBadge'
 import { Unavailable } from '../components/Unavailable'
-import { type SourceHealth } from '../features/sources/api'
+import { type SourceHealth, type SourceType } from '../features/sources/api'
 import { runStatusLabels, runStatusTones } from '../features/sources/states'
 import {
   useRunSource,
@@ -103,7 +106,13 @@ function SourceCard({
 }) {
   const run = useRunSource()
   const blocked = !source.enabled
+  const manual = source.sourceType === 'manual'
   const runHistoryId = `runs-${source.sourceDefinitionId}`
+  const controlsId = `controls-${source.sourceDefinitionId}`
+  const intakeId = `intake-panel-${source.sourceDefinitionId}`
+  const [panel, setPanel] = useState<'controls' | 'intake' | null>(null)
+  const toggle = (next: 'controls' | 'intake') =>
+    setPanel((current) => (current === next ? null : next))
 
   return (
     <Card as="article">
@@ -166,11 +175,31 @@ function SourceCard({
       )}
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
+        {manual ? (
+          <Button
+            aria-controls={intakeId}
+            aria-expanded={panel === 'intake'}
+            disabled={blocked}
+            onClick={() => toggle('intake')}
+          >
+            Registrar vaga
+          </Button>
+        ) : (
+          <Button
+            disabled={blocked || run.isPending}
+            onClick={() => run.mutate(source.sourceDefinitionId)}
+          >
+            {run.isPending ? 'Executando…' : 'Executar agora'}
+          </Button>
+        )}
         <Button
-          disabled={blocked || run.isPending}
-          onClick={() => run.mutate(source.sourceDefinitionId)}
+          aria-controls={controlsId}
+          aria-expanded={panel === 'controls'}
+          onClick={() => toggle('controls')}
+          size="sm"
+          variant="secondary"
         >
-          {run.isPending ? 'Executando…' : 'Executar agora'}
+          {panel === 'controls' ? 'Fechar homologação' : 'Homologação'}
         </Button>
         <Button
           aria-controls={runHistoryId}
@@ -183,7 +212,9 @@ function SourceCard({
         </Button>
         {blocked && (
           <span className="text-xs text-muted">
-            Fonte desabilitada: habilite após revisar termos e homologar o collector.
+            {manual
+              ? 'Fonte desabilitada: habilite na homologação para registrar vagas.'
+              : 'Fonte desabilitada: habilite na homologação, depois de revisar termos e testar o collector.'}
           </span>
         )}
       </div>
@@ -197,6 +228,17 @@ function SourceCard({
         </p>
       )}
 
+      {panel === 'controls' && (
+        <div id={controlsId}>
+          <SourceControlsPanel sourceId={source.sourceDefinitionId} />
+        </div>
+      )}
+      {panel === 'intake' && !blocked && (
+        <div id={intakeId}>
+          <ManualIntakePanel sourceId={source.sourceDefinitionId} />
+        </div>
+      )}
+
       {expanded && <RunHistory id={runHistoryId} sourceId={source.sourceDefinitionId} />}
     </Card>
   )
@@ -206,6 +248,9 @@ export function SourcesPage() {
   const health = useSourceHealth()
   const coverage = useSourceCoverage()
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [creating, setCreating] = useState<SourceType | null>(null)
+  const [created, setCreated] = useState<string | null>(null)
+  const hasManual = health.data?.items.some((item) => item.sourceType === 'manual') ?? true
 
   return (
     <PageShell
@@ -228,6 +273,43 @@ export function SourcesPage() {
           <p><span className="text-muted">Habilitadas / elegíveis</span><br /><strong>{coverage.data.enabledSources}</strong> / {coverage.data.eligibleSources}</p>
         </section>
       )}
+      <div className="mt-8 flex flex-wrap items-center gap-3">
+        {creating === null && (
+          <Button onClick={() => setCreating('greenhouse')}>Nova fonte</Button>
+        )}
+        {created && (
+          <p className="text-sm text-success-ink" role="status">
+            Fonte “{created}” criada, desabilitada. A homologação dela está no cartão abaixo.
+          </p>
+        )}
+      </div>
+      {creating === null && !hasManual && (
+        <p className="mt-4 max-w-2xl rounded-2xl border border-line bg-panel p-4 text-sm text-subtle">
+          Para registrar uma vaga avulsa é preciso uma fonte manual, e ainda não existe
+          nenhuma.{' '}
+          <button
+            className="font-medium text-ink underline decoration-accent decoration-2 underline-offset-4"
+            onClick={() => setCreating('manual')}
+            type="button"
+          >
+            Criar a fonte manual
+          </button>
+        </p>
+      )}
+      {creating !== null && (
+        <div className="mt-4">
+          <SourceCreateForm
+            initialType={creating}
+            key={creating}
+            onCancel={() => setCreating(null)}
+            onCreated={(source) => {
+              setCreating(null)
+              setCreated(source.name)
+            }}
+          />
+        </div>
+      )}
+
       <div className="mt-8 grid gap-3">
         {health.isPending && (
           <CardListSkeleton label="Carregando fontes…" />

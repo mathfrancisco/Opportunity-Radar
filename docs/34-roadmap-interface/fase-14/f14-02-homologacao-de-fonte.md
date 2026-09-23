@@ -1,6 +1,6 @@
 # CARD F14-02 — Homologação e kill switch de fonte pela interface
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-23
 - **Fase:** 14 — Cadastro e curadoria pela interface
 - **Depende de:** F14-01
 - **Bloqueia:** Milestone M
@@ -42,18 +42,41 @@ servidor continua sendo a autoridade, e o 422 dele precisa ser exibido tal como 
 
 ## Critérios de aceite
 
-- [ ] Homologar e habilitar uma fonte externa é possível pela tela quando o gate está
+- [x] Homologar e habilitar uma fonte externa é possível pela tela quando o gate está
       satisfeito.
-- [ ] Com requisito faltando, a tela explica qual é e não envia a habilitação.
-- [ ] Conflito de versão é reportado como conflito e recuperável sem recarregar a página.
-- [ ] Desabilitar uma fonte pela tela interrompe sua coleta agendada.
-- [ ] A recusa do servidor aparece na tela com a mensagem do domínio.
+- [x] Com requisito faltando, a tela explica qual é e não envia a habilitação.
+- [x] Conflito de versão é reportado como conflito e recuperável sem recarregar a página.
+- [x] Desabilitar uma fonte pela tela interrompe sua coleta agendada.
+- [x] A recusa do servidor aparece na tela com a mensagem do domínio.
 
 ## Verificação
 
 Homologar uma fonte pela tela e confirmar coleta agendada no ciclo seguinte; forçar conflito
 alterando a fonte por API entre a leitura e o envio; tentar habilitar uma fonte sem termos
 revisados e confirmar a recusa.
+
+## Nota de execução
+
+O conflito não era um conflito. `PATCH /sources/{id}` com versão desatualizada respondia
+422 `INVALID_CONFIGURATION`, a mesma resposta do gate recusado, e nenhuma tela conseguiria
+distinguir "releia" de "falta um requisito". Agora é 409 `version_conflict`
+(`SourceVersionConflictError`), e o painel mostra o aviso de conflito. Recarregar busca a
+versão nova sem desmarcar o que o operador marcou.
+
+O painel de homologação abre por fonte, lê o próprio recurso e lista o que falta antes de
+habilitar. O botão fica desabilitado com a lista ligada a ele por `aria-describedby`. O
+servidor continua sendo a autoridade, e a recusa dele aparece como veio.
+
+**Limite que o card não resolve:** evidência `confirmed` só é gravada pelo teste do
+collector contra o endpoint público (`scripts/enable_sources.py`), e testar ao vivo está
+fora do escopo desta fase. Uma fonte externa criada pela tela nasce `unverified` e fica
+bloqueada no gate, que explica exatamente isso. Habilitar e desabilitar pela tela vale para
+fontes cuja evidência já foi confirmada — o kill switch e a reabilitação — e para a fonte
+manual, que não tem gate.
+
+Desabilitar interrompe a coleta agendada porque o worker só coleta fontes habilitadas
+(`test_a_disabled_source_never_runs_by_the_clock`). Verificado no navegador: gate listando o
+que falta, conflito forçado por API entre a leitura e o envio, habilitar e desabilitar.
 
 ## Arquivos prováveis
 

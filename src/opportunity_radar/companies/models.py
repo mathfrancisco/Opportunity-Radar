@@ -110,7 +110,50 @@ class CompanySource(Base):
     verification_method: Mapped[str | None] = mapped_column(String(50))
     evidence_note: Mapped[str | None] = mapped_column(Text)
     last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     company: Mapped[Company] = relationship(back_populates="sources")
+    revisions: Mapped[list[CompanySourceRevision]] = relationship(
+        back_populates="company_source",
+        cascade="all, delete-orphan",
+        order_by="CompanySourceRevision.version",
+    )
+
+
+class CompanySourceRevision(Base):
+    """One registration or correction of a `CompanySource`, as it was made.
+
+    Written by the interface, never by the importer: research rows are their own record.
+    """
+
+    __tablename__ = "company_source_revision"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_source_id",
+            "version",
+            name="uq_company_source_revision_source_version",
+        ),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    company_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey(f"{SCHEMA}.company_source.id", ondelete="CASCADE"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    changes: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    evidence_note: Mapped[str] = mapped_column(Text, nullable=False)
+    company_source: Mapped[CompanySource] = relationship(back_populates="revisions")
 
 
 class CompanyImportBatch(Base):

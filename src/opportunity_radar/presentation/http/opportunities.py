@@ -30,6 +30,7 @@ from opportunity_radar.opportunities.service import (
     OpportunityService,
     OpportunityVersionConflictError,
     RawItemNotFoundError,
+    SourceRunNotFoundError,
 )
 from opportunity_radar.presentation.http.dependencies import get_session
 
@@ -125,6 +126,18 @@ class NormalizeResponse(BaseModel):
     occurrence: SourceOccurrenceResponse | None
 
 
+class RunNormalizationItemResponse(BaseModel):
+    raw_item_id: UUID
+    canonical_url: str | None
+    result: NormalizationResultResponse
+    opportunity: OpportunityResponse | None
+
+
+class RunNormalizationResponse(BaseModel):
+    source_run_id: UUID
+    items: list[RunNormalizationItemResponse]
+
+
 class NormalizePendingResponse(BaseModel):
     processed: int
     succeeded: int
@@ -144,6 +157,38 @@ def normalize_pending(
 ) -> NormalizePendingResponse:
     batch = OpportunityService(session).normalize_pending(limit)
     return _batch_response(batch)
+
+
+@router.post(
+    "/normalizations/runs/{source_run_id}", response_model=RunNormalizationResponse
+)
+def normalize_run(
+    source_run_id: UUID,
+    session: Session = Depends(get_session),
+) -> RunNormalizationResponse:
+    try:
+        outcomes = OpportunityService(session).normalize_run(source_run_id)
+    except SourceRunNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "source_run_not_found", "message": "Source run not found."},
+        ) from error
+    return RunNormalizationResponse(
+        source_run_id=source_run_id,
+        items=[
+            RunNormalizationItemResponse(
+                raw_item_id=raw_item.id,
+                canonical_url=raw_item.canonical_url,
+                result=_normalization_response(result),
+                opportunity=(
+                    _opportunity_response(result.opportunity)
+                    if result.opportunity is not None
+                    else None
+                ),
+            )
+            for raw_item, result in outcomes
+        ],
+    )
 
 
 @router.post("/normalizations/{raw_item_id}", response_model=NormalizeResponse)

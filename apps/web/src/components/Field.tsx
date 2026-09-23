@@ -30,15 +30,29 @@ export function Field({
   className = '',
 }: FieldProps) {
   const errorId = useId()
-  const described =
-    error && isControl(children)
-      ? cloneElement(children, { 'aria-invalid': true, 'aria-describedby': errorId })
-      : children
+  const labelId = useId()
+  const hintId = useId()
+  const describedBy = [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ')
+  // Named by the label text alone. Wrapping is kept for the association, but a wrapped
+  // select would otherwise lend its chosen option to the name: "Tipo Greenhouse".
+  const described = isControl(children)
+    ? cloneElement(children, {
+        'aria-labelledby': labelId,
+        ...(describedBy ? { 'aria-describedby': describedBy } : {}),
+        ...(error ? { 'aria-invalid': true } : {}),
+      })
+    : children
   return (
     <label className={`text-sm ${className}`.trim()}>
-      <span className={hiddenLabel ? 'sr-only' : 'text-muted'}>{label}</span>
+      <span className={hiddenLabel ? 'sr-only' : 'text-muted'} id={labelId}>
+        {label}
+      </span>
       {described}
-      {hint && <span className="mt-1 block text-xs text-muted">{hint}</span>}
+      {hint && (
+        <span className="mt-1 block text-xs text-muted" id={hintId}>
+          {hint}
+        </span>
+      )}
       {error && (
         <span className="mt-1 block text-xs text-danger-ink" id={errorId}>
           {error}

@@ -3,14 +3,23 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any, Literal, NoReturn
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.service import AcquisitionService
-from opportunity_radar.companies.models import Company
+from opportunity_radar.companies.models import Company, CompanySource
+from opportunity_radar.companies.registration import (
+    CompanyIdentityConflictError,
+    CompanyNotFoundError,
+    CompanyRegistration,
+    CompanyRegistrationError,
+    CompanySourceNotFoundError,
+    CompanyVersionConflictError,
+)
 from opportunity_radar.companies.repository import CompanyRepository
 from opportunity_radar.presentation.http.dependencies import get_session
 
@@ -30,6 +39,13 @@ class CompanyAliasResponse(BaseModel):
     alias: str
 
 
+class CompanySourceRevisionResponse(BaseModel):
+    version: int
+    changed_at: datetime
+    changes: dict[str, Any]
+    evidence_note: str
+
+
 class CompanySourceResponse(BaseModel):
     id: UUID
     name: str
@@ -39,6 +55,8 @@ class CompanySourceResponse(BaseModel):
     verification_method: str | None
     evidence: str | None
     last_verified_at: datetime | None
+    version: int
+    revisions: list[CompanySourceRevisionResponse]
 
 
 class CompanyResponse(BaseModel):
@@ -50,6 +68,38 @@ class CompanyResponse(BaseModel):
     verification_state: str
     aliases: list[CompanyAliasResponse]
     sources: list[CompanySourceResponse]
+    created_at: datetime
+    updated_at: datetime
+    version: int
+
+
+class CompanyBody(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    domain: str | None = Field(default=None, max_length=253)
+    priority: Literal["high", "normal", "low"] = "normal"
+    radar_status: Literal["active", "paused"] = "active"
+    aliases: list[str] = Field(default_factory=list, max_length=50)
+
+
+class CompanyUpdateBody(CompanyBody):
+    expected_version: int = Field(ge=1)
+
+
+class CompanyRegistrationResponse(BaseModel):
+    outcome: Literal["created", "matched"]
+    aliases_added: int
+    company: CompanyResponse
+
+
+class CompanySourceBody(BaseModel):
+    source_type: str = Field(min_length=1, max_length=50)
+    endpoint: str = Field(min_length=1, max_length=2048)
+    external_key: str = Field(min_length=1, max_length=255)
+    evidence_note: str = Field(min_length=1, max_length=4000)
+
+
+class CompanySourceUpdateBody(CompanySourceBody):
+    expected_version: int = Field(ge=1)
 
 
 class CompanyPageResponse(BaseModel):
@@ -79,16 +129,7 @@ def company_response(company: Company) -> CompanyResponse:
             for alias in company.aliases
         ],
         sources=[
-            CompanySourceResponse(
-                id=source.id,
-                name=source.source_type,
-                url=source.endpoint,
-                status=source.verification_status,
-                external_key=source.external_key,
-                verification_method=source.verification_method,
-                evidence=source.evidence_note,
-                last_verified_at=source.last_verified_at,
-            )
+            company_source_response(source)
             for source in sorted(
                 company.sources,
                 key=lambda item: (
@@ -98,6 +139,60 @@ def company_response(company: Company) -> CompanyResponse:
                 ),
             )
         ],
+        created_at=company.created_at,
+        updated_at=company.updated_at,
+        version=company.version,
+    )
+
+
+def company_source_response(source: CompanySource) -> CompanySourceResponse:
+    return CompanySourceResponse(
+        id=source.id,
+        name=source.source_type,
+        url=source.endpoint,
+        status=source.verification_status,
+        external_key=source.external_key,
+        verification_method=source.verification_method,
+        evidence=source.evidence_note,
+        last_verified_at=source.last_verified_at,
+        version=source.version,
+        revisions=[
+            CompanySourceRevisionResponse(
+                version=revision.version,
+                changed_at=revision.changed_at,
+                changes=revision.changes,
+                evidence_note=revision.evidence_note,
+            )
+            for revision in source.revisions
+        ],
+    )
+
+
+@router.post(
+    "",
+    response_model=CompanyRegistrationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def register_company(
+    body: CompanyBody, session: Session = Depends(get_session)
+) -> CompanyRegistrationResponse:
+    repository = CompanyRepository(session)
+    try:
+        result = CompanyRegistration(repository).register(
+            name=body.name,
+            domain=body.domain,
+            priority=body.priority,
+            radar_status=body.radar_status,
+            aliases=tuple(body.aliases),
+        )
+    except CompanyRegistrationError as error:
+        _raise_registration_error(error)
+    company = repository.get(result.company.id)
+    assert company is not None
+    return CompanyRegistrationResponse(
+        outcome=result.outcome,
+        aliases_added=result.aliases_added,
+        company=company_response(company),
     )
 
 
@@ -137,6 +232,111 @@ def get_company(
             detail={"code": "company_not_found", "message": "Company not found."},
         )
     return company_response(company)
+
+
+@router.patch("/{company_id}", response_model=CompanyResponse)
+def update_company(
+    company_id: UUID,
+    body: CompanyUpdateBody,
+    session: Session = Depends(get_session),
+) -> CompanyResponse:
+    repository = CompanyRepository(session)
+    try:
+        CompanyRegistration(repository).update(
+            company_id,
+            expected_version=body.expected_version,
+            name=body.name,
+            domain=body.domain,
+            priority=body.priority,
+            radar_status=body.radar_status,
+            aliases=tuple(body.aliases),
+        )
+    except (
+        CompanyNotFoundError,
+        CompanyVersionConflictError,
+        CompanyRegistrationError,
+    ) as error:
+        _raise_registration_error(error)
+    company = repository.get(company_id)
+    assert company is not None
+    return company_response(company)
+
+
+@router.post(
+    "/{company_id}/sources",
+    response_model=CompanySourceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_company_source(
+    company_id: UUID,
+    body: CompanySourceBody,
+    session: Session = Depends(get_session),
+) -> CompanySourceResponse:
+    repository = CompanyRepository(session)
+    try:
+        source = CompanyRegistration(repository).add_source(
+            company_id, **body.model_dump()
+        )
+    except (CompanyNotFoundError, CompanyRegistrationError) as error:
+        _raise_registration_error(error)
+    return company_source_response(source)
+
+
+@router.patch(
+    "/{company_id}/sources/{source_id}", response_model=CompanySourceResponse
+)
+def update_company_source(
+    company_id: UUID,
+    source_id: UUID,
+    body: CompanySourceUpdateBody,
+    session: Session = Depends(get_session),
+) -> CompanySourceResponse:
+    repository = CompanyRepository(session)
+    try:
+        source = CompanyRegistration(repository).update_source(
+            company_id, source_id, **body.model_dump()
+        )
+    except (
+        CompanySourceNotFoundError,
+        CompanyVersionConflictError,
+        CompanyRegistrationError,
+    ) as error:
+        _raise_registration_error(error)
+    return company_source_response(source)
+
+
+def _raise_registration_error(error: Exception) -> NoReturn:
+    if isinstance(error, CompanyNotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "company_not_found", "message": "Company not found."},
+        ) from error
+    if isinstance(error, CompanySourceNotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "company_source_not_found",
+                "message": "Company source not found.",
+            },
+        ) from error
+    if isinstance(error, CompanyVersionConflictError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "version_conflict", "message": str(error)},
+        ) from error
+    if isinstance(error, CompanyIdentityConflictError):
+        detail: dict[str, str] = {"code": "identity_conflict", "message": str(error)}
+        if error.field is not None:
+            detail["field"] = error.field
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from error
+    if isinstance(error, CompanyRegistrationError):
+        detail = {"code": "invalid_company", "message": str(error)}
+        if error.field is not None:
+            detail["field"] = error.field
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=detail
+        ) from error
+    raise error
 
 
 @router.post("/{company_id}/detect-source", response_model=SourceProposalResponse)

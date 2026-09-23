@@ -26,7 +26,11 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
     SourceRunModel,
 )
-from opportunity_radar.acquisition.service import AcquisitionService, SourceNotFoundError
+from opportunity_radar.acquisition.service import (
+    AcquisitionService,
+    SourceNotFoundError,
+    SourceVersionConflictError,
+)
 from opportunity_radar.presentation.http.dependencies import get_alert_service, get_session
 
 router = APIRouter(tags=["acquisition"])
@@ -333,11 +337,16 @@ def _run_response(run: SourceRunModel) -> SourceRunResponse:
 
 
 def _raise_acquisition_error(error: AcquisitionError) -> NoReturn:
+    if isinstance(error, SourceVersionConflictError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "version_conflict", "message": error.summary},
+        ) from error
     if isinstance(error, SourceNotFoundError):
         status_code = status.HTTP_404_NOT_FOUND
     else:
         status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
-    raise HTTPException(
-        status_code=status_code,
-        detail={"code": error.code.value, "message": error.summary},
-    ) from error
+    detail: dict[str, str] = {"code": error.code.value, "message": error.summary}
+    if error.field is not None:
+        detail["field"] = error.field
+    raise HTTPException(status_code=status_code, detail=detail) from error
