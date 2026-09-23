@@ -1,5 +1,9 @@
 import { type FormEvent, useState } from 'react'
-import { type CompanyDetailSource, supportedAts } from '../features/companies/api'
+import {
+  type CompanyDetailSource,
+  type ProposalOutcome,
+  supportedAts,
+} from '../features/companies/api'
 import { useSaveCompanySource } from '../features/companies/useCompanies'
 import { ConflictError, FieldError } from '../lib/api'
 import { Button } from './Button'
@@ -16,7 +20,7 @@ interface CompanySourceFormProps {
   companyId: string
   /** Null registers a new ATS record; a source corrects that one. */
   source: CompanySourceFormSource | null
-  onSaved: () => void
+  onSaved: (proposalOutcome: ProposalOutcome) => void
   onCancel: () => void
   onReload: () => void
 }
@@ -81,7 +85,7 @@ export function CompanySourceForm({
         externalKey: externalKey.trim(),
         evidenceNote: evidenceNote.trim(),
       },
-      { onSuccess: onSaved },
+      { onSuccess: (result) => onSaved(result.proposalOutcome) },
     )
   }
 

@@ -8,8 +8,17 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.proposals import (
+    ProposalChangedError,
+    follow_correction,
+    proposal_for,
+)
+from opportunity_radar.companies.models import CompanySource
 from opportunity_radar.platform.config import Settings
+from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.presentation.http.app import create_app
 
 pytestmark = [
@@ -274,7 +283,8 @@ def test_company_source_is_registered_corrected_and_proposed_inertly() -> None:
         },
     )
     assert corrected.status_code == 200
-    after = corrected.json()
+    assert corrected.json()["proposal_outcome"] == "none"
+    after = corrected.json()["source"]
     assert after["external_key"] == "rightkey"
     assert after["version"] == 2
     assert [revision["version"] for revision in after["revisions"]] == [1, 2]
@@ -307,3 +317,142 @@ def test_company_source_is_registered_corrected_and_proposed_inertly() -> None:
     repeated = client.post(f"/companies/{company['id']}/detect-source")
     assert repeated.json()["result"] == "already_proposed"
     assert repeated.json()["source_id"] == proposed.json()["source_id"]
+
+
+def _proposed(client: TestClient, key: str) -> tuple[dict, dict, dict]:
+    """A company with an ATS record and the inert source proposed from it."""
+    company = client.post("/companies", json={"name": _unique("Proposal Owner")}).json()[
+        "company"
+    ]
+    record = client.post(
+        f"/companies/{company['id']}/sources",
+        json={
+            "source_type": "greenhouse",
+            "endpoint": f"https://boards.greenhouse.io/{key}",
+            "external_key": key,
+            "evidence_note": "Linked from the careers page.",
+        },
+    ).json()
+    proposal = client.post(f"/companies/{company['id']}/detect-source").json()
+    assert proposal["result"] == "proposed"
+    return company, record, client.get(f"/sources/{proposal['source_id']}").json()
+
+
+def _correct(client: TestClient, company: dict, record: dict, key: str, version: int):
+    return client.patch(
+        f"/companies/{company['id']}/sources/{record['id']}",
+        json={
+            "source_type": "greenhouse",
+            "endpoint": f"https://boards.greenhouse.io/{key}",
+            "external_key": key,
+            "evidence_note": f"The board moved to {key}.",
+            "expected_version": version,
+        },
+    )
+
+
+def test_a_correction_reaches_an_inert_proposal() -> None:
+    client = _client()
+    old, new = f"old{uuid4().hex[:6]}", f"new{uuid4().hex[:6]}"
+    company, record, proposal = _proposed(client, old)
+
+    corrected = _correct(client, company, record, new, record["version"])
+
+    assert corrected.status_code == 200
+    assert corrected.json()["proposal_outcome"] == "updated"
+    shown = corrected.json()["source"]["proposal"]
+    assert shown["external_key"] == new
+    assert shown["outdated"] is False
+    source = client.get(f"/sources/{proposal['id']}").json()
+    assert source["configuration"]["board_token"] == new
+    assert source["configuration"]["discovery_evidence"] == f"The board moved to {new}."
+    assert source["version"] == proposal["version"] + 1
+    assert source["enabled"] is False
+    again = client.post(f"/companies/{company['id']}/detect-source").json()
+    assert again["result"] == "already_proposed"
+    assert again["source_id"] == proposal["id"]
+
+
+def test_a_homologated_proposal_is_reported_outdated_and_reopened_explicitly() -> None:
+    client = _client()
+    old, new = f"old{uuid4().hex[:6]}", f"new{uuid4().hex[:6]}"
+    company, record, proposal = _proposed(client, old)
+    reviewed = client.patch(
+        f"/sources/{proposal['id']}",
+        json={
+            "enabled": False,
+            "terms_reviewed": True,
+            "collector_local_tested": False,
+            "reviewed_at": "2026-09-23T12:00:00Z",
+            "expected_version": proposal["version"],
+        },
+    ).json()
+
+    corrected = _correct(client, company, record, new, record["version"])
+
+    assert corrected.json()["proposal_outcome"] == "outdated"
+    shown = corrected.json()["source"]["proposal"]
+    assert shown["external_key"] == old
+    assert shown["outdated"] is True
+    untouched = client.get(f"/sources/{proposal['id']}").json()
+    assert untouched["version"] == reviewed["version"]
+    assert untouched["configuration"]["board_token"] == old
+    detail = client.get(f"/companies/{company['id']}").json()
+    assert detail["sources"][0]["proposal"]["outdated"] is True
+
+    stale = client.post(
+        f"/sources/{proposal['id']}/reopen-homologation",
+        json={"expected_version": proposal["version"]},
+    )
+    assert stale.status_code == 409
+
+    reopened = client.post(
+        f"/sources/{proposal['id']}/reopen-homologation",
+        json={"expected_version": reviewed["version"]},
+    )
+    assert reopened.status_code == 200
+    body = reopened.json()
+    assert body["configuration"]["board_token"] == new
+    assert body["enabled"] is False
+    assert body["terms_reviewed"] is False
+    assert body["collector_local_tested"] is False
+    assert body["reviewed_at"] is None
+    assert body["evidence_status"] == "ats_identified"
+    assert body["version"] == reviewed["version"] + 1
+    history = body["configuration"]["reopened_homologations"]
+    assert history[-1]["previous_key"] == old
+    assert client.get(f"/companies/{company['id']}").json()["sources"][0]["proposal"][
+        "outdated"
+    ] is False
+
+
+def test_a_proposal_that_moves_mid_correction_refuses_both_writes() -> None:
+    client = _client()
+    old, new = f"old{uuid4().hex[:6]}", f"new{uuid4().hex[:6]}"
+    company, record, proposal = _proposed(client, old)
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+
+    with Session(engine) as session:
+        # This session reads the proposal first, as a correction does (kept referenced: the
+        # identity map is weak, and a collected row would simply be read fresh)...
+        first_read = proposal_for(session, record["id"])
+        assert first_read is not None
+        # ...and another writer changes it before the correction's guarded update lands.
+        with engine.begin() as other:
+            other.execute(
+                text(
+                    "UPDATE acquisition.source_definition SET version = version + 1 "
+                    "WHERE id = :id"
+                ),
+                {"id": proposal["id"]},
+            )
+        stored = session.get(CompanySource, record["id"])
+        assert stored is not None
+        stored.external_key = new
+        with pytest.raises(ProposalChangedError):
+            follow_correction(session, stored)
+        session.rollback()
+
+    unchanged = client.get(f"/companies/{company['id']}").json()["sources"][0]
+    assert unchanged["external_key"] == old
+    assert unchanged["proposal"]["external_key"] == old

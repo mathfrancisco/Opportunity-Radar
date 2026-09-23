@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.alerts import SourceAlertService
+from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
     AcquisitionErrorCode,
@@ -24,14 +25,20 @@ from opportunity_radar.acquisition.domain import (
 )
 from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
+    SourceProbeModel,
     SourceRunModel,
 )
 from opportunity_radar.acquisition.service import (
     AcquisitionService,
     SourceNotFoundError,
+    SourceProbeTooSoonError,
     SourceVersionConflictError,
 )
-from opportunity_radar.presentation.http.dependencies import get_alert_service, get_session
+from opportunity_radar.presentation.http.dependencies import (
+    get_alert_service,
+    get_collector_registry,
+    get_session,
+)
 
 router = APIRouter(tags=["acquisition"])
 
@@ -87,6 +94,28 @@ class SourceControlsBody(BaseModel):
     collector_local_tested: bool
     reviewed_at: datetime | None = None
     expected_version: int = Field(ge=1)
+
+
+class SourceProbeBody(BaseModel):
+    expected_version: int = Field(ge=1)
+
+
+class SourceProbeResult(BaseModel):
+    id: UUID
+    requested_by: str
+    status: str
+    started_at: datetime
+    finished_at: datetime | None
+    items_seen: int
+    http_requests: int
+    error_code: str | None
+    detail: str | None
+    evidence_recorded: bool
+
+
+class SourceProbeResponse(BaseModel):
+    probe: SourceProbeResult
+    source: SourceDefinitionResponse
 
 
 class ManualInputBody(BaseModel):
@@ -199,6 +228,54 @@ def update_source_controls(
 
 
 @router.post(
+    "/sources/{source_id}/reopen-homologation", response_model=SourceDefinitionResponse
+)
+def reopen_homologation(
+    source_id: UUID,
+    body: SourceProbeBody,
+    session: Session = Depends(get_session),
+) -> SourceDefinitionResponse:
+    """Disable a proposal, clear its gate and point it at its corrected ATS record."""
+    try:
+        source = AcquisitionService(session).reopen_homologation(
+            source_id, expected_version=body.expected_version
+        )
+    except AcquisitionError as error:
+        _raise_acquisition_error(error)
+    return _source_response(source)
+
+
+@router.post("/sources/{source_id}/probe", response_model=SourceProbeResponse)
+async def probe_source(
+    source_id: UUID,
+    body: SourceProbeBody,
+    session: Session = Depends(get_session),
+    registry: CollectorRegistry = Depends(get_collector_registry),
+) -> SourceProbeResponse:
+    """Test the collector against the public endpoint; a pass confirms the evidence.
+
+    A failed probe is an answer, not an error: 200 with the domain's code and summary.
+    A pass that found the source changed under it recorded nothing, and answers 409.
+    """
+    try:
+        probe, source = await AcquisitionService(session, registry=registry).probe_source(
+            source_id, expected_version=body.expected_version
+        )
+    except AcquisitionError as error:
+        _raise_acquisition_error(error)
+    if probe.status == "PASSED" and not probe.evidence_recorded:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "version_conflict",
+                "message": "the collector read the endpoint, but the source changed "
+                "meanwhile; refresh it and probe again",
+            },
+        )
+    return SourceProbeResponse(probe=_probe_response(probe), source=_source_response(source))
+
+
+@router.post(
     "/sources/{source_id}/runs",
     response_model=SourceRunResponse,
     status_code=status.HTTP_201_CREATED,
@@ -208,6 +285,7 @@ async def execute_source(
     body: CreateRunBody,
     session: Session = Depends(get_session),
     alerts: SourceAlertService = Depends(get_alert_service),
+    registry: CollectorRegistry = Depends(get_collector_registry),
 ) -> SourceRunResponse:
     try:
         manual_inputs = tuple(_manual_input(item) for item in body.inputs)
@@ -222,7 +300,9 @@ async def execute_source(
             max_items=body.max_items,
             correlation_id=body.correlation_id,
         )
-        run = await AcquisitionService(session, alerts=alerts).execute(source_id, request)
+        run = await AcquisitionService(
+            session, registry=registry, alerts=alerts
+        ).execute(source_id, request)
     except AcquisitionError as error:
         _raise_acquisition_error(error)
     except ValueError as error:
@@ -312,6 +392,21 @@ def _source_response(source: SourceDefinitionModel) -> SourceDefinitionResponse:
     )
 
 
+def _probe_response(probe: SourceProbeModel) -> SourceProbeResult:
+    return SourceProbeResult(
+        id=probe.id,
+        requested_by=probe.requested_by,
+        status=probe.status,
+        started_at=probe.started_at,
+        finished_at=probe.finished_at,
+        items_seen=probe.items_seen,
+        http_requests=probe.http_requests,
+        error_code=probe.error_code,
+        detail=probe.detail,
+        evidence_recorded=probe.evidence_recorded,
+    )
+
+
 def _run_response(run: SourceRunModel) -> SourceRunResponse:
     return SourceRunResponse(
         id=run.id,
@@ -337,6 +432,16 @@ def _run_response(run: SourceRunModel) -> SourceRunResponse:
 
 
 def _raise_acquisition_error(error: AcquisitionError) -> NoReturn:
+    if isinstance(error, SourceProbeTooSoonError):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": error.code.value,
+                "message": error.summary,
+                "retry_after_seconds": error.retry_after_seconds,
+            },
+            headers={"Retry-After": str(error.retry_after_seconds)},
+        ) from error
     if isinstance(error, SourceVersionConflictError):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

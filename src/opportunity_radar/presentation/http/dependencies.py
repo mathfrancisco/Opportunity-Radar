@@ -11,6 +11,8 @@ from opportunity_radar.acquisition.alerts import (
 from opportunity_radar.acquisition.alerts import (
     build_source_alert_notifier as _build_notifier,
 )
+from opportunity_radar.acquisition.collectors import CollectorRegistry
+from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.matching.adapters import build_analysis_adapter
 from opportunity_radar.matching.analysis import SemanticAnalysisPort
 from opportunity_radar.platform.config import Settings, get_settings
@@ -40,6 +42,17 @@ def get_alert_service(
         notifier=cached_alert_notifier(),
         threshold=settings.source_alert_failure_threshold,
     )
+
+
+@lru_cache
+def cached_collector_registry() -> CollectorRegistry:
+    settings = get_settings()
+    return build_collector_registry(greenhouse_base_url=settings.greenhouse_base_url)
+
+
+def get_collector_registry() -> CollectorRegistry:
+    """The worker's collectors, so a click and the clock read the same endpoints."""
+    return cached_collector_registry()
 
 
 @lru_cache

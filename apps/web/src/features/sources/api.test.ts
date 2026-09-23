@@ -4,6 +4,7 @@ import {
   getSourceHealth,
   getSourceRuns,
   normalizeRun,
+  probeSource,
   runSource,
   submitManualRun,
   updateSourceControls,
@@ -241,5 +242,29 @@ describe('entrada manual', () => {
     )
     expect(items[0]).toMatchObject({ opportunityId: 'opp-1', opportunityTitle: 'Senior Python Engineer' })
     expect(items[1]).toMatchObject({ status: 'FAILED', errorSummary: 'title is required' })
+  })
+})
+
+describe('probeSource', () => {
+  it('lê a sonda que falhou como resposta, não como erro', async () => {
+    respond({
+      probe: {
+        id: 'probe-1',
+        status: 'FAILED',
+        items_seen: 0,
+        http_requests: 1,
+        error_code: 'SOURCE_NOT_FOUND',
+        detail: 'board not found',
+        evidence_recorded: false,
+        finished_at: '2026-09-23T12:00:00Z',
+      },
+      source: sourceBody,
+    })
+
+    const { probe, source } = await probeSource('source-9', 1)
+
+    expect(sentBody()).toEqual({ expected_version: 1 })
+    expect(probe).toMatchObject({ status: 'FAILED', errorCode: 'SOURCE_NOT_FOUND' })
+    expect(source.evidenceStatus).toBe('unverified')
   })
 })

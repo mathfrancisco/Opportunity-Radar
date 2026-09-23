@@ -13,27 +13,21 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from opportunity_radar.acquisition.ashby import AshbyCollector
-from opportunity_radar.acquisition.collectors import CollectorRegistry, ManualCollector
-from opportunity_radar.acquisition.domain import (
-    AcquisitionError,
-    CollectedItem,
-    CollectionRequest,
-)
-from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
-from opportunity_radar.acquisition.lever import LeverCollector
+from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.models import SourceDefinitionModel
-from opportunity_radar.acquisition.remotive import RemotiveCollector
+from opportunity_radar.acquisition.probing import (
+    PROBE_TYPES,
+    PUBLIC_ENDPOINT_REFERENCES,
+    ProbeOutcome,
+    probe_request,
+    run_probe,
+)
+from opportunity_radar.acquisition.registry import build_collector_registry
+from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.companies.models import CompanySource  # noqa: F401
 from opportunity_radar.platform.database import create_database_engine
 
-RESEARCHED_TYPES = ("ashby", "lever", "greenhouse", "remotive")
-PUBLIC_ENDPOINT_REFERENCES = {
-    "ashby": "https://developers.ashbyhq.com/docs/public-job-posting-api",
-    "greenhouse": "https://docs.greenhouse.io/job-board.html",
-    "lever": "https://github.com/lever/postings-api",
-    "remotive": "https://remotive.com/api-documentation",
-}
+RESEARCHED_TYPES = PROBE_TYPES
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +40,7 @@ class ProbeResult:
     items_seen: int = 0
     http_requests: int = 0
     error_code: str | None = None
+    outcome: ProbeOutcome | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -61,38 +56,11 @@ class ProbeResult:
 
 
 def _registry() -> CollectorRegistry:
-    return CollectorRegistry(
-        (
-            ManualCollector(),
-            AshbyCollector(),
-            LeverCollector(),
-            GreenhouseCollector(),
-            RemotiveCollector(),
+    return build_collector_registry(
+        greenhouse_base_url=os.environ.get(
+            "GREENHOUSE_BASE_URL", "https://boards-api.greenhouse.io"
         )
     )
-
-
-def _request(source: SourceDefinitionModel, *, max_items: int) -> CollectionRequest:
-    configuration = source.configuration
-    common: dict[str, Any] = {"max_items": max_items}
-    if source.source_type == "ashby":
-        common["company_reference"] = _required(configuration, "board_identifier")
-        common["company_name"] = configuration.get("company_name")
-    elif source.source_type == "lever":
-        common["company_reference"] = _required(configuration, "site_identifier")
-        common["company_name"] = configuration.get("company_name")
-        common["api_region"] = configuration.get("api_region", "global")
-    elif source.source_type == "greenhouse":
-        common["company_reference"] = _required(configuration, "board_token")
-        common["company_name"] = configuration.get("company_name")
-    return CollectionRequest(**common)
-
-
-def _required(configuration: dict[str, Any], key: str) -> str:
-    value = configuration.get(key)
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"configuration requires {key}")
-    return value.strip()
 
 
 async def _probe(
@@ -101,62 +69,24 @@ async def _probe(
     *,
     max_items: int,
 ) -> ProbeResult:
-    telemetry_request: CollectionRequest | None = None
-    try:
-        telemetry_request = _request(source, max_items=max_items)
-        collector = registry.resolve(source.source_type)
-        items_seen = 0
-        async for item in collector.discover(telemetry_request):
-            if not isinstance(item, CollectedItem):
-                raise TypeError("collector emitted an invalid item")
-            items_seen += 1
-            if items_seen >= max_items:
-                break
-        return ProbeResult(
-            source_id=str(source.id),
-            source_name=source.name,
-            source_type=source.source_type,
-            ok=True,
-            detail="public endpoint responded and the collector parsed its schema",
-            items_seen=items_seen,
-            http_requests=telemetry_request.telemetry.http_requests,
-        )
-    except AcquisitionError as error:
-        return ProbeResult(
-            source_id=str(source.id),
-            source_name=source.name,
-            source_type=source.source_type,
-            ok=False,
-            detail=error.summary,
-            error_code=error.code.value,
-            http_requests=(
-                telemetry_request.telemetry.http_requests if telemetry_request else 0
-            ),
-        )
-    except (TypeError, ValueError) as error:
-        return ProbeResult(
-            source_id=str(source.id),
-            source_name=source.name,
-            source_type=source.source_type,
-            ok=False,
-            detail=str(error),
-            error_code="INVALID_CONFIGURATION",
-            http_requests=(
-                telemetry_request.telemetry.http_requests if telemetry_request else 0
-            ),
-        )
-    except Exception as error:
-        return ProbeResult(
-            source_id=str(source.id),
-            source_name=source.name,
-            source_type=source.source_type,
-            ok=False,
-            detail=str(error),
-            error_code="UNKNOWN_EXTERNAL_ERROR",
-            http_requests=(
-                telemetry_request.telemetry.http_requests if telemetry_request else 0
-            ),
-        )
+    """The domain's probe, the same one the interface runs, reported for this script."""
+    outcome = await run_probe(
+        source.source_type,
+        dict(source.configuration or {}),
+        registry,
+        max_items=max_items,
+    )
+    return ProbeResult(
+        source_id=str(source.id),
+        source_name=source.name,
+        source_type=source.source_type,
+        ok=outcome.ok,
+        detail=outcome.detail,
+        items_seen=outcome.items_seen,
+        http_requests=outcome.http_requests,
+        error_code=outcome.error_code,
+        outcome=outcome,
+    )
 
 
 def _probe_candidate(source: SourceDefinitionModel, *, include_remotive: bool) -> bool:
@@ -166,13 +96,15 @@ def _probe_candidate(source: SourceDefinitionModel, *, include_remotive: bool) -
     if source.source_type == "remotive":
         return include_remotive
     try:
-        _request(source, max_items=1)
+        probe_request(source.source_type, dict(source.configuration or {}), max_items=1)
     except ValueError:
         return False
     return True
 
 
-def _homologation_audit(result: ProbeResult, reviewed_at: datetime) -> dict[str, Any]:
+def _homologation_audit(
+    result: ProbeResult, reviewed_at: datetime, *, probe_id: str | None = None
+) -> dict[str, Any]:
     """Keep the operator-approved gate and its technical proof with the source."""
     return {
         "public_endpoint_reference": PUBLIC_ENDPOINT_REFERENCES[result.source_type],
@@ -182,6 +114,7 @@ def _homologation_audit(result: ProbeResult, reviewed_at: datetime) -> dict[str,
             "status": "passed",
             "items_seen": result.items_seen,
             "http_requests": result.http_requests,
+            **({"probe_id": probe_id} if probe_id is not None else {}),
         },
     }
 
@@ -221,10 +154,25 @@ def activate_sources(
         }
 
     registry = _registry()
+    probes_started_at = datetime.now(UTC)
     results = asyncio.run(
         _probe_all(candidates, registry, max_items=max_items)
     )
+    # Every attempt joins the same history the interface writes, passed or failed.
+    service = AcquisitionService(session, registry=registry)
+    probe_ids: dict[str, str] = {}
+    for source, result in zip(candidates, results, strict=True):
+        if result.outcome is None:
+            continue
+        probe = service.record_script_probe(
+            source,
+            result.outcome,
+            probes_started_at,
+            evidence_recorded=result.ok and not probe_only,
+        )
+        probe_ids[str(source.id)] = str(probe.id)
     if probe_only:
+        session.commit()
         return {
             "status": "probe_completed",
             "candidates": len(candidates),
@@ -242,7 +190,9 @@ def activate_sources(
         source.collector_local_tested = True
         source.configuration = {
             **source.configuration,
-            "homologation_audit": _homologation_audit(result, reviewed_at),
+            "homologation_audit": _homologation_audit(
+                result, reviewed_at, probe_id=probe_ids.get(str(source.id))
+            ),
         }
         source.version += 1
         activated.append(source.name)

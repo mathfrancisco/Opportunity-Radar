@@ -8,6 +8,7 @@ import {
   getCompanies,
   getCompany,
   registerCompany,
+  reopenHomologation,
   updateCompany,
   updateCompanySource,
 } from './api'
@@ -68,13 +69,27 @@ interface SaveCompanySource extends CompanySourceInput {
 export function useSaveCompanySource(companyId: string) {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: ({ sourceId, expectedVersion, ...input }: SaveCompanySource) =>
+    mutationFn: async ({ sourceId, expectedVersion, ...input }: SaveCompanySource) =>
       sourceId === null || expectedVersion === null
-        ? addCompanySource(companyId, input)
+        ? { proposalOutcome: 'none' as const, source: await addCompanySource(companyId, input) }
         : updateCompanySource(companyId, sourceId, { ...input, expectedVersion }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ['company', companyId] })
       void client.invalidateQueries({ queryKey: ['companies'] })
+      void client.invalidateQueries({ queryKey: ['source-coverage'] })
+    },
+  })
+}
+
+export function useReopenHomologation(companyId: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ sourceId, expectedVersion }: { sourceId: string; expectedVersion: number }) =>
+      reopenHomologation(sourceId, expectedVersion),
+    onSettled: (_data, _error, { sourceId }) => {
+      void client.invalidateQueries({ queryKey: ['company', companyId] })
+      void client.invalidateQueries({ queryKey: ['source', sourceId] })
+      void client.invalidateQueries({ queryKey: ['source-health'] })
       void client.invalidateQueries({ queryKey: ['source-coverage'] })
     },
   })

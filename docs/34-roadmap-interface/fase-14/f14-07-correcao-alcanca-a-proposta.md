@@ -1,6 +1,6 @@
 # CARD F14-07 — Correção do ATS alcança a fonte proposta
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-23
 - **Fase:** 14 — Cadastro e curadoria pela interface
 - **Depende de:** F14-05
 - **Bloqueia:** Nenhum
@@ -58,14 +58,42 @@ precisa dizer isso antes do clique, não depois.
 
 ## Critérios de aceite
 
-- [ ] Corrigir o ATS de uma proposta inerte atualiza a chave e a evidência da proposta, e
+- [x] Corrigir o ATS de uma proposta inerte atualiza a chave e a evidência da proposta, e
       propor de novo responde `already_proposed` com a chave nova.
-- [ ] Corrigir o ATS de uma fonte homologada não altera a fonte e informa que ela ficou
+- [x] Corrigir o ATS de uma fonte homologada não altera a fonte e informa que ela ficou
       desatualizada.
-- [ ] Reabrir a homologação desabilita, limpa o gate e troca a chave numa única escrita
+- [x] Reabrir a homologação desabilita, limpa o gate e troca a chave numa única escrita
       versionada.
-- [ ] Conflito de versão na fonte durante a correção recusa as duas escritas.
-- [ ] O detalhe da empresa mostra a chave do registro e a chave da fonte proposta.
+- [x] Conflito de versão na fonte durante a correção recusa as duas escritas.
+- [x] O detalhe da empresa mostra a chave do registro e a chave da fonte proposta.
+
+## Nota de execução
+
+`acquisition/proposals.py` decide o que acontece com a proposta. `is_inert` lê a própria
+`SourceDefinition`, sem campo novo: desabilitada, sem termos, sem collector testado e com
+evidência ainda de descoberta. A correção do `CompanySource` chama `follow_correction` na
+mesma transação. Proposta inerte recebe a chave e a nota novas numa escrita guardada por
+versão; proposta que já foi revisada, testada ou habilitada fica como está. Se a proposta
+muda entre a leitura e a escrita, `ProposalChangedError` desfaz a correção inteira, e a API
+responde 409.
+
+Troca de ATS (Greenhouse para Lever, por exemplo) sempre deixa a proposta desatualizada,
+mesmo inerte: uma fonte não muda de collector, e reabrir também recusa esse caso com a
+mensagem do domínio.
+
+`PATCH /companies/{id}/sources/{source_id}` passou a responder
+`{proposal_outcome, source}`, e cada `CompanySource` da empresa traz a `proposal` com a
+chave que ela usa hoje e `outdated`. A página de lista busca as propostas de uma vez, não
+uma consulta por registro.
+
+`POST /sources/{id}/reopen-homologation` é a ação explícita: desabilita, volta a evidência
+para `ats_identified`, limpa termos, teste e data de revisão e troca a chave, numa escrita
+versionada. O `homologation_audit` antigo não é apagado: vai para
+`reopened_homologations`, com a chave e a evidência anteriores.
+
+Verificado no navegador: correção de proposta inerte chegando à fonte, correção de proposta
+revisada deixada como estava e sinalizada, e reabertura trazendo a chave nova com o gate
+zerado. O teste de integração cobre a corrida entre a leitura e a escrita.
 
 ## Verificação
 

@@ -246,6 +246,7 @@ jobs:
           curl --fail --silent --output /dev/null http://127.0.0.1:3000/sources
           curl --fail --silent --output /dev/null http://127.0.0.1:3000/profile
           curl --fail --silent --output /dev/null "http://127.0.0.1:3000/companies/$company_id"
+
           echo "OPPORTUNITY_ID=$inbox_opportunity_id" >> "$GITHUB_ENV"
       - name: Verify the application pipeline through the public API
         run: |
@@ -476,6 +477,20 @@ jobs:
           curl --fail --silent --request POST "$api/opportunities/normalizations/runs/$run_id" | \
             python -c "import json,sys; items=json.load(sys.stdin)['items']; assert len(items) == 1; assert items[0]['result']['status'] in {'SUCCEEDED', 'REVIEW_REQUIRED', 'FAILED'}"
           curl --fail --silent --output /dev/null "http://127.0.0.1:3000/companies/$company_id"
+          # A source created with no terminal reaches confirmed evidence only through a live
+          # probe, and then runs once the operator records the rest of the gate.
+          probe_source="$(curl --fail --silent --json '{"source_type":"greenhouse","name":"CI probed board","configuration":{"board_token":"radar-ci","company_name":"Radar CI"}}' "$api/sources")"
+          probe_source_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['evidence_status'] == 'unverified'; print(data['id'])" <<< "$probe_source")"
+          probe_version="$(python -c "import json,sys; print(json.load(sys.stdin)['version'])" <<< "$probe_source")"
+          probed="$(curl --fail --silent --json "{\"expected_version\":$probe_version}" "$api/sources/$probe_source_id/probe")"
+          probed_version="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['probe']['status'] == 'PASSED', data; assert data['probe']['evidence_recorded'] is True; source=data['source']; assert source['evidence_status'] == 'confirmed'; assert source['collector_local_tested'] is True; assert source['terms_reviewed'] is False; assert source['enabled'] is False; print(source['version'])" <<< "$probed")"
+          too_soon="$(curl --silent --output /dev/null --write-out '%{http_code}' --json "{\"expected_version\":$probed_version}" "$api/sources/$probe_source_id/probe")"
+          test "$too_soon" = "429"
+          curl --fail --silent --request PATCH --json "{\"enabled\":true,\"terms_reviewed\":true,\"collector_local_tested\":true,\"reviewed_at\":\"2026-09-23T12:00:00Z\",\"expected_version\":$probed_version}" \
+            "$api/sources/$probe_source_id" | \
+            python -c "import json,sys; assert json.load(sys.stdin)['enabled'] is True"
+          curl --fail --silent --json '{"correlation_id":"ci-probed-board"}' "$api/sources/$probe_source_id/runs" | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'SUCCEEDED', data; assert data['items_seen'] >= 1"
       - name: Collect logs on failure
         if: failure()
         run: docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --tail=300

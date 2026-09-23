@@ -83,12 +83,17 @@ Cards de execução: [Fase 14](34-roadmap-interface/fase-14/README.md).
 
 ### 3.3 Critério de aceite
 
-- [ ] operador cria, homologa, habilita e executa uma fonte inteira sem terminal;
+- [x] operador cria, homologa, habilita e executa uma fonte inteira sem terminal;
 - [x] operador registra uma vaga avulsa e chega à oportunidade normalizada pela tela;
 - [x] operador cria uma empresa, corrige seus dados e vincula uma fonte a ela;
 - [x] nenhuma tela consegue burlar o gate de habilitação ou a imutabilidade da evidência;
 - [x] conflito de versão em qualquer escrita é reportado e recuperável sem perder o que foi
       digitado.
+
+O primeiro critério ficou aberto na entrega dos cinco primeiros cards e foi fechado por
+[F14-06](34-roadmap-interface/fase-14/f14-06-teste-ao-vivo-do-collector.md): a sonda do
+collector passou a rodar pela tela, e é ela que confirma a evidência. O registro original,
+mantido abaixo, explica por que o critério ficou aberto.
 
 O primeiro critério fica aberto de propósito. Pela tela, uma fonte manual é criada,
 habilitada e usada de ponta a ponta, e uma fonte externa com evidência confirmada é
@@ -96,7 +101,9 @@ homologada, habilitada e desligada. O que ainda exige terminal é **confirmar a 
 de uma fonte externa nova: isso só acontece quando o collector é testado contra o endpoint
 público (`make enable-sources`), e testar ao vivo está fora do escopo da Fase 14 (F14-01,
 F14-05). Fechar o critério pede decidir como a interface pode disparar esse teste sem
-afrouxar o gate — um card novo, não um atalho.
+afrouxar o gate — um card novo, não um atalho: [F14-06](34-roadmap-interface/fase-14/f14-06-teste-ao-vivo-do-collector.md).
+O limite de F14-05 — corrigir o ATS depois de propor não chega à fonte proposta — está em
+[F14-07](34-roadmap-interface/fase-14/f14-07-correcao-alcanca-a-proposta.md).
 
 ---
 

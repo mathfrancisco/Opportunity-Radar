@@ -373,3 +373,46 @@ export async function normalizeRun(runId: string): Promise<RunNormalizationItem[
     ]
   })
 }
+
+export interface SourceProbe {
+  id: string
+  status: 'PASSED' | 'FAILED' | 'RUNNING'
+  itemsSeen: number
+  httpRequests: number
+  errorCode: string | null
+  detail: string | null
+  evidenceRecorded: boolean
+  finishedAt: string | null
+}
+
+/**
+ * Asks the server to test the collector against the public endpoint. A failed probe is an
+ * answer (it resolves); a probe asked too soon rejects with the server's wait.
+ */
+export async function probeSource(
+  sourceId: string,
+  expectedVersion: number,
+): Promise<{ probe: SourceProbe; source: SourceDefinition }> {
+  const body = await send(`/sources/${sourceId}/probe`, 'POST', {
+    expected_version: expectedVersion,
+  })
+  if (!isRecord(body) || !isRecord(body.probe)) {
+    throw new Error('A API retornou uma sonda inválida.')
+  }
+  const source = parseSource(body.source)
+  if (source === null) throw new Error('A API retornou uma fonte inválida.')
+  const probe = body.probe
+  return {
+    source,
+    probe: {
+      id: required(probe.id),
+      status: probe.status === 'PASSED' || probe.status === 'RUNNING' ? probe.status : 'FAILED',
+      itemsSeen: count(probe.items_seen),
+      httpRequests: count(probe.http_requests),
+      errorCode: text(probe.error_code),
+      detail: text(probe.detail),
+      evidenceRecorded: probe.evidence_recorded === true,
+      finishedAt: text(probe.finished_at),
+    },
+  }
+}

@@ -13,15 +13,15 @@ empresa e vínculo exigem endpoints novos.
 | 3 | [F14-03 — entrada manual de vaga](f14-03-entrada-manual-de-vaga.md) | F14-01 | Concluído |
 | 4 | [F14-04 — cadastro de empresa](f14-04-cadastro-de-empresa.md) | Fase 13 | Concluído |
 | 5 | [F14-05 — vínculo entre empresa e fonte](f14-05-vinculo-empresa-fonte.md) | F14-04 | Concluído |
-| 6 | [F14-06 — teste ao vivo do collector](f14-06-teste-ao-vivo-do-collector.md) | F14-02 | Backlog |
-| 7 | [F14-07 — correção do ATS alcança a proposta](f14-07-correcao-alcanca-a-proposta.md) | F14-05 | Backlog |
+| 6 | [F14-06 — teste ao vivo do collector](f14-06-teste-ao-vivo-do-collector.md) | F14-02 | Concluído |
+| 7 | [F14-07 — correção do ATS alcança a proposta](f14-07-correcao-alcanca-a-proposta.md) | F14-05 | Concluído |
 
 F14-04 pode seguir em paralelo com F14-01. F14-02, F14-03 e F14-05 entregaram o cadastro
 pela tela.
 
 F14-06 e F14-07 saíram da execução dos cinco primeiros. F14-06 é o que falta para o
 Milestone M: sem ele, a evidência de uma fonte externa nova só é confirmada pelo terminal.
-F14-07 fecha o limite registrado em F14-05 — corrigir o ATS depois de propor não chegava à
+Com F14-06, o Milestone M fica atingido. F14-07 fecha o limite registrado em F14-05 — corrigir o ATS depois de propor não chegava à
 fonte proposta.
 
 ## Invariantes da fase
