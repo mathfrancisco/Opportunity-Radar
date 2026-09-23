@@ -40,7 +40,7 @@ export function DataTable({
     <div className={`overflow-x-auto ${className}`.trim()} id={id}>
       <table className={`w-full border-collapse text-left text-sm${sticky}`}>
         {caption && <caption className="sr-only">{caption}</caption>}
-        <thead className="bg-canvas text-xs uppercase tracking-[0.08em] text-muted">
+        <thead className="bg-canvas text-overline uppercase text-muted">
           <tr>
             {columns.map((column, index) => (
               <th className="px-4 py-3 font-semibold" key={index} scope="col">

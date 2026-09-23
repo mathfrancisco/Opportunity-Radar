@@ -41,7 +41,7 @@ export function PageShell({
       >
         Pular para o conteúdo
       </a>
-      <div className="mx-auto min-h-[calc(100vh-3.5rem)] max-w-5xl rounded-[2rem] border border-line-soft bg-raised p-7 shadow-[0_24px_70px_rgba(23,50,45,0.10)] sm:p-12">
+      <div className="mx-auto min-h-[calc(100vh-3.5rem)] max-w-5xl rounded-shell border border-line-soft bg-raised p-7 shadow-shell sm:p-12">
         <header
           className="flex flex-wrap items-center justify-between gap-4"
           aria-label="Opportunity Radar"
@@ -50,7 +50,7 @@ export function PageShell({
             <span className="grid h-10 w-10 place-items-center rounded-full bg-accent text-lg font-black">
               ◉
             </span>
-            <span className="text-lg font-semibold tracking-tight">Opportunity Radar</span>
+            <span className="text-section tracking-tight">Opportunity Radar</span>
           </Link>
           <nav aria-label="Navegação principal" className="flex flex-wrap gap-4 text-sm font-medium">
             {navigation.map((item) =>
@@ -78,9 +78,9 @@ export function PageShell({
 
         <section className="py-10 sm:py-14" id="conteudo" tabIndex={-1}>
           <p className="text-sm font-medium text-subtle">{eyebrow}</p>
-          <h1 className="mt-2 text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">{title}</h1>
+          <h1 className="mt-2 text-display sm:text-display-lg">{title}</h1>
           {description && (
-            <p className="mt-3 max-w-2xl leading-7 text-subtle">{description}</p>
+            <p className="mt-3 max-w-2xl text-body text-subtle">{description}</p>
           )}
           {children}
         </section>

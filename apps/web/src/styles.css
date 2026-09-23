@@ -46,6 +46,61 @@
 
   --color-info-surface: #eef3df;
   --color-info-ink: #5c694e;
+
+  /*
+   * Escala de texto por papel. Tamanho, entrelinha, espaçamento e peso andam juntos
+   * porque é assim que são escolhidos: ninguém decide "2.25rem", decide "título de
+   * página". Os degraus abaixo saíram de medir o que as telas já usavam.
+   */
+  --text-display: 2.25rem;
+  --text-display--line-height: 1.1;
+  --text-display--letter-spacing: -0.04em;
+  --text-display--font-weight: 600;
+
+  --text-display-lg: 3rem;
+  --text-display-lg--line-height: 1.05;
+  --text-display-lg--letter-spacing: -0.04em;
+  --text-display-lg--font-weight: 600;
+
+  /* Números que a tela existe para mostrar, em três tamanhos e um só tratamento. */
+  --text-metric-lg: 2.25rem;
+  --text-metric-lg--line-height: 1.1;
+  --text-metric-lg--letter-spacing: -0.03em;
+  --text-metric-lg--font-weight: 600;
+
+  --text-metric: 1.875rem;
+  --text-metric--line-height: 1.15;
+  --text-metric--letter-spacing: -0.03em;
+  --text-metric--font-weight: 600;
+
+  --text-metric-sm: 1.5rem;
+  --text-metric-sm--line-height: 1.2;
+  --text-metric-sm--letter-spacing: -0.03em;
+  --text-metric-sm--font-weight: 600;
+
+  --text-section: 1.125rem;
+  --text-section--line-height: 1.4;
+  --text-section--font-weight: 600;
+
+  /* Cabeçalho de tabela: caixa alta pede espaçamento, ou vira um bloco cinza. */
+  --text-overline: 0.75rem;
+  --text-overline--line-height: 1.3;
+  --text-overline--letter-spacing: 0.08em;
+  --text-overline--font-weight: 600;
+
+  /* Texto corrido, que precisa de entrelinha maior que rótulo e célula. */
+  --text-body: 1rem;
+  --text-body--line-height: 1.75;
+  --text-prose: 0.875rem;
+  --text-prose--line-height: 1.5;
+
+  /* Forma: o raio do invólucro e a única elevação da interface. */
+  --radius-shell: 2rem;
+  --shadow-shell: 0 24px 70px rgb(23 50 45 / 0.10);
+
+  /* Ritmo vertical entre blocos, onde hoje cada tela escolhia o seu. */
+  --spacing-section: 2.5rem;
+  --spacing-block: 1.5rem;
 }
 
 :root {

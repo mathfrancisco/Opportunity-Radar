@@ -333,8 +333,8 @@ export function ProfilePage() {
         </form>
       )}
 
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Versões</h2>
+      <section className="mt-section">
+        <h2 className="text-section">Versões</h2>
         <div className="mt-4">
           {versions.isPending && (
             <p className="text-sm text-subtle">Carregando versões…</p>

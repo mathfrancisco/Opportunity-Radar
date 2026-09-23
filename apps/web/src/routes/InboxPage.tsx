@@ -75,7 +75,7 @@ function ItemCard({ item }: { item: InboxItem }) {
                 item.applicationStage}
             </span>
           )}
-          <span className="text-2xl font-semibold tracking-[-0.03em]">
+          <span className="text-metric-sm">
             {formatScore(item.score)}
           </span>
         </div>
@@ -117,7 +117,7 @@ function ItemCard({ item }: { item: InboxItem }) {
         </p>
       )}
       {item.analysisSummary && (
-        <p className="mt-4 text-sm leading-6 text-subtle">{item.analysisSummary}</p>
+        <p className="mt-4 text-prose text-subtle">{item.analysisSummary}</p>
       )}
       {item.analysisRecommendedReview === true && (
         <p className="mt-2 text-sm font-medium text-warning-ink">

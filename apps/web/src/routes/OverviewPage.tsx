@@ -30,7 +30,7 @@ function Tile({
   const body = (
     <>
       <p className="text-sm text-muted">{label}</p>
-      <p className="mt-2 text-3xl font-semibold tracking-[-0.03em]">{value}</p>
+      <p className="mt-2 text-metric">{value}</p>
       {hint && <p className="mt-2 text-sm text-subtle">{hint}</p>}
     </>
   )
@@ -205,9 +205,9 @@ function SourceMetricsSection() {
   const active = windows.find((item) => item.window === selected) ?? windows[0]
 
   return (
-    <section className="mt-10">
+    <section className="mt-section">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Métricas operacionais por fonte</h2>
+        <h2 className="text-section">Métricas operacionais por fonte</h2>
         <div className="flex gap-2">
           {windows.map((item) => (
             <button
@@ -295,8 +295,8 @@ function Summary({ overview }: { overview: Overview }) {
       </div>
 
       {verdicts.length > 0 && (
-        <section className="mt-10">
-          <h2 className="text-lg font-semibold">Decisões por verdict</h2>
+        <section className="mt-section">
+          <h2 className="text-section">Decisões por verdict</h2>
           <ul className="mt-4 flex flex-wrap gap-3">
             {verdicts.map((verdict) => (
               <li key={verdict}>
@@ -313,8 +313,8 @@ function Summary({ overview }: { overview: Overview }) {
         </section>
       )}
 
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold">Saúde das fontes</h2>
+      <section className="mt-section">
+        <h2 className="text-section">Saúde das fontes</h2>
         <div className="mt-4">
           <FailingSources sources={overview.failingSources} />
         </div>

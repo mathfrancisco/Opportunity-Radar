@@ -84,7 +84,7 @@ function Tracker({
   return (
     <Card>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <span className="text-lg font-semibold">{label(application.currentStage)}</span>
+        <span className="text-section">{label(application.currentStage)}</span>
         <span className="text-sm text-muted">
           Iniciada em {formatDate(application.startedAt)}
           {application.appliedAt ? ` · enviada em ${formatDate(application.appliedAt)}` : ''}

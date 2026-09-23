@@ -34,6 +34,16 @@ export default tseslint.config(
           message:
             'Use um token de cor de src/styles.css em vez de um literal hexadecimal.',
         },
+        {
+          // A sombra do invólucro guardava a última cor crua da interface, fora do alcance
+          // da regra acima porque era rgba e não hexadecimal.
+          selector: 'Literal[value=/rgba?\\(/]',
+          message: 'Use um token de cor ou de sombra de src/styles.css em vez de rgb/rgba.',
+        },
+        {
+          selector: 'TemplateElement[value.raw=/rgba?\\(/]',
+          message: 'Use um token de cor ou de sombra de src/styles.css em vez de rgb/rgba.',
+        },
       ],
     },
   },

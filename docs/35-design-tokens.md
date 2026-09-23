@@ -70,6 +70,39 @@ Razão de contraste WCAG de cada par texto/fundo em uso. O alvo é AA, 4.5 para 
 | `surface` | `ink` | 13.72 |
 | `surface` | `ink-hover` | 10.11 |
 
+## Escala de texto
+
+O nome diz o papel; tamanho, entrelinha, espaçamento e peso vêm juntos, porque é assim que
+a escolha é feita — ninguém decide `2.25rem`, decide "título de página".
+
+| Token | Tamanho | Entrelinha | Espaçamento | Peso | Uso |
+| --- | --- | --- | --- | --- | --- |
+| `text-display` | 2.25rem | 1.1 | -0.04em | 600 | título da página |
+| `text-display-lg` | 3rem | 1.05 | -0.04em | 600 | o mesmo título a partir de `sm` |
+| `text-metric-lg` | 2.25rem | 1.1 | -0.03em | 600 | score no detalhe da oportunidade |
+| `text-metric` | 1.875rem | 1.15 | -0.03em | 600 | número do tile da Visão geral |
+| `text-metric-sm` | 1.5rem | 1.2 | -0.03em | 600 | score no cartão da Inbox |
+| `text-section` | 1.125rem | 1.4 | — | 600 | título de seção |
+| `text-overline` | 0.75rem | 1.3 | 0.08em | 600 | cabeçalho de tabela |
+| `text-body` | 1rem | 1.75 | — | — | texto corrido |
+| `text-prose` | 0.875rem | 1.5 | — | — | resumo dentro de cartão |
+
+`text-sm` e `text-xs` continuam vindo da escala do Tailwind: são rótulo, célula e legenda,
+já eram uma escala declarada, e trocá-los por apelidos nossos moveria cem chamadas sem
+mudar uma decisão.
+
+## Forma e ritmo
+
+| Token | Valor | Uso |
+| --- | --- | --- |
+| `rounded-shell` | 2rem | raio do invólucro da página |
+| `shadow-shell` | `0 24px 70px rgb(23 50 45 / 0.10)` | a única elevação da interface |
+| `mt-section`, `gap-section` | 2.5rem | distância entre seções de uma tela |
+| `mt-block`, `gap-block` | 1.5rem | distância entre blocos dentro de uma seção |
+
+A sombra é o único lugar onde a cor aparece fora da paleta, e por isso é um token: era um
+`rgba` cru dentro de uma classe, invisível para a regra de lint que só olhava hexadecimal.
+
 ## Ajuste registrado
 
 Um par reprovou e foi corrigido:

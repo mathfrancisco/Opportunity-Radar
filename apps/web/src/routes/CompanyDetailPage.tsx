@@ -143,8 +143,8 @@ export function CompanyDetailPage() {
             </div>
           </dl>
 
-          <section className="mt-10">
-            <h2 className="text-lg font-semibold">Aliases</h2>
+          <section className="mt-section">
+            <h2 className="text-section">Aliases</h2>
             <div className="mt-4">
               {company.data.aliases.length === 0 ? (
                 <p className="text-sm text-subtle">Nenhum alias registrado.</p>
@@ -163,8 +163,8 @@ export function CompanyDetailPage() {
             </div>
           </section>
 
-          <section className="mt-10">
-            <h2 className="text-lg font-semibold">Fontes</h2>
+          <section className="mt-section">
+            <h2 className="text-section">Fontes</h2>
             <button
               className="mt-3 rounded-xl border border-ink px-4 py-2 text-sm font-medium hover:bg-info-surface disabled:opacity-50"
               disabled={detectSource.isPending}
@@ -189,8 +189,8 @@ export function CompanyDetailPage() {
             </div>
           </section>
 
-          <section className="mt-10">
-            <h2 className="text-lg font-semibold">Últimas vagas</h2>
+          <section className="mt-section">
+            <h2 className="text-section">Últimas vagas</h2>
             <div className="mt-4">
               <LatestOpportunities companyId={company.data.id} />
             </div>

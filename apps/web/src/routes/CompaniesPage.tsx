@@ -28,7 +28,7 @@ function CompanyList({ companies }: { companies: Company[] }) {
     <>
       <div className="hidden overflow-hidden rounded-2xl border border-line md:block">
         <table className="w-full border-collapse text-left text-sm">
-          <thead className="bg-canvas text-xs uppercase tracking-[0.08em] text-muted">
+          <thead className="bg-canvas text-overline uppercase text-muted">
             <tr>
               <th className="px-5 py-4 font-semibold" scope="col">Empresa</th>
               <th className="px-5 py-4 font-semibold" scope="col">Prioridade</th>

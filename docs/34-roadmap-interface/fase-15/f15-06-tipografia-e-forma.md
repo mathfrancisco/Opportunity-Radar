@@ -1,6 +1,6 @@
 # CARD F15-06 — Escala tipográfica, espaçamento e elevação
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 15 — Design, consistência e acesso
 - **Depende de:** F15-01
 - **Bloqueia:** F15-07
@@ -50,12 +50,22 @@ tamanhos vizinhos hoje diferem sem motivo, o card registra qual venceu.
 
 ## Critérios de aceite
 
-- [ ] Nenhum valor arbitrário de `tracking`, `rounded` ou `shadow` permanece em rotas e
+- [x] Nenhum valor arbitrário de `tracking`, `rounded` ou `shadow` permanece em rotas e
       componentes.
-- [ ] Nenhuma cor crua resta em sombra ou em qualquer outro valor arbitrário.
-- [ ] Todo degrau de texto declarado tem pelo menos um uso.
-- [ ] Título, seção, corpo e legenda usam sempre o mesmo degrau em todas as telas.
-- [ ] O lint recusa `rgba(` e `#` em valor arbitrário de classe.
+- [x] Nenhuma cor crua resta em sombra ou em qualquer outro valor arbitrário.
+- [x] Todo degrau de texto declarado tem pelo menos um uso.
+- [x] Título, seção, corpo e legenda usam sempre o mesmo degrau em todas as telas.
+- [x] O lint recusa `rgba(` e `#` em valor arbitrário de classe.
+
+## Nota de execução
+
+A escala declara os papéis que carregavam mais que tamanho — os que traziam `tracking`,
+peso ou entrelinha próprios. `text-sm` e `text-xs` continuaram como estão: já são uma
+escala declarada, e renomeá-los moveria cem chamadas sem mudar nenhuma decisão. O critério
+de "todo degrau declarado tem uso" vale para os degraus que este card criou.
+
+A marca no cabeçalho usa `text-section`, que é o degrau visual certo ainda que o papel não
+seja o de uma seção. Se a Fase 15 ganhar um degrau próprio de marca, é ali que ele entra.
 
 ## Verificação
 

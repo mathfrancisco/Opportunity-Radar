@@ -45,8 +45,8 @@ function formatNumber(value: string | null, digits = 1) {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="mt-10">
-      <h2 className="text-lg font-semibold">{title}</h2>
+    <section className="mt-section">
+      <h2 className="text-section">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   )
@@ -278,7 +278,7 @@ function Analysis({
       )}
       {analysis?.status === 'AI_COMPLETED' && (
         <Card className="text-sm">
-          <p className="leading-6">{analysis.summary}</p>
+          <p className="text-body">{analysis.summary}</p>
           {analysis.strengths.length > 0 && (
             <>
               <h3 className="mt-4 font-semibold">Pontos fortes</h3>
@@ -356,7 +356,7 @@ function Decision({
   return (
     <>
       <div className="flex flex-wrap items-baseline gap-4">
-        <span className="text-4xl font-semibold tracking-[-0.03em]">
+        <span className="text-metric-lg">
           {formatNumber(assessment.score)}
         </span>
         <span className="rounded-full border border-line-strong bg-surface px-4 py-2 text-sm font-medium">
@@ -441,7 +441,7 @@ export function OpportunityDetailPage() {
 
             {opportunity.data.description && (
               <Section title="Descrição">
-                <p className="whitespace-pre-line leading-7 text-subtle">
+                <p className="whitespace-pre-line text-body text-subtle">
                   {opportunity.data.description}
                 </p>
               </Section>

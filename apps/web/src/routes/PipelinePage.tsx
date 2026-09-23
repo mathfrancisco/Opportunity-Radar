@@ -108,8 +108,8 @@ function Closed({ applications }: { applications: Application[] }) {
     .filter((entry) => entry.total > 0)
 
   return (
-    <section className="mt-10">
-      <h2 className="text-lg font-semibold">Encerradas</h2>
+    <section className="mt-section">
+      <h2 className="text-section">Encerradas</h2>
       <ul className="mt-4 flex flex-wrap gap-3">
         {counts.map((entry) => (
           <li
