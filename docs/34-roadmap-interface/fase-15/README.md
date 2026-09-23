@@ -15,7 +15,7 @@ estado antes de acessibilidade e responsividade.
 | 4 | [F15-04 — acessibilidade e teclado](f15-04-acessibilidade.md) | F15-02 | Concluído |
 | 5 | [F15-05 — responsividade e densidade](f15-05-responsividade.md) | F15-02 | Concluído |
 | 6 | [F15-06 — tipografia, espaçamento e elevação](f15-06-tipografia-e-forma.md) | F15-01 | Concluído |
-| 7 | [F15-07 — hierarquia da Visão geral](f15-07-hierarquia-da-overview.md) | F15-06 | Backlog |
+| 7 | [F15-07 — hierarquia da Visão geral](f15-07-hierarquia-da-overview.md) | F15-06 | Concluído |
 | 8 | [F15-08 — navegação, orientação e ícones](f15-08-navegacao-e-icones.md) | F15-06 | Backlog |
 | 9 | [F15-09 — carregamento sem salto](f15-09-carregamento-sem-salto.md) | F15-03, F15-06 | Backlog |
 

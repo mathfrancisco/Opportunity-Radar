@@ -294,9 +294,10 @@ export function InboxPage() {
           { value: 'false', label: 'Ainda não aplicada' },
         ].map((option) => (
           <button
-            className={`rounded-full border px-4 py-2 font-medium ${
+            aria-pressed={appliedFilter === option.value}
+            className={`rounded-full border px-4 py-2 font-medium transition ${
               appliedFilter === option.value
-                ? 'border-ink bg-ink text-white'
+                ? 'border-ink bg-ink text-surface'
                 : 'border-line-strong bg-surface hover:border-ink'
             }`}
             key={option.value || 'all'}

@@ -1,6 +1,6 @@
 # CARD F15-07 — Hierarquia da Visão geral
 
-- **Status:** Backlog
+- **Status:** Concluído em 2026-09-22
 - **Fase:** 15 — Design, consistência e acesso
 - **Depende de:** F15-06
 - **Bloqueia:** Milestone N
@@ -49,11 +49,22 @@ pendente", a tela precisa deixar isso óbvio sem obrigar a leitura do resto.
 
 ## Critérios de aceite
 
-- [ ] A tela apresenta três blocos nomeados, na ordem decisão, acervo, operação.
-- [ ] O bloco de decisão é visualmente dominante e cabe na primeira dobra em 1280 px.
-- [ ] Nenhum número deixou de existir ou de levar ao mesmo destino de antes.
-- [ ] Um estado sem pendência é legível sem ler a página inteira.
-- [ ] O resumo de saúde por fonte antecede a tabela e concorda com ela.
+- [x] A tela apresenta três blocos nomeados, na ordem decisão, acervo, operação.
+- [x] O bloco de decisão é visualmente dominante e cabe na primeira dobra em 1280 px.
+- [x] Nenhum número deixou de existir ou de levar ao mesmo destino de antes.
+- [x] Um estado sem pendência é legível sem ler a página inteira.
+- [x] O resumo de saúde por fonte antecede a tabela e concorda com ela.
+
+## Nota de execução
+
+Nenhum número saiu da tela. Os que não pedem ação deixaram de ser cartão e viraram linha
+de apoio, com os mesmos destinos: "Avaliadas" continua levando à Inbox filtrada,
+"Candidaturas ativas" continua levando ao pipeline. O follow-up devido, que antes era dica
+dentro do cartão de candidaturas, virou cartão no bloco de decisão — era a única pendência
+com prazo escondida numa nota de rodapé.
+
+O resumo de cobertura é derivado das mesmas linhas que a tabela exibe, e não de uma segunda
+consulta. Um resumo que pode discordar da tabela logo abaixo dele é pior que nenhum.
 
 ## Verificação
 

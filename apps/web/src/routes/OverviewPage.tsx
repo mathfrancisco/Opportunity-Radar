@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card } from '../components/Card'
 import { DataTable } from '../components/DataTable'
@@ -198,6 +198,37 @@ function SourceMetricsTable({ window }: { window: SourceMetricsWindow }) {
   )
 }
 
+/**
+ * O que a tabela abaixo diz, em uma linha.
+ *
+ * Derivado das mesmas linhas que a tabela mostra, e não de uma segunda consulta: um resumo
+ * que pode discordar da tabela logo abaixo dele é pior que nenhum resumo.
+ */
+function CoverageSummary({ window }: { window: SourceMetricsWindow }) {
+  const tally = window.sources.reduce(
+    (totals, source) => {
+      if (source.coverageState === 'SUCCEEDED') totals.healthy += 1
+      else if (source.coverageState === 'SUCCEEDED_ZERO') totals.empty += 1
+      else if (source.coverageState === 'PARTIAL' || source.coverageState === 'FAILED')
+        totals.degraded += 1
+      else if (source.coverageState === 'NOT_RUN') totals.idle += 1
+      else totals.inactive += 1
+      return totals
+    },
+    { healthy: 0, empty: 0, degraded: 0, idle: 0, inactive: 0 },
+  )
+  return (
+    <p className="text-sm text-subtle">
+      <strong className="font-semibold text-ink">{tally.healthy}</strong> saudáveis ·{' '}
+      <strong className="font-semibold text-ink">{tally.degraded}</strong> degradadas ·{' '}
+      <strong className="font-semibold text-ink">{tally.empty}</strong> sem vagas ·{' '}
+      <strong className="font-semibold text-ink">{tally.idle}</strong> sem execução na
+      janela · <strong className="font-semibold text-ink">{tally.inactive}</strong> não
+      habilitadas ou bloqueadas.
+    </p>
+  )
+}
+
 function SourceMetricsSection() {
   const metrics = useSourceMetrics()
   const [selected, setSelected] = useState('24h')
@@ -212,10 +243,10 @@ function SourceMetricsSection() {
           {windows.map((item) => (
             <button
               aria-pressed={item.window === active?.window}
-              className={`rounded-full border px-4 py-2 text-sm ${
+              className={`rounded-full border px-4 py-2 text-sm transition ${
                 item.window === active?.window
-                  ? 'border-ink bg-ink text-white'
-                  : 'border-line-strong bg-surface'
+                  ? 'border-ink bg-ink font-semibold text-surface'
+                  : 'border-line-strong bg-surface hover:border-ink'
               }`}
               key={item.window}
               onClick={() => setSelected(item.window)}
@@ -233,94 +264,187 @@ function SourceMetricsSection() {
         {metrics.isError && (
           <ErrorState onRetry={() => void metrics.refetch()}>Não foi possível carregar as métricas por fonte.</ErrorState>
         )}
-        {active && <SourceMetricsTable window={active} />}
+        {active && (
+          <>
+            <CoverageSummary window={active} />
+            <div className="mt-4">
+              <SourceMetricsTable window={active} />
+            </div>
+          </>
+        )}
       </div>
     </section>
   )
 }
 
-function Summary({ overview }: { overview: Overview }) {
-  const verdicts = verdictOrder.filter((verdict) => overview.verdictCounts[verdict] > 0)
+/** Um número e o que ele significa, numa linha. Para o que se lê, não para o que se aciona. */
+function SupportItem({
+  label,
+  value,
+  hint,
+  to,
+}: {
+  label: string
+  value: string
+  hint?: string
+  to?: string
+}) {
+  const number = <span className="font-semibold text-ink">{value}</span>
   return (
-    <>
-      <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Tile
-          label={`Novas (${overview.newOpportunityWindowDays} dias)`}
-          value={String(overview.newOpportunities)}
-          hint={`${overview.opportunitiesActive} ativas de ${overview.opportunitiesTotal}`}
-          to="/inbox?order=recency"
-        />
-        <Tile
-          label="Alta prioridade"
-          value={String(overview.verdictCounts.HIGH_PRIORITY ?? 0)}
-          to="/inbox?verdict=HIGH_PRIORITY"
-        />
-        <Tile
-          label="Recomendadas"
-          value={String(overview.verdictCounts.RECOMMENDED ?? 0)}
-          to="/inbox?verdict=RECOMMENDED"
-        />
-        <Tile
-          label="Fontes com falha"
-          value={String(overview.sourcesFailing)}
-          hint={`${overview.sourcesEnabled} habilitadas de ${overview.sourcesTotal}`}
-        />
-      </div>
+    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+      <dt className="text-muted">{label}</dt>
+      <dd className="text-subtle">
+        {to ? (
+          <Link className="underline decoration-accent decoration-2 underline-offset-4" to={to}>
+            {number}
+          </Link>
+        ) : (
+          number
+        )}
+        {hint && <span className="ml-2 text-xs text-muted">{hint}</span>}
+      </dd>
+    </div>
+  )
+}
 
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Tile
-          label="Avaliadas"
-          value={String(overview.assessedOpportunities)}
-          hint="Com decisão determinística registrada"
-          to="/inbox?only_assessed=true"
-        />
-        <Tile
-          label="Análises degradadas"
-          value={String(overview.analysesDegraded)}
-          hint="Ollama indisponível, fora do contrato ou desligado"
-        />
-        <Tile
-          label="Itens brutos pendentes"
-          value={String(overview.pendingNormalizations)}
-          hint="Preservados, ainda sem normalização"
-        />
-        <Tile
-          label="Candidaturas ativas"
-          value={String(overview.applicationsActive)}
-          hint={`${overview.followUpsDue} follow-up${
-            overview.followUpsDue === 1 ? '' : 's'
-          } nos próximos ${overview.followUpWindowDays} dias`}
-          to="/applications"
-        />
-      </div>
+function Block({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description: string
+  children: ReactNode
+}) {
+  return (
+    <section className="mt-section">
+      <h2 className="text-section">{title}</h2>
+      <p className="mt-1 text-sm text-muted">{description}</p>
+      <div className="mt-4">{children}</div>
+    </section>
+  )
+}
 
-      {verdicts.length > 0 && (
-        <section className="mt-section">
-          <h2 className="text-section">Decisões por verdict</h2>
-          <ul className="mt-4 flex flex-wrap gap-3">
-            {verdicts.map((verdict) => (
-              <li key={verdict}>
-                <Link
-                  className="flex items-baseline gap-2 rounded-full border border-line-strong bg-surface px-4 py-2 text-sm hover:border-ink"
-                  to={`/inbox?verdict=${verdict}`}
-                >
-                  <span className="text-subtle">{verdictCountLabels[verdict] ?? verdict}</span>
-                  <span className="font-semibold">{overview.verdictCounts[verdict]}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
+/**
+ * O que exige decisão hoje.
+ *
+ * Primeiro bloco e o único com peso de cartão: se nada aqui pede ação, o operador pode
+ * parar de ler a página, e a tela precisa deixar isso claro sem que ele desça até o fim.
+ */
+function PendingDecisions({ overview }: { overview: Overview }) {
+  const highPriority = overview.verdictCounts.HIGH_PRIORITY ?? 0
+  const recommended = overview.verdictCounts.RECOMMENDED ?? 0
+  const pending = highPriority + recommended + overview.newOpportunities + overview.followUpsDue
+  const verdicts = verdictOrder.filter((verdict) => overview.verdictCounts[verdict] > 0)
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-section">Decisão de hoje</h2>
+      {pending === 0 ? (
+        <p className="mt-4 rounded-2xl border border-success-line bg-success-surface p-5 text-success-ink">
+          Nada exige decisão agora: sem vagas novas na janela, sem recomendações abertas e
+          sem follow-up devido.
+        </p>
+      ) : (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Tile
+            label="Alta prioridade"
+            value={String(highPriority)}
+            to="/inbox?verdict=HIGH_PRIORITY"
+          />
+          <Tile
+            label="Recomendadas"
+            value={String(recommended)}
+            to="/inbox?verdict=RECOMMENDED"
+          />
+          <Tile
+            label={`Novas (${overview.newOpportunityWindowDays} dias)`}
+            value={String(overview.newOpportunities)}
+            to="/inbox?order=recency"
+          />
+          <Tile
+            label="Follow-ups devidos"
+            value={String(overview.followUpsDue)}
+            hint={`Próximos ${overview.followUpWindowDays} dias`}
+            to="/applications"
+          />
+        </div>
       )}
 
-      <section className="mt-section">
-        <h2 className="text-section">Saúde das fontes</h2>
-        <div className="mt-4">
+      {verdicts.length > 0 && (
+        <ul className="mt-3 flex flex-wrap gap-3">
+          {verdicts.map((verdict) => (
+            <li key={verdict}>
+              <Link
+                className="flex items-baseline gap-2 rounded-full border border-line-strong bg-surface px-4 py-2 text-sm hover:border-ink"
+                to={`/inbox?verdict=${verdict}`}
+              >
+                <span className="text-subtle">{verdictCountLabels[verdict] ?? verdict}</span>
+                <span className="font-semibold">{overview.verdictCounts[verdict]}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+function Summary({ overview }: { overview: Overview }) {
+  return (
+    <>
+      <PendingDecisions overview={overview} />
+
+      <Block
+        description="O que o radar já coletou e decidiu, e que continua disponível para consulta."
+        title="Acervo"
+      >
+        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          <SupportItem
+            hint={`de ${overview.opportunitiesTotal} no total`}
+            label="Oportunidades ativas"
+            value={String(overview.opportunitiesActive)}
+          />
+          <SupportItem
+            hint="Com decisão determinística registrada"
+            label="Avaliadas"
+            to="/inbox?only_assessed=true"
+            value={String(overview.assessedOpportunities)}
+          />
+          <SupportItem
+            hint="Preservados, ainda sem normalização"
+            label="Itens brutos pendentes"
+            value={String(overview.pendingNormalizations)}
+          />
+          <SupportItem
+            label="Candidaturas ativas"
+            to="/applications"
+            value={String(overview.applicationsActive)}
+          />
+        </dl>
+      </Block>
+
+      <Block
+        description="Como o ciclo está passando quando ninguém está olhando."
+        title="Operação"
+      >
+        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          <SupportItem
+            hint={`de ${overview.sourcesEnabled} habilitadas, ${overview.sourcesTotal} no catálogo`}
+            label="Fontes com falha na última execução"
+            value={String(overview.sourcesFailing)}
+          />
+          <SupportItem
+            hint="Ollama indisponível, fora do contrato ou desligado"
+            label="Análises degradadas"
+            value={String(overview.analysesDegraded)}
+          />
+        </dl>
+        <div className="mt-block">
           <FailingSources sources={overview.failingSources} />
         </div>
-      </section>
-
-      <SourceMetricsSection />
+        <SourceMetricsSection />
+      </Block>
     </>
   )
 }
