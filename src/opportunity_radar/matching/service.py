@@ -17,6 +17,7 @@ from opportunity_radar.companies.models import Company
 from opportunity_radar.matching import currency
 from opportunity_radar.matching.analysis import (
     ANALYSIS_SCHEMA_VERSION,
+    AnalysisMetrics,
     AnalysisOutcome,
     AnalysisRequest,
     AnalysisStatus,
@@ -625,7 +626,7 @@ def _analysis_record(
 ) -> AnalysisRecord:
     analysis = outcome.analysis
     # What the call cost travels with the row, completed or not; absent stays absent.
-    cost = outcome.metrics.as_dict() if outcome.metrics is not None else {}
+    cost = outcome.metrics or AnalysisMetrics()
     if outcome.status is not AnalysisStatus.AI_COMPLETED or analysis is None:
         return AnalysisRecord(
             assessment_id=assessment_id,
@@ -635,7 +636,12 @@ def _analysis_record(
             analyzed_at=analyzed_at,
             failure_code=outcome.failure_code.value if outcome.failure_code else None,
             detail=outcome.detail,
-            **cost,
+            total_ms=cost.total_ms,
+            load_ms=cost.load_ms,
+            prompt_tokens=cost.prompt_tokens,
+            prompt_eval_ms=cost.prompt_eval_ms,
+            output_tokens=cost.output_tokens,
+            eval_ms=cost.eval_ms,
         )
     return AnalysisRecord(
         assessment_id=assessment_id,
@@ -651,7 +657,12 @@ def _analysis_record(
         recommended_review=analysis.recommended_review,
         model_id=analysis.model_id,
         prompt_version=analysis.prompt_version,
-        **cost,
+        total_ms=cost.total_ms,
+        load_ms=cost.load_ms,
+        prompt_tokens=cost.prompt_tokens,
+        prompt_eval_ms=cost.prompt_eval_ms,
+        output_tokens=cost.output_tokens,
+        eval_ms=cost.eval_ms,
     )
 
 
