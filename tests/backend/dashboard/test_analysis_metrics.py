@@ -86,6 +86,7 @@ def _assessment(session: Session) -> UUID:
         ),
         [],
     )
+    session.flush()
     return assessment.id
 
 
