@@ -36,6 +36,29 @@ export interface MatchAnalysis {
   promptVersion: string | null
   schemaVersion: string
   analyzedAt: string
+  /** What the model call cost; null when there was no call or it was not recorded. */
+  metrics: AnalysisMetrics | null
+}
+
+export interface AnalysisMetrics {
+  totalMs: number | null
+  loadMs: number | null
+  promptTokens: number | null
+  outputTokens: number | null
+}
+
+function optionalCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+}
+
+function parseMetrics(value: unknown): AnalysisMetrics | null {
+  if (!isRecord(value)) return null
+  return {
+    totalMs: optionalCount(value.total_ms),
+    loadMs: optionalCount(value.load_ms),
+    promptTokens: optionalCount(value.prompt_tokens),
+    outputTokens: optionalCount(value.output_tokens),
+  }
 }
 
 export interface MatchAssessment {
@@ -123,6 +146,7 @@ function parseAnalysis(value: unknown): MatchAnalysis | null {
     promptVersion: text(value.prompt_version),
     schemaVersion: required(value.schema_version),
     analyzedAt: required(value.analyzed_at),
+    metrics: parseMetrics(value.metrics),
   }
 }
 

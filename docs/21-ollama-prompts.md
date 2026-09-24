@@ -215,14 +215,23 @@ o assessment não existe. Falha do Ollama não é erro HTTP: é `status` no corp
 | Variável | Padrão | Papel |
 |---|---|---|
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | endpoint local |
-| `OLLAMA_MODEL_ANALYSIS` | `llama3.2:3b` | modelo de análise |
+| `OLLAMA_MODEL_ANALYSIS` | `qwen3:8b-q4_K_M` | modelo de análise; a quantização vai na tag |
 | `OLLAMA_HEALTH_TIMEOUT_SECONDS` | `1.0` | timeout do healthcheck |
 | `OLLAMA_ANALYSIS_ENABLED` | `true` | desliga a camada semântica |
-| `OLLAMA_ANALYSIS_TIMEOUT_SECONDS` | `30.0` | timeout de leitura/escrita da análise |
+| `OLLAMA_ANALYSIS_TIMEOUT_SECONDS` | `60.0` | timeout de leitura/escrita da análise |
 | `OLLAMA_ANALYSIS_CONNECT_TIMEOUT_SECONDS` | `5.0` | timeout de conexão |
 | `OLLAMA_ANALYSIS_MAX_RETRIES` | `1` | tentativas extras em falha retentável |
 | `OLLAMA_ANALYSIS_RETRY_AFTER_SECONDS` | `0.5` | espera entre tentativas |
 | `OLLAMA_ANALYSIS_CACHE_ENTRIES` | `256` | tamanho do cache em memória |
+| `OLLAMA_NUM_CTX` | `8192` | janela de contexto enviada em toda chamada |
+| `OLLAMA_NUM_PREDICT` | `1024` | limite de tokens da resposta |
+| `OLLAMA_SEED` | `42` | semente, para a mesma entrada dar a mesma saída |
+| `OLLAMA_KEEP_ALIVE` | `30m` | quanto tempo o modelo fica carregado depois de uma chamada |
+| `OLLAMA_THINK` | `false` | raciocínio do Qwen3; desligado na análise |
+
+As variáveis do servidor (`OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`,
+`OLLAMA_NUM_PARALLEL`, `OLLAMA_MAX_LOADED_MODELS`) são lidas pelo serviço `ollama` do
+compose, não pela aplicação. A razão de cada valor está em `docs/36-spec-ollama.md`.
 
 Todas estão em `.env.example` e em `compose.yaml`; os padrões em `platform/config.py`
 cobrem a execução local sem configuração extra.

@@ -23,4 +23,9 @@ def build_analysis_adapter(settings: Settings) -> SemanticAnalysisPort:
         max_retries=settings.ollama_analysis_max_retries,
         retry_after_seconds=settings.ollama_analysis_retry_after_seconds,
         cache_max_entries=settings.ollama_analysis_cache_entries,
+        num_ctx=settings.ollama_num_ctx,
+        num_predict=settings.ollama_num_predict,
+        seed=settings.ollama_seed,
+        keep_alive=settings.ollama_keep_alive,
+        think=settings.ollama_think,
     )

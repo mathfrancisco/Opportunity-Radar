@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -10,6 +10,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from opportunity_radar.dashboard.analysis_metrics import (
+    AnalysisMetricsWindow,
+    ModelAnalysisMetrics,
+    analysis_metrics,
+)
 from opportunity_radar.dashboard.metrics import (
     METRIC_WINDOWS,
     SourceMetricsWindow,
@@ -29,7 +34,9 @@ from opportunity_radar.dashboard.queries import (
     source_coverage_report,
     summarize_overview,
 )
+from opportunity_radar.matching.service import MatchingService
 from opportunity_radar.opportunities.domain import OpportunityStatus, WorkMode
+from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.presentation.http.dependencies import get_session
 
 router = APIRouter(tags=["dashboard"])
@@ -172,6 +179,37 @@ class SourceMetricsReportResponse(BaseModel):
     windows: list[SourceMetricsWindowResponse]
 
 
+class ModelAnalysisMetricsResponse(BaseModel):
+    model_id: str | None
+    analyses: int
+    completed: int
+    failed: int
+    #: Percentiles and averages are `null` when no row in the window recorded the cost.
+    total_ms_p50: float | None
+    total_ms_p95: float | None
+    total_ms_p99: float | None
+    prompt_tokens_avg: float | None
+    output_tokens_avg: float | None
+    load_ms_avg: float | None
+    failure_rate: float | None
+    failure_rates: dict[str, float]
+    reuse_rate: float | None
+
+
+class AnalysisMetricsWindowResponse(BaseModel):
+    window: str
+    since: datetime
+    until: datetime
+    models: list[ModelAnalysisMetricsResponse]
+
+
+class AnalysisMetricsReportResponse(BaseModel):
+    generated_at: datetime
+    current_model: str
+    pending: int
+    windows: list[AnalysisMetricsWindowResponse]
+
+
 class OverviewResponse(BaseModel):
     opportunities_total: int
     opportunities_active: int
@@ -268,19 +306,40 @@ def get_source_metrics(
     session: Session = Depends(get_session),
 ) -> SourceMetricsReportResponse:
     """Both windows by default, because one of them alone hides a slow degradation."""
-    if window is not None and window not in METRIC_WINDOWS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail={
-                "code": "unknown_metric_window",
-                "message": f"Window must be one of: {', '.join(METRIC_WINDOWS)}.",
-            },
-        )
-    selected = None if window is None else {window: METRIC_WINDOWS[window]}
-    report = source_metrics(session, windows=selected)
+    report = source_metrics(session, windows=_selected_window(window))
     return SourceMetricsReportResponse(
         generated_at=report.generated_at,
         windows=[_metrics_window_response(item) for item in report.windows],
+    )
+
+
+@router.get("/analysis-metrics", response_model=AnalysisMetricsReportResponse)
+def get_analysis_metrics(
+    window: str | None = Query(
+        default=None, description="Restrict the answer to one window: 24h or 7d."
+    ),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> AnalysisMetricsReportResponse:
+    """Grouped by model, because a window can span a model change."""
+    selected = _selected_window(window)
+    pending = MatchingService(session).count_pending_analysis(
+        eligible_verdicts=settings.analysis_eligible_verdicts,
+        cooldown=timedelta(seconds=settings.analysis_retry_cooldown_seconds),
+        attempt_window=timedelta(seconds=settings.analysis_retry_attempt_window_seconds),
+        max_attempts=settings.analysis_retry_max_attempts,
+    )
+    report = analysis_metrics(
+        session,
+        current_model=settings.ollama_model_analysis,
+        pending=pending,
+        windows=selected,
+    )
+    return AnalysisMetricsReportResponse(
+        generated_at=report.generated_at,
+        current_model=report.current_model,
+        pending=report.pending,
+        windows=[_analysis_window_response(item) for item in report.windows],
     )
 
 
@@ -291,6 +350,47 @@ def get_overview(
 ) -> OverviewResponse:
     return _overview_response(
         summarize_overview(session, profile_version_id=profile_version_id)
+    )
+
+
+def _selected_window(window: str | None) -> dict[str, timedelta] | None:
+    if window is None:
+        return None
+    if window not in METRIC_WINDOWS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "unknown_metric_window",
+                "message": f"Window must be one of: {', '.join(METRIC_WINDOWS)}.",
+            },
+        )
+    return {window: METRIC_WINDOWS[window]}
+
+
+def _analysis_window_response(window: AnalysisMetricsWindow) -> AnalysisMetricsWindowResponse:
+    return AnalysisMetricsWindowResponse(
+        window=window.window,
+        since=window.since,
+        until=window.until,
+        models=[_model_analysis_response(item) for item in window.models],
+    )
+
+
+def _model_analysis_response(item: ModelAnalysisMetrics) -> ModelAnalysisMetricsResponse:
+    return ModelAnalysisMetricsResponse(
+        model_id=item.model_id,
+        analyses=item.analyses,
+        completed=item.completed,
+        failed=item.failed,
+        total_ms_p50=item.total_ms_p50,
+        total_ms_p95=item.total_ms_p95,
+        total_ms_p99=item.total_ms_p99,
+        prompt_tokens_avg=item.prompt_tokens_avg,
+        output_tokens_avg=item.output_tokens_avg,
+        load_ms_avg=item.load_ms_avg,
+        failure_rate=item.failure_rate,
+        failure_rates=item.failure_rates,
+        reuse_rate=item.reuse_rate,
     )
 
 

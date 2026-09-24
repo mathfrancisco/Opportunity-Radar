@@ -7,6 +7,7 @@ import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
 import { EmptyState, ErrorState, LoadingState } from '../components/states'
 import {
+  type AnalysisMetrics,
   type EligibilityDetail,
   type MatchAnalysis,
   type MatchAssessment,
@@ -35,6 +36,22 @@ function formatDate(value: string | null) {
   if (!value) return '—'
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString('pt-BR')
+}
+
+/**
+ * What the model call cost, in one line. Absent is said as absent: a cached answer or a row
+ * from before the cost was recorded did not cost zero, it is simply not known.
+ */
+function analysisCost(metrics: AnalysisMetrics | null) {
+  if (!metrics || metrics.totalMs === null) return 'Custo da chamada indisponível.'
+  const seconds = (metrics.totalMs / 1000).toLocaleString('pt-BR', {
+    maximumFractionDigits: 1,
+  })
+  const tokens =
+    metrics.promptTokens !== null && metrics.outputTokens !== null
+      ? ` · ${metrics.promptTokens} tokens de entrada, ${metrics.outputTokens} de saída`
+      : ''
+  return `Gerada em ${seconds} s${tokens}.`
 }
 
 function formatNumber(value: string | null, digits = 1) {
@@ -317,6 +334,9 @@ function Analysis({
           <p className="mt-4 text-xs text-muted">
             {analysis.modelId} · {analysis.promptVersion} · {analysis.schemaVersion} ·{' '}
             {formatDate(analysis.analyzedAt)}
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            {analysisCost(analysis.metrics)}
           </p>
         </Card>
       )}

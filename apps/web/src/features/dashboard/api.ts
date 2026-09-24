@@ -136,6 +136,36 @@ export interface SourceMetricsReport {
   windows: SourceMetricsWindow[]
 }
 
+export interface ModelAnalysisMetrics {
+  modelId: string | null
+  analyses: number
+  completed: number
+  failed: number
+  totalMsP50: number | null
+  totalMsP95: number | null
+  totalMsP99: number | null
+  promptTokensAvg: number | null
+  outputTokensAvg: number | null
+  loadMsAvg: number | null
+  failureRate: number | null
+  failureRates: Record<string, number>
+  reuseRate: number | null
+}
+
+export interface AnalysisMetricsWindow {
+  window: string
+  since: string
+  until: string
+  models: ModelAnalysisMetrics[]
+}
+
+export interface AnalysisMetricsReport {
+  generatedAt: string
+  currentModel: string
+  pending: number
+  windows: AnalysisMetricsWindow[]
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
@@ -337,6 +367,57 @@ export async function getSourceMetrics(): Promise<SourceMetricsReport> {
         }
       })
       .filter((entry): entry is SourceMetricsWindow => entry !== null),
+  }
+}
+
+function parseModelAnalysisMetrics(value: unknown): ModelAnalysisMetrics | null {
+  if (!isRecord(value)) return null
+  return {
+    modelId: text(value.model_id),
+    analyses: count(value.analyses),
+    completed: count(value.completed),
+    failed: count(value.failed),
+    // Null means the window recorded no cost; it must not collapse to zero.
+    totalMsP50: optionalNumber(value.total_ms_p50),
+    totalMsP95: optionalNumber(value.total_ms_p95),
+    totalMsP99: optionalNumber(value.total_ms_p99),
+    promptTokensAvg: optionalNumber(value.prompt_tokens_avg),
+    outputTokensAvg: optionalNumber(value.output_tokens_avg),
+    loadMsAvg: optionalNumber(value.load_ms_avg),
+    failureRate: optionalNumber(value.failure_rate),
+    failureRates: rateMap(value.failure_rates),
+    reuseRate: optionalNumber(value.reuse_rate),
+  }
+}
+
+export async function getAnalysisMetrics(): Promise<AnalysisMetricsReport> {
+  const response = await fetch(apiUrl('/analysis-metrics'), {
+    headers: { Accept: 'application/json' },
+  })
+  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  const body: unknown = await response.json()
+  if (!isRecord(body) || !Array.isArray(body.windows)) {
+    throw new Error('A API retornou métricas de análise inválidas.')
+  }
+  return {
+    generatedAt: text(body.generated_at) ?? '',
+    currentModel: text(body.current_model) ?? '',
+    pending: count(body.pending),
+    windows: body.windows
+      .map((entry): AnalysisMetricsWindow | null => {
+        if (!isRecord(entry) || typeof entry.window !== 'string') return null
+        return {
+          window: entry.window,
+          since: text(entry.since) ?? '',
+          until: text(entry.until) ?? '',
+          models: Array.isArray(entry.models)
+            ? entry.models
+                .map(parseModelAnalysisMetrics)
+                .filter((item): item is ModelAnalysisMetrics => item !== null)
+            : [],
+        }
+      })
+      .filter((entry): entry is AnalysisMetricsWindow => entry !== null),
   }
 }
 

@@ -203,7 +203,7 @@ jobs:
           # The worker analyses the same assessments, and a live claim answers 409 rather
           # than handing back another holder's stale row. Retrying is the intended reply.
           first_analysis="$(curl --fail --retry 10 --retry-all-errors --retry-delay 3 --silent --request POST "http://127.0.0.1:3000/api/matches/$MATCH_ID/analysis")"
-          first_analysis_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'AI_COMPLETED'; assert data['schema_version'] == 'analysis-v1'; assert data['prompt_version'] == 'opportunity_analysis/v1'; assert data['summary']; assert len(data['cache_key']) == 64; print(data['id'])" <<< "$first_analysis")"
+          first_analysis_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'AI_COMPLETED'; assert data['schema_version'] == 'analysis-v1'; assert data['metrics'] is not None and data['metrics']['total_ms'] == 1250 and data['metrics']['output_tokens'] == 120, data.get('metrics'); assert data['prompt_version'] == 'opportunity_analysis/v1'; assert data['summary']; assert len(data['cache_key']) == 64; print(data['id'])" <<< "$first_analysis")"
           curl --fail --retry 10 --retry-all-errors --retry-delay 3 --silent --request POST "http://127.0.0.1:3000/api/matches/$MATCH_ID/analysis" | \
             python -c "import json,sys; assert json.load(sys.stdin)['id'] == '$first_analysis_id'"
           curl --fail --silent "http://127.0.0.1:3000/api/matches/$MATCH_ID" | \
@@ -211,6 +211,9 @@ jobs:
           unknown_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST \
             http://127.0.0.1:3000/api/matches/00000000-0000-0000-0000-000000000000/analysis)"
           test "$unknown_status" = "404"
+          curl --fail --silent 'http://127.0.0.1:3000/api/analysis-metrics' |             python -c "import json,sys; data=json.load(sys.stdin); assert [item['window'] for item in data['windows']] == ['24h', '7d']; assert isinstance(data['pending'], int) and data['pending'] >= 0; current=[item for item in data['windows'][0]['models'] if item['model_id'] == data['current_model']]; assert len(current) == 1, data; assert current[0]['total_ms_p50'] == 1250, current; assert current[0]['completed'] >= 1; assert 0 <= current[0]['failure_rate'] <= 1"
+          analysis_window_status="$(curl --silent --output /dev/null --write-out '%{http_code}' 'http://127.0.0.1:3000/api/analysis-metrics?window=90d')"
+          test "$analysis_window_status" = "422"
       - name: Verify the dashboard read models
         run: |
           curl --fail --silent http://127.0.0.1:3000/api/overview | \

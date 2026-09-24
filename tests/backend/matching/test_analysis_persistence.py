@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from opportunity_radar.matching.analysis import (
     AnalysisFailureCode,
+    AnalysisMetrics,
     AnalysisOutcome,
     AnalysisRequest,
     AnalysisStatus,
@@ -49,6 +50,7 @@ class _StubAdapter:
     def __init__(self, outcome: AnalysisOutcome) -> None:
         self._outcome = outcome
         self.calls = 0
+        self.warm_ups = 0
         self.requests: list[AnalysisRequest] = []
 
     @property
@@ -63,6 +65,10 @@ class _StubAdapter:
         self.calls += 1
         self.requests.append(request)
         return self._outcome
+
+    async def warm_up(self, *, only_if_idle: bool = False) -> None:
+        del only_if_idle
+        self.warm_ups += 1
 
 
 def _completed() -> AnalysisOutcome:
@@ -255,3 +261,50 @@ def test_refresh_appends_a_new_analysis_instead_of_editing_the_previous_one() ->
             )
             == 2
         )
+
+
+def test_the_cost_of_a_call_is_recorded_with_the_analysis() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        repository, record = _seed_assessment(session)
+        assessment = repository.get_existing(input_hash=record.input_hash)
+        assert assessment is not None
+        completed = _completed()
+        costed = AnalysisOutcome(
+            status=completed.status,
+            analysis=completed.analysis,
+            metrics=AnalysisMetrics(
+                total_ms=4200,
+                load_ms=150,
+                prompt_tokens=1830,
+                prompt_eval_ms=900,
+                output_tokens=212,
+                eval_ms=3100,
+            ),
+        )
+
+        analysis = asyncio.run(
+            MatchingService(session).analyze(assessment.id, _StubAdapter(costed), refresh=True)
+        )
+
+        assert (analysis.total_ms, analysis.load_ms, analysis.prompt_tokens) == (4200, 150, 1830)
+        assert (analysis.prompt_eval_ms, analysis.output_tokens, analysis.eval_ms) == (
+            900,
+            212,
+            3100,
+        )
+
+
+def test_a_failure_before_the_model_answered_records_no_cost() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        repository, record = _seed_assessment(session)
+        assessment = repository.get_existing(input_hash=record.input_hash)
+        assert assessment is not None
+
+        analysis = asyncio.run(
+            MatchingService(session).analyze(assessment.id, _StubAdapter(_failed()), refresh=True)
+        )
+
+        assert analysis.total_ms is None
+        assert analysis.output_tokens is None

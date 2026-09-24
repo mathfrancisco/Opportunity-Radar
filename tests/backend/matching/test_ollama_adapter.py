@@ -8,12 +8,13 @@ import pytest
 
 from opportunity_radar.matching.analysis import (
     AnalysisFailureCode,
+    AnalysisOutcome,
     AnalysisPolicy,
     AnalysisRequest,
     AnalysisStatus,
 )
 from opportunity_radar.matching.domain import EligibilityStatus, Verdict
-from opportunity_radar.matching.ollama import OllamaAnalysisAdapter
+from opportunity_radar.matching.ollama import OllamaAnalysisAdapter, _keep_alive_seconds
 
 _BASE_URL = "http://ollama:11434"
 _MODEL = "llama3.2:3b"
@@ -63,6 +64,7 @@ def _adapter(
         "model": _MODEL,
         "max_retries": 0,
         "sleeper": _no_sleep,
+        "jitter": lambda: 0.0,
     }
     kwargs.update(overrides)
     if handler is not None:
@@ -130,6 +132,44 @@ def test_timeout_degrades_without_raising() -> None:
     assert outcome.status is AnalysisStatus.AI_FAILED
     assert outcome.failure_code is AnalysisFailureCode.TIMEOUT
     assert outcome.analysis is None
+
+
+def test_a_timeout_is_not_retried_by_the_adapter() -> None:
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        raise httpx.ReadTimeout("too slow", request=request)
+
+    outcome = asyncio.run(_adapter(_transport(handler), max_retries=2).analyze(_request()))
+
+    assert outcome.failure_code is AnalysisFailureCode.TIMEOUT
+    assert calls["count"] == 1
+
+
+def test_a_transport_error_is_retried_with_exponential_backoff_and_jitter() -> None:
+    calls = {"count": 0}
+    delays: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        raise httpx.ConnectError("refused", request=request)
+
+    async def sleeper(delay: float) -> None:
+        delays.append(delay)
+
+    adapter = _adapter(
+        _transport(handler),
+        max_retries=3,
+        retry_after_seconds=0.5,
+        sleeper=sleeper,
+        jitter=lambda: 1.0,
+    )
+    outcome = asyncio.run(adapter.analyze(_request()))
+
+    assert outcome.failure_code is AnalysisFailureCode.TRANSPORT_ERROR
+    assert calls["count"] == 4
+    assert delays == [0.625, 1.25, 2.5]
 
 
 def test_unreachable_ollama_degrades_without_raising() -> None:
@@ -266,13 +306,15 @@ def test_cache_avoids_an_identical_second_call() -> None:
 
     adapter = _adapter(_transport(handler))
 
-    async def run_twice() -> tuple[object, object]:
+    async def run_twice() -> tuple[AnalysisOutcome, AnalysisOutcome]:
         return await adapter.analyze(_request()), await adapter.analyze(_request())
 
     first, second = asyncio.run(run_twice())
 
     assert calls["count"] == 1
-    assert first == second
+    assert first.analysis == second.analysis
+    # The second answer came from the cache: no call, so no cost to report.
+    assert second.metrics is None
 
 
 def test_cache_misses_when_the_opportunity_content_changes() -> None:
@@ -372,3 +414,234 @@ def test_rejects_conflicting_client_configuration() -> None:
 def test_rejects_invalid_limits(overrides: dict[str, object]) -> None:
     with pytest.raises(ValueError):
         OllamaAnalysisAdapter(base_url=_BASE_URL, model=_MODEL, **overrides)  # type: ignore[arg-type]
+
+
+def test_sends_the_configured_model_options_and_turns_thinking_off() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return _envelope(_ANALYSIS)
+
+    adapter = _adapter(
+        _transport(handler),
+        num_ctx=8192,
+        num_predict=1024,
+        seed=42,
+        keep_alive="30m",
+        think=False,
+    )
+    asyncio.run(adapter.analyze(_request()))
+
+    body = seen["body"]
+    assert isinstance(body, dict)
+    assert body["options"] == {
+        "temperature": 0,
+        "num_ctx": 8192,
+        "num_predict": 1024,
+        "seed": 42,
+    }
+    # Top-level fields, not options: that is where the server reads them.
+    assert body["keep_alive"] == "30m"
+    assert body["think"] is False
+
+
+def test_leaves_unset_options_to_the_request_defaults() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return _envelope(_ANALYSIS)
+
+    asyncio.run(_adapter(_transport(handler)).analyze(_request()))
+
+    body = seen["body"]
+    assert isinstance(body, dict)
+    assert body["options"] == {"temperature": 0}
+    assert "keep_alive" not in body
+    assert "think" not in body
+
+
+def _timed_envelope(content: object) -> httpx.Response:
+    body = content if isinstance(content, str) else json.dumps(content)
+    return httpx.Response(
+        200,
+        json={
+            "message": {"role": "assistant", "content": body},
+            "total_duration": 4_200_000_000,
+            "load_duration": 150_000_000,
+            "prompt_eval_count": 1830,
+            "prompt_eval_duration": 900_000_000,
+            "eval_count": 212,
+            "eval_duration": 3_100_000_000,
+        },
+    )
+
+
+def test_reports_what_the_call_cost_in_milliseconds() -> None:
+    adapter = _adapter(_transport(lambda request: _timed_envelope(_ANALYSIS)))
+    outcome = asyncio.run(adapter.analyze(_request()))
+
+    assert outcome.status is AnalysisStatus.AI_COMPLETED
+    assert outcome.metrics is not None
+    assert outcome.metrics.as_dict() == {
+        "total_ms": 4200,
+        "load_ms": 150,
+        "prompt_tokens": 1830,
+        "prompt_eval_ms": 900,
+        "output_tokens": 212,
+        "eval_ms": 3100,
+    }
+
+
+def test_an_answer_that_fails_validation_still_reports_its_cost() -> None:
+    outcome = asyncio.run(
+        _adapter(
+            _transport(lambda request: _timed_envelope({"summary": "no other fields"})),
+            max_retries=0,
+        ).analyze(_request())
+    )
+
+    assert outcome.status is AnalysisStatus.AI_FAILED
+    assert outcome.failure_code is AnalysisFailureCode.SCHEMA_MISMATCH
+    assert outcome.metrics is not None
+    assert outcome.metrics.total_ms == 4200
+
+
+def test_absent_or_malformed_durations_stay_absent() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "message": {"role": "assistant", "content": json.dumps(_ANALYSIS)},
+                "total_duration": "slow",
+                "eval_count": -3,
+            },
+        )
+
+    outcome = asyncio.run(_adapter(_transport(handler)).analyze(_request()))
+
+    assert outcome.metrics is not None
+    assert outcome.metrics.total_ms is None
+    assert outcome.metrics.output_tokens is None
+    assert outcome.metrics.prompt_tokens is None
+
+
+def test_a_cached_answer_reports_no_cost() -> None:
+    adapter = _adapter(_transport(lambda request: _timed_envelope(_ANALYSIS)))
+
+    asyncio.run(adapter.analyze(_request()))
+    cached = asyncio.run(adapter.analyze(_request()))
+
+    assert cached.status is AnalysisStatus.AI_COMPLETED
+    assert cached.metrics is None
+
+
+def test_warm_up_loads_the_model_and_reports_the_load() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"done": True, "load_duration": 2_500_000_000})
+
+    metrics = asyncio.run(_adapter(_transport(handler), keep_alive="30m").warm_up())
+
+    assert seen["url"] == f"{_BASE_URL}/api/generate"
+    assert seen["body"] == {"model": _MODEL, "prompt": "", "keep_alive": "30m"}
+    assert metrics is not None
+    assert metrics.load_ms == 2500
+
+
+def test_warm_up_never_raises_when_the_server_is_down() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused", request=request)
+
+    assert asyncio.run(_adapter(_transport(handler)).warm_up()) is None
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _loading_handler(calls: list[str]) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path == "/api/generate":
+            return httpx.Response(200, json={"done": True, "load_duration": 1_000_000})
+        return _envelope(_ANALYSIS)
+
+    return _transport(handler)
+
+
+def test_an_idle_warm_up_loads_only_after_keep_alive_has_elapsed() -> None:
+    calls: list[str] = []
+    clock = _Clock()
+    adapter = _adapter(_loading_handler(calls), keep_alive="30m", clock=clock)
+
+    async def scenario() -> list[bool]:
+        loaded = [await adapter.warm_up(only_if_idle=True) is not None]
+        await adapter.analyze(_request())
+        clock.now += 29 * 60
+        loaded.append(await adapter.warm_up(only_if_idle=True) is not None)
+        clock.now += 31 * 60
+        loaded.append(await adapter.warm_up(only_if_idle=True) is not None)
+        return loaded
+
+    assert asyncio.run(scenario()) == [True, False, True]
+    assert calls == ["/api/generate", "/api/chat", "/api/generate"]
+
+
+def test_a_resident_model_is_never_warmed_up_again() -> None:
+    calls: list[str] = []
+    clock = _Clock()
+    adapter = _adapter(_loading_handler(calls), keep_alive="-1", clock=clock)
+
+    async def scenario() -> None:
+        await adapter.warm_up()
+        clock.now += 10 * 86400
+        assert await adapter.warm_up(only_if_idle=True) is None
+
+    asyncio.run(scenario())
+    assert calls == ["/api/generate"]
+
+
+def test_a_failed_warm_up_does_not_count_as_a_call() -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        return httpx.Response(503, json={"error": "loading"})
+
+    adapter = _adapter(_transport(handler), keep_alive="30m", clock=_Clock())
+
+    async def scenario() -> None:
+        assert await adapter.warm_up() is None
+        assert await adapter.warm_up(only_if_idle=True) is None
+
+    asyncio.run(scenario())
+    assert calls == ["/api/generate", "/api/generate"]
+
+
+@pytest.mark.parametrize(
+    ("keep_alive", "seconds"),
+    [
+        ("30m", 1800.0),
+        ("1h30m", 5400.0),
+        ("90s", 90.0),
+        ("600", 600.0),
+        ("0", 0.0),
+        ("-1", None),
+        ("-1m", None),
+        (None, 300.0),
+        ("soon", 300.0),
+    ],
+)
+def test_keep_alive_is_read_as_the_server_reads_it(
+    keep_alive: str | None, seconds: float | None
+) -> None:
+    assert _keep_alive_seconds(keep_alive) == seconds

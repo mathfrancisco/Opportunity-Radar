@@ -1,6 +1,6 @@
 # CARD F16-03 — Custo de cada análise: durações e tokens
 
-- **Status:** Backlog
+- **Status:** Em revisão (PR #18)
 - **Fase:** 16 — Camada local de IA
 - **Depende de:** F16-02
 - **Bloqueia:** F16-05, F16-06, F16-08, F16-13

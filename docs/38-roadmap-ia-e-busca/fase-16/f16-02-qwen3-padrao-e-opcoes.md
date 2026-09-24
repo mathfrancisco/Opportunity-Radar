@@ -1,6 +1,6 @@
 # CARD F16-02 — `qwen3:8b-q4_K_M` como padrão e opções explícitas da chamada
 
-- **Status:** Backlog
+- **Status:** Em revisão (PR #18)
 - **Fase:** 16 — Camada local de IA
 - **Depende de:** F16-01
 - **Bloqueia:** F16-03, F16-04, Milestone O

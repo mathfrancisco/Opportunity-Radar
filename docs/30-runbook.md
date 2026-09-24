@@ -208,7 +208,7 @@ Esperado quando o Ollama não está no ar ou o modelo não foi baixado. O fluxo
 determinístico continua inteiro; só a camada semântica degrada. Para baixar o modelo:
 
 ```bash
-docker compose exec ollama ollama pull llama3.2:3b
+docker compose exec ollama ollama pull qwen3:8b-q4_K_M
 ```
 
 Para desligar a camada semântica de vez, `OLLAMA_ANALYSIS_ENABLED=false`.
@@ -263,3 +263,28 @@ make test-integration   # testes que exigem PostgreSQL
 make check              # lint e tipos, backend e frontend
 make soak               # gate de 72 horas contra relógio controlado
 ```
+
+
+## GPU para o Ollama
+
+O serviço `ollama` reserva a GPU NVIDIA e roda a imagem `ollama/ollama:0.34.4`, a primeira
+linha com suporte a Blackwell (RTX 50) usada pelo projeto. O modelo de análise é baixado
+pelo serviço `ollama-init` na primeira subida; não é preciso `ollama pull` à mão.
+
+Pré-requisitos no Windows:
+
+1. driver NVIDIA recente instalado no Windows (o WSL2 o expõe aos containers; não se
+   instala driver dentro da imagem);
+2. Docker Desktop com o backend WSL2 ligado ("Use the WSL 2 based engine");
+3. Docker Compose 2.24 ou mais recente (o `compose.cpu.yaml` usa `!reset`).
+
+Conferir que o modelo está na GPU, depois de uma análise:
+
+```bash
+docker compose exec ollama ollama ps        # coluna PROCESSOR deve mostrar 100% GPU
+docker compose exec -T api python scripts/doctor.py   # check "ollama gpu"
+```
+
+Máquina sem GPU NVIDIA: `make up-cpu` (ou `docker compose -f compose.yaml -f
+compose.cpu.yaml up --build -d`). Funciona, mais devagar; as metas de latência da
+`docs/36-spec-ollama.md` são para a GPU.

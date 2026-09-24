@@ -8,10 +8,10 @@ A ordem mede antes de otimizar e avalia antes de trocar.
 
 | Ordem | Card | Depende de | Status |
 | --- | --- | --- | --- |
-| 1 | [F16-01 — GPU, imagem 0.34.4, `ollama-init` e perfis](f16-01-gpu-imagem-e-perfis.md) | Nenhum | Backlog |
-| 2 | [F16-02 — `qwen3:8b-q4_K_M` como padrão e opções da chamada](f16-02-qwen3-padrao-e-opcoes.md) | F16-01 | Backlog |
-| 3 | [F16-03 — custo de cada análise](f16-03-custo-de-cada-analise.md) | F16-02 | Backlog |
-| 4 | [F16-04 — aquecimento, `keep_alive` e fila por valor](f16-04-aquecimento-e-fila-por-valor.md) | F16-02 | Backlog |
+| 1 | [F16-01 — GPU, imagem 0.34.4, `ollama-init` e perfis](f16-01-gpu-imagem-e-perfis.md) | Nenhum | Em revisão (PR #18) |
+| 2 | [F16-02 — `qwen3:8b-q4_K_M` como padrão e opções da chamada](f16-02-qwen3-padrao-e-opcoes.md) | F16-01 | Em revisão (PR #18) |
+| 3 | [F16-03 — custo de cada análise](f16-03-custo-de-cada-analise.md) | F16-02 | Em revisão (PR #18) |
+| 4 | [F16-04 — aquecimento, `keep_alive` e fila por valor](f16-04-aquecimento-e-fila-por-valor.md) | F16-02 | Em revisão (PR #18) |
 | 5 | [F16-05 — orçamento de tokens e limpador](f16-05-orcamento-de-tokens-e-limpador.md) | F16-03 | Backlog |
 | 6 | [F16-06 — conjunto de avaliação](f16-06-conjunto-de-avaliacao.md) | F16-03 | Backlog |
 | 7 | [F16-07 — vaga no payload e prompt `v2`](f16-07-vaga-no-payload-e-prompt-v2.md) | F16-05, F16-06 | Backlog |
@@ -20,7 +20,7 @@ A ordem mede antes de otimizar e avalia antes de trocar.
 | 10 | [F16-10 — vagas parecidas e busca por significado](f16-10-vagas-parecidas-e-busca-por-significado.md) | F16-09, F17-03 | Backlog |
 | 11 | [F16-11 — contexto recuperado (RAG)](f16-11-contexto-recuperado.md) | F16-06, F16-07, F16-09 | Backlog |
 | 12 | [F16-12 — confirmação de modelo e quantização](f16-12-confirmacao-de-modelo-e-quantizacao.md) | F16-06, F16-07 | Backlog |
-| 13 | [F16-13 — métricas da análise](f16-13-metricas-da-analise.md) | F16-03 | Backlog |
+| 13 | [F16-13 — métricas da análise](f16-13-metricas-da-analise.md) | F16-03 | Em revisão (PR #18) |
 
 F16-09 só depende da infraestrutura e pode andar em paralelo com F16-02 a F16-08.
 F16-01 a F16-04 e F16-13 fecham o Milestone O.

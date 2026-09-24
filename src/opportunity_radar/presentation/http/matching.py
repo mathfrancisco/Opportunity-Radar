@@ -45,6 +45,15 @@ class MatchFactorResponse(BaseModel):
     evidence_refs: list[Any]
 
 
+class AnalysisMetricsResponse(BaseModel):
+    total_ms: int | None
+    load_ms: int | None
+    prompt_tokens: int | None
+    prompt_eval_ms: int | None
+    output_tokens: int | None
+    eval_ms: int | None
+
+
 class MatchAnalysisResponse(BaseModel):
     """Advisory layer. Carries no score, verdict or eligibility by construction."""
 
@@ -65,6 +74,8 @@ class MatchAnalysisResponse(BaseModel):
     cache_key: str
     analyzed_at: str
     created_at: str
+    metrics: AnalysisMetricsResponse | None = None
+
 
 
 class AnalyzeMatchBody(BaseModel):
@@ -262,6 +273,18 @@ def _analysis_response(analysis: MatchAnalysisModel) -> MatchAnalysisResponse:
         cache_key=analysis.cache_key,
         analyzed_at=analysis.analyzed_at.isoformat(),
         created_at=analysis.created_at.isoformat(),
+        metrics=(
+            AnalysisMetricsResponse(
+                total_ms=analysis.total_ms,
+                load_ms=analysis.load_ms,
+                prompt_tokens=analysis.prompt_tokens,
+                prompt_eval_ms=analysis.prompt_eval_ms,
+                output_tokens=analysis.output_tokens,
+                eval_ms=analysis.eval_ms,
+            )
+            if analysis.total_ms is not None or analysis.prompt_tokens is not None
+            else None
+        ),
     )
 
 

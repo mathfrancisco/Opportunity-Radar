@@ -14,28 +14,48 @@ ANALYSIS = {
 }
 
 
+# Fixed costs in nanoseconds, as the real server reports them, so the pipeline proves the
+# analysis records what a call cost.
+COST = {
+    "total_duration": 1_250_000_000,
+    "load_duration": 50_000_000,
+    "prompt_eval_count": 640,
+    "prompt_eval_duration": 300_000_000,
+    "eval_count": 120,
+    "eval_duration": 900_000_000,
+}
+
+
 class OllamaStubHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
-        if self.path != "/api/tags":
+        if self.path == "/api/tags":
+            self._respond({"models": []})
+        elif self.path == "/api/version":
+            self._respond({"version": "0.34.4"})
+        elif self.path == "/api/ps":
+            self._respond({"models": []})
+        else:
             self.send_error(404)
-            return
-
-        self._respond({"models": []})
 
     def do_POST(self) -> None:
-        if self.path != "/api/chat":
-            self.send_error(404)
-            return
-
         length = int(self.headers.get("Content-Length") or 0)
         self.rfile.read(length)
-        self._respond(
-            {
-                "model": "llama3.2:3b",
-                "done": True,
-                "message": {"role": "assistant", "content": json.dumps(ANALYSIS)},
-            }
-        )
+        if self.path == "/api/chat":
+            self._respond(
+                {
+                    "model": "qwen3:8b-q4_K_M",
+                    "done": True,
+                    "message": {"role": "assistant", "content": json.dumps(ANALYSIS)},
+                    **COST,
+                }
+            )
+        elif self.path == "/api/generate":
+            # Warm-up: an empty prompt loads the model and generates nothing.
+            self._respond(
+                {"model": "qwen3:8b-q4_K_M", "done": True, "load_duration": 50_000_000}
+            )
+        else:
+            self.send_error(404)
 
     def _respond(self, payload: object) -> None:
         body = json.dumps(payload).encode("utf-8")

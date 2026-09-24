@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
+import re
+import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
@@ -20,6 +23,7 @@ from opportunity_radar.matching.analysis import (
     ANALYSIS_SCHEMA_VERSION,
     AnalysisError,
     AnalysisFailureCode,
+    AnalysisMetrics,
     AnalysisOutcome,
     AnalysisPolicy,
     AnalysisRequest,
@@ -39,6 +43,9 @@ from opportunity_radar.matching.prompts import (
 
 DEFAULT_PROMPT_VERSION = f"{PROMPT_FAMILY}/{DEFAULT_PROMPT_NAME}"
 _CHAT_PATH = "/api/chat"
+_GENERATE_PATH = "/api/generate"
+_DURATION_PART = re.compile(r"(\d+(?:\.\d+)?)(ms|s|m|h)")
+_DURATION_SECONDS = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0}
 
 
 class _AnalysisCache:
@@ -85,9 +92,16 @@ class OllamaAnalysisAdapter:
         max_retries: int = 1,
         retry_after_seconds: float = 0.5,
         sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        jitter: Callable[[], float] = random.random,
+        clock: Callable[[], float] = time.monotonic,
         policy: AnalysisPolicy | None = None,
         prompt: PromptArtifacts | None = None,
         cache_max_entries: int = 256,
+        num_ctx: int | None = None,
+        num_predict: int | None = None,
+        seed: int | None = None,
+        keep_alive: str | None = None,
+        think: bool | None = None,
     ) -> None:
         if client is not None and client_factory is not None:
             raise ValueError("provide either client or client_factory, not both")
@@ -113,9 +127,18 @@ class OllamaAnalysisAdapter:
         self._max_retries = max_retries
         self._retry_after_seconds = retry_after_seconds
         self._sleeper = sleeper
+        self._jitter = jitter
+        self._clock = clock
+        self._last_call_at: float | None = None
         self._policy = policy or AnalysisPolicy()
         self._prompt = prompt or load_prompt()
         self._cache = _AnalysisCache(cache_max_entries)
+        self._num_ctx = num_ctx
+        self._num_predict = num_predict
+        self._seed = seed
+        self._keep_alive = keep_alive
+        self._residency_seconds = _keep_alive_seconds(keep_alive)
+        self._think = think
 
     @property
     def model(self) -> str:
@@ -140,13 +163,51 @@ class OllamaAnalysisAdapter:
             return completed_outcome(cached)
 
         try:
-            analysis = await self._analyze_with_retries(request)
+            analysis, metrics = await self._analyze_with_retries(request)
         except AnalysisError as error:
             return failed_outcome(error)
         self._cache.set(key, analysis)
-        return completed_outcome(analysis)
+        return completed_outcome(analysis, metrics)
 
-    async def _analyze_with_retries(self, request: AnalysisRequest) -> SemanticAnalysis:
+    async def warm_up(self, *, only_if_idle: bool = False) -> AnalysisMetrics | None:
+        """Load the model before the queue needs it, and report what the load cost.
+
+        An empty generate request loads the model into memory and keeps it there for
+        `keep_alive`, so the first real analysis does not pay for loading five gigabytes.
+        With `only_if_idle`, the request is sent only when the last call is older than
+        `keep_alive`, which is when the server has unloaded the model. Returns `None` when
+        nothing was loaded. Never raises: a server that is down is the queue's problem to
+        degrade, not the worker's startup's.
+        """
+        if only_if_idle and not self._idle():
+            return None
+        payload: dict[str, Any] = {"model": self._model, "prompt": ""}
+        if self._keep_alive is not None:
+            payload["keep_alive"] = self._keep_alive
+        try:
+            if self._client is not None:
+                response = await self._client.post(
+                    f"{self._base_url}{_GENERATE_PATH}", json=payload
+                )
+            else:
+                async with self._client_factory() as client:
+                    response = await client.post(
+                        f"{self._base_url}{_GENERATE_PATH}", json=payload
+                    )
+        except httpx.HTTPError:
+            return None
+        if not 200 <= response.status_code < 300:
+            return None
+        self._last_call_at = self._clock()
+        try:
+            envelope = response.json()
+        except ValueError:
+            return None
+        return _metrics(envelope) if isinstance(envelope, dict) else None
+
+    async def _analyze_with_retries(
+        self, request: AnalysisRequest
+    ) -> tuple[SemanticAnalysis, AnalysisMetrics | None]:
         last_error: AnalysisError | None = None
         for attempt in range(self._max_retries + 1):
             try:
@@ -155,11 +216,15 @@ class OllamaAnalysisAdapter:
                 last_error = error
                 if not error.retryable or attempt == self._max_retries:
                     raise
-                await self._sleeper(self._retry_after_seconds)
+                # Exponential with jitter, so a restarting server is not hit in lockstep.
+                delay = self._retry_after_seconds * 2**attempt
+                await self._sleeper(delay * (1 + self._jitter() / 4))
         assert last_error is not None
         raise last_error
 
-    async def _analyze_once(self, request: AnalysisRequest) -> SemanticAnalysis:
+    async def _analyze_once(
+        self, request: AnalysisRequest
+    ) -> tuple[SemanticAnalysis, AnalysisMetrics | None]:
         if self._client is not None:
             return await self._analyze_with_client(self._client, request)
         async with self._client_factory() as client:
@@ -167,17 +232,18 @@ class OllamaAnalysisAdapter:
 
     async def _analyze_with_client(
         self, client: httpx.AsyncClient, request: AnalysisRequest
-    ) -> SemanticAnalysis:
+    ) -> tuple[SemanticAnalysis, AnalysisMetrics | None]:
         try:
             response = await client.post(
                 f"{self._base_url}{_CHAT_PATH}",
                 json=self._chat_payload(request),
             )
         except httpx.TimeoutException as error:
+            # Not retried here: the same input would time out again at once. The queue's
+            # cooldown is the retry for a timeout.
             raise AnalysisError(
                 AnalysisFailureCode.TIMEOUT,
                 "ollama analysis request timed out",
-                retryable=True,
             ) from error
         except httpx.TransportError as error:
             raise AnalysisError(
@@ -186,24 +252,51 @@ class OllamaAnalysisAdapter:
                 retryable=True,
             ) from error
 
+        self._last_call_at = self._clock()
         self._raise_for_status(response)
-        return parse_analysis(
-            self._content(response),
-            model_id=self._model,
-            prompt_version=self._prompt.version,
-        )
+        envelope = self._envelope(response)
+        metrics = _metrics(envelope)
+        try:
+            analysis = parse_analysis(
+                self._content(envelope),
+                model_id=self._model,
+                prompt_version=self._prompt.version,
+            )
+        except AnalysisError as error:
+            error.metrics = metrics
+            raise
+        return analysis, metrics
+
+    def _idle(self) -> bool:
+        if self._last_call_at is None:
+            return True
+        if self._residency_seconds is None:
+            return False
+        return self._clock() - self._last_call_at >= self._residency_seconds
 
     def _chat_payload(self, request: AnalysisRequest) -> dict[str, Any]:
-        return {
+        options: dict[str, Any] = {"temperature": 0}
+        if self._num_ctx is not None:
+            options["num_ctx"] = self._num_ctx
+        if self._num_predict is not None:
+            options["num_predict"] = self._num_predict
+        if self._seed is not None:
+            options["seed"] = self._seed
+        payload: dict[str, Any] = {
             "model": self._model,
             "stream": False,
             "format": self._prompt.output_schema,
-            "options": {"temperature": 0},
+            "options": options,
             "messages": [
                 {"role": "system", "content": self._prompt.system},
                 {"role": "user", "content": self._user_content(request)},
             ],
         }
+        if self._keep_alive is not None:
+            payload["keep_alive"] = self._keep_alive
+        if self._think is not None:
+            payload["think"] = self._think
+        return payload
 
     def _user_content(self, request: AnalysisRequest) -> str:
         """Render the versioned template. Values arrive JSON-encoded, so the result parses."""
@@ -252,7 +345,7 @@ class OllamaAnalysisAdapter:
         )
 
     @staticmethod
-    def _content(response: httpx.Response) -> Any:
+    def _envelope(response: httpx.Response) -> dict[str, Any]:
         try:
             envelope = response.json()
         except ValueError as error:
@@ -267,6 +360,10 @@ class OllamaAnalysisAdapter:
                 "ollama envelope must be an object",
                 retryable=True,
             )
+        return envelope
+
+    @staticmethod
+    def _content(envelope: dict[str, Any]) -> Any:
         message = envelope.get("message")
         if not isinstance(message, dict):
             raise AnalysisError(
@@ -289,6 +386,49 @@ class OllamaAnalysisAdapter:
                 "ollama analysis content is not valid JSON",
                 retryable=True,
             ) from error
+
+
+def _metrics(envelope: dict[str, Any]) -> AnalysisMetrics:
+    """Durations arrive in nanoseconds; anything missing or malformed stays absent."""
+
+    def milliseconds(key: str) -> int | None:
+        value = envelope.get(key)
+        return value // 1_000_000 if isinstance(value, int) and value >= 0 else None
+
+    def count(key: str) -> int | None:
+        value = envelope.get(key)
+        return value if isinstance(value, int) and value >= 0 else None
+
+    return AnalysisMetrics(
+        total_ms=milliseconds("total_duration"),
+        load_ms=milliseconds("load_duration"),
+        prompt_tokens=count("prompt_eval_count"),
+        prompt_eval_ms=milliseconds("prompt_eval_duration"),
+        output_tokens=count("eval_count"),
+        eval_ms=milliseconds("eval_duration"),
+    )
+
+
+def _keep_alive_seconds(keep_alive: str | None) -> float | None:
+    """How long the server keeps the model loaded; `None` when it never unloads it.
+
+    Ollama takes a Go duration (`30m`, `1h30m`) or a bare number of seconds, and a
+    negative value keeps the model resident. An unset or unreadable value falls back to
+    the server default of five minutes, which errs towards warming up.
+    """
+    value = (keep_alive or "").strip()
+    if not value:
+        return 300.0
+    try:
+        seconds = float(value)
+    except ValueError:
+        parts = _DURATION_PART.findall(value.lstrip("-"))
+        if not parts or "".join(n + u for n, u in parts) != value.lstrip("-"):
+            return 300.0
+        seconds = sum(float(n) * _DURATION_SECONDS[u] for n, u in parts)
+        if value.startswith("-"):
+            seconds = -seconds
+    return None if seconds < 0 else seconds
 
 
 def _encode(value: Any) -> str:

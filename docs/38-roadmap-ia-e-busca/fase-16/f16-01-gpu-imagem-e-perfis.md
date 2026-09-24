@@ -1,6 +1,6 @@
 # CARD F16-01 — GPU, imagem 0.34.4, `ollama-init` e perfis de execução
 
-- **Status:** Backlog
+- **Status:** Em revisão (PR #18)
 - **Fase:** 16 — Camada local de IA
 - **Depende de:** Nenhum
 - **Bloqueia:** F16-02, F16-09, Milestone O

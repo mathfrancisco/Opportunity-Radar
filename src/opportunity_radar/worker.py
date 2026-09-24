@@ -26,7 +26,11 @@ from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.scheduling import CollectionGate, evaluate_gate
 from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.matching.adapters import build_analysis_adapter
-from opportunity_radar.matching.analysis import AnalysisStatus, SemanticAnalysisPort
+from opportunity_radar.matching.analysis import (
+    AnalysisMetrics,
+    AnalysisStatus,
+    SemanticAnalysisPort,
+)
 from opportunity_radar.matching.service import (
     DEFAULT_ANALYSIS_VERDICTS,
     AnalysisInProgressError,
@@ -128,6 +132,20 @@ def evaluate_pending(engine: Engine, *, batch_size: int = 50) -> None:
                 )
 
 
+def warm_up_models(adapter: SemanticAnalysisPort) -> None:
+    """Load the model once at startup, so the first analysis does not pay for it."""
+    _log_warm_up(run_async(adapter.warm_up()), reason="startup")
+
+
+def _log_warm_up(metrics: AnalysisMetrics | None, *, reason: str) -> None:
+    if metrics is None:
+        return
+    logger.info(
+        "analysis model warmed up",
+        extra={"job": "warm-up", "reason": reason, "load_ms": metrics.load_ms},
+    )
+
+
 def analyze_pending(
     engine: Engine,
     adapter: SemanticAnalysisPort,
@@ -157,6 +175,12 @@ def analyze_pending(
                 attempt_window=timedelta(seconds=attempt_window_seconds),
                 max_attempts=max_attempts,
             )
+            if pending:
+                # After an idle stretch longer than `keep_alive` the server has unloaded
+                # the model; loading it here keeps that cost out of the first analysis.
+                _log_warm_up(
+                    run_async(adapter.warm_up(only_if_idle=True)), reason="idle"
+                )
             completed = degraded = claimed_elsewhere = failed = 0
             for assessment_id in pending:
                 try:
@@ -425,11 +449,25 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             next_run_time=first_run,
         )
     if settings.worker_analyze_enabled:
+        # One adapter for both jobs: it remembers when it last reached the model.
+        adapter = build_analysis_adapter(settings)
+        if settings.ollama_analysis_enabled:
+            # One-off, so it stays out of FUNCTIONAL_JOB_IDS.
+            scheduler.add_job(
+                warm_up_models,
+                "date",
+                run_date=first_run,
+                args=(adapter,),
+                id="warm-up-models",
+                replace_existing=True,
+                # A one-off that misses its instant is dropped, not deferred, by default.
+                misfire_grace_time=None,
+            )
         scheduler.add_job(
             analyze_pending,
             "interval",
             seconds=120,
-            args=(engine, build_analysis_adapter(settings)),
+            args=(engine, adapter),
             kwargs={
                 "batch_size": settings.worker_analyze_batch_size,
                 "eligible_verdicts": settings.analysis_eligible_verdicts,
