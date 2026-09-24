@@ -13,8 +13,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.matching.analysis import (
-    AnalysisMetrics,
     AnalysisFailureCode,
+    AnalysisMetrics,
     AnalysisOutcome,
     AnalysisRequest,
     AnalysisStatus,

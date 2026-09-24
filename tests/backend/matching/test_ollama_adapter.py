@@ -8,6 +8,7 @@ import pytest
 
 from opportunity_radar.matching.analysis import (
     AnalysisFailureCode,
+    AnalysisOutcome,
     AnalysisPolicy,
     AnalysisRequest,
     AnalysisStatus,
@@ -266,13 +267,15 @@ def test_cache_avoids_an_identical_second_call() -> None:
 
     adapter = _adapter(_transport(handler))
 
-    async def run_twice() -> tuple[object, object]:
+    async def run_twice() -> tuple[AnalysisOutcome, AnalysisOutcome]:
         return await adapter.analyze(_request()), await adapter.analyze(_request())
 
     first, second = asyncio.run(run_twice())
 
     assert calls["count"] == 1
-    assert first == second
+    assert first.analysis == second.analysis
+    # The second answer came from the cache: no call, so no cost to report.
+    assert second.metrics is None
 
 
 def test_cache_misses_when_the_opportunity_content_changes() -> None:
