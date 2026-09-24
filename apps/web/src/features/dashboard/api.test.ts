@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getInbox, getOverview, getSourceMetrics } from './api'
+import { getAnalysisMetrics, getInbox, getOverview, getSourceMetrics } from './api'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -263,5 +263,63 @@ describe('getSourceMetrics', () => {
   it('rejeita respostas sem janelas', async () => {
     respond({ generated_at: '2026-09-22T12:00:00Z' })
     await expect(getSourceMetrics()).rejects.toThrow('métricas de fontes inválidas')
+  })
+})
+
+describe('getAnalysisMetrics', () => {
+  it('lê os agregados por modelo e mantém null como indisponível', async () => {
+    respond({
+      generated_at: '2026-09-24T12:00:00Z',
+      current_model: 'qwen3:8b-q4_K_M',
+      pending: 4,
+      windows: [
+        {
+          window: '7d',
+          since: '2026-09-17T12:00:00Z',
+          until: '2026-09-24T12:00:00Z',
+          models: [
+            {
+              model_id: 'qwen3:8b-q4_K_M',
+              analyses: 8,
+              completed: 6,
+              failed: 2,
+              total_ms_p50: 3500,
+              total_ms_p95: 5750,
+              total_ms_p99: 5950,
+              prompt_tokens_avg: 900,
+              output_tokens_avg: 100,
+              load_ms_avg: null,
+              failure_rate: 0.25,
+              failure_rates: { TIMEOUT: 0.125, SCHEMA_MISMATCH: 0.125 },
+              reuse_rate: null,
+            },
+          ],
+        },
+        { window: '24h', since: '', until: '', models: [] },
+      ],
+    })
+
+    const report = await getAnalysisMetrics()
+
+    expect(fetch).toHaveBeenCalledWith('/api/analysis-metrics', expect.any(Object))
+    expect(report.currentModel).toBe('qwen3:8b-q4_K_M')
+    expect(report.pending).toBe(4)
+    const [week, day] = report.windows
+    expect(week.models[0]).toMatchObject({
+      modelId: 'qwen3:8b-q4_K_M',
+      totalMsP50: 3500,
+      totalMsP95: 5750,
+      loadMsAvg: null,
+      failureRate: 0.25,
+      failureRates: { TIMEOUT: 0.125, SCHEMA_MISMATCH: 0.125 },
+      reuseRate: null,
+    })
+    expect(day.models).toEqual([])
+  })
+
+  it('recusa uma resposta sem janelas', async () => {
+    respond({ current_model: 'x' })
+
+    await expect(getAnalysisMetrics()).rejects.toThrow('métricas de análise inválidas')
   })
 })

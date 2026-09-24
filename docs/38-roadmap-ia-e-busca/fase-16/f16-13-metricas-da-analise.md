@@ -1,6 +1,6 @@
 # CARD F16-13 — Métricas da análise na API, na Visão geral e no `doctor`
 
-- **Status:** Backlog
+- **Status:** Em revisão (PR #18)
 - **Fase:** 16 — Camada local de IA
 - **Depende de:** F16-03
 - **Bloqueia:** Milestone O

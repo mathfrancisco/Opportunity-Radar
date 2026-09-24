@@ -218,6 +218,74 @@ class SqlAlchemyMatchingRepository:
         """
         if not eligible_verdicts or limit <= 0 or max_attempts <= 0:
             return []
+        verdict_rank = case(
+            {verdict: rank for rank, verdict in enumerate(ANALYSIS_VERDICT_PRIORITY)},
+            value=MatchAssessmentModel.verdict,
+            else_=len(ANALYSIS_VERDICT_PRIORITY),
+        )
+        # Value first, then the freshest posting; `id` last keeps every batch deterministic.
+        return list(
+            self.session.scalars(
+                select(MatchAssessmentModel.id)
+                .join(
+                    OpportunityModel,
+                    OpportunityModel.id == MatchAssessmentModel.opportunity_id,
+                )
+                .where(
+                    *self._pending_analysis_conditions(
+                        eligible_verdicts=eligible_verdicts,
+                        now=now,
+                        cooldown=cooldown,
+                        attempt_window=attempt_window,
+                        max_attempts=max_attempts,
+                    )
+                )
+                .order_by(
+                    verdict_rank,
+                    OpportunityModel.published_at.desc().nulls_last(),
+                    MatchAssessmentModel.assessed_at.desc(),
+                    MatchAssessmentModel.id,
+                )
+                .limit(limit)
+            )
+        )
+
+    def count_pending_analysis(
+        self,
+        *,
+        eligible_verdicts: Sequence[str],
+        now: datetime,
+        cooldown: timedelta,
+        attempt_window: timedelta,
+        max_attempts: int,
+    ) -> int:
+        """How far behind the queue is: the same selection, without the batch cap."""
+        if not eligible_verdicts or max_attempts <= 0:
+            return 0
+        total = self.session.scalar(
+            select(func.count())
+            .select_from(MatchAssessmentModel)
+            .where(
+                *self._pending_analysis_conditions(
+                    eligible_verdicts=eligible_verdicts,
+                    now=now,
+                    cooldown=cooldown,
+                    attempt_window=attempt_window,
+                    max_attempts=max_attempts,
+                )
+            )
+        )
+        return total or 0
+
+    @staticmethod
+    def _pending_analysis_conditions(
+        *,
+        eligible_verdicts: Sequence[str],
+        now: datetime,
+        cooldown: timedelta,
+        attempt_window: timedelta,
+        max_attempts: int,
+    ) -> tuple[Any, ...]:
         completed = aliased(MatchAnalysisModel)
         cooling = aliased(MatchAnalysisModel)
         attempted = aliased(MatchAnalysisModel)
@@ -261,34 +329,12 @@ class SqlAlchemyMatchingRepository:
             )
             .scalar_subquery()
         )
-        verdict_rank = case(
-            {verdict: rank for rank, verdict in enumerate(ANALYSIS_VERDICT_PRIORITY)},
-            value=MatchAssessmentModel.verdict,
-            else_=len(ANALYSIS_VERDICT_PRIORITY),
-        )
-        # Value first, then the freshest posting; `id` last keeps every batch deterministic.
-        return list(
-            self.session.scalars(
-                select(MatchAssessmentModel.id)
-                .join(
-                    OpportunityModel,
-                    OpportunityModel.id == MatchAssessmentModel.opportunity_id,
-                )
-                .where(
-                    MatchAssessmentModel.verdict.in_(tuple(eligible_verdicts)),
-                    ~has_completed,
-                    ~is_superseded,
-                    ~in_cooldown,
-                    attempts < max_attempts,
-                )
-                .order_by(
-                    verdict_rank,
-                    OpportunityModel.published_at.desc().nulls_last(),
-                    MatchAssessmentModel.assessed_at.desc(),
-                    MatchAssessmentModel.id,
-                )
-                .limit(limit)
-            )
+        return (
+            MatchAssessmentModel.verdict.in_(tuple(eligible_verdicts)),
+            ~has_completed,
+            ~is_superseded,
+            ~in_cooldown,
+            attempts < max_attempts,
         )
 
     def acquire_analysis_claim(

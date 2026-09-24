@@ -20,7 +20,7 @@ A ordem mede antes de otimizar e avalia antes de trocar.
 | 10 | [F16-10 — vagas parecidas e busca por significado](f16-10-vagas-parecidas-e-busca-por-significado.md) | F16-09, F17-03 | Backlog |
 | 11 | [F16-11 — contexto recuperado (RAG)](f16-11-contexto-recuperado.md) | F16-06, F16-07, F16-09 | Backlog |
 | 12 | [F16-12 — confirmação de modelo e quantização](f16-12-confirmacao-de-modelo-e-quantizacao.md) | F16-06, F16-07 | Backlog |
-| 13 | [F16-13 — métricas da análise](f16-13-metricas-da-analise.md) | F16-03 | Backlog |
+| 13 | [F16-13 — métricas da análise](f16-13-metricas-da-analise.md) | F16-03 | Em revisão (PR #18) |
 
 F16-09 só depende da infraestrutura e pode andar em paralelo com F16-02 a F16-08.
 F16-01 a F16-04 e F16-13 fecham o Milestone O.

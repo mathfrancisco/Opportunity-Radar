@@ -240,6 +240,17 @@ def test_the_queue_serves_the_most_valuable_verdict_first_then_the_newest_postin
         ]
 
 
+def test_the_backlog_count_matches_the_uncapped_queue() -> None:
+    with _session() as session:
+        for _ in range(3):
+            _seed_assessment(session)
+        service = MatchingService(session)
+
+        assert service.count_pending_analysis() == len(
+            service.pending_analysis_ids(limit=1_000_000)
+        )
+
+
 def test_a_batch_warms_the_model_before_analyzing() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:

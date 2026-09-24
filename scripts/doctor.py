@@ -21,7 +21,11 @@ from typing import Any
 from urllib.request import urlopen
 
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
+from opportunity_radar.dashboard.analysis_metrics import analysis_metrics
+from opportunity_radar.dashboard.metrics import METRIC_WINDOWS
+from opportunity_radar.matching.service import MatchingService
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.health import database_health
@@ -31,6 +35,9 @@ WARN = "warn"
 FAIL = "fail"
 
 _SYMBOLS = {OK: "PASS", WARN: "WARN", FAIL: "FAIL"}
+
+#: SPEC 36, section 3.2: p95 of a warm analysis on the reference GPU.
+ANALYSIS_P95_TARGET_MS = 15_000
 
 
 @dataclass(frozen=True)
@@ -415,6 +422,49 @@ def check_ollama_gpu(settings: Settings) -> Check:
     return Check("ollama gpu", OK, f"server {version}; loaded models are in VRAM", None, facts)
 
 
+def check_analysis(settings: Settings) -> Check:
+    """Backlog and 24-hour latency of the current model, against the SPEC target."""
+    try:
+        with Session(create_database_engine(settings.database_url)) as session:
+            pending = MatchingService(session).count_pending_analysis(
+                eligible_verdicts=settings.analysis_eligible_verdicts,
+                cooldown=timedelta(seconds=settings.analysis_retry_cooldown_seconds),
+                attempt_window=timedelta(
+                    seconds=settings.analysis_retry_attempt_window_seconds
+                ),
+                max_attempts=settings.analysis_retry_max_attempts,
+            )
+            report = analysis_metrics(
+                session,
+                current_model=settings.ollama_model_analysis,
+                pending=pending,
+                windows={"24h": METRIC_WINDOWS["24h"]},
+            )
+    except Exception as error:  # pragma: no cover - depends on the local environment
+        return Check("analysis", WARN, f"could not read analysis metrics: {error}")
+    current = report.windows[0].for_model(settings.ollama_model_analysis)
+    p95 = current.total_ms_p95 if current else None
+    facts: dict[str, Any] = {
+        "model": settings.ollama_model_analysis,
+        "keep_alive": settings.ollama_keep_alive,
+        "pending": pending,
+        "p50_ms_24h": current.total_ms_p50 if current else None,
+        "p95_ms_24h": p95,
+        "failure_rate_24h": current.failure_rate if current else None,
+    }
+    if p95 is not None and p95 > ANALYSIS_P95_TARGET_MS:
+        return Check(
+            "analysis",
+            WARN,
+            f"p95 over 24 h is {p95 / 1000:.1f} s, above the {ANALYSIS_P95_TARGET_MS // 1000} s"
+            " target",
+            "check `ollama gpu` above: a model outside VRAM is the usual cause",
+            facts,
+        )
+    measured = "no analysis measured in 24 h" if p95 is None else f"p95 {p95 / 1000:.1f} s"
+    return Check("analysis", OK, f"{measured}; {pending} pending", None, facts)
+
+
 def run_checks(root: Path) -> list[Check]:
     checks = [check_environment(), check_dotenv(root), check_prompts(root)]
     if checks[0].status == FAIL:
@@ -427,6 +477,7 @@ def run_checks(root: Path) -> list[Check]:
         checks.append(check_tables(settings))
         checks.append(check_worker_jobs(settings))
         checks.append(check_source_incidents(settings))
+        checks.append(check_analysis(settings))
     checks.append(check_ollama(settings))
     checks.append(check_ollama_gpu(settings))
     return checks

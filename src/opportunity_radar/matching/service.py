@@ -317,6 +317,8 @@ class MatchingService:
                     cache_key=cache_key,
                     outcome=outcome,
                     analyzed_at=datetime.now(UTC),
+                    model_id=adapter.model,
+                    prompt_version=adapter.prompt_version,
                 )
             )
             self.session.commit()
@@ -349,6 +351,23 @@ class MatchingService:
                 attempt_window=attempt_window,
                 max_attempts=max_attempts,
             )
+        )
+
+    def count_pending_analysis(
+        self,
+        *,
+        eligible_verdicts: Sequence[str] = DEFAULT_ANALYSIS_VERDICTS,
+        cooldown: timedelta = DEFAULT_ANALYSIS_COOLDOWN,
+        attempt_window: timedelta = DEFAULT_ANALYSIS_ATTEMPT_WINDOW,
+        max_attempts: int = DEFAULT_ANALYSIS_MAX_ATTEMPTS,
+        now: datetime | None = None,
+    ) -> int:
+        return self.repository.count_pending_analysis(
+            eligible_verdicts=eligible_verdicts,
+            now=now or datetime.now(UTC),
+            cooldown=cooldown,
+            attempt_window=attempt_window,
+            max_attempts=max_attempts,
         )
 
     def latest_analysis(self, assessment_id: UUID) -> MatchAnalysisModel | None:
@@ -623,6 +642,8 @@ def _analysis_record(
     cache_key: str,
     outcome: AnalysisOutcome,
     analyzed_at: datetime,
+    model_id: str,
+    prompt_version: str,
 ) -> AnalysisRecord:
     analysis = outcome.analysis
     # What the call cost travels with the row, completed or not; absent stays absent.
@@ -636,6 +657,9 @@ def _analysis_record(
             analyzed_at=analyzed_at,
             failure_code=outcome.failure_code.value if outcome.failure_code else None,
             detail=outcome.detail,
+            # Which model the attempt was for, so failures count against the right one.
+            model_id=model_id,
+            prompt_version=prompt_version,
             total_ms=cost.total_ms,
             load_ms=cost.load_ms,
             prompt_tokens=cost.prompt_tokens,

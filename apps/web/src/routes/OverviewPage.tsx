@@ -14,7 +14,11 @@ import {
   type SourceMetrics,
   type SourceMetricsWindow,
 } from '../features/dashboard/api'
-import { useOverview, useSourceMetrics } from '../features/dashboard/useOverview'
+import {
+  useAnalysisMetrics,
+  useOverview,
+  useSourceMetrics,
+} from '../features/dashboard/useOverview'
 import { verdictCountLabels, verdictOrder } from '../features/matching/verdicts'
 import { coverageLabels, coverageTones } from '../features/sources/states'
 
@@ -322,7 +326,7 @@ function SummarySkeleton() {
       <section className="mt-section">
         <p className="text-section">Operação</p>
         <Bone className="mt-3 w-1/2" />
-        {supportLines([true, true])}
+        {supportLines([true, true, true])}
       </section>
     </Skeleton>
   )
@@ -355,6 +359,37 @@ function SupportItem({
         {hint && <span className="ml-2 text-xs text-muted">{hint}</span>}
       </dd>
     </div>
+  )
+}
+
+/**
+ * Custo e atraso da análise do modelo atual em 7 dias. A janela atravessa trocas de modelo,
+ * então só as linhas do modelo configurado entram: um p95 de dois modelos não descreve
+ * nenhum.
+ */
+function AnalysisSupport() {
+  const metrics = useAnalysisMetrics()
+  const report = metrics.data
+  const week = report?.windows.find((item) => item.window === '7d')
+  const current = week?.models.find((item) => item.modelId === report?.currentModel)
+  const inSeconds = (ms: number | null) =>
+    ms === null ? 'indisponível' : `${(ms / 1000).toFixed(1)} s`
+
+  let value = 'carregando…'
+  if (metrics.isError) value = 'indisponível'
+  else if (report && (!current || current.totalMsP50 === null))
+    value = `sem análise medida · ${report.pending} na fila`
+  else if (report && current)
+    value =
+      `p50 ${inSeconds(current.totalMsP50)} · p95 ${inSeconds(current.totalMsP95)} · ` +
+      `${report.pending} na fila · ` +
+      `${((current.failureRate ?? 0) * 100).toFixed(1)}% falhas`
+  return (
+    <SupportItem
+      hint={report ? `${report.currentModel}, últimos 7 dias` : undefined}
+      label="Análise"
+      value={value}
+    />
   )
 }
 
@@ -490,6 +525,7 @@ function Summary({ overview }: { overview: Overview }) {
             label="Análises degradadas"
             value={String(overview.analysesDegraded)}
           />
+          <AnalysisSupport />
         </dl>
         <div className="mt-block">
           <FailingSources sources={overview.failingSources} />

@@ -211,6 +211,9 @@ jobs:
           unknown_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST \
             http://127.0.0.1:3000/api/matches/00000000-0000-0000-0000-000000000000/analysis)"
           test "$unknown_status" = "404"
+          curl --fail --silent 'http://127.0.0.1:3000/api/analysis-metrics' |             python -c "import json,sys; data=json.load(sys.stdin); assert [item['window'] for item in data['windows']] == ['24h', '7d']; assert isinstance(data['pending'], int) and data['pending'] >= 0; current=[item for item in data['windows'][0]['models'] if item['model_id'] == data['current_model']]; assert len(current) == 1, data; assert current[0]['total_ms_p50'] == 1250, current; assert current[0]['completed'] >= 1; assert 0 <= current[0]['failure_rate'] <= 1"
+          analysis_window_status="$(curl --silent --output /dev/null --write-out '%{http_code}' 'http://127.0.0.1:3000/api/analysis-metrics?window=90d')"
+          test "$analysis_window_status" = "422"
       - name: Verify the dashboard read models
         run: |
           curl --fail --silent http://127.0.0.1:3000/api/overview | \
