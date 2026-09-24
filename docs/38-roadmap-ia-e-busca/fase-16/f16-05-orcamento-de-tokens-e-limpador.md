@@ -1,6 +1,6 @@
 # CARD F16-05 — Orçamento de tokens, limpador de descrição e `CONTEXT_OVERFLOW`
 
-- **Status:** Backlog
+- **Status:** Em revisão
 - **Fase:** 16 — Camada local de IA
 - **Depende de:** F16-03
 - **Bloqueia:** F16-07, F16-09

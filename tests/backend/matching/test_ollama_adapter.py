@@ -1,5 +1,7 @@
 import asyncio
 import json
+import math
+from dataclasses import replace
 from decimal import Decimal
 from uuid import UUID
 
@@ -484,7 +486,11 @@ def test_reports_what_the_call_cost_in_milliseconds() -> None:
 
     assert outcome.status is AnalysisStatus.AI_COMPLETED
     assert outcome.metrics is not None
+    size = outcome.metrics.prompt_chars
+    assert size is not None and size > 0
     assert outcome.metrics.as_dict() == {
+        "prompt_chars": size,
+        "prompt_tokens_estimate": math.ceil(size * 0.35),
         "total_ms": 4200,
         "load_ms": 150,
         "prompt_tokens": 1830,
@@ -645,3 +651,57 @@ def test_keep_alive_is_read_as_the_server_reads_it(
     keep_alive: str | None, seconds: float | None
 ) -> None:
     assert _keep_alive_seconds(keep_alive) == seconds
+
+
+def test_a_prompt_over_the_budget_is_never_sent() -> None:
+    calls = {"count": 0}
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        return _envelope(_ANALYSIS)
+
+    # 1000 - 900 - 100 leaves no room at all, so even the fixed parts overflow.
+    adapter = _adapter(_transport(handler), num_ctx=1000, num_predict=900, max_retries=2)
+    outcome = asyncio.run(adapter.analyze(_request()))
+
+    assert calls["count"] == 0
+    assert outcome.status is AnalysisStatus.AI_FAILED
+    assert outcome.failure_code is AnalysisFailureCode.CONTEXT_OVERFLOW
+    assert outcome.metrics is not None
+    assert outcome.metrics.prompt_tokens_estimate is not None
+    assert outcome.metrics.total_ms is None
+
+
+def test_a_prompt_inside_the_budget_is_sent_and_its_size_recorded() -> None:
+    adapter = _adapter(
+        _transport(lambda request: _timed_envelope(_ANALYSIS)), num_ctx=8192, num_predict=1024
+    )
+    outcome = asyncio.run(adapter.analyze(_request()))
+
+    assert outcome.status is AnalysisStatus.AI_COMPLETED
+    assert outcome.metrics is not None
+    assert outcome.metrics.prompt_chars is not None
+    assert outcome.metrics.prompt_tokens == 1830
+
+
+def test_the_calibrated_ratio_replaces_the_default_estimate() -> None:
+    adapter = _adapter(_transport(lambda request: _timed_envelope(_ANALYSIS)))
+    outcome = asyncio.run(adapter.analyze(replace(_request(), tokens_per_char=0.25)))
+
+    assert outcome.metrics is not None
+    assert outcome.metrics.prompt_chars is not None
+    assert outcome.metrics.prompt_tokens_estimate == math.ceil(
+        outcome.metrics.prompt_chars * 0.25
+    )
+
+
+def test_a_failure_carries_the_size_of_the_prompt_it_tried_to_send() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused", request=request)
+
+    outcome = asyncio.run(_adapter(_transport(handler)).analyze(_request()))
+
+    assert outcome.failure_code is AnalysisFailureCode.TRANSPORT_ERROR
+    assert outcome.metrics is not None
+    assert outcome.metrics.prompt_chars is not None
+    assert outcome.metrics.total_ms is None

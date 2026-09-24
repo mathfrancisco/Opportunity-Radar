@@ -1,6 +1,6 @@
 # CARD F16-08 — Cache persistente na tabela de análises
 
-- **Status:** Backlog
+- **Status:** Em revisão
 - **Fase:** 16 — Camada local de IA
 - **Depende de:** F16-03
 - **Bloqueia:** Nenhum

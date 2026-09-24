@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
@@ -23,11 +24,12 @@ from opportunity_radar.matching.analysis import (
 )
 from opportunity_radar.matching.models import MatchAnalysisModel
 from opportunity_radar.matching.repository import (
+    AnalysisRecord,
     AssessmentRecord,
     FactorRecord,
     SqlAlchemyMatchingRepository,
 )
-from opportunity_radar.matching.service import MatchingService
+from opportunity_radar.matching.service import MatchingService, is_reused_analysis
 from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
@@ -308,3 +310,94 @@ def test_a_failure_before_the_model_answered_records_no_cost() -> None:
 
         assert analysis.total_ms is None
         assert analysis.output_tokens is None
+
+
+def test_an_analysis_under_the_same_key_is_reused_across_a_restart() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        repository, record = _seed_assessment(session)
+        first = repository.get_existing(input_hash=record.input_hash)
+        assert first is not None
+        service = MatchingService(session)
+        original = asyncio.run(service.analyze(first.id, _StubAdapter(_completed())))
+        # A re-evaluation of the same opportunity and profile version: same cache key.
+        second_record = replace(record, input_hash=uuid4().hex + uuid4().hex)
+        repository.add(second_record, [])
+        session.commit()
+        second = repository.get_existing(input_hash=second_record.input_hash)
+        assert second is not None
+        second_id, original_id = second.id, original.id
+
+    # A new session, service and adapter: nothing in memory survives the restart.
+    with Session(engine) as session:
+        adapter = _StubAdapter(_completed())
+        reused = asyncio.run(MatchingService(session).analyze(second_id, adapter))
+
+        assert adapter.calls == 0
+        assert reused.assessment_id == second_id
+        assert reused.id != original_id
+        assert reused.status == AnalysisStatus.AI_COMPLETED.value
+        assert reused.detail == f"reaproveitada da análise {original_id}"
+        assert reused.summary == "Strong Python match with unclear compensation."
+        assert reused.total_ms is None and reused.prompt_tokens is None
+        assert is_reused_analysis(reused)
+
+
+def test_refresh_does_not_reuse_another_assessments_analysis() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        repository, record = _seed_assessment(session)
+        first = repository.get_existing(input_hash=record.input_hash)
+        assert first is not None
+        asyncio.run(MatchingService(session).analyze(first.id, _StubAdapter(_completed())))
+        second_record = replace(record, input_hash=uuid4().hex + uuid4().hex)
+        repository.add(second_record, [])
+        session.commit()
+        second = repository.get_existing(input_hash=second_record.input_hash)
+        assert second is not None
+
+        adapter = _StubAdapter(_completed())
+        asyncio.run(MatchingService(session).analyze(second.id, adapter, refresh=True))
+
+        assert adapter.calls == 1
+
+
+def test_the_token_ratio_is_calibrated_from_the_models_measured_analyses() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    model = f"ratio-{uuid4().hex[:8]}"
+    with Session(engine) as session:
+        repository, record = _seed_assessment(session)
+        assessment = repository.get_existing(input_hash=record.input_hash)
+        assert assessment is not None
+        assert repository.tokens_per_char(model, sample=50) is None
+        for tokens, chars in ((300, 1000), (500, 1000), (None, 1000)):
+            repository.add_analysis(
+                AnalysisRecord(
+                    assessment_id=assessment.id,
+                    cache_key=uuid4().hex + uuid4().hex,
+                    status="AI_FAILED",
+                    failure_code="SCHEMA_MISMATCH",
+                    schema_version="analysis-v1",
+                    analyzed_at=datetime.now(UTC),
+                    model_id=model,
+                    prompt_tokens=tokens,
+                    prompt_chars=chars,
+                )
+            )
+        session.commit()
+
+        # The row the server never measured stays out of the ratio.
+        assert repository.tokens_per_char(model, sample=50) == 0.4
+
+
+def test_the_request_carries_no_ratio_while_the_model_has_no_history() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        repository, record = _seed_assessment(session)
+        assessment = repository.get_existing(input_hash=record.input_hash)
+        assert assessment is not None
+        adapter = _StubAdapter(_completed())
+
+        asyncio.run(MatchingService(session).analyze(assessment.id, adapter))
+
+        assert adapter.requests[0].tokens_per_char is None

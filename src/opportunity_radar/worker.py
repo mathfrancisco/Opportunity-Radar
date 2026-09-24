@@ -35,6 +35,7 @@ from opportunity_radar.matching.service import (
     DEFAULT_ANALYSIS_VERDICTS,
     AnalysisInProgressError,
     MatchingService,
+    is_reused_analysis,
 )
 from opportunity_radar.operations.retention import PayloadRetentionService
 from opportunity_radar.operations.service import observe_job
@@ -181,7 +182,7 @@ def analyze_pending(
                 _log_warm_up(
                     run_async(adapter.warm_up(only_if_idle=True)), reason="idle"
                 )
-            completed = degraded = claimed_elsewhere = failed = 0
+            completed = reused = degraded = claimed_elsewhere = failed = 0
             for assessment_id in pending:
                 try:
                     analysis = run_async(
@@ -206,6 +207,7 @@ def analyze_pending(
                     continue
                 if analysis.status == AnalysisStatus.AI_COMPLETED.value:
                     completed += 1
+                    reused += is_reused_analysis(analysis)
                 else:
                     degraded += 1
             if pending:
@@ -215,6 +217,7 @@ def analyze_pending(
                         "job": "analyze",
                         "processed": len(pending),
                         "succeeded": completed,
+                        "reused": reused,
                         "degraded": degraded,
                         "claimed_elsewhere": claimed_elsewhere,
                         "failed": failed,

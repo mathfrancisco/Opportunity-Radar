@@ -236,6 +236,9 @@ class MatchAnalysisModel(Base):
     prompt_eval_ms: Mapped[int | None] = mapped_column(Integer)
     output_tokens: Mapped[int | None] = mapped_column(Integer)
     eval_ms: Mapped[int | None] = mapped_column(Integer)
+    # The prompt's size before sending, and the tokens it was estimated at (F16-05).
+    prompt_chars: Mapped[int | None] = mapped_column(Integer)
+    prompt_tokens_estimate: Mapped[int | None] = mapped_column(Integer)
     schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
     analyzed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
