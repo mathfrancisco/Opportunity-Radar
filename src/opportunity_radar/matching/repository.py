@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Any, Sequence
 from uuid import UUID
 
-from sqlalchemy import Select, delete, func, literal, select, tuple_
+from sqlalchemy import Select, case, delete, func, literal, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.orm import Session, aliased, selectinload
 
@@ -19,10 +19,15 @@ from opportunity_radar.matching.models import (
     MatchAssessmentModel,
     MatchFactorModel,
 )
+from opportunity_radar.opportunities.models import OpportunityModel
 
 # A degraded attempt is what the retry budget counts. `AI_PENDING` is not an attempt and
 # `AI_COMPLETED` ends the budget by removing the assessment from the queue entirely.
 ANALYSIS_ATTEMPT_STATUSES = ("AI_FAILED", "AI_SKIPPED")
+
+# The order the operator reads the Inbox in, so a backlog spends the model on what will be
+# read first. A verdict outside this list still queues, after all of these.
+ANALYSIS_VERDICT_PRIORITY = ("HIGH_PRIORITY", "RECOMMENDED", "REVIEW_REQUIRED", "WATCHLIST")
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,9 +261,19 @@ class SqlAlchemyMatchingRepository:
             )
             .scalar_subquery()
         )
+        verdict_rank = case(
+            {verdict: rank for rank, verdict in enumerate(ANALYSIS_VERDICT_PRIORITY)},
+            value=MatchAssessmentModel.verdict,
+            else_=len(ANALYSIS_VERDICT_PRIORITY),
+        )
+        # Value first, then the freshest posting; `id` last keeps every batch deterministic.
         return list(
             self.session.scalars(
                 select(MatchAssessmentModel.id)
+                .join(
+                    OpportunityModel,
+                    OpportunityModel.id == MatchAssessmentModel.opportunity_id,
+                )
                 .where(
                     MatchAssessmentModel.verdict.in_(tuple(eligible_verdicts)),
                     ~has_completed,
@@ -267,7 +282,10 @@ class SqlAlchemyMatchingRepository:
                     attempts < max_attempts,
                 )
                 .order_by(
-                    MatchAssessmentModel.assessed_at.desc(), MatchAssessmentModel.id
+                    verdict_rank,
+                    OpportunityModel.published_at.desc().nulls_last(),
+                    MatchAssessmentModel.assessed_at.desc(),
+                    MatchAssessmentModel.id,
                 )
                 .limit(limit)
             )

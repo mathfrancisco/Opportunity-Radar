@@ -57,6 +57,7 @@ class _StubAdapter:
     def __init__(self, outcome: AnalysisOutcome) -> None:
         self._outcome = outcome
         self.calls = 0
+        self.warm_ups = 0
 
     @property
     def model(self) -> str:
@@ -70,6 +71,10 @@ class _StubAdapter:
         del request
         self.calls += 1
         return self._outcome
+
+    async def warm_up(self, *, only_if_idle: bool = False) -> None:
+        del only_if_idle
+        self.warm_ups += 1
 
 
 def _completed() -> AnalysisOutcome:
@@ -124,6 +129,7 @@ def _seed_assessment(
     *,
     verdict: str = "RECOMMENDED",
     assessed_at: datetime | None = None,
+    published_at: datetime | None = None,
     opportunity: OpportunityModel | None = None,
     profile_version: ProfileVersionModel | None = None,
 ) -> UUID:
@@ -140,6 +146,7 @@ def _seed_assessment(
             contract_type="FULL_TIME",
             lifecycle_status="ACTIVE",
             version=1,
+            published_at=published_at or datetime.now(UTC),
         )
         session.add(opportunity)
         session.flush()
@@ -210,6 +217,39 @@ def test_only_configured_verdicts_are_queued() -> None:
 
         assert set(eligible.values()) <= queued
         assert queued.isdisjoint(ignored.values())
+
+
+def test_the_queue_serves_the_most_valuable_verdict_first_then_the_newest_posting() -> None:
+    now = datetime.now(UTC)
+    with _session() as session:
+        seeded = {
+            (verdict, age): _seed_assessment(
+                session, verdict=verdict, published_at=now - timedelta(days=age)
+            )
+            for verdict in ("WATCHLIST", "REVIEW_REQUIRED", "RECOMMENDED", "HIGH_PRIORITY")
+            for age in (5, 1)
+        }
+
+        queued = MatchingService(session).pending_analysis_ids(limit=10_000)
+
+        ours = [item for item in queued if item in set(seeded.values())]
+        assert ours == [
+            seeded[(verdict, age)]
+            for verdict in ("HIGH_PRIORITY", "RECOMMENDED", "REVIEW_REQUIRED", "WATCHLIST")
+            for age in (1, 5)
+        ]
+
+
+def test_a_batch_warms_the_model_before_analyzing() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        _seed_assessment(session, verdict="HIGH_PRIORITY")
+    adapter = _StubAdapter(_completed())
+
+    analyze_pending(engine, adapter, batch_size=1)
+
+    assert adapter.warm_ups == 1
+    assert adapter.calls == 1
 
 
 def test_a_completed_analysis_leaves_the_queue_and_is_not_re_prompted() -> None:
@@ -432,7 +472,7 @@ def test_a_model_failure_records_history_and_releases_the_claim() -> None:
 def test_the_job_analyzes_a_bounded_batch_and_commits_each_result() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
-        seeded = [_seed_assessment(session) for _ in range(3)]
+        seeded = [_seed_assessment(session, verdict="HIGH_PRIORITY") for _ in range(3)]
     adapter = _StubAdapter(_completed())
 
     analyze_pending(engine, adapter, batch_size=2)
@@ -450,7 +490,7 @@ def test_the_job_analyzes_a_bounded_batch_and_commits_each_result() -> None:
 def test_the_job_skips_a_claimed_assessment_without_failing_the_pass() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
-        claimed = _seed_assessment(session)
+        claimed = _seed_assessment(session, verdict="HIGH_PRIORITY")
         service = MatchingService(session)
         assert service.repository.acquire_analysis_claim(
             claimed, owner="other", now=datetime.now(UTC), lease=timedelta(minutes=15)
@@ -475,7 +515,7 @@ def test_the_job_skips_a_claimed_assessment_without_failing_the_pass() -> None:
 def test_an_unavailable_model_degrades_the_job_without_raising() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
-        assessment_id = _seed_assessment(session)
+        assessment_id = _seed_assessment(session, verdict="HIGH_PRIORITY")
 
     analyze_pending(engine, _StubAdapter(_failed()), batch_size=1)
 

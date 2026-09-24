@@ -50,6 +50,7 @@ class _StubAdapter:
     def __init__(self, outcome: AnalysisOutcome) -> None:
         self._outcome = outcome
         self.calls = 0
+        self.warm_ups = 0
         self.requests: list[AnalysisRequest] = []
 
     @property
@@ -64,6 +65,10 @@ class _StubAdapter:
         self.calls += 1
         self.requests.append(request)
         return self._outcome
+
+    async def warm_up(self, *, only_if_idle: bool = False) -> None:
+        del only_if_idle
+        self.warm_ups += 1
 
 
 def _completed() -> AnalysisOutcome:

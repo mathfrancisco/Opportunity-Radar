@@ -1,6 +1,6 @@
 # CARD F16-04 — Aquecimento, `keep_alive` e fila por valor
 
-- **Status:** Backlog
+- **Status:** Em revisão (PR #18)
 - **Fase:** 16 — Camada local de IA
 - **Depende de:** F16-02
 - **Bloqueia:** Milestone O

@@ -14,7 +14,7 @@ from opportunity_radar.matching.analysis import (
     AnalysisStatus,
 )
 from opportunity_radar.matching.domain import EligibilityStatus, Verdict
-from opportunity_radar.matching.ollama import OllamaAnalysisAdapter
+from opportunity_radar.matching.ollama import OllamaAnalysisAdapter, _keep_alive_seconds
 
 _BASE_URL = "http://ollama:11434"
 _MODEL = "llama3.2:3b"
@@ -64,6 +64,7 @@ def _adapter(
         "model": _MODEL,
         "max_retries": 0,
         "sleeper": _no_sleep,
+        "jitter": lambda: 0.0,
     }
     kwargs.update(overrides)
     if handler is not None:
@@ -131,6 +132,44 @@ def test_timeout_degrades_without_raising() -> None:
     assert outcome.status is AnalysisStatus.AI_FAILED
     assert outcome.failure_code is AnalysisFailureCode.TIMEOUT
     assert outcome.analysis is None
+
+
+def test_a_timeout_is_not_retried_by_the_adapter() -> None:
+    calls = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        raise httpx.ReadTimeout("too slow", request=request)
+
+    outcome = asyncio.run(_adapter(_transport(handler), max_retries=2).analyze(_request()))
+
+    assert outcome.failure_code is AnalysisFailureCode.TIMEOUT
+    assert calls["count"] == 1
+
+
+def test_a_transport_error_is_retried_with_exponential_backoff_and_jitter() -> None:
+    calls = {"count": 0}
+    delays: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["count"] += 1
+        raise httpx.ConnectError("refused", request=request)
+
+    async def sleeper(delay: float) -> None:
+        delays.append(delay)
+
+    adapter = _adapter(
+        _transport(handler),
+        max_retries=3,
+        retry_after_seconds=0.5,
+        sleeper=sleeper,
+        jitter=lambda: 1.0,
+    )
+    outcome = asyncio.run(adapter.analyze(_request()))
+
+    assert outcome.failure_code is AnalysisFailureCode.TRANSPORT_ERROR
+    assert calls["count"] == 4
+    assert delays == [0.625, 1.25, 2.5]
 
 
 def test_unreachable_ollama_degrades_without_raising() -> None:
@@ -519,3 +558,90 @@ def test_warm_up_never_raises_when_the_server_is_down() -> None:
         raise httpx.ConnectError("refused", request=request)
 
     assert asyncio.run(_adapter(_transport(handler)).warm_up()) is None
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _loading_handler(calls: list[str]) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path == "/api/generate":
+            return httpx.Response(200, json={"done": True, "load_duration": 1_000_000})
+        return _envelope(_ANALYSIS)
+
+    return _transport(handler)
+
+
+def test_an_idle_warm_up_loads_only_after_keep_alive_has_elapsed() -> None:
+    calls: list[str] = []
+    clock = _Clock()
+    adapter = _adapter(_loading_handler(calls), keep_alive="30m", clock=clock)
+
+    async def scenario() -> list[bool]:
+        loaded = [await adapter.warm_up(only_if_idle=True) is not None]
+        await adapter.analyze(_request())
+        clock.now += 29 * 60
+        loaded.append(await adapter.warm_up(only_if_idle=True) is not None)
+        clock.now += 31 * 60
+        loaded.append(await adapter.warm_up(only_if_idle=True) is not None)
+        return loaded
+
+    assert asyncio.run(scenario()) == [True, False, True]
+    assert calls == ["/api/generate", "/api/chat", "/api/generate"]
+
+
+def test_a_resident_model_is_never_warmed_up_again() -> None:
+    calls: list[str] = []
+    clock = _Clock()
+    adapter = _adapter(_loading_handler(calls), keep_alive="-1", clock=clock)
+
+    async def scenario() -> None:
+        await adapter.warm_up()
+        clock.now += 10 * 86400
+        assert await adapter.warm_up(only_if_idle=True) is None
+
+    asyncio.run(scenario())
+    assert calls == ["/api/generate"]
+
+
+def test_a_failed_warm_up_does_not_count_as_a_call() -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        return httpx.Response(503, json={"error": "loading"})
+
+    adapter = _adapter(_transport(handler), keep_alive="30m", clock=_Clock())
+
+    async def scenario() -> None:
+        assert await adapter.warm_up() is None
+        assert await adapter.warm_up(only_if_idle=True) is None
+
+    asyncio.run(scenario())
+    assert calls == ["/api/generate", "/api/generate"]
+
+
+@pytest.mark.parametrize(
+    ("keep_alive", "seconds"),
+    [
+        ("30m", 1800.0),
+        ("1h30m", 5400.0),
+        ("90s", 90.0),
+        ("600", 600.0),
+        ("0", 0.0),
+        ("-1", None),
+        ("-1m", None),
+        (None, 300.0),
+        ("soon", 300.0),
+    ],
+)
+def test_keep_alive_is_read_as_the_server_reads_it(
+    keep_alive: str | None, seconds: float | None
+) -> None:
+    assert _keep_alive_seconds(keep_alive) == seconds

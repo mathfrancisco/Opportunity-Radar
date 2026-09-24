@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
+import re
+import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
@@ -41,6 +44,8 @@ from opportunity_radar.matching.prompts import (
 DEFAULT_PROMPT_VERSION = f"{PROMPT_FAMILY}/{DEFAULT_PROMPT_NAME}"
 _CHAT_PATH = "/api/chat"
 _GENERATE_PATH = "/api/generate"
+_DURATION_PART = re.compile(r"(\d+(?:\.\d+)?)(ms|s|m|h)")
+_DURATION_SECONDS = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0}
 
 
 class _AnalysisCache:
@@ -87,6 +92,8 @@ class OllamaAnalysisAdapter:
         max_retries: int = 1,
         retry_after_seconds: float = 0.5,
         sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        jitter: Callable[[], float] = random.random,
+        clock: Callable[[], float] = time.monotonic,
         policy: AnalysisPolicy | None = None,
         prompt: PromptArtifacts | None = None,
         cache_max_entries: int = 256,
@@ -120,6 +127,9 @@ class OllamaAnalysisAdapter:
         self._max_retries = max_retries
         self._retry_after_seconds = retry_after_seconds
         self._sleeper = sleeper
+        self._jitter = jitter
+        self._clock = clock
+        self._last_call_at: float | None = None
         self._policy = policy or AnalysisPolicy()
         self._prompt = prompt or load_prompt()
         self._cache = _AnalysisCache(cache_max_entries)
@@ -127,6 +137,7 @@ class OllamaAnalysisAdapter:
         self._num_predict = num_predict
         self._seed = seed
         self._keep_alive = keep_alive
+        self._residency_seconds = _keep_alive_seconds(keep_alive)
         self._think = think
 
     @property
@@ -158,14 +169,18 @@ class OllamaAnalysisAdapter:
         self._cache.set(key, analysis)
         return completed_outcome(analysis, metrics)
 
-    async def warm_up(self) -> AnalysisMetrics | None:
+    async def warm_up(self, *, only_if_idle: bool = False) -> AnalysisMetrics | None:
         """Load the model before the queue needs it, and report what the load cost.
 
         An empty generate request loads the model into memory and keeps it there for
         `keep_alive`, so the first real analysis does not pay for loading five gigabytes.
-        Never raises: a server that is down is the queue's problem to degrade, not the
-        worker's startup's.
+        With `only_if_idle`, the request is sent only when the last call is older than
+        `keep_alive`, which is when the server has unloaded the model. Returns `None` when
+        nothing was loaded. Never raises: a server that is down is the queue's problem to
+        degrade, not the worker's startup's.
         """
+        if only_if_idle and not self._idle():
+            return None
         payload: dict[str, Any] = {"model": self._model, "prompt": ""}
         if self._keep_alive is not None:
             payload["keep_alive"] = self._keep_alive
@@ -183,6 +198,7 @@ class OllamaAnalysisAdapter:
             return None
         if not 200 <= response.status_code < 300:
             return None
+        self._last_call_at = self._clock()
         try:
             envelope = response.json()
         except ValueError:
@@ -200,7 +216,9 @@ class OllamaAnalysisAdapter:
                 last_error = error
                 if not error.retryable or attempt == self._max_retries:
                     raise
-                await self._sleeper(self._retry_after_seconds)
+                # Exponential with jitter, so a restarting server is not hit in lockstep.
+                delay = self._retry_after_seconds * 2**attempt
+                await self._sleeper(delay * (1 + self._jitter() / 4))
         assert last_error is not None
         raise last_error
 
@@ -221,10 +239,11 @@ class OllamaAnalysisAdapter:
                 json=self._chat_payload(request),
             )
         except httpx.TimeoutException as error:
+            # Not retried here: the same input would time out again at once. The queue's
+            # cooldown is the retry for a timeout.
             raise AnalysisError(
                 AnalysisFailureCode.TIMEOUT,
                 "ollama analysis request timed out",
-                retryable=True,
             ) from error
         except httpx.TransportError as error:
             raise AnalysisError(
@@ -233,6 +252,7 @@ class OllamaAnalysisAdapter:
                 retryable=True,
             ) from error
 
+        self._last_call_at = self._clock()
         self._raise_for_status(response)
         envelope = self._envelope(response)
         metrics = _metrics(envelope)
@@ -246,6 +266,13 @@ class OllamaAnalysisAdapter:
             error.metrics = metrics
             raise
         return analysis, metrics
+
+    def _idle(self) -> bool:
+        if self._last_call_at is None:
+            return True
+        if self._residency_seconds is None:
+            return False
+        return self._clock() - self._last_call_at >= self._residency_seconds
 
     def _chat_payload(self, request: AnalysisRequest) -> dict[str, Any]:
         options: dict[str, Any] = {"temperature": 0}
@@ -380,6 +407,28 @@ def _metrics(envelope: dict[str, Any]) -> AnalysisMetrics:
         output_tokens=count("eval_count"),
         eval_ms=milliseconds("eval_duration"),
     )
+
+
+def _keep_alive_seconds(keep_alive: str | None) -> float | None:
+    """How long the server keeps the model loaded; `None` when it never unloads it.
+
+    Ollama takes a Go duration (`30m`, `1h30m`) or a bare number of seconds, and a
+    negative value keeps the model resident. An unset or unreadable value falls back to
+    the server default of five minutes, which errs towards warming up.
+    """
+    value = (keep_alive or "").strip()
+    if not value:
+        return 300.0
+    try:
+        seconds = float(value)
+    except ValueError:
+        parts = _DURATION_PART.findall(value.lstrip("-"))
+        if not parts or "".join(n + u for n, u in parts) != value.lstrip("-"):
+            return 300.0
+        seconds = sum(float(n) * _DURATION_SECONDS[u] for n, u in parts)
+        if value.startswith("-"):
+            seconds = -seconds
+    return None if seconds < 0 else seconds
 
 
 def _encode(value: Any) -> str:

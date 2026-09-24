@@ -363,6 +363,10 @@ class SemanticAnalysisPort(Protocol):
     async def analyze(self, request: AnalysisRequest) -> AnalysisOutcome:
         ...
 
+    async def warm_up(self, *, only_if_idle: bool = False) -> AnalysisMetrics | None:
+        """Load the model ahead of the queue. Never raises; `None` when nothing loaded."""
+        ...
+
 
 class NullAnalysisAdapter:
     """Adapter used when the semantic layer is disabled. Always degrades cleanly."""
@@ -381,6 +385,10 @@ class NullAnalysisAdapter:
             status=AnalysisStatus.AI_SKIPPED,
             detail="semantic analysis is disabled",
         )
+
+    async def warm_up(self, *, only_if_idle: bool = False) -> AnalysisMetrics | None:
+        del only_if_idle
+        return None
 
 
 def skipped_outcome(reason: str) -> AnalysisOutcome:
