@@ -5,13 +5,18 @@ x-app-environment: &app-environment
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://opportunity_radar:change-me-for-local-use@postgres:5432/opportunity_radar}
   OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-  OLLAMA_MODEL_ANALYSIS: ${OLLAMA_MODEL_ANALYSIS:-llama3.2:3b}
+  OLLAMA_MODEL_ANALYSIS: ${OLLAMA_MODEL_ANALYSIS:-qwen3:8b-q4_K_M}
   OLLAMA_ANALYSIS_ENABLED: ${OLLAMA_ANALYSIS_ENABLED:-true}
-  OLLAMA_ANALYSIS_TIMEOUT_SECONDS: ${OLLAMA_ANALYSIS_TIMEOUT_SECONDS:-30}
+  OLLAMA_ANALYSIS_TIMEOUT_SECONDS: ${OLLAMA_ANALYSIS_TIMEOUT_SECONDS:-60}
   OLLAMA_ANALYSIS_CONNECT_TIMEOUT_SECONDS: ${OLLAMA_ANALYSIS_CONNECT_TIMEOUT_SECONDS:-5}
   OLLAMA_ANALYSIS_MAX_RETRIES: ${OLLAMA_ANALYSIS_MAX_RETRIES:-1}
   OLLAMA_ANALYSIS_RETRY_AFTER_SECONDS: ${OLLAMA_ANALYSIS_RETRY_AFTER_SECONDS:-0.5}
   OLLAMA_ANALYSIS_CACHE_ENTRIES: ${OLLAMA_ANALYSIS_CACHE_ENTRIES:-256}
+  OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-8192}
+  OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-1024}
+  OLLAMA_SEED: ${OLLAMA_SEED:-42}
+  OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
+  OLLAMA_THINK: ${OLLAMA_THINK:-false}
   FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
   COLLECTION_TIMEZONE: ${COLLECTION_TIMEZONE:-America/Sao_Paulo}
   WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
@@ -59,7 +64,28 @@ services:
     networks: [app_net]
 
   ollama:
-    image: ollama/ollama:0.5.13
+    # Pinned by digest: a tag can be republished, and a server version changes the
+    # tokenizer, the defaults and the speed under the same name. 0.34.4 carries the CUDA
+    # runners the RTX 5060 (Blackwell) needs; 0.5.13 predates them.
+    image: ollama/ollama:0.34.4@sha256:8262851b2846b87c649eddf3e76beb270c52f4d1bc94559f47efde16b0841551
+    environment:
+      # Flash attention and a q8 KV cache shrink the context's memory, which is what lets
+      # an 8B model and an 8k window share the 8 GB of VRAM (docs/36-spec-ollama.md 3.1).
+      OLLAMA_FLASH_ATTENTION: ${OLLAMA_FLASH_ATTENTION:-1}
+      OLLAMA_KV_CACHE_TYPE: ${OLLAMA_KV_CACHE_TYPE:-q8_0}
+      # Each parallel request reserves another context cache; 8 GB holds one.
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-2}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
+    # If a model spills out of VRAM, the Ollama container runs out of memory, not Postgres.
+    mem_limit: ${OLLAMA_MEMORY_LIMIT:-6g}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     volumes:
       - ollama_models:/root/.ollama
     healthcheck:
@@ -68,6 +94,22 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+    networks: [app_net]
+
+  # Pulls the configured models once and exits, so a fresh machine does not need a
+  # terminal to get the semantic layer working. Nothing depends on it: analysis is
+  # optional, and a model still downloading reads as MODEL_UNAVAILABLE, classified.
+  ollama-init:
+    image: ollama/ollama:0.34.4@sha256:8262851b2846b87c649eddf3e76beb270c52f4d1bc94559f47efde16b0841551
+    entrypoint: ["/bin/sh", "-c"]
+    command: ['ollama pull "$$OLLAMA_MODEL_ANALYSIS"']
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL_ANALYSIS: ${OLLAMA_MODEL_ANALYSIS:-qwen3:8b-q4_K_M}
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
     networks: [app_net]
 
   migrate:

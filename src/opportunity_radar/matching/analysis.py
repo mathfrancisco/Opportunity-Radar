@@ -61,6 +61,35 @@ class AnalysisError(Exception):
         self.code = code
         self.summary = summary
         self.retryable = retryable
+        # What the call cost when the model did answer, even if the answer was unusable:
+        # a schema mismatch after 40 seconds is a different problem from one after 2.
+        self.metrics: AnalysisMetrics | None = None
+
+
+@dataclass(frozen=True)
+class AnalysisMetrics:
+    """What one model call cost, as the server reported it. Durations in milliseconds.
+
+    Every field is optional: an adapter that does not report a number leaves it absent,
+    and absent is shown as unavailable, never as zero.
+    """
+
+    total_ms: int | None = None
+    load_ms: int | None = None
+    prompt_tokens: int | None = None
+    prompt_eval_ms: int | None = None
+    output_tokens: int | None = None
+    eval_ms: int | None = None
+
+    def as_dict(self) -> dict[str, int | None]:
+        return {
+            "total_ms": self.total_ms,
+            "load_ms": self.load_ms,
+            "prompt_tokens": self.prompt_tokens,
+            "prompt_eval_ms": self.prompt_eval_ms,
+            "output_tokens": self.output_tokens,
+            "eval_ms": self.eval_ms,
+        }
 
 
 @dataclass(frozen=True)
@@ -99,6 +128,7 @@ class AnalysisOutcome:
     analysis: SemanticAnalysis | None = None
     failure_code: AnalysisFailureCode | None = None
     detail: str | None = None
+    metrics: AnalysisMetrics | None = None
 
     @property
     def degraded(self) -> bool:
@@ -362,11 +392,16 @@ def failed_outcome(error: AnalysisError) -> AnalysisOutcome:
         status=AnalysisStatus.AI_FAILED,
         failure_code=error.code,
         detail=error.summary,
+        metrics=error.metrics,
     )
 
 
-def completed_outcome(analysis: SemanticAnalysis) -> AnalysisOutcome:
-    return AnalysisOutcome(status=AnalysisStatus.AI_COMPLETED, analysis=analysis)
+def completed_outcome(
+    analysis: SemanticAnalysis, metrics: AnalysisMetrics | None = None
+) -> AnalysisOutcome:
+    return AnalysisOutcome(
+        status=AnalysisStatus.AI_COMPLETED, analysis=analysis, metrics=metrics
+    )
 
 
 __all__: Sequence[str] = (
@@ -374,6 +409,7 @@ __all__: Sequence[str] = (
     "OUTPUT_SCHEMA",
     "AnalysisError",
     "AnalysisFailureCode",
+    "AnalysisMetrics",
     "AnalysisOutcome",
     "AnalysisPolicy",
     "AnalysisRequest",

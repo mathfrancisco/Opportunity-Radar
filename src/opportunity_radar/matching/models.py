@@ -227,6 +227,15 @@ class MatchAnalysisModel(Base):
     recommended_review: Mapped[bool | None] = mapped_column(Boolean)
     model_id: Mapped[str | None] = mapped_column(String(128))
     prompt_version: Mapped[str | None] = mapped_column(String(64))
+    # What the call cost, as the server reported it (docs/36-spec-ollama.md, section 9).
+    # Null on rows written before it was recorded, and on calls that never reached the
+    # model: unavailable, never zero.
+    total_ms: Mapped[int | None] = mapped_column(Integer)
+    load_ms: Mapped[int | None] = mapped_column(Integer)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer)
+    prompt_eval_ms: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    eval_ms: Mapped[int | None] = mapped_column(Integer)
     schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
     analyzed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(

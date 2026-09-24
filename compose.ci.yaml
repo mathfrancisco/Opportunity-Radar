@@ -2,6 +2,9 @@ services:
   ollama:
     image: python:3.12-alpine
     command: ["python", "/stub/fake_ollama.py"]
+    # The runner has no GPU, and the stub needs none; the GPU reservation and the server
+    # tuning of compose.yaml would stop the container from starting here.
+    deploy: !reset null
     volumes:
       - ./tests/e2e:/stub:ro
     healthcheck:

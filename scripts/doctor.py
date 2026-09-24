@@ -368,6 +368,53 @@ def check_ollama(settings: Settings) -> Check:
     return Check("ollama", OK, f"model {settings.ollama_model_analysis} is installed")
 
 
+def check_ollama_gpu(settings: Settings) -> Check:
+    """Server version and whether the loaded models sit entirely in VRAM.
+
+    A model with `size_vram < size` has part of it in system RAM: it answers, slowly,
+    and competes with Postgres for memory. That is a warning, not a failure, because the
+    CPU path is a supported fallback (compose.cpu.yaml).
+    """
+    base = settings.ollama_base_url.rstrip("/")
+    try:
+        timeout = settings.ollama_health_timeout_seconds
+        with urlopen(f"{base}/api/version", timeout=timeout) as response:
+            version = json.load(response).get("version")
+        with urlopen(f"{base}/api/ps", timeout=timeout) as response:
+            loaded = json.load(response).get("models", [])
+    except Exception:
+        return Check(
+            "ollama gpu",
+            WARN,
+            "could not read the Ollama version or its loaded models",
+            "check that the ollama service is up",
+        )
+    facts: dict[str, Any] = {"version": version, "loaded": []}
+    spilled: list[str] = []
+    for model in loaded if isinstance(loaded, list) else []:
+        if not isinstance(model, dict):
+            continue
+        size, in_vram = model.get("size"), model.get("size_vram")
+        facts["loaded"].append(
+            {"name": model.get("name"), "size": size, "size_vram": in_vram}
+        )
+        if isinstance(size, int) and isinstance(in_vram, int) and in_vram < size:
+            spilled.append(str(model.get("name")))
+    if spilled:
+        return Check(
+            "ollama gpu",
+            WARN,
+            f"loaded partly outside VRAM: {', '.join(spilled)}",
+            "reserve the GPU (docs/30-runbook.md) or use a smaller model or context",
+            facts,
+        )
+    if not facts["loaded"]:
+        return Check(
+            "ollama gpu", OK, f"server {version}; no model loaded right now", None, facts
+        )
+    return Check("ollama gpu", OK, f"server {version}; loaded models are in VRAM", None, facts)
+
+
 def run_checks(root: Path) -> list[Check]:
     checks = [check_environment(), check_dotenv(root), check_prompts(root)]
     if checks[0].status == FAIL:
@@ -381,6 +428,7 @@ def run_checks(root: Path) -> list[Check]:
         checks.append(check_worker_jobs(settings))
         checks.append(check_source_incidents(settings))
     checks.append(check_ollama(settings))
+    checks.append(check_ollama_gpu(settings))
     return checks
 
 

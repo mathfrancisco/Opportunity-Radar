@@ -111,6 +111,47 @@ describe('analyzeAssessment', () => {
     expect(analysis.status).toBe('AI_FAILED')
     expect(analysis.failureCode).toBe('TRANSPORT_ERROR')
     expect(analysis.summary).toBeNull()
+    // No call reached the model, so there is no cost to show — absent, not zero.
+    expect(analysis.metrics).toBeNull()
+  })
+
+  it('lê o custo da chamada e mantém ausente o que o servidor não informou', async () => {
+    respond({
+      id: 'analysis-2',
+      assessment_id: 'assessment-1',
+      status: 'AI_COMPLETED',
+      failure_code: null,
+      detail: null,
+      summary: 'Boa aderência.',
+      strengths: [],
+      risks: [],
+      inferences: [],
+      unknowns: [],
+      recommended_review: false,
+      model_id: 'qwen3:8b-q4_K_M',
+      prompt_version: 'opportunity_analysis/v1',
+      schema_version: 'analysis-v1',
+      cache_key: 'c'.repeat(64),
+      analyzed_at: '2026-09-24T12:05:00Z',
+      created_at: '2026-09-24T12:05:00Z',
+      metrics: {
+        total_ms: 4200,
+        load_ms: null,
+        prompt_tokens: 1830,
+        prompt_eval_ms: 900,
+        output_tokens: 212,
+        eval_ms: 3100,
+      },
+    })
+
+    const analysis = await analyzeAssessment('assessment-1', { refresh: false })
+
+    expect(analysis.metrics).toEqual({
+      totalMs: 4200,
+      loadMs: null,
+      promptTokens: 1830,
+      outputTokens: 212,
+    })
   })
 
   it('explica a análise já em andamento em vez de mostrar o código do conflito', async () => {

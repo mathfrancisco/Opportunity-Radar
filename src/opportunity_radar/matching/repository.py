@@ -61,6 +61,12 @@ class AnalysisRecord:
     recommended_review: bool | None = None
     model_id: str | None = None
     prompt_version: str | None = None
+    total_ms: int | None = None
+    load_ms: int | None = None
+    prompt_tokens: int | None = None
+    prompt_eval_ms: int | None = None
+    output_tokens: int | None = None
+    eval_ms: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -326,6 +332,12 @@ class SqlAlchemyMatchingRepository:
             prompt_version=record.prompt_version,
             schema_version=record.schema_version,
             analyzed_at=record.analyzed_at,
+            total_ms=record.total_ms,
+            load_ms=record.load_ms,
+            prompt_tokens=record.prompt_tokens,
+            prompt_eval_ms=record.prompt_eval_ms,
+            output_tokens=record.output_tokens,
+            eval_ms=record.eval_ms,
         )
         self.session.add(analysis)
         return analysis

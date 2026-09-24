@@ -624,6 +624,8 @@ def _analysis_record(
     analyzed_at: datetime,
 ) -> AnalysisRecord:
     analysis = outcome.analysis
+    # What the call cost travels with the row, completed or not; absent stays absent.
+    cost = outcome.metrics.as_dict() if outcome.metrics is not None else {}
     if outcome.status is not AnalysisStatus.AI_COMPLETED or analysis is None:
         return AnalysisRecord(
             assessment_id=assessment_id,
@@ -633,6 +635,7 @@ def _analysis_record(
             analyzed_at=analyzed_at,
             failure_code=outcome.failure_code.value if outcome.failure_code else None,
             detail=outcome.detail,
+            **cost,
         )
     return AnalysisRecord(
         assessment_id=assessment_id,
@@ -648,6 +651,7 @@ def _analysis_record(
         recommended_review=analysis.recommended_review,
         model_id=analysis.model_id,
         prompt_version=analysis.prompt_version,
+        **cost,
     )
 
 
