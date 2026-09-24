@@ -1,10 +1,11 @@
 # SPEC — Camada local de IA: respostas, tempo, busca e operação
 
 - **Status:** Proposta, para revisão
-- **Data:** 2026-09-23
+- **Data:** 2026-09-23, revisada em 2026-09-24 com as decisões da §3.3
 - **Escopo:** tudo o que o Opportunity Radar faz com o Ollama — análise semântica,
   desempenho, busca, observabilidade, avaliação e operação
 - **Hardware de referência:** Xeon E5-2680 v4, 16 GB de RAM, RTX 5060 8 GB (§3.1)
+- **Cards de execução:** [Fase 16](38-roadmap-ia-e-busca/fase-16/README.md)
 - **Documentos relacionados:** [SPEC de busca](37-spec-busca.md), [Ollama e prompts](21-ollama-prompts.md),
   [Matching e scoring](20-matching-scoring.md), [Tecnologias](05-tecnologias.md) (§ pgvector),
   [Runbook](30-runbook.md)
@@ -61,7 +62,7 @@ Auditoria contra o código em 23 de setembro de 2026.
   em prosa os fatores que o motor determinístico já calculou. É a maior perda de valor da
   camada, e nenhuma otimização de tempo compensa isso.
 - **Mandar o texto tem custo.** Uma descrição de vaga costuma ter centenas de palavras — a
-  distribuição real do acervo é a primeira coisa que o F16-03 mede. Com o
+  distribuição real do acervo é a primeira coisa que o F16-05 mede. Com o
   contexto padrão do servidor e sem `num_ctx` explícito, um prompt maior que a janela é
   truncado pelo início, que é onde estão as instruções de sistema. O servidor registra
   isso no próprio log, mas a resposta a quem chamou não diz nada: para o radar, a
@@ -95,8 +96,8 @@ Três consequências para esta SPEC:
   reserva nenhuma GPU, então o container não enxerga a RTX 5060, qualquer que seja a
   versão. E a GPU, quando reservada, exige servidor recente: Blackwell precisa de CUDA 12.8
   ou superior, e a imagem `ollama/ollama:0.5.13` é muito provavelmente anterior a esse
-  suporte — o F16-09 confirma. Reservar a GPU e atualizar a imagem deixam de ser melhoria e
-  viram **pré-requisito** (F16-09 sobe na ordem, §11), com verificação explícita de que o
+  suporte — o F16-01 confirma. Reservar a GPU e atualizar a imagem deixam de ser melhoria e
+  viram **pré-requisito** (F16-01 abre o plano, §14), com verificação explícita de que o
   modelo carregou na VRAM (`/api/ps`, campo `size_vram`).
 - **Docker no Windows passa pelo WSL2.** A GPU chega ao container pelo Docker Desktop com
   backend WSL2 e o driver NVIDIA do Windows. O runbook ganha esse passo, e o `doctor` passa
@@ -110,7 +111,7 @@ do modelo de análise.
 ### 3.2 Metas
 
 Os números de latência são estimativas para 7–8B em Q4 nessa GPU — geração na casa de
-dezenas de tokens por segundo e avaliação do prompt na casa dos milhares. O F16-01 mede o
+dezenas de tokens por segundo e avaliação do prompt na casa dos milhares. O F16-03 mede o
 valor real antes de qualquer otimização, e as metas são recalculadas a partir dele se a
 medição cair fora da faixa. Cada meta tem a medição que a prova, na §9.
 
@@ -128,6 +129,29 @@ medição cair fora da faixa. Cada meta tem a medição que a prova, na §9.
 | Análises reaproveitadas pelo cache persistente após reinício | 0% (cache em memória) | 100% das chaves já gravadas |
 | Qualidade no conjunto de avaliação (§8) | inexistente | nota ≥ baseline `v1` em todos os critérios, e maior em fidelidade |
 | Busca que encontra por termo da descrição | não | sim, com Postgres full-text |
+| Vagas com embedding atual | não existe | 100% das oportunidades não rejeitadas, em até 2 ciclos do worker |
+
+### 3.3 Decisões tomadas
+
+Decididas pelo operador em 24 de setembro de 2026, e tratadas daqui em diante como o
+padrão a implementar, não como hipótese a comparar:
+
+| Decisão | Valor | Substitui | Fonte |
+| --- | --- | --- | --- |
+| Modelo de análise | `qwen3:8b-q4_K_M` — 5,2 GB, contexto nativo de 40K, saída estruturada | `llama3.2:3b` | [Ollama](https://ollama.com/library/qwen3/tags) |
+| Raciocínio do modelo | desligado por requisição (`think: false`) | — | §4.4 |
+| Imagem do servidor | `ollama/ollama:0.34.4`, fixada por digest `sha256:8262851b2846…0841551` | `0.5.13` | Docker Hub, release de 23/09/2026 |
+| Modelo de embedding | `qwen3-embedding:0.6b` — 639 MB, multilíngue, 1 024 dimensões | — | [Ollama](https://ollama.com/library/qwen3-embedding/tags) |
+| Banco vetorial | pgvector 0.8.6, compilado sobre a imagem `postgres:17.2-alpine` atual | — | §7.2 |
+| Execução | GPU por padrão; CPU como perfil de reserva | CPU | §3.1 |
+
+A regra de troca da §8 continua valendo, mas agora para **sair** desse padrão: um modelo
+ou uma quantização diferente só substitui o `qwen3:8b-q4_K_M` com relatório de avaliação
+mostrando que não piora nenhum critério e melhora pelo menos um.
+
+O suporte da RTX 5060 foi confirmado contra a fonte: o problema de GPUs Blackwell ficando
+em CPU foi corrigido no Ollama em novembro de 2025
+([issue #13163](https://github.com/ollama/ollama/issues/13163)), bem antes da 0.34.4.
 
 ---
 
@@ -176,6 +200,9 @@ medição cair fora da faixa. Cada meta tem a medição que a prova, na §9.
 
 - `seed` fixo em `options`, junto com `temperature: 0`, para que a mesma entrada no mesmo
   modelo produza a mesma saída. Isso é o que torna a comparação entre versões (§8) justa.
+- `think: false` em toda requisição de análise. O Qwen3 raciocina antes de responder por
+  padrão; numa análise que é um resumo estruturado, esses tokens custam segundos e janela
+  de contexto sem melhorar a saída. Ligar o raciocínio é experimento da §8, não padrão.
 - `top_k`/`top_p` explícitos no `metadata.yaml` da versão do prompt, para que a
   configuração de amostragem seja parte do artefato versionado e não um padrão do servidor.
 
@@ -187,8 +214,11 @@ medição cair fora da faixa. Cada meta tem a medição que a prova, na §9.
 
 - `num_ctx` explícito em toda chamada, configurável (`OLLAMA_ANALYSIS_NUM_CTX`, padrão
   8192). A janela nunca fica por conta do padrão do servidor, que muda entre versões.
-- `num_predict` explícito (`OLLAMA_ANALYSIS_NUM_PREDICT`, padrão 768): o limite de saída
-  corta resposta que desanda, em vez de deixar o modelo gerar até o timeout.
+- `num_predict` explícito (`OLLAMA_NUM_PREDICT`, padrão 1024): o limite de saída corta
+  resposta que desanda, em vez de deixar o modelo gerar até o timeout.
+- O `qwen3:8b` aceita 40K de contexto, mas a janela usada é a que cabe na VRAM junto com os
+  pesos (§3.1), não a que o modelo aceita. Subir o `num_ctx` é decisão medida, com a VRAM
+  ocupada no relatório.
 
 ### 5.2 Orçamento antes do envio
 
@@ -210,15 +240,19 @@ medição cair fora da faixa. Cada meta tem a medição que a prova, na §9.
 
 ### 6.1 Conexão e modelo quentes
 
-- Um `httpx.AsyncClient` por processo, com pool de conexões, em vez de um cliente novo por
-  análise. O adaptador já é construído uma vez por processo (`cached_analysis_adapter`); o
-  cliente passa a acompanhá-lo, com fechamento no encerramento do worker e da API.
+- **Cliente HTTP persistente não se paga aqui.** O worker chama cada análise com
+  `asyncio.run` (`worker.py:163`), o que cria um loop de eventos novo por análise, e um
+  `httpx.AsyncClient` não pode ser reaproveitado entre loops. Trocar isso exigiria mudar o
+  modelo de execução do worker para economizar milissegundos de conexão local. O ganho real
+  de tempo está no modelo carregado, não na conexão: a proposta de cliente persistente sai
+  desta SPEC.
 - `keep_alive` explícito por chamada (`OLLAMA_KEEP_ALIVE`, padrão `30m`), para que a fila
   não pague a carga do modelo a cada lote.
 - **Aquecimento** no início do worker e antes de cada lote após ociosidade maior que o
   `keep_alive`: uma chamada mínima (`num_predict: 1`) que carrega o modelo e mede a
   calibração de tokens (§5.2). A carga passa a ser um evento medido do worker, não o
-  primeiro item da fila pagando por ela.
+  primeiro item da fila pagando por ela. O aquecimento usa `POST /api/generate` com
+  `prompt` vazio, que carrega o modelo sem gerar nada, e nunca falha a subida do worker.
 
 ### 6.2 Timeouts pelo que se sabe
 
@@ -232,7 +266,7 @@ medição cair fora da faixa. Cada meta tem a medição que a prova, na §9.
 ### 6.3 Vazão da fila
 
 - Concorrência do worker alinhada ao servidor: `WORKER_ANALYSIS_CONCURRENCY` igual a
-  `OLLAMA_NUM_PARALLEL` (padrão 1 em CPU). Mandar duas requisições para um servidor que
+  `OLLAMA_NUM_PARALLEL` (padrão 1, pela VRAM da §3.1). Mandar duas requisições para um servidor que
   atende uma só enfileira no Ollama, que já tem fila.
 - Ordem da fila por valor: `HIGH_PRIORITY` e `RECOMMENDED` antes de `WATCHLIST` e
   `REVIEW_REQUIRED`, e dentro de cada veredito, publicação mais recente primeiro. Com a
@@ -252,43 +286,72 @@ medição cair fora da faixa. Cada meta tem a medição que a prova, na §9.
 
 ---
 
-## 7. Frente D — Busca
+## 7. Frente D — Vetores: pgvector e embeddings
 
-A busca é onde "usar IA" é mais tentador e mais fácil de errar. A ordem abaixo é
-proposital: primeiro o que resolve o problema sem modelo; embedding só entra se, medido,
-resolver o que sobrou.
+A busca textual sem IA (Postgres full-text) é da [SPEC de busca](37-spec-busca.md), card
+F17-03. Esta frente trata do que só vetores fazem: aproximar vagas pelo significado.
 
-### 7.1 Busca textual de verdade (sem IA)
+### 7.1 Decisão
 
-> Detalhada e movida para a [SPEC de busca](37-spec-busca.md), §10, card F17-03. O
-> resumo abaixo fica como contexto do gate da §7.2.
+A versão anterior desta SPEC condicionava o pgvector a um protótipo medido, como
+`docs/05-tecnologias.md` pedia. O operador decidiu construir a infraestrutura agora
+(§3.3). O que continua medido é o **uso**: a busca semântica só vira o padrão da Inbox
+se superar a busca full-text no conjunto de referência (§7.4). A infraestrutura vale
+sozinha, porque ela alimenta as vagas parecidas (§7.3) e as ferramentas de apoio ao modelo
+(§11).
 
-- Postgres full-text: coluna `tsvector` gerada a partir de título (peso A), empresa (A),
-  skills (B) e descrição (C), dicionário `portuguese` e `english` combinados, índice GIN.
-- A Inbox troca o `LIKE` por `websearch_to_tsquery` com ordenação por `ts_rank_cd` quando
-  há termo de busca. Com isso, "python remoto sênior" encontra a vaga pela descrição, com
-  radicalização e sem depender da ordem das palavras.
-- Isso não exige Ollama, não muda com o modelo e cobre a maior parte do que se procura.
+### 7.2 Infraestrutura
 
-### 7.2 Busca semântica, com gate de medição
+- **Postgres com pgvector sem trocar de imagem base.** O banco roda em
+  `postgres:17.2-alpine` (musl). A imagem oficial `pgvector/pgvector` é Debian (glibc), e
+  trocar a base sobre o volume existente muda a ordenação de texto sob índices já
+  construídos, o que corrompe índices em silêncio. Por isso o pgvector 0.8.6 é compilado
+  numa imagem própria derivada da alpine atual (`docker/postgres/Dockerfile`), com
+  `OPTFLAGS=""` para que o binário não fique preso às instruções da CPU que fez o build, e
+  sem bitcode LLVM (`with_llvm=no`).
+- No CI, o serviço de Postgres do job de backend começa sempre vazio, então pode usar a
+  imagem oficial `pgvector/pgvector:0.8.6-pg17`. O job de compose constrói a imagem do
+  projeto, como em produção.
+- **Tabela derivada.** `opportunities.opportunity_embedding`: uma linha por oportunidade,
+  com a versão de conteúdo e o modelo que produziram o vetor, um hash do texto usado e o
+  vetor `vector(1024)`. Índice HNSW com `vector_cosine_ops`. Pode ser apagada e refeita a
+  qualquer momento: não é evidência.
+- **Tipo sem dependência nova.** O projeto não precisa do pacote `pgvector` do Python: o
+  formato de texto do pgvector é `[1,2,3]`, e um tipo SQLAlchemy próprio converte nos dois
+  sentidos, sempre com `CAST(... AS vector(1024))` explícito, para o driver não adivinhar
+  o tipo e um vetor de tamanho errado falhar no banco.
+- **Texto que vira vetor.** Título, empresa, localização, modo de trabalho, senioridade,
+  skills e a descrição limpa (sem HTML, espaços colapsados), cortada em tamanho fixo. O
+  mesmo limpador da §4.1.
+- **Assimetria de consulta.** O `qwen3-embedding` espera uma instrução antes da consulta
+  de busca (`Instruct: …\nQuery: …`) e nenhuma nos documentos. A instrução é versionada
+  junto com o modelo.
+- **Job do worker.** `embed_opportunities`, com chave de desligar própria
+  (`WORKER_EMBED_ENABLED`), processa em lotes as oportunidades sem vetor, com versão de
+  conteúdo mais nova ou com modelo diferente do configurado. O `/api/embed` recebe o lote
+  inteiro numa chamada.
+- **Troca de modelo de embedding.** Modelo de outro tamanho exige migração da coluna e
+  reindexação completa. Mesmo tamanho, modelo diferente: o job refaz tudo, porque vetores
+  de modelos diferentes não se comparam.
 
-`docs/05-tecnologias.md` já estabelece que pgvector só entra com um caso medido. Esta
-frente define a medição antes da implementação:
+### 7.3 Vagas parecidas
 
-- **Conjunto de consultas:** 40 consultas reais do operador, cada uma com as vagas que ele
-  considera relevantes marcadas no acervo.
-- **Métrica:** recall@10 e nDCG@10 da busca full-text (§7.1) sobre esse conjunto.
-- **Gate:** embeddings só entram se um protótipo — modelo de embedding multilíngue servido
-  pelo Ollama (`/api/embed`), vetores em memória, sem pgvector — superar o full-text em
-  pelo menos 15% de recall@10. Se não superar, a frente termina no §7.1, e o resultado
-  fica registrado.
-- **Se passar:** pgvector com uma coluna de embedding por oportunidade, calculada pelo
-  worker no mesmo passo da normalização e invalidada pelo `content_version`; busca híbrida
-  (full-text + vetorial, fusão por *reciprocal rank*); o modelo de embedding versionado
-  como o prompt, com reindexação explícita quando ele muda.
-- O embedding também serviria para agrupar vagas quase duplicadas entre fontes. A
-  deduplicação atual é determinística e continua sendo a autoridade; o uso seria sugerir
-  pares para revisão, nunca juntar sozinho.
+- `GET /opportunities/{id}/similar`: as vagas mais próximas pelo cosseno, do mesmo modelo
+  de embedding, excluindo a própria.
+- Seção "Vagas parecidas" no detalhe da oportunidade, com o veredito de cada uma, para o
+  operador ver como vagas semelhantes foram avaliadas.
+- Candidatos a duplicata (similaridade acima de um limiar alto, empresa igual) aparecem
+  como sugestão para revisão, no fluxo da [SPEC de busca](37-spec-busca.md) §12. O vetor
+  nunca junta duas oportunidades sozinho.
+
+### 7.4 Busca por significado, com gate de uso
+
+- `GET /search/semantic?q=`: a consulta vira vetor com a instrução de busca e é comparada
+  aos vetores das vagas.
+- **Gate:** medir recall@10 e nDCG@10 nas 40 consultas de referência da
+  [SPEC de busca](37-spec-busca.md) §10 para três modos — full-text, vetorial e híbrido
+  (fusão por *reciprocal rank*). A Inbox adota o modo que vencer. Se o full-text vencer, a
+  busca semântica fica disponível pela API e fora da tela, com os números registrados.
 
 ---
 
@@ -316,15 +379,14 @@ prompt ou modelo.
   determinístico: schema, validador de evidência, montagem do payload e orçamento de
   tokens contra uma razão caracteres/token fixa.
 
-### 8.1 Escolha de modelo
+### 8.1 Confirmação do modelo
 
-`llama3.2:3b` foi escolhido pelo custo de CPU, antes de existir avaliação e antes de a GPU
-entrar na conta. Com 8 GB de VRAM, a faixa útil passa a ser 7–8B em Q4_K_M. Comparar pelo
-menos três modelos nessa faixa — um da família Llama, um Qwen e um de outra família com bom
-português — mais o `llama3.2:3b` atual como baseline, pelos critérios acima, pela latência
-na GPU e pela VRAM ocupada com `num_ctx` de 8 192. Modelo que transborda para a RAM está
-desclassificado, qualquer que seja a nota. O vencedor vira o padrão do `.env.example` e do
-`metadata.yaml`. O relatório fica em `docs/pesquisas/`.
+O padrão já é o `qwen3:8b-q4_K_M` (§3.3). Com o conjunto de avaliação pronto, confirmar a
+escolha contra: o `llama3.2:3b` anterior, como baseline de piso; um 8B de outra família
+(Llama 3.1 8B); o próprio Qwen3 8B em Q5_K_M (§12); e o Qwen3 8B com raciocínio ligado.
+Pelos critérios da §8, pela latência na GPU e pela VRAM ocupada com `num_ctx` de 8 192.
+Modelo que transborda para a RAM está desclassificado, qualquer que seja a nota. O
+relatório fica em `docs/pesquisas/` e fecha a decisão, mantendo ou trocando o padrão.
 
 ---
 
@@ -346,14 +408,13 @@ desclassificado, qualquer que seja a nota. O vencedor vira o padrão do `.env.ex
 
 ## 10. Frente G — Operação
 
-- **Imagem:** atualizar `ollama/ollama` da 0.5.13 para a versão estável corrente com suporte
-  a Blackwell (CUDA 12.8+), fixada por versão exata e digest. É pré-requisito para a GPU da
-  referência (§3.1). A troca passa pelo conjunto de avaliação (§8) quando ele existir:
-  versão de servidor muda tokenizer, padrões e desempenho.
-- **Modelo instalado sem terminal:** serviço `ollama-init` no compose, que roda
-  `ollama pull` do modelo configurado e termina. O worker depende dele com
-  `service_completed_successfully` só quando a análise está habilitada; com ela
-  desligada, o radar sobe sem baixar nada.
+- **Imagem:** `ollama/ollama:0.34.4` fixada por digest (§3.3). Atualizações futuras
+  passam pelo conjunto de avaliação (§8): versão de servidor muda tokenizer, padrões e
+  desempenho.
+- **Modelos instalados sem terminal:** serviço `ollama-init` no compose, com a mesma
+  imagem, que roda `ollama pull` do modelo de análise e do de embedding contra o serviço
+  `ollama` (`OLLAMA_HOST`) e termina. Ninguém depende dele para subir: a análise é
+  opcional, e um modelo ainda baixando aparece como `MODEL_UNAVAILABLE` classificado.
 - **Recursos:** limite de RAM no serviço `ollama` do compose, para que um transbordo da VRAM
   não tome a memória do Postgres nos 16 GB da referência. Um modelo que não cabe deve falhar
   na subida, não derrubar o banco.
@@ -361,62 +422,151 @@ desclassificado, qualquer que seja a nota. O vencedor vira o padrão do `.env.ex
   `.env.example`. Declarar modelo para funcionalidade que não existe é documentação falsa.
 - **GPU por padrão:** o serviço `ollama` reserva a GPU NVIDIA (`deploy.resources.
   reservations.devices`), e o runbook documenta o pré-requisito no Windows: Docker Desktop
-  com WSL2 e driver NVIDIA recente. Um perfil `cpu` fica como reserva para máquinas sem
-  GPU, com as metas de latência da CPU medidas à parte. O CI continua com o Ollama falso.
+  com WSL2 e driver NVIDIA recente. Numa máquina sem GPU, o compose com reserva de GPU
+  nem sobe o serviço; por isso existe `compose.cpu.yaml`, que remove a reserva
+  (`deploy: !reset null`). O `compose.ci.yaml` faz o mesmo sobre o Ollama falso, porque o
+  runner do CI não tem GPU.
 
 ---
 
-## 11. Plano de entrega
+## 11. Frente H — Ferramentas de apoio ao modelo
 
-Proposta de fase, na convenção dos roadmaps (`docs/33`, `docs/34`), com um card por linha.
-A ordem respeita a dependência real: medir antes de otimizar, avaliar antes de trocar.
+Modelo de 8B erra menos quando recebe o contexto certo pronto do que quando precisa
+procurar. Por isso as "ferramentas" aqui são código determinístico que roda **antes** da
+chamada e entrega o resultado no payload — não chamadas de ferramenta feitas pelo modelo.
+Chamada de ferramenta pelo modelo acrescenta turnos, latência e uma decisão não
+determinística sobre quando chamar, num fluxo que precisa ser reproduzível.
+
+| Ferramenta | O que faz | Onde |
+| --- | --- | --- |
+| Limpador de descrição | remove HTML, colapsa espaço, descarta boilerplate reconhecido | §4.1 |
+| Orçamento de tokens | calcula quanto da descrição cabe e marca o corte | §5.2 |
+| Validador de evidência | confere que cada `evidence` aparece literalmente no payload | §4.3 |
+| Saída estruturada | `format` com o JSON Schema da versão do prompt | já existe |
+| Aquecimento | carrega o modelo antes da fila | §6.1 |
+| Contexto recuperado | vagas parecidas e como foram decididas | §11.1 |
+
+### 11.1 Contexto recuperado (RAG)
+
+- Para cada análise, recuperar pelo pgvector as 3 vagas mais parecidas que já têm decisão
+  do operador — candidatura aberta, descarte, ou marcação de relevância da
+  [SPEC de busca](37-spec-busca.md) §13 — e entregar ao modelo título, veredito e decisão de
+  cada uma, num bloco `similar_decisions` separado do snapshot.
+- O modelo usa isso para comentar ("vaga parecida com X, que você descartou por
+  localização"), nunca para decidir: o schema continua sem score e sem veredito.
+- **Reprodutibilidade:** o contexto recuperado muda com o tempo, então os identificadores
+  recuperados entram na chave de cache da análise. A mesma vaga com contexto diferente é
+  outra análise, e a análise guarda quais vagas recebeu.
+- Entra só depois do conjunto de avaliação (§8) mostrar que o bloco melhora a cobertura ou a
+  fidelidade sem piorar o custo além da meta de latência.
+
+---
+
+## 12. Frente I — Quantização
+
+A quantização decide quanto do modelo cabe na VRAM e quanto sobra para o contexto.
+Números de tamanho vêm da página de tags do Ollama; a VRAM real é medida (§9).
+
+| Componente | Padrão | Alternativas a medir | Limite |
+| --- | --- | --- | --- |
+| Pesos do modelo de análise | Q4_K_M (5,2 GB) | Q5_K_M, Q6_K | o que sobrar precisa acomodar o cache de 8K de contexto; Q8_0 (8,9 GB) não cabe |
+| Cache de contexto (KV) | `q8_0` | `f16` (mais memória), `q4_0` (menos qualidade) | medido com `num_ctx` de 8 192 |
+| Modelo de embedding | a tag padrão do `qwen3-embedding:0.6b` (639 MB) | `fp16` (1,2 GB) | cabe ao lado do modelo de análise com `OLLAMA_MAX_LOADED_MODELS=2` |
+
+- A quantização vai sempre no nome da tag (`qwen3:8b-q4_K_M`), nunca implícita: uma tag
+  sem quantização deixa o registro decidir quais pesos rodam, e uma atualização do
+  registro trocaria o modelo sem ninguém mudar a configuração.
+- Subir de Q4_K_M para Q5_K_M ou Q6_K é troca de modelo, com a regra da §8: relatório de
+  qualidade, latência e VRAM no mesmo documento.
+- Quantizar ou converter modelo localmente (GGUF próprio, `ollama create`) fica fora do
+  escopo enquanto existir tag oficial que atenda.
+
+---
+
+## 13. Descobertas técnicas que os cards precisam respeitar
+
+Levantadas numa tentativa de implementação em 24 de setembro de 2026, interrompida para
+virar cards. Valem como notas de implementação:
+
+- **Loop de eventos por análise.** `worker.py:163` usa `asyncio.run` por análise; qualquer
+  recurso assíncrono compartilhado (cliente HTTP, semáforo) não sobrevive entre chamadas.
+- **Ollama falso do CI.** `tests/e2e/fake_ollama.py` responde só `/api/tags` e
+  `/api/chat`, sem campos de duração. Ele precisa responder `/api/embed` (vetor
+  determinístico de 1 024 posições), `/api/generate` (aquecimento) e devolver
+  `eval_count`/`total_duration` no chat, senão o E2E não exercita nada disto.
+- **Asserção exata dos jobs no E2E.** O passo "Verify the kill switches reach the worker"
+  compara o dicionário de jobs com igualdade exata. Um job novo (`embed_opportunities`)
+  exige atualizar esse passo e o `FUNCTIONAL_JOB_IDS`, junto com `tests/backend/test_worker.py`.
+- **Ordem de rotas.** `GET /opportunities/{opportunity_id}` é declarado antes; uma rota
+  `/opportunities/semantic-search` seria capturada por ele e responderia 422. A busca por
+  significado vai num roteador próprio (`/search/semantic`).
+- **Nome acessível do modelo no health.** O `health` compara o modelo configurado com
+  `/api/tags`; trocar o padrão para `qwen3:8b-q4_K_M` muda o que o Ollama falso precisa
+  (ou não) listar para manter o estado `degraded` que o primeiro passo do E2E espera.
+- **Criação da extensão.** `CREATE EXTENSION vector` exige superusuário ou extensão
+  confiável; o usuário do compose e o do CI são superusuários, e o runbook registra isso
+  para instalações fora do compose.
+
+---
+
+## 14. Plano de entrega
+
+Os cards detalhados estão em
+[`38-roadmap-ia-e-busca/fase-16`](38-roadmap-ia-e-busca/fase-16/README.md). Ordem e
+dependências:
 
 | Ordem | Card | Frente | Depende de |
 | --- | --- | --- | --- |
-| 1 | F16-01 — medir cada análise (durações, tokens, VRAM) | F | Nenhum |
-| 2 | F16-09 — imagem com suporte a Blackwell, GPU no compose, `ollama-init`, limites | G | Nenhum |
-| 3 | F16-02 — cliente persistente, `keep_alive`, aquecimento | C | F16-01 |
-| 4 | F16-03 — `num_ctx`, `num_predict`, orçamento de tokens e `CONTEXT_OVERFLOW` | B | F16-01 |
-| 5 | F16-04 — conjunto de avaliação e `make eval-analysis` | E | F16-01 |
-| 6 | F16-05 — vaga e experiências no payload, prompt `v2` em pt-BR com evidência | A | F16-03, F16-04 |
-| 7 | F16-06 — cache persistente e fila por valor | C | F16-02 |
-| 8 | F16-07 — busca full-text na Inbox → movido para F17-03 na [SPEC de busca](37-spec-busca.md) | D | — |
-| 9 | F16-08 — comparação de modelos e troca do padrão | E | F16-04, F16-05 |
-| 10 | F16-10 — métricas da análise na API e na Visão geral | F | F16-01 |
-| 11 | F16-11 — protótipo de busca semântica e decisão pelo gate | D | F17-03 |
+| 1 | F16-01 — GPU, imagem 0.34.4, `ollama-init` e perfis de execução | G | Nenhum |
+| 2 | F16-02 — `qwen3:8b-q4_K_M` como padrão e opções explícitas da chamada | B, A | F16-01 |
+| 3 | F16-03 — custo de cada análise: durações e tokens | F | F16-02 |
+| 4 | F16-04 — aquecimento, `keep_alive` e fila por valor | C | F16-02 |
+| 5 | F16-05 — orçamento de tokens, limpador e `CONTEXT_OVERFLOW` | B | F16-03 |
+| 6 | F16-06 — conjunto de avaliação e `make eval-analysis` | E | F16-03 |
+| 7 | F16-07 — vaga e experiências no payload, prompt `v2` pt-BR com evidência | A | F16-05, F16-06 |
+| 8 | F16-08 — cache persistente na tabela de análises | C | F16-03 |
+| 9 | F16-09 — pgvector e embeddings das vagas | D | F16-01 |
+| 10 | F16-10 — vagas parecidas e busca por significado com gate | D | F16-09, F17-03 |
+| 11 | F16-11 — contexto recuperado para a análise | H | F16-06, F16-07, F16-09 |
+| 12 | F16-12 — confirmação do modelo e da quantização | E, I | F16-06, F16-07 |
+| 13 | F16-13 — métricas da análise na API, na Visão geral e no `doctor` | F | F16-03 |
 
-F16-09 subiu para o início porque, no hardware de referência, sem ele a análise roda em
-CPU e toda medição de latência feita antes seria sobre o caminho errado. F16-07 não depende
-de nada desta SPEC e é detalhado na [SPEC de busca](37-spec-busca.md). F16-11 pode terminar
-em "não implementar" — esse é um resultado válido, registrado com os números.
+F16-01 vem primeiro porque, no hardware de referência, sem ele tudo roda em CPU e
+qualquer medição anterior seria do caminho errado. F16-09 só depende da infraestrutura e
+pode andar em paralelo com F16-02 a F16-08.
 
 ---
 
-## 12. Invariantes
+## 15. Invariantes
 
 - A saída do modelo não altera elegibilidade, score, veredito nem fator.
 - Com o Ollama indisponível, nada além do comentário deixa de funcionar.
 - Nenhum prompt é truncado sem que isso esteja registrado na análise.
 - Toda análise registra modelo, versão de prompt, versão de schema e o que custou.
-- Toda troca de prompt, modelo ou versão de servidor passa pelo conjunto de avaliação.
+- Toda troca de prompt, modelo, quantização ou versão de servidor passa pelo conjunto de
+  avaliação.
+- Embedding é dado derivado: pode ser apagado e refeito, e nunca junta nem decide nada.
 - Nenhum dado do operador sai da máquina: nenhuma frente introduz serviço de IA remoto.
 
 ---
 
-## 13. Riscos
+## 16. Riscos
 
 | Risco | Mitigação |
 | --- | --- |
 | Descrição longa estoura a janela e o tempo | orçamento de tokens (§5.2), `num_predict`, limpeza de boilerplate |
-| Modelo maior melhora a qualidade e estoura a latência | a regra de troca (§8) exige as duas medidas no mesmo relatório |
+| Modelo ou quantização maior melhora a qualidade e estoura a latência | a regra de troca (§8) exige as duas medidas no mesmo relatório |
 | `evidence` inventada que parece plausível | conferência literal por código, não por outro modelo |
 | Avaliação com poucos casos dá conclusão frágil | 30 casos cobrindo os tipos listados; diferença pequena não troca o padrão |
-| Embedding vira custo sem ganho | gate de recall@10 antes de qualquer pgvector (§7.2) |
+| Busca semântica vira custo sem ganho | gate de recall@10 antes de virar o padrão da Inbox (§7.4) |
+| Trocar a base do Postgres corrompe índices de texto | pgvector compilado sobre a mesma imagem alpine (§7.2) |
+| Máquina ou CI sem GPU não sobe o compose | `compose.cpu.yaml` e `compose.ci.yaml` removem a reserva (§10) |
+| Raciocínio do Qwen3 ligado por engano | `think: false` explícito em toda requisição, conferido em teste do payload |
 | Atualizar o Ollama muda o comportamento em silêncio | imagem fixada por digest e troca só com relatório de avaliação |
 
 ---
 
-## 14. Fora de escopo
+## 17. Fora de escopo
 
 - Serviços de IA remotos (OpenAI, Anthropic, etc.) ou envio de dados para fora da máquina.
 - Modelo decidindo elegibilidade, score ou veredito.

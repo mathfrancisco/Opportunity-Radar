@@ -4,6 +4,7 @@
 - **Data:** 2026-09-24
 - **Escopo:** o caminho inteiro de "encontrar vagas": catálogo, fontes, coleta,
   normalização, identidade e a busca na Inbox
+- **Cards de execução:** [Fase 17](38-roadmap-ia-e-busca/fase-17/README.md)
 - **Documentos relacionados:** [SPEC da camada de IA](36-spec-ollama.md),
   [Roadmap de interface](34-roadmap-interface.md), [Matching e scoring](20-matching-scoring.md),
   [Tecnologias](05-tecnologias.md)
@@ -221,8 +222,9 @@ configuração.
 
 ## 10. Frente G — Busca na Inbox
 
-Esta frente substitui o F16-07 da [SPEC da camada de IA](36-spec-ollama.md), que passa a
-apontar para cá. A busca semântica continua lá, no §7.2, atrás do mesmo gate de medição.
+A busca full-text é desta SPEC. A busca por significado (pgvector) é da
+[SPEC da camada de IA](36-spec-ollama.md), §7.4, card F16-10, e usa o mesmo conjunto de
+referência abaixo para decidir se vira o padrão da Inbox.
 
 - **Full-text do Postgres:** coluna `tsvector` gerada de título (peso A), empresa (A),
   skills e área (B) e descrição (C), dicionários `portuguese` e `english`, índice GIN.
@@ -262,6 +264,9 @@ apontar para cá. A busca semântica continua lá, no §7.2, atrás do mesmo gat
 - O fingerprint exato continua sendo a identidade forte, com o dia da publicação.
 - Acrescenta-se um **candidato a duplicata**: mesma empresa canônica, mesmo título
   normalizado e mesma localização normalizada, publicados dentro de uma janela de 14 dias.
+- Quando os embeddings existirem (card F16-09), a similaridade de cosseno acima de um
+  limiar alto, na mesma empresa, entra como segundo sinal de candidato — cobre título
+  reescrito entre fontes ("Sr. Backend Engineer" e "Senior Software Engineer, Backend").
   O candidato não junta nada sozinho. Ele aparece na Inbox como "possível duplicata de…",
   e o operador confirma ou recusa.
 - Confirmação vira regra aprendida para aquele par de fontes, versionada, e é ela que passa
