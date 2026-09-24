@@ -51,6 +51,33 @@ ocupada (`ollama ps`, com `num_ctx` de 8 192) e a latência p50/p95:
   melhore pelo menos um. A decisão atualiza a SPEC §3.3, o `.env.example` e o
   `metadata.yaml`.
 
+## Quantizações disponíveis (conferido em 24/09/2026)
+
+O Ollama oficial publica, para o `qwen3:8b`, só estas tags:
+
+| Tag | Tamanho | Cabe nos 8 GB com contexto de 8K? |
+| --- | --- | --- |
+| `qwen3:8b-q4_K_M` (padrão) | 5,2 GB | sim |
+| `qwen3:8b-q8_0` | 8,9 GB | não |
+| `qwen3:8b-fp16` | 16 GB | não |
+
+**Não existem** tags oficiais `q4_K_S`, `q5_K_M` nem `q6_K` para o 8B. Consequências:
+
+- A linha "Qwen3 8B em Q5_K_M ou Q6_K" da comparação fica registrada como **indisponível
+  no oficial**, e não é testada por padrão.
+- **Q4_K_S** (menor que a Q4_K_M, mais folga de VRAM) foi sugerida em relato de uso do
+  Qwen com cache de contexto em Q8_0. Ela só existe em GGUF de terceiros no Hugging Face,
+  que o Ollama baixa como `hf.co/<autor>/<repositório>:Q4_K_S`. Entra na comparação como
+  **experimento**, não como candidata a padrão, e só se o 8B oficial não couber com folga:
+  - apenas de quantizador conhecido, com o repositório e o arquivo registrados no
+    relatório (não é tag fixada pelo Ollama: o conteúdo pode mudar);
+  - o conjunto de avaliação roda com contagem de repetições: resposta que repete o mesmo
+    trecho ou atinge o `num_predict` sem fechar o JSON conta como falha — o mesmo relato
+    aponta que uma variante não oficial do Qwen "fica presa em loops";
+  - adotar exigiria a regra da SPEC §8 e, além dela, fixar o arquivo por hash.
+- Se o problema for só folga de VRAM, a ordem da SPEC continua valendo: `num_ctx` 6 144,
+  depois `qwen3:4b` oficial, e só então o GGUF de terceiros.
+
 ## Fora de escopo
 
 - Modelos que não cabem em 8 GB com o contexto útil (12B ou mais em Q4).

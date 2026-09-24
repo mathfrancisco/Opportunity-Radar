@@ -10,7 +10,7 @@ explícito no card, e `Done` só com critério demonstrado e verificação repet
 | Fase | Objetivo | Cards | SPEC |
 | --- | --- | ---: | --- |
 | [Fase 16](fase-16/README.md) | Camada local de IA na GPU, medida e avaliada | 13 | [36](../36-spec-ollama.md) |
-| [Fase 17](fase-17/README.md) | Busca de vagas: cobertura e precisão | 12 | [37](../37-spec-busca.md) |
+| [Fase 17](fase-17/README.md) | Busca de vagas: cobertura e precisão | 13 | [37](../37-spec-busca.md) |
 
 ## Dependências entre fases
 
@@ -20,6 +20,7 @@ explícito no card, e `Done` só com critério demonstrado e verificação repet
 | F16-11 | F17-01 (opcional) | a marcação de relevância é uma das decisões recuperadas |
 | F17-08 | F16-09 (opcional) | o vetor é o segundo sinal de duplicata |
 | F17-05, F17-10, F17-11 | F17-02 | volume só depois do filtro de área |
+| F17-13 | F16-09, F17-01 | a relevância aprendida usa os vetores e as marcações |
 
 ## Regra de execução
 
