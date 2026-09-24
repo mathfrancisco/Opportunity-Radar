@@ -383,7 +383,7 @@ prompt ou modelo.
 
 O padrão já é o `qwen3:8b-q4_K_M` (§3.3). Com o conjunto de avaliação pronto, confirmar a
 escolha contra: o `llama3.2:3b` anterior, como baseline de piso; um 8B de outra família
-(Llama 3.1 8B); o próprio Qwen3 8B em Q5_K_M (§12); e o Qwen3 8B com raciocínio ligado.
+(Llama 3.1 8B); quantizações alternativas do Qwen3 8B, quando existirem (§12); e o Qwen3 8B com raciocínio ligado.
 Pelos critérios da §8, pela latência na GPU e pela VRAM ocupada com `num_ctx` de 8 192.
 Modelo que transborda para a RAM está desclassificado, qualquer que seja a nota. O
 relatório fica em `docs/pesquisas/` e fecha a decisão, mantendo ou trocando o padrão.
@@ -469,14 +469,18 @@ Números de tamanho vêm da página de tags do Ollama; a VRAM real é medida (§
 
 | Componente | Padrão | Alternativas a medir | Limite |
 | --- | --- | --- | --- |
-| Pesos do modelo de análise | Q4_K_M (5,2 GB) | Q5_K_M, Q6_K | o que sobrar precisa acomodar o cache de 8K de contexto; Q8_0 (8,9 GB) não cabe |
+| Pesos do modelo de análise | Q4_K_M (5,2 GB) | oficial: nenhuma que caiba (Q8_0 tem 8,9 GB); de terceiros: Q4_K_S | o que sobrar precisa acomodar o cache de 8K de contexto; Q8_0 (8,9 GB) não cabe |
 | Cache de contexto (KV) | `q8_0` | `f16` (mais memória), `q4_0` (menos qualidade) | medido com `num_ctx` de 8 192 |
 | Modelo de embedding | a tag padrão do `qwen3-embedding:0.6b` (639 MB) | `fp16` (1,2 GB) | cabe ao lado do modelo de análise com `OLLAMA_MAX_LOADED_MODELS=2` |
 
 - A quantização vai sempre no nome da tag (`qwen3:8b-q4_K_M`), nunca implícita: uma tag
   sem quantização deixa o registro decidir quais pesos rodam, e uma atualização do
   registro trocaria o modelo sem ninguém mudar a configuração.
-- Subir de Q4_K_M para Q5_K_M ou Q6_K é troca de modelo, com a regra da §8: relatório de
+- O Ollama oficial não publica `q4_K_S`, `q5_K_M` nem `q6_K` para o `qwen3:8b`
+  (conferido em 24/09/2026): só `q4_K_M`, `q8_0` e `fp16`. Qualquer outra quantização vem
+  de GGUF de terceiros (`hf.co/...`), sem fixação pelo registro do Ollama e com risco de
+  loop relatado por usuários; entra só como experimento, nas condições do card F16-12.
+- Trocar de Q4_K_M para outra quantização é troca de modelo, com a regra da §8: relatório de
   qualidade, latência e VRAM no mesmo documento.
 - Quantizar ou converter modelo localmente (GGUF próprio, `ollama create`) fica fora do
   escopo enquanto existir tag oficial que atenda.

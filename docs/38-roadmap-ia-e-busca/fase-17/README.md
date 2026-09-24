@@ -18,6 +18,7 @@ Inbox de vagas que não servem.
 | 10 | [F17-10 — coletores novos](f17-10-coletores-novos.md) | F17-09, F17-02 | Backlog |
 | 11 | [F17-11 — palavras-chave do perfil](f17-11-palavras-chave-do-perfil.md) | F17-02 | Backlog |
 | 12 | [F17-12 — buscas salvas](f17-12-buscas-salvas.md) | F17-03 | Backlog |
+| 13 | [F17-13 — relevância aprendida](f17-13-relevancia-aprendida.md) | F17-01, F16-09 | Backlog |
 
 F17-01 a F17-05 fecham o Milestone P junto com F16-10.
 

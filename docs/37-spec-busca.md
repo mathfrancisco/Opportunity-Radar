@@ -292,6 +292,20 @@ Nada acima é demonstrável sem esta frente, e ela vem primeiro.
 
 ---
 
+### 13.1 Relevância aprendida
+
+Com as marcações desta frente e os vetores da [SPEC da camada de IA](36-spec-ollama.md)
+(§7), dá para aprender o gosto do operador sem gerar texto: um classificador pequeno sobre
+vetores congelados estima a probabilidade de cada vaga interessar. É o padrão do CLM
+(Contrastive Language Models) — codificador congelado com cabeça pequena e treinável —,
+aplicado com peças que cabem no hardware de referência: o `qwen3-embedding:0.6b` em vez de
+um segundo Qwen3-8B, e regressão logística em vez de uma cabeça treinada em milhões de
+exemplos. O CLM v0.1 foi avaliado e adiado (codificador de 8B disputando a VRAM, só Linux,
+contexto calibrado até 8K, sem afirmação multilíngue), com os motivos no card F17-13.
+
+A probabilidade ordena, não decide: não entra no score, não esconde vaga e só vira ordem
+disponível na Inbox se melhorar a precisão das 50 primeiras na validação.
+
 ## 14. Plano de entrega
 
 Proposta de fase na convenção de `docs/33` e `docs/34`. A ordem mede primeiro, depois
@@ -311,6 +325,7 @@ ganha precisão, e só então aumenta o volume.
 | 10 | F17-10 — coletores novos, na ordem medida após F17-09 | C | F17-09 |
 | 11 | F17-11 — palavras-chave do perfil e fontes amplas | D | F17-02 |
 | 12 | F17-12 — buscas salvas | G | F17-03 |
+| 13 | F17-13 — relevância aprendida a partir das marcações | J | F17-01, F16-09 |
 
 F17-02 vem antes de qualquer card de volume (F17-04 em diante no efeito, F17-10, F17-11)
 porque é o que mantém a precisão enquanto o volume sobe. F17-04 não depende de F17-02 para
