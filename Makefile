@@ -4,7 +4,7 @@
 
 help:
 	@echo "Targets: bootstrap dev up up-cpu down restart status logs migrate import-companies enable-sources collect"
-	@echo "Operations: doctor soak backup restore-check"
+	@echo "Operations: doctor soak backup restore-check eval-analysis export-eval-cases"
 	@echo "Validation (run only when requested): test test-integration check"
 
 bootstrap:
@@ -68,6 +68,12 @@ restore-check:
 
 collect:
 	@docker compose run --rm --build -v "$(CURDIR):/workspace" api python scripts/collect.py $(if $(SOURCE_ID),--source-id "$(SOURCE_ID)",) $(if $(SOURCE_TYPE),--source-type "$(SOURCE_TYPE)",) $(if $(KEYWORDS),--keywords "$(KEYWORDS)",) $(if $(MODE),--mode "$(MODE)",) $(if $(MAX_ITEMS),--max-items "$(MAX_ITEMS)",)
+
+eval-analysis:
+	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/eval_analysis.py --cases /workspace/prompts/opportunity_analysis/eval/cases --output /workspace/data/evals $(if $(PROMPT),--prompt "$(PROMPT)",) $(if $(MODEL),--model "$(MODEL)",) $(if $(BASELINE),--baseline "/workspace/$(BASELINE)",)
+
+export-eval-cases:
+	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/export_eval_cases.py --output /workspace/prompts/opportunity_analysis/eval/drafts $(if $(PER_VERDICT),--per-verdict "$(PER_VERDICT)",)
 
 .DEFAULT:
 	@echo "Target '$@' is not implemented yet."

@@ -1,6 +1,6 @@
 # CARD F16-06 — Conjunto de avaliação e `make eval-analysis`
 
-- **Status:** Backlog
+- **Status:** Em revisão — harness pronto; casos e baselines na máquina de referência
 - **Fase:** 16 — Camada local de IA
 - **Depende de:** F16-03
 - **Bloqueia:** F16-07, F16-11, F16-12

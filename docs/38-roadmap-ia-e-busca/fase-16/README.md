@@ -13,7 +13,7 @@ A ordem mede antes de otimizar e avalia antes de trocar.
 | 3 | [F16-03 — custo de cada análise](f16-03-custo-de-cada-analise.md) | F16-02 | Em revisão (PR #18) |
 | 4 | [F16-04 — aquecimento, `keep_alive` e fila por valor](f16-04-aquecimento-e-fila-por-valor.md) | F16-02 | Em revisão (PR #18) |
 | 5 | [F16-05 — orçamento de tokens e limpador](f16-05-orcamento-de-tokens-e-limpador.md) | F16-03 | Em revisão |
-| 6 | [F16-06 — conjunto de avaliação](f16-06-conjunto-de-avaliacao.md) | F16-03 | Backlog |
+| 6 | [F16-06 — conjunto de avaliação](f16-06-conjunto-de-avaliacao.md) | F16-03 | Em revisão |
 | 7 | [F16-07 — vaga no payload e prompt `v2`](f16-07-vaga-no-payload-e-prompt-v2.md) | F16-05, F16-06 | Backlog |
 | 8 | [F16-08 — cache persistente](f16-08-cache-persistente.md) | F16-03 | Em revisão |
 | 9 | [F16-09 — pgvector e embeddings](f16-09-pgvector-e-embeddings.md) | F16-01 | Backlog |
