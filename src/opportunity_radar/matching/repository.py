@@ -190,6 +190,18 @@ class SqlAlchemyMatchingRepository:
             .limit(1)
         ).one_or_none()
 
+    def completed_analysis_by_key(self, cache_key: str) -> MatchAnalysisModel | None:
+        """The newest completed analysis under a key, whichever assessment it belongs to."""
+        return self.session.scalars(
+            select(MatchAnalysisModel)
+            .where(
+                MatchAnalysisModel.cache_key == cache_key,
+                MatchAnalysisModel.status == "AI_COMPLETED",
+            )
+            .order_by(MatchAnalysisModel.analyzed_at.desc(), MatchAnalysisModel.id)
+            .limit(1)
+        ).one_or_none()
+
     def latest_analysis(self, assessment_id: UUID) -> MatchAnalysisModel | None:
         return self.session.scalars(
             select(MatchAnalysisModel)

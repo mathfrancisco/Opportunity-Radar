@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
@@ -27,7 +28,7 @@ from opportunity_radar.matching.repository import (
     FactorRecord,
     SqlAlchemyMatchingRepository,
 )
-from opportunity_radar.matching.service import MatchingService
+from opportunity_radar.matching.service import MatchingService, is_reused_analysis
 from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
@@ -308,3 +309,52 @@ def test_a_failure_before_the_model_answered_records_no_cost() -> None:
 
         assert analysis.total_ms is None
         assert analysis.output_tokens is None
+
+
+def test_an_analysis_under_the_same_key_is_reused_across_a_restart() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        repository, record = _seed_assessment(session)
+        first = repository.get_existing(input_hash=record.input_hash)
+        assert first is not None
+        original = asyncio.run(MatchingService(session).analyze(first.id, _StubAdapter(_completed())))
+        # A re-evaluation of the same opportunity and profile version: same cache key.
+        second_record = replace(record, input_hash=uuid4().hex + uuid4().hex)
+        repository.add(second_record, [])
+        session.commit()
+        second = repository.get_existing(input_hash=second_record.input_hash)
+        assert second is not None
+        second_id, original_id = second.id, original.id
+
+    # A new session, service and adapter: nothing in memory survives the restart.
+    with Session(engine) as session:
+        adapter = _StubAdapter(_completed())
+        reused = asyncio.run(MatchingService(session).analyze(second_id, adapter))
+
+        assert adapter.calls == 0
+        assert reused.assessment_id == second_id
+        assert reused.id != original_id
+        assert reused.status == AnalysisStatus.AI_COMPLETED.value
+        assert reused.detail == f"reaproveitada da análise {original_id}"
+        assert reused.summary == "Strong Python match with unclear compensation."
+        assert reused.total_ms is None and reused.prompt_tokens is None
+        assert is_reused_analysis(reused)
+
+
+def test_refresh_does_not_reuse_another_assessments_analysis() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        repository, record = _seed_assessment(session)
+        first = repository.get_existing(input_hash=record.input_hash)
+        assert first is not None
+        asyncio.run(MatchingService(session).analyze(first.id, _StubAdapter(_completed())))
+        second_record = replace(record, input_hash=uuid4().hex + uuid4().hex)
+        repository.add(second_record, [])
+        session.commit()
+        second = repository.get_existing(input_hash=second_record.input_hash)
+        assert second is not None
+
+        adapter = _StubAdapter(_completed())
+        asyncio.run(MatchingService(session).analyze(second.id, adapter, refresh=True))
+
+        assert adapter.calls == 1

@@ -305,22 +305,29 @@ class MatchingService:
                     return cached
 
             request = _analysis_request(self.get(assessment_id))
-            outcome = await adapter.analyze(request)
             cache_key = analysis_cache_key(
                 request,
                 model_id=adapter.model,
                 prompt_version=adapter.prompt_version,
             )
-            analysis = self.repository.add_analysis(
-                _analysis_record(
+            # The key covers model, prompt, schema and both input versions, so another
+            # assessment's completed analysis under it is this one's answer too — and,
+            # unlike the adapter's memory, it survives a restart.
+            source = None if refresh else self.repository.completed_analysis_by_key(cache_key)
+            if source is not None:
+                record = _reused_record(
+                    source, assessment_id=assessment_id, analyzed_at=datetime.now(UTC)
+                )
+            else:
+                record = _analysis_record(
                     assessment_id=assessment_id,
                     cache_key=cache_key,
-                    outcome=outcome,
+                    outcome=await adapter.analyze(request),
                     analyzed_at=datetime.now(UTC),
                     model_id=adapter.model,
                     prompt_version=adapter.prompt_version,
                 )
-            )
+            analysis = self.repository.add_analysis(record)
             self.session.commit()
             self.session.refresh(analysis)
             return analysis
@@ -633,6 +640,38 @@ def _analysis_request(assessment: MatchAssessmentModel) -> AnalysisRequest:
         score=assessment.score,
         opportunity_snapshot=assessment.opportunity_snapshot,
         profile_snapshot=assessment.profile_snapshot,
+    )
+
+
+REUSED_ANALYSIS_DETAIL = "reaproveitada da análise"
+
+
+def is_reused_analysis(analysis: MatchAnalysisModel) -> bool:
+    return (analysis.detail or "").startswith(REUSED_ANALYSIS_DETAIL)
+
+
+def _reused_record(
+    source: MatchAnalysisModel, *, assessment_id: UUID, analyzed_at: datetime
+) -> AnalysisRecord:
+    """A new row, not a pointer: each assessment keeps its own append-only history.
+
+    The costs stay null because no call was made; the detail names the row it came from.
+    """
+    return AnalysisRecord(
+        assessment_id=assessment_id,
+        cache_key=source.cache_key,
+        status=source.status,
+        schema_version=source.schema_version,
+        analyzed_at=analyzed_at,
+        detail=f"{REUSED_ANALYSIS_DETAIL} {source.id}",
+        summary=source.summary,
+        strengths=tuple(source.strengths),
+        risks=tuple(source.risks),
+        inferences=tuple(source.inferences),
+        unknowns=tuple(source.unknowns),
+        recommended_review=source.recommended_review,
+        model_id=source.model_id,
+        prompt_version=source.prompt_version,
     )
 
 

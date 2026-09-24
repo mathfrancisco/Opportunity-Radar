@@ -15,7 +15,7 @@ A ordem mede antes de otimizar e avalia antes de trocar.
 | 5 | [F16-05 — orçamento de tokens e limpador](f16-05-orcamento-de-tokens-e-limpador.md) | F16-03 | Backlog |
 | 6 | [F16-06 — conjunto de avaliação](f16-06-conjunto-de-avaliacao.md) | F16-03 | Backlog |
 | 7 | [F16-07 — vaga no payload e prompt `v2`](f16-07-vaga-no-payload-e-prompt-v2.md) | F16-05, F16-06 | Backlog |
-| 8 | [F16-08 — cache persistente](f16-08-cache-persistente.md) | F16-03 | Backlog |
+| 8 | [F16-08 — cache persistente](f16-08-cache-persistente.md) | F16-03 | Em revisão |
 | 9 | [F16-09 — pgvector e embeddings](f16-09-pgvector-e-embeddings.md) | F16-01 | Backlog |
 | 10 | [F16-10 — vagas parecidas e busca por significado](f16-10-vagas-parecidas-e-busca-por-significado.md) | F16-09, F17-03 | Backlog |
 | 11 | [F16-11 — contexto recuperado (RAG)](f16-11-contexto-recuperado.md) | F16-06, F16-07, F16-09 | Backlog |
