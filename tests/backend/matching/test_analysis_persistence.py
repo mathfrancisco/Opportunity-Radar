@@ -318,7 +318,8 @@ def test_an_analysis_under_the_same_key_is_reused_across_a_restart() -> None:
         repository, record = _seed_assessment(session)
         first = repository.get_existing(input_hash=record.input_hash)
         assert first is not None
-        original = asyncio.run(MatchingService(session).analyze(first.id, _StubAdapter(_completed())))
+        service = MatchingService(session)
+        original = asyncio.run(service.analyze(first.id, _StubAdapter(_completed())))
         # A re-evaluation of the same opportunity and profile version: same cache key.
         second_record = replace(record, input_hash=uuid4().hex + uuid4().hex)
         repository.add(second_record, [])
