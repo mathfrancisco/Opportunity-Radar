@@ -4,7 +4,8 @@
 - **Data:** 2026-09-23
 - **Escopo:** tudo o que o Opportunity Radar faz com o Ollama — análise semântica,
   desempenho, busca, observabilidade, avaliação e operação
-- **Documentos relacionados:** [Ollama e prompts](21-ollama-prompts.md),
+- **Hardware de referência:** Xeon E5-2680 v4, 16 GB de RAM, RTX 5060 8 GB (§3.1)
+- **Documentos relacionados:** [SPEC de busca](37-spec-busca.md), [Ollama e prompts](21-ollama-prompts.md),
   [Matching e scoring](20-matching-scoring.md), [Tecnologias](05-tecnologias.md) (§ pgvector),
   [Runbook](30-runbook.md)
 
@@ -75,19 +76,52 @@ Auditoria contra o código em 23 de setembro de 2026.
 
 ## 3. Metas mensuráveis
 
-As metas valem para um hardware de referência e para o modelo padrão. **O hardware de
-referência é uma premissa a confirmar** no F16-01: a proposta é a máquina onde o radar roda
-hoje, só CPU e 16 GB de RAM. Se a máquina real for outra, os números de latência abaixo
-são recalculados a partir da primeira medição, antes de qualquer otimização. Cada meta tem
-a medição que a prova, na §9.
+### 3.1 Hardware de referência
+
+| Peça | Especificação | O que decide |
+| --- | --- | --- |
+| CPU | Intel Xeon E5-2680 v4 — 14 núcleos / 28 threads, AVX2, **sem AVX-512** | inferência em CPU é o caminho lento; serve de reserva, não de padrão |
+| RAM | 16 GB | divide espaço com Postgres, API, worker e frontend; modelo em RAM disputa com o banco |
+| GPU | NVIDIA RTX 5060, **8 GB de VRAM**, arquitetura Blackwell | é onde a inferência deve rodar; o limite real é a VRAM |
+
+Três consequências para esta SPEC:
+
+- **A GPU é o caminho padrão, não um perfil opcional.** Um modelo de 7–8B em Q4_K_M ocupa
+  cerca de 5 GB de VRAM, e o que sobra dos 8 GB é o cache de contexto (KV). Com
+  `OLLAMA_KV_CACHE_TYPE=q8_0` e flash attention, uma janela de 8 192 tokens cabe junto.
+  Modelos de 12B ou mais em Q4 não cabem com contexto útil e transbordam para a RAM, o que
+  derruba a velocidade e compete com o Postgres: ficam fora da comparação (§8.1).
+- **Hoje a análise roda em CPU, com certeza.** O serviço `ollama` do `compose.yaml` não
+  reserva nenhuma GPU, então o container não enxerga a RTX 5060, qualquer que seja a
+  versão. E a GPU, quando reservada, exige servidor recente: Blackwell precisa de CUDA 12.8
+  ou superior, e a imagem `ollama/ollama:0.5.13` é muito provavelmente anterior a esse
+  suporte — o F16-09 confirma. Reservar a GPU e atualizar a imagem deixam de ser melhoria e
+  viram **pré-requisito** (F16-09 sobe na ordem, §11), com verificação explícita de que o
+  modelo carregou na VRAM (`/api/ps`, campo `size_vram`).
+- **Docker no Windows passa pelo WSL2.** A GPU chega ao container pelo Docker Desktop com
+  backend WSL2 e o driver NVIDIA do Windows. O runbook ganha esse passo, e o `doctor` passa
+  a recusar a análise habilitada com o modelo carregado fora da VRAM.
+
+`OLLAMA_NUM_PARALLEL=1`: cada requisição paralela reserva outro cache de contexto, e com
+8 GB isso cabe em uma, não em duas. `OLLAMA_MAX_LOADED_MODELS=2` só quando o modelo de
+embedding (§7.2) existir, porque ele é pequeno (menos de 1 GB) e pode ficar residente ao lado
+do modelo de análise.
+
+### 3.2 Metas
+
+Os números de latência são estimativas para 7–8B em Q4 nessa GPU — geração na casa de
+dezenas de tokens por segundo e avaliação do prompt na casa dos milhares. O F16-01 mede o
+valor real antes de qualquer otimização, e as metas são recalculadas a partir dele se a
+medição cair fora da faixa. Cada meta tem a medição que a prova, na §9.
 
 | Meta | Hoje | Alvo |
 | --- | --- | --- |
 | Análise que lê título e descrição da vaga | 0% | 100% das análises com descrição disponível |
 | Prompt truncado sem aviso | desconhecido | 0, com contagem de tokens antes do envio |
 | Análise em pt-BR | não especificado | 100% dos campos textuais |
-| Latência p50 com modelo aquecido | não medida | ≤ 12 s |
-| Latência p95 com modelo aquecido | não medida | ≤ 25 s |
+| Latência p50 com modelo aquecido, na GPU | não medida | ≤ 8 s |
+| Latência p95 com modelo aquecido, na GPU | não medida | ≤ 15 s |
+| Análises executadas com o modelo inteiro na VRAM | 0% (compose sem GPU) | 100% |
 | Primeira análise após ociosidade (carga do modelo) | não medida | ≤ 1,5 × p95, com aquecimento no início do worker |
 | Análises que falham por timeout | não medida | < 2% em janela de 7 dias |
 | Taxa de `SCHEMA_MISMATCH` / `INVALID_JSON` | não medida | < 1% |
@@ -203,10 +237,10 @@ a medição que a prova, na §9.
 - Ordem da fila por valor: `HIGH_PRIORITY` e `RECOMMENDED` antes de `WATCHLIST` e
   `REVIEW_REQUIRED`, e dentro de cada veredito, publicação mais recente primeiro. Com a
   fila atrasada, o que o operador vai ler primeiro é o que fica pronto primeiro.
-- Configuração do servidor documentada e aplicada no compose, depois de medida no hardware
-  de referência: `OLLAMA_FLASH_ATTENTION=1` e `OLLAMA_KV_CACHE_TYPE=q8_0`. As duas reduzem
-  memória por contexto, o que é o que permite o `num_ctx` de 8192 caber na RAM de
-  referência. Nenhuma das duas entra sem medição antes e depois (§9).
+- Configuração do servidor aplicada no compose, com medição antes e depois (§9):
+  `OLLAMA_FLASH_ATTENTION=1` e `OLLAMA_KV_CACHE_TYPE=q8_0`. As duas reduzem a memória do
+  cache de contexto, e é isso que permite modelo de 7–8B e `num_ctx` de 8 192 caberem juntos
+  nos 8 GB de VRAM da referência (§3.1). `OLLAMA_NUM_PARALLEL=1` pelo mesmo motivo.
 
 ### 6.4 Cache que sobrevive
 
@@ -225,6 +259,9 @@ proposital: primeiro o que resolve o problema sem modelo; embedding só entra se
 resolver o que sobrou.
 
 ### 7.1 Busca textual de verdade (sem IA)
+
+> Detalhada e movida para a [SPEC de busca](37-spec-busca.md), §10, card F17-03. O
+> resumo abaixo fica como contexto do gate da §7.2.
 
 - Postgres full-text: coluna `tsvector` gerada a partir de título (peso A), empresa (A),
   skills (B) e descrição (C), dicionário `portuguese` e `english` combinados, índice GIN.
@@ -281,11 +318,13 @@ prompt ou modelo.
 
 ### 8.1 Escolha de modelo
 
-`llama3.2:3b` foi escolhido pelo custo, antes de existir avaliação. Com o conjunto pronto,
-comparar pelo menos três modelos que caibam no hardware de referência — um da família
-Llama, um Qwen e um Gemma, na faixa de 3–8B, quantização Q4_K_M — pelos critérios acima e
-pela latência. O vencedor vira o padrão do `.env.example` e do `metadata.yaml`. O relatório
-da comparação fica em `docs/pesquisas/`.
+`llama3.2:3b` foi escolhido pelo custo de CPU, antes de existir avaliação e antes de a GPU
+entrar na conta. Com 8 GB de VRAM, a faixa útil passa a ser 7–8B em Q4_K_M. Comparar pelo
+menos três modelos nessa faixa — um da família Llama, um Qwen e um de outra família com bom
+português — mais o `llama3.2:3b` atual como baseline, pelos critérios acima, pela latência
+na GPU e pela VRAM ocupada com `num_ctx` de 8 192. Modelo que transborda para a RAM está
+desclassificado, qualquer que seja a nota. O vencedor vira o padrão do `.env.example` e do
+`metadata.yaml`. O relatório fica em `docs/pesquisas/`.
 
 ---
 
@@ -307,20 +346,23 @@ da comparação fica em `docs/pesquisas/`.
 
 ## 10. Frente G — Operação
 
-- **Imagem:** atualizar `ollama/ollama` da 0.5.13 para a versão estável corrente no momento
-  da implementação, fixada por versão exata e digest. A troca passa pelo conjunto de
-  avaliação (§8): versão de servidor muda tokenizer, padrões e desempenho.
+- **Imagem:** atualizar `ollama/ollama` da 0.5.13 para a versão estável corrente com suporte
+  a Blackwell (CUDA 12.8+), fixada por versão exata e digest. É pré-requisito para a GPU da
+  referência (§3.1). A troca passa pelo conjunto de avaliação (§8) quando ele existir:
+  versão de servidor muda tokenizer, padrões e desempenho.
 - **Modelo instalado sem terminal:** serviço `ollama-init` no compose, que roda
   `ollama pull` do modelo configurado e termina. O worker depende dele com
   `service_completed_successfully` só quando a análise está habilitada; com ela
   desligada, o radar sobe sem baixar nada.
-- **Recursos:** limites de memória no serviço `ollama` do compose, calculados a partir do
-  modelo e do `num_ctx` escolhidos. Um modelo que não cabe deve falhar na subida, não
-  derrubar o Postgres por falta de memória.
+- **Recursos:** limite de RAM no serviço `ollama` do compose, para que um transbordo da VRAM
+  não tome a memória do Postgres nos 16 GB da referência. Um modelo que não cabe deve falhar
+  na subida, não derrubar o banco.
 - **Configuração enxuta:** remover `OLLAMA_MODEL_OUTREACH` e `OLLAMA_MODEL_INTERVIEW` do
   `.env.example`. Declarar modelo para funcionalidade que não existe é documentação falsa.
-- **GPU opcional:** perfil de compose `gpu` com o `device request` da NVIDIA, documentado
-  no runbook. O perfil padrão continua CPU.
+- **GPU por padrão:** o serviço `ollama` reserva a GPU NVIDIA (`deploy.resources.
+  reservations.devices`), e o runbook documenta o pré-requisito no Windows: Docker Desktop
+  com WSL2 e driver NVIDIA recente. Um perfil `cpu` fica como reserva para máquinas sem
+  GPU, com as metas de latência da CPU medidas à parte. O CI continua com o Ollama falso.
 
 ---
 
@@ -331,19 +373,21 @@ A ordem respeita a dependência real: medir antes de otimizar, avaliar antes de 
 
 | Ordem | Card | Frente | Depende de |
 | --- | --- | --- | --- |
-| 1 | F16-01 — medir cada análise (durações e tokens) | F | Nenhum |
-| 2 | F16-02 — cliente persistente, `keep_alive`, aquecimento | C | F16-01 |
-| 3 | F16-03 — `num_ctx`, `num_predict`, orçamento de tokens e `CONTEXT_OVERFLOW` | B | F16-01 |
-| 4 | F16-04 — conjunto de avaliação e `make eval-analysis` | E | F16-01 |
-| 5 | F16-05 — vaga e experiências no payload, prompt `v2` em pt-BR com evidência | A | F16-03, F16-04 |
-| 6 | F16-06 — cache persistente e fila por valor | C | F16-02 |
-| 7 | F16-07 — busca full-text na Inbox | D | Nenhum |
-| 8 | F16-08 — comparação de modelos e troca do padrão | E | F16-04, F16-05 |
-| 9 | F16-09 — imagem atualizada, `ollama-init`, limites e perfil GPU | G | F16-02 |
+| 1 | F16-01 — medir cada análise (durações, tokens, VRAM) | F | Nenhum |
+| 2 | F16-09 — imagem com suporte a Blackwell, GPU no compose, `ollama-init`, limites | G | Nenhum |
+| 3 | F16-02 — cliente persistente, `keep_alive`, aquecimento | C | F16-01 |
+| 4 | F16-03 — `num_ctx`, `num_predict`, orçamento de tokens e `CONTEXT_OVERFLOW` | B | F16-01 |
+| 5 | F16-04 — conjunto de avaliação e `make eval-analysis` | E | F16-01 |
+| 6 | F16-05 — vaga e experiências no payload, prompt `v2` em pt-BR com evidência | A | F16-03, F16-04 |
+| 7 | F16-06 — cache persistente e fila por valor | C | F16-02 |
+| 8 | F16-07 — busca full-text na Inbox → movido para F17-03 na [SPEC de busca](37-spec-busca.md) | D | — |
+| 9 | F16-08 — comparação de modelos e troca do padrão | E | F16-04, F16-05 |
 | 10 | F16-10 — métricas da análise na API e na Visão geral | F | F16-01 |
-| 11 | F16-11 — protótipo de busca semântica e decisão pelo gate | D | F16-07 |
+| 11 | F16-11 — protótipo de busca semântica e decisão pelo gate | D | F17-03 |
 
-F16-07 não depende de nada desta SPEC e pode ser o primeiro a entrar. F16-11 pode terminar
+F16-09 subiu para o início porque, no hardware de referência, sem ele a análise roda em
+CPU e toda medição de latência feita antes seria sobre o caminho errado. F16-07 não depende
+de nada desta SPEC e é detalhado na [SPEC de busca](37-spec-busca.md). F16-11 pode terminar
 em "não implementar" — esse é um resultado válido, registrado com os números.
 
 ---
