@@ -15,6 +15,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager
+from dataclasses import replace
 from typing import Any
 
 import httpx
@@ -39,6 +40,11 @@ from opportunity_radar.matching.prompts import (
     PROMPT_FAMILY,
     PromptArtifacts,
     load_prompt,
+)
+from opportunity_radar.matching.text import (
+    DEFAULT_TOKENS_PER_CHAR,
+    estimate_tokens,
+    prompt_budget,
 )
 
 DEFAULT_PROMPT_VERSION = f"{PROMPT_FAMILY}/{DEFAULT_PROMPT_NAME}"
@@ -162,12 +168,36 @@ class OllamaAnalysisAdapter:
         if cached is not None:
             return completed_outcome(cached)
 
+        size = self._measure(request)
+        budget = self._budget()
+        if budget is not None and (size.prompt_tokens_estimate or 0) > budget:
+            # Sending it would let the server cut the instructions off the front.
+            overflow = AnalysisError(
+                AnalysisFailureCode.CONTEXT_OVERFLOW,
+                f"prompt needs about {size.prompt_tokens_estimate} tokens; "
+                f"the budget is {budget}",
+            )
+            overflow.metrics = size
+            return failed_outcome(overflow)
         try:
             analysis, metrics = await self._analyze_with_retries(request)
         except AnalysisError as error:
+            error.metrics = _with_size(error.metrics, size)
             return failed_outcome(error)
         self._cache.set(key, analysis)
-        return completed_outcome(analysis, metrics)
+        return completed_outcome(analysis, _with_size(metrics, size))
+
+    def _measure(self, request: AnalysisRequest) -> AnalysisMetrics:
+        chars = len(self._prompt.system) + len(self._user_content(request))
+        ratio = request.tokens_per_char or DEFAULT_TOKENS_PER_CHAR
+        return AnalysisMetrics(
+            prompt_chars=chars, prompt_tokens_estimate=estimate_tokens(chars, ratio)
+        )
+
+    def _budget(self) -> int | None:
+        if self._num_ctx is None:
+            return None
+        return prompt_budget(self._num_ctx, self._num_predict or 0)
 
     async def warm_up(self, *, only_if_idle: bool = False) -> AnalysisMetrics | None:
         """Load the model before the queue needs it, and report what the load cost.
@@ -429,6 +459,14 @@ def _keep_alive_seconds(keep_alive: str | None) -> float | None:
         if value.startswith("-"):
             seconds = -seconds
     return None if seconds < 0 else seconds
+
+
+def _with_size(metrics: AnalysisMetrics | None, size: AnalysisMetrics) -> AnalysisMetrics:
+    return replace(
+        metrics or AnalysisMetrics(),
+        prompt_chars=size.prompt_chars,
+        prompt_tokens_estimate=size.prompt_tokens_estimate,
+    )
 
 
 def _encode(value: Any) -> str:

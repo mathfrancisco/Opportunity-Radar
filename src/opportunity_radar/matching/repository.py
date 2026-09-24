@@ -72,6 +72,8 @@ class AnalysisRecord:
     prompt_eval_ms: int | None = None
     output_tokens: int | None = None
     eval_ms: int | None = None
+    prompt_chars: int | None = None
+    prompt_tokens_estimate: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,6 +191,24 @@ class SqlAlchemyMatchingRepository:
             .order_by(MatchAnalysisModel.analyzed_at.desc(), MatchAnalysisModel.id)
             .limit(1)
         ).one_or_none()
+
+    def tokens_per_char(self, model_id: str, *, sample: int) -> float | None:
+        """Real tokens per character over the model's latest measured analyses."""
+        recent = (
+            select(MatchAnalysisModel.prompt_tokens, MatchAnalysisModel.prompt_chars)
+            .where(
+                MatchAnalysisModel.model_id == model_id,
+                MatchAnalysisModel.prompt_tokens.is_not(None),
+                MatchAnalysisModel.prompt_chars > 0,
+            )
+            .order_by(MatchAnalysisModel.analyzed_at.desc(), MatchAnalysisModel.id)
+            .limit(sample)
+            .subquery()
+        )
+        tokens, chars = self.session.execute(
+            select(func.sum(recent.c.prompt_tokens), func.sum(recent.c.prompt_chars))
+        ).one()
+        return float(tokens) / float(chars) if tokens and chars else None
 
     def completed_analysis_by_key(self, cache_key: str) -> MatchAnalysisModel | None:
         """The newest completed analysis under a key, whichever assessment it belongs to."""
@@ -414,6 +434,8 @@ class SqlAlchemyMatchingRepository:
             prompt_eval_ms=record.prompt_eval_ms,
             output_tokens=record.output_tokens,
             eval_ms=record.eval_ms,
+            prompt_chars=record.prompt_chars,
+            prompt_tokens_estimate=record.prompt_tokens_estimate,
         )
         self.session.add(analysis)
         return analysis

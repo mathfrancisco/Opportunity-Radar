@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any, Sequence, TypeVar
@@ -304,7 +305,12 @@ class MatchingService:
                 if cached is not None:
                     return cached
 
-            request = _analysis_request(self.get(assessment_id))
+            request = replace(
+                _analysis_request(self.get(assessment_id)),
+                tokens_per_char=self.repository.tokens_per_char(
+                    adapter.model, sample=TOKEN_RATIO_SAMPLE
+                ),
+            )
             cache_key = analysis_cache_key(
                 request,
                 model_id=adapter.model,
@@ -644,6 +650,8 @@ def _analysis_request(assessment: MatchAssessmentModel) -> AnalysisRequest:
 
 
 REUSED_ANALYSIS_DETAIL = "reaproveitada da análise"
+#: How many of the model's latest analyses calibrate its tokens-per-character ratio.
+TOKEN_RATIO_SAMPLE = 50
 
 
 def is_reused_analysis(analysis: MatchAnalysisModel) -> bool:
@@ -705,6 +713,8 @@ def _analysis_record(
             prompt_eval_ms=cost.prompt_eval_ms,
             output_tokens=cost.output_tokens,
             eval_ms=cost.eval_ms,
+            prompt_chars=cost.prompt_chars,
+            prompt_tokens_estimate=cost.prompt_tokens_estimate,
         )
     return AnalysisRecord(
         assessment_id=assessment_id,
@@ -726,6 +736,8 @@ def _analysis_record(
         prompt_eval_ms=cost.prompt_eval_ms,
         output_tokens=cost.output_tokens,
         eval_ms=cost.eval_ms,
+        prompt_chars=cost.prompt_chars,
+        prompt_tokens_estimate=cost.prompt_tokens_estimate,
     )
 
 

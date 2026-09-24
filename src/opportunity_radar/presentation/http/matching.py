@@ -52,6 +52,8 @@ class AnalysisMetricsResponse(BaseModel):
     prompt_eval_ms: int | None
     output_tokens: int | None
     eval_ms: int | None
+    prompt_chars: int | None = None
+    prompt_tokens_estimate: int | None = None
 
 
 class MatchAnalysisResponse(BaseModel):
@@ -281,6 +283,8 @@ def _analysis_response(analysis: MatchAnalysisModel) -> MatchAnalysisResponse:
                 prompt_eval_ms=analysis.prompt_eval_ms,
                 output_tokens=analysis.output_tokens,
                 eval_ms=analysis.eval_ms,
+                prompt_chars=analysis.prompt_chars,
+                prompt_tokens_estimate=analysis.prompt_tokens_estimate,
             )
             if analysis.total_ms is not None or analysis.prompt_tokens is not None
             else None

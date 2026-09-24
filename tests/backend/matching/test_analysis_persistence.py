@@ -24,6 +24,7 @@ from opportunity_radar.matching.analysis import (
 )
 from opportunity_radar.matching.models import MatchAnalysisModel
 from opportunity_radar.matching.repository import (
+    AnalysisRecord,
     AssessmentRecord,
     FactorRecord,
     SqlAlchemyMatchingRepository,
@@ -358,3 +359,44 @@ def test_refresh_does_not_reuse_another_assessments_analysis() -> None:
         asyncio.run(MatchingService(session).analyze(second.id, adapter, refresh=True))
 
         assert adapter.calls == 1
+
+
+def test_the_token_ratio_is_calibrated_from_the_models_measured_analyses() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    model = f"ratio-{uuid4().hex[:8]}"
+    with Session(engine) as session:
+        repository, record = _seed_assessment(session)
+        assessment = repository.get_existing(input_hash=record.input_hash)
+        assert assessment is not None
+        assert repository.tokens_per_char(model, sample=50) is None
+        for tokens, chars in ((300, 1000), (500, 1000), (None, 1000)):
+            repository.add_analysis(
+                AnalysisRecord(
+                    assessment_id=assessment.id,
+                    cache_key=uuid4().hex + uuid4().hex,
+                    status="AI_FAILED",
+                    failure_code="SCHEMA_MISMATCH",
+                    schema_version="analysis-v1",
+                    analyzed_at=datetime.now(UTC),
+                    model_id=model,
+                    prompt_tokens=tokens,
+                    prompt_chars=chars,
+                )
+            )
+        session.commit()
+
+        # The row the server never measured stays out of the ratio.
+        assert repository.tokens_per_char(model, sample=50) == 0.4
+
+
+def test_the_request_carries_no_ratio_while_the_model_has_no_history() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        repository, record = _seed_assessment(session)
+        assessment = repository.get_existing(input_hash=record.input_hash)
+        assert assessment is not None
+        adapter = _StubAdapter(_completed())
+
+        asyncio.run(MatchingService(session).analyze(assessment.id, adapter))
+
+        assert adapter.requests[0].tokens_per_char is None

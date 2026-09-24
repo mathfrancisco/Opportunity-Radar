@@ -45,6 +45,8 @@ class AnalysisFailureCode(StrEnum):
     INVALID_JSON = "INVALID_JSON"
     SCHEMA_MISMATCH = "SCHEMA_MISMATCH"
     EMPTY_RESPONSE = "EMPTY_RESPONSE"
+    # Not even the fixed parts of the prompt fit the window: the call is never sent.
+    CONTEXT_OVERFLOW = "CONTEXT_OVERFLOW"
 
 
 class AnalysisError(Exception):
@@ -80,9 +82,15 @@ class AnalysisMetrics:
     prompt_eval_ms: int | None = None
     output_tokens: int | None = None
     eval_ms: int | None = None
+    # Measured before sending: the gap between the estimate and `prompt_tokens` is how
+    # well the characters-per-token ratio is calibrated.
+    prompt_chars: int | None = None
+    prompt_tokens_estimate: int | None = None
 
     def as_dict(self) -> dict[str, int | None]:
         return {
+            "prompt_chars": self.prompt_chars,
+            "prompt_tokens_estimate": self.prompt_tokens_estimate,
             "total_ms": self.total_ms,
             "load_ms": self.load_ms,
             "prompt_tokens": self.prompt_tokens,
@@ -153,6 +161,9 @@ class AnalysisRequest:
     score: Decimal
     opportunity_snapshot: Mapping[str, Any] = field(default_factory=dict)
     profile_snapshot: Mapping[str, Any] = field(default_factory=dict)
+    # Calibrated from this model's recorded analyses; `None` falls back to the default.
+    # Not part of the cache key: it changes how a prompt is measured, not what it says.
+    tokens_per_char: float | None = None
 
 
 @dataclass(frozen=True)
