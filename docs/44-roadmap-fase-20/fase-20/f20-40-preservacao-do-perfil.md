@@ -1,6 +1,6 @@
 # CARD F20-40 — Preservação integral do perfil
 
-- **Status:** Parcial — `794b519`; conferir o restante
+- **Status:** Feito — `794b519` cobre os três critérios; conferido nesta fase, sem código pendente.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** D — Varredura produtiva
 - **Depende de:** Nenhum
@@ -29,9 +29,17 @@ Editar uma preferência não elimina experiências, projetos, datas das skills o
 
 ## Critérios de aceite
 
-- [ ] Alterar só país preserva todas as experiências/projetos e last_used_at.
-- [ ] Duas edições concorrentes não perdem dados nem ativam snapshot parcial.
-- [ ] Nova versão ativa gera reavaliação; antiga continua consultável.
+- [x] Alterar só país preserva todas as experiências/projetos e last_used_at.
+- [x] Duas edições concorrentes não perdem dados nem ativam snapshot parcial.
+- [x] Nova versão ativa gera reavaliação; antiga continua consultável.
+
+## Critério → evidência
+
+| Critério | Evidência |
+| --- | --- |
+| Alterar só país preserva experiências/projetos/last_used_at | `tests/backend/profile/test_profile_preservation.py::test_changing_only_countries_preserves_the_rest_of_the_profile`; `_snapshot()` em `src/opportunity_radar/presentation/http/profile.py` completa campos omitidos a partir de `base_version_id` |
+| Concorrência não perde dados nem ativa snapshot parcial | `test_second_edit_from_the_same_version_conflicts_and_loses_nothing`, `test_a_refused_save_leaves_no_version_and_keeps_the_active_one`, `test_a_failure_after_the_draft_rolls_the_whole_write_back` (`ProfileService._commit` faz rollback total) |
+| Nova versão ativa gera reavaliação; antiga continua consultável | `tests/backend/matching/test_currency.py::test_moving_any_single_component_makes_the_assessment_stale[profile_version_id]` (a avaliação vira "stale" ao trocar a versão ativa do perfil); `test_changing_only_countries_preserves_the_rest_of_the_profile` confirma que a versão anterior fica `ARCHIVED` e legível via `ProfileService.get_version`; `useSaveProfile` em `apps/web/src/features/profile/useProfile.ts` invalida `inbox`/`overview` ao salvar |
 
 ## Verificação
 

@@ -1,6 +1,7 @@
 # CARD F17-02 — Área da vaga (`role-family-v1`) e filtro padrão na Inbox
 
-- **Status:** Backlog
+- **Status:** Em revisão — evidência por critério abaixo (card F20-03); dois critérios
+  de precisão/UNKNOWN dependem da medição no acervo real do F20-01
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
 - **Depende de:** F17-01, F18-07
 - **Bloqueia:** F17-04 (habilitação em massa), F17-10, F17-11, Milestone P
@@ -76,6 +77,18 @@ traz vendas, marketing e operações para a Inbox, e aumentar o volume piora a p
   as áreas e as fronteiras); teste do retroativo; teste da Inbox com e sem a preferência;
   E2E conferindo `role_family` na oportunidade do ciclo.
 - **Máquina de referência:** precisão da Inbox antes e depois, pelo relatório do F17-01.
+
+## Critério → evidência (card F20-03)
+
+| Critério | Evidência |
+| --- | --- |
+| Vagas novas saem com área, evidência e versão | `tests/backend/opportunities/test_domain.py::test_candidate_carries_the_role_family_decision_and_its_evidence` |
+| Vagas existentes reclassificadas retroativamente | `tests/backend/test_role_family_integration.py::test_reclassify_role_families_updates_only_stale_rows`, `scripts/reclassify_role_families.py` |
+| Perfil declara áreas; Inbox usa como filtro padrão | `tests/backend/dashboard/test_queries.py::test_inbox_filters_by_role_family_without_deleting_off_filter_rows` |
+| Nenhuma vaga fora do filtro deixa de ser encontrável / UNKNOWN visível por padrão | mesmo teste acima (`...without_deleting_off_filter_rows`) confirma que a linha fora do filtro continua na consulta, só marcada |
+| Reclassificação usa versão, não timestamp externo | `scripts/reclassify_role_families.py` só toca `role_family_version` divergente da atual; `test_reclassify_role_families_updates_only_stale_rows` |
+| Taxa de UNKNOWN medida (< 10% é meta secundária) | sem evidência verificável nesta revisão — depende da medição no acervo real; ver [F20-01](../../../44-roadmap-fase-20/fase-20/f20-01-baselines-e-relatorios-da-busca.md) |
+| Precisão por área e perda de relevantes no conjunto reservado | sem evidência verificável nesta revisão — mesma dependência do F20-01 |
 
 ## Arquivos prováveis
 

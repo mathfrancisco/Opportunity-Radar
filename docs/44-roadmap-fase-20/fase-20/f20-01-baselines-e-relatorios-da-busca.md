@@ -1,6 +1,9 @@
 # CARD F20-01 — Baselines e relatórios da busca
 
-- **Status:** Backlog
+- **Status:** Parcial — requer `make up` com o acervo real e marcação manual de relevância
+  na Inbox (passo 2) e a máquina de referência para `make eval-search`; não executável
+  neste ambiente (sem Docker, sem acervo real). Nenhum código alterado, como pede este
+  card.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** A — Fechamento do que está em revisão
 - **Depende de:** Nenhum

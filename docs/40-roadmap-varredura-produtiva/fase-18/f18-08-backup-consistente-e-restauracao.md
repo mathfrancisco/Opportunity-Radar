@@ -1,6 +1,6 @@
 # CARD F18-08 — Backup consistente e restauração verificável
 
-- **Status:** Backlog
+- **Status:** Parcial — código e testes em [F20-41](../../../44-roadmap-fase-20/fase-20/f20-41-backup-consistente-e-restauracao.md); falta o round-trip real contra Postgres e a medição de RTO/RPO na máquina de referência
 - **Fase:** 18 — Varredura produtiva
 - **Depende de:** Nenhum
 - **Bloqueia:** F18-09; migrações de dados da Fase 18

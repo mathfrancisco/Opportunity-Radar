@@ -1,6 +1,7 @@
 # CARD F17-07 — Coleta completa, alerta de paginação e vaga encerrada
 
-- **Status:** Backlog
+- **Status:** Em revisão — evidência por critério abaixo (card F20-03); dois critérios
+  sem teste dedicado localizado
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
 - **Depende de:** Nenhum
 - **Bloqueia:** Milestone P
@@ -67,6 +68,18 @@ Inbox para sempre, poluindo a precisão com vagas mortas.
 - **CI:** testes dos coletores com fixtures paginadas e totais; teste de integração do
   encerramento (duas completas, uma parcial no meio, reaparecimento); E2E com o board
   falso servindo menos vagas numa segunda coleta.
+
+## Critério → evidência (card F20-03)
+
+| Critério | Evidência |
+| --- | --- |
+| Cada execução registra anunciados × lidos quando a API informa | `tests/backend/acquisition/test_service.py::test_pagination_gap_alert_fires_for_an_unbounded_shortfall` (`run.items_announced == 5`) |
+| Paginação incompleta gera alerta com os números | `test_pagination_gap_is_announced_with_the_two_counts` (`test_alerts.py`), `test_pagination_gap_alert_fires_for_an_unbounded_shortfall`, `test_pagination_gap_alert_does_not_fire_when_max_items_caps_the_run` |
+| Duas ausências comparáveis encerram ocorrência; outra fonte ativa impede encerramento agregado | `tests/backend/opportunities/test_run_closures.py::test_missing_from_two_consecutive_complete_runs_closes_with_evidence` |
+| Execução parcial ou falha nunca encerra vaga | `test_run_closures.py::test_partial_and_failed_runs_never_close_anything` |
+| Reaparecimento desfaz apenas encerramento automático | `test_run_closures.py::test_reappearing_reopens_a_closed_opportunity` |
+| Mudança de escopo, loop de cursor e limite atingido nunca provam ausência | sem evidência verificável nesta revisão — nenhum teste com esses três nomes foi localizado; abrir card de acompanhamento para uma regressão dedicada |
+| Itens repetidos registram presença sem duplicar evidência/conteúdo | `test_service.py::test_run_deduplicates_identical_identity_but_preserves_changed_payload` |
 
 ## Arquivos prováveis
 

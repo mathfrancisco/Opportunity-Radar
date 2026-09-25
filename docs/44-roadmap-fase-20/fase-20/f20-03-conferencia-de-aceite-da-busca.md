@@ -1,6 +1,9 @@
 # CARD F20-03 — Conferência de aceite de F17-02, F17-04 e F17-07
 
-- **Status:** Backlog
+- **Status:** Feito — tabela critério → evidência adicionada aos três cards; nenhum
+  critério foi marcado sem evidência (os sem teste localizado ficam anotados como tal,
+  não marcados). F17-02, F17-04 e F17-07 seguem "Em revisão" porque alguns critérios
+  ainda não têm evidência verificável (medição no acervo real ou teste ausente).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** A — Fechamento do que está em revisão
 - **Depende de:** Nenhum
@@ -41,8 +44,8 @@ Código integrado: F17-02 (`c73cf8f`, `1287ba0`), F17-04 (`ef8345d`), F17-07 (`2
 
 ## Critérios de aceite
 
-- [ ] Tabela critério → evidência nos três cards.
-- [ ] Nenhum critério marcado sem evidência.
+- [x] Tabela critério → evidência nos três cards.
+- [x] Nenhum critério marcado sem evidência.
 
 ## Testes
 

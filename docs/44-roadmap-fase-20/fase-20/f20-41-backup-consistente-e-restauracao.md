@@ -1,6 +1,6 @@
 # CARD F20-41 — Backup consistente e restauração verificável
 
-- **Status:** Backlog
+- **Status:** Parcial — snapshot compartilhado, gate estrito, sha256, relacionamentos e extensões implementados em `scripts/backup.py`/`scripts/restore_check.py`/`src/opportunity_radar/platform/backup.py`, com `tests/backend/test_backup.py` cobrindo a lógica sem Postgres; falta rodar o round-trip real (`pg_dump`/`pg_restore` contra Postgres) e medir RTO/RPO na máquina de referência — sem Docker neste ambiente. As tabelas de IA citadas em "Ajustes da Fase 20" (`ai_quota_usage`, F20-19, F20-16) ainda não existem no código; entram em `MANIFEST_QUERIES` quando esses cards forem feitos.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** D — Varredura produtiva
 - **Depende de:** Nenhum

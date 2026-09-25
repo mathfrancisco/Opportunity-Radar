@@ -92,11 +92,35 @@ make restore-check                   # restaura o dump mais recente num banco de
 make restore-check DUMP=data/backups/antes-da-migracao.dump
 ```
 
-O manifesto guarda a revisão do Alembic e a contagem de cada tabela do fluxo vertical.
-`restore-check` cria um banco novo, restaura nele, roda as mesmas contagens e compara
-com o manifesto. Divergência sai com código 1 listando qual tabela divergiu. O banco de
-trabalho não é tocado em nenhum momento, e o descartável é removido ao final — use
-`--keep` se quiser inspecioná-lo.
+O manifesto guarda a revisão do Alembic, a contagem de cada tabela do fluxo vertical, um
+conjunto de contagens de relacionamento (linha sem a outra ponta da FK, que deve ser
+sempre zero), a lista de extensões instaladas e o `sha256` do arquivo do dump.
+`restore-check` cria um banco novo, restaura nele, roda as mesmas verificações e compara
+com o manifesto — contagens, relacionamentos e extensões, não só contagens. Divergência
+sai com código 1 listando o que divergiu. O banco de trabalho não é tocado em nenhum
+momento, e o descartável é removido ao final — use `--keep` se quiser inspecioná-lo.
+
+`backup.py` e `restore-check` (card F20-41, antigo F18-08):
+
+- O dump e o manifesto vêm da mesma transação: `backup.py` exporta o snapshot da
+  transação que faz o dump (`pg_export_snapshot`) e lê as contagens dentro dela, então uma
+  escrita concorrente não faz o manifesto e o dump discordarem por coincidência de tempo.
+- O dump e o manifesto são escritos com nome temporário e só recebem o nome final depois
+  de completos — um leitor nunca vê um dump sem manifesto ou um arquivo pela metade.
+- O gate é estrito por padrão: sem manifesto, com `format_version` incompatível ou com
+  `sha256` divergente do arquivo, `restore-check` falha antes de restaurar qualquer coisa.
+  `--allow-missing-manifest` é a única forma explícita de restaurar mesmo assim, e nesse
+  caso a verificação vira só "o arquivo é legível", nunca "os dados batem".
+- O backup nunca inclui `.env` nem `GROQ_API_KEY`: `pg_dump` só lê o conteúdo do banco, e
+  nenhum dos dois vive lá.
+- As tabelas de telemetria de IA (fila de quota `ai_quota_usage`, registro de chamada
+  F20-19, identidade de cache F20-16) ainda não existem neste código — quando os cards que
+  as criam entrarem, elas entram em `MANIFEST_QUERIES`
+  (`src/opportunity_radar/platform/backup.py`), o único lugar de onde os dois scripts leem
+  a lista.
+- Periodicidade proposta: backup a cada 24 h, idade máxima tolerada de 24 h, tempo de
+  recuperação medido (RTO) até 30 min — metas a confirmar contra uma medição real na
+  máquina de referência; nenhum número abaixo foi medido lá ainda.
 
 `BACKUP_RETENTION_DAYS` no `.env` controla a poda de dumps antigos.
 
