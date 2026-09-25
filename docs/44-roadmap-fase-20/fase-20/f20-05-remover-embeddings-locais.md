@@ -1,6 +1,6 @@
 # CARD F20-05 — Remover os embeddings locais e a busca por significado
 
-- **Status:** Backlog
+- **Status:** Parcial — alembic upgrade/downgrade não executado (sem Postgres/Docker nesta máquina); demais critérios feitos
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** Nenhum
@@ -54,9 +54,9 @@ O F16-09 (`0ddd0de`) gera embedding com `qwen3-embedding:0.6b` no Ollama. O Groq
 
 ## Critérios de aceite
 
-- [ ] O worker roda um ciclo completo sem log de embedding.
-- [ ] `GET /search/semantic` responde 404.
-- [ ] `alembic upgrade head` e `alembic downgrade base` continuam funcionando.
+- [x] O worker roda um ciclo completo sem log de embedding.
+- [x] `GET /search/semantic` responde 404 (rota removida).
+- [ ] `alembic upgrade head` e `alembic downgrade base` continuam funcionando — não executado (sem Postgres/Docker disponível nesta máquina; nenhuma migração foi criada ou alterada).
 
 ## Testes
 

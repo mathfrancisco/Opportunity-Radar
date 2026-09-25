@@ -28,7 +28,6 @@ def test_worker_kill_switches_only_remove_functional_jobs() -> None:
             worker_match_enabled=False,
             worker_analyze_enabled=False,
             worker_retention_enabled=False,
-            worker_embed_enabled=False,
         )
     )
 

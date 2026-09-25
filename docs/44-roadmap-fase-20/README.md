@@ -22,7 +22,7 @@ O status oficial passa a ser o desta fase.
 | Card | Depende de | Status |
 | --- | --- | --- |
 | [F20-04 — Remover o Ollama do compose, da config e do worker](fase-20/f20-04-remover-ollama-do-compose-config-e-worker.md) | F20-17 | Backlog |
-| [F20-05 — Remover os embeddings locais e a busca por significado](fase-20/f20-05-remover-embeddings-locais.md) | Nenhum | Backlog |
+| [F20-05 — Remover os embeddings locais e a busca por significado](fase-20/f20-05-remover-embeddings-locais.md) | Nenhum | Parcial — alembic não verificado |
 | [F20-06 — Health, doctor, scripts e testes sem Ollama](fase-20/f20-06-health-doctor-scripts-e-testes-sem-ollama.md) | F20-04, F20-05, F20-08 | Backlog |
 | [F20-07 — Porta `LLMProvider` e `GroqProvider`](fase-20/f20-07-porta-llmprovider-e-groqprovider.md) | Nenhum | Backlog |
 | [F20-08 — Configuração da IA cloud e segredos](fase-20/f20-08-configuracao-e-segredos.md) | F20-07 | Backlog |

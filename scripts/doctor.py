@@ -26,8 +26,6 @@ from sqlalchemy.orm import Session
 from opportunity_radar.dashboard.analysis_metrics import analysis_metrics
 from opportunity_radar.dashboard.metrics import METRIC_WINDOWS
 from opportunity_radar.matching.service import MatchingService
-from opportunity_radar.opportunities.embedding_models import EMBEDDING_COLUMN_DIMENSIONS
-from opportunity_radar.opportunities.embeddings import embedding_coverage
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.health import database_health
@@ -171,7 +169,6 @@ WORKER_JOB_SWITCHES = {
     "evaluate_pending": "worker_match_enabled",
     "analyze_pending": "worker_analyze_enabled",
     "expire_raw_payloads": "worker_retention_enabled",
-    "embed_opportunities": "worker_embed_enabled",
 }
 
 
@@ -468,66 +465,6 @@ def check_analysis(settings: Settings) -> Check:
     return Check("analysis", OK, f"{measured}; {pending} pending", None, facts)
 
 
-def check_embeddings(settings: Settings, *, now: datetime | None = None) -> Check:
-    """Coverage of the configured embedding model, and how long the oldest posting waits.
-
-    SPEC 36, section 3.2: every eligible posting has a current vector within two worker
-    cycles. A partial index is expected right after a model change; one that stays partial
-    is not, and neither is a dimension the column cannot hold.
-    """
-    facts: dict[str, Any] = {
-        "model": settings.ollama_model_embedding,
-        "dimensions": settings.ollama_embedding_dimensions,
-    }
-    if settings.ollama_embedding_dimensions != EMBEDDING_COLUMN_DIMENSIONS:
-        return Check(
-            "embeddings",
-            FAIL,
-            f"OLLAMA_EMBEDDING_DIMENSIONS is {settings.ollama_embedding_dimensions}, but the "
-            f"column is vector({EMBEDDING_COLUMN_DIMENSIONS})",
-            f"set it back to {EMBEDDING_COLUMN_DIMENSIONS}, or migrate the column and reindex",
-            facts,
-        )
-    if not (settings.ollama_embedding_enabled and settings.worker_embed_enabled):
-        return Check(
-            "embeddings",
-            OK,
-            "embedding is switched off; similar postings and search by meaning stay empty",
-            None,
-            facts,
-        )
-    try:
-        with Session(create_database_engine(settings.database_url)) as session:
-            coverage = embedding_coverage(session, model=settings.ollama_model_embedding)
-    except Exception as error:  # pragma: no cover - depends on the local environment
-        return Check("embeddings", WARN, f"could not read embedding coverage: {error}")
-    moment = now or datetime.now(UTC)
-    waited = (
-        None
-        if coverage.oldest_pending_at is None
-        else max(0, round((moment - coverage.oldest_pending_at).total_seconds()))
-    )
-    facts.update(
-        current=coverage.current,
-        eligible=coverage.eligible,
-        given_up=coverage.given_up,
-        oldest_pending_seconds=waited,
-    )
-    summary = f"{coverage.current}/{coverage.eligible} postings have a current vector"
-    allowed = 2 * settings.worker_embed_interval_seconds + settings.doctor_job_grace_seconds
-    if coverage.given_up or (waited is not None and waited > allowed):
-        return Check(
-            "embeddings",
-            WARN,
-            f"index is partial: {summary}; the oldest pending posting has waited "
-            f"{waited} s, {coverage.given_up} given up",
-            "read the `embed_opportunities` worker logs; the Inbox keeps full-text meanwhile",
-            facts,
-        )
-    state = "index complete" if coverage.complete else "index catching up"
-    return Check("embeddings", OK, f"{state}: {summary}", None, facts)
-
-
 def run_checks(root: Path) -> list[Check]:
     checks = [check_environment(), check_dotenv(root), check_prompts(root)]
     if checks[0].status == FAIL:
@@ -541,7 +478,6 @@ def run_checks(root: Path) -> list[Check]:
         checks.append(check_worker_jobs(settings))
         checks.append(check_source_incidents(settings))
         checks.append(check_analysis(settings))
-        checks.append(check_embeddings(settings))
     checks.append(check_ollama(settings))
     checks.append(check_ollama_gpu(settings))
     return checks

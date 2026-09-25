@@ -49,7 +49,6 @@ from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.dashboard.metrics import source_metrics
 from opportunity_radar.matching.adapters import build_analysis_adapter
 from opportunity_radar.operations.models import WorkerJobStateModel
-from opportunity_radar.opportunities.embeddings import build_embedding_adapter
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.profile.domain import (
     EmploymentPreference,
@@ -168,7 +167,6 @@ def run_soak(
     steps = max(1, (hours * 60) // step_minutes)
     bootstrap = _bootstrap(engine, settings, started_at, retention_days=retention_days)
     adapter = build_analysis_adapter(settings)
-    embedding_adapter = build_embedding_adapter(settings)
 
     clock = started_at
     for step in range(steps):
@@ -190,12 +188,6 @@ def run_soak(
             adapter,
             batch_size=settings.worker_analyze_batch_size,
             eligible_verdicts=settings.analysis_eligible_verdicts,
-        )
-        worker.embed_opportunities(
-            engine,
-            embedding_adapter,
-            batch_size=settings.worker_embed_batch_size,
-            interval_seconds=settings.worker_embed_interval_seconds,
         )
         # Retention runs on its own slower cadence, exactly as the scheduler drives it.
         if step % 6 == 0:
