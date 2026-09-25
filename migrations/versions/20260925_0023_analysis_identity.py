@@ -1,7 +1,7 @@
 """Record what each analysis sent and was keyed by.
 
 Revision ID: 20260925_0023
-Revises: 20260925_0022
+Revises: 20260925_0020
 Create Date: 2026-09-25 12:00:00
 
 Cards F16-05, F16-07, F16-08 and F16-11. `analysis-key-v2` covers the payload actually
@@ -16,7 +16,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "20260925_0023"
-down_revision = "20260925_0022"
+down_revision = "20260925_0020"
 branch_labels = None
 depends_on = None
 
