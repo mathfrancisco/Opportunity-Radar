@@ -13,7 +13,7 @@ import random
 import re
 import time
 from collections import OrderedDict
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import replace
 from typing import Any
@@ -21,18 +21,20 @@ from typing import Any
 import httpx
 
 from opportunity_radar.matching.analysis import (
-    ANALYSIS_SCHEMA_VERSION,
     AnalysisError,
     AnalysisFailureCode,
     AnalysisMetrics,
     AnalysisOutcome,
     AnalysisPolicy,
     AnalysisRequest,
+    PreparedAnalysis,
     SemanticAnalysis,
-    analysis_cache_key,
+    analysis_key,
     completed_outcome,
+    evidence_sources,
     failed_outcome,
     parse_analysis,
+    payload_digest,
     skipped_outcome,
 )
 from opportunity_radar.matching.prompts import (
@@ -42,20 +44,28 @@ from opportunity_radar.matching.prompts import (
     load_prompt,
 )
 from opportunity_radar.matching.text import (
+    CLEANER_VERSION,
     DEFAULT_TOKENS_PER_CHAR,
+    clean_description_report,
     estimate_tokens,
+    fit_description,
     prompt_budget,
+    truncate_at_sentence,
 )
 
 DEFAULT_PROMPT_VERSION = f"{PROMPT_FAMILY}/{DEFAULT_PROMPT_NAME}"
 _CHAT_PATH = "/api/chat"
 _GENERATE_PATH = "/api/generate"
+_VERSION_PATH = "/api/version"
+_TAGS_PATH = "/api/tags"
 _DURATION_PART = re.compile(r"(\d+(?:\.\d+)?)(ms|s|m|h)")
 _DURATION_SECONDS = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0}
+#: Rounds of re-fitting when JSON escaping made the rendered prompt longer than planned.
+_FIT_ROUNDS = 3
 
 
 class _AnalysisCache:
-    """Bounded in-memory cache. Section 40: the key already covers every relevant input."""
+    """Bounded in-memory cache, keyed by the same `analysis-key-v2` as the table."""
 
     def __init__(self, max_entries: int) -> None:
         self._max_entries = max(0, max_entries)
@@ -145,6 +155,8 @@ class OllamaAnalysisAdapter:
         self._keep_alive = keep_alive
         self._residency_seconds = _keep_alive_seconds(keep_alive)
         self._think = think
+        # What `describe` found about the server; recorded with every later analysis.
+        self._server: dict[str, Any] = {}
 
     @property
     def model(self) -> str:
@@ -154,50 +166,185 @@ class OllamaAnalysisAdapter:
     def prompt_version(self) -> str:
         return self._prompt.version
 
-    async def analyze(self, request: AnalysisRequest) -> AnalysisOutcome:
-        """Never raises for an external failure: callers get a classified outcome."""
+    @property
+    def requires(self) -> frozenset[str]:
+        """Inputs beyond the stored snapshots this prompt reads (cards F16-07, F16-11)."""
+        needed = set(self._prompt.variables) & {"posting", "similar_decisions"}
+        if self._prompt.reads_profile_history:
+            needed.add("profile_history")
+        return frozenset(needed)
+
+    def prepare(self, request: AnalysisRequest) -> PreparedAnalysis:
+        """Build, measure, fit and key the exact payload an analysis would send.
+
+        The fixed parts — instructions, deterministic result, snapshots, profile — go in
+        whole; if they alone exceed the budget, nothing is sent. The posting's description
+        takes what is left, cleaned and cut at a sentence boundary, and the retrieved
+        decisions give way before the description does. Every cut is recorded.
+        """
+        ratio, margin = self._ratio_and_margin(request)
+        budget = (
+            prompt_budget(self._num_ctx, self._num_predict or 0, margin)
+            if self._num_ctx is not None
+            else None
+        )
+        posting = dict(request.posting or {}) if "posting" in self.requires else None
+        cleaned = clean_description_report(str((posting or {}).get("description") or ""))
+        decisions = [dict(item) for item in request.similar_decisions or ()]
+        offered = len(decisions)
+        description = cleaned.text
+        truncated = False
+
+        def render(text: str, cut: bool, context: Sequence[Mapping[str, Any]]) -> str:
+            return self._user_content(request, posting, text, cut, context)
+
+        def estimate(content: str) -> int:
+            return estimate_tokens(len(self._prompt.system) + len(content), ratio)
+
+        overflow = False
+        if budget is not None:
+            if estimate(render("", False, [])) > budget:
+                overflow = True
+            elif posting is not None:
+                # Retrieved context is cut before the description is (card F16-11).
+                while True:
+                    available = budget - estimate(render("", False, decisions))
+                    fitted = fit_description(
+                        cleaned.text, available_tokens=available, tokens_per_char=ratio
+                    )
+                    if fitted.truncated and decisions:
+                        decisions.pop()
+                        continue
+                    description, truncated = fitted.text, fitted.truncated
+                    break
+                # JSON escaping can make the rendered text longer than the plain one.
+                for _ in range(_FIT_ROUNDS):
+                    excess = estimate(render(description, truncated, decisions)) - budget
+                    if excess <= 0:
+                        break
+                    shorter = max(0, len(description) - int(excess / ratio) - 1)
+                    description, _ = truncate_at_sentence(description, shorter)
+                    truncated = True
+
+        user_content = render(description, truncated, decisions)
+        payload: dict[str, Any] = json.loads(user_content)
+        size = AnalysisMetrics(
+            prompt_chars=len(self._prompt.system) + len(user_content),
+            prompt_tokens_estimate=estimate(user_content),
+        )
+        options = self._options()
+        inference: dict[str, Any] = {
+            "model": self._model,
+            "prompt_version": self._prompt.version,
+            "prompt_digest": self._prompt.digest,
+            "schema_version": self._prompt.schema_version,
+            "options": options,
+            "keep_alive": self._keep_alive,
+            "tokens_per_char": ratio,
+            "calibration": (
+                request.calibration.as_dict()
+                if request.calibration is not None
+                else {"state": "uncalibrated", "samples": 0, "ratio": ratio}
+            ),
+            "prompt_budget": budget,
+            **self._server,
+        }
+        if posting is not None:
+            inference["cut"] = {
+                "cleaner_version": CLEANER_VERSION,
+                "description_sha256": payload_digest(cleaned.text),
+                "description_chars": len(cleaned.text),
+                "description_sent_chars": len(description),
+                "description_truncated": truncated,
+                "removed_sections": list(cleaned.removed_sections),
+                "kept_facts": cleaned.kept_facts,
+            }
+        if "similar_decisions" in self.requires:
+            inference["context"] = {
+                "offered": offered,
+                "sent": len(decisions),
+                "dropped": offered - len(decisions),
+            }
+        payload_hash = payload_digest(user_content)
+        return PreparedAnalysis(
+            cache_key=analysis_key(
+                request,
+                model_id=self._model,
+                prompt_version=self._prompt.version,
+                schema_version=self._prompt.schema_version,
+                prompt_digest=self._prompt.digest,
+                payload_hash=payload_hash,
+                options={**options, "think": self._think},
+            ),
+            payload_hash=payload_hash,
+            payload=payload,
+            inference=inference,
+            size=size,
+            system=self._prompt.system,
+            user_content=user_content,
+            prompt_budget=budget,
+            overflow=overflow,
+            evidence_sources=evidence_sources(payload),
+            # Only the decisions that survived the cut: what the model actually read.
+            context_refs=tuple(
+                dict(item["ref"]) for item in decisions if isinstance(item.get("ref"), Mapping)
+            ),
+            schema_version=self._prompt.schema_version,
+        )
+
+    async def analyze(
+        self,
+        request: AnalysisRequest,
+        *,
+        prepared: PreparedAnalysis | None = None,
+        use_cache: bool = True,
+    ) -> AnalysisOutcome:
+        """Never raises for an external failure: callers get a classified outcome.
+
+        `use_cache=False` is the refresh and the evaluation: they must reach the model
+        even when an identical answer is in memory.
+        """
         if not self._policy.should_analyze(request):
             return skipped_outcome("policy skipped the semantic layer for this assessment")
 
-        key = analysis_cache_key(
-            request,
-            model_id=self._model,
-            prompt_version=self._prompt.version,
-        )
-        cached = self._cache.get(key)
-        if cached is not None:
-            return completed_outcome(cached)
+        prepared = prepared or self.prepare(request)
+        if use_cache:
+            cached = self._cache.get(prepared.cache_key)
+            if cached is not None:
+                return completed_outcome(cached)
 
-        size = self._measure(request)
-        budget = self._budget()
-        if budget is not None and (size.prompt_tokens_estimate or 0) > budget:
+        if prepared.overflow:
             # Sending it would let the server cut the instructions off the front.
             overflow = AnalysisError(
                 AnalysisFailureCode.CONTEXT_OVERFLOW,
-                f"prompt needs about {size.prompt_tokens_estimate} tokens; "
-                f"the budget is {budget}",
+                f"prompt needs about {prepared.size.prompt_tokens_estimate} tokens; "
+                f"the budget is {prepared.prompt_budget}",
             )
-            overflow.metrics = size
+            overflow.metrics = prepared.size
             return failed_outcome(overflow)
         try:
-            analysis, metrics = await self._analyze_with_retries(request)
+            analysis, metrics = await self._analyze_with_retries(prepared)
         except AnalysisError as error:
-            error.metrics = _with_size(error.metrics, size)
+            error.metrics = _with_size(error.metrics, prepared.size)
             return failed_outcome(error)
-        self._cache.set(key, analysis)
-        return completed_outcome(analysis, _with_size(metrics, size))
+        self._cache.set(prepared.cache_key, analysis)
+        return completed_outcome(analysis, _with_size(metrics, prepared.size))
 
-    def _measure(self, request: AnalysisRequest) -> AnalysisMetrics:
-        chars = len(self._prompt.system) + len(self._user_content(request))
-        ratio = request.tokens_per_char or DEFAULT_TOKENS_PER_CHAR
-        return AnalysisMetrics(
-            prompt_chars=chars, prompt_tokens_estimate=estimate_tokens(chars, ratio)
-        )
+    def _ratio_and_margin(self, request: AnalysisRequest) -> tuple[float, int | None]:
+        calibration = request.calibration
+        if calibration is not None and self._num_ctx is not None:
+            return calibration.ratio, calibration.margin(self._num_ctx, self._num_predict or 0)
+        return request.tokens_per_char or DEFAULT_TOKENS_PER_CHAR, None
 
-    def _budget(self) -> int | None:
-        if self._num_ctx is None:
-            return None
-        return prompt_budget(self._num_ctx, self._num_predict or 0)
+    def _options(self) -> dict[str, Any]:
+        options: dict[str, Any] = dict(self._prompt.sampling)
+        if self._num_ctx is not None:
+            options["num_ctx"] = self._num_ctx
+        if self._num_predict is not None:
+            options["num_predict"] = self._num_predict
+        if self._seed is not None:
+            options["seed"] = self._seed
+        return options
 
     async def warm_up(self, *, only_if_idle: bool = False) -> AnalysisMetrics | None:
         """Load the model before the queue needs it, and report what the load cost.
@@ -235,13 +382,44 @@ class OllamaAnalysisAdapter:
             return None
         return _metrics(envelope) if isinstance(envelope, dict) else None
 
+    async def describe(self) -> Mapping[str, Any]:
+        """Server version and the digest the tag resolves to; whatever cannot be read is
+        left out. Remembered, so every later analysis records the same identity."""
+        found: dict[str, Any] = {}
+        try:
+            if self._client is not None:
+                found = await self._describe_with(self._client)
+            else:
+                async with self._client_factory() as client:
+                    found = await self._describe_with(client)
+        except httpx.HTTPError:
+            return dict(self._server)
+        self._server.update(found)
+        return dict(self._server)
+
+    async def _describe_with(self, client: httpx.AsyncClient) -> dict[str, Any]:
+        found: dict[str, Any] = {}
+        version = await client.get(f"{self._base_url}{_VERSION_PATH}")
+        if version.status_code == 200:
+            body = _json_object(version)
+            if isinstance(body.get("version"), str):
+                found["server_version"] = body["version"]
+        tags = await client.get(f"{self._base_url}{_TAGS_PATH}")
+        if tags.status_code == 200:
+            models = _json_object(tags).get("models")
+            for item in models if isinstance(models, list) else []:
+                if isinstance(item, dict) and self._model in (item.get("name"), item.get("model")):
+                    if isinstance(item.get("digest"), str):
+                        found["model_digest"] = item["digest"]
+        return found
+
     async def _analyze_with_retries(
-        self, request: AnalysisRequest
+        self, prepared: PreparedAnalysis
     ) -> tuple[SemanticAnalysis, AnalysisMetrics | None]:
         last_error: AnalysisError | None = None
         for attempt in range(self._max_retries + 1):
             try:
-                return await self._analyze_once(request)
+                return await self._analyze_once(prepared)
             except AnalysisError as error:
                 last_error = error
                 if not error.retryable or attempt == self._max_retries:
@@ -253,20 +431,20 @@ class OllamaAnalysisAdapter:
         raise last_error
 
     async def _analyze_once(
-        self, request: AnalysisRequest
+        self, prepared: PreparedAnalysis
     ) -> tuple[SemanticAnalysis, AnalysisMetrics | None]:
         if self._client is not None:
-            return await self._analyze_with_client(self._client, request)
+            return await self._analyze_with_client(self._client, prepared)
         async with self._client_factory() as client:
-            return await self._analyze_with_client(client, request)
+            return await self._analyze_with_client(client, prepared)
 
     async def _analyze_with_client(
-        self, client: httpx.AsyncClient, request: AnalysisRequest
+        self, client: httpx.AsyncClient, prepared: PreparedAnalysis
     ) -> tuple[SemanticAnalysis, AnalysisMetrics | None]:
         try:
             response = await client.post(
                 f"{self._base_url}{_CHAT_PATH}",
-                json=self._chat_payload(request),
+                json=self._chat_payload(prepared),
             )
         except httpx.TimeoutException as error:
             # Not retried here: the same input would time out again at once. The queue's
@@ -291,6 +469,8 @@ class OllamaAnalysisAdapter:
                 self._content(envelope),
                 model_id=self._model,
                 prompt_version=self._prompt.version,
+                schema_version=self._prompt.schema_version,
+                evidence_sources=prepared.evidence_sources,
             )
         except AnalysisError as error:
             error.metrics = metrics
@@ -304,22 +484,15 @@ class OllamaAnalysisAdapter:
             return False
         return self._clock() - self._last_call_at >= self._residency_seconds
 
-    def _chat_payload(self, request: AnalysisRequest) -> dict[str, Any]:
-        options: dict[str, Any] = {"temperature": 0}
-        if self._num_ctx is not None:
-            options["num_ctx"] = self._num_ctx
-        if self._num_predict is not None:
-            options["num_predict"] = self._num_predict
-        if self._seed is not None:
-            options["seed"] = self._seed
+    def _chat_payload(self, prepared: PreparedAnalysis) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": self._model,
             "stream": False,
             "format": self._prompt.output_schema,
-            "options": options,
+            "options": self._options(),
             "messages": [
-                {"role": "system", "content": self._prompt.system},
-                {"role": "user", "content": self._user_content(request)},
+                {"role": "system", "content": prepared.system},
+                {"role": "user", "content": prepared.user_content},
             ],
         }
         if self._keep_alive is not None:
@@ -328,8 +501,19 @@ class OllamaAnalysisAdapter:
             payload["think"] = self._think
         return payload
 
-    def _user_content(self, request: AnalysisRequest) -> str:
-        """Render the versioned template. Values arrive JSON-encoded, so the result parses."""
+    def _user_content(
+        self,
+        request: AnalysisRequest,
+        posting: Mapping[str, Any] | None,
+        description: str,
+        truncated: bool,
+        decisions: Sequence[Mapping[str, Any]],
+    ) -> str:
+        """Render the versioned template. Values arrive JSON-encoded, so the result parses.
+
+        Only the variables the template declares are rendered, so `v1` keeps sending
+        exactly the snapshots it always did.
+        """
         deterministic_result = {
             "eligibility": request.eligibility.value,
             "verdict": request.verdict.value,
@@ -338,13 +522,34 @@ class OllamaAnalysisAdapter:
             "taxonomy_version": request.taxonomy_version,
             "authoritative": True,
         }
+        profile = dict(request.profile_snapshot)
+        if self._prompt.reads_profile_history:
+            profile.update(dict(request.profile_history or {}))
+        values = {
+            "schema_version": _encode(self._prompt.schema_version),
+            "deterministic_result": _encode(deterministic_result),
+            "opportunity": _encode(dict(request.opportunity_snapshot)),
+            "profile": _encode(profile),
+            "posting": _encode(
+                {
+                    "title": (posting or {}).get("title"),
+                    "company_name": (posting or {}).get("company_name"),
+                    "location_text": (posting or {}).get("location_text"),
+                    "description": description or None,
+                    "description_truncated": truncated,
+                }
+            ),
+            "similar_decisions": _encode(
+                # The reference is for the row, not the model: ids mean nothing to it.
+                [
+                    {key: value for key, value in item.items() if key != "ref"}
+                    for item in decisions
+                ]
+            ),
+        }
+        declared = set(self._prompt.variables)
         return self._prompt.render_user(
-            {
-                "schema_version": _encode(ANALYSIS_SCHEMA_VERSION),
-                "deterministic_result": _encode(deterministic_result),
-                "opportunity": _encode(dict(request.opportunity_snapshot)),
-                "profile": _encode(dict(request.profile_snapshot)),
-            }
+            {name: value for name, value in values.items() if name in declared}
         )
 
     @staticmethod
@@ -416,6 +621,14 @@ class OllamaAnalysisAdapter:
                 "ollama analysis content is not valid JSON",
                 retryable=True,
             ) from error
+
+
+def _json_object(response: httpx.Response) -> dict[str, Any]:
+    try:
+        body = response.json()
+    except ValueError:
+        return {}
+    return body if isinstance(body, dict) else {}
 
 
 def _metrics(envelope: dict[str, Any]) -> AnalysisMetrics:

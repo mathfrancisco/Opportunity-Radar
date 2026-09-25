@@ -196,6 +196,7 @@ class MatchAnalysisModel(Base):
         ),
         Index("ix_match_analysis_assessment_analyzed", "assessment_id", "analyzed_at"),
         Index("ix_match_analysis_cache_key", "cache_key"),
+        Index("ix_match_analysis_key_version", "cache_key", "key_version"),
         {"schema": SCHEMA},
     )
 
@@ -239,6 +240,19 @@ class MatchAnalysisModel(Base):
     # The prompt's size before sending, and the tokens it was estimated at (F16-05).
     prompt_chars: Mapped[int | None] = mapped_column(Integer)
     prompt_tokens_estimate: Mapped[int | None] = mapped_column(Integer)
+    # What the call was, not only what it answered (card F16-08). `key_version` NULL marks
+    # a row keyed the pre-v2 way, which is kept for the audit and never reused as v2.
+    key_version: Mapped[str | None] = mapped_column(String(32))
+    payload_hash: Mapped[str | None] = mapped_column(String(64))
+    # The payload as sent — posting cut, profile history, retrieved decisions — so an
+    # answer can be checked against its input. Local only, under the payload retention.
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # Model, prompt digest, effective options, calibration, cuts and server identity.
+    inference: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # Similar decided postings the prompt received, as they stood (card F16-11).
+    context_refs: Mapped[list[Any] | None] = mapped_column(JSONB)
+    # Tokens the prompt was allowed; a real count above it is a suspected truncation.
+    prompt_budget: Mapped[int | None] = mapped_column(Integer)
     schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
     analyzed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
