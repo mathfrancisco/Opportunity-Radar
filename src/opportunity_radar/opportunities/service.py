@@ -159,6 +159,7 @@ class OpportunityService:
             occurrence.source_url = candidate.source_url
             occurrence.normalized_source_url = candidate.normalized_url
             occurrence.last_seen_at = raw_item.fetched_at
+            occurrence.last_seen_run_id = raw_item.source_run_id
             occurrence.source_published_at = candidate.published_at
             occurrence.source_updated_at = candidate.source_updated_at
         else:
@@ -210,6 +211,7 @@ class OpportunityService:
                 normalized_source_url=candidate.normalized_url,
                 first_seen_at=raw_item.fetched_at,
                 last_seen_at=raw_item.fetched_at,
+                last_seen_run_id=raw_item.source_run_id,
                 source_published_at=candidate.published_at,
                 source_updated_at=candidate.source_updated_at,
             )
@@ -274,6 +276,55 @@ class OpportunityService:
             ),
             failed=sum(item.status == "FAILED" for item in results),
         )
+
+    def reconcile_run_closures(self, source_run_id: UUID) -> None:
+        """Close jobs that vanished for two complete runs in a row, and reopen ones back.
+
+        Only a complete run may change anything here: a partial or failed run tells us
+        nothing about what the board still has, so absence from it is not evidence.
+        """
+        run = self.session.get(SourceRunModel, source_run_id)
+        if run is None:
+            raise SourceRunNotFoundError(source_run_id)
+        if not run.complete:
+            return
+        source_definition_id = run.source_definition_id
+
+        for occurrence in self.repository.occurrences_seen_in_run(
+            source_definition_id, source_run_id
+        ):
+            opportunity = occurrence.opportunity
+            if opportunity.lifecycle_status != OpportunityStatus.CLOSED.value:
+                continue
+            opportunity.lifecycle_status = OpportunityStatus.ACTIVE.value
+            opportunity.closure_evidence = {
+                **(opportunity.closure_evidence or {}),
+                "reopened_by_run_id": str(source_run_id),
+            }
+            opportunity.version += 1
+
+        previous_run_id = self.repository.previous_complete_run_id(
+            source_definition_id, before_run_id=source_run_id
+        )
+        if previous_run_id is not None:
+            for occurrence in self.repository.occurrences_missing_from_both_runs(
+                source_definition_id,
+                current_run_id=source_run_id,
+                previous_complete_run_id=previous_run_id,
+            ):
+                opportunity = occurrence.opportunity
+                current_status = OpportunityStatus(opportunity.lifecycle_status)
+                if current_status is OpportunityStatus.CLOSED:
+                    continue
+                if not current_status.can_transition_to(OpportunityStatus.CLOSED):
+                    continue
+                opportunity.lifecycle_status = OpportunityStatus.CLOSED.value
+                opportunity.closure_evidence = {
+                    "closed_by_run_ids": [str(previous_run_id), str(source_run_id)],
+                }
+                opportunity.version += 1
+
+        self.session.commit()
 
     def transition(
         self,

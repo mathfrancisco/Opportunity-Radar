@@ -9,7 +9,11 @@ from uuid import UUID
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from opportunity_radar.acquisition.models import RawItemModel, SourceDefinitionModel
+from opportunity_radar.acquisition.models import (
+    RawItemModel,
+    SourceDefinitionModel,
+    SourceRunModel,
+)
 from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.opportunities.domain import CanonicalCandidate
 from opportunity_radar.opportunities.models import (
@@ -192,6 +196,62 @@ class OpportunityRepository:
                 )
                 .order_by(OpportunityModel.created_at.desc())
                 .limit(limit)
+            )
+        )
+
+    def previous_complete_run_id(
+        self, source_definition_id: UUID, *, before_run_id: UUID
+    ) -> UUID | None:
+        """The complete run immediately preceding `before_run_id` for this source."""
+        before_started_at = (
+            select(SourceRunModel.started_at)
+            .where(SourceRunModel.id == before_run_id)
+            .scalar_subquery()
+        )
+        return self.session.scalar(
+            select(SourceRunModel.id)
+            .where(
+                SourceRunModel.source_definition_id == source_definition_id,
+                SourceRunModel.complete.is_(True),
+                SourceRunModel.id != before_run_id,
+                SourceRunModel.started_at < before_started_at,
+            )
+            .order_by(SourceRunModel.started_at.desc())
+            .limit(1)
+        )
+
+    def occurrences_missing_from_both_runs(
+        self,
+        source_definition_id: UUID,
+        *,
+        current_run_id: UUID,
+        previous_complete_run_id: UUID,
+    ) -> list[SourceOccurrenceModel]:
+        """Occurrences of this source last seen in neither of the two latest complete runs."""
+        return list(
+            self.session.scalars(
+                select(SourceOccurrenceModel)
+                .where(
+                    SourceOccurrenceModel.source_definition_id == source_definition_id,
+                    SourceOccurrenceModel.last_seen_run_id.is_not(None),
+                    SourceOccurrenceModel.last_seen_run_id != current_run_id,
+                    SourceOccurrenceModel.last_seen_run_id != previous_complete_run_id,
+                )
+                .options(joinedload(SourceOccurrenceModel.opportunity))
+            )
+        )
+
+    def occurrences_seen_in_run(
+        self, source_definition_id: UUID, run_id: UUID
+    ) -> list[SourceOccurrenceModel]:
+        return list(
+            self.session.scalars(
+                select(SourceOccurrenceModel)
+                .where(
+                    SourceOccurrenceModel.source_definition_id == source_definition_id,
+                    SourceOccurrenceModel.last_seen_run_id == run_id,
+                )
+                .options(joinedload(SourceOccurrenceModel.opportunity))
             )
         )
 

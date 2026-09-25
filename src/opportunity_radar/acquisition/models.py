@@ -147,6 +147,13 @@ class SourceRunModel(Base):
     checkpoint_before: Mapped[str | None] = mapped_column(Text)
     checkpoint_after: Mapped[str | None] = mapped_column(Text)
     correlation_id: Mapped[str | None] = mapped_column(String(255))
+    #: What the source's own API announced the board holds, when it said so.
+    items_announced: Mapped[int | None] = mapped_column(Integer)
+    #: Whether this run read the whole board. Only a complete run may close a job that
+    #: stopped appearing (see `opportunity_radar.acquisition.domain.evaluate_completeness`).
+    complete: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     source_definition: Mapped[SourceDefinitionModel] = relationship(back_populates="runs")
     raw_items: Mapped[list["RawItemModel"]] = relationship(
         back_populates="source_run"

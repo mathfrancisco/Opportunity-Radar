@@ -101,6 +101,9 @@ class OpportunityModel(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    #: Evidence for the last automatic close/reopen: the two consecutive complete run ids
+    #: that closed it, or the run id that brought it back. `None` until either happens.
+    closure_evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     occurrences: Mapped[list["SourceOccurrenceModel"]] = relationship(
         back_populates="opportunity"
     )
@@ -166,6 +169,12 @@ class SourceOccurrenceModel(Base):
     )
     last_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    #: The run that last saw this occurrence, seeded by every normalization that touches
+    #: it. Closure compares this against the two most recent complete runs of the source.
+    last_seen_run_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("acquisition.source_run.id", ondelete="SET NULL"),
     )
     source_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

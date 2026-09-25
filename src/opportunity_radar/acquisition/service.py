@@ -33,6 +33,7 @@ from opportunity_radar.acquisition.domain import (
     CollectionTelemetry,
     SourceRun,
     SourceRunStatus,
+    evaluate_completeness,
 )
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.lever import LeverCollector
@@ -53,7 +54,10 @@ from opportunity_radar.acquisition.probing import (
 from opportunity_radar.acquisition.proposals import IDENTIFIER_KEYS
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.repository import AcquisitionRepository
-from opportunity_radar.acquisition.scheduling import SourceSchedulingState
+from opportunity_radar.acquisition.scheduling import (
+    SourceSchedulingState,
+    default_schedule_for_priority,
+)
 from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.platform.logging import get_logger
 
@@ -167,7 +171,11 @@ class AcquisitionService:
             _reject_secret_configuration(source_configuration)
         source_rate_limit_policy = dict(rate_limit_policy or {})
         with _refusing_field("rate_limit_policy"):
-            _network_policy(source_rate_limit_policy)
+            resolved_network_policy = _network_policy(source_rate_limit_policy)
+        if schedule is None and company_source_id is not None:
+            schedule = self._default_schedule(
+                company_source_id, resolved_network_policy
+            )
         if normalized_type == "ashby":
             with _refusing_field("configuration.board_identifier"):
                 AshbyCollector.validate_board_identifier(
@@ -225,6 +233,21 @@ class AcquisitionService:
             ) from error
         self.session.refresh(source)
         return source
+
+    def _default_schedule(
+        self, company_source_id: UUID, network_policy: CollectionNetworkPolicy
+    ) -> str | None:
+        priority = self.session.scalar(
+            select(Company.priority)
+            .join(CompanySource, CompanySource.company_id == Company.id)
+            .where(CompanySource.id == company_source_id)
+        )
+        if priority is None:
+            return None
+        return default_schedule_for_priority(
+            priority,
+            minimum_run_interval_seconds=network_policy.minimum_run_interval_seconds,
+        )
 
     def list_sources(
         self, *, offset: int, limit: int
@@ -769,6 +792,13 @@ class AcquisitionService:
                 last_cursor if final_status is SourceRunStatus.SUCCEEDED else None
             ),
         )
+        run.items_announced = run_telemetry.items_announced
+        run.complete = evaluate_completeness(
+            status=run.status,
+            max_items=request.max_items,
+            items_seen=run.items_seen,
+            items_announced=run.items_announced,
+        )
         self._copy_run(run, persisted_run)
         if run_telemetry.last_http_attempt_at is not None:
             source.last_http_attempt_at = run_telemetry.last_http_attempt_at
@@ -809,6 +839,23 @@ class AcquisitionService:
                 "source alert evaluation failed",
                 extra={"job": "alert", "source_id": str(source.id), "run_id": str(run.id)},
             )
+        if run.items_announced is not None and run.items_seen < run.items_announced:
+            try:
+                self.alerts.record_pagination_gap(
+                    source,
+                    run,
+                    items_seen=run.items_seen,
+                    items_announced=run.items_announced,
+                )
+            except Exception:
+                logger.exception(
+                    "pagination alert evaluation failed",
+                    extra={
+                        "job": "alert",
+                        "source_id": str(source.id),
+                        "run_id": str(run.id),
+                    },
+                )
 
     def _persist_item(
         self,
@@ -871,6 +918,8 @@ class AcquisitionService:
         model.error_code = run.error_code.value if run.error_code else None
         model.error_summary = run.error_summary
         model.checkpoint_after = run.checkpoint_after
+        model.items_announced = run.items_announced
+        model.complete = run.complete
 
 
 def canonical_payload_hash(payload: Mapping[str, Any]) -> str:

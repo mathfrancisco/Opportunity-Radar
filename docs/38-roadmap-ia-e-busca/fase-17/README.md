@@ -12,7 +12,7 @@ Inbox de vagas que não servem.
 | 4 | [F17-04 — importador propõe todo ATS](f17-04-importador-propoe-todo-ats.md) | Nenhum (habilitação em massa espera F17-02 e F17-07) | Backlog |
 | 5 | [F17-05 — fila de homologação](f17-05-fila-de-homologacao.md) | F17-04, F17-02, F17-07 | Backlog |
 | 6 | [F17-06 — normalização mais precisa](f17-06-normalizacao-mais-precisa.md) | F17-01 | Backlog |
-| 7 | [F17-07 — coleta completa e encerradas](f17-07-coleta-completa-e-encerradas.md) | Nenhum | Backlog |
+| 7 | [F17-07 — coleta completa e encerradas](f17-07-coleta-completa-e-encerradas.md) | Nenhum | Em revisão |
 | 8 | [F17-08 — candidato a duplicata](f17-08-candidato-a-duplicata.md) | F17-01 (sinal vetorial após F16-09) | Backlog |
 | 9 | [F17-09 — descoberta de ATS](f17-09-descoberta-de-ats.md) | F17-04 | Backlog |
 | 10 | [F17-10 — coletores novos](f17-10-coletores-novos.md) | F17-09, F17-02, F17-06, F17-07 | Backlog |

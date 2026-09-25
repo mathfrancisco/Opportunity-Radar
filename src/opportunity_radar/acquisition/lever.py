@@ -103,6 +103,7 @@ class LeverCollector:
         emitted: int,
     ) -> AsyncIterator[CollectedItem]:
         seen_pages: set[tuple[tuple[str, str], ...]] = set()
+        total_fetched = 0
         while request.max_items is None or emitted < request.max_items:
             remaining = (
                 None if request.max_items is None else request.max_items - emitted
@@ -121,6 +122,7 @@ class LeverCollector:
                     "Lever pagination repeated a page without making progress",
                 )
             seen_pages.add(page_signature)
+            total_fetched += len(postings)
             for posting in postings:
                 try:
                     item = self._item(posting, company_name=request.company_name)
@@ -134,6 +136,9 @@ class LeverCollector:
                 if request.max_items is not None and emitted >= request.max_items:
                     return
             if len(postings) < limit:
+                # A short page is how Lever signals the end: no field states the total,
+                # so this exhaustive read is itself the announced count.
+                request.telemetry.record_items_announced(total_fetched)
                 return
             skip += len(postings)
 

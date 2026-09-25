@@ -74,6 +74,7 @@ class AshbyCollector:
         board = self.validate_board_identifier(request.company_reference)
         payload = await self._fetch_jobs(board, request)
         jobs = self._jobs(payload)
+        request.telemetry.record_items_announced(len(jobs))
         emitted = 0
         for job in jobs:
             if job.get("isListed") is not True:

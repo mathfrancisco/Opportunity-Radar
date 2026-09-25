@@ -474,6 +474,20 @@ def collect_enabled_sources(
                         extra={"job": "collect", "source_id": str(source.id)},
                     )
                     continue
+                if run.complete:
+                    # Closure compares this run's occurrences against the previous complete
+                    # run, so its items must be normalized first: an occurrence that has
+                    # not been touched yet would read as absent and close by mistake.
+                    try:
+                        opportunity_service = OpportunityService(session)
+                        opportunity_service.normalize_run(run.id)
+                        opportunity_service.reconcile_run_closures(run.id)
+                    except Exception:
+                        session.rollback()
+                        logger.exception(
+                            "run closure reconciliation failed",
+                            extra={"job": "collect", "source_id": str(source.id)},
+                        )
                 outcome = "failed" if run.status == "FAILED" else "completed"
                 summary[outcome] += 1
                 logger.info(

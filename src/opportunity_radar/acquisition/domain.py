@@ -113,6 +113,14 @@ class CollectionTelemetry:
     last_http_attempt_at: datetime | None = None
     invalid_items: int = 0
     last_invalid_item_error: str | None = None
+    #: What the source's own API said the board holds, when it says so at all. `None`
+    #: means the collector never learned a total, not that the board announced zero.
+    items_announced: int | None = None
+
+    def record_items_announced(self, total: int) -> None:
+        if total < 0:
+            raise ValueError("items_announced cannot be negative")
+        self.items_announced = total
 
     def record_http_attempt(self, *, retry: bool = False) -> None:
         self.http_requests += 1
@@ -281,6 +289,12 @@ class SourceRun:
     error_summary: str | None = None
     checkpoint_before: str | None = None
     checkpoint_after: str | None = None
+    #: What the source announced this run, when it said so. `None` means unknown, not zero.
+    items_announced: int | None = None
+    #: Whether this run read the whole board: `SUCCEEDED`, unbounded by `max_items`, and
+    #: (when a total is known) `items_seen` reached it. Only a complete run may close a
+    #: job that stopped appearing — see `evaluate_completeness`.
+    complete: bool = False
 
     def start(self, at: datetime | None = None) -> None:
         if self.status is not SourceRunStatus.PENDING:
@@ -355,3 +369,27 @@ class SourceRun:
     def _require_running(self) -> None:
         if self.status is not SourceRunStatus.RUNNING:
             raise InvalidSourceRunTransitionError("source run is not running")
+
+
+def evaluate_completeness(
+    *,
+    status: SourceRunStatus,
+    max_items: int | None,
+    items_seen: int,
+    items_announced: int | None,
+) -> bool:
+    """Did this run read the whole board?
+
+    Only a `SUCCEEDED` run that was never bounded by `max_items` can be complete, because a
+    capped run stopping short of the total is by design, not evidence of anything missing.
+    Without a known total the run is trusted as complete on those two conditions alone; a
+    known total additionally requires `items_seen` to have reached it, which is what makes
+    a shrunk `items_seen` from broken pagination visible.
+    """
+    if status is not SourceRunStatus.SUCCEEDED:
+        return False
+    if max_items is not None:
+        return False
+    if items_announced is None:
+        return True
+    return items_seen >= items_announced
