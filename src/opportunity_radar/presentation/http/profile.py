@@ -206,9 +206,10 @@ def _preferences(body: PreferenceBody, base: ProfileSnapshot | None) -> Employme
         if base is None
         else {**asdict(base.preferences), **body.model_dump(exclude_unset=True)}
     )
-    return EmploymentPreference(
-        **{key: tuple(value) if isinstance(value, list) else value for key, value in values.items()}
-    )
+    kwargs: dict[str, object] = {
+        key: tuple(value) if isinstance(value, list) else value for key, value in values.items()
+    }
+    return EmploymentPreference(**kwargs)  # type: ignore[arg-type]
 
 
 def _execute(operation: Callable[[], ProfileVersion]) -> ProfileVersionResponse:

@@ -43,6 +43,8 @@ _CASE = {
         "profile_snapshot": {"skills": ["python"]},
     },
     "posting": {"title": "Backend Engineer", "description": "Kubernetes in production."},
+    "split": "tuning",
+    "group": "backend-engineer",
     "expected": {
         "verdict": "RECOMMENDED",
         "must_mention_risks": ["Kubernetes em produção"],
@@ -221,4 +223,4 @@ def test_the_comparison_reads_each_criterion_in_its_own_direction() -> None:
     assert verdicts["coverage"] == "melhora"
     assert verdicts["inventions"] == "empate"
     assert verdicts["total_ms"] == "piora"
-    assert verdicts["fidelity"] == "sem dado"
+    assert verdicts["fidelity"] == "não comparável"
