@@ -24,7 +24,7 @@ O status oficial passa a ser o desta fase.
 | [F20-04 — Remover o Ollama do compose, da config e do worker](fase-20/f20-04-remover-ollama-do-compose-config-e-worker.md) | F20-17 | Backlog |
 | [F20-05 — Remover os embeddings locais e a busca por significado](fase-20/f20-05-remover-embeddings-locais.md) | Nenhum | Parcial — alembic não verificado |
 | [F20-06 — Health, doctor, scripts e testes sem Ollama](fase-20/f20-06-health-doctor-scripts-e-testes-sem-ollama.md) | F20-04, F20-05, F20-08 | Backlog |
-| [F20-07 — Porta `LLMProvider` e `GroqProvider`](fase-20/f20-07-porta-llmprovider-e-groqprovider.md) | Nenhum | Backlog |
+| [F20-07 — Porta `LLMProvider` e `GroqProvider`](fase-20/f20-07-porta-llmprovider-e-groqprovider.md) | Nenhum | Feito |
 | [F20-08 — Configuração da IA cloud e segredos](fase-20/f20-08-configuracao-e-segredos.md) | F20-07 | Backlog |
 | [F20-09 — Tarefas (`AITask`) e roteamento por tarefa](fase-20/f20-09-tarefas-e-roteamento.md) | F20-07, F20-08 | Backlog |
 | [F20-10 — Retry com jitter e fallback entre modelos](fase-20/f20-10-retry-e-fallback-entre-modelos.md) | F20-09 | Backlog |
