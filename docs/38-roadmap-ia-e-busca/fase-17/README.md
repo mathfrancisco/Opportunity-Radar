@@ -11,7 +11,7 @@ Inbox de vagas que não servem.
 | 3 | [F17-03 — busca full-text](f17-03-busca-full-text.md) | F17-01, F17-02 | Em revisão — relatório do `eval_search.py` na máquina de referência pendente |
 | 4 | [F17-04 — importador propõe todo ATS](f17-04-importador-propoe-todo-ats.md) | Nenhum (habilitação em massa espera F17-02 e F17-07) | Em revisão |
 | 5 | [F17-05 — fila de homologação](f17-05-fila-de-homologacao.md) | F17-04, F17-02, F17-07 | Backlog |
-| 6 | [F17-06 — normalização mais precisa](f17-06-normalizacao-mais-precisa.md) | F17-01 | Em andamento — `seniority-v2` (títulos PT + abreviações), `regions-v1`/`allowed_countries` e o filtro de país permitido no Inbox entraram; `skills-v2` e o reprocessamento sem `source_updated_at` seguem pendentes |
+| 6 | [F17-06 — normalização mais precisa](f17-06-normalizacao-mais-precisa.md) | F17-01 | Em revisão — `seniority-v2`, `regions-v1`/`allowed_countries`, filtro de país permitido, reprocessamento (regra sempre reaplica, evidência nunca regride, payload expirado explicitado, lotes retomáveis) e o script de lacunas de `skills-v2` (`scripts/unmatched_skill_terms.py`) entraram; a curadoria manual das novas entradas de `skills-v2` (aliases/desambiguação) segue pendente |
 | 7 | [F17-07 — coleta completa e encerradas](f17-07-coleta-completa-e-encerradas.md) | Nenhum | Em revisão |
 | 8 | [F17-08 — candidato a duplicata](f17-08-candidato-a-duplicata.md) | F17-01 (sinal vetorial após F16-09) | Backlog |
 | 9 | [F17-09 — descoberta de ATS](f17-09-descoberta-de-ats.md) | F17-04 | Backlog |
