@@ -1,6 +1,6 @@
 # CARD F18-07 — Preservação integral do perfil
 
-- **Status:** Backlog
+- **Status:** Done — `794b519`; conferido em [F20-40](../../../44-roadmap-fase-20/fase-20/f20-40-preservacao-do-perfil.md)
 - **Fase:** 18 — Varredura produtiva
 - **Depende de:** Nenhum
 - **Bloqueia:** F16-07, F17-02, F17-11, F18-09
