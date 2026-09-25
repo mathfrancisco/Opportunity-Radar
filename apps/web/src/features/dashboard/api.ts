@@ -14,6 +14,7 @@ export interface InboxItem {
   seniority: string
   contractType: string
   lifecycleStatus: string
+  roleFamily: string
   publishedAt: string | null
   opportunityVersion: number
   assessmentId: string | null
@@ -42,6 +43,8 @@ export interface InboxPage {
   offset: number
   limit: number
   order: InboxOrder
+  /** Opportunities the same filters would show without the area filter, per F17-02. */
+  offFilterCount: number
 }
 
 export interface InboxParams {
@@ -56,6 +59,17 @@ export interface InboxParams {
   applied?: boolean
   search?: string
   order?: InboxOrder
+  /** `role-family-v1` codes. Omitted defaults server-side to the profile's areas. */
+  roleFamilies?: string[]
+  /** Bypass the profile default and show every area — the "ver todas" click. */
+  allAreas?: boolean
+  seniorities?: string[]
+  salaryMin?: string
+  salaryMax?: string
+  sourceDefinitionIds?: string[]
+  /** ISO country code from the `regions-v1` table. Unknown-country opportunities are
+   * never implicitly excluded — the API keeps them visible (card F17-06). */
+  allowedCountry?: string
 }
 
 export interface FailingSource {
@@ -85,6 +99,10 @@ export interface Overview {
   applicationsByStage: Record<string, number>
   followUpsDue: number
   followUpWindowDays: number
+  precisionPercent: string | null
+  precisionMarkedCount: number
+  companiesCovered: number
+  companiesWithAts: number
 }
 
 export const metricWindows = ['24h', '7d'] as const
@@ -203,6 +221,7 @@ function parseInboxItem(value: unknown): InboxItem | null {
     seniority: text(value.seniority) ?? 'UNKNOWN',
     contractType: text(value.contract_type) ?? 'UNKNOWN',
     lifecycleStatus: text(value.lifecycle_status) ?? 'UNKNOWN',
+    roleFamily: text(value.role_family) ?? 'UNKNOWN',
     publishedAt: text(value.published_at),
     opportunityVersion: typeof value.opportunity_version === 'number' ? value.opportunity_version : 1,
     assessmentId: text(value.assessment_id),
@@ -254,6 +273,13 @@ export async function getInbox({
   applied,
   search,
   order = 'priority',
+  roleFamilies,
+  allAreas,
+  seniorities,
+  salaryMin,
+  salaryMax,
+  sourceDefinitionIds,
+  allowedCountry,
 }: InboxParams): Promise<InboxPage> {
   const params = new URLSearchParams({
     offset: String((page - 1) * pageSize),
@@ -268,6 +294,13 @@ export async function getInbox({
   if (onlyAssessed) params.set('only_assessed', 'true')
   if (applied !== undefined) params.set('applied', applied ? 'true' : 'false')
   if (search?.trim()) params.set('search', search.trim())
+  roleFamilies?.forEach((family) => params.append('role_family', family))
+  if (allAreas) params.set('all_areas', 'true')
+  seniorities?.forEach((value) => params.append('seniority', value))
+  if (salaryMin) params.set('salary_min', salaryMin)
+  if (salaryMax) params.set('salary_max', salaryMax)
+  sourceDefinitionIds?.forEach((value) => params.append('source_definition_id', value))
+  if (allowedCountry) params.set('allowed_country', allowedCountry)
 
   const response = await fetch(apiUrl(`/inbox?${params.toString()}`), {
     headers: { Accept: 'application/json' },
@@ -283,6 +316,7 @@ export async function getInbox({
     offset: count(body.offset),
     limit: typeof body.limit === 'number' ? body.limit : pageSize,
     order,
+    offFilterCount: count(body.off_filter_count),
   }
 }
 
@@ -450,5 +484,9 @@ export async function getOverview(): Promise<Overview> {
     applicationsByStage: countMap(body.applications_by_stage),
     followUpsDue: count(body.follow_ups_due),
     followUpWindowDays: count(body.follow_up_window_days),
+    precisionPercent: text(body.precision_percent),
+    precisionMarkedCount: count(body.precision_marked_count),
+    companiesCovered: count(body.companies_covered),
+    companiesWithAts: count(body.companies_with_ats),
   }
 }

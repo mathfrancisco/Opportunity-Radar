@@ -507,6 +507,22 @@ function Summary({ overview }: { overview: Overview }) {
             to="/applications"
             value={String(overview.applicationsActive)}
           />
+          <SupportItem
+            hint={
+              overview.precisionPercent === null
+                ? `sem marcação suficiente · ${overview.companiesCovered} de ${overview.companiesWithAts} empresas cobertas`
+                : `(${overview.precisionMarkedCount} marcadas) · ${overview.companiesCovered} de ${overview.companiesWithAts} empresas cobertas`
+            }
+            label={`${overview.newOpportunityWindowDays} dias: vagas novas`}
+            value={String(overview.newOpportunities)}
+          />
+          {overview.precisionPercent !== null && (
+            <SupportItem
+              hint={`${overview.precisionMarkedCount} marcadas`}
+              label="Precisão da Inbox"
+              value={`${Number(overview.precisionPercent).toFixed(0)}%`}
+            />
+          )}
         </dl>
       </Block>
 

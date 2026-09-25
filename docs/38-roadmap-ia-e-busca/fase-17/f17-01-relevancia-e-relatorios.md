@@ -1,17 +1,18 @@
 # CARD F17-01 — Marcação de relevância e relatórios de cobertura e precisão
 
-- **Status:** Backlog
+- **Status:** Em revisão — código e testes prontos; baseline pendente na máquina de referência (ver `docs/pesquisas/baseline-f17-01.md`)
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
 - **Depende de:** Nenhum
-- **Bloqueia:** F17-02, F17-03, F17-06, F17-08, F16-11, Milestone P
+- **Bloqueia:** F17-02, F17-03, F17-06, F17-08, F17-13, F18-01, Milestone P
 - **Origem:** [SPEC de busca](../../37-spec-busca.md), §3, §13
 
 ## Resultado
 
 O operador marca cada vaga como relevante ou não, e o radar passa a medir o que esta fase
 promete melhorar: quantas vagas relevantes entram, quantas das mostradas servem, quantas
-se repetem e o que a busca acha. O valor inicial de cada métrica fica registrado antes de
-qualquer outro card mexer nelas.
+se repetem e o que a busca acha. O baseline disponível fica registrado antes de alterar o ranking. Métricas de
+funções futuras ficam nulas, com motivo e card responsável; cada entrega registra
+sua comparação antes/depois.
 
 ## Contexto
 
@@ -24,7 +25,7 @@ cards de precisão não teriam como provar que ajudaram.
 - **Marcação de relevância:**
   - tabela `opportunities.relevance_mark` — `id`, `opportunity_id`, `relevant` (bool),
     `reason` (`AREA`, `SENIORITY`, `LOCATION`, `COMPANY`, `COMPENSATION`, `OTHER`, opcional
-    quando relevante), `note`, `profile_version_id`, `marked_at`; histórico append-only, a
+    quando relevante), `note`, `profile_version_id`, `opportunity_version`, `marked_at`; histórico append-only, a
     marca atual é a mais recente;
   - `POST /opportunities/{id}/relevance` e a marca atual na resposta da Inbox e do detalhe;
   - na Inbox e no detalhe, dois botões ("Relevante", "Não é para mim") com motivo opcional
@@ -33,19 +34,21 @@ cards de precisão não teriam como provar que ajudaram.
   e total: execuções, itens vistos, persistidos, repetidos e inválidos, vagas novas,
   empresas cobertas ÷ empresas com ATS identificado, taxa de senioridade `UNKNOWN`.
 - **Relatório de precisão** (bloco `precision`): precisão das 50 primeiras da Inbox na
-  ordem padrão, calculada só sobre as marcadas, com a contagem de marcadas ao lado — sem
-  marcação suficiente, a precisão é `null`, não um número frágil.
+  ordem padrão em snapshot congelado. P@50 só é publicada com as 50 julgadas;
+  menos vagas disponíveis usa P@k identificado. Julgamento parcial mostra taxa
+  observada e suporte, mantendo P@50 nula.
 - **Amostra de duplicatas:** `scripts/sample_duplicates.py` sorteia 50 pares de vagas da
   mesma empresa com títulos parecidos (similaridade de trigramas) para o operador julgar;
-  o resultado alimenta a taxa de duplicatas.
+  o resultado mede duplicação entre candidatos. Uma amostra aleatória de
+  oportunidades, revisada contra suas ocorrências, mede a taxa global separadamente.
 - **Conjunto de referência da busca:** `scripts/search_reference.py` mantém
   `data/search-reference/queries.json` (fora do git: é do acervo local) com 40 consultas e,
   para cada uma, as vagas relevantes marcadas. O mesmo arquivo é usado pelo F17-03 e pelo
   F16-10.
 - **Visão geral:** linha de apoio no bloco "Acervo" — "7 dias: N vagas novas · precisão X%
   (M marcadas) · Y empresas cobertas de Z".
-- **Baseline:** relatório em `docs/pesquisas/` com o valor inicial de cada métrica da SPEC
-  §3.
+- **Baseline:** relatório em `docs/pesquisas/` com o valor inicial das métricas
+  disponíveis da SPEC §3, com denominadores e limitações.
 
 ## Fora de escopo
 
@@ -54,12 +57,19 @@ cards de precisão não teriam como provar que ajudaram.
 
 ## Notas de implementação
 
-- "Empresas cobertas" = empresas com pelo menos uma `SourceDefinition` habilitada;
-  "empresas com ATS identificado" = empresas com `CompanySource` de tipo com coletor.
-- O conjunto de referência fica fora do git porque os ids são do banco local; o script
-  exporta e importa por URL canônica da vaga, para sobreviver a restauração de backup.
-- A marca guarda a versão do perfil: uma vaga irrelevante para o perfil de hoje pode ser
-  relevante para o de amanhã, e a precisão é calculada contra o perfil ativo.
+- Contar empresas canônicas. Denominador ATS inclui tipos sem coletor; registrar
+  também total do catálogo. Não confundir 222 registros pesquisados com empresas.
+- Separar fonte proposta, homologada, habilitada e cobertura operacional: coleta
+  completa dentro da janela configurada. Uma fonte falhando não prova cobertura.
+- Congelar ranking, corpus, perfil, filtros, regras e julgamentos de cada medição.
+  Amostra fora do top 50 inclui fontes, áreas, idiomas e UNKNOWN.
+- Referência de busca exporta URL canônica e snapshot/hash do conteúdo, julgamentos
+  e configuração; ids locais não bastam para reconstruir uma comparação.
+  Separar consultas de ajuste e reservadas; reportar o número de relevantes.
+- A marca guarda perfil e versão da vaga julgada. Mudança material torna a marca
+  antiga histórica, sem tratá-la como avaliação do texto novo.
+- F18-01 complementa este endpoint com produtividade da aquisição, sem duplicar
+  métricas. Métricas indisponíveis têm null e motivo, não zero.
 
 ## Critérios de aceite
 
@@ -67,7 +77,10 @@ cards de precisão não teriam como provar que ajudaram.
 - [ ] `GET /search-metrics` devolve cobertura e precisão, com `null` onde não há dado.
 - [ ] O conjunto de referência pode ser criado, exportado e importado pelo script.
 - [ ] A Visão geral mostra a linha de apoio.
-- [ ] O baseline de todas as métricas da SPEC §3 está registrado.
+- [ ] Baseline disponível e responsáveis pelas métricas ainda indisponíveis registrados.
+- [ ] Denominadores incluem ATS sem coletor; habilitada e operacional são distintos.
+- [ ] Julgamentos incompletos não produzem P@50; fixtures cobrem ambos os casos.
+- [ ] Snapshot exportado permite repetir a comparação após alterações no acervo.
 
 ## Verificação
 

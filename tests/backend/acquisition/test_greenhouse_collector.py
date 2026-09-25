@@ -55,6 +55,20 @@ def test_maps_public_board_payload_and_preserves_raw_job() -> None:
     assert request.telemetry.http_requests == 1
 
 
+def test_records_meta_total_as_items_announced() -> None:
+    payload = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    )
+    request = CollectionRequest(company_reference="acme")
+    try:
+        items = asyncio.run(_collect(GreenhouseCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+    assert len(items) == payload["meta"]["total"]
+    assert request.telemetry.items_announced == payload["meta"]["total"]
+
+
 def test_stops_at_max_items() -> None:
     payload = json.loads(_FIXTURE.read_text(encoding="utf-8"))
     client = httpx.AsyncClient(

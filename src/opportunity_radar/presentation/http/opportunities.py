@@ -9,8 +9,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from opportunity_radar.matching.currency import active_profile_version_id
 from opportunity_radar.opportunities.domain import (
     NormalizationError,
     OpportunityStatus,
@@ -21,6 +23,7 @@ from opportunity_radar.opportunities.models import (
     OpportunityCompensationModel,
     OpportunityModel,
     OpportunitySkillModel,
+    RelevanceMarkModel,
     SourceOccurrenceModel,
 )
 from opportunity_radar.opportunities.repository import OpportunityRepository
@@ -33,6 +36,15 @@ from opportunity_radar.opportunities.service import (
     SourceRunNotFoundError,
 )
 from opportunity_radar.presentation.http.dependencies import get_session
+
+_RELEVANCE_REASONS = (
+    "AREA",
+    "SENIORITY",
+    "LOCATION",
+    "COMPANY",
+    "COMPENSATION",
+    "OTHER",
+)
 
 router = APIRouter(prefix="/opportunities", tags=["opportunities"])
 
@@ -88,6 +100,15 @@ class OpportunitySkillResponse(BaseModel):
     normalizer_version: str
 
 
+class RelevanceMarkResponse(BaseModel):
+    id: UUID
+    relevant: bool
+    reason: str | None
+    note: str | None
+    profile_version_id: UUID | None
+    marked_at: datetime
+
+
 class OpportunityResponse(BaseModel):
     id: UUID
     fingerprint: str
@@ -101,12 +122,16 @@ class OpportunityResponse(BaseModel):
     contract_type: str
     description: str | None
     lifecycle_status: str
+    role_family: str
+    role_family_evidence: dict[str, str] | None
+    role_family_version: str | None
     published_at: datetime | None
     source_updated_at: datetime | None
     version: int
     compensations: list[CompensationResponse]
     skills: list[OpportunitySkillResponse]
     occurrences: list[SourceOccurrenceResponse]
+    relevance_mark: RelevanceMarkResponse | None = None
 
 
 class OpportunityDetailResponse(OpportunityResponse):
@@ -150,6 +175,19 @@ class OpportunityStatusBody(BaseModel):
     expected_version: int = Field(ge=1)
 
 
+class RelevanceMarkBody(BaseModel):
+    relevant: bool
+    reason: str | None = None
+    note: str | None = None
+
+    def validated_reason(self) -> str | None:
+        if self.reason is None:
+            return None
+        if self.reason not in _RELEVANCE_REASONS:
+            raise ValueError(f"invalid reason: {self.reason}")
+        return self.reason
+
+
 @router.post("/normalizations/pending", response_model=NormalizePendingResponse)
 def normalize_pending(
     limit: int = Query(default=100, ge=1, le=500),
@@ -181,7 +219,7 @@ def normalize_run(
                 canonical_url=raw_item.canonical_url,
                 result=_normalization_response(result),
                 opportunity=(
-                    _opportunity_response(result.opportunity)
+                    _opportunity_response(result.opportunity, session=session)
                     if result.opportunity is not None
                     else None
                 ),
@@ -206,7 +244,7 @@ def normalize_raw_item(
     return NormalizeResponse(
         result=_normalization_response(result),
         opportunity=(
-            _opportunity_response(result.opportunity)
+            _opportunity_response(result.opportunity, session=session)
             if result.opportunity is not None
             else None
         ),
@@ -235,7 +273,7 @@ def list_opportunities(
         company_id=company_id,
     )
     return OpportunityPageResponse(
-        items=[_opportunity_response(item) for item in items],
+        items=[_opportunity_response(item, session=session) for item in items],
         page=page,
         page_size=page_size,
         total=total,
@@ -256,7 +294,7 @@ def get_opportunity(
                 "message": "Opportunity not found.",
             },
         )
-    basic = _opportunity_response(opportunity)
+    basic = _opportunity_response(opportunity, session=session)
     return OpportunityDetailResponse(
         **basic.model_dump(),
         normalization_results=[
@@ -296,10 +334,61 @@ def update_opportunity_status(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={"code": "invalid_status_transition", "message": str(error)},
         ) from error
-    return _opportunity_response(opportunity)
+    return _opportunity_response(opportunity, session=session)
 
 
-def _opportunity_response(opportunity: OpportunityModel) -> OpportunityResponse:
+@router.post("/{opportunity_id}/relevance", response_model=RelevanceMarkResponse)
+def mark_relevance(
+    opportunity_id: UUID,
+    body: RelevanceMarkBody,
+    session: Session = Depends(get_session),
+) -> RelevanceMarkResponse:
+    try:
+        reason = body.validated_reason()
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "invalid_reason", "message": str(error)},
+        ) from error
+    profile_version_id = session.scalar(select(active_profile_version_id()))
+    try:
+        mark = OpportunityService(session).mark_relevance(
+            opportunity_id,
+            relevant=body.relevant,
+            reason=reason,
+            note=body.note,
+            profile_version_id=profile_version_id,
+        )
+    except OpportunityNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "opportunity_not_found",
+                "message": "Opportunity not found.",
+            },
+        ) from error
+    return _relevance_mark_response(mark)
+
+
+def _relevance_mark_response(mark: RelevanceMarkModel) -> RelevanceMarkResponse:
+    return RelevanceMarkResponse(
+        id=mark.id,
+        relevant=mark.relevant,
+        reason=mark.reason,
+        note=mark.note,
+        profile_version_id=mark.profile_version_id,
+        marked_at=mark.marked_at,
+    )
+
+
+def _opportunity_response(
+    opportunity: OpportunityModel, *, session: Session | None = None
+) -> OpportunityResponse:
+    current_mark = None
+    if session is not None:
+        current_mark = OpportunityRepository(session).current_relevance_mark(
+            opportunity.id
+        )
     return OpportunityResponse(
         id=opportunity.id,
         fingerprint=opportunity.fingerprint,
@@ -313,6 +402,9 @@ def _opportunity_response(opportunity: OpportunityModel) -> OpportunityResponse:
         contract_type=opportunity.contract_type,
         description=opportunity.description,
         lifecycle_status=opportunity.lifecycle_status,
+        role_family=opportunity.role_family,
+        role_family_evidence=opportunity.role_family_evidence,
+        role_family_version=opportunity.role_family_version,
         published_at=opportunity.published_at,
         source_updated_at=opportunity.source_updated_at,
         version=opportunity.version,
@@ -337,6 +429,9 @@ def _opportunity_response(opportunity: OpportunityModel) -> OpportunityResponse:
                 key=lambda value: (value.first_seen_at, str(value.id)),
             )
         ],
+        relevance_mark=(
+            _relevance_mark_response(current_mark) if current_mark is not None else None
+        ),
     )
 
 

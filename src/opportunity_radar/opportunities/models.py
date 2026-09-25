@@ -8,7 +8,9 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
+    Computed,
     DateTime,
     ForeignKey,
     Index,
@@ -21,7 +23,7 @@ from sqlalchemy import (
     select,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, column_property, mapped_column, relationship
 
@@ -59,12 +61,20 @@ class OpportunityModel(Base):
             name="ck_opportunity_lifecycle_status",
         ),
         CheckConstraint("version > 0", name="ck_opportunity_version_positive"),
+        CheckConstraint(
+            "role_family IN ('SOFTWARE_ENGINEERING', 'DATA', 'INFRASTRUCTURE', "
+            "'SECURITY', 'QA', 'PRODUCT', 'DESIGN', 'SALES', 'MARKETING', "
+            "'OPERATIONS', 'PEOPLE', 'FINANCE', 'LEGAL', 'SUPPORT', 'OTHER', "
+            "'UNKNOWN')",
+            name="ck_opportunity_role_family",
+        ),
         Index(
             "ix_opportunity_company_status",
             "canonical_company_id",
             "lifecycle_status",
         ),
         Index("ix_opportunity_published", "published_at"),
+        Index("ix_opportunity_role_family", "role_family"),
         {"schema": SCHEMA},
     )
 
@@ -101,6 +111,37 @@ class OpportunityModel(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    #: Evidence for the last automatic close/reopen: the two consecutive complete run ids
+    #: that closed it, or the run id that brought it back. `None` until either happens.
+    closure_evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    #: Area of the posting (`role_family.py`, card F17-02), `UNKNOWN` when the rules found
+    #: no single area. Never a matching factor, only an Inbox filter.
+    role_family: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="UNKNOWN", server_default="UNKNOWN"
+    )
+    #: `rule`, `term` and `origin` that decided `role_family`. `None` for rows created
+    #: before this card, until the retroactive job reclassifies them.
+    role_family_evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    #: Version of the rules that produced `role_family`. `None` until classified.
+    role_family_version: Mapped[str | None] = mapped_column(String(32))
+    #: ISO 3166-1 alpha-2 codes (or `regions.ANY_COUNTRY`) the `regions-v1` table
+    #: resolved from `location_text`. `None` means unknown — never read as "no country
+    #: allowed": office location is never allowed country (card F17-06).
+    allowed_countries: Mapped[list[str] | None] = mapped_column(ARRAY(String(8)))
+    #: Version of the `regions-v1` table that produced `allowed_countries`. `None` until
+    #: resolved.
+    allowed_countries_version: Mapped[str | None] = mapped_column(String(32))
+    #: Skill names, space-joined, kept in sync with `skills` (F17-03). Feeds the
+    #: generated `search_document` column, which cannot reach another table's rows.
+    search_skills: Mapped[str | None] = mapped_column(Text)
+    #: Generated `tsvector`: title (A), company (A), skills+area (B), description (C),
+    #: location (D), `portuguese` and `english` combined. `Computed(...)` tells the ORM
+    #: this is a Postgres `GENERATED ALWAYS` column (migration 0028): never send it in an
+    #: INSERT/UPDATE — Postgres rejects any explicit value for it, even `NULL`. The
+    #: expression string here is documentation only; the migration is the source of truth.
+    search_document: Mapped[Any | None] = mapped_column(
+        TSVECTOR, Computed("NULL", persisted=True)
+    )
     occurrences: Mapped[list["SourceOccurrenceModel"]] = relationship(
         back_populates="opportunity"
     )
@@ -113,6 +154,46 @@ class OpportunityModel(Base):
     skills: Mapped[list["OpportunitySkillModel"]] = relationship(
         back_populates="opportunity", cascade="all, delete-orphan"
     )
+
+
+class RelevanceMarkModel(Base):
+    """One operator judgement of an opportunity, append-only.
+
+    The current mark is the most recent row for the `opportunity_id`. Never updated or
+    deleted, so precision can be recomputed against any past profile version. F17-01;
+    out of scope: this table never feeds the score or the verdict.
+    """
+
+    __tablename__ = "relevance_mark"
+    __table_args__ = (
+        CheckConstraint(
+            "reason IS NULL OR reason IN "
+            "('AREA', 'SENIORITY', 'LOCATION', 'COMPANY', 'COMPENSATION', 'OTHER')",
+            name="ck_relevance_mark_reason",
+        ),
+        Index("ix_relevance_mark_opportunity_marked_at", "opportunity_id", "marked_at"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    opportunity_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.opportunity.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    relevant: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(16))
+    note: Mapped[str | None] = mapped_column(Text)
+    profile_version_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("profile.profile_version.id", ondelete="SET NULL"),
+    )
+    marked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    opportunity: Mapped[OpportunityModel] = relationship()
 
 
 class SourceOccurrenceModel(Base):
@@ -166,6 +247,12 @@ class SourceOccurrenceModel(Base):
     )
     last_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    #: The run that last saw this occurrence, seeded by every normalization that touches
+    #: it. Closure compares this against the two most recent complete runs of the source.
+    last_seen_run_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("acquisition.source_run.id", ondelete="SET NULL"),
     )
     source_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

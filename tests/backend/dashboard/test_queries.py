@@ -12,12 +12,13 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import SourceDefinitionModel, SourceRunModel
-from opportunity_radar.companies.models import Company
+from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.dashboard.queries import (
     InboxOrder,
     InboxQuery,
     list_opportunity_inbox,
     list_source_health,
+    search_metrics,
     source_coverage_report,
     summarize_overview,
 )
@@ -90,6 +91,10 @@ def _opportunity(
     published_at: datetime | None,
     lifecycle_status: str = "ACTIVE",
     work_mode: str = "REMOTE",
+    seniority: str = "SENIOR",
+    description: str | None = None,
+    role_family: str = "UNKNOWN",
+    search_skills: str | None = None,
 ) -> OpportunityModel:
     opportunity = OpportunityModel(
         fingerprint=uuid4().hex,
@@ -99,10 +104,13 @@ def _opportunity(
         canonical_company_id=company.id,
         company_name=company.canonical_name,
         work_mode=work_mode,
-        seniority="SENIOR",
+        seniority=seniority,
         contract_type="FULL_TIME",
         lifecycle_status=lifecycle_status,
         published_at=published_at,
+        description=description,
+        role_family=role_family,
+        search_skills=search_skills,
         version=1,
     )
     session.add(opportunity)
@@ -306,6 +314,63 @@ def test_inbox_filters_by_verdict_score_search_and_only_assessed() -> None:
             session, InboxQuery(company_id=company.id, search="junior support")
         )
         assert [item.opportunity_id for item in searched.items] == [weak.id]
+
+
+def test_inbox_filters_by_role_family_without_deleting_off_filter_rows() -> None:
+    """Card F17-02: the area filter narrows the page, never hides a row for good."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company = _company(session, "normal")
+        engineering = _opportunity(
+            session, company, title="Backend Engineer", published_at=NOW
+        )
+        engineering.role_family = "SOFTWARE_ENGINEERING"
+        sales = _opportunity(session, company, title="Account Executive", published_at=NOW)
+        sales.role_family = "SALES"
+        session.commit()
+
+        everything = list_opportunity_inbox(session, InboxQuery(company_id=company.id))
+        assert everything.total == 2
+        assert everything.off_filter_count == 0
+
+        engineering_only = list_opportunity_inbox(
+            session,
+            InboxQuery(company_id=company.id, role_families=("SOFTWARE_ENGINEERING",)),
+        )
+        assert [item.opportunity_id for item in engineering_only.items] == [engineering.id]
+        assert engineering_only.off_filter_count == 1
+
+        # The sales role stays reachable without the area filter: never deleted.
+        broadened = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search="account executive")
+        )
+        assert [item.opportunity_id for item in broadened.items] == [sales.id]
+
+
+def test_inbox_filters_by_allowed_country_without_excluding_unknown_rows() -> None:
+    """Card F17-06: an unrecognized/unknown allowed country never becomes an implicit
+    exclusion — it stays visible next to the countries the filter names."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company = _company(session, "normal")
+        brazil = _opportunity(session, company, title="Backend BR", published_at=NOW)
+        brazil.allowed_countries = ["BR"]
+        mexico = _opportunity(session, company, title="Backend MX", published_at=NOW)
+        mexico.allowed_countries = ["MX"]
+        unknown = _opportunity(session, company, title="Backend Unknown", published_at=NOW)
+        unknown.allowed_countries = None
+        session.commit()
+
+        everything = list_opportunity_inbox(session, InboxQuery(company_id=company.id))
+        assert everything.total == 3
+
+        br_filtered = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, allowed_country="BR")
+        )
+        assert {item.opportunity_id for item in br_filtered.items} == {
+            brazil.id,
+            unknown.id,
+        }
 
 
 def test_inbox_orders_by_priority_recency_and_score() -> None:
@@ -529,3 +594,74 @@ def test_overview_counts_reflect_the_catalogue_and_flag_the_missing_pipeline() -
         assert summary.sources_failing == len(summary.failing_sources)
         assert summary.applications_active == sum(summary.applications_by_stage.values())
         assert summary.follow_ups_due <= summary.applications_active
+
+
+def test_search_metrics_reports_coverage_numeric_fields() -> None:
+    """Card F17-01: per-source run counters, company coverage, and seniority-unknown."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        marker = uuid4().hex[:8]
+        ats_company = Company(
+            canonical_name=f"ATS Co {marker}",
+            normalized_name=f"ats-co-{marker}",
+        )
+        plain_company = Company(
+            canonical_name=f"Plain Co {marker}",
+            normalized_name=f"plain-co-{marker}",
+        )
+        session.add_all([ats_company, plain_company])
+        session.flush()
+
+        ats_source = CompanySource(
+            company_id=ats_company.id,
+            source_type="greenhouse",
+            endpoint=f"https://boards.greenhouse.io/{marker}",
+        )
+        session.add(ats_source)
+        session.flush()
+
+        source_definition = SourceDefinitionModel(
+            source_type="greenhouse",
+            name=f"Coverage source {marker}",
+            enabled=True,
+            company_source_id=ats_source.id,
+        )
+        session.add(source_definition)
+        session.flush()
+
+        session.add(
+            SourceRunModel(
+                source_definition_id=source_definition.id,
+                status="SUCCEEDED",
+                started_at=NOW - timedelta(minutes=5),
+                finished_at=NOW - timedelta(minutes=4),
+                items_seen=10,
+                items_persisted=6,
+                items_skipped=3,
+                items_invalid=1,
+            )
+        )
+        _opportunity(
+            session, ats_company, title="Known Seniority", published_at=NOW,
+            seniority="SENIOR",
+        )
+        _opportunity(
+            session, plain_company, title="Unknown Seniority", published_at=NOW,
+            seniority="UNKNOWN",
+        )
+        session.commit()
+
+        report = search_metrics(session, window_days=7, now=NOW)
+
+        by_source = {item.source_definition_id: item for item in report.coverage.by_source}
+        assert by_source[source_definition.id].runs == 1
+        assert by_source[source_definition.id].items_seen == 10
+        assert by_source[source_definition.id].items_persisted == 6
+        assert by_source[source_definition.id].items_duplicate == 3
+        assert by_source[source_definition.id].items_invalid == 1
+        assert report.coverage.runs >= 1
+        assert report.coverage.items_seen >= 10
+        assert report.coverage.items_duplicate >= 3
+        assert report.coverage.companies_with_ats >= 1
+        assert report.coverage.seniority_unknown_rate is not None
+        assert report.coverage.seniority_unknown_rate > 0

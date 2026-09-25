@@ -9,6 +9,7 @@ from opportunity_radar.presentation.http.matching import router as matching_rout
 from opportunity_radar.presentation.http.opportunities import router as opportunities_router
 from opportunity_radar.presentation.http.pipeline import router as pipeline_router
 from opportunity_radar.presentation.http.profile import router as profile_router
+from opportunity_radar.presentation.http.search import router as search_router
 
 router = APIRouter()
 router.include_router(acquisition_router)
@@ -18,6 +19,7 @@ router.include_router(matching_router)
 router.include_router(opportunities_router)
 router.include_router(pipeline_router)
 router.include_router(profile_router)
+router.include_router(search_router)
 
 
 @router.get("/health/live")

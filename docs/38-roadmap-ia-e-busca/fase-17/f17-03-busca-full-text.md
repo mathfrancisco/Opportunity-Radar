@@ -2,7 +2,7 @@
 
 - **Status:** Backlog
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
-- **Depende de:** F17-01
+- **Depende de:** F17-01, F17-02
 - **Bloqueia:** F16-10, F17-12, Milestone P
 - **Origem:** [SPEC de busca](../../37-spec-busca.md), §10
 
@@ -50,6 +50,19 @@ Hoje a busca é `LIKE '%termo%'` em título e empresa (`dashboard/queries.py:345
   pgvector do F16-09.
 - A migração recalcula a coluna para o acervo existente; em acervo grande, fazer o
   `ALTER` fora do horário de coleta.
+
+## Contrato de consulta
+
+- Mesmo universo de filtros da busca semântica; empate por rank, data e id.
+  Ordenação/paginação não pode repetir ou perder linha por empate.
+- Atualizar documento ao mudar empresa canônica, skills, área ou texto, inclusive
+  em reprocessamento; não apenas na primeira inserção.
+- Sinônimos preservam frases, negação e AND/OR da consulta; não expandir substring
+  indiscriminadamente. Casos como C++, C#, .NET e Node.js entram na referência.
+- Perfil/filtro desconhecido não vira exclusão implícita. Fonte filtra ocorrências,
+  não duplica a oportunidade quando há várias fontes.
+- Reportar P@10, recall@10 e nDCG@10 no corpus congelado, além da latência p95
+  com volume representativo. Este modo opera sem Ollama.
 
 ## Critérios de aceite
 

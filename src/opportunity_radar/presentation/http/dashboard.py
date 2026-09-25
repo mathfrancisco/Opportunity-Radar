@@ -27,17 +27,21 @@ from opportunity_radar.dashboard.queries import (
     InboxOrder,
     InboxQuery,
     OverviewSummary,
+    SearchMetricsReport,
     SourceCoverageReport,
     SourceHealth,
     list_opportunity_inbox,
     list_source_health,
+    search_metrics,
     source_coverage_report,
     summarize_overview,
 )
 from opportunity_radar.matching.service import MatchingService
-from opportunity_radar.opportunities.domain import OpportunityStatus, WorkMode
+from opportunity_radar.opportunities.domain import OpportunityStatus, Seniority, WorkMode
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.presentation.http.dependencies import get_session
+from opportunity_radar.profile.domain import ProfileNotFoundError
+from opportunity_radar.profile.service import ProfileService
 
 router = APIRouter(tags=["dashboard"])
 
@@ -53,6 +57,7 @@ class InboxItemResponse(BaseModel):
     seniority: str
     contract_type: str
     lifecycle_status: str
+    role_family: str
     published_at: datetime | None
     opportunity_version: int
     assessment_id: UUID | None
@@ -81,6 +86,7 @@ class InboxPageResponse(BaseModel):
     offset: int
     limit: int
     order: str
+    off_filter_count: int
 
 
 class SourceHealthResponse(BaseModel):
@@ -227,6 +233,50 @@ class OverviewResponse(BaseModel):
     applications_by_stage: dict[str, int]
     follow_ups_due: int
     follow_up_window_days: int
+    precision_percent: str | None
+    precision_marked_count: int
+    companies_covered: int
+    companies_with_ats: int
+
+
+class SourceCoverageMetricResponse(BaseModel):
+    source_definition_id: UUID
+    name: str
+    runs: int
+    items_seen: int
+    items_persisted: int
+    items_duplicate: int
+    items_invalid: int
+    new_opportunities: int
+
+
+class CoverageMetricsResponse(BaseModel):
+    window_days: int
+    runs: int
+    items_seen: int
+    items_persisted: int
+    items_duplicate: int
+    items_invalid: int
+    new_opportunities: int
+    companies_covered: int
+    companies_with_ats: int
+    seniority_unknown_rate: str | None
+    role_family_unknown_rate: str | None
+    by_source: list[SourceCoverageMetricResponse]
+
+
+class PrecisionMetricsResponse(BaseModel):
+    sample_size: int
+    marked_count: int
+    relevant_count: int
+    precision: str | None
+
+
+class SearchMetricsResponse(BaseModel):
+    window_days: int
+    generated_at: datetime
+    coverage: CoverageMetricsResponse
+    precision: PrecisionMetricsResponse
 
 
 @router.get("/inbox", response_model=InboxPageResponse)
@@ -240,12 +290,26 @@ def list_inbox(
     only_assessed: bool = False,
     applied: bool | None = None,
     search: str | None = None,
+    role_family: list[str] | None = Query(default=None),
+    all_areas: bool = False,
+    seniority: list[Seniority] | None = Query(default=None),
+    allowed_country: str | None = None,
+    salary_min: Decimal | None = Query(default=None, ge=0),
+    salary_max: Decimal | None = Query(default=None, ge=0),
+    source_definition_id: list[UUID] | None = Query(default=None),
     profile_version_id: UUID | None = None,
     order: InboxOrder = InboxOrder.PRIORITY,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
     session: Session = Depends(get_session),
 ) -> InboxPageResponse:
+    role_families = tuple(role_family or ())
+    if not role_families and not all_areas:
+        try:
+            active = ProfileService(session).get_active()
+            role_families = tuple(active.snapshot.preferences.target_role_families)
+        except ProfileNotFoundError:
+            role_families = ()
     page = list_opportunity_inbox(
         session,
         InboxQuery(
@@ -258,6 +322,12 @@ def list_inbox(
             only_assessed=only_assessed,
             applied=applied,
             search=search,
+            seniorities=tuple(item.value for item in seniority or ()),
+            allowed_country=allowed_country,
+            salary_min=salary_min,
+            salary_max=salary_max,
+            source_definition_ids=tuple(source_definition_id or ()),
+            role_families=role_families,
             profile_version_id=profile_version_id,
             order=order,
             offset=offset,
@@ -270,6 +340,7 @@ def list_inbox(
         offset=page.offset,
         limit=page.limit,
         order=order.value,
+        off_filter_count=page.off_filter_count,
     )
 
 
@@ -343,6 +414,20 @@ def get_analysis_metrics(
     )
 
 
+@router.get("/search-metrics", response_model=SearchMetricsResponse)
+def get_search_metrics(
+    window: str = Query(default="7d", pattern=r"^\d+d$"),
+    profile_version_id: UUID | None = None,
+    session: Session = Depends(get_session),
+) -> SearchMetricsResponse:
+    """`GET /search-metrics?window=7d` — SPEC §3, card F17-01."""
+    window_days = int(window[:-1])
+    report = search_metrics(
+        session, window_days=window_days, profile_version_id=profile_version_id
+    )
+    return _search_metrics_response(report)
+
+
 @router.get("/overview", response_model=OverviewResponse)
 def get_overview(
     profile_version_id: UUID | None = None,
@@ -406,6 +491,7 @@ def _inbox_item_response(item: InboxItem) -> InboxItemResponse:
         seniority=item.seniority,
         contract_type=item.contract_type,
         lifecycle_status=item.lifecycle_status,
+        role_family=item.role_family,
         published_at=item.published_at,
         opportunity_version=item.opportunity_version,
         assessment_id=item.assessment_id,
@@ -492,6 +578,65 @@ def _overview_response(summary: OverviewSummary) -> OverviewResponse:
         applications_by_stage=summary.applications_by_stage,
         follow_ups_due=summary.follow_ups_due,
         follow_up_window_days=summary.follow_up_window_days,
+        precision_percent=(
+            str(summary.precision_percent * 100)
+            if summary.precision_percent is not None
+            else None
+        ),
+        precision_marked_count=summary.precision_marked_count,
+        companies_covered=summary.companies_covered,
+        companies_with_ats=summary.companies_with_ats,
+    )
+
+
+def _search_metrics_response(report: SearchMetricsReport) -> SearchMetricsResponse:
+    coverage = report.coverage
+    precision = report.precision
+    return SearchMetricsResponse(
+        window_days=report.window_days,
+        generated_at=report.generated_at,
+        coverage=CoverageMetricsResponse(
+            window_days=coverage.window_days,
+            runs=coverage.runs,
+            items_seen=coverage.items_seen,
+            items_persisted=coverage.items_persisted,
+            items_duplicate=coverage.items_duplicate,
+            items_invalid=coverage.items_invalid,
+            new_opportunities=coverage.new_opportunities,
+            companies_covered=coverage.companies_covered,
+            companies_with_ats=coverage.companies_with_ats,
+            seniority_unknown_rate=(
+                str(coverage.seniority_unknown_rate)
+                if coverage.seniority_unknown_rate is not None
+                else None
+            ),
+            role_family_unknown_rate=(
+                str(coverage.role_family_unknown_rate)
+                if coverage.role_family_unknown_rate is not None
+                else None
+            ),
+            by_source=[
+                SourceCoverageMetricResponse(
+                    source_definition_id=item.source_definition_id,
+                    name=item.name,
+                    runs=item.runs,
+                    items_seen=item.items_seen,
+                    items_persisted=item.items_persisted,
+                    items_duplicate=item.items_duplicate,
+                    items_invalid=item.items_invalid,
+                    new_opportunities=item.new_opportunities,
+                )
+                for item in coverage.by_source
+            ],
+        ),
+        precision=PrecisionMetricsResponse(
+            sample_size=precision.sample_size,
+            marked_count=precision.marked_count,
+            relevant_count=precision.relevant_count,
+            precision=(
+                str(precision.precision) if precision.precision is not None else None
+            ),
+        ),
     )
 
 

@@ -1,6 +1,6 @@
 # CARD F16-04 — Aquecimento, `keep_alive` e fila por valor
 
-- **Status:** Em revisão (PR #18)
+- **Status:** Implementação integrada (PR #18); aceite documental pendente
 - **Fase:** 16 — Camada local de IA
 - **Depende de:** F16-02
 - **Bloqueia:** Milestone O
@@ -11,7 +11,7 @@
 A primeira análise de um lote não paga a carga do modelo, a fila analisa primeiro o que o
 operador vai ler primeiro, e timeout não vira retentativa imediata.
 
-## Contexto
+## Contexto inicial (antes da implementação)
 
 Carregar 5 GB de pesos na VRAM leva segundos. Sem aquecimento, esse tempo cai dentro da
 primeira análise do lote e aparece como latência dela — ou como timeout. A fila hoje

@@ -25,6 +25,7 @@ from opportunity_radar.opportunities.domain import (
     normalize_url,
     seniority_classification,
 )
+from opportunity_radar.opportunities.role_family import ROLE_FAMILY_VERSION, RoleFamily
 
 
 def _input(**changes: object) -> NormalizationInput:
@@ -40,6 +41,26 @@ def _input(**changes: object) -> NormalizationInput:
     }
     values.update(changes)
     return NormalizationInput(**values)  # type: ignore[arg-type]
+
+
+def test_candidate_carries_the_role_family_decision_and_its_evidence() -> None:
+    """Card F17-02: normalization must classify the area, not just skip past it."""
+    candidate = build_candidate(_input(title="Senior C++ Engineer"))
+    assert candidate.role_family is RoleFamily.SOFTWARE_ENGINEERING
+    assert candidate.role_family_version == ROLE_FAMILY_VERSION
+    assert candidate.role_family_evidence["rule"]
+
+    unknown = build_candidate(_input(title="Solutions Engineer"))
+    assert unknown.role_family is RoleFamily.UNKNOWN
+
+    department_led = build_candidate(
+        _input(
+            title="Team Lead",
+            metadata={"department": "Sales"},
+        )
+    )
+    assert department_led.role_family is RoleFamily.SALES
+    assert department_led.role_family_evidence["origin"] == "department"
 
 
 def test_normalizes_title_and_url_deterministically() -> None:
@@ -74,7 +95,7 @@ def test_seniority_classification_records_precedence_and_conflicts() -> None:
         "Senior Engineer", {"seniority": "Junior"}
     )
     unmapped_value, unmapped_reason = seniority_classification(
-        "Principal Engineer", {"seniority": "Principal"}
+        "Engineer", {"seniority": "Astronaut"}
     )
 
     assert title_value is Seniority.JUNIOR
@@ -86,6 +107,20 @@ def test_seniority_classification_records_precedence_and_conflicts() -> None:
     assert conflict_reason["source"] == "conflict"
     assert unmapped_value is Seniority.UNKNOWN
     assert unmapped_reason["source"] == "structured"
+
+
+def test_seniority_v2_covers_portuguese_titles_and_abbreviations() -> None:
+    from opportunity_radar.opportunities.domain import SENIORITY_MAPPING_VERSION
+
+    assert SENIORITY_MAPPING_VERSION == "seniority-v2"
+    assert infer_seniority("Engenheiro Especialista", None, {}) is Seniority.STAFF
+    assert infer_seniority("Principal Engineer", None, {}) is Seniority.STAFF
+    assert infer_seniority("Desenvolvedor Pl", None, {}) is Seniority.MID
+    assert infer_seniority("Desenvolvedor Pl.", None, {}) is Seniority.MID
+    assert infer_seniority("Dev Jr", None, {}) is Seniority.JUNIOR
+    assert infer_seniority("Dev Sr", None, {}) is Seniority.SENIOR
+    assert infer_seniority("Tech Lider", None, {}) is Seniority.LEAD
+    assert infer_seniority("Tech Líder", None, {}) is Seniority.LEAD
 
 
 def test_structured_seniority_conflict_keeps_candidate_unknown() -> None:

@@ -19,7 +19,7 @@ import {
 } from '../features/matching/useAssessment'
 import { type OpportunityDetail } from '../features/opportunities/api'
 import { verdictLabels } from '../features/matching/verdicts'
-import { useOpportunity } from '../features/opportunities/useOpportunity'
+import { useMarkRelevance, useOpportunity } from '../features/opportunities/useOpportunity'
 
 const resultLabels: Record<string, string> = {
   TRUE: 'Atende',
@@ -189,6 +189,62 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
   )
 }
 
+const RELEVANCE_REASONS = [
+  { value: 'AREA', label: 'Área' },
+  { value: 'SENIORITY', label: 'Senioridade' },
+  { value: 'LOCATION', label: 'Localização' },
+  { value: 'COMPANY', label: 'Empresa' },
+  { value: 'COMPENSATION', label: 'Remuneração' },
+  { value: 'OTHER', label: 'Outro' },
+]
+
+/** The relevance mark is operator evaluation data (F17-01): it never feeds the score. */
+function RelevanceMark({ opportunity }: { opportunity: OpportunityDetail }) {
+  const mark = useMarkRelevance(opportunity.id)
+  const current = opportunity.relevanceMark
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          disabled={mark.isPending}
+          onClick={() => mark.mutate({ relevant: true })}
+        >
+          Relevante
+        </Button>
+        <select
+          aria-label="Motivo de não ser para mim"
+          className="rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm"
+          disabled={mark.isPending}
+          onChange={(event) => {
+            const reason = event.target.value
+            mark.mutate({ relevant: false, reason: reason === '' ? null : reason })
+            event.target.value = ''
+          }}
+          value=""
+        >
+          <option value="">Não é para mim…</option>
+          {RELEVANCE_REASONS.map((reason) => (
+            <option key={reason.value} value={reason.value}>
+              {reason.label}
+            </option>
+          ))}
+        </select>
+        {current && (
+          <span className="text-sm text-muted">
+            Marcada como {current.relevant ? 'relevante' : 'não relevante'}
+            {current.reason ? ` (${current.reason.toLowerCase()})` : ''} em{' '}
+            {formatDate(current.markedAt)}.
+          </span>
+        )}
+      </div>
+      {mark.isError && (
+        <p className="mt-2 text-sm text-danger-ink">Não foi possível registrar a marca.</p>
+      )}
+    </div>
+  )
+}
+
 function Eligibility({ details }: { details: EligibilityDetail[] }) {
   if (details.length === 0) return <p className="text-subtle">Nenhum filtro avaliado.</p>
   return (
@@ -340,6 +396,10 @@ export function OpportunityDetailPage() {
         {opportunity.data && (
           <>
             <Facts opportunity={opportunity.data} />
+
+            <Section title="Relevância">
+              <RelevanceMark opportunity={opportunity.data} />
+            </Section>
 
             {opportunity.data.description && (
               <Section title="Descrição">

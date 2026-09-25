@@ -21,6 +21,7 @@ dist/
 # Local runtime data
 data/exports/
 data/backups/
+data/search-reference/
 local_exports/
 local_backups/
 

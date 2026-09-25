@@ -43,6 +43,14 @@ export interface NormalizationResult {
   processedAt: string
 }
 
+export interface RelevanceMark {
+  id: string
+  relevant: boolean
+  reason: string | null
+  note: string | null
+  markedAt: string
+}
+
 export interface OpportunityDetail {
   id: string
   fingerprint: string
@@ -62,6 +70,18 @@ export interface OpportunityDetail {
   skills: OpportunitySkill[]
   occurrences: SourceOccurrence[]
   normalizationResults: NormalizationResult[]
+  relevanceMark: RelevanceMark | null
+}
+
+function parseRelevanceMark(value: unknown): RelevanceMark | null {
+  if (!isRecord(value) || typeof value.id !== 'string') return null
+  return {
+    id: value.id,
+    relevant: value.relevant === true,
+    reason: text(value.reason),
+    note: text(value.note),
+    markedAt: required(value.marked_at),
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -174,5 +194,27 @@ export async function getOpportunity(opportunityId: string): Promise<Opportunity
     normalizationResults: list(body.normalization_results)
       .map(parseNormalization)
       .filter((item): item is NormalizationResult => item !== null),
+    relevanceMark: parseRelevanceMark(body.relevance_mark),
   }
+}
+
+export async function markRelevance(
+  opportunityId: string,
+  input: { relevant: boolean; reason?: string | null; note?: string | null },
+): Promise<RelevanceMark> {
+  const response = await fetch(apiUrl(`/opportunities/${opportunityId}/relevance`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      relevant: input.relevant,
+      reason: input.reason ?? null,
+      note: input.note ?? null,
+    }),
+  })
+  if (response.status === 404) throw new Error('Oportunidade não encontrada.')
+  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  const body: unknown = await response.json()
+  const mark = parseRelevanceMark(body)
+  if (mark === null) throw new Error('A API retornou uma marca inválida.')
+  return mark
 }
