@@ -2,14 +2,14 @@
 
 - **Status:** Backlog
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
-- **Depende de:** F17-01
+- **Depende de:** F17-01, F18-07
 - **Bloqueia:** F17-04 (habilitação em massa), F17-10, F17-11, Milestone P
 - **Origem:** [SPEC de busca](../../37-spec-busca.md), §9
 
 ## Resultado
 
 Toda vaga tem uma área classificada — engenharia, dados, produto, vendas… — com a evidência
-que decidiu, e a Inbox mostra por padrão só as áreas de interesse do perfil, sem apagar
+que decidiu, e a Inbox mostra por padrão as áreas de interesse do perfil e UNKNOWN, sem apagar
 nada.
 
 ## Contexto
@@ -39,7 +39,7 @@ traz vendas, marketing e operações para a Inbox, e aumentar o volume piora a p
   título e do departamento guardado no `RawItem` (`collected_item_v1.metadata`).
 - **Perfil:** preferência nova `target_role_families` (lista) na versão do perfil, editável
   na tela de perfil. Perfil sem a preferência = todas as áreas, como hoje.
-- **Inbox:** filtro de área, ligado por padrão nas áreas do perfil, com contador "N vagas
+- **Inbox:** filtro de área, ligado por padrão nas áreas do perfil e em UNKNOWN, com contador "N vagas
   em outras áreas" e um clique para ver todas.
 - **Métrica:** taxa de `UNKNOWN` no relatório do F17-01.
 
@@ -64,7 +64,11 @@ traz vendas, marketing e operações para a Inbox, e aumentar o volume piora a p
 - [ ] As vagas existentes são reclassificadas retroativamente.
 - [ ] O perfil declara áreas de interesse, e a Inbox as usa como filtro padrão.
 - [ ] Nenhuma vaga fora do filtro deixa de ser encontrável.
-- [ ] Taxa de `UNKNOWN` < 10% no acervo, medida no relatório do F17-01.
+- [ ] Taxa de UNKNOWN medida; < 10% é alvo secundário, sem adivinhar classificação.
+- [ ] Precisão por área e perda de relevantes pelo filtro são medidas no conjunto
+      reservado; nenhuma redução de UNKNOWN compensa aumento de falso descarte.
+- [ ] UNKNOWN permanece visível por padrão; ver todas preserva o acervo.
+- [ ] Reclassificação aplica regra nova sem depender de timestamp externo (F17-06).
 
 ## Verificação
 

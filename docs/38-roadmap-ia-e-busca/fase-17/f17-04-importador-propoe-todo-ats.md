@@ -2,7 +2,7 @@
 
 - **Status:** Backlog
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
-- **Depende de:** Nenhum (a habilitação em massa espera F17-02)
+- **Depende de:** Nenhum (habilitação em massa espera F17-02 e F17-07)
 - **Bloqueia:** F17-05, F17-09
 - **Origem:** [SPEC de busca](../../37-spec-busca.md), §4
 

@@ -53,6 +53,22 @@ menos `UNKNOWN`, cada regra nova versionada e medida contra o que havia antes.
   afetadas são refeitas, o que é o comportamento certo, mas gera uma onda de reanálise —
   a fila por valor do F16-04 absorve.
 
+## Reprocessamento e limites semânticos
+
+- Reprocessar pela nova regra mesmo quando a fonte não fornece
+  `source_updated_at`: o retorno antecipado atual de `_refresh_opportunity`
+  precisa ser tratado. Snapshot novo não depende de mudança no anúncio externo.
+- Separar revisão da regra de atualização da fonte. Replay antigo não regride
+  `last_seen_at`, payload corrente ou campos baseados em evidência mais recente.
+- Mudança semântica incrementa versão e invalida matching/índice/vetor;
+  repetição idêntica não cria ondas de reanálise. Lotes são retomáveis.
+- Payload expirado não pode ser reconstruído por suposição: marcar indisponível,
+  manter histórico e indicar recoleta possível.
+- Local do escritório não é país permitido; remoto não significa global.
+  País, residência, visto, patrocínio e fuso têm evidências distintas.
+- Medir precisão junto com recall de skills e UNKNOWN de senioridade. Resolver
+  mais campos incorretamente não passa no gate.
+
 ## Critérios de aceite
 
 - [ ] `seniority-v2` reduz a taxa de `UNKNOWN` à metade do baseline do F17-01.
@@ -60,6 +76,11 @@ menos `UNKNOWN`, cada regra nova versionada e medida contra o que havia antes.
 - [ ] Regiões resolvem para países pela tabela versionada, e "Remote — Brazil" preenche o
       país permitido.
 - [ ] O acervo é renormalizado sem perder procedência.
+
+- [ ] Regra nova altera corretamente item sem `source_updated_at`.
+- [ ] Replay fora de ordem não regride conteúdo/última observação.
+- [ ] Reinício retoma lotes; repetição sem mudança não invalida avaliações.
+- [ ] Payload expirado é explicitado e não impede o restante do reprocessamento.
 
 ## Verificação
 

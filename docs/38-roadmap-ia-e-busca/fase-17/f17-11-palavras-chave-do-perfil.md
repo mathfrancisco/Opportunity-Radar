@@ -2,7 +2,7 @@
 
 - **Status:** Backlog
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
-- **Depende de:** F17-02
+- **Depende de:** F17-02, F18-07
 - **Bloqueia:** Nenhum
 - **Origem:** [SPEC de busca](../../37-spec-busca.md), §7
 
@@ -41,8 +41,12 @@ O perfil não tem campo de cargos-alvo.
 
 - A mudança de perfil passa a mudar a busca na próxima coleta; registrar na execução quais
   termos foram usados, para explicar por que uma vaga entrou.
-- O checkpoint atual guarda cursor; a rotação pode usar o mesmo registro com
-  `checkpoint_type = "keyword_rotation"`.
+- Cursor de paginação e rotação de termos são estados separados. Chave de execução
+  inclui perfil, conjunto de termos e escopo. Só avançar rotação após confirmação
+  durável da página/lote; falha/reinício não pula termos.
+- Respeitar capacidades: ATS de board completo não recebe keyword_search.
+  Cobrir cargos e sinônimos pt/en por rotação explícita, medindo sobreposição e
+  vagas únicas por consulta. Nenhum termo fica permanentemente sem visita.
 
 ## Critérios de aceite
 

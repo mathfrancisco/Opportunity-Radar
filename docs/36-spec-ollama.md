@@ -1,7 +1,7 @@
 # SPEC — Camada local de IA: respostas, tempo, busca e operação
 
-- **Status:** Proposta, para revisão
-- **Data:** 2026-09-23, revisada em 2026-09-24 com as decisões da §3.3
+- **Status:** Em implementação; revisão de robustez em 2026-09-24
+- **Data:** 2026-09-23, revisada em 2026-09-24 com decisões e contratos de robustez
 - **Escopo:** tudo o que o Opportunity Radar faz com o Ollama — análise semântica,
   desempenho, busca, observabilidade, avaliação e operação
 - **Hardware de referência:** Xeon E5-2680 v4, 16 GB de RAM, RTX 5060 8 GB (§3.1)
@@ -33,7 +33,13 @@ Duas coisas não mudam, e cada requisito abaixo é conferido contra elas:
 
 ## 2. Estado verificado
 
-Auditoria contra o código em 23 de setembro de 2026.
+Baseline histórico de 23 de setembro de 2026; a tabela abaixo não é o estado atual.
+
+Em 24 de setembro, o histórico local já contém as PRs #18 e #20 integradas
+(GPU/opções/métricas/fila, cache e orçamento) e o harness de avaliação no
+commit `be4b8b0`. Isso comprova implementação, não os relatórios reais de
+GPU/qualidade. Os cards mantêm o aceite pendente quando falta evidência ou
+quando esta revisão amplia o contrato.
 
 | Área | O que existe | Onde |
 | --- | --- | --- |
@@ -92,21 +98,18 @@ Três consequências para esta SPEC:
   `OLLAMA_KV_CACHE_TYPE=q8_0` e flash attention, uma janela de 8 192 tokens cabe junto.
   Modelos de 12B ou mais em Q4 não cabem com contexto útil e transbordam para a RAM, o que
   derruba a velocidade e compete com o Postgres: ficam fora da comparação (§8.1).
-- **Hoje a análise roda em CPU, com certeza.** O serviço `ollama` do `compose.yaml` não
-  reserva nenhuma GPU, então o container não enxerga a RTX 5060, qualquer que seja a
-  versão. E a GPU, quando reservada, exige servidor recente: Blackwell precisa de CUDA 12.8
-  ou superior, e a imagem `ollama/ollama:0.5.13` é muito provavelmente anterior a esse
-  suporte — o F16-01 confirma. Reservar a GPU e atualizar a imagem deixam de ser melhoria e
-  viram **pré-requisito** (F16-01 abre o plano, §14), com verificação explícita de que o
-  modelo carregou na VRAM (`/api/ps`, campo `size_vram`).
+- **O baseline não reservava GPU.** F16-01 já integrou a reserva e a imagem
+  escolhida. Aceite operacional exige confirmar que o modelo carregou na VRAM
+  (`/api/ps`, campo `size_vram`); configuração entregue não comprova a execução
+  no hardware. Os relatórios dos cards registram essa evidência.
 - **Docker no Windows passa pelo WSL2.** A GPU chega ao container pelo Docker Desktop com
   backend WSL2 e o driver NVIDIA do Windows. O runbook ganha esse passo, e o `doctor` passa
   a recusar a análise habilitada com o modelo carregado fora da VRAM.
 
 `OLLAMA_NUM_PARALLEL=1`: cada requisição paralela reserva outro cache de contexto, e com
 8 GB isso cabe em uma, não em duas. `OLLAMA_MAX_LOADED_MODELS=2` só quando o modelo de
-embedding (§7.2) existir, porque ele é pequeno (menos de 1 GB) e pode ficar residente ao lado
-do modelo de análise.
+embedding (§7.2) existir e a medição combinada confirmar capacidade para ambos
+com os contextos configurados. Caso contrário, alternar residência sob orçamento.
 
 ### 3.2 Metas
 
@@ -114,6 +117,9 @@ Os números de latência são estimativas para 7–8B em Q4 nessa GPU — geraç
 dezenas de tokens por segundo e avaliação do prompt na casa dos milhares. O F16-03 mede o
 valor real antes de qualquer otimização, e as metas são recalculadas a partir dele se a
 medição cair fora da faixa. Cada meta tem a medição que a prova, na §9.
+
+A coluna "Hoje" abaixo preserva o baseline de 23/09, não o estado do checkout.
+Resultados atuais entram nos relatórios datados dos cards.
 
 | Meta | Hoje | Alvo |
 | --- | --- | --- |
@@ -164,11 +170,12 @@ em CPU foi corrigido no Ollama em novembro de 2025
   porque ele é a identidade da avaliação e entra no `input_hash`.
 - A descrição entra **limpa e orçada**: HTML removido, espaços colapsados, seções de
   boilerplate reconhecidas descartadas ("About us", "Equal opportunity", "Benefits"
-  genéricos), e o resultado cortado por orçamento de tokens (§5.2), nunca por caracteres
+  comprovadamente genéricos), preservando remuneração, visto, localização e contrato
+  mesmo sob esses títulos. O resultado é cortado por orçamento de tokens (§5.2), nunca por caracteres
   no meio de uma palavra. O corte é registrado no payload (`description_truncated: true`)
   para o modelo saber que não viu tudo.
-- O `content_version` da oportunidade já entra na chave de cache. Mudar o texto da vaga,
-  portanto, já invalida a análise, sem regra nova.
+- A análise usa a mesma versão da vaga avaliada; se ela mudou, aguarda reavaliação.
+  Guarda o hash do payload efetivamente enviado e a identidade de execução (§6.4).
 
 ### 4.2 Levar o perfil ao modelo
 
@@ -188,9 +195,13 @@ em CPU foi corrigido no Ollama em novembro de 2025
   trecho da vaga que sustenta cada força ou risco, separar o que o anúncio afirma do que o
   modelo inferiu.
 - Schema `analysis-v2`: cada item de `strengths` e `risks` passa a ser
-  `{ "claim": string, "evidence": string | null }`, onde `evidence` é o trecho literal da
-  vaga ou do perfil. O validador confere que o trecho aparece no payload enviado.
+  `{ "claim": string, "evidence": string | null, "source": "posting" | "profile" | null }`.
+  O trecho deve existir na origem indicada do payload enviado; trecho nulo exige
+  origem nula. Inferência sem evidência é identificada como tal, nunca como fato.
   Afirmação com evidência inventada é `SCHEMA_MISMATCH`, não resposta aceita.
+  Presença literal não comprova que o trecho sustenta a afirmação: a avaliação
+  humana verifica negações, requisitos opcionais e contradições. Anúncios são
+  dados não confiáveis; suas instruções nunca substituem o system prompt.
 - O schema continua sem score, sem elegibilidade e sem desqualificador. O validador
   continua recusando campo desconhecido.
 - Poucos exemplos no prompt (1–2, curtos) só se o avaliador mostrar ganho. Exemplo custa
@@ -198,8 +209,9 @@ em CPU foi corrigido no Ollama em novembro de 2025
 
 ### 4.4 Determinismo
 
-- `seed` fixo em `options`, junto com `temperature: 0`, para que a mesma entrada no mesmo
-  modelo produza a mesma saída. Isso é o que torna a comparação entre versões (§8) justa.
+- `seed` fixo e `temperature: 0` reduzem variação; não prometem identidade de
+  saída entre execuções, hardware ou versões. Comparações registram a configuração
+  efetiva e repetem os casos críticos (§8).
 - `think: false` em toda requisição de análise. O Qwen3 raciocina antes de responder por
   padrão; numa análise que é um resumo estruturado, esses tokens custam segundos e janela
   de contexto sem melhorar a saída. Ligar o raciocínio é experimento da §8, não padrão.
@@ -222,17 +234,20 @@ em CPU foi corrigido no Ollama em novembro de 2025
 
 ### 5.2 Orçamento antes do envio
 
-- Estimar os tokens do prompt montado antes de enviar. A primeira versão usa o tokenizer do
-  próprio servidor, contando pela resposta de uma chamada de aquecimento
-  (`prompt_eval_count`) e calibrando uma razão caracteres/token por modelo. A estimativa
-  fica persistida por modelo.
-- Orçamento: `num_ctx − num_predict − margem de 10%`. A descrição (§4.1) é a única parte
-  elástica: system prompt, snapshot e perfil são fixos, e o que sobra é o espaço da
-  descrição.
-- Se nem a parte fixa couber, a análise não é enviada: falha classificada como
-  `CONTEXT_OVERFLOW` (código novo). Nunca truncamento silencioso.
-- Toda análise grava `prompt_tokens` (o `prompt_eval_count` real devolvido) e a estimativa
-  feita antes. A diferença entre as duas é o indicador de calibração.
+- Medir o prompt completo renderizado. A razão tokens/caractere vem de chamadas
+  reais por modelo, idioma e versão do formatador; aquecimento com prompt vazio
+  não é amostra de calibração.
+- Orçamento: `num_ctx − num_predict − margem`, inicialmente 10% da janela.
+  A margem e a razão conservadora usam a cauda de subestimação observada,
+  não apenas a média. Sem histórico, manter limite conservador e estado não calibrado.
+- Uma estimativa não prova ausência de truncamento. Medir erro p95, pior
+  subestimação, idioma e tamanho da amostra; registrar estouro ou suspeita de corte
+  separadamente. Comparação de contagens é diagnóstico, não prova isolada.
+- Preservar system, snapshot e perfil. Cortar descrição em fronteira de frase e
+  registrar versão do limpador, hash do texto, corte e partes omitidas.
+  Não cabe a parte fixa: `CONTEXT_OVERFLOW`, sem enviar nem retentar imediatamente.
+- O aceite exige casos extremos (pt/en, Unicode, URLs, código, JSON e descrições
+  longas), evidência de calibração no hardware e nenhum corte conhecido sem registro.
 
 ---
 
@@ -249,10 +264,9 @@ em CPU foi corrigido no Ollama em novembro de 2025
 - `keep_alive` explícito por chamada (`OLLAMA_KEEP_ALIVE`, padrão `30m`), para que a fila
   não pague a carga do modelo a cada lote.
 - **Aquecimento** no início do worker e antes de cada lote após ociosidade maior que o
-  `keep_alive`: uma chamada mínima (`num_predict: 1`) que carrega o modelo e mede a
-  calibração de tokens (§5.2). A carga passa a ser um evento medido do worker, não o
-  primeiro item da fila pagando por ela. O aquecimento usa `POST /api/generate` com
-  `prompt` vazio, que carrega o modelo sem gerar nada, e nunca falha a subida do worker.
+  `keep_alive`: `POST /api/generate` com prompt vazio carrega o modelo sem gerar
+  texto e mede a carga. Não fornece amostra representativa para calibrar tokens.
+  Indisponibilidade no aquecimento nunca impede a subida do worker.
 
 ### 6.2 Timeouts pelo que se sabe
 
@@ -278,11 +292,18 @@ em CPU foi corrigido no Ollama em novembro de 2025
 
 ### 6.4 Cache que sobrevive
 
-- Antes de chamar o modelo, consultar a tabela de análises pela `cache_key` e reaproveitar
-  uma análise `AI_COMPLETED` com a mesma chave. Hoje o reaproveitamento é só em memória e
-  morre a cada reinício do worker.
-- O LRU em memória continua como primeiro nível, e a tabela vira o segundo. A chave não
-  muda: ela já cobre modelo, prompt, schema, versão da vaga e versão do perfil.
+- A consulta persistente já existe. O reforço F16-08 define `analysis-key-v2`,
+  compartilhada pelo serviço e pelo adaptador: versões de vaga/perfil/regras,
+  hash do payload final (incluindo cortes e contexto), conteúdo do prompt e schema,
+  identidade resolvida do modelo e opções que alteram a resposta.
+- Incluir `num_ctx`, `num_predict`, `seed`, temperatura e opções de amostragem
+  efetivas; registrar servidor/artefato. Mudança de limpador ou recuperação de contexto
+  que altere o payload não pode reutilizar a resposta anterior.
+- Chaves antigas permanecem auditáveis, sem reaproveitamento cruzado com a v2.
+  Somente `AI_COMPLETED` compatível pode ser reutilizado. `refresh` e avaliações
+  comparativas ignoram os dois caches.
+- A cópia append-only registra a análise de origem, com métricas de inferência
+  nulas. A consulta por assessment também verifica a identidade antes de retornar.
 
 ---
 
@@ -330,6 +351,11 @@ sozinha, porque ela alimenta as vagas parecidas (§7.3) e as ferramentas de apoi
   (`WORKER_EMBED_ENABLED`), processa em lotes as oportunidades sem vetor, com versão de
   conteúdo mais nova ou com modelo diferente do configurado. O `/api/embed` recebe o lote
   inteiro numa chamada.
+- **Atualidade e capacidade.** Consumidores exigem mesma identidade do modelo,
+  versão do texto/limpador e versão atual da vaga. Não misturar espaços vetoriais.
+  Lotes têm orçamento de tempo/tokens e retomada; erro de um item não perde o lote.
+  Análise e embedding compartilham admissão limitada da GPU; a busca textual
+  continua operante durante recomposição. Medir as duas cargas juntas na GPU.
 - **Troca de modelo de embedding.** Modelo de outro tamanho exige migração da coluna e
   reindexação completa. Mesmo tamanho, modelo diferente: o job refaz tudo, porque vetores
   de modelos diferentes não se comparam.
@@ -346,12 +372,17 @@ sozinha, porque ela alimenta as vagas parecidas (§7.3) e as ferramentas de apoi
 
 ### 7.4 Busca por significado, com gate de uso
 
-- `GET /search/semantic?q=`: a consulta vira vetor com a instrução de busca e é comparada
-  aos vetores das vagas.
-- **Gate:** medir recall@10 e nDCG@10 nas 40 consultas de referência da
-  [SPEC de busca](37-spec-busca.md) §10 para três modos — full-text, vetorial e híbrido
-  (fusão por *reciprocal rank*). A Inbox adota o modo que vencer. Se o full-text vencer, a
-  busca semântica fica disponível pela API e fora da tela, com os números registrados.
+- `GET /search/semantic?q=` compara vetores atuais sob os mesmos filtros do full-text.
+  Usa paginação estável, desempate por id e informa cobertura do índice.
+- Comparar full-text, vetorial e híbrido nas consultas reservadas do F17-01,
+  contra o mesmo snapshot e julgamentos. Ganho relativo de recall@10 ≥ 15%,
+  sem queda de nDCG@10; baseline zero usa critério absoluto pré-registrado.
+  Relatar dispersão por consulta e latência p95; orçamento inicial de 2 s para
+  busca aquecida é hipótese a confirmar antes de habilitar o modo.
+- Ollama indisponível, timeout ou índice incompleto: a Inbox retorna ao full-text,
+  preserva termo/filtros e informa o modo efetivo. A rota semântica isolada pode
+  responder 503 classificado. A busca textual nunca depende da GPU.
+- F16-10 é melhoria opcional após o Milestone P; não bloqueia busca produtiva.
 
 ---
 
@@ -360,12 +391,14 @@ sozinha, porque ela alimenta as vagas parecidas (§7.3) e as ferramentas de apoi
 Sem avaliação, as frentes A e B são opinião. Esta frente vem antes de qualquer troca de
 prompt ou modelo.
 
-- **Conjunto fixo:** 30 pares vaga/perfil reais, anonimizados, em
+- **Conjunto fixo:** no mínimo 30 pares vaga/perfil reais, anonimizados, em
   `prompts/opportunity_analysis/eval/`, cobrindo vaga forte, vaga fraca, vaga ambígua,
-  descrição longa, descrição em inglês e vaga sem descrição.
+  descrição longa, descrição em inglês e vaga sem descrição. Acrescentar negações,
+  requisitos opcionais, contradições e instruções injetadas no anúncio. Separar
+  casos de ajuste e casos reservados, sem duplicatas próximas entre os conjuntos.
 - **Critérios, pontuados por caso:**
   - **fidelidade:** toda `evidence` aparece no payload (conferido por código, não por
-    modelo);
+    modelo), com origem correta. Isso mede presença, não sustentação semântica;
   - **aderência ao determinístico:** o texto não contradiz o veredito;
   - **cobertura:** as exigências do anúncio que faltam no perfil aparecem em `risks`, contra
     uma lista marcada à mão por caso;
@@ -373,8 +406,13 @@ prompt ou modelo.
   - **custo:** tokens de entrada e saída, latência.
 - **Comando:** `make eval-analysis PROMPT=v2 MODEL=...` roda o conjunto contra o Ollama
   local, grava o relatório em `data/evals/` e compara com o último baseline salvo.
+- **Julgamento:** termos e idioma por heurística são indicadores. Rubrica humana
+  verifica se a evidência sustenta a afirmação. Repetir três vezes os casos críticos,
+  com cache desligado; guardar payload/configuração e decisões de revisão.
 - **Regra de troca:** um prompt ou modelo novo só vira padrão se não piorar nenhum critério
-  e melhorar pelo menos um, no mesmo hardware. O relatório entra no PR que faz a troca.
+  e melhorar pelo menos um no conjunto reservado, no mesmo hardware. Critérios
+  indisponíveis em v1 são reportados como não comparáveis; v2 precisa satisfazer
+  o gabarito, não uma melhora artificial sobre ausência de medição. O PR leva relatório.
 - **CI:** o conjunto não roda no CI, que usa o Ollama falso. O CI confere só o que é
   determinístico: schema, validador de evidência, montagem do payload e orçamento de
   tokens contra uma razão caracteres/token fixa.
@@ -448,14 +486,17 @@ determinística sobre quando chamar, num fluxo que precisa ser reproduzível.
 
 ### 11.1 Contexto recuperado (RAG)
 
-- Para cada análise, recuperar pelo pgvector as 3 vagas mais parecidas que já têm decisão
+- Opcional após a busca textual e a varredura básica; sem bloquear esses marcos.
+  Para cada análise, recuperar pelo pgvector até 3 vagas mais parecidas que já têm decisão
   do operador — candidatura aberta, descarte, ou marcação de relevância da
   [SPEC de busca](37-spec-busca.md) §13 — e entregar ao modelo título, veredito e decisão de
   cada uma, num bloco `similar_decisions` separado do snapshot.
 - O modelo usa isso para comentar ("vaga parecida com X, que você descartou por
   localização"), nunca para decidir: o schema continua sem score e sem veredito.
 - **Reprodutibilidade:** o contexto recuperado muda com o tempo, então os identificadores
-  recuperados entram na chave de cache da análise. A mesma vaga com contexto diferente é
+  recuperados, versão do perfil, estado e instante das decisões entram no payload
+  persistido e na chave da §6.4. Não recuperar a própria vaga nem suas duplicatas,
+  nem interpretar ausência de candidatura como rejeição. A mesma vaga com contexto diferente é
   outra análise, e a análise guarda quais vagas recebeu.
 - Entra só depois do conjunto de avaliação (§8) mostrar que o bloco melhora a cobertura ou a
   fidelidade sem piorar o custo além da meta de latência.
@@ -527,17 +568,18 @@ dependências:
 | 4 | F16-04 — aquecimento, `keep_alive` e fila por valor | C | F16-02 |
 | 5 | F16-05 — orçamento de tokens, limpador e `CONTEXT_OVERFLOW` | B | F16-03 |
 | 6 | F16-06 — conjunto de avaliação e `make eval-analysis` | E | F16-03 |
-| 7 | F16-07 — vaga e experiências no payload, prompt `v2` pt-BR com evidência | A | F16-05, F16-06 |
+| 7 | F16-07 — vaga e experiências no payload, prompt `v2` pt-BR com evidência | A | F16-05, F16-06, F16-08, F18-07 |
 | 8 | F16-08 — cache persistente na tabela de análises | C | F16-03 |
-| 9 | F16-09 — pgvector e embeddings das vagas | D | F16-01 |
+| 9 | F16-09 — pgvector e embeddings das vagas | D | F16-01, F16-05 |
 | 10 | F16-10 — vagas parecidas e busca por significado com gate | D | F16-09, F17-03 |
 | 11 | F16-11 — contexto recuperado para a análise | H | F16-06, F16-07, F16-09 |
 | 12 | F16-12 — confirmação do modelo e da quantização | E, I | F16-06, F16-07 |
 | 13 | F16-13 — métricas da análise na API, na Visão geral e no `doctor` | F | F16-03 |
 
 F16-01 vem primeiro porque, no hardware de referência, sem ele tudo roda em CPU e
-qualquer medição anterior seria do caminho errado. F16-09 só depende da infraestrutura e
-pode andar em paralelo com F16-02 a F16-08.
+qualquer medição anterior seria do caminho errado. F16-09 depende também do limpador do F16-05.
+F18-07 preserva o perfil antes do F16-07; seus cards estão na
+[SPEC de varredura produtiva](39-spec-varredura-produtiva.md).
 
 ---
 
@@ -545,7 +587,8 @@ pode andar em paralelo com F16-02 a F16-08.
 
 - A saída do modelo não altera elegibilidade, score, veredito nem fator.
 - Com o Ollama indisponível, nada além do comentário deixa de funcionar.
-- Nenhum prompt é truncado sem que isso esteja registrado na análise.
+- Todo corte conhecido fica registrado; a estimativa de tokens declara sua
+  calibração, margem e limitações, sem prometer contagem exata por média.
 - Toda análise registra modelo, versão de prompt, versão de schema e o que custou.
 - Toda troca de prompt, modelo, quantização ou versão de servidor passa pelo conjunto de
   avaliação.
@@ -560,7 +603,7 @@ pode andar em paralelo com F16-02 a F16-08.
 | --- | --- |
 | Descrição longa estoura a janela e o tempo | orçamento de tokens (§5.2), `num_predict`, limpeza de boilerplate |
 | Modelo ou quantização maior melhora a qualidade e estoura a latência | a regra de troca (§8) exige as duas medidas no mesmo relatório |
-| `evidence` inventada que parece plausível | conferência literal por código, não por outro modelo |
+| Evidência inventada ou usada fora de contexto | origem validada por código e sustentação julgada nos casos reservados |
 | Avaliação com poucos casos dá conclusão frágil | 30 casos cobrindo os tipos listados; diferença pequena não troca o padrão |
 | Busca semântica vira custo sem ganho | gate de recall@10 antes de virar o padrão da Inbox (§7.4) |
 | Trocar a base do Postgres corrompe índices de texto | pgvector compilado sobre a mesma imagem alpine (§7.2) |

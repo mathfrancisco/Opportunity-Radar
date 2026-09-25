@@ -1,5 +1,11 @@
 # Fontes e coletores
 
+> Evolução planejada: [SPEC 37](37-spec-busca.md) cobre fontes e precisão;
+> [SPEC 39](39-spec-varredura-produtiva.md) e seus
+> [cards](40-roadmap-varredura-produtiva/README.md) acrescentam descoberta
+> limitada, JobPosting público, delta e agenda por rendimento. Esses recursos
+> não devem ser tratados como implementados apenas por estarem documentados.
+
 ## 1. Objetivo
 
 O módulo de aquisição deve transformar origens heterogêneas de vagas em um fluxo previsível, auditável e substituível.
