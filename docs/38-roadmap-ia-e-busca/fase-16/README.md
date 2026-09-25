@@ -1,5 +1,8 @@
 # Cards da Fase 16 — Camada local de IA
 
+> **Consolidado na [Fase 20](../../44-roadmap-fase-20/README.md).** O status oficial destes cards passa a ser o da Fase 20
+> ([SPEC 43](../../43-spec-llm-cloud-e-consolidacao.md)). Os cards abaixo seguem como referência de escopo.
+
 Estes cards executam a [SPEC da camada de IA](../../36-spec-ollama.md): o Ollama passa a
 rodar na RTX 5060 com o `qwen3:8b-q4_K_M`, cada análise mede o que custa, o modelo lê a
 vaga de verdade, e o pgvector dá às vagas uma noção de "parecida".

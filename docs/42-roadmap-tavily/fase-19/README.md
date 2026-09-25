@@ -1,5 +1,8 @@
 # Fase 19 — Integração Tavily
 
+> **Consolidado na [Fase 20](../../44-roadmap-fase-20/README.md).** O status oficial destes cards passa a ser o da Fase 20
+> ([SPEC 43](../../43-spec-llm-cloud-e-consolidacao.md)). Os cards abaixo seguem como referência de escopo.
+
 [Escopo e contratos](../../41-spec-tavily.md). Objetivo: achar vaga fora dos ATS já
 cobertos, preencher corpo de postagem sem descrição e, depois, alimentar propostas de
 fonte com evidência — sem gastar crédito além do orçamento e sem contornar o gate de

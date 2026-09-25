@@ -1,5 +1,8 @@
 # Roadmap — IA local, busca e varredura produtiva
 
+> **Consolidado na [Fase 20](44-roadmap-fase-20/README.md).** O status oficial destes cards passa a ser o da Fase 20
+> ([SPEC 43](43-spec-llm-cloud-e-consolidacao.md)). Os cards abaixo seguem como referência de escopo.
+
 ## 1. Objetivo
 
 Encontrar oportunidades únicas, abertas e relevantes nos sites de interesse,

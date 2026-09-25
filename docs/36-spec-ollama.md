@@ -1,5 +1,8 @@
 # SPEC — Camada local de IA: respostas, tempo, busca e operação
 
+> **Consolidado na [Fase 20](44-roadmap-fase-20/README.md).** O status oficial destes cards passa a ser o da Fase 20
+> ([SPEC 43](43-spec-llm-cloud-e-consolidacao.md)). Os cards abaixo seguem como referência de escopo.
+
 - **Status:** Em implementação; revisão de robustez em 2026-09-24
 - **Data:** 2026-09-23, revisada em 2026-09-24 com decisões e contratos de robustez
 - **Escopo:** tudo o que o Opportunity Radar faz com o Ollama — análise semântica,

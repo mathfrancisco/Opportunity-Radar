@@ -1,5 +1,8 @@
 # Cards da Fase 17 — Busca de vagas: cobertura e precisão
 
+> **Consolidado na [Fase 20](../../44-roadmap-fase-20/README.md).** O status oficial destes cards passa a ser o da Fase 20
+> ([SPEC 43](../../43-spec-llm-cloud-e-consolidacao.md)). Os cards abaixo seguem como referência de escopo.
+
 Estes cards executam a [SPEC de busca](../../37-spec-busca.md). A ordem é: medir, ganhar
 precisão e só então aumentar o volume — porque cada fonte nova sem filtro de área enche a
 Inbox de vagas que não servem.

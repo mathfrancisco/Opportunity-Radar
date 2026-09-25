@@ -1,5 +1,8 @@
 # Fase 18 — Varredura produtiva de sites
 
+> **Consolidado na [Fase 20](../../44-roadmap-fase-20/README.md).** O status oficial destes cards passa a ser o da Fase 20
+> ([SPEC 43](../../43-spec-llm-cloud-e-consolidacao.md)). Os cards abaixo seguem como referência de escopo.
+
 [Escopo e contratos](../../39-spec-varredura-produtiva.md).
 Objetivo: cobertura operacional, frescor e oportunidades úteis por custo,
 sem transformar falha, ausência de marcação ou página inalterada em ausência de vaga.
