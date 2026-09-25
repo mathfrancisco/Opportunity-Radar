@@ -1,8 +1,12 @@
 from pathlib import Path
 
+from opportunity_radar.companies.models import CompanySource
 from scripts.import_research_catalog import (
     DEFAULT_INPUTS,
     ResearchRow,
+    _record_source_metadata,
+    _resolve_source_key,
+    extract_ats_key,
     read_research_rows,
 )
 
@@ -95,3 +99,99 @@ def test_default_studies_contain_the_researched_catalog() -> None:
     counts = [len(list(read_research_rows(path))) for path in DEFAULT_INPUTS]
 
     assert counts == [186, 36]
+
+
+def test_extract_ats_key_validates_each_ats_board_link_shape() -> None:
+    assert extract_ats_key("ashby", "https://jobs.ashbyhq.com/cartesia").key == "cartesia"
+    assert extract_ats_key(
+        "ashby", "https://jobs.ashbyhq.com/cartesia/opening/123"
+    ).key == "cartesia"
+    assert extract_ats_key(
+        "greenhouse", "https://job-boards.greenhouse.io/assemblyai"
+    ).key == "assemblyai"
+    assert extract_ats_key(
+        "greenhouse", "https://boards.greenhouse.io/assemblyai"
+    ).key == "assemblyai"
+    global_lever = extract_ats_key("lever", "https://jobs.lever.co/ciandt")
+    assert global_lever.key == "ciandt"
+    assert global_lever.api_region == "global"
+    eu_lever = extract_ats_key("lever", "https://jobs.eu.lever.co/ciandt")
+    assert eu_lever.api_region == "eu"
+
+
+def test_extract_ats_key_rejects_links_outside_the_ats_domain_or_pattern() -> None:
+    assert extract_ats_key("ashby", "https://jobs.ashbyhq.com/") is None
+    assert extract_ats_key("greenhouse", "https://boards.greenhouse.io/") is None
+    assert extract_ats_key("ashby", "https://cartesia.ai/careers") is None
+    assert extract_ats_key("lever", "https://example.com/jobs/ciandt") is None
+
+
+def _company_source(*, source_type: str, endpoint: str) -> CompanySource:
+    return CompanySource(source_type=source_type, endpoint=endpoint)
+
+
+def test_resolve_source_key_extracts_and_validates_board_link() -> None:
+    row = ResearchRow(
+        name="Cartesia",
+        situation="ATS identificado",
+        ats="Ashby",
+        consulted_url="https://cartesia.ai/careers",
+        evidence="[Board](https://jobs.ashbyhq.com/cartesia). Evidence.",
+        links=(
+            ("Carreiras", "https://cartesia.ai/careers"),
+            ("Board", "https://jobs.ashbyhq.com/cartesia"),
+        ),
+    )
+    source = _company_source(
+        source_type="ashby", endpoint="https://jobs.ashbyhq.com/cartesia"
+    )
+
+    resolution = _resolve_source_key(row, source)
+
+    assert resolution.key == "cartesia"
+    assert resolution.verification_method == "research_link"
+    assert resolution.unresolved_reason is None
+
+
+def test_resolve_source_key_reports_unresolved_when_no_link_matches() -> None:
+    row = ResearchRow(
+        name="Cognition",
+        situation="ATS identificado",
+        ats="Ashby",
+        consulted_url="https://cognition.ai/careers",
+        evidence="No board link available.",
+        links=(("Carreiras", "https://cognition.ai/careers"),),
+    )
+    source = _company_source(
+        source_type="ashby", endpoint="https://cognition.ai/careers"
+    )
+
+    resolution = _resolve_source_key(row, source)
+
+    assert resolution.key is None
+    assert resolution.unresolved_reason is not None
+
+
+def test_record_source_metadata_surfaces_unresolved_ats_keys() -> None:
+    row = ResearchRow(
+        name="Cognition",
+        situation="ATS identificado",
+        ats="Ashby",
+        consulted_url="https://cognition.ai/careers",
+        evidence="No board link available.",
+        links=(("Carreiras", "https://cognition.ai/careers"),),
+    )
+    source = _company_source(
+        source_type="ashby", endpoint="https://cognition.ai/careers"
+    )
+
+    unresolved = _record_source_metadata([source], row)
+
+    assert source.external_key is None
+    assert source.verification_status == "ats_identified"
+    assert unresolved == [
+        (
+            "ashby",
+            "ashby identified with no board or JSON link to extract a key from.",
+        )
+    ]

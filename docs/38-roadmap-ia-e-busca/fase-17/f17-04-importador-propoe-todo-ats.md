@@ -1,6 +1,7 @@
 # CARD F17-04 — Importador propõe todo ATS identificado, com chave extraída do link
 
-- **Status:** Backlog
+- **Status:** Em revisão — filtro, extração de chave e testes prontos; contagens do E2E
+  atualizadas (`sources_total` novo == 16; ver PR).
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
 - **Depende de:** Nenhum (habilitação em massa espera F17-02 e F17-07)
 - **Bloqueia:** F17-05, F17-09
