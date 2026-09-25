@@ -508,7 +508,12 @@ def collect_enabled_sources(
 
 def collection_service_factory(settings: Settings) -> Callable[[Session], AcquisitionService]:
     """Build the collectors once per worker, with the endpoints this deployment points at."""
-    registry = build_collector_registry(greenhouse_base_url=settings.greenhouse_base_url)
+    registry = build_collector_registry(
+        greenhouse_base_url=settings.greenhouse_base_url,
+        tavily_api_key=settings.tavily_api_key,
+        tavily_base_url=settings.tavily_base_url,
+        tavily_search_depth=settings.tavily_search_depth,
+    )
     notifier = build_source_alert_notifier(
         settings.source_alert_webhook_url,
         timeout_seconds=settings.source_alert_timeout_seconds,

@@ -12,20 +12,25 @@ from __future__ import annotations
 
 import asyncio
 import math
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+import re
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
     AcquisitionErrorCode,
+    CollectedItem,
     CollectionNetworkPolicy,
+    CollectionRequest,
     CollectionTelemetry,
+    CollectorCapabilities,
     HealthcheckContext,
     HealthResult,
 )
@@ -33,6 +38,59 @@ from opportunity_radar.acquisition.domain import (
 _SEARCH_PATH = "/search"
 _EXTRACT_PATH = "/extract"
 _MAX_EXTRACT_URLS = 20
+_SEARCH_PARSER_VERSION = "tavily-search-v1"
+
+# Query keys that identify a click's origin rather than the resource itself. Stripped so
+# two links to the same job posting that differ only by campaign tagging canonicalize to
+# the same URL (F20-44). Mirrors the tracking-key list `opportunities.domain.normalize_url`
+# already uses for the same reason; kept local rather than imported to avoid giving
+# `acquisition` a new dependency on `opportunities` for one helper (acquisition currently
+# has no such dependency in either direction) — noted here as a deliberate choice.
+_TRACKING_QUERY_PREFIXES = ("utm_",)
+_TRACKING_QUERY_KEYS = frozenset({"ref", "source", "gclid", "fbclid"})
+
+# Board key location per ATS, matching `acquisition.proposals.IDENTIFIER_KEYS`.
+_ATS_BOARD_PATTERNS: dict[str, re.Pattern[str]] = {
+    "ashby": re.compile(r"^jobs\.ashbyhq\.com/([^/?#]+)"),
+    "greenhouse": re.compile(r"^boards\.greenhouse\.io/([^/?#]+)"),
+    "lever": re.compile(r"^jobs\.lever\.co/([^/?#]+)"),
+}
+
+
+def canonicalize_url(url: str) -> str:
+    """Lowercase host, no fragment, no tracking query params.
+
+    The single normalization used both for within-run dedupe here (F20-44) and for the
+    extraction cache hash (F20-45) — one function, not two copies of the same rule.
+    """
+    parsed = urlsplit(url.strip())
+    hostname = (parsed.hostname or "").casefold()
+    netloc = hostname if parsed.port is None else f"{hostname}:{parsed.port}"
+    path = parsed.path.rstrip("/") or "/"
+    query = urlencode(
+        sorted(
+            (key, value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            if not (
+                key.casefold().startswith(_TRACKING_QUERY_PREFIXES)
+                or key.casefold() in _TRACKING_QUERY_KEYS
+            )
+        ),
+        doseq=True,
+    )
+    return urlunsplit((parsed.scheme.casefold(), netloc, path, query, ""))
+
+
+def detect_ats_board(url: str) -> tuple[str, str] | None:
+    """`(source_type, board_key)` when `url` matches a known ATS board pattern, else `None`."""
+    parsed = urlsplit(url.strip())
+    hostname = (parsed.hostname or "").casefold()
+    candidate = f"{hostname}{parsed.path}"
+    for source_type, pattern in _ATS_BOARD_PATTERNS.items():
+        match = pattern.match(candidate)
+        if match:
+            return source_type, match.group(1)
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -507,3 +565,101 @@ class TavilyClient:
             credits_used=TavilyClient._credits_used(payload),
             raw_payload=payload,
         )
+
+
+class TavilySearchCollector:
+    """Keyword-search discovery over the Tavily `/search` endpoint (F20-44).
+
+    Sits next to `RemotiveCollector` in the registry: same `keyword_search` capability,
+    same `CollectedItem` contract. Credit budgeting (F20-43) is out of scope here per the
+    card — this collector calls `TavilyClient.search()` plainly; a run-scoped ceiling is a
+    later wiring decision, not duplicated or half-wired in this class.
+    """
+
+    source_type = "tavily_search"
+    capabilities = CollectorCapabilities(keyword_search=True)
+
+    def __init__(
+        self,
+        *,
+        client: TavilyClient | None = None,
+        client_factory: Callable[[], TavilyClient] | None = None,
+        time_range: str = "month",
+        include_domains: Sequence[str] = (),
+        max_results: int = 10,
+        known_ats_boards: frozenset[tuple[str, str]] = frozenset(),
+    ) -> None:
+        if client is not None and client_factory is not None:
+            raise ValueError("provide either client or client_factory, not both")
+        if client is None and client_factory is None:
+            raise ValueError("provide client or client_factory")
+        self._client = client
+        self._client_factory = client_factory
+        # Never open (card acceptance criterion): a default is always in effect, and
+        # nothing in this class accepts `None` to widen it.
+        self._time_range = time_range
+        self._include_domains = tuple(include_domains)
+        self._max_results = max_results
+        # Pre-calculated pairs of (source_type, board_key) that already have a
+        # CompanySource enabled for that board. Injected by whoever builds the registry,
+        # since collectors carry no database session (see `Collector` Protocol).
+        self._known_ats_boards = known_ats_boards
+
+    async def healthcheck(
+        self, context: HealthcheckContext | None = None
+    ) -> HealthResult:
+        return await self._resolve_client().healthcheck(context)
+
+    async def discover(
+        self, request: CollectionRequest
+    ) -> AsyncIterator[CollectedItem]:
+        if not request.keywords:
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                "tavily_search requires at least one keyword",
+                field="keywords",
+            )
+        client = self._resolve_client()
+        query = " ".join(keyword.strip() for keyword in request.keywords)
+        response = await client.search(
+            query=query,
+            max_results=self._max_results,
+            time_range=self._time_range,
+            include_domains=self._include_domains or None,
+            telemetry=request.telemetry,
+            network_policy=request.network_policy,
+        )
+        seen_urls: set[str] = set()
+        emitted = 0
+        for rank, result in enumerate(response.results):
+            canonical = canonicalize_url(result.url)
+            if canonical in seen_urls:
+                continue
+            seen_urls.add(canonical)
+            metadata: dict[str, Any] = {
+                "query": query,
+                "rank": rank,
+                "score": result.score,
+                "retrieved_at": datetime.now(UTC).isoformat(),
+                "parser_version": _SEARCH_PARSER_VERSION,
+            }
+            board = detect_ats_board(result.url)
+            if board is not None and board not in self._known_ats_boards:
+                metadata["source_proposal_candidate"] = True
+            yield CollectedItem(
+                source_type=self.source_type,
+                url=result.url,
+                title=result.title,
+                description=result.content,
+                raw_payload=result.raw_payload,
+                metadata=metadata,
+            )
+            emitted += 1
+            if request.max_items is not None and emitted >= request.max_items:
+                return
+
+    def _resolve_client(self) -> TavilyClient:
+        if self._client is not None:
+            return self._client
+        assert self._client_factory is not None
+        return self._client_factory()

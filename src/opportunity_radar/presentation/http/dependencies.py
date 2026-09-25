@@ -51,7 +51,12 @@ def get_alert_service(
 @lru_cache
 def cached_collector_registry() -> CollectorRegistry:
     settings = get_settings()
-    return build_collector_registry(greenhouse_base_url=settings.greenhouse_base_url)
+    return build_collector_registry(
+        greenhouse_base_url=settings.greenhouse_base_url,
+        tavily_api_key=settings.tavily_api_key,
+        tavily_base_url=settings.tavily_base_url,
+        tavily_search_depth=settings.tavily_search_depth,
+    )
 
 
 def get_collector_registry() -> CollectorRegistry:

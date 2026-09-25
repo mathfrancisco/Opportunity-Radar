@@ -1,6 +1,6 @@
 # CARD F20-44 — Collector de descoberta web
 
-- **Status:** Backlog
+- **Status:** Feito
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** E — Tavily
 - **Depende de:** F20-42, F20-43
