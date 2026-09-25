@@ -1,6 +1,9 @@
 # CARD F20-02 — Curadoria manual de `skills-v2`
 
-- **Status:** Backlog
+- **Status:** Parcial — a curadoria manual (passos 1-5) exige rodar
+  `scripts/unmatched_skill_terms.py` contra o acervo real e decidir termo a termo; não
+  executável neste ambiente (sem Docker, sem acervo real). Nenhuma alteração de código ou
+  taxonomia feita sem essa medição, como pede o card.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** A — Fechamento do que está em revisão
 - **Depende de:** Nenhum
