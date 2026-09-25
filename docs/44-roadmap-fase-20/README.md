@@ -13,9 +13,9 @@ O status oficial passa a ser o desta fase.
 
 | Card | Depende de | Status |
 | --- | --- | --- |
-| [F20-01 — Baselines e relatórios da busca](fase-20/f20-01-baselines-e-relatorios-da-busca.md) | Nenhum | Backlog |
-| [F20-02 — Curadoria manual de `skills-v2`](fase-20/f20-02-curadoria-skills-v2.md) | Nenhum | Backlog |
-| [F20-03 — Conferência de aceite de F17-02, F17-04 e F17-07](fase-20/f20-03-conferencia-de-aceite-da-busca.md) | Nenhum | Backlog |
+| [F20-01 — Baselines e relatórios da busca](fase-20/f20-01-baselines-e-relatorios-da-busca.md) | Nenhum | Parcial — precisa do acervo real e da máquina de referência (`make up`, amostra na Inbox, `make eval-search`) |
+| [F20-02 — Curadoria manual de `skills-v2`](fase-20/f20-02-curadoria-skills-v2.md) | Nenhum | Parcial — a curadoria depende de `python scripts/unmatched_skill_terms.py` no acervo real, na máquina de referência |
+| [F20-03 — Conferência de aceite de F17-02, F17-04 e F17-07](fase-20/f20-03-conferencia-de-aceite-da-busca.md) | Nenhum | Done — tabela critério → evidência nos três cards |
 
 ### Bloco B — IA cloud no Groq
 
@@ -67,8 +67,8 @@ O status oficial passa a ser o desta fase.
 | [F20-37 — Coletor JobPosting público](fase-20/f20-37-coletor-jobposting-publico.md) | F20-36, F20-03 | Backlog |
 | [F20-38 — Agenda por rendimento e orçamento de rede](fase-20/f20-38-agenda-adaptativa-e-http-condicional.md) | F20-35 | Backlog |
 | [F20-39 — Delta, presença e retomada](fase-20/f20-39-delta-presenca-e-retomada.md) | F20-38 | Backlog |
-| [F20-40 — Preservação integral do perfil](fase-20/f20-40-preservacao-do-perfil.md) | Nenhum | Parcial — `794b519`; conferir o restante |
-| [F20-41 — Backup consistente e restauração verificável](fase-20/f20-41-backup-consistente-e-restauracao.md) | Nenhum | Backlog |
+| [F20-40 — Preservação integral do perfil](fase-20/f20-40-preservacao-do-perfil.md) | Nenhum | Done — `794b519`; os três critérios conferidos com teste |
+| [F20-41 — Backup consistente e restauração verificável](fase-20/f20-41-backup-consistente-e-restauracao.md) | Nenhum | Parcial — código e testes prontos; falta o round-trip real e o RTO/RPO na máquina de referência |
 
 ### Bloco E — Tavily
 
