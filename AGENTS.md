@@ -10,6 +10,8 @@
 ## Validation
 
 - Run local validation (tests, linters, type checks) when it verifies the change. Start with the narrowest target (one test file or module), then widen if needed.
+- Run backend checks against the working tree without rebuilding images: `docker compose -p <unique> -f compose.yaml -f compose.dev.yaml run --rm api pytest -q`. Rebuild only when `requirements*.txt` or a Dockerfile changes. Run the full suite (and `RUN_DATABASE_INTEGRATION=1`) once at the end, not per iteration.
+- Every acceptance criterion ships with a test that exercises it.
 - Keep repeatable validation in `.github/workflows/pipeline.yml`; add new checks there too.
 - If CI reports a failure, inspect that failure and fix it.
 

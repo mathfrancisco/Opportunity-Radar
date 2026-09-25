@@ -1,0 +1,25 @@
+# Development overlay: runs checks against the working tree without rebuilding images.
+# Usage: docker compose -f compose.yaml -f compose.dev.yaml run --rm api pytest -q
+# Rebuild only when requirements*.txt or a Dockerfile changes.
+# PYTHONPATH puts the mounted src ahead of the package installed in the image.
+x-dev-mounts: &dev-mounts
+  - ./src:/app/src:ro
+  - ./tests:/app/tests:ro
+  - ./migrations:/app/migrations:ro
+  - ./scripts:/app/scripts:ro
+  - ./prompts:/app/prompts:ro
+  - ./pyproject.toml:/app/pyproject.toml:ro
+  - ./alembic.ini:/app/alembic.ini:ro
+
+services:
+  migrate:
+    environment:
+      PYTHONPATH: /app/src
+    volumes: *dev-mounts
+
+  api:
+    environment:
+      PYTHONPATH: /app/src
+      RUFF_CACHE_DIR: /tmp/ruff
+      MYPY_CACHE_DIR: /tmp/mypy
+    volumes: *dev-mounts
