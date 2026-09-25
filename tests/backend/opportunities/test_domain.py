@@ -25,6 +25,7 @@ from opportunity_radar.opportunities.domain import (
     normalize_url,
     seniority_classification,
 )
+from opportunity_radar.opportunities.role_family import ROLE_FAMILY_VERSION, RoleFamily
 
 
 def _input(**changes: object) -> NormalizationInput:
@@ -40,6 +41,26 @@ def _input(**changes: object) -> NormalizationInput:
     }
     values.update(changes)
     return NormalizationInput(**values)  # type: ignore[arg-type]
+
+
+def test_candidate_carries_the_role_family_decision_and_its_evidence() -> None:
+    """Card F17-02: normalization must classify the area, not just skip past it."""
+    candidate = build_candidate(_input(title="Senior C++ Engineer"))
+    assert candidate.role_family is RoleFamily.SOFTWARE_ENGINEERING
+    assert candidate.role_family_version == ROLE_FAMILY_VERSION
+    assert candidate.role_family_evidence["rule"]
+
+    unknown = build_candidate(_input(title="Solutions Engineer"))
+    assert unknown.role_family is RoleFamily.UNKNOWN
+
+    department_led = build_candidate(
+        _input(
+            title="Team Lead",
+            metadata={"department": "Sales"},
+        )
+    )
+    assert department_led.role_family is RoleFamily.SALES
+    assert department_led.role_family_evidence["origin"] == "department"
 
 
 def test_normalizes_title_and_url_deterministically() -> None:

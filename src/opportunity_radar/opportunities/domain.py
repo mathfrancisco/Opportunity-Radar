@@ -15,6 +15,12 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 from opportunity_radar.companies.domain import normalize_name
+from opportunity_radar.opportunities.role_family import (
+    ROLE_FAMILY_VERSION,
+    RoleFamily,
+    classify_role_family,
+    departments_from_metadata,
+)
 
 
 class WorkMode(StrEnum):
@@ -258,6 +264,9 @@ class CanonicalCandidate:
     compensation: Compensation | None = None
     skills: tuple[ExtractedSkill, ...] = ()
     fingerprint_version: str = "v1"
+    role_family: RoleFamily = RoleFamily.UNKNOWN
+    role_family_evidence: dict[str, str] = field(default_factory=dict)
+    role_family_version: str = ROLE_FAMILY_VERSION
 
 
 def _clean_text(value: str | None) -> str | None:
@@ -922,6 +931,11 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
         original_title, value.metadata, source_type=value.source_type
     )
     contract_type = infer_contract_type(original_title, location_text, value.metadata)
+    role_family_decision = classify_role_family(
+        title=original_title,
+        departments=departments_from_metadata(value.metadata),
+        description=value.description,
+    )
     return CanonicalCandidate(
         original_title=original_title,
         normalized_title=normalized_title,
@@ -957,6 +971,9 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
             source_type=value.source_type,
         ),
         skills=extract_skills(original_title, value.description, value.metadata),
+        role_family=role_family_decision.role_family,
+        role_family_evidence=dict(role_family_decision.evidence),
+        role_family_version=role_family_decision.version,
     )
 
 

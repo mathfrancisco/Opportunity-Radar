@@ -11,7 +11,7 @@ still in the inbox: hiding it would make the screen quietly disagree with the ca
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
@@ -64,6 +64,7 @@ class InboxItem:
     seniority: str
     contract_type: str
     lifecycle_status: str
+    role_family: str
     published_at: datetime | None
     opportunity_version: int
     assessment_id: UUID | None = None
@@ -97,6 +98,10 @@ class InboxPage:
     total: int
     offset: int
     limit: int
+    #: Opportunities the same filters would show without the area filter. 0 when no
+    #: `role_families` filter is active, so a client never subtracts a filter it did not
+    #: apply. Never a count of hidden rows: they stay one click away, never deleted.
+    off_filter_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +117,8 @@ class InboxQuery:
     only_assessed: bool = False
     applied: bool | None = None
     search: str | None = None
+    #: `role-family-v1` codes. Empty means every area — never a filter that hides rows.
+    role_families: tuple[str, ...] = ()
     profile_version_id: UUID | None = None
     order: InboxOrder = InboxOrder.PRIORITY
     offset: int = 0
@@ -228,6 +235,9 @@ class CoverageMetrics:
     companies_covered: int
     companies_with_ats: int
     seniority_unknown_rate: Decimal | None
+    #: Rate of `role_family == 'UNKNOWN'` in the whole catalogue. Card F17-02's acceptance
+    #: is < 10%, measured here rather than fabricated.
+    role_family_unknown_rate: Decimal | None
     by_source: tuple[SourceCoverageMetric, ...] = ()
 
 
@@ -346,6 +356,7 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
             OpportunityModel.seniority,
             OpportunityModel.contract_type,
             OpportunityModel.lifecycle_status,
+            OpportunityModel.role_family,
             OpportunityModel.published_at,
             OpportunityModel.version,
             assessments.c.assessment_id,
@@ -399,6 +410,8 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
         filters.append(OpportunityModel.work_mode == query.work_mode)
     if query.lifecycle_status:
         filters.append(OpportunityModel.lifecycle_status == query.lifecycle_status)
+    if query.role_families:
+        filters.append(OpportunityModel.role_family.in_(query.role_families))
     if query.published_after is not None:
         filters.append(OpportunityModel.published_at >= query.published_after)
     if query.search and query.search.strip():
@@ -430,11 +443,22 @@ def list_opportunity_inbox(session: Session, query: InboxQuery) -> InboxPage:
         .offset(query.offset)
         .limit(query.limit)
     ).all()
+    off_filter_count = 0
+    if query.role_families:
+        broader_statement, _, _ = _inbox_statement(replace(query, role_families=()))
+        broader_total = (
+            session.scalar(
+                select(func.count()).select_from(broader_statement.subquery("inbox_all"))
+            )
+            or 0
+        )
+        off_filter_count = max(broader_total - total, 0)
     return InboxPage(
         items=tuple(_inbox_item(row) for row in rows),
         total=total,
         offset=query.offset,
         limit=query.limit,
+        off_filter_count=off_filter_count,
     )
 
 
@@ -450,25 +474,26 @@ def _inbox_item(row: Any) -> InboxItem:
         seniority=row[7],
         contract_type=row[8],
         lifecycle_status=row[9],
-        published_at=row[10],
-        opportunity_version=row[11],
-        assessment_id=row[12],
-        assessment_opportunity_version=row[13],
-        assessment_profile_version_id=row[14],
-        current_profile_version_id=row[15],
-        verdict=row[16],
-        eligibility=row[17],
-        score=row[18],
-        confidence=row[19],
-        rules_version=row[20],
-        is_stale=row[21],
-        assessed_at=row[22],
-        analysis_status=row[23],
-        analysis_recommended_review=row[24],
-        analysis_summary=row[25],
-        application_id=row[26],
-        application_stage=row[27],
-        application_next_action_at=row[28],
+        role_family=row[10],
+        published_at=row[11],
+        opportunity_version=row[12],
+        assessment_id=row[13],
+        assessment_opportunity_version=row[14],
+        assessment_profile_version_id=row[15],
+        current_profile_version_id=row[16],
+        verdict=row[17],
+        eligibility=row[18],
+        score=row[19],
+        confidence=row[20],
+        rules_version=row[21],
+        is_stale=row[22],
+        assessed_at=row[23],
+        analysis_status=row[24],
+        analysis_recommended_review=row[25],
+        analysis_summary=row[26],
+        application_id=row[27],
+        application_stage=row[28],
+        application_next_action_at=row[29],
     )
 
 
@@ -901,6 +926,17 @@ def search_metrics(
         if seniority_total > 0
         else None
     )
+    role_family_unknown = _count(
+        session,
+        select(func.count(OpportunityModel.id)).where(
+            OpportunityModel.role_family == "UNKNOWN"
+        ),
+    )
+    role_family_unknown_rate = (
+        Decimal(role_family_unknown) / Decimal(seniority_total)
+        if seniority_total > 0
+        else None
+    )
     companies_covered, companies_with_ats = _companies_coverage(session)
 
     coverage = CoverageMetrics(
@@ -914,6 +950,7 @@ def search_metrics(
         companies_covered=companies_covered,
         companies_with_ats=companies_with_ats,
         seniority_unknown_rate=seniority_unknown_rate,
+        role_family_unknown_rate=role_family_unknown_rate,
         by_source=by_source,
     )
     precision = _precision_metrics(session, profile_version_id=profile_version_id)

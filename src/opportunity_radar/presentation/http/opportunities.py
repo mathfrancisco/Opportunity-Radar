@@ -122,6 +122,9 @@ class OpportunityResponse(BaseModel):
     contract_type: str
     description: str | None
     lifecycle_status: str
+    role_family: str
+    role_family_evidence: dict[str, str] | None
+    role_family_version: str | None
     published_at: datetime | None
     source_updated_at: datetime | None
     version: int
@@ -399,6 +402,9 @@ def _opportunity_response(
         contract_type=opportunity.contract_type,
         description=opportunity.description,
         lifecycle_status=opportunity.lifecycle_status,
+        role_family=opportunity.role_family,
+        role_family_evidence=opportunity.role_family_evidence,
+        role_family_version=opportunity.role_family_version,
         published_at=opportunity.published_at,
         source_updated_at=opportunity.source_updated_at,
         version=opportunity.version,

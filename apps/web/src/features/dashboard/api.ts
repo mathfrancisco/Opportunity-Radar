@@ -14,6 +14,7 @@ export interface InboxItem {
   seniority: string
   contractType: string
   lifecycleStatus: string
+  roleFamily: string
   publishedAt: string | null
   opportunityVersion: number
   assessmentId: string | null
@@ -42,6 +43,8 @@ export interface InboxPage {
   offset: number
   limit: number
   order: InboxOrder
+  /** Opportunities the same filters would show without the area filter, per F17-02. */
+  offFilterCount: number
 }
 
 export interface InboxParams {
@@ -56,6 +59,10 @@ export interface InboxParams {
   applied?: boolean
   search?: string
   order?: InboxOrder
+  /** `role-family-v1` codes. Omitted defaults server-side to the profile's areas. */
+  roleFamilies?: string[]
+  /** Bypass the profile default and show every area — the "ver todas" click. */
+  allAreas?: boolean
 }
 
 export interface FailingSource {
@@ -207,6 +214,7 @@ function parseInboxItem(value: unknown): InboxItem | null {
     seniority: text(value.seniority) ?? 'UNKNOWN',
     contractType: text(value.contract_type) ?? 'UNKNOWN',
     lifecycleStatus: text(value.lifecycle_status) ?? 'UNKNOWN',
+    roleFamily: text(value.role_family) ?? 'UNKNOWN',
     publishedAt: text(value.published_at),
     opportunityVersion: typeof value.opportunity_version === 'number' ? value.opportunity_version : 1,
     assessmentId: text(value.assessment_id),
@@ -258,6 +266,8 @@ export async function getInbox({
   applied,
   search,
   order = 'priority',
+  roleFamilies,
+  allAreas,
 }: InboxParams): Promise<InboxPage> {
   const params = new URLSearchParams({
     offset: String((page - 1) * pageSize),
@@ -272,6 +282,8 @@ export async function getInbox({
   if (onlyAssessed) params.set('only_assessed', 'true')
   if (applied !== undefined) params.set('applied', applied ? 'true' : 'false')
   if (search?.trim()) params.set('search', search.trim())
+  roleFamilies?.forEach((family) => params.append('role_family', family))
+  if (allAreas) params.set('all_areas', 'true')
 
   const response = await fetch(apiUrl(`/inbox?${params.toString()}`), {
     headers: { Accept: 'application/json' },
@@ -287,6 +299,7 @@ export async function getInbox({
     offset: count(body.offset),
     limit: typeof body.limit === 'number' ? body.limit : pageSize,
     order,
+    offFilterCount: count(body.off_filter_count),
   }
 }
 

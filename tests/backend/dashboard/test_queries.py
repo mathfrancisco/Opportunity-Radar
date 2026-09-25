@@ -310,6 +310,37 @@ def test_inbox_filters_by_verdict_score_search_and_only_assessed() -> None:
         assert [item.opportunity_id for item in searched.items] == [weak.id]
 
 
+def test_inbox_filters_by_role_family_without_deleting_off_filter_rows() -> None:
+    """Card F17-02: the area filter narrows the page, never hides a row for good."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company = _company(session, "normal")
+        engineering = _opportunity(
+            session, company, title="Backend Engineer", published_at=NOW
+        )
+        engineering.role_family = "SOFTWARE_ENGINEERING"
+        sales = _opportunity(session, company, title="Account Executive", published_at=NOW)
+        sales.role_family = "SALES"
+        session.commit()
+
+        everything = list_opportunity_inbox(session, InboxQuery(company_id=company.id))
+        assert everything.total == 2
+        assert everything.off_filter_count == 0
+
+        engineering_only = list_opportunity_inbox(
+            session,
+            InboxQuery(company_id=company.id, role_families=("SOFTWARE_ENGINEERING",)),
+        )
+        assert [item.opportunity_id for item in engineering_only.items] == [engineering.id]
+        assert engineering_only.off_filter_count == 1
+
+        # The sales role stays reachable without the area filter: never deleted.
+        broadened = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search="account executive")
+        )
+        assert [item.opportunity_id for item in broadened.items] == [sales.id]
+
+
 def test_inbox_orders_by_priority_recency_and_score() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:

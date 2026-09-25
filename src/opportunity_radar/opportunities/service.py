@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import RawItemModel, SourceRunModel
@@ -37,6 +37,12 @@ from opportunity_radar.opportunities.models import (
 from opportunity_radar.opportunities.repository import (
     OpportunityRepository,
     RawItemEvidence,
+)
+from opportunity_radar.opportunities.role_family import (
+    ROLE_FAMILY_VERSION,
+    RoleFamily,
+    classify_role_family,
+    departments_from_metadata,
 )
 
 NORMALIZER_VERSION = "v3"
@@ -718,6 +724,71 @@ def _clean_optional(value: str | None) -> str | None:
     return cleaned or None
 
 
+def _latest_occurrence_departments(
+    session: Session, opportunity_id: UUID
+) -> tuple[str, ...]:
+    """Departments from the raw item of the occurrence last seen, per the card's notes."""
+    occurrence = session.execute(
+        select(SourceOccurrenceModel)
+        .where(SourceOccurrenceModel.opportunity_id == opportunity_id)
+        .order_by(SourceOccurrenceModel.last_seen_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if occurrence is None:
+        return ()
+    raw_item = session.get(RawItemModel, occurrence.raw_item_id)
+    if raw_item is None:
+        return ()
+    snapshot = raw_item.item_metadata.get(COLLECTED_ITEM_V1_KEY)
+    if not isinstance(snapshot, Mapping):
+        return ()
+    metadata = snapshot.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return ()
+    return departments_from_metadata(metadata)
+
+
+def reclassify_role_families(session: Session, *, batch_size: int = 500) -> dict[str, int]:
+    """Classify every opportunity not yet on `ROLE_FAMILY_VERSION`.
+
+    Card F17-02's retroactive job: title and department come from the RawItem
+    `collected_item_v1` snapshot of the occurrence last seen, the same evidence
+    normalization uses for a new item.
+    """
+    total = 0
+    updated = 0
+    unknown = 0
+    query = (
+        select(OpportunityModel.id)
+        .where(
+            OpportunityModel.role_family_version.is_(None)
+            | (OpportunityModel.role_family_version != ROLE_FAMILY_VERSION)
+        )
+        .order_by(OpportunityModel.id)
+    )
+    for opportunity_id in session.scalars(query).all():
+        opportunity = session.get(OpportunityModel, opportunity_id)
+        if opportunity is None:
+            continue
+        total += 1
+        departments = _latest_occurrence_departments(session, opportunity.id)
+        decision = classify_role_family(
+            title=opportunity.canonical_title,
+            departments=departments,
+            description=opportunity.description,
+        )
+        opportunity.role_family = decision.role_family.value
+        opportunity.role_family_evidence = dict(decision.evidence) or None
+        opportunity.role_family_version = decision.version
+        updated += 1
+        if decision.role_family is RoleFamily.UNKNOWN:
+            unknown += 1
+        if total % batch_size == 0:
+            session.commit()
+    session.commit()
+    return {"total": total, "updated": updated, "unknown": unknown}
+
+
 def _new_opportunity(candidate: CanonicalCandidate) -> OpportunityModel:
     return OpportunityModel(
         fingerprint=candidate.fingerprint,
@@ -736,6 +807,9 @@ def _new_opportunity(candidate: CanonicalCandidate) -> OpportunityModel:
         lifecycle_status=OpportunityStatus.DISCOVERED.value,
         published_at=candidate.published_at,
         source_updated_at=candidate.source_updated_at,
+        role_family=candidate.role_family.value,
+        role_family_evidence=dict(candidate.role_family_evidence) or None,
+        role_family_version=candidate.role_family_version,
     )
 
 
@@ -764,4 +838,7 @@ def _refresh_opportunity(
     opportunity.source_updated_at = candidate.source_updated_at
     opportunity.fingerprint = candidate.fingerprint
     opportunity.fingerprint_version = candidate.fingerprint_version
+    opportunity.role_family = candidate.role_family.value
+    opportunity.role_family_evidence = dict(candidate.role_family_evidence) or None
+    opportunity.role_family_version = candidate.role_family_version
     opportunity.version += 1

@@ -40,6 +40,8 @@ from opportunity_radar.matching.service import MatchingService
 from opportunity_radar.opportunities.domain import OpportunityStatus, WorkMode
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.presentation.http.dependencies import get_session
+from opportunity_radar.profile.domain import ProfileNotFoundError
+from opportunity_radar.profile.service import ProfileService
 
 router = APIRouter(tags=["dashboard"])
 
@@ -55,6 +57,7 @@ class InboxItemResponse(BaseModel):
     seniority: str
     contract_type: str
     lifecycle_status: str
+    role_family: str
     published_at: datetime | None
     opportunity_version: int
     assessment_id: UUID | None
@@ -83,6 +86,7 @@ class InboxPageResponse(BaseModel):
     offset: int
     limit: int
     order: str
+    off_filter_count: int
 
 
 class SourceHealthResponse(BaseModel):
@@ -257,6 +261,7 @@ class CoverageMetricsResponse(BaseModel):
     companies_covered: int
     companies_with_ats: int
     seniority_unknown_rate: str | None
+    role_family_unknown_rate: str | None
     by_source: list[SourceCoverageMetricResponse]
 
 
@@ -285,12 +290,21 @@ def list_inbox(
     only_assessed: bool = False,
     applied: bool | None = None,
     search: str | None = None,
+    role_family: list[str] | None = Query(default=None),
+    all_areas: bool = False,
     profile_version_id: UUID | None = None,
     order: InboxOrder = InboxOrder.PRIORITY,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
     session: Session = Depends(get_session),
 ) -> InboxPageResponse:
+    role_families = tuple(role_family or ())
+    if not role_families and not all_areas:
+        try:
+            active = ProfileService(session).get_active()
+            role_families = tuple(active.snapshot.preferences.target_role_families)
+        except ProfileNotFoundError:
+            role_families = ()
     page = list_opportunity_inbox(
         session,
         InboxQuery(
@@ -303,6 +317,7 @@ def list_inbox(
             only_assessed=only_assessed,
             applied=applied,
             search=search,
+            role_families=role_families,
             profile_version_id=profile_version_id,
             order=order,
             offset=offset,
@@ -315,6 +330,7 @@ def list_inbox(
         offset=page.offset,
         limit=page.limit,
         order=order.value,
+        off_filter_count=page.off_filter_count,
     )
 
 
@@ -465,6 +481,7 @@ def _inbox_item_response(item: InboxItem) -> InboxItemResponse:
         seniority=item.seniority,
         contract_type=item.contract_type,
         lifecycle_status=item.lifecycle_status,
+        role_family=item.role_family,
         published_at=item.published_at,
         opportunity_version=item.opportunity_version,
         assessment_id=item.assessment_id,
@@ -581,6 +598,11 @@ def _search_metrics_response(report: SearchMetricsReport) -> SearchMetricsRespon
             seniority_unknown_rate=(
                 str(coverage.seniority_unknown_rate)
                 if coverage.seniority_unknown_rate is not None
+                else None
+            ),
+            role_family_unknown_rate=(
+                str(coverage.role_family_unknown_rate)
+                if coverage.role_family_unknown_rate is not None
                 else None
             ),
             by_source=[

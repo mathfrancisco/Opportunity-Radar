@@ -14,6 +14,7 @@ import { useInbox } from '../features/dashboard/useInbox'
 import { verdictLabels, verdictTones } from '../features/matching/verdicts'
 import { useMarkRelevance } from '../features/opportunities/useOpportunity'
 import { type ApplicationStage, stageLabels } from '../features/pipeline/api'
+import { roleFamilies } from '../features/dashboard/roleFamilies'
 
 const pageSize = 25
 
@@ -176,6 +177,8 @@ export function InboxPage() {
     : 'priority'
   const page = Math.max(1, Number(params.get('page') ?? '1') || 1)
   const [searchInput, setSearchInput] = useState(search)
+  const allAreas = params.get('all_areas') === 'true'
+  const areaFilter = params.getAll('area')
 
   const inbox = useInbox({
     page,
@@ -189,6 +192,8 @@ export function InboxPage() {
     applied: appliedFilter === '' ? undefined : appliedFilter === 'true',
     search: search || undefined,
     order,
+    roleFamilies: allAreas || areaFilter.length === 0 ? undefined : areaFilter,
+    allAreas,
   })
   const totalPages = inbox.data ? Math.max(1, Math.ceil(inbox.data.total / pageSize)) : 0
 
@@ -199,6 +204,27 @@ export function InboxPage() {
       else next.set(key, value)
     }
     if (!('page' in changes)) next.delete('page')
+    setParams(next)
+  }
+
+  function toggleArea(code: string) {
+    const next = new URLSearchParams(params)
+    next.delete('all_areas')
+    const current = next.getAll('area')
+    next.delete('area')
+    const updated = current.includes(code)
+      ? current.filter((item) => item !== code)
+      : [...current, code]
+    updated.forEach((item) => next.append('area', item))
+    next.delete('page')
+    setParams(next)
+  }
+
+  function showAllAreas() {
+    const next = new URLSearchParams(params)
+    next.delete('area')
+    next.set('all_areas', 'true')
+    next.delete('page')
     setParams(next)
   }
 
@@ -304,6 +330,42 @@ export function InboxPage() {
         />
         Somente oportunidades já avaliadas
       </label>
+
+      <fieldset className="mt-4" aria-describedby="area-filter-hint">
+        <legend className="text-sm font-medium">Área</legend>
+        <p className="text-sm text-muted" id="area-filter-hint">
+          Sem marcação, usa as áreas de interesse do perfil. Vagas fora do filtro nunca são
+          apagadas — continuam buscáveis.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-4">
+          {roleFamilies.map((family) => (
+            <label className="flex items-center gap-2 text-sm" key={family.code}>
+              <input
+                checked={!allAreas && areaFilter.includes(family.code)}
+                className="h-4 w-4"
+                onChange={() => toggleArea(family.code)}
+                type="checkbox"
+              />
+              {family.label}
+            </label>
+          ))}
+        </div>
+        {(allAreas || areaFilter.length > 0 || (inbox.data && inbox.data.offFilterCount > 0)) && (
+          <p className="mt-2 text-sm text-subtle">
+            {allAreas ? (
+              'Mostrando todas as áreas.'
+            ) : (
+              <>
+                {inbox.data ? inbox.data.offFilterCount : 0} vaga
+                {inbox.data?.offFilterCount === 1 ? '' : 's'} em outras áreas.{' '}
+                <button className="font-medium underline" onClick={showAllAreas} type="button">
+                  Ver todas
+                </button>
+              </>
+            )}
+          </p>
+        )}
+      </fieldset>
 
       {companyId && (
         <p className="mt-4 text-sm text-subtle">

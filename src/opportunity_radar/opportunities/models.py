@@ -60,12 +60,20 @@ class OpportunityModel(Base):
             name="ck_opportunity_lifecycle_status",
         ),
         CheckConstraint("version > 0", name="ck_opportunity_version_positive"),
+        CheckConstraint(
+            "role_family IN ('SOFTWARE_ENGINEERING', 'DATA', 'INFRASTRUCTURE', "
+            "'SECURITY', 'QA', 'PRODUCT', 'DESIGN', 'SALES', 'MARKETING', "
+            "'OPERATIONS', 'PEOPLE', 'FINANCE', 'LEGAL', 'SUPPORT', 'OTHER', "
+            "'UNKNOWN')",
+            name="ck_opportunity_role_family",
+        ),
         Index(
             "ix_opportunity_company_status",
             "canonical_company_id",
             "lifecycle_status",
         ),
         Index("ix_opportunity_published", "published_at"),
+        Index("ix_opportunity_role_family", "role_family"),
         {"schema": SCHEMA},
     )
 
@@ -105,6 +113,16 @@ class OpportunityModel(Base):
     #: Evidence for the last automatic close/reopen: the two consecutive complete run ids
     #: that closed it, or the run id that brought it back. `None` until either happens.
     closure_evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    #: Area of the posting (`role_family.py`, card F17-02), `UNKNOWN` when the rules found
+    #: no single area. Never a matching factor, only an Inbox filter.
+    role_family: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="UNKNOWN", server_default="UNKNOWN"
+    )
+    #: `rule`, `term` and `origin` that decided `role_family`. `None` for rows created
+    #: before this card, until the retroactive job reclassifies them.
+    role_family_evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    #: Version of the rules that produced `role_family`. `None` until classified.
+    role_family_version: Mapped[str | None] = mapped_column(String(32))
     occurrences: Mapped[list["SourceOccurrenceModel"]] = relationship(
         back_populates="opportunity"
     )

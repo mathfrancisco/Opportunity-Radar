@@ -3,6 +3,7 @@ import { Button } from '../components/Button'
 import { PageShell } from '../components/PageShell'
 import { ConflictNotice, EmptyState, ErrorState, LoadingState } from '../components/states'
 import { ConflictError } from '../lib/api'
+import { roleFamilies } from '../features/dashboard/roleFamilies'
 import {
   emptyPreferences,
   type ProfilePreferences,
@@ -19,25 +20,6 @@ const workModes = ['REMOTE', 'HYBRID', 'ONSITE']
 const contracts = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP']
 const periods = ['YEAR', 'MONTH', 'HOUR']
 
-// The API's PROFILE_ROLE_FAMILIES (`role-family-v1`). UNKNOWN is not offered: the Inbox
-// always shows a posting with no classified area, so it is never a preference.
-const roleFamilies = [
-  { code: 'SOFTWARE_ENGINEERING', label: 'Engenharia de software' },
-  { code: 'DATA', label: 'Dados' },
-  { code: 'INFRASTRUCTURE', label: 'Infraestrutura' },
-  { code: 'SECURITY', label: 'Segurança' },
-  { code: 'QA', label: 'Qualidade (QA)' },
-  { code: 'PRODUCT', label: 'Produto' },
-  { code: 'DESIGN', label: 'Design' },
-  { code: 'SALES', label: 'Vendas' },
-  { code: 'MARKETING', label: 'Marketing' },
-  { code: 'OPERATIONS', label: 'Operações' },
-  { code: 'PEOPLE', label: 'Pessoas' },
-  { code: 'FINANCE', label: 'Finanças' },
-  { code: 'LEGAL', label: 'Jurídico' },
-  { code: 'SUPPORT', label: 'Suporte' },
-  { code: 'OTHER', label: 'Outras' },
-]
 
 function toList(value: string): string[] {
   return value
