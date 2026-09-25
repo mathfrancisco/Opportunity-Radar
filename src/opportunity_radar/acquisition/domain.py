@@ -26,6 +26,12 @@ class AcquisitionErrorCode(StrEnum):
     CIRCUIT_OPEN = "CIRCUIT_OPEN"
     UNKNOWN_EXTERNAL_ERROR = "UNKNOWN_EXTERNAL_ERROR"
     MANUAL_INPUT_INVALID = "MANUAL_INPUT_INVALID"
+    #: The provider says the calling account is correct and authenticated, but its credit
+    #: or usage budget is spent — either the provider's own limit (Tavily HTTP 433) or a
+    #: per-run ceiling the radar configured itself (F20-43). Distinct from
+    #: SOURCE_RATE_LIMITED (retry in seconds) and SOURCE_FORBIDDEN (a permission problem):
+    #: neither describes "correct key, no budget left" (docs/41-spec-tavily.md, section 4).
+    SOURCE_QUOTA_EXHAUSTED = "SOURCE_QUOTA_EXHAUSTED"
 
 
 class AcquisitionError(Exception):
@@ -285,6 +291,11 @@ class SourceRun:
     http_requests: int = 0
     retry_count: int = 0
     rate_limit_events: int = 0
+    #: Provider credits spent by this run (e.g. Tavily's usage.credits), a different unit
+    #: from http_requests/retry_count, which keep counting HTTP calls regardless of what a
+    #: source charges per call. A generic field, not Tavily-specific: any future paid API
+    #: source can report spend the same way (F20-43, docs/41-spec-tavily.md section 6).
+    credits_used: int = 0
     error_code: AcquisitionErrorCode | None = None
     error_summary: str | None = None
     checkpoint_before: str | None = None
@@ -340,6 +351,12 @@ class SourceRun:
         self.http_requests += requests
         self.retry_count += retries
         self.rate_limit_events += rate_limit_events
+
+    def record_credits(self, amount: int) -> None:
+        self._require_running()
+        if amount < 0:
+            raise ValueError("credits cannot be negative")
+        self.credits_used += amount
 
     def finish(
         self,

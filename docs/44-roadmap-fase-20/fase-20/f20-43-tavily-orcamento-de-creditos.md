@@ -1,6 +1,6 @@
 # CARD F20-43 — Orçamento de créditos Tavily e telemetria
 
-- **Status:** Backlog
+- **Status:** Feito
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** E — Tavily
 - **Depende de:** F20-42

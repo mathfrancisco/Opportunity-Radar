@@ -79,6 +79,22 @@ class Settings(BaseSettings):
     payload_retention_interval_seconds: int = 21600
     # How late a job may be before the doctor calls it late rather than merely busy.
     doctor_job_grace_seconds: int = 120
+    # Optional on purpose: presence decides whether the Tavily source participates in
+    # runs at all. Absent, it is a supported deployment (bloqueada por configuração),
+    # the same treatment source_alert_webhook_url already gets above.
+    tavily_api_key: str | None = None
+    tavily_base_url: str = "https://api.tavily.com"
+    # Cheapest tier of each knob (docs/41-spec-tavily.md, section 3); `advanced` doubles
+    # the credit cost and is not enabled without a measurement showing `basic` loses
+    # relevant content.
+    tavily_search_depth: str = "basic"
+    tavily_extract_depth: str = "basic"
+    tavily_extract_format: str = "markdown"
+    # Conservative on purpose: the free plan is 1,000 credits/month shared by /search and
+    # /extract; a single run capped at 100 leaves room for roughly ten runs/day before the
+    # monthly ceiling is a concern, until real usage is measured (docs/41-spec-tavily.md,
+    # section 9).
+    tavily_credit_budget_per_run: int = 100
 
     @property
     def analysis_eligible_verdicts(self) -> tuple[str, ...]:
