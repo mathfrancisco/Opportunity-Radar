@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Computed,
     DateTime,
     ForeignKey,
     Index,
@@ -22,7 +23,7 @@ from sqlalchemy import (
     select,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, column_property, mapped_column, relationship
 
@@ -123,6 +124,17 @@ class OpportunityModel(Base):
     role_family_evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     #: Version of the rules that produced `role_family`. `None` until classified.
     role_family_version: Mapped[str | None] = mapped_column(String(32))
+    #: Skill names, space-joined, kept in sync with `skills` (F17-03). Feeds the
+    #: generated `search_document` column, which cannot reach another table's rows.
+    search_skills: Mapped[str | None] = mapped_column(Text)
+    #: Generated `tsvector`: title (A), company (A), skills+area (B), description (C),
+    #: location (D), `portuguese` and `english` combined. `Computed(...)` tells the ORM
+    #: this is a Postgres `GENERATED ALWAYS` column (migration 0028): never send it in an
+    #: INSERT/UPDATE — Postgres rejects any explicit value for it, even `NULL`. The
+    #: expression string here is documentation only; the migration is the source of truth.
+    search_document: Mapped[Any | None] = mapped_column(
+        TSVECTOR, Computed("NULL", persisted=True)
+    )
     occurrences: Mapped[list["SourceOccurrenceModel"]] = relationship(
         back_populates="opportunity"
     )

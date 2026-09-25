@@ -15,6 +15,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
+from functools import reduce
 from typing import Any
 from uuid import UUID
 
@@ -27,6 +28,7 @@ from opportunity_radar.acquisition.models import (
     SourceRunModel,
 )
 from opportunity_radar.companies.models import Company, CompanySource
+from opportunity_radar.dashboard.search_synonyms import synonym_variants
 from opportunity_radar.matching import currency
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
 from opportunity_radar.matching.service import RULES_VERSION
@@ -414,18 +416,42 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
         filters.append(OpportunityModel.role_family.in_(query.role_families))
     if query.published_after is not None:
         filters.append(OpportunityModel.published_at >= query.published_after)
-    if query.search and query.search.strip():
-        pattern = f"%{query.search.strip().lower()}%"
-        filters.append(
-            func.lower(OpportunityModel.canonical_title).like(pattern)
-            | func.lower(func.coalesce(OpportunityModel.company_name, "")).like(pattern)
-        )
+    term = query.search.strip() if query.search else ""
+    if term:
+        filters.append(OpportunityModel.search_document.op("@@")(_search_tsquery(term)))
     return filters
 
 
-def _inbox_ordering(order: InboxOrder, assessments: Any) -> list[Any]:
+_DICTIONARIES = ("portuguese", "english")
+
+
+def _search_tsquery(term: str) -> Any:
+    """`websearch_to_tsquery` over both dictionaries, ORed across synonym variants.
+
+    Quoted phrases, `AND`/`OR`/`-negation` in `term` come from `websearch_to_tsquery`
+    itself; `synonym_variants` only substitutes plain tokens before parsing, so those
+    semantics survive (SPEC 37, "Contrato de consulta").
+    """
+    expressions: list[Any] = [
+        func.websearch_to_tsquery(dictionary, variant)
+        for variant in synonym_variants(term)
+        for dictionary in _DICTIONARIES
+    ]
+    return reduce(lambda left, right: left.op("||")(right), expressions)
+
+
+def _search_rank(term: str) -> Any:
+    return func.ts_rank_cd(OpportunityModel.search_document, _search_tsquery(term))
+
+
+def _inbox_ordering(order: InboxOrder, assessments: Any, search_term: str = "") -> list[Any]:
     recency = OpportunityModel.published_at.desc().nulls_last()
     score = assessments.c.score.desc().nulls_last()
+    if search_term:
+        # Contract: rank when there is a term; tie-break by recency then id so
+        # pagination never repeats or drops a row on a tie (SPEC 37, "Contrato de
+        # consulta").
+        return [_search_rank(search_term).desc(), recency, OpportunityModel.id]
     if order is InboxOrder.RECENCY:
         return [recency, score, OpportunityModel.id]
     if order is InboxOrder.SCORE:
@@ -439,7 +465,11 @@ def list_opportunity_inbox(session: Session, query: InboxQuery) -> InboxPage:
         session.scalar(select(func.count()).select_from(statement.subquery("inbox"))) or 0
     )
     rows = session.execute(
-        statement.order_by(*_inbox_ordering(query.order, assessments))
+        statement.order_by(
+            *_inbox_ordering(
+                query.order, assessments, (query.search or "").strip()
+            )
+        )
         .offset(query.offset)
         .limit(query.limit)
     ).all()

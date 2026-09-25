@@ -234,6 +234,7 @@ class OpportunityService:
         if enrichment_reasons:
             reasons.extend(enrichment_reasons)
             result_status = "REVIEW_REQUIRED"
+        opportunity.search_skills = _search_skills_text(opportunity.skills)
 
         result = NormalizationResultModel(
             raw_item_id=raw_item.id,
@@ -787,6 +788,14 @@ def reclassify_role_families(session: Session, *, batch_size: int = 500) -> dict
             session.commit()
     session.commit()
     return {"total": total, "updated": updated, "unknown": unknown}
+
+
+def _search_skills_text(skills: list[OpportunitySkillModel]) -> str | None:
+    """Denormalized skill names for `search_document` (F17-03): a generated column
+    cannot read another table's rows, so this stays in sync here, on every
+    normalization — first insert and every reprocessing alike."""
+    names = sorted({skill.canonical_name.replace("_", " ") for skill in skills})
+    return " ".join(names) or None
 
 
 def _new_opportunity(candidate: CanonicalCandidate) -> OpportunityModel:

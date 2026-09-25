@@ -92,6 +92,9 @@ def _opportunity(
     lifecycle_status: str = "ACTIVE",
     work_mode: str = "REMOTE",
     seniority: str = "SENIOR",
+    description: str | None = None,
+    role_family: str = "UNKNOWN",
+    search_skills: str | None = None,
 ) -> OpportunityModel:
     opportunity = OpportunityModel(
         fingerprint=uuid4().hex,
@@ -105,6 +108,9 @@ def _opportunity(
         contract_type="FULL_TIME",
         lifecycle_status=lifecycle_status,
         published_at=published_at,
+        description=description,
+        role_family=role_family,
+        search_skills=search_skills,
         version=1,
     )
     session.add(opportunity)
