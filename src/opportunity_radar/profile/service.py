@@ -1,5 +1,6 @@
 """Application service for immutable, versioned career profiles."""
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
@@ -32,6 +33,9 @@ from opportunity_radar.profile.models import (
 )
 from opportunity_radar.profile.repository import SqlAlchemyProfileRepository
 
+# The lock is the profile's version counter: a mismatch always means another write won.
+_CONFLICT = "career profile was changed by another edit; nothing was saved"
+
 
 class ProfileService:
     def __init__(self, session: Session) -> None:
@@ -58,21 +62,73 @@ class ProfileService:
         snapshot: ProfileSnapshot,
         expected_profile_version: int,
     ) -> ProfileVersion:
-        snapshot.validate()
-        profile = self.repository.career_profile_for_update()
-        if profile is None:
-            if expected_profile_version != 0:
-                raise ProfileConflictError("career profile was changed")
-            profile = CareerProfileModel(version=1)
-            self.session.add(profile)
-            try:
-                self.session.flush()
-            except IntegrityError as error:
-                self.session.rollback()
-                raise ProfileConflictError("career profile was changed") from error
-        else:
-            self._advance_profile(profile, expected_profile_version)
+        """Record `snapshot` as a draft; publishing and activating it are separate writes."""
+        return self._commit(lambda: self._create_draft(snapshot, expected_profile_version))
 
+    def create_active_version(
+        self,
+        snapshot: ProfileSnapshot,
+        expected_profile_version: int,
+    ) -> ProfileVersion:
+        """Create, publish and activate `snapshot` as a single write (card F18-07).
+
+        Done as three requests, a failure between them left a draft or a published version
+        behind. Here the expected version is consumed once and nothing is committed until
+        the new version is active: a conflict or any error rolls the whole write back, and
+        the previous active version stays active.
+        """
+
+        def write() -> ProfileVersionModel:
+            version = self._create_draft(snapshot, expected_profile_version)
+            self._mark_published(version)
+            self._mark_active(version)
+            return version
+
+        return self._commit(write)
+
+    def publish(self, version_id: UUID, expected_profile_version: int) -> ProfileVersion:
+        def write() -> ProfileVersionModel:
+            version = self._version_for_update(version_id)
+            if version.status != ProfileVersionStatus.DRAFT.value:
+                raise ImmutableProfileVersionError("only draft profile versions can be published")
+            self._advance_profile(self._career_profile(), expected_profile_version)
+            self._mark_published(version)
+            return version
+
+        return self._commit(write)
+
+    def activate(self, version_id: UUID, expected_profile_version: int) -> ProfileVersion:
+        def write() -> ProfileVersionModel:
+            version = self._version_for_update(version_id)
+            if version.status != ProfileVersionStatus.PUBLISHED.value:
+                raise ImmutableProfileVersionError(
+                    "only published profile versions can be activated"
+                )
+            self._advance_profile(self._career_profile(), expected_profile_version)
+            self._mark_active(version)
+            return version
+
+        return self._commit(write)
+
+    def _commit(self, write: Callable[[], ProfileVersionModel]) -> ProfileVersion:
+        """Commit one write whole, or roll all of it back.
+
+        A failed write must not leave an advanced lock or a half-built version in the
+        session, where a later commit by the same caller would persist it.
+        """
+        try:
+            version_id = write().id
+            self.session.commit()
+        except Exception:
+            self.session.rollback()
+            raise
+        return self.get_version(version_id)
+
+    def _create_draft(
+        self, snapshot: ProfileSnapshot, expected_profile_version: int
+    ) -> ProfileVersionModel:
+        snapshot.validate()
+        profile = self._claim_profile(expected_profile_version)
         next_number = (
             self.session.scalar(
                 select(func.coalesce(func.max(ProfileVersionModel.number), 0)).where(
@@ -88,49 +144,58 @@ class ProfileService:
         )
         self._apply_snapshot(version, snapshot)
         self.session.add(version)
-        self.session.commit()
-        self.session.refresh(version)
-        return self._to_domain(version)
+        self.session.flush()
+        return version
 
-    def publish(self, version_id: UUID, expected_profile_version: int) -> ProfileVersion:
+    def _claim_profile(self, expected: int) -> CareerProfileModel:
+        """Advance the profile lock from `expected`, creating the profile on its first write."""
+        profile = self.repository.career_profile_for_update()
+        if profile is not None:
+            self._advance_profile(profile, expected)
+            return profile
+        if expected != 0:
+            raise ProfileConflictError(_CONFLICT)
+        profile = CareerProfileModel(version=1)
+        self.session.add(profile)
+        try:
+            self.session.flush()
+        except IntegrityError as error:
+            # Another first write created the singleton profile in the meantime.
+            raise ProfileConflictError(_CONFLICT) from error
+        return profile
+
+    def _career_profile(self) -> CareerProfileModel:
+        profile = self.repository.career_profile_for_update()
+        assert profile is not None
+        return profile
+
+    def _version_for_update(self, version_id: UUID) -> ProfileVersionModel:
         version = self.repository.version_for_update(version_id)
         if version is None:
             raise ProfileNotFoundError("profile version not found")
-        if version.status != ProfileVersionStatus.DRAFT.value:
-            raise ImmutableProfileVersionError("only draft profile versions can be published")
-        profile = self.repository.career_profile_for_update()
-        assert profile is not None
-        self._advance_profile(profile, expected_profile_version)
+        return version
+
+    @staticmethod
+    def _mark_published(version: ProfileVersionModel) -> None:
         version.status = ProfileVersionStatus.PUBLISHED.value
         version.published_at = datetime.now(UTC)
-        self.session.commit()
-        return self._to_domain(version)
 
-    def activate(self, version_id: UUID, expected_profile_version: int) -> ProfileVersion:
-        version = self.repository.version_for_update(version_id)
-        if version is None:
-            raise ProfileNotFoundError("profile version not found")
-        if version.status != ProfileVersionStatus.PUBLISHED.value:
-            raise ImmutableProfileVersionError("only published profile versions can be activated")
-        profile = self.repository.career_profile_for_update()
-        assert profile is not None
-        self._advance_profile(profile, expected_profile_version)
-
+    def _mark_active(self, version: ProfileVersionModel) -> None:
         active = self.session.scalar(
             select(ProfileVersionModel)
             .where(
-                ProfileVersionModel.career_profile_id == profile.id,
+                ProfileVersionModel.career_profile_id == version.career_profile_id,
                 ProfileVersionModel.status == ProfileVersionStatus.ACTIVE.value,
             )
             .with_for_update()
         )
         if active is not None:
+            # One ACTIVE version per profile is a unique index: the previous one is archived
+            # before this one takes its place, never deleted, so it stays readable.
             active.status = ProfileVersionStatus.ARCHIVED.value
             self.session.flush()
         version.status = ProfileVersionStatus.ACTIVE.value
         version.activated_at = datetime.now(UTC)
-        self.session.commit()
-        return self._to_domain(version)
 
     def _advance_profile(self, profile: CareerProfileModel, expected: int) -> None:
         result = cast(
@@ -142,7 +207,7 @@ class ProfileService:
             ),
         )
         if result.rowcount != 1:
-            raise ProfileConflictError("career profile was changed")
+            raise ProfileConflictError(_CONFLICT)
 
     def _apply_snapshot(self, version: ProfileVersionModel, snapshot: ProfileSnapshot) -> None:
         version.skills = []
@@ -197,6 +262,7 @@ class ProfileService:
             compensation_period=preferences.compensation_period,
             relocation_allowed=preferences.relocation_allowed,
             sponsorship_required=preferences.sponsorship_required,
+            target_role_families=list(preferences.target_role_families),
         )
 
     @staticmethod
@@ -245,6 +311,7 @@ class ProfileService:
                 compensation_period=preference.compensation_period,
                 relocation_allowed=preference.relocation_allowed,
                 sponsorship_required=preference.sponsorship_required,
+                target_role_families=tuple(preference.target_role_families),
             ),
         )
         return ProfileVersion(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from typing import Any, Sequence, TypeVar
 from uuid import UUID
@@ -22,9 +22,11 @@ from opportunity_radar.matching.analysis import (
     AnalysisOutcome,
     AnalysisRequest,
     AnalysisStatus,
+    PreparedAnalysis,
     SemanticAnalysisPort,
     analysis_cache_key,
 )
+from opportunity_radar.matching.context import retrieve_similar_decisions
 from opportunity_radar.matching.domain import (
     CompanyPriority,
     CompensationEvidenceSnapshot,
@@ -265,6 +267,54 @@ class MatchingService:
             raise MatchNotFoundError(str(assessment_id))
         return assessment
 
+    def _analysis_request(
+        self, assessment: MatchAssessmentModel, adapter: SemanticAnalysisPort
+    ) -> tuple[AnalysisRequest, str | None]:
+        """The prompt input, plus the reason to skip the call when there is one.
+
+        The snapshots come from the assessment, so the deterministic part is reproducible
+        from stored state. What the prompt reads beyond them — the posting, the profile
+        history, retrieved decisions — is loaded only when the prompt declares it, and the
+        posting only while it is still the version the assessment judged: a changed
+        posting waits for its own assessment instead of being commented against an old
+        verdict (card F16-07).
+        """
+        calibration = self.repository.token_calibration(
+            adapter.model, adapter.prompt_version, sample=TOKEN_RATIO_SAMPLE
+        )
+        request = replace(
+            _analysis_request(assessment),
+            tokens_per_char=calibration.ratio if calibration.calibrated else None,
+            calibration=calibration,
+        )
+        needs = adapter.requires
+        if "posting" in needs:
+            opportunity = OpportunityRepository(self.session).get(assessment.opportunity_id)
+            if opportunity is None or opportunity.version != assessment.opportunity_version:
+                current = opportunity.version if opportunity is not None else None
+                return request, (
+                    f"{STALE_POSTING_DETAIL}: assessed version "
+                    f"{assessment.opportunity_version}, current {current}"
+                )
+            request = replace(
+                request,
+                posting={
+                    "title": opportunity.canonical_title,
+                    "company_name": opportunity.company_name,
+                    "location_text": opportunity.location_text,
+                    "description": opportunity.description,
+                },
+            )
+        if "profile_history" in needs:
+            profile = ProfileService(self.session).get_version(assessment.profile_version_id)
+            request = replace(request, profile_history=profile_history(profile))
+        if "similar_decisions" in needs:
+            request = replace(
+                request,
+                similar_decisions=retrieve_similar_decisions(self.session, assessment),
+            )
+        return request, None
+
     async def analyze(
         self,
         assessment_id: UUID,
@@ -284,9 +334,15 @@ class MatchingService:
         assessment twice. It is taken after the cache lookup, so a reader of an already
         completed analysis never waits on a claim it does not need.
         """
-        self.get(assessment_id)  # Fail on an unknown assessment before taking a claim.
-        if not refresh:
-            cached = self.repository.get_completed_analysis(assessment_id)
+        # Fail on an unknown assessment before taking a claim.
+        request, skip_reason = self._analysis_request(self.get(assessment_id), adapter)
+        prepared = adapter.prepare(request) if skip_reason is None else None
+        if not refresh and prepared is not None:
+            # Only an answer under the identity this call would have is this call's answer:
+            # one made with another prompt, model, cut or context is history, not a hit.
+            cached = self.repository.get_completed_analysis(
+                assessment_id, cache_key=prepared.cache_key
+            )
             if cached is not None:
                 return cached
 
@@ -299,40 +355,51 @@ class MatchingService:
         # The claim is only exclusive once other transactions can see it.
         self.session.commit()
         try:
-            if not refresh:
+            if not refresh and prepared is not None:
                 # The previous holder may have completed while we waited for the lease.
-                cached = self.repository.get_completed_analysis(assessment_id)
+                cached = self.repository.get_completed_analysis(
+                    assessment_id, cache_key=prepared.cache_key
+                )
                 if cached is not None:
                     return cached
 
-            request = replace(
-                _analysis_request(self.get(assessment_id)),
-                tokens_per_char=self.repository.tokens_per_char(
-                    adapter.model, sample=TOKEN_RATIO_SAMPLE
-                ),
-            )
-            cache_key = analysis_cache_key(
-                request,
-                model_id=adapter.model,
-                prompt_version=adapter.prompt_version,
-            )
-            # The key covers model, prompt, schema and both input versions, so another
-            # assessment's completed analysis under it is this one's answer too — and,
-            # unlike the adapter's memory, it survives a restart.
-            source = None if refresh else self.repository.completed_analysis_by_key(cache_key)
-            if source is not None:
-                record = _reused_record(
-                    source, assessment_id=assessment_id, analyzed_at=datetime.now(UTC)
-                )
-            else:
-                record = _analysis_record(
+            if prepared is None:
+                record = _skipped_record(
+                    request,
                     assessment_id=assessment_id,
-                    cache_key=cache_key,
-                    outcome=await adapter.analyze(request),
+                    reason=skip_reason or "",
                     analyzed_at=datetime.now(UTC),
                     model_id=adapter.model,
                     prompt_version=adapter.prompt_version,
                 )
+            else:
+                # The key covers the payload actually sent, the prompt's content, the model
+                # and its options, so another assessment's completed analysis under it is
+                # this one's answer too — and, unlike the adapter's memory, it survives a
+                # restart. `refresh` skips both caches.
+                source = (
+                    None
+                    if refresh
+                    else self.repository.completed_analysis_by_key(
+                        prepared.cache_key,
+                        model_digest=prepared.inference.get("model_digest"),
+                    )
+                )
+                if source is not None:
+                    record = _reused_record(
+                        source, assessment_id=assessment_id, analyzed_at=datetime.now(UTC)
+                    )
+                else:
+                    record = _analysis_record(
+                        assessment_id=assessment_id,
+                        prepared=prepared,
+                        outcome=await adapter.analyze(
+                            request, prepared=prepared, use_cache=not refresh
+                        ),
+                        analyzed_at=datetime.now(UTC),
+                        model_id=adapter.model,
+                        prompt_version=adapter.prompt_version,
+                    )
             analysis = self.repository.add_analysis(record)
             self.session.commit()
             self.session.refresh(analysis)
@@ -650,12 +717,69 @@ def _analysis_request(assessment: MatchAssessmentModel) -> AnalysisRequest:
 
 
 REUSED_ANALYSIS_DETAIL = "reaproveitada da análise"
+STALE_POSTING_DETAIL = "posting changed after the assessment; waiting for re-evaluation"
 #: How many of the model's latest analyses calibrate its tokens-per-character ratio.
 TOKEN_RATIO_SAMPLE = 50
+#: Experiences and projects the profile history carries into the prompt (card F16-07).
+PROFILE_HISTORY_ITEMS = 5
+_HISTORY_LINE_LENGTH = 200
 
 
 def is_reused_analysis(analysis: MatchAnalysisModel) -> bool:
     return (analysis.detail or "").startswith(REUSED_ANALYSIS_DETAIL)
+
+
+def _period(started: date | None, ended: date | None) -> str | None:
+    if started is None and ended is None:
+        return None
+    start = started.strftime("%Y-%m") if started else "?"
+    return f"{start} – {ended.strftime('%Y-%m') if ended else 'atual'}"
+
+
+def _first_line(text: str | None) -> str | None:
+    line = next((item.strip() for item in (text or "").splitlines() if item.strip()), "")
+    return line[:_HISTORY_LINE_LENGTH] or None
+
+
+def profile_history(profile: ProfileVersion) -> dict[str, Any]:
+    """The profile's most recent experiences and projects, for the model to compare with.
+
+    Current roles first, then by end date. Only what compares with a posting: role,
+    company, period and one line; never contact data, and no project URL.
+    """
+    experiences = sorted(
+        profile.snapshot.experiences,
+        key=lambda item: (item.ended_on is None, item.ended_on or date.min, item.started_on),
+        reverse=True,
+    )[:PROFILE_HISTORY_ITEMS]
+    projects = sorted(
+        profile.snapshot.projects,
+        key=lambda item: (
+            item.ended_on is None,
+            item.ended_on or date.min,
+            item.started_on or date.min,
+        ),
+        reverse=True,
+    )[:PROFILE_HISTORY_ITEMS]
+    return {
+        "experiences": [
+            {
+                "title": item.title,
+                "company_name": item.company_name,
+                "period": _period(item.started_on, item.ended_on),
+                "summary": _first_line(item.summary),
+            }
+            for item in experiences
+        ],
+        "projects": [
+            {
+                "name": item.name,
+                "period": _period(item.started_on, item.ended_on),
+                "description": _first_line(item.description),
+            }
+            for item in projects
+        ],
+    }
 
 
 def _reused_record(
@@ -663,7 +787,8 @@ def _reused_record(
 ) -> AnalysisRecord:
     """A new row, not a pointer: each assessment keeps its own append-only history.
 
-    The costs stay null because no call was made; the detail names the row it came from.
+    The costs stay null because no call was made; the detail names the row it came from,
+    and the identity and payload travel with the copy so it stays auditable on its own.
     """
     return AnalysisRecord(
         assessment_id=assessment_id,
@@ -680,13 +805,43 @@ def _reused_record(
         recommended_review=source.recommended_review,
         model_id=source.model_id,
         prompt_version=source.prompt_version,
+        key_version=source.key_version,
+        payload_hash=source.payload_hash,
+        payload=source.payload,
+        inference=source.inference,
+        context_refs=tuple(source.context_refs or ()),
+        prompt_budget=source.prompt_budget,
+    )
+
+
+def _skipped_record(
+    request: AnalysisRequest,
+    *,
+    assessment_id: UUID,
+    reason: str,
+    analyzed_at: datetime,
+    model_id: str,
+    prompt_version: str,
+) -> AnalysisRecord:
+    """A skip decided before any payload existed, keyed the pre-v2 way for the audit."""
+    return AnalysisRecord(
+        assessment_id=assessment_id,
+        cache_key=analysis_cache_key(
+            request, model_id=model_id, prompt_version=prompt_version
+        ),
+        status=AnalysisStatus.AI_SKIPPED.value,
+        schema_version=ANALYSIS_SCHEMA_VERSION,
+        analyzed_at=analyzed_at,
+        detail=reason,
+        model_id=model_id,
+        prompt_version=prompt_version,
     )
 
 
 def _analysis_record(
     *,
     assessment_id: UUID,
-    cache_key: str,
+    prepared: PreparedAnalysis,
     outcome: AnalysisOutcome,
     analyzed_at: datetime,
     model_id: str,
@@ -695,30 +850,38 @@ def _analysis_record(
     analysis = outcome.analysis
     # What the call cost travels with the row, completed or not; absent stays absent.
     cost = outcome.metrics or AnalysisMetrics()
+    identity: dict[str, Any] = {
+        "cache_key": prepared.cache_key,
+        "key_version": prepared.key_version,
+        "payload_hash": prepared.payload_hash,
+        "payload": dict(prepared.payload),
+        "inference": dict(prepared.inference),
+        "context_refs": prepared.context_refs,
+        "prompt_budget": prepared.prompt_budget,
+        "total_ms": cost.total_ms,
+        "load_ms": cost.load_ms,
+        "prompt_tokens": cost.prompt_tokens,
+        "prompt_eval_ms": cost.prompt_eval_ms,
+        "output_tokens": cost.output_tokens,
+        "eval_ms": cost.eval_ms,
+        "prompt_chars": cost.prompt_chars,
+        "prompt_tokens_estimate": cost.prompt_tokens_estimate,
+    }
     if outcome.status is not AnalysisStatus.AI_COMPLETED or analysis is None:
         return AnalysisRecord(
             assessment_id=assessment_id,
-            cache_key=cache_key,
             status=outcome.status.value,
-            schema_version=ANALYSIS_SCHEMA_VERSION,
+            schema_version=prepared.schema_version,
             analyzed_at=analyzed_at,
             failure_code=outcome.failure_code.value if outcome.failure_code else None,
             detail=outcome.detail,
             # Which model the attempt was for, so failures count against the right one.
             model_id=model_id,
             prompt_version=prompt_version,
-            total_ms=cost.total_ms,
-            load_ms=cost.load_ms,
-            prompt_tokens=cost.prompt_tokens,
-            prompt_eval_ms=cost.prompt_eval_ms,
-            output_tokens=cost.output_tokens,
-            eval_ms=cost.eval_ms,
-            prompt_chars=cost.prompt_chars,
-            prompt_tokens_estimate=cost.prompt_tokens_estimate,
+            **identity,
         )
     return AnalysisRecord(
         assessment_id=assessment_id,
-        cache_key=cache_key,
         status=outcome.status.value,
         schema_version=analysis.schema_version,
         analyzed_at=analyzed_at,
@@ -730,14 +893,7 @@ def _analysis_record(
         recommended_review=analysis.recommended_review,
         model_id=analysis.model_id,
         prompt_version=analysis.prompt_version,
-        total_ms=cost.total_ms,
-        load_ms=cost.load_ms,
-        prompt_tokens=cost.prompt_tokens,
-        prompt_eval_ms=cost.prompt_eval_ms,
-        output_tokens=cost.output_tokens,
-        eval_ms=cost.eval_ms,
-        prompt_chars=cost.prompt_chars,
-        prompt_tokens_estimate=cost.prompt_tokens_estimate,
+        **identity,
     )
 
 

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import signal
 from asyncio import run as run_async
-from collections.abc import Callable
+from collections import deque
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from threading import Event
+from threading import Event, Lock
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -39,6 +41,12 @@ from opportunity_radar.matching.service import (
 )
 from opportunity_radar.operations.retention import PayloadRetentionService
 from opportunity_radar.operations.service import observe_job
+from opportunity_radar.opportunities.embeddings import (
+    EmbeddingPort,
+    build_embedding_adapter,
+    count_pending_embeddings,
+    embed_pending,
+)
 from opportunity_radar.opportunities.service import OpportunityService
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.database import create_database_engine
@@ -59,9 +67,68 @@ FUNCTIONAL_JOB_IDS = {
     "evaluate_pending": "evaluate-pending",
     "analyze_pending": "analyze-pending",
     "expire_raw_payloads": "expire-raw-payloads",
+    "embed_opportunities": "embed-opportunities",
 }
 
+#: How long an embedding pass waits for the GPU before giving the turn up. A warm analysis
+#: takes seconds (SPEC 36, section 3.2); a pass that would wait longer is skipped and the
+#: next one, an interval later, tries again, instead of holding a scheduler thread.
+EMBED_ADMISSION_TIMEOUT_SECONDS = 30.0
+
 logger = get_logger("opportunity_radar.worker")
+
+
+class GpuAdmission:
+    """One model call on the GPU at a time, served in arrival order.
+
+    Analysis and embedding share 8 GB of VRAM on the reference machine (SPEC 36, section
+    3.1), and whether both models fit resident with their contexts is still to be
+    measured. Admission is per model call — one analysis, one embedding batch — so neither
+    job holds the GPU for a whole pass. The turn is handed straight to the oldest waiter on
+    release: with a plain lock, the analysis loop, which re-acquires at once, could keep
+    the embedding job out for its whole batch.
+
+    Process-wide by design: the API's query embeddings are not counted here.
+    """
+
+    def __init__(self) -> None:
+        self._mutex = Lock()
+        self._busy = False
+        self._waiting: deque[Event] = deque()
+
+    def acquire(self, timeout: float | None = None) -> bool:
+        """Wait for the turn; `False` when `timeout` passed first. `None` waits forever."""
+        with self._mutex:
+            if not self._busy:
+                self._busy = True
+                return True
+            turn = Event()
+            self._waiting.append(turn)
+        if turn.wait(timeout):
+            return True
+        with self._mutex:
+            if turn.is_set():  # handed over between the timeout and this line
+                return True
+            self._waiting.remove(turn)
+            return False
+
+    def release(self) -> None:
+        with self._mutex:
+            if self._waiting:
+                self._waiting.popleft().set()
+            else:
+                self._busy = False
+
+    @contextmanager
+    def hold(self) -> Iterator[None]:
+        self.acquire()
+        try:
+            yield
+        finally:
+            self.release()
+
+
+GPU_ADMISSION = GpuAdmission()
 
 
 def heartbeat() -> None:
@@ -133,9 +200,13 @@ def evaluate_pending(engine: Engine, *, batch_size: int = 50) -> None:
                 )
 
 
-def warm_up_models(adapter: SemanticAnalysisPort) -> None:
+def warm_up_models(
+    adapter: SemanticAnalysisPort, *, admission: GpuAdmission = GPU_ADMISSION
+) -> None:
     """Load the model once at startup, so the first analysis does not pay for it."""
-    _log_warm_up(run_async(adapter.warm_up()), reason="startup")
+    with admission.hold():
+        metrics = run_async(adapter.warm_up())
+    _log_warm_up(metrics, reason="startup")
 
 
 def _log_warm_up(metrics: AnalysisMetrics | None, *, reason: str) -> None:
@@ -157,12 +228,14 @@ def analyze_pending(
     attempt_window_seconds: int = 86400,
     max_attempts: int = 3,
     lease_seconds: int = 900,
+    admission: GpuAdmission = GPU_ADMISSION,
 ) -> None:
     """Attach the semantic layer to current assessments, one claim at a time.
 
     The adapter classifies its own failures instead of raising, so an Ollama that is down
     degrades this job alone: evaluation keeps running and the failure is persisted as the
-    history entry that the cooldown then reads.
+    history entry that the cooldown then reads. Each model call waits for its GPU turn,
+    which the embedding job gets between two analyses.
     """
     with observe_job(
         engine, job_name="analyze_pending", interval=timedelta(seconds=120)
@@ -179,20 +252,21 @@ def analyze_pending(
             if pending:
                 # After an idle stretch longer than `keep_alive` the server has unloaded
                 # the model; loading it here keeps that cost out of the first analysis.
-                _log_warm_up(
-                    run_async(adapter.warm_up(only_if_idle=True)), reason="idle"
-                )
+                with admission.hold():
+                    metrics = run_async(adapter.warm_up(only_if_idle=True))
+                _log_warm_up(metrics, reason="idle")
             completed = reused = degraded = claimed_elsewhere = failed = 0
             for assessment_id in pending:
                 try:
-                    analysis = run_async(
-                        service.analyze(
-                            assessment_id,
-                            adapter,
-                            owner=correlation_id,
-                            lease=timedelta(seconds=lease_seconds),
+                    with admission.hold():
+                        analysis = run_async(
+                            service.analyze(
+                                assessment_id,
+                                adapter,
+                                owner=correlation_id,
+                                lease=timedelta(seconds=lease_seconds),
+                            )
                         )
-                    )
                 except AnalysisInProgressError:
                     # The manual action or another worker holds it. Not an error.
                     claimed_elsewhere += 1
@@ -223,6 +297,78 @@ def analyze_pending(
                         "failed": failed,
                     },
                 )
+
+
+def embed_opportunities(
+    engine: Engine,
+    adapter: EmbeddingPort | None,
+    *,
+    batch_size: int = 32,
+    interval_seconds: int = 120,
+    admission: GpuAdmission = GPU_ADMISSION,
+    admission_timeout_seconds: float = EMBED_ADMISSION_TIMEOUT_SECONDS,
+) -> None:
+    """Keep one current vector per eligible opportunity, one bounded batch per pass.
+
+    `None` is embedding switched off, and an unreachable model is the same for this pass:
+    both are logged as degraded and charge no posting for it. A posting whose own vector
+    came back wrong is recorded and cooled down without holding the others back. A pass
+    never outlasts its interval, and it gives its turn up rather than queue for the GPU
+    behind a long analysis.
+    """
+    with observe_job(
+        engine,
+        job_name="embed_opportunities",
+        interval=timedelta(seconds=interval_seconds),
+    ):
+        if adapter is None:
+            logger.warning(
+                "embedding batch degraded",
+                extra={"job": "embed", "reason": "embedding_disabled"},
+            )
+            return
+        if not admission.acquire(timeout=admission_timeout_seconds):
+            logger.warning(
+                "embedding pass skipped",
+                extra={
+                    "job": "embed",
+                    "reason": "gpu_busy",
+                    "waited_seconds": admission_timeout_seconds,
+                },
+            )
+            return
+        try:
+            with Session(engine) as session:
+                batch = embed_pending(
+                    session,
+                    adapter,
+                    batch_size=batch_size,
+                    time_budget_seconds=interval_seconds,
+                )
+        finally:
+            admission.release()
+        if not batch.selected:
+            return
+        with Session(engine) as session:
+            backlog = count_pending_embeddings(session, model=adapter.model)
+        summary = {
+            "job": "embed",
+            "model": adapter.model,
+            "selected": batch.selected,
+            "embedded": batch.embedded,
+            "reused": batch.reused,
+            "failed": batch.failed,
+            "skipped": batch.skipped,
+            "backlog": backlog,
+            "failures": batch.failures,
+        }
+        if batch.degraded is not None:
+            logger.warning(
+                "embedding batch degraded",
+                extra={**summary, "reason": batch.degraded.value},
+            )
+        else:
+            logger.info("embedding batch finished", extra=summary)
 
 
 def expire_raw_payloads(
@@ -503,6 +649,24 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             # Six hours is the cadence, not the wait before the first pass: a job whose
             # state only appears after six hours reads to the doctor as a job that is
             # missing, which is the one thing operational state exists to rule out.
+            next_run_time=first_run,
+        )
+    if settings.worker_embed_enabled:
+        # Registered even with embedding switched off (`None` adapter): the pass then says
+        # so in the log, which a job that is simply absent never would.
+        scheduler.add_job(
+            embed_opportunities,
+            "interval",
+            seconds=settings.worker_embed_interval_seconds,
+            args=(engine, build_embedding_adapter(settings)),
+            kwargs={
+                "batch_size": settings.worker_embed_batch_size,
+                "interval_seconds": settings.worker_embed_interval_seconds,
+            },
+            id="embed-opportunities",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
             next_run_time=first_run,
         )
     jobs = {

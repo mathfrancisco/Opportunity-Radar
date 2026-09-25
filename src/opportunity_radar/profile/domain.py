@@ -73,6 +73,9 @@ class EmploymentPreference:
     compensation_period: str | None = None
     relocation_allowed: bool = False
     sponsorship_required: bool = False
+    #: `role-family-v1` areas the Inbox shows by default (card F17-02). Empty means every
+    #: area, which is what a profile meant before the preference existed.
+    target_role_families: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -123,6 +126,8 @@ class ProfileSnapshot:
             0 <= start_hour <= 23 and 0 <= end_hour <= 23 and start_hour < end_hour
         ):
             raise InvalidProfileSnapshotError("timezone window must be valid")
+        if len(set(preferences.target_role_families)) != len(preferences.target_role_families):
+            raise InvalidProfileSnapshotError("target role families must be unique")
 
 
 @dataclass(frozen=True)

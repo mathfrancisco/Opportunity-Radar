@@ -154,6 +154,52 @@ describe('analyzeAssessment', () => {
     })
   })
 
+  it('lê afirmações com evidência do analysis-v2 e strings do analysis-v1 na mesma forma', async () => {
+    respond({
+      id: 'analysis-3',
+      assessment_id: 'assessment-1',
+      status: 'AI_COMPLETED',
+      failure_code: null,
+      detail: null,
+      summary: 'Vaga backend remota.',
+      strengths: [
+        { claim: 'Python exigido está no perfil', evidence: 'Required: Python', source: 'posting' },
+        'Texto de uma análise antiga',
+      ],
+      risks: [
+        { claim: 'Provavelmente exige plantão', evidence: null, source: null },
+        // An inconsistent pair must not be shown as evidence.
+        { claim: 'Trecho sem origem', evidence: 'algo', source: 'elsewhere' },
+      ],
+      inferences: [],
+      unknowns: [],
+      recommended_review: false,
+      model_id: 'qwen3:8b-q4_K_M',
+      prompt_version: 'opportunity_analysis/v2',
+      schema_version: 'analysis-v2',
+      cache_key: 'd'.repeat(64),
+      context_refs: [
+        { opportunity_id: 'opp-9', decision: 'NOT_RELEVANT', decided_at: null, similarity: 0.82 },
+      ],
+      analyzed_at: '2026-09-25T12:05:00Z',
+      created_at: '2026-09-25T12:05:00Z',
+    })
+
+    const analysis = await analyzeAssessment('assessment-1')
+
+    expect(analysis.strengths).toEqual([
+      { claim: 'Python exigido está no perfil', evidence: 'Required: Python', source: 'posting' },
+      { claim: 'Texto de uma análise antiga', evidence: null, source: null },
+    ])
+    expect(analysis.risks).toEqual([
+      { claim: 'Provavelmente exige plantão', evidence: null, source: null },
+      { claim: 'Trecho sem origem', evidence: null, source: null },
+    ])
+    expect(analysis.contextRefs).toEqual([
+      { opportunityId: 'opp-9', decision: 'NOT_RELEVANT', decidedAt: null, similarity: 0.82 },
+    ])
+  })
+
   it('explica a análise já em andamento em vez de mostrar o código do conflito', async () => {
     respond(
       { detail: { code: 'analysis_in_progress', message: 'Already being analyzed.' } },

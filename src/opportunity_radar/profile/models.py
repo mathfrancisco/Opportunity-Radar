@@ -247,6 +247,14 @@ class EmploymentPreferenceModel(Base):
     compensation_period: Mapped[str | None] = mapped_column(String(16))
     relocation_allowed: Mapped[bool] = mapped_column(nullable=False, default=False)
     sponsorship_required: Mapped[bool] = mapped_column(nullable=False, default=False)
+    # Empty means every area: the versions written before the column existed keep meaning
+    # what they meant.
+    target_role_families: Mapped[list[str]] = mapped_column(
+        ARRAY(String(32)),
+        nullable=False,
+        default=list,
+        server_default=text("'{}'::varchar[]"),
+    )
     profile_version: Mapped[ProfileVersionModel] = relationship(
         back_populates="preference"
     )

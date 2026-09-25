@@ -33,3 +33,5 @@ local_backups/
 *.swp
 .DS_Store
 Thumbs.db
+data/evals/
+prompts/opportunity_analysis/eval/drafts/

@@ -8,16 +8,22 @@ from __future__ import annotations
 
 from opportunity_radar.matching.analysis import NullAnalysisAdapter, SemanticAnalysisPort
 from opportunity_radar.matching.ollama import OllamaAnalysisAdapter
+from opportunity_radar.matching.prompts import load_prompt
 from opportunity_radar.platform.config import Settings
 
 
 def build_analysis_adapter(settings: Settings) -> SemanticAnalysisPort:
-    """Build one adapter per process: its in-memory cache is worthless if rebuilt."""
+    """Build one adapter per process: its in-memory cache is worthless if rebuilt.
+
+    The prompt version comes from configuration (`OLLAMA_ANALYSIS_PROMPT`); an unknown one
+    fails here, at startup, rather than on the first analysis.
+    """
     if not settings.ollama_analysis_enabled:
         return NullAnalysisAdapter()
     return OllamaAnalysisAdapter(
         base_url=settings.ollama_base_url,
         model=settings.ollama_model_analysis,
+        prompt=load_prompt(settings.ollama_analysis_prompt),
         timeout_seconds=settings.ollama_analysis_timeout_seconds,
         connect_timeout_seconds=settings.ollama_analysis_connect_timeout_seconds,
         max_retries=settings.ollama_analysis_max_retries,

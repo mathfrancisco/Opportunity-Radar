@@ -33,3 +33,17 @@ def test_snapshot_rejects_invalid_experience_period() -> None:
 
     with pytest.raises(InvalidProfileSnapshotError, match="experience end date"):
         snapshot.validate()
+
+
+def test_snapshot_rejects_duplicate_target_role_families() -> None:
+    snapshot = ProfileSnapshot(
+        skills=(),
+        experiences=(),
+        projects=(),
+        preferences=EmploymentPreference(
+            target_role_families=("DATA", "SOFTWARE_ENGINEERING", "DATA")
+        ),
+    )
+
+    with pytest.raises(InvalidProfileSnapshotError, match="target role families must be unique"):
+        snapshot.validate()
