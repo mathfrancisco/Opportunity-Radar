@@ -67,6 +67,9 @@ export interface InboxParams {
   salaryMin?: string
   salaryMax?: string
   sourceDefinitionIds?: string[]
+  /** ISO country code from the `regions-v1` table. Unknown-country opportunities are
+   * never implicitly excluded — the API keeps them visible (card F17-06). */
+  allowedCountry?: string
 }
 
 export interface FailingSource {
@@ -276,6 +279,7 @@ export async function getInbox({
   salaryMin,
   salaryMax,
   sourceDefinitionIds,
+  allowedCountry,
 }: InboxParams): Promise<InboxPage> {
   const params = new URLSearchParams({
     offset: String((page - 1) * pageSize),
@@ -296,6 +300,7 @@ export async function getInbox({
   if (salaryMin) params.set('salary_min', salaryMin)
   if (salaryMax) params.set('salary_max', salaryMax)
   sourceDefinitionIds?.forEach((value) => params.append('source_definition_id', value))
+  if (allowedCountry) params.set('allowed_country', allowedCountry)
 
   const response = await fetch(apiUrl(`/inbox?${params.toString()}`), {
     headers: { Accept: 'application/json' },

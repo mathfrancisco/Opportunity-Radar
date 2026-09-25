@@ -819,6 +819,10 @@ def _new_opportunity(candidate: CanonicalCandidate) -> OpportunityModel:
         role_family=candidate.role_family.value,
         role_family_evidence=dict(candidate.role_family_evidence) or None,
         role_family_version=candidate.role_family_version,
+        allowed_countries=list(candidate.allowed_countries) or None,
+        allowed_countries_version=(
+            candidate.allowed_countries_version if candidate.allowed_countries else None
+        ),
     )
 
 
@@ -847,6 +851,10 @@ def _refresh_opportunity(
     opportunity.source_updated_at = candidate.source_updated_at
     opportunity.fingerprint = candidate.fingerprint
     opportunity.fingerprint_version = candidate.fingerprint_version
+    opportunity.allowed_countries = list(candidate.allowed_countries) or None
+    opportunity.allowed_countries_version = (
+        candidate.allowed_countries_version if candidate.allowed_countries else None
+    )
     opportunity.role_family = candidate.role_family.value
     opportunity.role_family_evidence = dict(candidate.role_family_evidence) or None
     opportunity.role_family_version = candidate.role_family_version

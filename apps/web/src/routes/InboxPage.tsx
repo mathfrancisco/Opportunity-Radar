@@ -194,6 +194,7 @@ export function InboxPage() {
   const salaryMin = params.get('salary_min') ?? ''
   const salaryMax = params.get('salary_max') ?? ''
   const source = params.get('source') ?? ''
+  const allowedCountry = params.get('allowed_country') ?? ''
 
   const inbox = useInbox({
     page,
@@ -213,6 +214,7 @@ export function InboxPage() {
     salaryMin: salaryMin || undefined,
     salaryMax: salaryMax || undefined,
     sourceDefinitionIds: source ? [source] : undefined,
+    allowedCountry: allowedCountry || undefined,
   })
   const totalPages = inbox.data ? Math.max(1, Math.ceil(inbox.data.total / pageSize)) : 0
 
@@ -367,6 +369,18 @@ export function InboxPage() {
             placeholder="uuid da fonte"
             type="text"
             value={source}
+          />
+        </Field>
+
+        <Field label="País permitido">
+          <input
+            className={controlClassName}
+            onChange={(event) =>
+              update({ allowed_country: event.target.value.trim().toUpperCase() })
+            }
+            placeholder="ISO, ex.: BR"
+            type="text"
+            value={allowedCountry}
           />
         </Field>
 

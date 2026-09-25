@@ -15,6 +15,10 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 from opportunity_radar.companies.domain import normalize_name
+from opportunity_radar.opportunities.regions import (
+    REGIONS_VERSION,
+    resolve_allowed_countries,
+)
 from opportunity_radar.opportunities.role_family import (
     ROLE_FAMILY_VERSION,
     RoleFamily,
@@ -267,6 +271,11 @@ class CanonicalCandidate:
     role_family: RoleFamily = RoleFamily.UNKNOWN
     role_family_evidence: dict[str, str] = field(default_factory=dict)
     role_family_version: str = ROLE_FAMILY_VERSION
+    #: ISO country codes (or `regions.ANY_COUNTRY`) the `regions-v1` table resolved from
+    #: `location_text`. Empty means unknown — office location is never allowed country,
+    #: and this must never be read as "no country allowed" (card F17-06).
+    allowed_countries: tuple[str, ...] = ()
+    allowed_countries_version: str = REGIONS_VERSION
 
 
 def _clean_text(value: str | None) -> str | None:
@@ -950,6 +959,7 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
         departments=departments_from_metadata(value.metadata),
         description=value.description,
     )
+    allowed_countries = resolve_allowed_countries(location_text)
     return CanonicalCandidate(
         original_title=original_title,
         normalized_title=normalized_title,
@@ -988,6 +998,7 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
         role_family=role_family_decision.role_family,
         role_family_evidence=dict(role_family_decision.evidence),
         role_family_version=role_family_decision.version,
+        allowed_countries=allowed_countries,
     )
 
 

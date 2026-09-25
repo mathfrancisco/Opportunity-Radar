@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -32,7 +33,7 @@ DEFAULT_PATH = Path("data/search-reference/queries.json")
 REFERENCE_QUERY_COUNT = 40
 
 
-def _load(path: Path) -> dict[str, list[dict[str, object]]]:
+def _load(path: Path) -> dict[str, list[dict[str, Any]]]:
     if not path.exists():
         return {"queries": []}
     with path.open("r", encoding="utf-8") as handle:
@@ -42,14 +43,14 @@ def _load(path: Path) -> dict[str, list[dict[str, object]]]:
     return data
 
 
-def _save(path: Path, data: dict[str, list[dict[str, object]]]) -> None:
+def _save(path: Path, data: dict[str, list[dict[str, Any]]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
         json.dump(data, handle, ensure_ascii=False, indent=2, sort_keys=True)
         handle.write("\n")
 
 
-def init_reference(path: Path = DEFAULT_PATH) -> dict[str, list[dict[str, object]]]:
+def init_reference(path: Path = DEFAULT_PATH) -> dict[str, list[dict[str, Any]]]:
     """Create the file with 40 empty query slots, unless it already exists."""
     if path.exists():
         return _load(path)
@@ -79,7 +80,7 @@ def add_relevant(
     query: str,
     opportunity_id: UUID,
     path: Path = DEFAULT_PATH,
-) -> dict[str, list[dict[str, object]]]:
+) -> dict[str, list[dict[str, Any]]]:
     data = _load(path)
     url = canonical_url(session, opportunity_id)
     if url is None:
@@ -95,14 +96,14 @@ def add_relevant(
     return data
 
 
-def resolve(session: Session, path: Path = DEFAULT_PATH) -> list[dict[str, object]]:
+def resolve(session: Session, path: Path = DEFAULT_PATH) -> list[dict[str, Any]]:
     """Resolve every stored URL back to the opportunity it names in this database.
 
     A URL with no match is reported, not dropped silently: the reference set is only as
     good as what the operator can see is missing.
     """
     data = _load(path)
-    resolved: list[dict[str, object]] = []
+    resolved: list[dict[str, Any]] = []
     for entry in data["queries"]:
         query = str(entry.get("query", ""))
         urls = list(entry.get("relevant_urls", []))

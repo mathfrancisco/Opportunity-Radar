@@ -23,7 +23,7 @@ from sqlalchemy import (
     select,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, column_property, mapped_column, relationship
 
@@ -124,6 +124,13 @@ class OpportunityModel(Base):
     role_family_evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     #: Version of the rules that produced `role_family`. `None` until classified.
     role_family_version: Mapped[str | None] = mapped_column(String(32))
+    #: ISO 3166-1 alpha-2 codes (or `regions.ANY_COUNTRY`) the `regions-v1` table
+    #: resolved from `location_text`. `None` means unknown — never read as "no country
+    #: allowed": office location is never allowed country (card F17-06).
+    allowed_countries: Mapped[list[str] | None] = mapped_column(ARRAY(String(8)))
+    #: Version of the `regions-v1` table that produced `allowed_countries`. `None` until
+    #: resolved.
+    allowed_countries_version: Mapped[str | None] = mapped_column(String(32))
     #: Skill names, space-joined, kept in sync with `skills` (F17-03). Feeds the
     #: generated `search_document` column, which cannot reach another table's rows.
     search_skills: Mapped[str | None] = mapped_column(Text)

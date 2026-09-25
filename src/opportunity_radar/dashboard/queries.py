@@ -39,6 +39,7 @@ from opportunity_radar.opportunities.models import (
     RelevanceMarkModel,
     SourceOccurrenceModel,
 )
+from opportunity_radar.opportunities.regions import ANY_COUNTRY
 from opportunity_radar.pipeline.models import ApplicationProcessModel
 
 NEW_OPPORTUNITY_WINDOW_DAYS = 7
@@ -126,6 +127,11 @@ class InboxQuery:
     #: Empty means every seniority — an unknown/blank value is never an implicit
     #: exclusion (SPEC 37, "Contrato de consulta").
     seniorities: tuple[str, ...] = ()
+    #: ISO country code from the `regions-v1` table (`opportunities.regions`). `None`
+    #: means every country. An opportunity whose `allowed_countries` is unknown (`NULL`)
+    #: still matches — unknown never becomes an implicit exclusion (card F17-06, same
+    #: contract as `role_families`/`seniorities` above).
+    allowed_country: str | None = None
     #: Compensation range, compared as-is against `OpportunityCompensationModel`
     #: amounts. No currency conversion: mixing currencies in one query compares raw
     #: numbers, a known limitation until a conversion service exists for filtering
@@ -432,6 +438,12 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
         filters.append(OpportunityModel.published_at >= query.published_after)
     if query.seniorities:
         filters.append(OpportunityModel.seniority.in_(query.seniorities))
+    if query.allowed_country:
+        filters.append(
+            OpportunityModel.allowed_countries.is_(None)
+            | OpportunityModel.allowed_countries.any(query.allowed_country)
+            | OpportunityModel.allowed_countries.any(ANY_COUNTRY)
+        )
     if query.salary_min is not None or query.salary_max is not None:
         compensation_conditions = [
             OpportunityCompensationModel.opportunity_id == OpportunityModel.id

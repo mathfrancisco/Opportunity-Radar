@@ -347,6 +347,32 @@ def test_inbox_filters_by_role_family_without_deleting_off_filter_rows() -> None
         assert [item.opportunity_id for item in broadened.items] == [sales.id]
 
 
+def test_inbox_filters_by_allowed_country_without_excluding_unknown_rows() -> None:
+    """Card F17-06: an unrecognized/unknown allowed country never becomes an implicit
+    exclusion — it stays visible next to the countries the filter names."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company = _company(session, "normal")
+        brazil = _opportunity(session, company, title="Backend BR", published_at=NOW)
+        brazil.allowed_countries = ["BR"]
+        mexico = _opportunity(session, company, title="Backend MX", published_at=NOW)
+        mexico.allowed_countries = ["MX"]
+        unknown = _opportunity(session, company, title="Backend Unknown", published_at=NOW)
+        unknown.allowed_countries = None
+        session.commit()
+
+        everything = list_opportunity_inbox(session, InboxQuery(company_id=company.id))
+        assert everything.total == 3
+
+        br_filtered = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, allowed_country="BR")
+        )
+        assert {item.opportunity_id for item in br_filtered.items} == {
+            brazil.id,
+            unknown.id,
+        }
+
+
 def test_inbox_orders_by_priority_recency_and_score() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
