@@ -15,6 +15,10 @@ from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.matching.adapters import build_analysis_adapter
 from opportunity_radar.matching.analysis import SemanticAnalysisPort
+from opportunity_radar.opportunities.embeddings import (
+    OllamaEmbeddingAdapter,
+    build_embedding_adapter,
+)
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.database import open_session
 
@@ -63,3 +67,14 @@ def cached_analysis_adapter() -> SemanticAnalysisPort:
 
 def get_analysis_adapter() -> SemanticAnalysisPort:
     return cached_analysis_adapter()
+
+
+@lru_cache
+def cached_embedding_adapter() -> OllamaEmbeddingAdapter | None:
+    """One adapter per process, so queries reuse its connection to Ollama."""
+    return build_embedding_adapter(get_settings())
+
+
+def get_embedding_adapter() -> OllamaEmbeddingAdapter | None:
+    """`None` when embedding is switched off; the route turns that into a 503."""
+    return cached_embedding_adapter()
