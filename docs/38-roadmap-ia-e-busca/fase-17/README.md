@@ -6,7 +6,7 @@ Inbox de vagas que não servem.
 
 | Ordem | Card | Depende de | Status |
 | --- | --- | --- | --- |
-| 1 | [F17-01 — relevância e relatórios](f17-01-relevancia-e-relatorios.md) | Nenhum | Backlog |
+| 1 | [F17-01 — relevância e relatórios](f17-01-relevancia-e-relatorios.md) | Nenhum | Em revisão — baseline pendente |
 | 2 | [F17-02 — área da vaga](f17-02-area-da-vaga.md) | F17-01, F18-07 | Backlog |
 | 3 | [F17-03 — busca full-text](f17-03-busca-full-text.md) | F17-01, F17-02 | Backlog |
 | 4 | [F17-04 — importador propõe todo ATS](f17-04-importador-propoe-todo-ats.md) | Nenhum (habilitação em massa espera F17-02 e F17-07) | Backlog |

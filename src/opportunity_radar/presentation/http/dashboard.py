@@ -27,10 +27,12 @@ from opportunity_radar.dashboard.queries import (
     InboxOrder,
     InboxQuery,
     OverviewSummary,
+    SearchMetricsReport,
     SourceCoverageReport,
     SourceHealth,
     list_opportunity_inbox,
     list_source_health,
+    search_metrics,
     source_coverage_report,
     summarize_overview,
 )
@@ -227,6 +229,49 @@ class OverviewResponse(BaseModel):
     applications_by_stage: dict[str, int]
     follow_ups_due: int
     follow_up_window_days: int
+    precision_percent: str | None
+    precision_marked_count: int
+    companies_covered: int
+    companies_with_ats: int
+
+
+class SourceCoverageMetricResponse(BaseModel):
+    source_definition_id: UUID
+    name: str
+    runs: int
+    items_seen: int
+    items_persisted: int
+    items_duplicate: int
+    items_invalid: int
+    new_opportunities: int
+
+
+class CoverageMetricsResponse(BaseModel):
+    window_days: int
+    runs: int
+    items_seen: int
+    items_persisted: int
+    items_duplicate: int
+    items_invalid: int
+    new_opportunities: int
+    companies_covered: int
+    companies_with_ats: int
+    seniority_unknown_rate: str | None
+    by_source: list[SourceCoverageMetricResponse]
+
+
+class PrecisionMetricsResponse(BaseModel):
+    sample_size: int
+    marked_count: int
+    relevant_count: int
+    precision: str | None
+
+
+class SearchMetricsResponse(BaseModel):
+    window_days: int
+    generated_at: datetime
+    coverage: CoverageMetricsResponse
+    precision: PrecisionMetricsResponse
 
 
 @router.get("/inbox", response_model=InboxPageResponse)
@@ -341,6 +386,20 @@ def get_analysis_metrics(
         pending=report.pending,
         windows=[_analysis_window_response(item) for item in report.windows],
     )
+
+
+@router.get("/search-metrics", response_model=SearchMetricsResponse)
+def get_search_metrics(
+    window: str = Query(default="7d", pattern=r"^\d+d$"),
+    profile_version_id: UUID | None = None,
+    session: Session = Depends(get_session),
+) -> SearchMetricsResponse:
+    """`GET /search-metrics?window=7d` — SPEC §3, card F17-01."""
+    window_days = int(window[:-1])
+    report = search_metrics(
+        session, window_days=window_days, profile_version_id=profile_version_id
+    )
+    return _search_metrics_response(report)
 
 
 @router.get("/overview", response_model=OverviewResponse)
@@ -492,6 +551,60 @@ def _overview_response(summary: OverviewSummary) -> OverviewResponse:
         applications_by_stage=summary.applications_by_stage,
         follow_ups_due=summary.follow_ups_due,
         follow_up_window_days=summary.follow_up_window_days,
+        precision_percent=(
+            str(summary.precision_percent * 100)
+            if summary.precision_percent is not None
+            else None
+        ),
+        precision_marked_count=summary.precision_marked_count,
+        companies_covered=summary.companies_covered,
+        companies_with_ats=summary.companies_with_ats,
+    )
+
+
+def _search_metrics_response(report: SearchMetricsReport) -> SearchMetricsResponse:
+    coverage = report.coverage
+    precision = report.precision
+    return SearchMetricsResponse(
+        window_days=report.window_days,
+        generated_at=report.generated_at,
+        coverage=CoverageMetricsResponse(
+            window_days=coverage.window_days,
+            runs=coverage.runs,
+            items_seen=coverage.items_seen,
+            items_persisted=coverage.items_persisted,
+            items_duplicate=coverage.items_duplicate,
+            items_invalid=coverage.items_invalid,
+            new_opportunities=coverage.new_opportunities,
+            companies_covered=coverage.companies_covered,
+            companies_with_ats=coverage.companies_with_ats,
+            seniority_unknown_rate=(
+                str(coverage.seniority_unknown_rate)
+                if coverage.seniority_unknown_rate is not None
+                else None
+            ),
+            by_source=[
+                SourceCoverageMetricResponse(
+                    source_definition_id=item.source_definition_id,
+                    name=item.name,
+                    runs=item.runs,
+                    items_seen=item.items_seen,
+                    items_persisted=item.items_persisted,
+                    items_duplicate=item.items_duplicate,
+                    items_invalid=item.items_invalid,
+                    new_opportunities=item.new_opportunities,
+                )
+                for item in coverage.by_source
+            ],
+        ),
+        precision=PrecisionMetricsResponse(
+            sample_size=precision.sample_size,
+            marked_count=precision.marked_count,
+            relevant_count=precision.relevant_count,
+            precision=(
+                str(precision.precision) if precision.precision is not None else None
+            ),
+        ),
     )
 
 

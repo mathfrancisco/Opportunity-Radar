@@ -33,6 +33,7 @@ from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
     OpportunityModel,
+    RelevanceMarkModel,
     SourceOccurrenceModel,
 )
 from opportunity_radar.pipeline.models import ApplicationProcessModel
@@ -188,6 +189,64 @@ class OverviewSummary:
     #: Active applications whose next action is already due or falls inside the window.
     follow_ups_due: int = 0
     follow_up_window_days: int = FOLLOW_UP_WINDOW_DAYS
+    #: Support line data for the "Acervo" block (F17-01). `precision_percent` is `None`
+    #: when there are not enough marks to compute it — never a frail number.
+    precision_percent: Decimal | None = None
+    precision_marked_count: int = 0
+    companies_covered: int = 0
+    companies_with_ats: int = 0
+
+
+#: Source types with a collector registered (`registry.py`), i.e. an ATS the radar can
+#: actually collect from. "Empresas com ATS identificado" per the SPEC notes.
+ATS_COLLECTOR_SOURCE_TYPES = ("ashby", "greenhouse", "lever")
+#: Number of top Inbox rows, in the default order, that the precision report samples.
+PRECISION_SAMPLE_SIZE = 50
+
+
+@dataclass(frozen=True, slots=True)
+class SourceCoverageMetric:
+    source_definition_id: UUID
+    name: str
+    runs: int
+    items_seen: int
+    items_persisted: int
+    items_duplicate: int
+    items_invalid: int
+    new_opportunities: int
+
+
+@dataclass(frozen=True, slots=True)
+class CoverageMetrics:
+    window_days: int
+    runs: int
+    items_seen: int
+    items_persisted: int
+    items_duplicate: int
+    items_invalid: int
+    new_opportunities: int
+    companies_covered: int
+    companies_with_ats: int
+    seniority_unknown_rate: Decimal | None
+    by_source: tuple[SourceCoverageMetric, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PrecisionMetrics:
+    """Precision of the top `sample_size` Inbox rows, computed only over marked ones."""
+
+    sample_size: int
+    marked_count: int
+    relevant_count: int
+    precision: Decimal | None
+
+
+@dataclass(frozen=True, slots=True)
+class SearchMetricsReport:
+    window_days: int
+    generated_at: datetime
+    coverage: CoverageMetrics
+    precision: PrecisionMetrics
 
 
 def _latest_assessments(profile_version_id: UUID | None) -> Any:
@@ -441,6 +500,8 @@ def summarize_overview(
         .group_by(ApplicationProcessModel.current_stage)
     ).all()
     applications_by_stage = {str(stage): int(total) for stage, total in stage_rows}
+    precision = _precision_metrics(session, profile_version_id=profile_version_id)
+    companies_covered, companies_with_ats = _companies_coverage(session)
     return OverviewSummary(
         opportunities_total=_count(session, select(func.count(OpportunityModel.id))),
         opportunities_active=_count(
@@ -481,6 +542,10 @@ def summarize_overview(
                 <= reference + timedelta(days=FOLLOW_UP_WINDOW_DAYS),
             ),
         ),
+        precision_percent=precision.precision,
+        precision_marked_count=precision.marked_count,
+        companies_covered=companies_covered,
+        companies_with_ats=companies_with_ats,
     )
 
 
@@ -687,20 +752,200 @@ def source_coverage_report(
     )
 
 
+def _companies_coverage(session: Session) -> tuple[int, int]:
+    """(empresas com pelo menos uma fonte habilitada, empresas com ATS identificado)."""
+    covered = _count(
+        session,
+        select(func.count(func.distinct(CompanySource.company_id)))
+        .select_from(CompanySource)
+        .join(
+            SourceDefinitionModel,
+            SourceDefinitionModel.company_source_id == CompanySource.id,
+        )
+        .where(SourceDefinitionModel.enabled.is_(True)),
+    )
+    with_ats = _count(
+        session,
+        select(func.count(func.distinct(CompanySource.company_id))).where(
+            CompanySource.source_type.in_(ATS_COLLECTOR_SOURCE_TYPES)
+        ),
+    )
+    return covered, with_ats
+
+
+def _precision_metrics(
+    session: Session,
+    *,
+    profile_version_id: UUID | None = None,
+    sample_size: int = PRECISION_SAMPLE_SIZE,
+) -> PrecisionMetrics:
+    """Precision over the top `sample_size` Inbox rows in the default order.
+
+    Computed only over marked opportunities, `None` when nothing is marked yet: a
+    percentage over zero marks would be a frail number, not a metric.
+    """
+    page = list_opportunity_inbox(
+        session,
+        InboxQuery(order=InboxOrder.PRIORITY, limit=sample_size, offset=0),
+    )
+    opportunity_ids = [item.opportunity_id for item in page.items]
+    if not opportunity_ids:
+        return PrecisionMetrics(
+            sample_size=0, marked_count=0, relevant_count=0, precision=None
+        )
+    latest = (
+        select(
+            RelevanceMarkModel.opportunity_id.label("opportunity_id"),
+            RelevanceMarkModel.relevant.label("relevant"),
+            func.row_number()
+            .over(
+                partition_by=RelevanceMarkModel.opportunity_id,
+                order_by=(
+                    RelevanceMarkModel.marked_at.desc(),
+                    RelevanceMarkModel.id.desc(),
+                ),
+            )
+            .label("position"),
+        )
+        .where(RelevanceMarkModel.opportunity_id.in_(opportunity_ids))
+        .subquery("ranked_marks")
+    )
+    marks = session.execute(
+        select(latest.c.relevant).where(latest.c.position == 1)
+    ).all()
+    marked_count = len(marks)
+    relevant_count = sum(1 for (relevant,) in marks if relevant)
+    precision = (
+        Decimal(relevant_count) / Decimal(marked_count) if marked_count > 0 else None
+    )
+    return PrecisionMetrics(
+        sample_size=len(opportunity_ids),
+        marked_count=marked_count,
+        relevant_count=relevant_count,
+        precision=precision,
+    )
+
+
+def search_metrics(
+    session: Session,
+    *,
+    window_days: int = 7,
+    profile_version_id: UUID | None = None,
+    now: datetime | None = None,
+) -> SearchMetricsReport:
+    """The cobertura and precisão report the SPEC (§3) and F17-01 call for."""
+    reference = now or datetime.now(UTC)
+    since = reference - timedelta(days=window_days)
+
+    run_rows = session.execute(
+        select(
+            SourceRunModel.source_definition_id,
+            SourceDefinitionModel.name,
+            func.count(SourceRunModel.id),
+            func.coalesce(func.sum(SourceRunModel.items_seen), 0),
+            func.coalesce(func.sum(SourceRunModel.items_persisted), 0),
+            func.coalesce(func.sum(SourceRunModel.items_skipped), 0),
+            func.coalesce(func.sum(SourceRunModel.items_invalid), 0),
+        )
+        .join(
+            SourceDefinitionModel,
+            SourceDefinitionModel.id == SourceRunModel.source_definition_id,
+        )
+        .where(SourceRunModel.started_at >= since)
+        .group_by(SourceRunModel.source_definition_id, SourceDefinitionModel.name)
+        .order_by(SourceDefinitionModel.name)
+    ).all()
+
+    new_by_source: dict[UUID, int] = {
+        row[0]: row[1]
+        for row in session.execute(
+            select(SourceOccurrenceModel.source_definition_id, func.count())
+            .join(
+                OpportunityModel,
+                OpportunityModel.id == SourceOccurrenceModel.opportunity_id,
+            )
+            .where(OpportunityModel.created_at >= since)
+            .group_by(SourceOccurrenceModel.source_definition_id)
+        ).all()
+    }
+
+    by_source = tuple(
+        SourceCoverageMetric(
+            source_definition_id=row[0],
+            name=row[1],
+            runs=int(row[2]),
+            items_seen=int(row[3]),
+            items_persisted=int(row[4]),
+            items_duplicate=int(row[5]),
+            items_invalid=int(row[6]),
+            new_opportunities=int(new_by_source.get(row[0], 0)),
+        )
+        for row in run_rows
+    )
+
+    new_opportunities = _count(
+        session,
+        select(func.count(OpportunityModel.id)).where(
+            OpportunityModel.created_at >= since
+        ),
+    )
+    seniority_total = _count(session, select(func.count(OpportunityModel.id)))
+    seniority_unknown = _count(
+        session,
+        select(func.count(OpportunityModel.id)).where(
+            OpportunityModel.seniority == "UNKNOWN"
+        ),
+    )
+    seniority_unknown_rate = (
+        Decimal(seniority_unknown) / Decimal(seniority_total)
+        if seniority_total > 0
+        else None
+    )
+    companies_covered, companies_with_ats = _companies_coverage(session)
+
+    coverage = CoverageMetrics(
+        window_days=window_days,
+        runs=sum(item.runs for item in by_source),
+        items_seen=sum(item.items_seen for item in by_source),
+        items_persisted=sum(item.items_persisted for item in by_source),
+        items_duplicate=sum(item.items_duplicate for item in by_source),
+        items_invalid=sum(item.items_invalid for item in by_source),
+        new_opportunities=new_opportunities,
+        companies_covered=companies_covered,
+        companies_with_ats=companies_with_ats,
+        seniority_unknown_rate=seniority_unknown_rate,
+        by_source=by_source,
+    )
+    precision = _precision_metrics(session, profile_version_id=profile_version_id)
+    return SearchMetricsReport(
+        window_days=window_days,
+        generated_at=reference,
+        coverage=coverage,
+        precision=precision,
+    )
+
+
 __all__ = [
+    "ATS_COLLECTOR_SOURCE_TYPES",
     "FAILING_RUN_STATUSES",
     "FOLLOW_UP_WINDOW_DAYS",
     "NEW_OPPORTUNITY_WINDOW_DAYS",
+    "PRECISION_SAMPLE_SIZE",
+    "CoverageMetrics",
     "InboxItem",
     "InboxOrder",
     "InboxPage",
     "InboxQuery",
     "OverviewSummary",
+    "PrecisionMetrics",
+    "SearchMetricsReport",
+    "SourceCoverageMetric",
     "SourceHealth",
     "SourceCoverage",
     "SourceCoverageReport",
     "list_opportunity_inbox",
     "list_source_health",
+    "search_metrics",
     "source_coverage_report",
     "summarize_overview",
 ]

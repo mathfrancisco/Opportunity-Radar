@@ -12,6 +12,7 @@ import { Toolbar } from '../components/Toolbar'
 import { type InboxItem, type InboxOrder, inboxOrders } from '../features/dashboard/api'
 import { useInbox } from '../features/dashboard/useInbox'
 import { verdictLabels, verdictTones } from '../features/matching/verdicts'
+import { useMarkRelevance } from '../features/opportunities/useOpportunity'
 import { type ApplicationStage, stageLabels } from '../features/pipeline/api'
 
 const pageSize = 25
@@ -57,6 +58,28 @@ const appliedOptions = [
   { value: 'true', label: 'Já aplicada' },
   { value: 'false', label: 'Ainda não aplicada' },
 ] as const
+
+/** Operator relevance mark (F17-01). It is evaluation data: it never feeds the score. */
+function RelevanceButtons({ opportunityId }: { opportunityId: string }) {
+  const mark = useMarkRelevance(opportunityId)
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      <Button
+        disabled={mark.isPending}
+        onClick={() => mark.mutate({ relevant: true })}
+      >
+        Relevante
+      </Button>
+      <Button
+        disabled={mark.isPending}
+        onClick={() => mark.mutate({ relevant: false })}
+        variant="secondary"
+      >
+        Não é para mim
+      </Button>
+    </div>
+  )
+}
 
 function ItemCard({ item }: { item: InboxItem }) {
   return (
@@ -132,6 +155,7 @@ function ItemCard({ item }: { item: InboxItem }) {
           A análise sugere revisão humana antes de aplicar.
         </p>
       )}
+      <RelevanceButtons opportunityId={item.opportunityId} />
     </Card>
   )
 }

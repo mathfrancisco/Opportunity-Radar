@@ -19,6 +19,7 @@ from opportunity_radar.opportunities.domain import CanonicalCandidate
 from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
     OpportunityModel,
+    RelevanceMarkModel,
     SourceOccurrenceModel,
 )
 
@@ -264,6 +265,50 @@ class OpportunityRepository:
                 selectinload(OpportunityModel.normalization_results),
                 selectinload(OpportunityModel.compensations),
                 selectinload(OpportunityModel.skills),
+            )
+        )
+
+    def add_relevance_mark(
+        self,
+        opportunity_id: UUID,
+        *,
+        relevant: bool,
+        reason: str | None,
+        note: str | None,
+        profile_version_id: UUID | None,
+    ) -> RelevanceMarkModel:
+        """Append a judgement. History is never updated or deleted (F17-01)."""
+        mark = RelevanceMarkModel(
+            opportunity_id=opportunity_id,
+            relevant=relevant,
+            reason=reason,
+            note=note,
+            profile_version_id=profile_version_id,
+        )
+        self.session.add(mark)
+        self.session.flush()
+        return mark
+
+    def current_relevance_mark(
+        self, opportunity_id: UUID
+    ) -> RelevanceMarkModel | None:
+        return self.session.scalar(
+            select(RelevanceMarkModel)
+            .where(RelevanceMarkModel.opportunity_id == opportunity_id)
+            .order_by(
+                RelevanceMarkModel.marked_at.desc(), RelevanceMarkModel.id.desc()
+            )
+            .limit(1)
+        )
+
+    def relevance_mark_history(
+        self, opportunity_id: UUID
+    ) -> list[RelevanceMarkModel]:
+        return list(
+            self.session.scalars(
+                select(RelevanceMarkModel)
+                .where(RelevanceMarkModel.opportunity_id == opportunity_id)
+                .order_by(RelevanceMarkModel.marked_at.desc())
             )
         )
 

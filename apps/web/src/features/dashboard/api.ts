@@ -85,6 +85,10 @@ export interface Overview {
   applicationsByStage: Record<string, number>
   followUpsDue: number
   followUpWindowDays: number
+  precisionPercent: string | null
+  precisionMarkedCount: number
+  companiesCovered: number
+  companiesWithAts: number
 }
 
 export const metricWindows = ['24h', '7d'] as const
@@ -450,5 +454,9 @@ export async function getOverview(): Promise<Overview> {
     applicationsByStage: countMap(body.applications_by_stage),
     followUpsDue: count(body.follow_ups_due),
     followUpWindowDays: count(body.follow_up_window_days),
+    precisionPercent: text(body.precision_percent),
+    precisionMarkedCount: count(body.precision_marked_count),
+    companiesCovered: count(body.companies_covered),
+    companiesWithAts: count(body.companies_with_ats),
   }
 }

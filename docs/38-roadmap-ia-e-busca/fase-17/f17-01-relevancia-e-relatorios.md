@@ -1,6 +1,6 @@
 # CARD F17-01 — Marcação de relevância e relatórios de cobertura e precisão
 
-- **Status:** Backlog
+- **Status:** Em revisão — código e testes prontos; baseline pendente na máquina de referência (ver `docs/pesquisas/baseline-f17-01.md`)
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
 - **Depende de:** Nenhum
 - **Bloqueia:** F17-02, F17-03, F17-06, F17-08, F17-13, F18-01, Milestone P

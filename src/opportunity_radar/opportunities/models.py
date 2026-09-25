@@ -8,6 +8,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -116,6 +117,46 @@ class OpportunityModel(Base):
     skills: Mapped[list["OpportunitySkillModel"]] = relationship(
         back_populates="opportunity", cascade="all, delete-orphan"
     )
+
+
+class RelevanceMarkModel(Base):
+    """One operator judgement of an opportunity, append-only.
+
+    The current mark is the most recent row for the `opportunity_id`. Never updated or
+    deleted, so precision can be recomputed against any past profile version. F17-01;
+    out of scope: this table never feeds the score or the verdict.
+    """
+
+    __tablename__ = "relevance_mark"
+    __table_args__ = (
+        CheckConstraint(
+            "reason IS NULL OR reason IN "
+            "('AREA', 'SENIORITY', 'LOCATION', 'COMPANY', 'COMPENSATION', 'OTHER')",
+            name="ck_relevance_mark_reason",
+        ),
+        Index("ix_relevance_mark_opportunity_marked_at", "opportunity_id", "marked_at"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    opportunity_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.opportunity.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    relevant: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(16))
+    note: Mapped[str | None] = mapped_column(Text)
+    profile_version_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("profile.profile_version.id", ondelete="SET NULL"),
+    )
+    marked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    opportunity: Mapped[OpportunityModel] = relationship()
 
 
 class SourceOccurrenceModel(Base):

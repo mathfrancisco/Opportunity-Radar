@@ -31,6 +31,7 @@ from opportunity_radar.opportunities.models import (
     OpportunityCompensationModel,
     OpportunityModel,
     OpportunitySkillModel,
+    RelevanceMarkModel,
     SourceOccurrenceModel,
 )
 from opportunity_radar.opportunities.repository import (
@@ -325,6 +326,29 @@ class OpportunityService:
                 opportunity.version += 1
 
         self.session.commit()
+
+    def mark_relevance(
+        self,
+        opportunity_id: UUID,
+        *,
+        relevant: bool,
+        reason: str | None,
+        note: str | None,
+        profile_version_id: UUID | None,
+    ) -> RelevanceMarkModel:
+        """Record an operator judgement. Out of scope: it never feeds score or verdict."""
+        opportunity = self.repository.get(opportunity_id)
+        if opportunity is None:
+            raise OpportunityNotFoundError(str(opportunity_id))
+        mark = self.repository.add_relevance_mark(
+            opportunity_id,
+            relevant=relevant,
+            reason=reason,
+            note=note,
+            profile_version_id=profile_version_id,
+        )
+        self.session.commit()
+        return mark
 
     def transition(
         self,
