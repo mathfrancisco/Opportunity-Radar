@@ -84,6 +84,89 @@ Endpoints candidatos, **a confirmar na revisão de termos** (não são fato até
 - `apps/web/src/components/SourceCreateForm.tsx`
 - `tests/backend/acquisition/`, `tests/e2e/`
 
+## Arquivos
+
+| Ação | Caminho | O quê |
+| --- | --- | --- |
+| Criar | `docs/pesquisas/termos-workable.md` | Revisão dos termos de uso do endpoint público do Workable, antes de qualquer código. Se o endpoint proibir automação, este documento é o entregável final do sub-card e ele fecha como "não viável". |
+| Criar | `src/opportunity_radar/acquisition/workable.py` | Coletor do Workable, no formato de `src/opportunity_radar/acquisition/lever.py` (`LeverCollector`: `source_type`, `capabilities`, `healthcheck`, `discover`, retentativa com `Retry-After`, `validate_*`). |
+| Alterar | `src/opportunity_radar/acquisition/registry.py` | `build_collector_registry` (linhas 12-26) monta a tupla de coletores do worker e da API; adicionar `WorkableCollector()`. |
+| Alterar | `src/opportunity_radar/acquisition/probing.py` | `PROBE_TYPES` (linha 24) e `PUBLIC_ENDPOINT_REFERENCES` (linhas 25-30) só cobrem `ashby`, `lever`, `greenhouse`, `remotive`; adicionar `"workable"` e a referência ao endpoint público. `probe_request` (linhas 43-62) precisa de um novo `elif source_type == "workable"` que monte `company_reference` a partir de `configuration["account_identifier"]`. |
+| Alterar | `src/opportunity_radar/acquisition/proposals.py` | `IDENTIFIER_KEYS` (linhas 22-26) só mapeia `ashby`/`lever`/`greenhouse`; adicionar `"workable": "account_identifier"` — nome de campo a confirmar na revisão de termos. |
+| Alterar | `src/opportunity_radar/companies/registration.py` | `SUPPORTED_ATS` (linha 48) e o dicionário de `validators` em `_source_values` (linhas 373-376) só cobrem os três ATS atuais; adicionar `"workable"` e `WorkableCollector.validate_account_identifier` (ou o nome que a revisão de termos confirmar). |
+| Alterar | `apps/web/src/components/SourceCreateForm.tsx` | `configFields` (linhas 21-58) e `typeLabels` (linhas 60-66) só têm entradas para `ashby`/`lever`/`greenhouse`/`remotive`/`manual`; adicionar `workable` com o campo `account_identifier` (obrigatório) e `company_name` (opcional), e o rótulo `"Workable"`. |
+| Alterar | `apps/web/src/features/sources/api.ts` | `sourceTypes` (linhas 204-205) é a lista fechada de `SourceType`; adicionar `"workable"`. |
+| Criar | `tests/backend/acquisition/test_workable_collector.py` | Testes do coletor contra um board falso, no formato de `tests/backend/acquisition/test_lever_collector.py`. |
+| Criar | `tests/e2e/fake_workable_board.py` | Servidor falso do Workable (paginação, erro, 429), no formato de `tests/e2e/fake_job_board.py`. |
+
+Endpoint provável do Workable: widget público por conta — **a confirmar na revisão de termos**, não é fato até lá.
+
+## Interfaces
+
+```python
+# src/opportunity_radar/acquisition/workable.py
+class WorkableCollector:
+    """Lê vagas públicas do Workable. Nomes de campo e forma do endpoint dependem
+    da revisão de termos em docs/pesquisas/termos-workable.md."""
+
+    source_type = "workable"
+    capabilities = CollectorCapabilities(company_jobs=True, pagination=True)
+
+    def __init__(
+        self,
+        *,
+        client: httpx.AsyncClient | None = None,
+        client_factory: (
+            Callable[[], AbstractAsyncContextManager[httpx.AsyncClient]] | None
+        ) = None,
+        max_retries: int = 2,
+        retry_after_seconds: float = 1.0,
+        sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None: ...
+
+    async def healthcheck(
+        self, context: HealthcheckContext | None = None
+    ) -> HealthResult: ...
+
+    async def discover(
+        self, request: CollectionRequest
+    ) -> AsyncIterator[CollectedItem]:
+        """o widget pode devolver a lista completa sem paginação; confirmar na revisão de termos. Falha nunca deve parecer board vazio: página curta só
+        conta como fim quando o coletor sabe que é o fim (mesmo contrato do Lever,
+        linha 138-142), não só um retorno vazio."""
+
+    @staticmethod
+    def validate_account_identifier(value: str) -> str:
+        """Formato do identificador a confirmar na revisão de termos."""
+```
+
+## Passos
+
+1. Escrever a revisão de termos em `docs/pesquisas/termos-workable.md` antes de qualquer código: o que o endpoint público permite, exige atribuição, limite de taxa, e se proíbe automação. Se proibir, parar aqui e fechar o sub-card como "não viável", registrando o motivo no card.
+2. Confirmar a forma real do endpoint contra a documentação pública encontrada (ou, se preciso, uma chamada manual isolada, nunca dentro do CI) e atualizar a tabela deste card se a forma prevista estiver errada.
+3. Escrever os testes do coletor (`tests/backend/acquisition/test_workable_collector.py`) contra o board falso, cobrindo item válido, paginação, schema alterado e erro HTTP — antes do código do coletor.
+4. Criar `tests/e2e/fake_workable_board.py`, no formato de `tests/e2e/fake_job_board.py`, com paginação e um caminho de erro (404, 429 com `Retry-After`, 500).
+5. Implementar `src/opportunity_radar/acquisition/workable.py`, seguindo a forma de `LeverCollector` (`source_type`, `capabilities`, retentativa com `Retry-After`, classificação de erro HTTP em `AcquisitionErrorCode`, `validate_account_identifier`).
+6. Registrar o coletor em `build_collector_registry` (`registry.py`, linhas 12-26).
+7. Adicionar `"workable"` a `PROBE_TYPES` e `PUBLIC_ENDPOINT_REFERENCES` em `probing.py`, e o ramo correspondente em `probe_request`.
+8. Adicionar `"workable": "account_identifier"` a `IDENTIFIER_KEYS` em `proposals.py`.
+9. Adicionar `"workable"` a `SUPPORTED_ATS` e o validador correspondente em `registration.py`.
+10. Adicionar o tipo ao formulário (`SourceCreateForm.tsx`) e a `sourceTypes` (`api.ts`).
+11. Mapear departamento (F20-03) e senioridade (F20-02) só para os campos que o endpoint do Workable realmente expõe — não inventar correspondência para campo ausente.
+12. Homologar pelo menos uma empresa real do catálogo pela fila de homologação (F20-25) e registrar a primeira coleta real no PR do sub-card.
+13. Rodar os comandos de verificação e confirmar que a sonda (`probing.py`) reconhece o novo tipo em um teste de integração.
+
+## Testes a escrever
+
+- `tests/backend/acquisition/test_workable_collector.py::test_parses_listed_jobs_and_preserves_payload`
+- `tests/backend/acquisition/test_workable_collector.py::test_paginates_until_short_page`
+- `tests/backend/acquisition/test_workable_collector.py::test_retries_rate_limit_using_retry_after`
+- `tests/backend/acquisition/test_workable_collector.py::test_classifies_http_errors`
+- `tests/backend/acquisition/test_workable_collector.py::test_rejects_invalid_identifier_and_schema`
+- `tests/backend/acquisition/test_workable_collector.py::test_skips_malformed_listed_job_and_reports_it`
+- `tests/backend/acquisition/test_service.py::test_probe_recognizes_workable_source_type`
+- `tests/backend/companies/test_importer.py::test_registration_accepts_workable_source_type` (ou equivalente em `test_domain.py`, conforme onde `SUPPORTED_ATS` for exercitado)
+
 ## Não fazer
 
 - Não alterar elegibilidade, score, veredito nem fatores do matching.
@@ -103,7 +186,7 @@ Endpoints candidatos, **a confirmar na revisão de termos** (não são fato até
 ## Comando de verificação
 
 ```bash
-docker compose -p f20-30 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend
+docker compose -p f20-30 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend/acquisition/test_workable_collector.py tests/backend/acquisition/test_service.py
 docker compose -p f20-30 -f compose.yaml -f compose.dev.yaml run --rm api ruff check .
 docker compose -p f20-30 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```

@@ -85,6 +85,130 @@ a evidência se perde ao fim da execução.
 - `scripts/discover_sources.py` (se a rotina reusar o mesmo script)
 - `tests/acquisition/test_tavily_proposals.py` (novo)
 
+## Arquivos
+
+| Ação | Caminho | O quê |
+| --- | --- | --- |
+| Alterar | `src/opportunity_radar/acquisition/proposals.py` | reusar `IDENTIFIER_KEYS` (`proposals.py:20-24`) para a nova rotina de evidência |
+| Alterar | `src/opportunity_radar/acquisition/service.py` | novo método em `AcquisitionService`, ao lado de `propose_company_source` (`service.py:260-298`), que reusa `create_source` (mesmo método que `propose_company_source` já chama) |
+| Alterar | `src/opportunity_radar/acquisition/tavily.py` | reusar `detect_ats_board()` do F20-44 na leitura dos itens marcados |
+| Criar | `tests/backend/acquisition/test_tavily_proposals.py` | testes deste card (não `tests/acquisition/`, ver nota do F20-42) |
+
+Nenhuma migração: a via de origem (`"discovery_via": "tavily_search"`) entra na coluna
+JSONB `configuration` de `SourceDefinitionModel` que já existe (`models.py:59-63`), no
+mesmo padrão que `discovery_evidence` já usa (`service.py:297`, `proposals.py:96`).
+
+## Interfaces
+
+```python
+# acquisition/service.py — ao lado de propose_company_source (service.py:260)
+class AcquisitionService:
+    def propose_from_tavily_evidence(
+        self, items: Iterable[CollectedItem]
+    ) -> TavilyProposalReport:
+        """Lê os CollectedItem com metadata["source_proposal_candidate"] is True,
+        detecta o board via detect_ats_board() (F20-44) e cria/atualiza uma proposta
+        inerte por par (source_type, board_key) — nunca duplica, nunca homologa."""
+        ...
+
+@dataclass(frozen=True, slots=True)
+class TavilyProposalOutcome:
+    url: str
+    outcome: Literal["created", "already_proposed", "unmatched_pattern", "company_not_found"]
+    proposal_id: UUID | None = None
+
+@dataclass(frozen=True, slots=True)
+class TavilyProposalReport:
+    outcomes: tuple[TavilyProposalOutcome, ...]
+```
+
+A ambiguidade de qual `Company` corresponde a um `CollectedItem.company_name` de texto
+livre não tem resolvedor existente no código (nenhuma função de match de empresa por
+nome foi encontrada em `companies/`); **a confirmar**: este card usa igualdade exata
+com `Company.canonical_name` como primeira aproximação e trata "sem correspondência
+exata" como `company_not_found` (pendência registrada, não proposta malformada), e não
+resolvedor difuso — decisão a documentar no PR, coerente com "Fora de escopo" já dizer
+que ambiguidade entre empresas não é resolvida aqui.
+
+## Exemplos
+
+Item de entrada (emitido pelo F20-44, com o campo de proposta marcado):
+
+```python
+CollectedItem(
+    source_type="tavily_search",
+    url="https://boards.greenhouse.io/acme/jobs/12345",
+    company_name="Acme Corp",
+    metadata={
+        "query": "backend engineer remote brazil",
+        "rank": 0,
+        "score": 0.87,
+        "source_proposal_candidate": True,
+    },
+)
+```
+
+Configuração resultante da `SourceDefinitionModel` proposta (mesmo formato de
+`propose_company_source`, `service.py:288-298`, mais a via de origem):
+
+```json
+{
+  "company_name": "Acme Corp",
+  "board_token": "acme",
+  "discovery_evidence": "https://boards.greenhouse.io/acme/jobs/12345",
+  "discovery_via": "tavily_search",
+  "discovery_query": "backend engineer remote brazil",
+  "discovery_rank": 0,
+  "discovery_score": 0.87
+}
+```
+
+`evidence_status="ats_identified"`, `terms_reviewed=False`, `collector_local_tested=False`
+— os mesmos valores que `create_source`/`propose_company_source` já produzem.
+
+## Passos
+
+1. Escrever `tests/backend/acquisition/test_tavily_proposals.py` para cada critério de
+   aceite (ver "Testes a escrever") — falham até a rotina existir.
+2. Implementar `propose_from_tavily_evidence` em `service.py`, filtrando os
+   `CollectedItem` com `metadata.get("source_proposal_candidate") is True`.
+3. Para cada item, chamar `detect_ats_board(item.url)` (F20-44); sem casar, registrar
+   `TavilyProposalOutcome(outcome="unmatched_pattern")` — nunca criar proposta
+   malformada.
+4. Resolver a `Company` por `canonical_name` exato contra `item.company_name`; sem
+   correspondência, registrar `outcome="company_not_found"` (pendência).
+5. Verificar se já existe `SourceDefinitionModel` com aquele `source_type` +
+   `IDENTIFIER_KEYS[source_type]` na `configuration` — se sim, `already_proposed`
+   (idempotência).
+6. Caso contrário, chamar `create_source(...)` com `evidence_status="ats_identified"`,
+   igual a `propose_company_source`, incluindo `discovery_via="tavily_search"` e a
+   evidência (query/rank/score) do `metadata` do item.
+7. Reexecutar sobre o mesmo `CollectedItem` não deve duplicar — cobrir com teste de
+   idempotência (ver "Testes a escrever").
+8. Se a proposta já existir e ainda estiver inerte (`is_inert`, `proposals.py:56-61`) e
+   a nova evidência apontar para uma chave diferente, seguir o mesmo caminho de
+   `follow_correction` (`proposals.py:71-98`) em vez de criar uma segunda proposta.
+9. Escrever os testes até verdes; `ruff check .`; `mypy`.
+
+## Testes a escrever
+
+`tests/backend/acquisition/test_tavily_proposals.py`:
+
+- `test_known_board_url_becomes_inert_proposal_with_auditable_evidence` — cobre
+  "Resultado marcado `source_proposal_candidate` vira proposta inerte com evidência
+  auditável".
+- `test_new_proposal_starts_terms_unreviewed_and_untested` — cobre "Proposta nasce com
+  `terms_reviewed=false` e `collector_local_tested=false`".
+- `test_rerun_over_same_result_does_not_duplicate_proposal` — cobre "Reexecução sobre o
+  mesmo resultado não duplica proposta".
+- `test_url_outside_known_pattern_becomes_pending_not_malformed_proposal` — cobre "URL
+  fora do padrão de chave conhecido vira pendência registrada".
+- `test_proposal_records_tavily_as_origin_distinct_from_html_and_sitemap_discovery` —
+  cobre "A via de origem (Tavily) fica registrada na proposta, distinta de
+  F20-27/F20-36".
+- `test_company_not_found_becomes_pending_outcome` — cobre a decisão "a confirmar" do
+  passo 4.
+
 ## Não fazer
 
 - Não alterar elegibilidade, score, veredito nem fatores do matching.
@@ -104,7 +228,7 @@ a evidência se perde ao fim da execução.
 ## Comando de verificação
 
 ```bash
-docker compose -p f20-46 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend
+docker compose -p f20-46 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend/acquisition/test_tavily_proposals.py
 docker compose -p f20-46 -f compose.yaml -f compose.dev.yaml run --rm api ruff check .
 docker compose -p f20-46 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```

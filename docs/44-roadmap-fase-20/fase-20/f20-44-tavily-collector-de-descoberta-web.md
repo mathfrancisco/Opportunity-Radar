@@ -86,6 +86,135 @@ outro.
 - `src/opportunity_radar/acquisition/registry.py`
 - `tests/acquisition/test_tavily_collector.py` (novo)
 
+## Arquivos
+
+| Ação | Caminho | O quê |
+| --- | --- | --- |
+| Alterar | `src/opportunity_radar/acquisition/tavily.py` | `TavilySearchCollector`, `canonicalize_url()`, `detect_ats_board()` |
+| Alterar | `src/opportunity_radar/acquisition/registry.py` | registrar `TavilySearchCollector()` em `build_collector_registry` (`registry.py:14-23`, ao lado de `RemotiveCollector()`) |
+| Criar | `tests/backend/acquisition/test_tavily_collector.py` | testes deste card (não `tests/acquisition/`, ver nota do F20-42) |
+
+## Interfaces
+
+```python
+# acquisition/tavily.py
+
+def canonicalize_url(url: str) -> str:
+    """Sem query de rastreamento, sem fragmento, host em minúsculas — mesma normalização
+    usada pelo dedupe daqui e pelo hash de cache do F20-45; um único lugar, não duplicado."""
+    ...
+
+# padrão de board por ATS, mesma chave que proposals.py.IDENTIFIER_KEYS usa
+# (proposals.py:20-24): ashby -> board_identifier, lever -> site_identifier,
+# greenhouse -> board_token.
+_ATS_BOARD_PATTERNS: dict[str, re.Pattern[str]] = {
+    "ashby": re.compile(r"^jobs\.ashbyhq\.com/([^/?#]+)"),
+    "greenhouse": re.compile(r"^boards\.greenhouse\.io/([^/?#]+)"),
+    "lever": re.compile(r"^jobs\.lever\.co/([^/?#]+)"),
+}
+
+def detect_ats_board(url: str) -> tuple[str, str] | None:
+    """(source_type, board_key) se a URL casar com um padrão conhecido, senão None."""
+    ...
+
+class TavilySearchCollector:
+    source_type = "tavily_search"
+    capabilities = CollectorCapabilities(keyword_search=True)
+
+    def __init__(
+        self,
+        *,
+        client: TavilyClient | None = None,
+        client_factory: Callable[[], TavilyClient] | None = None,
+        settings: TavilySettings,  # tavily_base_url, *_depth, include_domains padrão
+        budget_guard: TavilyBudgetGuard | None = None,  # F20-43; None = sem teto aplicado aqui
+        known_ats_boards: frozenset[tuple[str, str]] = frozenset(),
+        # Pares (source_type, board_key) que JÁ têm CompanySource habilitada. O
+        # coletor não tem sessão de banco (nenhum outro Collector tem — Protocol em
+        # collectors.py:27-36 só define healthcheck/discover); por isso este conjunto
+        # é pré-calculado e injetado por quem monta o registry antes de chamar
+        # discover(). A cadência de atualização (por execução vs. por processo) é uma
+        # decisão de implementação do worker — a confirmar no PR.
+    ) -> None: ...
+
+    async def healthcheck(
+        self, context: HealthcheckContext | None = None
+    ) -> HealthResult: ...  # reusa o estado do TavilyClient do F20-42
+
+    async def discover(
+        self, request: CollectionRequest
+    ) -> AsyncIterator[CollectedItem]: ...
+```
+
+## Exemplos
+
+Um resultado de `/search` (ver F20-42, seção Exemplos) virando `CollectedItem`:
+
+```python
+CollectedItem(
+    source_type="tavily_search",
+    url="https://boards.greenhouse.io/acme/jobs/12345",
+    title="Backend Engineer (Remote, Brazil)",
+    description="We are hiring a backend engineer...",  # trecho de "content"
+    raw_payload={"title": "...", "url": "...", "content": "...", "score": 0.87, "...": "..."},
+    metadata={
+        "query": "backend engineer remote brazil",
+        "rank": 0,
+        "score": 0.87,
+        "retrieved_at": "2026-09-25T12:00:00+00:00",
+        "parser_version": "tavily-search-v1",
+        "source_proposal_candidate": True,  # greenhouse/acme sem CompanySource habilitada
+    },
+)
+```
+
+## Passos
+
+1. Escrever `tests/backend/acquisition/test_tavily_collector.py` para cada critério de
+   aceite (ver "Testes a escrever") — falham até o coletor existir.
+2. Implementar `canonicalize_url()` em `tavily.py` (host minúsculo, sem
+   query de rastreamento, sem fragmento).
+3. Implementar `detect_ats_board()` com os três padrões (`_ATS_BOARD_PATTERNS`).
+4. Implementar `TavilySearchCollector.__init__` recebendo `known_ats_boards` e o
+   `budget_guard` do F20-43.
+5. Implementar `discover()`: montar `TavilySearchParams.query` a partir de
+   `request.keywords`; somar `include_domains` com os boards de ATS conhecidos quando
+   configurado; `time_range` sempre vindo da configuração.
+6. Mapear cada resultado de `/search` para `CollectedItem` com o `metadata` da seção
+   Interfaces/Exemplos (`query`, `rank`, `score`, `retrieved_at`, `parser_version`).
+7. Aplicar dedupe por `canonicalize_url()` contra os itens já emitidos nesta execução
+   (um `set[str]` local ao `discover()`).
+8. Para cada item, chamar `detect_ats_board(item.url)`; se casar e o par
+   `(source_type, board_key)` não estiver em `known_ats_boards`, marcar
+   `metadata["source_proposal_candidate"] = True` em vez de tratar como ingestão
+   comum (o item ainda é emitido — quem decide não ingerir é o worker, não o coletor).
+9. Implementar `healthcheck()` delegando ao `TavilyClient` do F20-42.
+10. Registrar `TavilySearchCollector()` em `build_collector_registry`
+    (`registry.py:14-23`).
+11. Escrever o teste de registro no `CollectorRegistry` (`resolve("tavily_search")`).
+12. Rodar os testes até verdes; `ruff check .`; `mypy`.
+
+## Testes a escrever
+
+`tests/backend/acquisition/test_tavily_collector.py`:
+
+- `test_registered_and_resolves_by_tavily_search` — cobre "O coletor está registrado e
+  resolve por `\"tavily_search\"`".
+- `test_query_includes_profile_keywords_and_include_domains_when_configured` — cobre
+  "Query inclui as palavras-chave... `include_domains` aplica quando configurado".
+- `test_time_range_never_open` — cobre "`time_range` nunca fica aberto".
+- `test_collected_item_metadata_has_query_rank_score_retrieved_at_parser_version` —
+  cobre o critério homônimo.
+- `test_equivalent_urls_deduplicate_within_one_run` (variação de query
+  string/fragmento/caixa) — cobre "Duas URLs equivalentes ... não geram dois itens".
+- `test_known_ats_board_marks_source_proposal_candidate` e
+  `test_unknown_ats_board_url_does_not_marks_candidate` — cobrem "URL de board de ATS
+  já coberto marca `source_proposal_candidate`".
+- `test_canonicalize_url_strips_tracking_query_and_fragment_lowercases_host` — unidade
+  isolada de `canonicalize_url()`.
+- `test_detect_ats_board_matches_known_patterns_and_returns_none_otherwise` — unidade
+  isolada de `detect_ats_board()`.
+
 ## Não fazer
 
 - Não alterar elegibilidade, score, veredito nem fatores do matching.
@@ -105,7 +234,7 @@ outro.
 ## Comando de verificação
 
 ```bash
-docker compose -p f20-44 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend
+docker compose -p f20-44 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend/acquisition/test_tavily_collector.py
 docker compose -p f20-44 -f compose.yaml -f compose.dev.yaml run --rm api ruff check .
 docker compose -p f20-44 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```

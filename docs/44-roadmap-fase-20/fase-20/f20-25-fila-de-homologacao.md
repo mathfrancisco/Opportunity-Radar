@@ -71,6 +71,86 @@ entre testes da mesma fonte, não entre fontes diferentes.
 - `apps/web/src/features/sources/`
 - `src/opportunity_radar/presentation/http/acquisition.py` (filtro, se preciso)
 
+## Arquivos
+
+| Ação | Caminho | O quê |
+| --- | --- | --- |
+| Criar | `apps/web/src/routes/HomologationQueuePage.tsx` | Rota "Fila de homologação": contadores, lista por estado/prioridade e o modo sequencial. |
+| Criar | `apps/web/src/components/HomologationQueue.tsx` | Componente da fila (lista + card sequencial + botão "Testar várias"), reaproveitado pela rota. |
+| Alterar | `apps/web/src/routes/SourcesPage.tsx` | Hoje monta a lista de fontes a partir de `useSourceHealth()` (linha 248) e mostra `source.evidenceStatus` por cartão (linha 127). Adicionar o link/aba para a nova rota da fila. |
+| Alterar | `apps/web/src/features/sources/api.ts` | `sourceTypes`/`SourceHealth` já existem (linha 204+); adicionar o campo `retryAfterSeconds` no tipo de resultado do probe e, se o filtro for feito aqui, o parâmetro `status` em `getSourceHealth`. |
+| Alterar | `apps/web/src/features/sources/useSources.ts` | `useSourceHealth()` (linha 18-19) e `useProbeSource` (linha 102-105) já existem; adicionar hook `useProbeQueue` que roda os probes selecionados em sequência (`for … await`), aguardando `retryAfterSeconds` entre um 429 e o próximo probe do lote. |
+| Alterar | `src/opportunity_radar/presentation/http/dashboard.py` | `list_sources_health` (linha 348) só aceita `only_failing`; adicionar `status: str \| None = None` e repassar para `list_source_health`. |
+| Alterar | `src/opportunity_radar/dashboard/queries.py` | `list_source_health(session, *, only_failing=False)` (linha 708) monta a consulta por `SourceDefinitionModel` sem filtrar por `enabled`/`evidence_status` nem ordenar por prioridade da empresa; adicionar filtro `status="proposed"` (equivalente a `enabled is False`) e `ORDER BY` pela prioridade de `Company` via `company_source_id` → `CompanySource.company_id` → `Company.priority`. |
+| Alterar | `src/opportunity_radar/acquisition/probing.py` | `ProbeOutcome` (linha 33-40) não guarda o `Retry-After` da resposta; adicionar `retry_after_seconds: float \| None = None` e preenchê-lo em `_failed` quando `error_code == "SOURCE_RATE_LIMITED"`. |
+| Alterar | `src/opportunity_radar/presentation/http/acquisition.py` | `SourceProbeResult` (linha 103-113) espelha `ProbeOutcome`; adicionar o mesmo `retry_after_seconds` para o frontend usar no lote. |
+
+## Interfaces
+
+```python
+# src/opportunity_radar/acquisition/probing.py
+@dataclass(frozen=True, slots=True)
+class ProbeOutcome:
+    ok: bool
+    detail: str
+    items_seen: int = 0
+    http_requests: int = 0
+    error_code: str | None = None
+    last_http_attempt_at: datetime | None = None
+    retry_after_seconds: float | None = None  # novo: só quando error_code == SOURCE_RATE_LIMITED
+
+
+# src/opportunity_radar/dashboard/queries.py
+def list_source_health(
+    session: Session,
+    *,
+    only_failing: bool = False,
+    status: Literal["proposed"] | None = None,  # novo: "proposed" == enabled is False
+) -> tuple[SourceHealth, ...]: ...
+```
+
+```typescript
+// apps/web/src/features/sources/api.ts
+interface QueueCounters {
+  withoutProbe: number
+  probeFailed: number
+  confirmed: number
+  enabled: number
+}
+
+interface BatchProbeResult {
+  sourceId: string
+  ok: boolean
+  detail: string
+  errorCode: string | null
+  retryAfterSeconds: number | null
+}
+```
+
+## Passos
+
+1. Escrever os testes de componente da fila (estados, sequência, lote com 429 simulado) antes do código, cobrindo cada critério de aceite.
+2. Em `src/opportunity_radar/acquisition/probing.py`, adicionar `retry_after_seconds` a `ProbeOutcome` e preenchê-lo em `_failed`/`run_probe` a partir do cabeçalho `Retry-After` quando o `AcquisitionError` tiver `code == AcquisitionErrorCode.SOURCE_RATE_LIMITED`.
+3. Em `src/opportunity_radar/presentation/http/acquisition.py`, espelhar o campo em `SourceProbeResult` e no `_probe_response` (linha 395).
+4. Em `src/opportunity_radar/dashboard/queries.py`, adicionar o parâmetro `status` a `list_source_health` e o `JOIN` até `Company.priority` para a ordenação; escrever o teste em `tests/backend/dashboard/test_queries.py`.
+5. Em `src/opportunity_radar/presentation/http/dashboard.py`, repassar `status` em `list_sources_health` (linha 348).
+6. Criar `apps/web/src/components/HomologationQueue.tsx` com os contadores do topo, a lista por estado/prioridade e o card do modo sequencial (empresa, evidência, link do board, "Testar o collector" / "Termos revisados" / "Habilitar" / "Pular" / "Próxima").
+7. Adicionar em `apps/web/src/features/sources/useSources.ts` o hook `useProbeQueue`, que chama `useProbeSource` para cada fonte selecionada em um laço `for … await`, aguardando `retryAfterSeconds` (ou um atraso padrão) antes do próximo probe quando `errorCode === 'SOURCE_RATE_LIMITED'`.
+8. Criar `apps/web/src/routes/HomologationQueuePage.tsx`, montando `HomologationQueue` a partir de `useSourceHealth({ status: 'proposed' })`.
+9. Ligar a nova rota a `apps/web/src/routes/SourcesPage.tsx` (link/aba), sem remover o fluxo atual de um cartão por vez.
+10. Adicionar o aviso da tela quando o perfil não tem áreas de interesse (dependência do F20-03), reaproveitando o texto de "Notas de implementação".
+11. Rodar os comandos de verificação e colar no PR a homologação real das propostas do F20-03 pela fila (quantas confirmadas, quantas falharam e o motivo).
+
+## Testes a escrever
+
+- `tests/backend/dashboard/test_queries.py::test_list_source_health_filters_by_status_proposed` — só fontes desabilitadas com evidência pendente aparecem.
+- `tests/backend/dashboard/test_queries.py::test_list_source_health_orders_by_company_priority` — prioridade alta da empresa aparece primeiro.
+- `tests/backend/acquisition/test_service.py::test_probe_reports_retry_after_on_rate_limit` — `ProbeOutcome.retry_after_seconds` reflete o cabeçalho `Retry-After` de uma resposta 429 simulada com `httpx.MockTransport`.
+- `apps/web/src/components/HomologationQueue.test.tsx::lista as propostas por estado e prioridade` — critério de aceite 1.
+- `apps/web/src/components/HomologationQueue.test.tsx::modo sequencial avança sem voltar à lista` — critério de aceite 2.
+- `apps/web/src/components/HomologationQueue.test.tsx::lote de sondas respeita Retry-After e mostra resultado por linha` — critério de aceite 3, com 429 simulado.
+- `apps/web/src/components/HomologationQueue.test.tsx::termos e habilitação nunca disparam em lote` — critério de aceite 4.
+
 ## Não fazer
 
 - Não alterar elegibilidade, score, veredito nem fatores do matching.
@@ -90,7 +170,7 @@ entre testes da mesma fonte, não entre fontes diferentes.
 ## Comando de verificação
 
 ```bash
-docker compose -p f20-25 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend
+docker compose -p f20-25 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend/dashboard/test_queries.py tests/backend/acquisition/test_service.py
 docker compose -p f20-25 -f compose.yaml -f compose.dev.yaml run --rm api ruff check .
 docker compose -p f20-25 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```

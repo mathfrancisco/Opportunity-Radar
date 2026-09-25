@@ -46,6 +46,154 @@ Backup durante coleta ativa restaura o mesmo estado descrito no manifesto e pres
 
 `scripts/backup.py`, restore_check.py, platform/backup.py, pipeline.yml e docs/30-runbook.md.
 
+## Contexto no código
+
+`platform/backup.py`, `scripts/backup.py` e `scripts/restore_check.py` já existem e já
+implementam a maior parte do fluxo, mas com lacunas concretas encontradas na leitura:
+
+- `MANIFEST_QUERIES` (`platform/backup.py:14-26`) tem uma contagem por tabela do fluxo
+  vertical (`company`, `company_source`, `profile_version`, `source_definition`,
+  `source_run`, `raw_item`, `opportunity`, `source_occurrence`, `match_assessment`,
+  `match_analysis`, `application_process`, `stage_history`) — **não** inclui
+  `platform.ai_quota_usage`, `platform.ai_call_record` (F20-19) nem
+  `opportunities.field_suggestion` (F20-23). Nenhuma das três tabelas existe ainda nesta
+  árvore (criadas por F20-12/F20-19/F20-23); se este card rodar antes delas, registrar
+  no PR quais entram como "a confirmar" até a migração correspondente aterrar.
+- `scripts/backup.py:collect_manifest` (linhas 36-50) roda sua própria consulta de
+  contagem numa conexão separada da que `run_pg_dump` (linhas 53-70) usa para o
+  `pg_dump` — **não há snapshot transacional compartilhado ou exportado entre os dois**.
+  Sob escrita concorrente, a contagem do manifesto e o conteúdo do dump podem divergir
+  sem que isso seja um bug de dado, só falta de sincronização — exatamente o problema do
+  critério de aceite 1.
+- O manifesto grava `created_at`, `alembic_revision`, `database`, `counts`, `file` e
+  `bytes` (`scripts/backup.py:102-109`) — **não grava hash do dump nem versão do
+  formato do manifesto**. O critério de aceite 2 ("sem manifesto/hash válido o gate
+  estrito falha") não tem hash para verificar hoje.
+- `scripts/restore_check.py:main` (linhas 124-157) tem um bug de gate encontrado na
+  leitura: quando não há manifesto (`manifest = {}`), a linha 151 calcula
+  `problems = compare(manifest, restored) if manifest else []` — como `manifest` é um
+  dict vazio (falsy), `problems` fica `[]` e o script imprime **"restore check passed"**
+  mesmo sem ter verificado nada. Isso é o oposto do "gate estrito" pedido pelo critério
+  de aceite 2: hoje a ausência de manifesto passa, não falha.
+- Não há checagem de extensão (`pgvector`) no restore: `smoke_queries`
+  (`restore_check.py:87-97`) só roda `MANIFEST_QUERIES`; se `vector` (criada pela
+  migração `20260925_0024_opportunity_embedding.py:36`) não estiver disponível na imagem
+  de restauração, a falha apareceria como erro de `pg_restore`, não como um item do
+  relatório.
+- `docs/30-runbook.md` seção 5 (linhas 84-101) já documenta `make backup`/
+  `make restore-check` e `BACKUP_RETENTION_DAYS`, mas não define periodicidade, local de
+  cópia separado, idade máxima tolerada nem tempo de recuperação medido — os defaults
+  propostos pelo card (24h e 30min) ainda não estão escritos em nenhum lugar.
+- O backup nunca lê `.env`/`GROQ_API_KEY`: `pg_dump` só despeja o banco Postgres, nunca o
+  sistema de arquivos, então a garantia "nunca inclui `.env`" já é estrutural. O risco
+  real é as tabelas de telemetria da IA (F20-19) guardarem por acidente algo que remonte
+  à chave (corpo de requisição/resposta) — este card não cria essas tabelas, mas deve
+  testar que o dump/manifesto delas nunca contém a string `GROQ_API_KEY` nem o valor da
+  variável de ambiente, como defesa em profundidade.
+
+## Arquivos
+
+| Ação | Caminho | O quê |
+| --- | --- | --- |
+| Alterar | `src/opportunity_radar/platform/backup.py` | `MANIFEST_QUERIES` com as tabelas novas da IA; `MANIFEST_FORMAT_VERSION` |
+| Alterar | `scripts/backup.py` | snapshot transacional compartilhado com `pg_dump` (ou janela explícita sem escritores); hash do dump no manifesto |
+| Alterar | `scripts/restore_check.py` | gate estrito: manifesto ausente/incompatível ou hash divergente falha (corrige o bug da linha 151); checagem de `pgvector` |
+| Alterar | `docs/30-runbook.md` | periodicidade, local de cópia separado, idade máxima tolerada, RTO medido (seção 5) |
+| Criar | `tests/backend/platform/test_backup_manifest.py` | hash, formato, tabelas novas, ausência de `GROQ_API_KEY` |
+| Criar | `tests/backend/test_backup_restore_integration.py` | escritor controlado durante o dump, corrupção/ausência de manifesto, restauração com `pgvector` |
+
+Nenhuma migração de schema é criada por este card: as tabelas novas citadas no
+manifesto pertencem aos cards F20-12/F20-19/F20-23.
+
+## Interfaces
+
+```python
+# src/opportunity_radar/platform/backup.py
+MANIFEST_FORMAT_VERSION = "backup-manifest-v2"  # v1 implícito era o formato sem hash
+
+MANIFEST_QUERIES: dict[str, str] = {
+    # ... entradas já existentes ...
+    "ai_quota_usage": "SELECT count(*) FROM platform.ai_quota_usage",       # F20-12
+    "ai_call_record": "SELECT count(*) FROM platform.ai_call_record",       # F20-19
+    "field_suggestions": "SELECT count(*) FROM opportunities.field_suggestion",  # F20-23
+}
+
+#: Nunca aparecem em dump, manifesto ou log de backup.
+FORBIDDEN_MANIFEST_STRINGS: tuple[str, ...] = ("GROQ_API_KEY",)
+
+
+def dump_sha256(path: "Path") -> str:
+    """Hash do arquivo `.dump`, gravado no manifesto para o gate estrito comparar."""
+
+
+def has_extension(url: str, name: str) -> bool:
+    """Confere se `name` (ex.: "vector") está instalada no banco restaurado."""
+
+
+# scripts/backup.py
+def run_pg_dump_with_shared_snapshot(url: str, target: "Path") -> str:
+    """Exporta o snapshot da transação que leu o manifesto (`pg_export_snapshot()`)
+    e passa `--snapshot=<id>` ao `pg_dump`, para que manifesto e dump vejam o mesmo
+    estado. Sem suporte a snapshot exportado, documentar a alternativa de janela
+    explícita sem escritores em vez de mascarar a divergência."""
+
+
+# scripts/restore_check.py
+def strict_gate(manifest: dict, restored: dict, *, dump_hash: str) -> list[str]:
+    """Substitui `compare`: manifesto ausente, `manifest_format_version`
+    incompatível ou hash do dump divergente sempre entram na lista de problemas —
+    nunca resultam em lista vazia por manifesto ausente."""
+```
+
+## Passos
+
+1. Escrever `tests/backend/platform/test_backup_manifest.py` cobrindo: hash do dump
+   presente e correto, `manifest_format_version` presente, as três tabelas novas da IA
+   na lista (mesmo com contagem 0 quando as tabelas ainda não existem — registrar como
+   "a confirmar" se a migração ainda não aterrou), e ausência de `GROQ_API_KEY` em
+   qualquer string do manifesto.
+2. Escrever `tests/backend/test_backup_restore_integration.py` cobrindo: escrita
+   concorrente durante o dump não gera divergência de contagem (critério de aceite 1),
+   manifesto ausente ou com hash divergente falha o gate (critério de aceite 2, cobre o
+   bug descrito no Contexto), e restauração com `pgvector` presente (critério de aceite
+   3).
+3. Adicionar `MANIFEST_FORMAT_VERSION`, `FORBIDDEN_MANIFEST_STRINGS`, `dump_sha256` e
+   `has_extension` a `platform/backup.py`; estender `MANIFEST_QUERIES` com as três
+   tabelas novas.
+4. Em `scripts/backup.py`, exportar o snapshot da transação que roda
+   `collect_manifest` (`pg_export_snapshot()`) e repassar para `pg_dump` via
+   `--snapshot`; se a versão do Postgres/`pg_dump` não suportar, documentar no runbook a
+   alternativa de janela explícita sem escritores em vez de manter a divergência
+   silenciosa atual.
+5. Gravar `dump_sha256(target)` e `MANIFEST_FORMAT_VERSION` no manifesto
+   (`scripts/backup.py:104-109`).
+6. Corrigir `scripts/restore_check.py:151`: substituir
+   `problems = compare(manifest, restored) if manifest else []` pela chamada a
+   `strict_gate`, que sempre reporta manifesto ausente/incompatível/hash divergente como
+   problema — nunca devolve "passed" sem ter verificado nada. Manter um modo explícito
+   `--readability-only` que declara no output que **não** verificou dados, em vez de
+   imprimir "restore check passed".
+7. Adicionar a checagem de `pgvector` (`has_extension`) ao `smoke_queries`/relatório do
+   `restore_check.py`, com o resultado exposto mesmo quando a extensão não é esperada
+   (dado ainda não usa vetores).
+8. Atualizar `docs/30-runbook.md` seção 5 com periodicidade, local de cópia separado,
+   idade máxima tolerada e RTO medido; marcar 24h/30min como metas a confirmar (não como
+   medição real), conforme o card pede.
+9. Confirmar amostras de conteúdo/relacionamentos além da contagem (por exemplo, uma
+   `MatchAnalysisModel` específica com seus `MatchAssessmentModel`/`SourceOccurrence`
+   relacionados) no teste de integração — contagem sozinha é insuficiente pelo critério
+   de aceite 3.
+10. Rodar o comando de verificação e confirmar os quatro critérios de aceite.
+
+## Testes a escrever
+
+- `tests/backend/platform/test_backup_manifest.py::test_manifest_includes_ai_tables_when_present` — inclui `ai_quota_usage`/`ai_call_record`/`field_suggestions` quando as tabelas existem.
+- `tests/backend/platform/test_backup_manifest.py::test_manifest_never_contains_groq_api_key` — nenhuma string do manifesto bate com `FORBIDDEN_MANIFEST_STRINGS` nem com o valor real de `GROQ_API_KEY` do ambiente de teste.
+- `tests/backend/test_backup_restore_integration.py::test_concurrent_writer_does_not_cause_artificial_count_divergence` — critério de aceite 1.
+- `tests/backend/test_backup_restore_integration.py::test_missing_or_corrupt_manifest_fails_strict_gate` — cobre o bug de `restore_check.py:151`; critério de aceite 2.
+- `tests/backend/test_backup_restore_integration.py::test_restore_checks_relationships_not_only_counts` — restaura e confere uma cadeia relacional específica, não só contagens; critério de aceite 3.
+- `tests/backend/test_backup_restore_integration.py::test_restore_reports_pgvector_availability` — extensão `vector` presente/ausente aparece explicitamente no relatório.
+
 ## Não fazer
 
 - Não alterar elegibilidade, score, veredito nem fatores do matching.
@@ -65,7 +213,7 @@ Backup durante coleta ativa restaura o mesmo estado descrito no manifesto e pres
 ## Comando de verificação
 
 ```bash
-docker compose -p f20-41 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend
+docker compose -p f20-41 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend/platform/test_backup_manifest.py tests/backend/test_backup_restore_integration.py
 docker compose -p f20-41 -f compose.yaml -f compose.dev.yaml run --rm api ruff check .
 docker compose -p f20-41 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```

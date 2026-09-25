@@ -80,6 +80,113 @@ negativo não significa empresa sem vagas; guardar motivo e próxima pesquisa.
 - `migrations/versions/*_discovery_attempt.py`
 - `tests/backend/companies/`
 
+## Arquivos
+
+| Ação | Caminho | O quê |
+| --- | --- | --- |
+| Criar | `src/opportunity_radar/companies/discovery.py` | Assinaturas por ATS no HTML, elegibilidade (empresa com `CompanySource` `source_type="careers"`/`verification_status="careers_confirmed"` e sem ATS — mesmo padrão usado por `scripts/import_research_catalog.py:263,325-326,385`), respeito a `robots.txt`, e o registro do resultado. |
+| Alterar | `src/opportunity_radar/companies/models.py` | `CompanySource` (linha 79-125) e `CompanySourceRevision` (linha 128-156) já guardam evidência e histórico; adicionar `DiscoveryAttemptModel` (`company_radar.discovery_attempt`) no mesmo arquivo. |
+| Criar | `migrations/versions/20260926_0033_discovery_attempt.py` | Cria `company_radar.discovery_attempt`. Número indicativo: latest hoje é `20260925_0029`; F20-12/19/23 reservam 0030-0032 — usar 0033 ou o que `alembic heads` indicar. |
+| Criar | `scripts/discover_ats.py` | Script chamado por `make discover-ats`, no formato de `scripts/discover_sources.py` (lê `DATABASE_URL`, abre uma `Session`, imprime um relatório JSON). |
+| Alterar | `Makefile` | Hoje sem alvo `discover-ats`; adicionar um alvo no formato de `discover-sources`/`enable-sources` (linhas 56-61), rodando dentro do container via `docker compose run`. |
+| Alterar | `docs/pesquisas/` | Novo relatório `docs/pesquisas/descoberta-ats-<data>.md` com a contagem por tipo de ATS (entregável do card, não CI). |
+
+Este card **não** toca `src/opportunity_radar/companies/registration.py`: `add_source`/`_source_values` (linhas 224-258, 362-399) só aceita os ATS já suportados (`SUPPORTED_ATS = ("ashby", "lever", "greenhouse")`, linha 48) e exige uma chave validada por collector existente. Um ATS descoberto sem collector (Workday, Teamtailor, Workable, Factorial, Gupy) ainda não tem validador, então `discovery.py` grava o `CompanySource` diretamente — como o importador já faz em `import_research_catalog.py` — sem passar por `_source_values`.
+
+## Interfaces
+
+```python
+# src/opportunity_radar/companies/discovery.py
+ATS_SIGNATURES: dict[str, tuple[str, ...]] = {
+    "ashby": ("jobs.ashbyhq.com",),
+    "greenhouse": ("boards.greenhouse.io", "job-boards.greenhouse.io"),
+    "lever": ("jobs.lever.co",),
+    "gupy": (".gupy.io",),
+    "teamtailor": (".teamtailor.com",),
+    "workable": ("apply.workable.com",),
+    "workday": (".myworkdayjobs.com",),
+    "factorial": (".factorialhr.com",),
+}
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoveryOutcome:
+    company_id: UUID
+    checked_url: str
+    final_url: str
+    http_status: int | None
+    ats_found: str | None
+    evidence_snippet: str | None
+
+
+def eligible_companies(session: Session) -> list[Company]:
+    """Empresas com página de carreiras confirmada e nenhum ATS conhecido, que não
+    foram verificadas dentro do intervalo configurado (padrão 30 dias)."""
+
+
+def detect_ats(html: str) -> str | None:
+    """Casa `ATS_SIGNATURES` contra links, `iframe src` e `script src`."""
+
+
+async def discover_one(
+    company: Company,
+    *,
+    client: httpx.AsyncClient,
+    robots_checker: Callable[[str], bool],
+    user_agent: str,
+) -> DiscoveryOutcome:
+    """Uma requisição GET; nunca segue links para dentro do site."""
+
+
+def record_discovery_attempt(
+    session: Session, outcome: DiscoveryOutcome
+) -> DiscoveryAttemptModel: ...
+
+
+def record_ats_identified(
+    session: Session, outcome: DiscoveryOutcome
+) -> CompanySource:
+    """CompanySource com verification_method='discovery',
+    verification_status='ats_identified', endpoint=final_url, evidence_note=snippet."""
+
+
+# src/opportunity_radar/companies/models.py
+class DiscoveryAttemptModel(Base):
+    __tablename__ = "discovery_attempt"
+    __table_args__ = ({"schema": SCHEMA},)  # SCHEMA = "company_radar"
+
+    id: Mapped[uuid.UUID]
+    company_id: Mapped[uuid.UUID]  # FK company.id
+    checked_url: Mapped[str]
+    http_status: Mapped[int | None]
+    ats_found: Mapped[str | None]
+    attempted_at: Mapped[datetime]
+```
+
+## Passos
+
+1. Escrever os testes de `detect_ats` com HTML fixo de cada assinatura e páginas sem ATS, antes do código.
+2. Criar a migração `migrations/versions/20260926_0033_discovery_attempt.py` com `company_radar.discovery_attempt` (empresa, URL, status HTTP, ATS encontrado, data).
+3. Adicionar `DiscoveryAttemptModel` a `src/opportunity_radar/companies/models.py`.
+4. Criar `src/opportunity_radar/companies/discovery.py`: `ATS_SIGNATURES`, `detect_ats` (busca em links, `iframe src`, `script src`), `eligible_companies` (join `CompanySource` `source_type="careers"` + `verification_status="careers_confirmed"` sem nenhum `CompanySource` de ATS, e sem tentativa dentro dos últimos 30 dias em `discovery_attempt`).
+5. Implementar `discover_one` com `urllib.robotparser` (uma checagem de `robots.txt` por host, cacheada na execução), `User-Agent` identificando o radar, uma requisição por segundo no total (mesmo espírito do `minimum_interval_seconds` de `CollectionNetworkPolicy`, `acquisition/domain.py:146`), timeout curto e `follow_redirects=True` registrando a URL final.
+6. Implementar `record_discovery_attempt` (sempre grava) e `record_ats_identified` (só quando `ats_found` não é `None`), este último criando `CompanySource` diretamente (sem passar por `registration.add_source`/`_source_values`, que exigem um ATS já suportado).
+7. Criar `scripts/discover_ats.py` no formato de `scripts/discover_sources.py`: abre sessão a partir de `DATABASE_URL`, chama `eligible_companies`, roda `discover_one` para cada uma, imprime o relatório JSON por tipo de ATS.
+8. Adicionar o alvo `discover-ats` ao `Makefile`, no formato de `discover-sources`/`enable-sources` (linhas 56-61), desligado por padrão (sem agendamento automático).
+9. Escrever o teste de respeito a `robots.txt` com servidor falso (nega e permite) e o teste do intervalo entre tentativas (30 dias).
+10. Rodar a execução real sobre o catálogo (fora do CI) e escrever `docs/pesquisas/descoberta-ats-<data>.md` com a contagem por tipo de ATS — é o insumo que ordena F20-28 a F20-32.
+
+## Testes a escrever
+
+- `tests/backend/companies/test_discovery.py::test_detect_ats_matches_each_signature`
+- `tests/backend/companies/test_discovery.py::test_detect_ats_returns_none_without_signature`
+- `tests/backend/companies/test_discovery.py::test_eligible_companies_excludes_known_ats`
+- `tests/backend/companies/test_discovery.py::test_eligible_companies_excludes_recent_attempt`
+- `tests/backend/companies/test_discovery.py::test_discover_one_respects_robots_txt`
+- `tests/backend/companies/test_discovery.py::test_discover_one_records_final_url_on_redirect`
+- `tests/backend/companies/test_discovery.py::test_record_ats_identified_creates_company_source_with_discovery_method`
+- `tests/backend/companies/test_discovery.py::test_attempt_not_repeated_before_interval`
+
 ## Não fazer
 
 - Não alterar elegibilidade, score, veredito nem fatores do matching.
@@ -99,7 +206,7 @@ negativo não significa empresa sem vagas; guardar motivo e próxima pesquisa.
 ## Comando de verificação
 
 ```bash
-docker compose -p f20-27 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend
+docker compose -p f20-27 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend/companies/test_discovery.py
 docker compose -p f20-27 -f compose.yaml -f compose.dev.yaml run --rm api ruff check .
 docker compose -p f20-27 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```

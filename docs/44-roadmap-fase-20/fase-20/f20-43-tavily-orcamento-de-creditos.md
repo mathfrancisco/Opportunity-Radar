@@ -75,6 +75,121 @@ poucas rodadas sem ninguém perceber até a fonte parar de funcionar por outro m
 - `src/opportunity_radar/acquisition/tavily.py`
 - `tests/acquisition/test_tavily_budget.py` (novo)
 
+## Arquivos
+
+| Ação | Caminho | O quê |
+| --- | --- | --- |
+| Alterar | `src/opportunity_radar/platform/config.py` | `tavily_credit_budget_per_run: int` com padrão conservador |
+| Alterar | `src/opportunity_radar/acquisition/domain.py` | `SourceRun.credits_spent` + `record_credits()`; `AcquisitionErrorCode.CREDIT_BUDGET_EXCEEDED` novo (distinto de `SOURCE_QUOTA_EXHAUSTED`/433, que é limite do provedor, não teto do radar) |
+| Alterar | `src/opportunity_radar/acquisition/models.py` | `SourceRunModel.credits_spent` (coluna nova, `class SourceRunModel` em `models.py:91`) |
+| Criar | `migrations/versions/20260926_0050_source_run_credits.py` | `down_revision = "20260925_0029"` (head atual, confirmado — nenhum outro arquivo referencia `20260925_0029` como `down_revision`); numeração 0050+ é indicativa, não definitiva |
+| Alterar | `src/opportunity_radar/acquisition/service.py` | `_copy_run` (`service.py:917`) grava `model.credits_spent = run.credits_spent`; ponto de decisão do teto na execução da Tavily |
+| Alterar | `src/opportunity_radar/acquisition/tavily.py` | acumulador de créditos por execução usando o `TavilyClient` do F20-42 |
+| Criar | `tests/backend/acquisition/test_tavily_budget.py` | testes deste card (não `tests/acquisition/`, ver nota do F20-42) |
+
+## Interfaces
+
+```python
+# platform/config.py
+# 1000 créditos/mês no plano gratuito (SPEC 41 §3.3); teto conservador por execução para
+# sobrar margem para várias execuções antes do fim do ciclo de faturamento.
+tavily_credit_budget_per_run: int = 100
+
+# acquisition/domain.py — StrEnum AcquisitionErrorCode: acrescentar
+CREDIT_BUDGET_EXCEEDED = "CREDIT_BUDGET_EXCEEDED"
+# distinto de SOURCE_QUOTA_EXHAUSTED (F20-42, 433 = limite mensal do provedor
+# esgotado) e de SOURCE_RATE_LIMITED (429 = throttling passageiro); aqui a causa é o
+# teto por execução que o próprio radar configurou.
+
+# acquisition/domain.py — SourceRun (dataclass, domain.py:~257)
+@dataclass(slots=True)
+class SourceRun:
+    ...
+    credits_spent: int = 0
+
+    def record_credits(self, amount: int) -> None:
+        self._require_running()
+        if amount < 0:
+            raise ValueError("credits cannot be negative")
+        self.credits_spent += amount
+
+# acquisition/tavily.py — acumulador usado pelo collector do F20-44 antes de cada chamada
+class TavilyBudgetGuard:
+    def __init__(self, *, budget: int) -> None: ...
+    @property
+    def spent(self) -> int: ...
+    def would_exceed(self, run: SourceRun) -> bool:
+        return run.credits_spent >= self._budget
+    def record(self, run: SourceRun, response_usage: TavilyUsage | None) -> None:
+        if response_usage is not None and response_usage.credits is not None:
+            run.record_credits(response_usage.credits)
+```
+
+## Exemplos
+
+O acumulador lê o mesmo bloco `usage` que o F20-42 já parseia
+(`TavilyUsage`, SPEC 41 §3.3):
+
+```json
+{
+  "...": "corpo de /search ou /extract, ver F20-42 seção Exemplos",
+  "usage": {"...": "a confirmar — nome exato da chave de créditos; ver F20-42"}
+}
+```
+
+Fluxo de teto atingido (pseudocódigo do que o `SourceRun` registra ao final):
+
+```python
+run.record_credits(cost_of_last_call)  # soma o custo desta chamada
+if guard.would_exceed(run):
+    run.finish(
+        SourceRunStatus.PARTIAL,
+        error=AcquisitionError(
+            AcquisitionErrorCode.CREDIT_BUDGET_EXCEEDED,
+            f"tavily_credit_budget_per_run atingido: {run.credits_spent} créditos gastos",
+        ),
+    )
+```
+
+## Passos
+
+1. Escrever `tests/backend/acquisition/test_tavily_budget.py` para cada critério de
+   aceite (ver "Testes a escrever") — falham até o acumulador existir.
+2. Adicionar `tavily_credit_budget_per_run` em `Settings`.
+3. Adicionar `SourceRun.credits_spent` e `record_credits()` em `domain.py`.
+4. Adicionar `AcquisitionErrorCode.CREDIT_BUDGET_EXCEEDED` em `domain.py`; registrar no
+   PR por que não reutiliza `SOURCE_QUOTA_EXHAUSTED` (causas diferentes: provedor vs.
+   teto do radar).
+5. Criar a migração `20260926_0050_source_run_credits.py` (`op.add_column` em
+   `acquisition.source_run`, `credits_spent integer not null default 0`, mais um
+   `CheckConstraint` próprio — não reaproveitar `ck_source_run_counters`, que é de
+   contadores de HTTP).
+6. Adicionar `credits_spent` em `SourceRunModel` (`models.py:91`), com o mesmo padrão
+   de `items_announced`/`complete` já existentes na classe.
+7. Atualizar `_copy_run` (`service.py:917`) para copiar `run.credits_spent`.
+8. Implementar `TavilyBudgetGuard` (ou lógica equivalente) em `tavily.py`, chamado pelo
+   `TavilySearchCollector` do F20-44 antes de cada nova chamada a `/search`/`/extract`.
+9. Ao ultrapassar o teto, parar de iniciar chamadas novas e terminar a execução como
+   `PARTIAL` com `CREDIT_BUDGET_EXCEEDED` (nunca `FAILED`).
+10. Escrever os testes de integração de soma de custo e teto até verdes.
+11. `ruff check .` e `mypy`.
+
+## Testes a escrever
+
+`tests/backend/acquisition/test_tavily_budget.py`:
+
+- `test_run_stays_below_budget_finishes_succeeded` — cobre a execução que não atinge o
+  teto e termina `SUCCEEDED` normalmente (ver "Verificação").
+- `test_accumulated_cost_stops_new_calls_at_budget` — cobre "nenhuma chamada nova
+  começa depois de ultrapassado".
+- `test_budget_exceeded_finishes_partial_never_failed` — cobre "Execução que atinge o
+  teto termina `PARTIAL`, nunca `FAILED`".
+- `test_credits_spent_is_auditable_on_source_run` — cobre "gasto acumulado ... fica
+  auditável no `SourceRun`" (lê `SourceRunModel.credits_spent` após persistir).
+- `test_budget_exceeded_error_code_differs_from_rate_limit_and_network_error` — cobre
+  "Teto atingido é distinguível de 429 e de erro de rede".
+- `test_record_credits_rejects_negative_amount` — cobre a validação de `record_credits`.
+
 ## Não fazer
 
 - Não alterar elegibilidade, score, veredito nem fatores do matching.
@@ -94,7 +209,7 @@ poucas rodadas sem ninguém perceber até a fonte parar de funcionar por outro m
 ## Comando de verificação
 
 ```bash
-docker compose -p f20-43 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend
+docker compose -p f20-43 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend/acquisition/test_tavily_budget.py
 docker compose -p f20-43 -f compose.yaml -f compose.dev.yaml run --rm api ruff check .
 docker compose -p f20-43 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```

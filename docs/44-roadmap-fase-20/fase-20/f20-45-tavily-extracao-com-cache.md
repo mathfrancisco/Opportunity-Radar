@@ -75,6 +75,126 @@ realmente ficaram sem corpo depois da normalização.
 - `src/opportunity_radar/acquisition/models.py` (tabela/coluna de cache, se persistida)
 - `tests/acquisition/test_tavily_extract_cache.py` (novo)
 
+## Arquivos
+
+| Ação | Caminho | O quê |
+| --- | --- | --- |
+| Alterar | `src/opportunity_radar/acquisition/tavily.py` | `TavilyExtractionCache`, rotina de extração em lote |
+| Alterar | `src/opportunity_radar/acquisition/models.py` | `TavilyExtractCacheModel` (tabela nova) |
+| Criar | `migrations/versions/20260926_0051_tavily_extract_cache.py` | `down_revision = "20260926_0050"` (a migração do F20-43); numeração 0050+ é indicativa |
+| Criar | `tests/backend/acquisition/test_tavily_extract_cache.py` | testes deste card (não `tests/acquisition/`, ver nota do F20-42) |
+
+## Interfaces
+
+```python
+# acquisition/models.py — tabela nova, schema "acquisition" como as demais deste módulo
+class TavilyExtractCacheModel(Base):
+    __tablename__ = "tavily_extract_cache"
+    __table_args__ = ({"schema": "acquisition"},)
+
+    # hash sha256 de canonicalize_url(url) (F20-44) — mesma normalização do dedupe,
+    # para que a mesma URL nunca caia em duas entradas por diferença de query/caixa.
+    url_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    canonical_url: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_content: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)  # "success"|"failed"
+    error: Mapped[str | None] = mapped_column(Text)
+    extracted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+# acquisition/tavily.py
+@dataclass(frozen=True, slots=True)
+class ExtractionResult:
+    url: str
+    raw_content: str | None
+    error: str | None          # AcquisitionErrorCode.value quando a URL falhou no lote
+    from_cache: bool
+
+class TavilyExtractionCache:
+    def __init__(self, *, session: Session, ttl_seconds: int) -> None: ...
+    def get(self, url: str) -> ExtractionResult | None: ...  # None = miss ou expirado
+    def put(self, url: str, result: ExtractionResult) -> None: ...
+
+async def extract_missing_descriptions(
+    client: TavilyClient,
+    cache: TavilyExtractionCache,
+    urls: Sequence[str],
+    *,
+    extract_depth: str,
+    format: str,
+    budget_guard: TavilyBudgetGuard,  # F20-43
+    run: SourceRun,
+) -> list[ExtractionResult]:
+    """Particiona `urls` em lotes de até 20 (limite da API, não escolha do radar),
+    consulta o cache antes de cada lote e só chama /extract para os misses."""
+    ...
+```
+
+## Exemplos
+
+Resposta de `/extract` com sucesso parcial (ver F20-42 seção Exemplos para o corpo
+completo; aqui o caso com uma URL em `failed_results`):
+
+```json
+{
+  "results": [
+    {"url": "https://boards.greenhouse.io/acme/jobs/12345", "raw_content": "# Backend Engineer\n..."}
+  ],
+  "failed_results": [
+    {"url": "https://boards.greenhouse.io/acme/jobs/99999", "error": "could not extract content"}
+  ],
+  "usage": {"...": "a confirmar — ver F20-42"}
+}
+```
+
+O item com falha isolada não derruba os demais 19 do lote: vira
+`ExtractionResult(url=..., raw_content=None, error="could not extract content", from_cache=False)`,
+mapeado para `AcquisitionErrorCode.INVALID_ITEM` (ou `PARSER_SCHEMA_CHANGED`, conforme a
+causa) na telemetria da execução, sem interromper o lote.
+
+## Passos
+
+1. Escrever `tests/backend/acquisition/test_tavily_extract_cache.py` para cada
+   critério de aceite (ver "Testes a escrever") — falham até a rotina existir.
+2. Criar a migração `20260926_0051_tavily_extract_cache.py` para a tabela
+   `acquisition.tavily_extract_cache`.
+3. Adicionar `TavilyExtractCacheModel` em `models.py`.
+4. Implementar `TavilyExtractionCache.get`/`put` usando `canonicalize_url()` do F20-44
+   para o hash — não duplicar a normalização.
+5. Implementar o particionamento em lotes de até 20 URLs em
+   `extract_missing_descriptions()`.
+6. Para cada lote: separar hits (retornam do cache sem chamada) de misses; chamar
+   `TavilyClient.extract()` do F20-42 só para os misses.
+7. Gravar cada resultado do lote (sucesso ou falha) no cache antes de devolver,
+   inclusive falhas — uma URL que falhou não deve ser tentada de novo dentro da
+   validade do cache se a política decidir cachear falha (registrar a escolha no PR;
+   caso contrário, falha não entra no cache e a próxima execução tenta de novo).
+8. Somar o custo da chamada ao acumulador do `SourceRun` via o `TavilyBudgetGuard` do
+   F20-43 (1 crédito a cada 5 URLs bem-sucedidas em `basic`, conforme SPEC 41 §3.2).
+9. Tratar cache expirado como miss (comparar `expires_at` com o relógio atual antes de
+   usar a entrada).
+10. Substituir a descrição provisória do `CollectedItem` (F20-44) pelo `raw_content`
+    extraído quando presente.
+11. Rodar os testes até verdes; `ruff check .`; `mypy`.
+
+## Testes a escrever
+
+`tests/backend/acquisition/test_tavily_extract_cache.py`:
+
+- `test_url_extracted_once_stays_cached_within_ttl` — cobre "Uma URL nunca gera duas
+  chamadas de extração bem-sucedidas dentro da validade do cache".
+- `test_expired_cache_entry_is_treated_as_miss_and_recorded_again` — cobre "Cache
+  expirado é tratado como miss, com nova chamada e novo registro".
+- `test_batch_over_twenty_urls_is_partitioned` — cobre o particionamento em lotes.
+- `test_isolated_failure_in_batch_preserves_other_nineteen_results` — cobre "Lote de
+  20 URLs com uma falha isolada preserva o resultado das demais 19".
+- `test_extraction_credits_feed_the_shared_run_accumulator` — cobre "Créditos gastos
+  na extração aparecem no acumulador do F20-43".
+- `test_extracted_markdown_replaces_provisional_description` — cobre "Markdown
+  extraído substitui a descrição provisória quando presente".
+
 ## Não fazer
 
 - Não alterar elegibilidade, score, veredito nem fatores do matching.
@@ -94,7 +214,7 @@ realmente ficaram sem corpo depois da normalização.
 ## Comando de verificação
 
 ```bash
-docker compose -p f20-45 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend
+docker compose -p f20-45 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend/acquisition/test_tavily_extract_cache.py
 docker compose -p f20-45 -f compose.yaml -f compose.dev.yaml run --rm api ruff check .
 docker compose -p f20-45 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```
