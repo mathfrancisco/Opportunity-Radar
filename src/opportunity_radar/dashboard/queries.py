@@ -34,6 +34,7 @@ from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmen
 from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
+    OpportunityCompensationModel,
     OpportunityModel,
     RelevanceMarkModel,
     SourceOccurrenceModel,
@@ -122,6 +123,19 @@ class InboxQuery:
     #: `role-family-v1` codes. Empty means every area — never a filter that hides rows.
     role_families: tuple[str, ...] = ()
     profile_version_id: UUID | None = None
+    #: Empty means every seniority — an unknown/blank value is never an implicit
+    #: exclusion (SPEC 37, "Contrato de consulta").
+    seniorities: tuple[str, ...] = ()
+    #: Compensation range, compared as-is against `OpportunityCompensationModel`
+    #: amounts. No currency conversion: mixing currencies in one query compares raw
+    #: numbers, a known limitation until a conversion service exists for filtering
+    #: (`matching.currency` only converts for scoring today).
+    salary_min: Decimal | None = None
+    salary_max: Decimal | None = None
+    #: `SourceDefinitionModel` ids. Matches on the opportunity's occurrences (`EXISTS`),
+    #: never a join — an opportunity with several matching sources still appears once
+    #: (SPEC 37, "Contrato de consulta": "fonte filtra ocorrências, não duplica").
+    source_definition_ids: tuple[UUID, ...] = ()
     order: InboxOrder = InboxOrder.PRIORITY
     offset: int = 0
     limit: int = 50
@@ -416,6 +430,38 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
         filters.append(OpportunityModel.role_family.in_(query.role_families))
     if query.published_after is not None:
         filters.append(OpportunityModel.published_at >= query.published_after)
+    if query.seniorities:
+        filters.append(OpportunityModel.seniority.in_(query.seniorities))
+    if query.salary_min is not None or query.salary_max is not None:
+        compensation_conditions = [
+            OpportunityCompensationModel.opportunity_id == OpportunityModel.id
+        ]
+        if query.salary_min is not None:
+            compensation_conditions.append(
+                OpportunityCompensationModel.amount_max.is_(None)
+                | (OpportunityCompensationModel.amount_max >= query.salary_min)
+            )
+        if query.salary_max is not None:
+            compensation_conditions.append(
+                OpportunityCompensationModel.amount_min.is_(None)
+                | (OpportunityCompensationModel.amount_min <= query.salary_max)
+            )
+        filters.append(
+            select(OpportunityCompensationModel.id)
+            .where(*compensation_conditions)
+            .exists()
+        )
+    if query.source_definition_ids:
+        filters.append(
+            select(SourceOccurrenceModel.id)
+            .where(
+                SourceOccurrenceModel.opportunity_id == OpportunityModel.id,
+                SourceOccurrenceModel.source_definition_id.in_(
+                    query.source_definition_ids
+                ),
+            )
+            .exists()
+        )
     term = query.search.strip() if query.search else ""
     if term:
         filters.append(OpportunityModel.search_document.op("@@")(_search_tsquery(term)))

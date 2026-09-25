@@ -37,7 +37,7 @@ from opportunity_radar.dashboard.queries import (
     summarize_overview,
 )
 from opportunity_radar.matching.service import MatchingService
-from opportunity_radar.opportunities.domain import OpportunityStatus, WorkMode
+from opportunity_radar.opportunities.domain import OpportunityStatus, Seniority, WorkMode
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.presentation.http.dependencies import get_session
 from opportunity_radar.profile.domain import ProfileNotFoundError
@@ -292,6 +292,10 @@ def list_inbox(
     search: str | None = None,
     role_family: list[str] | None = Query(default=None),
     all_areas: bool = False,
+    seniority: list[Seniority] | None = Query(default=None),
+    salary_min: Decimal | None = Query(default=None, ge=0),
+    salary_max: Decimal | None = Query(default=None, ge=0),
+    source_definition_id: list[UUID] | None = Query(default=None),
     profile_version_id: UUID | None = None,
     order: InboxOrder = InboxOrder.PRIORITY,
     offset: int = Query(default=0, ge=0),
@@ -317,6 +321,10 @@ def list_inbox(
             only_assessed=only_assessed,
             applied=applied,
             search=search,
+            seniorities=tuple(item.value for item in seniority or ()),
+            salary_min=salary_min,
+            salary_max=salary_max,
+            source_definition_ids=tuple(source_definition_id or ()),
             role_families=role_families,
             profile_version_id=profile_version_id,
             order=order,

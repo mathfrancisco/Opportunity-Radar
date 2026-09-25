@@ -63,6 +63,10 @@ export interface InboxParams {
   roleFamilies?: string[]
   /** Bypass the profile default and show every area — the "ver todas" click. */
   allAreas?: boolean
+  seniorities?: string[]
+  salaryMin?: string
+  salaryMax?: string
+  sourceDefinitionIds?: string[]
 }
 
 export interface FailingSource {
@@ -268,6 +272,10 @@ export async function getInbox({
   order = 'priority',
   roleFamilies,
   allAreas,
+  seniorities,
+  salaryMin,
+  salaryMax,
+  sourceDefinitionIds,
 }: InboxParams): Promise<InboxPage> {
   const params = new URLSearchParams({
     offset: String((page - 1) * pageSize),
@@ -284,6 +292,10 @@ export async function getInbox({
   if (search?.trim()) params.set('search', search.trim())
   roleFamilies?.forEach((family) => params.append('role_family', family))
   if (allAreas) params.set('all_areas', 'true')
+  seniorities?.forEach((value) => params.append('seniority', value))
+  if (salaryMin) params.set('salary_min', salaryMin)
+  if (salaryMax) params.set('salary_max', salaryMax)
+  sourceDefinitionIds?.forEach((value) => params.append('source_definition_id', value))
 
   const response = await fetch(apiUrl(`/inbox?${params.toString()}`), {
     headers: { Accept: 'application/json' },

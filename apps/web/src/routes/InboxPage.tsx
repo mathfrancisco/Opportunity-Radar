@@ -26,6 +26,17 @@ const orderLabels: Record<InboxOrder, string> = {
 
 const workModes = ['REMOTE', 'HYBRID', 'ONSITE', 'UNKNOWN']
 const lifecycleStatuses = ['DISCOVERED', 'ACTIVE', 'STALE', 'CLOSED']
+const seniorities = [
+  'INTERN',
+  'JUNIOR',
+  'MID',
+  'SENIOR',
+  'STAFF',
+  'LEAD',
+  'MANAGER',
+  'DIRECTOR',
+  'UNKNOWN',
+]
 
 function display(value: string | null) {
   return value === null || value === '' ? '—' : value
@@ -179,6 +190,10 @@ export function InboxPage() {
   const [searchInput, setSearchInput] = useState(search)
   const allAreas = params.get('all_areas') === 'true'
   const areaFilter = params.getAll('area')
+  const seniority = params.get('seniority') ?? ''
+  const salaryMin = params.get('salary_min') ?? ''
+  const salaryMax = params.get('salary_max') ?? ''
+  const source = params.get('source') ?? ''
 
   const inbox = useInbox({
     page,
@@ -194,6 +209,10 @@ export function InboxPage() {
     order,
     roleFamilies: allAreas || areaFilter.length === 0 ? undefined : areaFilter,
     allAreas,
+    seniorities: seniority ? [seniority] : undefined,
+    salaryMin: salaryMin || undefined,
+    salaryMax: salaryMax || undefined,
+    sourceDefinitionIds: source ? [source] : undefined,
   })
   const totalPages = inbox.data ? Math.max(1, Math.ceil(inbox.data.total / pageSize)) : 0
 
@@ -303,6 +322,51 @@ export function InboxPage() {
             onChange={(event) => update({ minimum_score: event.target.value })}
             type="number"
             value={minimumScore}
+          />
+        </Field>
+
+        <Field label="Senioridade">
+          <select
+            className={controlClassName}
+            onChange={(event) => update({ seniority: event.target.value })}
+            value={seniority}
+          >
+            <option value="">Todas</option>
+            {seniorities.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Remuneração mínima">
+          <input
+            className={controlClassName}
+            min={0}
+            onChange={(event) => update({ salary_min: event.target.value })}
+            type="number"
+            value={salaryMin}
+          />
+        </Field>
+
+        <Field label="Remuneração máxima">
+          <input
+            className={controlClassName}
+            min={0}
+            onChange={(event) => update({ salary_max: event.target.value })}
+            type="number"
+            value={salaryMax}
+          />
+        </Field>
+
+        <Field label="Fonte (id)">
+          <input
+            className={controlClassName}
+            onChange={(event) => update({ source: event.target.value })}
+            placeholder="uuid da fonte"
+            type="text"
+            value={source}
           />
         </Field>
 
