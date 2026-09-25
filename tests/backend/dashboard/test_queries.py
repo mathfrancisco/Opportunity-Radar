@@ -12,12 +12,13 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import SourceDefinitionModel, SourceRunModel
-from opportunity_radar.companies.models import Company
+from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.dashboard.queries import (
     InboxOrder,
     InboxQuery,
     list_opportunity_inbox,
     list_source_health,
+    search_metrics,
     source_coverage_report,
     summarize_overview,
 )
@@ -90,6 +91,7 @@ def _opportunity(
     published_at: datetime | None,
     lifecycle_status: str = "ACTIVE",
     work_mode: str = "REMOTE",
+    seniority: str = "SENIOR",
 ) -> OpportunityModel:
     opportunity = OpportunityModel(
         fingerprint=uuid4().hex,
@@ -99,7 +101,7 @@ def _opportunity(
         canonical_company_id=company.id,
         company_name=company.canonical_name,
         work_mode=work_mode,
-        seniority="SENIOR",
+        seniority=seniority,
         contract_type="FULL_TIME",
         lifecycle_status=lifecycle_status,
         published_at=published_at,
@@ -529,3 +531,74 @@ def test_overview_counts_reflect_the_catalogue_and_flag_the_missing_pipeline() -
         assert summary.sources_failing == len(summary.failing_sources)
         assert summary.applications_active == sum(summary.applications_by_stage.values())
         assert summary.follow_ups_due <= summary.applications_active
+
+
+def test_search_metrics_reports_coverage_numeric_fields() -> None:
+    """Card F17-01: per-source run counters, company coverage, and seniority-unknown."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        marker = uuid4().hex[:8]
+        ats_company = Company(
+            canonical_name=f"ATS Co {marker}",
+            normalized_name=f"ats-co-{marker}",
+        )
+        plain_company = Company(
+            canonical_name=f"Plain Co {marker}",
+            normalized_name=f"plain-co-{marker}",
+        )
+        session.add_all([ats_company, plain_company])
+        session.flush()
+
+        ats_source = CompanySource(
+            company_id=ats_company.id,
+            source_type="greenhouse",
+            endpoint=f"https://boards.greenhouse.io/{marker}",
+        )
+        session.add(ats_source)
+        session.flush()
+
+        source_definition = SourceDefinitionModel(
+            source_type="greenhouse",
+            name=f"Coverage source {marker}",
+            enabled=True,
+            company_source_id=ats_source.id,
+        )
+        session.add(source_definition)
+        session.flush()
+
+        session.add(
+            SourceRunModel(
+                source_definition_id=source_definition.id,
+                status="SUCCEEDED",
+                started_at=NOW - timedelta(minutes=5),
+                finished_at=NOW - timedelta(minutes=4),
+                items_seen=10,
+                items_persisted=6,
+                items_skipped=3,
+                items_invalid=1,
+            )
+        )
+        _opportunity(
+            session, ats_company, title="Known Seniority", published_at=NOW,
+            seniority="SENIOR",
+        )
+        _opportunity(
+            session, plain_company, title="Unknown Seniority", published_at=NOW,
+            seniority="UNKNOWN",
+        )
+        session.commit()
+
+        report = search_metrics(session, window_days=7, now=NOW)
+
+        by_source = {item.source_definition_id: item for item in report.coverage.by_source}
+        assert by_source[source_definition.id].runs == 1
+        assert by_source[source_definition.id].items_seen == 10
+        assert by_source[source_definition.id].items_persisted == 6
+        assert by_source[source_definition.id].items_duplicate == 3
+        assert by_source[source_definition.id].items_invalid == 1
+        assert report.coverage.runs >= 1
+        assert report.coverage.items_seen >= 10
+        assert report.coverage.items_duplicate >= 3
+        assert report.coverage.companies_with_ats >= 1
+        assert report.coverage.seniority_unknown_rate is not None
+        assert report.coverage.seniority_unknown_rate > 0

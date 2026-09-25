@@ -1,7 +1,7 @@
 """Add the append-only operator relevance mark.
 
-Revision ID: 20260925_0020
-Revises: 20260924_0019
+Revision ID: 20260925_0026
+Revises: 20260925_0025
 Create Date: 2026-09-25 12:00:00
 
 Card F17-01. The current mark for an opportunity is the most recent row; history is
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "20260925_0020"
-down_revision = "20260924_0019"
+revision = "20260925_0026"
+down_revision = "20260925_0025"
 branch_labels = None
 depends_on = None
 

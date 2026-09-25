@@ -7,6 +7,7 @@ on what gets queued and what gets persisted — never on the content of an analy
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -18,10 +19,13 @@ from sqlalchemy.orm import Session
 
 from opportunity_radar.matching.analysis import (
     AnalysisFailureCode,
+    AnalysisMetrics,
     AnalysisOutcome,
     AnalysisRequest,
     AnalysisStatus,
+    PreparedAnalysis,
     SemanticAnalysis,
+    analysis_key,
 )
 from opportunity_radar.matching.models import MatchAnalysisClaimModel, MatchAnalysisModel
 from opportunity_radar.matching.repository import (
@@ -67,8 +71,39 @@ class _StubAdapter:
     def prompt_version(self) -> str:
         return _PROMPT_VERSION
 
-    async def analyze(self, request: AnalysisRequest) -> AnalysisOutcome:
-        del request
+    @property
+    def requires(self) -> frozenset[str]:
+        return frozenset()
+
+    def prepare(self, request: AnalysisRequest) -> PreparedAnalysis:
+        payload_hash = hashlib.sha256(
+            f"{request.opportunity_id}:{request.profile_version_id}:"
+            f"{request.opportunity_content_version}".encode()
+        ).hexdigest()
+        return PreparedAnalysis(
+            cache_key=analysis_key(
+                request,
+                model_id=self.model,
+                prompt_version=self.prompt_version,
+                schema_version="stub-v1",
+                prompt_digest="stub",
+                payload_hash=payload_hash,
+                options={},
+            ),
+            payload_hash=payload_hash,
+            payload={},
+            inference={"model": self.model},
+            size=AnalysisMetrics(),
+        )
+
+    async def analyze(
+        self,
+        request: AnalysisRequest,
+        *,
+        prepared: PreparedAnalysis | None = None,
+        use_cache: bool = True,
+    ) -> AnalysisOutcome:
+        del request, prepared, use_cache
         self.calls += 1
         return self._outcome
 
