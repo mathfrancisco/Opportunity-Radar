@@ -26,6 +26,12 @@ class AcquisitionErrorCode(StrEnum):
     CIRCUIT_OPEN = "CIRCUIT_OPEN"
     UNKNOWN_EXTERNAL_ERROR = "UNKNOWN_EXTERNAL_ERROR"
     MANUAL_INPUT_INVALID = "MANUAL_INPUT_INVALID"
+    #: The provider says the calling account is correct and authenticated, but its credit
+    #: or usage budget is spent — either the provider's own limit (Tavily HTTP 433) or a
+    #: per-run ceiling the radar configured itself (F20-43). Distinct from
+    #: SOURCE_RATE_LIMITED (retry in seconds) and SOURCE_FORBIDDEN (a permission problem):
+    #: neither describes "correct key, no budget left" (docs/41-spec-tavily.md, section 4).
+    SOURCE_QUOTA_EXHAUSTED = "SOURCE_QUOTA_EXHAUSTED"
 
 
 class AcquisitionError(Exception):

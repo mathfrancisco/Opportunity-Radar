@@ -74,7 +74,7 @@ O status oficial passa a ser o desta fase.
 
 | Card | Depende de | Status |
 | --- | --- | --- |
-| [F20-42 — Cliente Tavily e configuração](fase-20/f20-42-tavily-cliente-e-configuracao.md) | Nenhum | Backlog |
+| [F20-42 — Cliente Tavily e configuração](fase-20/f20-42-tavily-cliente-e-configuracao.md) | Nenhum | Feito |
 | [F20-43 — Orçamento de créditos Tavily e telemetria](fase-20/f20-43-tavily-orcamento-de-creditos.md) | F20-42 | Backlog |
 | [F20-44 — Collector de descoberta web](fase-20/f20-44-tavily-collector-de-descoberta-web.md) | F20-42, F20-43 | Backlog |
 | [F20-45 — Extração de conteúdo com cache](fase-20/f20-45-tavily-extracao-com-cache.md) | F20-44 | Backlog |

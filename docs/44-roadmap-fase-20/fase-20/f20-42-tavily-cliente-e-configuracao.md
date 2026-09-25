@@ -1,6 +1,6 @@
 # CARD F20-42 — Cliente Tavily e configuração
 
-- **Status:** Backlog
+- **Status:** Feito
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** E — Tavily
 - **Depende de:** Nenhum
