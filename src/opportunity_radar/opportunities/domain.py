@@ -785,9 +785,17 @@ def infer_seniority(
         {
             Seniority.INTERN: (r"\bintern(ship)?\b", r"\best[aá]gi[oa]\b"),
             Seniority.JUNIOR: (r"\bjunior\b", r"\bjr\.?\b"),
-            Seniority.MID: (r"\bmid(?:[- ]level)?\b", r"\bmiddle\b", r"\bpleno\b"),
+            Seniority.MID: (
+                r"\bmid(?:[- ]level)?\b",
+                r"\bmiddle\b",
+                r"\bpleno\b",
+                r"\bpl\.?\b",
+            ),
             Seniority.SENIOR: (r"\bsenior\b", r"\bsr\.?\b"),
-            Seniority.STAFF: (r"\bstaff\b",),
+            # "especialista" and "principal" have no dedicated enum tier; both denote a
+            # deep individual-contributor level closest to STAFF, so they are folded
+            # into it rather than inventing a new Seniority member (card F17-06 scope).
+            Seniority.STAFF: (r"\bstaff\b", r"\bespecialista\b", r"\bprincipal\b"),
             Seniority.LEAD: (r"\blead\b", r"\bl[ií]der\b"),
             Seniority.MANAGER: (r"\bmanager\b", r"\bgerente\b"),
             Seniority.DIRECTOR: (r"\bdirector\b", r"\bdiretor\b"),
@@ -797,10 +805,16 @@ def infer_seniority(
     return Seniority(result)
 
 
-SENIORITY_MAPPING_VERSION = "seniority-v1"
+SENIORITY_MAPPING_VERSION = "seniority-v2"
 
 # Collector payloads are intentionally listed even when they have no approved level
 # field. Adding a field here is part of that collector's homologation, not a heuristic.
+#
+# seniority-v2 checked the real fixtures under tests/backend/acquisition/ for Ashby,
+# Greenhouse and Lever payloads: none of them carry a structured seniority/level field
+# (no key such as "level", "seniority", "experienceLevel" appears in any fixture), so
+# those three collectors remain unmapped (()). Adding an entry later requires the same
+# fixture evidence, per the mapping-version comment above.
 HOMOLOGATED_SENIORITY_FIELDS: dict[str, tuple[str, ...]] = {
     "ashby": (),
     "greenhouse": (),

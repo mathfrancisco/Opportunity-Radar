@@ -95,7 +95,7 @@ def test_seniority_classification_records_precedence_and_conflicts() -> None:
         "Senior Engineer", {"seniority": "Junior"}
     )
     unmapped_value, unmapped_reason = seniority_classification(
-        "Principal Engineer", {"seniority": "Principal"}
+        "Engineer", {"seniority": "Astronaut"}
     )
 
     assert title_value is Seniority.JUNIOR
@@ -107,6 +107,20 @@ def test_seniority_classification_records_precedence_and_conflicts() -> None:
     assert conflict_reason["source"] == "conflict"
     assert unmapped_value is Seniority.UNKNOWN
     assert unmapped_reason["source"] == "structured"
+
+
+def test_seniority_v2_covers_portuguese_titles_and_abbreviations() -> None:
+    from opportunity_radar.opportunities.domain import SENIORITY_MAPPING_VERSION
+
+    assert SENIORITY_MAPPING_VERSION == "seniority-v2"
+    assert infer_seniority("Engenheiro Especialista", None, {}) is Seniority.STAFF
+    assert infer_seniority("Principal Engineer", None, {}) is Seniority.STAFF
+    assert infer_seniority("Desenvolvedor Pl", None, {}) is Seniority.MID
+    assert infer_seniority("Desenvolvedor Pl.", None, {}) is Seniority.MID
+    assert infer_seniority("Dev Jr", None, {}) is Seniority.JUNIOR
+    assert infer_seniority("Dev Sr", None, {}) is Seniority.SENIOR
+    assert infer_seniority("Tech Lider", None, {}) is Seniority.LEAD
+    assert infer_seniority("Tech Líder", None, {}) is Seniority.LEAD
 
 
 def test_structured_seniority_conflict_keeps_candidate_unknown() -> None:
