@@ -66,7 +66,9 @@ jobs:
       RUN_DATABASE_INTEGRATION: "1"
     services:
       postgres:
-        image: postgres:17.2-alpine
+        # Always an empty database here, so the official pgvector image is safe to use; the
+        # compose job builds the project's alpine image with pgvector, as production does.
+        image: pgvector/pgvector:0.8.6-pg17
         env:
           POSTGRES_DB: opportunity_radar
           POSTGRES_USER: opportunity_radar

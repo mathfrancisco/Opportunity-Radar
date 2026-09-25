@@ -34,6 +34,18 @@ class Settings(BaseSettings):
     # Qwen3 thinks before answering by default. The analysis is a structured summary, not
     # a reasoning task, and the thinking tokens would cost seconds and context for nothing.
     ollama_think: bool = False
+    # Which versioned prompt runs (`prompts/opportunity_analysis/<name>`). The default moves
+    # only with an evaluation report that shows no criterion got worse (SPEC 36, section 8).
+    ollama_analysis_prompt: str = "v1"
+    # Embeddings of the postings (card F16-09). The dimension is tied to the column type
+    # `vector(1024)`: another size needs a migration and a full reindex.
+    ollama_embedding_enabled: bool = True
+    ollama_model_embedding: str = "qwen3-embedding:0.6b"
+    ollama_embedding_dimensions: int = 1024
+    ollama_embedding_timeout_seconds: float = 30.0
+    # The Inbox search mode. Full-text until the gate of card F16-10 shows another mode
+    # wins on the reference queries; a semantic mode always falls back to full-text.
+    inbox_search_mode: str = "fulltext"
     frontend_origin: str = "http://localhost:3000"
     collection_timezone: str = "UTC"
     worker_collect_enabled: bool = True
@@ -41,6 +53,9 @@ class Settings(BaseSettings):
     worker_match_enabled: bool = True
     worker_analyze_enabled: bool = True
     worker_retention_enabled: bool = True
+    worker_embed_enabled: bool = True
+    worker_embed_batch_size: int = 32
+    worker_embed_interval_seconds: int = 120
     worker_evaluate_batch_size: int = 50
     # The local model competes with the rest of the machine for the GPU, so a pass is
     # capped well below the evaluation batch: analysis falls behind on purpose, never the

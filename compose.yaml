@@ -17,6 +17,12 @@ x-app-environment: &app-environment
   OLLAMA_SEED: ${OLLAMA_SEED:-42}
   OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
   OLLAMA_THINK: ${OLLAMA_THINK:-false}
+  OLLAMA_ANALYSIS_PROMPT: ${OLLAMA_ANALYSIS_PROMPT:-v1}
+  OLLAMA_EMBEDDING_ENABLED: ${OLLAMA_EMBEDDING_ENABLED:-true}
+  OLLAMA_MODEL_EMBEDDING: ${OLLAMA_MODEL_EMBEDDING:-qwen3-embedding:0.6b}
+  OLLAMA_EMBEDDING_DIMENSIONS: ${OLLAMA_EMBEDDING_DIMENSIONS:-1024}
+  OLLAMA_EMBEDDING_TIMEOUT_SECONDS: ${OLLAMA_EMBEDDING_TIMEOUT_SECONDS:-30}
+  INBOX_SEARCH_MODE: ${INBOX_SEARCH_MODE:-fulltext}
   FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
   COLLECTION_TIMEZONE: ${COLLECTION_TIMEZONE:-America/Sao_Paulo}
   WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
@@ -28,6 +34,9 @@ x-app-environment: &app-environment
   WORKER_MATCH_ENABLED: ${WORKER_MATCH_ENABLED:-true}
   WORKER_ANALYZE_ENABLED: ${WORKER_ANALYZE_ENABLED:-true}
   WORKER_RETENTION_ENABLED: ${WORKER_RETENTION_ENABLED:-true}
+  WORKER_EMBED_ENABLED: ${WORKER_EMBED_ENABLED:-true}
+  WORKER_EMBED_BATCH_SIZE: ${WORKER_EMBED_BATCH_SIZE:-32}
+  WORKER_EMBED_INTERVAL_SECONDS: ${WORKER_EMBED_INTERVAL_SECONDS:-120}
   WORKER_EVALUATE_BATCH_SIZE: ${WORKER_EVALUATE_BATCH_SIZE:-50}
   WORKER_ANALYZE_BATCH_SIZE: ${WORKER_ANALYZE_BATCH_SIZE:-10}
   WORKER_ANALYZE_VERDICTS: ${WORKER_ANALYZE_VERDICTS:-HIGH_PRIORITY,RECOMMENDED,WATCHLIST,REVIEW_REQUIRED}
@@ -48,7 +57,11 @@ x-app-environment: &app-environment
 
 services:
   postgres:
-    image: postgres:17.2-alpine
+    # The same alpine base as before, with pgvector compiled on top (card F16-09). The
+    # official pgvector image is Debian: switching the base under an existing volume
+    # changes the text collation beneath built indexes and corrupts them silently.
+    build:
+      context: docker/postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-opportunity_radar}
       POSTGRES_USER: ${POSTGRES_USER:-opportunity_radar}
@@ -102,10 +115,11 @@ services:
   ollama-init:
     image: ollama/ollama:0.34.4@sha256:8262851b2846b87c649eddf3e76beb270c52f4d1bc94559f47efde16b0841551
     entrypoint: ["/bin/sh", "-c"]
-    command: ['ollama pull "$$OLLAMA_MODEL_ANALYSIS"']
+    command: ['ollama pull "$$OLLAMA_MODEL_ANALYSIS" && ollama pull "$$OLLAMA_MODEL_EMBEDDING"']
     environment:
       OLLAMA_HOST: http://ollama:11434
       OLLAMA_MODEL_ANALYSIS: ${OLLAMA_MODEL_ANALYSIS:-qwen3:8b-q4_K_M}
+      OLLAMA_MODEL_EMBEDDING: ${OLLAMA_MODEL_EMBEDDING:-qwen3-embedding:0.6b}
     depends_on:
       ollama:
         condition: service_healthy
