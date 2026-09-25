@@ -106,6 +106,10 @@ class SourceRunModel(Base):
             "AND rate_limit_events >= 0",
             name="ck_source_run_counters",
         ),
+        CheckConstraint(
+            "credits_used >= 0",
+            name="ck_source_run_credits_used",
+        ),
         Index("ix_source_run_source_started", "source_definition_id", "started_at"),
         Index(
             "uq_source_run_active",
@@ -141,6 +145,12 @@ class SourceRunModel(Base):
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rate_limit_events: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0
+    )
+    #: Provider credits spent by this run (e.g. Tavily's usage.credits). A different unit
+    #: from http_requests/retry_count, which count HTTP calls regardless of what a source
+    #: charges per call (F20-43).
+    credits_used: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
     )
     error_code: Mapped[str | None] = mapped_column(String(64))
     error_summary: Mapped[str | None] = mapped_column(Text)

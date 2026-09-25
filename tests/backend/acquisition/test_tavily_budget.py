@@ -20,6 +20,8 @@ from opportunity_radar.acquisition.domain import (
     SourceRun,
     SourceRunStatus,
 )
+from opportunity_radar.acquisition.models import SourceRunModel
+from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.acquisition.tavily import TavilyClient, TavilyCreditBudget
 
 
@@ -125,3 +127,18 @@ def test_source_run_records_credits_only_while_running() -> None:
 
     with pytest.raises(ValueError):
         run.record_credits(-1)
+
+
+def test_credits_used_persists_on_source_run_model() -> None:
+    """`SourceRun.credits_used` must survive the domain-to-model copy, otherwise
+    `record_credits()` is lost on every flush and the spend is not auditable (F20-43
+    follow-up)."""
+    run = SourceRun(source_definition_id=uuid4())
+    run.start()
+    run.record_credits(7)
+    run.finish(SourceRunStatus.SUCCEEDED)
+    model = SourceRunModel(id=run.id, source_definition_id=run.source_definition_id)
+
+    AcquisitionService._copy_run(run, model)
+
+    assert model.credits_used == 7

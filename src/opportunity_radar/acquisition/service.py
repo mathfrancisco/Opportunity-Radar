@@ -930,6 +930,7 @@ class AcquisitionService:
         model.checkpoint_after = run.checkpoint_after
         model.items_announced = run.items_announced
         model.complete = run.complete
+        model.credits_used = run.credits_used
 
 
 def canonical_payload_hash(payload: Mapping[str, Any]) -> str:
