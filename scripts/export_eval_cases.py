@@ -15,6 +15,7 @@ profile's compensation. Names of people inside a description are left to the rev
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -102,12 +103,20 @@ def _draft(
         },
         "posting": {
             "title": _anonymise_text(opportunity.canonical_title, company),
+            "company_name": "Empresa X" if company else None,
+            "location_text": opportunity.location_text,
             "description": description,
         },
+        # The operator decides the split and the family; a draft proposes one family per
+        # company so two postings of one employer never land on both sides.
+        "split": "tuning",
+        "group": hashlib.sha256((company or str(opportunity.id)).encode()).hexdigest()[:12],
+        "critical": False,
         "expected": {
             "verdict": assessment.verdict,
             "must_mention_risks": [],
             "must_not_claim": [],
+            "optional_terms": [],
             "language": "pt-BR",
         },
     }

@@ -2,15 +2,22 @@
 
 SPEC 36, section 8. Changing the prompt, the model or its quantisation is a decision with
 numbers: every run scores the same cases on the same criteria and is compared with a
-baseline. Scoring is code, never another model's opinion; the one judgement that needs a
-person — whether the commentary agrees with the verdict — is left as a manual column.
+baseline. Scoring is code, never another model's opinion; what code cannot judge —
+whether the commentary agrees with the verdict, whether a quoted passage really supports
+its claim, a negation, an optional requirement — is a human rubric column in the report.
+
+Cases are split into `tuning` and `reserved`: the prompt is adjusted on the first and a
+change is decided on the second. A family of near-identical postings (`group`) lives on
+one side only, so the reserved set never grades what the tuning set taught.
 
 Pure functions only. Running the cases against Ollama lives in scripts/eval_analysis.py.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import re
 import unicodedata
 from collections.abc import Iterable, Mapping, Sequence
@@ -24,6 +31,8 @@ from opportunity_radar.matching.analysis import (
     AnalysisMetrics,
     AnalysisOutcome,
     AnalysisRequest,
+    claim_text,
+    item_evidence,
 )
 from opportunity_radar.matching.domain import EligibilityStatus, Verdict
 
@@ -38,8 +47,17 @@ CASE_KINDS = frozenset(
         "no_description",
         "missing_compensation",
         "missing_country",
+        # Added by the robustness review: keyword presence alone gets these wrong.
+        "negation",
+        "optional_requirement",
+        "contradiction",
+        "prompt_injection",
     }
 )
+SPLITS = ("tuning", "reserved")
+#: Jaccard similarity of word shingles above which two postings are the same posting.
+NEAR_DUPLICATE_THRESHOLD = 0.8
+_SHINGLE = 5
 _REQUIRED_PAYLOAD = (
     "eligibility",
     "verdict",
@@ -50,6 +68,7 @@ _REQUIRED_PAYLOAD = (
     "profile_snapshot",
 )
 _REQUIRED_EXPECTED = ("verdict", "must_mention_risks", "must_not_claim", "language")
+_EVIDENCE_REJECTED = "quotes evidence absent"
 
 # Short, high-frequency function words. A text is Portuguese when these outnumber the
 # English ones; the split is crude on purpose, and good enough to catch a model that
@@ -77,6 +96,9 @@ class Expected:
     must_mention_risks: tuple[str, ...]
     must_not_claim: tuple[str, ...]
     language: str
+    # Requirements the posting marks as optional or negates: naming them as a hard
+    # requirement is wrong, but only a person can tell how a risk mentions them.
+    optional_terms: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +108,13 @@ class EvalCase:
     payload: Mapping[str, Any]
     expected: Expected
     posting: Mapping[str, Any] = field(default_factory=dict)
+    split: str = "tuning"
+    # Near-identical postings share a group, and a group lives in one split only.
+    group: str = ""
+    # Critical cases run several times with every cache off, to measure the variation
+    # a fixed seed does not remove.
+    critical: bool = False
+    profile_history: Mapping[str, Any] = field(default_factory=dict)
 
     def request(self) -> AnalysisRequest:
         """The same request production builds; ids are placeholders, never looked up."""
@@ -101,6 +130,8 @@ class EvalCase:
             score=Decimal(str(self.payload["score"])),
             opportunity_snapshot=opportunity,
             profile_snapshot=self.payload["profile_snapshot"],
+            posting=self.posting or None,
+            profile_history=self.profile_history or None,
         )
 
     def payload_text(self) -> str:
@@ -132,7 +163,17 @@ def load_case(path: Path) -> EvalCase:
             f"{path.name}: must_mention_risks is a list of strings and must_not_claim a "
             "non-empty one"
         )
+    optional = expected.get("optional_terms") or []
+    if not _strings(optional):
+        raise EvalCaseError(f"{path.name}: optional_terms is a list of strings")
+    split = raw.get("split")
+    if split not in SPLITS:
+        raise EvalCaseError(f"{path.name}: split must be one of {', '.join(SPLITS)}")
+    group = raw.get("group")
+    if not isinstance(group, str) or not group.strip():
+        raise EvalCaseError(f"{path.name}: group names the family of similar postings")
     posting = raw.get("posting") or {}
+    history = raw.get("profile_history") or {}
     return EvalCase(
         case_id=path.stem,
         kinds=kinds,
@@ -142,13 +183,79 @@ def load_case(path: Path) -> EvalCase:
             must_mention_risks=tuple(risks),
             must_not_claim=tuple(claims),
             language=str(expected["language"]),
+            optional_terms=tuple(optional),
         ),
         posting=posting if isinstance(posting, dict) else {},
+        split=split,
+        group=group.strip(),
+        critical=raw.get("critical") is True,
+        profile_history=history if isinstance(history, dict) else {},
     )
 
 
 def load_cases(directory: Path) -> list[EvalCase]:
-    return [load_case(path) for path in sorted(directory.glob("*.json"))]
+    cases = [load_case(path) for path in sorted(directory.glob("*.json"))]
+    leaks = split_leaks(cases)
+    if leaks:
+        raise EvalCaseError("tuning and reserved share postings: " + "; ".join(leaks))
+    return cases
+
+
+def _shingles(text: str) -> set[tuple[str, ...]]:
+    words = normalize(text).split()
+    if len(words) < _SHINGLE:
+        return {tuple(words)} if words else set()
+    return {tuple(words[index : index + _SHINGLE]) for index in range(len(words) - _SHINGLE + 1)}
+
+
+def _posting_text(case: EvalCase) -> str:
+    return " ".join(str(case.posting.get(key) or "") for key in ("title", "description"))
+
+
+def split_leaks(cases: Sequence[EvalCase]) -> list[str]:
+    """Pairs across the two splits that share a group or are near-identical postings."""
+    tuning = [case for case in cases if case.split == "tuning"]
+    reserved = [case for case in cases if case.split == "reserved"]
+    leaks: list[str] = []
+    for left in tuning:
+        left_shingles = _shingles(_posting_text(left))
+        for right in reserved:
+            if left.group == right.group:
+                leaks.append(f"{left.case_id} and {right.case_id} share group {left.group}")
+                continue
+            right_shingles = _shingles(_posting_text(right))
+            union = left_shingles | right_shingles
+            if union and len(left_shingles & right_shingles) / len(union) >= (
+                NEAR_DUPLICATE_THRESHOLD
+            ):
+                leaks.append(f"{left.case_id} and {right.case_id} are near-duplicates")
+    return leaks
+
+
+def cases_digest(cases: Iterable[EvalCase]) -> str:
+    """One hash for the set as run, so two reports say whether they graded the same cases."""
+    encoded = json.dumps(
+        [
+            {
+                "id": case.case_id,
+                "split": case.split,
+                "payload": case.payload,
+                "posting": case.posting,
+                "history": case.profile_history,
+                "expected": [
+                    case.expected.verdict,
+                    case.expected.must_mention_risks,
+                    case.expected.must_not_claim,
+                    case.expected.optional_terms,
+                ],
+            }
+            for case in cases
+        ],
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def missing_kinds(cases: Iterable[EvalCase]) -> set[str]:
@@ -182,6 +289,16 @@ def coverage(risks: Sequence[str], must_mention: Sequence[str]) -> float | None:
     return hits / len(must_mention)
 
 
+def optional_mentions(risks: Sequence[str], optional_terms: Sequence[str]) -> int:
+    """Risks naming an optional or negated requirement: flags for the human rubric.
+
+    Not a score. "Kubernetes é diferencial" and "exige Kubernetes" share every keyword;
+    only a reader can tell the first is right and the second is not.
+    """
+    named = [_terms(risk) for risk in risks]
+    return sum(1 for term in optional_terms for risk in named if _terms(term) <= risk)
+
+
 def inventions(texts: Sequence[str], must_not_claim: Sequence[str]) -> int:
     """How many forbidden claims appear, as a normalized phrase, anywhere in the output."""
     haystack = f" {normalize(' '.join(texts))} "
@@ -199,7 +316,10 @@ def portuguese_share(texts: Sequence[str]) -> float | None:
 
 
 def fidelity(evidence: Sequence[str], payload_text: str) -> float | None:
-    """Share of quoted evidence found verbatim in the payload. Schema `v1` has none."""
+    """Share of quoted evidence found verbatim in the payload. Schema `v1` has none.
+
+    Presence only: a quote can be in the payload and still not support its claim.
+    """
     if not evidence:
         return None
     source = normalize(payload_text)
@@ -218,15 +338,25 @@ class CaseScore:
     prompt_tokens: int | None
     output_tokens: int | None
     total_ms: int | None
+    # Share of strengths and risks that quote a passage; `None` under `analysis-v1`.
+    grounded: float | None = None
+    # The answer quoted a passage the payload does not contain and was refused.
+    evidence_rejected: bool = False
+    optional_mentions: int | None = None
+    split: str = "tuning"
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "case_id": self.case_id,
+            "split": self.split,
             "status": self.status,
             "failure_code": self.failure_code,
             "fidelity": self.fidelity,
+            "grounded": self.grounded,
+            "evidence_rejected": self.evidence_rejected,
             "coverage": self.coverage,
             "inventions": self.inventions,
+            "optional_mentions": self.optional_mentions,
             "portuguese": self.portuguese,
             "prompt_tokens": self.prompt_tokens,
             "output_tokens": self.output_tokens,
@@ -234,41 +364,65 @@ class CaseScore:
         }
 
 
-def score_case(case: EvalCase, outcome: AnalysisOutcome) -> CaseScore:
+def score_case(
+    case: EvalCase,
+    outcome: AnalysisOutcome,
+    *,
+    evidence_sources: Mapping[str, str] | None = None,
+) -> CaseScore:
+    """Score one answer. `evidence_sources` are the texts actually sent (after the cut);
+    without them the case's own payload stands in, which only the v1 tests rely on."""
     metrics = outcome.metrics or AnalysisMetrics()
     analysis = outcome.analysis
     if analysis is None:
+        rejected = outcome.failure_code is not None and _EVIDENCE_REJECTED in (
+            outcome.detail or ""
+        )
         return CaseScore(
             case_id=case.case_id,
             status=outcome.status.value,
             failure_code=outcome.failure_code.value if outcome.failure_code else None,
-            fidelity=None,
+            # An invented quote is a fidelity failure, not an absence of data.
+            fidelity=0.0 if rejected else None,
             coverage=None,
             inventions=None,
             portuguese=None,
             prompt_tokens=metrics.prompt_tokens,
             output_tokens=metrics.output_tokens,
             total_ms=metrics.total_ms,
+            evidence_rejected=rejected,
+            split=case.split,
         )
+    items = [*analysis.strengths, *analysis.risks]
+    risks = [claim_text(item) for item in analysis.risks]
     texts = [
         analysis.summary,
-        *analysis.strengths,
-        *analysis.risks,
+        *(claim_text(item) for item in items),
         *analysis.inferences,
         *analysis.unknowns,
     ]
-    evidence = [str(item) for item in getattr(analysis, "evidence", ())]
+    claims_with_schema = [item for item in items if not isinstance(item, str)]
+    quoted = [item_evidence(item) for item in claims_with_schema]
+    sources = evidence_sources or {"posting": case.payload_text(), "profile": ""}
     return CaseScore(
         case_id=case.case_id,
         status=outcome.status.value,
         failure_code=None,
-        fidelity=fidelity(evidence, case.payload_text()),
-        coverage=coverage(analysis.risks, case.expected.must_mention_risks),
+        fidelity=fidelity(
+            [evidence for evidence, _ in quoted if evidence],
+            "\n".join(sources.values()),
+        ),
+        coverage=coverage(risks, case.expected.must_mention_risks),
         inventions=inventions(texts, case.expected.must_not_claim),
         portuguese=portuguese_share(texts),
         prompt_tokens=metrics.prompt_tokens,
         output_tokens=metrics.output_tokens,
         total_ms=metrics.total_ms,
+        grounded=(
+            sum(1 for evidence, _ in quoted if evidence) / len(quoted) if quoted else None
+        ),
+        optional_mentions=optional_mentions(risks, case.expected.optional_terms),
+        split=case.split,
     )
 
 
@@ -276,6 +430,7 @@ def score_case(case: EvalCase, outcome: AnalysisOutcome) -> CaseScore:
 CRITERIA: dict[str, bool] = {
     "completed_rate": True,
     "fidelity": True,
+    "grounded": True,
     "coverage": True,
     "inventions": False,
     "portuguese": True,
@@ -297,6 +452,7 @@ def summarize(scores: Sequence[CaseScore]) -> dict[str, float | None]:
             else None
         ),
         "fidelity": mean(score.fidelity for score in scores),
+        "grounded": mean(score.grounded for score in scores),
         "coverage": mean(score.coverage for score in scores),
         # Total, not mean: one invention is one too many, however many cases ran.
         "inventions": float(sum(score.inventions or 0 for score in scores)),
@@ -307,16 +463,55 @@ def summarize(scores: Sequence[CaseScore]) -> dict[str, float | None]:
     }
 
 
+def summarize_by_split(scores: Sequence[CaseScore]) -> dict[str, dict[str, float | None]]:
+    """The summary of each split and of the whole run; decisions read `reserved`."""
+    return {
+        "all": summarize(scores),
+        **{
+            split: summarize([score for score in scores if score.split == split])
+            for split in SPLITS
+        },
+    }
+
+
+def variation(runs: Mapping[str, Sequence[CaseScore]]) -> dict[str, dict[str, Any]]:
+    """How much repeated runs of a case disagree, which a fixed seed does not rule out."""
+    report: dict[str, dict[str, Any]] = {}
+    for case_id, scores in runs.items():
+        values = [score.coverage for score in scores if score.coverage is not None]
+        mean = sum(values) / len(values) if values else None
+        spread = (
+            math.sqrt(sum((value - mean) ** 2 for value in values) / len(values))
+            if mean is not None
+            else None
+        )
+        report[case_id] = {
+            "runs": len(scores),
+            "statuses": sorted({score.status for score in scores}),
+            "coverage_mean": mean,
+            "coverage_stdev": spread,
+            "total_ms": [score.total_ms for score in scores],
+        }
+    return report
+
+
 def compare(
     current: Mapping[str, float | None],
     baseline: Mapping[str, float | None],
     *,
     tolerance: float = 0.01,
 ) -> dict[str, str]:
-    """`melhora`, `piora`, `empate`, or `sem dado` per criterion, in reading order."""
+    """`melhora`, `piora`, `empate`, `não comparável` or `sem dado` per criterion.
+
+    A criterion the baseline could not measure — evidence under `analysis-v1` — is not
+    comparable: the new version has to meet its answer key, not beat an absence.
+    """
     verdicts: dict[str, str] = {}
     for criterion, higher_is_better in CRITERIA.items():
         now, before = current.get(criterion), baseline.get(criterion)
+        if now is not None and before is None:
+            verdicts[criterion] = "não comparável"
+            continue
         if now is None or before is None:
             verdicts[criterion] = "sem dado"
             continue
@@ -331,13 +526,21 @@ def compare(
     return verdicts
 
 
+def switch_allowed(verdicts: Mapping[str, str]) -> bool:
+    """SPEC 36 §8: no criterion worse and at least one better, on the reserved split."""
+    values = set(verdicts.values())
+    return "piora" not in values and "melhora" in values
+
+
 __all__ = [
     "CASE_KINDS",
     "CRITERIA",
+    "SPLITS",
     "CaseScore",
     "EvalCase",
     "EvalCaseError",
     "Expected",
+    "cases_digest",
     "compare",
     "coverage",
     "fidelity",
@@ -346,7 +549,12 @@ __all__ = [
     "load_cases",
     "missing_kinds",
     "normalize",
+    "optional_mentions",
     "portuguese_share",
     "score_case",
+    "split_leaks",
     "summarize",
+    "summarize_by_split",
+    "switch_allowed",
+    "variation",
 ]
