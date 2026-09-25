@@ -11,17 +11,19 @@ stops new calls once a ceiling is hit is F20-43 (`TavilyCreditBudget` below).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import math
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
+from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
@@ -33,7 +35,9 @@ from opportunity_radar.acquisition.domain import (
     CollectorCapabilities,
     HealthcheckContext,
     HealthResult,
+    SourceRun,
 )
+from opportunity_radar.acquisition.models import TavilyExtractCacheModel
 
 _SEARCH_PATH = "/search"
 _EXTRACT_PATH = "/extract"
@@ -663,3 +667,150 @@ class TavilySearchCollector:
             return self._client
         assert self._client_factory is not None
         return self._client_factory()
+
+
+@dataclass(frozen=True, slots=True)
+class ExtractionResult:
+    url: str
+    raw_content: str | None
+    #: `AcquisitionErrorCode.value` when this URL failed inside an otherwise successful
+    #: batch. `None` means the extraction succeeded (or found nothing, which is not an
+    #: error — see `TavilyExtractResponse.results` vs `failed_results`).
+    error: str | None
+    from_cache: bool
+
+
+class ExtractionCachePort(Protocol):
+    """What `extract_missing_descriptions` needs from a cache (F20-45).
+
+    A `Protocol`, not a hard dependency on `TavilyExtractionCache`: the batching and
+    partial-failure logic below is exercised in tests against a plain in-memory stand-in,
+    the same way `Collector` lets adapters be tested without a database.
+    """
+
+    def get(self, url: str) -> ExtractionResult | None: ...
+    def put(self, url: str, result: ExtractionResult) -> None: ...
+
+
+class TavilyExtractionCache:
+    """Persists `/extract` results by canonical URL hash, one row per URL, forever within
+    its TTL (F20-45). Reuses `canonicalize_url` (F20-44) for the hash so the dedupe in the
+    collector and the cache key here never disagree about what "the same URL" means.
+    """
+
+    def __init__(self, *, session: Session, ttl_seconds: int) -> None:
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be positive")
+        self._session = session
+        self._ttl_seconds = ttl_seconds
+
+    def get(self, url: str) -> ExtractionResult | None:
+        row = self._session.get(TavilyExtractCacheModel, self._hash(url))
+        if row is None:
+            return None
+        if row.expires_at <= datetime.now(UTC):
+            return None
+        return ExtractionResult(
+            url=row.canonical_url,
+            raw_content=row.raw_content,
+            error=row.error,
+            from_cache=True,
+        )
+
+    def put(self, url: str, result: ExtractionResult) -> None:
+        url_hash = self._hash(url)
+        canonical = canonicalize_url(url)
+        now = datetime.now(UTC)
+        row = self._session.get(TavilyExtractCacheModel, url_hash)
+        if row is None:
+            row = TavilyExtractCacheModel(url_hash=url_hash, canonical_url=canonical)
+            self._session.add(row)
+        row.canonical_url = canonical
+        row.raw_content = result.raw_content
+        row.status = "failed" if result.error else "success"
+        row.error = result.error
+        row.extracted_at = now
+        row.expires_at = now + timedelta(seconds=self._ttl_seconds)
+
+    @staticmethod
+    def _hash(url: str) -> str:
+        return hashlib.sha256(canonicalize_url(url).encode()).hexdigest()
+
+
+def _partition(urls: Sequence[str], size: int) -> list[list[str]]:
+    return [list(urls[index : index + size]) for index in range(0, len(urls), size)]
+
+
+async def extract_missing_descriptions(
+    client: TavilyClient,
+    cache: ExtractionCachePort,
+    urls: Sequence[str],
+    *,
+    extract_depth: str | None = None,
+    format: str | None = None,
+    telemetry: CollectionTelemetry,
+    network_policy: CollectionNetworkPolicy | None = None,
+    budget: TavilyCreditBudget | None = None,
+    run: SourceRun | None = None,
+) -> list[ExtractionResult]:
+    """Fills in bodies for URLs with no description, one cache entry per URL forever.
+
+    Partitions `urls` into batches of at most 20 (`/extract`'s own limit, not a radar
+    choice), serves cache hits without a call, and only sends misses. A failure isolated to
+    one URL inside a batch is recorded for that URL and never drops the batch's other
+    results (SPEC 41, F20-45 acceptance criteria).
+    """
+    results: list[ExtractionResult] = []
+    for batch in _partition(list(urls), _MAX_EXTRACT_URLS):
+        misses: list[str] = []
+        for url in batch:
+            cached = cache.get(url)
+            if cached is not None:
+                results.append(cached)
+            else:
+                misses.append(url)
+        if not misses:
+            continue
+        response = await client.extract(
+            urls=misses,
+            extract_depth=extract_depth,
+            format=format,
+            telemetry=telemetry,
+            network_policy=network_policy,
+        )
+        if budget is not None:
+            budget.charge(response.credits_used)
+        if run is not None:
+            run.record_credits(response.credits_used or 0)
+        failed_by_url = {
+            entry.get("url"): entry.get("error")
+            for entry in response.failed_results
+            if isinstance(entry.get("url"), str)
+        }
+        succeeded_urls = {page.url for page in response.results}
+        for page in response.results:
+            result = ExtractionResult(
+                url=page.url, raw_content=page.raw_content, error=None, from_cache=False
+            )
+            cache.put(page.url, result)
+            results.append(result)
+        for url in misses:
+            if url in succeeded_urls:
+                continue
+            error = failed_by_url.get(url) or AcquisitionErrorCode.INVALID_ITEM.value
+            result = ExtractionResult(url=url, raw_content=None, error=str(error), from_cache=False)
+            cache.put(url, result)
+            results.append(result)
+    return results
+
+
+def apply_extracted_description(item: CollectedItem, result: ExtractionResult) -> CollectedItem:
+    """Swaps in the extracted markdown when present; otherwise the item is unchanged.
+
+    A failed or cache-miss-that-stayed-a-miss result carries `raw_content=None`, and the
+    provisional description a collector already set (F20-44) is left standing rather than
+    erased by an extraction that found nothing.
+    """
+    if result.raw_content is None:
+        return item
+    return replace(item, description=result.raw_content)

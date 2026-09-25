@@ -170,6 +170,36 @@ class SourceRunModel(Base):
     )
 
 
+class TavilyExtractCacheModel(Base):
+    """Cache of `/extract` results, keyed by the canonical URL's hash (F20-45).
+
+    A hit never calls Tavily again within its validity; an expired row is a miss, not an
+    error. `status` records success or failure per URL so a failed extraction is not
+    retried inside the same TTL window (see `TavilyExtractionCache`).
+    """
+
+    __tablename__ = "tavily_extract_cache"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('success', 'failed')",
+            name="ck_tavily_extract_cache_status",
+        ),
+        {"schema": "acquisition"},
+    )
+
+    #: sha256 of `canonicalize_url(url)` — the same normalization the collector's dedupe
+    #: uses (F20-44), so the same URL never lands in two entries over a query/case diff.
+    url_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    canonical_url: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_content: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error: Mapped[str | None] = mapped_column(Text)
+    extracted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class RawItemModel(Base):
     """Append-only evidence received from a collector."""
 

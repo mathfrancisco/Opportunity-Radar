@@ -1,6 +1,11 @@
 # CARD F20-45 — Extração de conteúdo com cache
 
-- **Status:** Backlog
+- **Status:** Parcial — cache e rotina de extração implementados e testados (unidade,
+  `httpx.MockTransport`); `TavilyExtractionCache` contra o schema real só é verificável em
+  CI com `RUN_DATABASE_INTEGRATION=1` (Docker indisponível neste ambiente); wiring do
+  `apply_extracted_description()` no worker/pipeline de coleta não incluído — a rotina
+  existe e é testada isoladamente, mas nada chama `extract_missing_descriptions()` a
+  partir do fluxo real de coleta ainda
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** E — Tavily
 - **Depende de:** F20-44
