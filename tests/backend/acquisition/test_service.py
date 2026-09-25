@@ -7,6 +7,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
+from opportunity_radar.acquisition.alerts import SourceAlertService
 from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.domain import (
@@ -153,7 +154,43 @@ class _PartiallyInvalidCollector(_Collector):
         )
 
 
-def _service(collector: _Collector) -> tuple[AcquisitionService, _MemorySession]:
+class _UnderReportingCollector(_Collector):
+    """Announces more items than it ever yields, like a board with broken pagination."""
+
+    async def discover(
+        self, request: CollectionRequest
+    ) -> AsyncIterator[CollectedItem]:
+        request.telemetry.record_items_announced(5)
+        items = [
+            CollectedItem(
+                source_type=self.source_type,
+                external_id="job-1",
+                raw_payload={"title": "First"},
+            ),
+            CollectedItem(
+                source_type=self.source_type,
+                external_id="job-2",
+                raw_payload={"title": "Second"},
+            ),
+        ]
+        if request.max_items is not None:
+            items = items[: request.max_items]
+        for item in items:
+            yield item
+
+
+class _RecordingNotifier:
+    def __init__(self) -> None:
+        self.messages: list[dict[str, object]] = []
+
+    def send(self, message: dict[str, object]) -> bool:
+        self.messages.append(message)
+        return True
+
+
+def _service(
+    collector: _Collector, *, notifier: _RecordingNotifier | None = None
+) -> tuple[AcquisitionService, _MemorySession]:
     source = SourceDefinitionModel(
         id=uuid4(),
         source_type="example",
@@ -166,6 +203,7 @@ def _service(collector: _Collector) -> tuple[AcquisitionService, _MemorySession]
         session,  # type: ignore[arg-type]
         registry=CollectorRegistry((collector,)),
         repository=_MemoryRepository(source),  # type: ignore[arg-type]
+        alerts=SourceAlertService(session, notifier=notifier),  # type: ignore[arg-type]
     )
     return service, session
 
@@ -256,6 +294,42 @@ def test_partial_run_does_not_promote_checkpoint() -> None:
     assert run.items_invalid == 1
     assert run.checkpoint_after is None
     assert checkpoints == []
+
+
+def test_pagination_gap_alert_fires_for_an_unbounded_shortfall() -> None:
+    notifier = _RecordingNotifier()
+    service, _ = _service(_UnderReportingCollector(), notifier=notifier)
+
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+        )
+    )
+
+    assert run.items_seen == 2
+    assert run.items_announced == 5
+    assert [message["event"] for message in notifier.messages] == [
+        "source_pagination_gap"
+    ]
+    assert notifier.messages[0]["items_seen"] == 2
+    assert notifier.messages[0]["items_announced"] == 5
+
+
+def test_pagination_gap_alert_does_not_fire_when_max_items_caps_the_run() -> None:
+    notifier = _RecordingNotifier()
+    service, _ = _service(_UnderReportingCollector(), notifier=notifier)
+
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY, max_items=1),
+        )
+    )
+
+    assert run.items_seen == 1
+    assert run.items_announced == 5
+    assert notifier.messages == []
 
 
 def test_ashby_source_configuration_reaches_collector_and_records_http_metrics() -> None:

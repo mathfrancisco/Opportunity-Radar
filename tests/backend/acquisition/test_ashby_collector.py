@@ -56,6 +56,10 @@ def test_parses_listed_jobs_and_preserves_payload() -> None:
     assert len(calls) == 1
     assert collection_request.telemetry.http_requests == 1
     assert collection_request.telemetry.retry_count == 0
+    # The fixture has one listed and one unlisted job: the announced count covers both,
+    # while `discover` only yields the listed one.
+    assert collection_request.telemetry.items_announced == len(payload["jobs"])
+    assert collection_request.telemetry.items_announced != len([item])
 
 
 def test_retries_rate_limit_using_retry_after() -> None:

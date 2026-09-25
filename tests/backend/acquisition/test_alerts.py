@@ -234,3 +234,24 @@ def test_a_partial_run_ends_the_incident_like_a_success() -> None:
             assert service.open_incidents() == []
         finally:
             _cleanup(session, source)
+
+
+def test_pagination_gap_is_announced_with_the_two_counts() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    notifier = _RecordingNotifier()
+    with Session(engine) as session:
+        source = _source(session)
+        service = SourceAlertService(session, notifier=notifier)
+        try:
+            run = _run(session, source, "SUCCEEDED")
+            service.record_pagination_gap(
+                source, run, items_seen=7, items_announced=10
+            )
+            assert len(notifier.messages) == 1
+            message = notifier.messages[0]
+            assert message["event"] == "source_pagination_gap"
+            assert message["items_seen"] == 7
+            assert message["items_announced"] == 10
+            assert message["run_id"] == str(run.id)
+        finally:
+            _cleanup(session, source)

@@ -815,11 +815,15 @@ class AcquisitionService:
             self.session.add(checkpoint)
         self.session.commit()
         self.session.refresh(persisted_run)
-        self._announce(source, persisted_run)
+        self._announce(source, persisted_run, max_items=request.max_items)
         return persisted_run
 
     def _announce(
-        self, source: SourceDefinitionModel, run: SourceRunModel
+        self,
+        source: SourceDefinitionModel,
+        run: SourceRunModel,
+        *,
+        max_items: int | None,
     ) -> None:
         """Report what this run changed about the source being up.
 
@@ -839,7 +843,13 @@ class AcquisitionService:
                 "source alert evaluation failed",
                 extra={"job": "alert", "source_id": str(source.id), "run_id": str(run.id)},
             )
-        if run.items_announced is not None and run.items_seen < run.items_announced:
+        # A run capped by max_items is expected to fall short of the announced total, so
+        # a shortfall there is by design, not evidence of broken pagination.
+        if (
+            max_items is None
+            and run.items_announced is not None
+            and run.items_seen < run.items_announced
+        ):
             try:
                 self.alerts.record_pagination_gap(
                     source,
