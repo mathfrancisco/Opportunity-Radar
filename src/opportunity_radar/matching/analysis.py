@@ -57,6 +57,8 @@ class AnalysisFailureCode(StrEnum):
     EMPTY_RESPONSE = "EMPTY_RESPONSE"
     # Not even the fixed parts of the prompt fit the window: the call is never sent.
     CONTEXT_OVERFLOW = "CONTEXT_OVERFLOW"
+    NOT_CONFIGURED = "NOT_CONFIGURED"
+    QUOTA_EXHAUSTED = "QUOTA_EXHAUSTED"
 
 
 class AnalysisError(Exception):
