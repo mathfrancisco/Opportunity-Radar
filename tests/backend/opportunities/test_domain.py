@@ -307,6 +307,42 @@ def test_ambiguous_skill_aliases_require_technical_context() -> None:
     assert {skill.canonical_id for skill in structured} == {"react", "go"}
 
 
+def test_extracts_skills_added_by_f20_02_curation() -> None:
+    """Regression for `docs/pesquisas/curadoria-skills-v2.md` (card F20-02).
+
+    Excerpts below are real acervo text (Render "Senior/Staff Data Scientist" and
+    "Engineering Manager, Platform" postings), not fabricated fixtures.
+    """
+    ai_skills = extract_skills(
+        None,
+        "focusing on some combination of data analytics, analytics engineering, "
+        "machine learning, and experimentation based on your strengths.",
+        {},
+    )
+    assert {skill.canonical_id for skill in ai_skills} == {"ai"}
+
+    ci_and_observability = extract_skills(
+        None,
+        "bring Render's internal developer platform and shared production "
+        "infrastructure (observability, CI/CD, developer environments, storage, "
+        "and more) from good to great.",
+        {},
+    )
+    by_id = {skill.canonical_id: skill for skill in ci_and_observability}
+    assert {"cicd", "observability"}.issubset(by_id)
+
+    ai_alias = extract_skills(
+        None,
+        "We may use artificial intelligence (AI) tools to support parts of the "
+        "hiring process.",
+        {},
+    )
+    assert {skill.canonical_id for skill in ai_alias} == {"ai"}
+
+    agentic_alias = extract_skills(None, "Required: experience with agentic AI systems.", {})
+    assert {skill.canonical_id for skill in agentic_alias} == {"ai"}
+
+
 def test_candidate_enrichment_does_not_change_fingerprint() -> None:
     candidate = build_candidate(
         _input(

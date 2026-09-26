@@ -1,6 +1,9 @@
 # CARD F17-01 — Marcação de relevância e relatórios de cobertura e precisão
 
-- **Status:** Em revisão — código e testes prontos; baseline pendente na máquina de referência (ver `docs/pesquisas/baseline-f17-01.md`)
+- **Status:** Done — baseline medido na máquina de referência em 2026-09-26, ver
+  [`docs/pesquisas/baseline-f17-01.md`](../../../pesquisas/baseline-f17-01.md) (card F20-01).
+  Limitação registrada no relatório: a marcação de relevância usou uma heurística de
+  título (não leitura humana descrição a descrição) por restrição de tempo da sessão.
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
 - **Depende de:** Nenhum
 - **Bloqueia:** F17-02, F17-03, F17-06, F17-08, F17-13, F18-01, Milestone P

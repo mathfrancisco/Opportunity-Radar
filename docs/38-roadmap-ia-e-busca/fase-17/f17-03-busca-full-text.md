@@ -1,6 +1,12 @@
 # CARD F17-03 — Busca full-text, sinônimos e filtros combináveis
 
-- **Status:** Backlog
+- **Status:** Em revisão — código integrado e testado; medição na máquina de referência
+  feita em 2026-09-26 mas **inconclusiva** para o critério de aceite
+  ("recall@10 fulltext > recall@10 like"), ver
+  [`docs/pesquisas/eval-search-f17-03.md`](../../../pesquisas/eval-search-f17-03.md)
+  (card F20-01). Causa provável: viés na construção automática do conjunto de referência,
+  não regressão do full-text. Não fechar como `Done` até uma remedição com gabarito
+  curado por leitura humana.
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
 - **Depende de:** F17-01, F17-02
 - **Bloqueia:** F16-10, F17-12, Milestone P

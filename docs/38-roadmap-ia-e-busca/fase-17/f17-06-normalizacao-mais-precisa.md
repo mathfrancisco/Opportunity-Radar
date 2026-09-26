@@ -1,6 +1,16 @@
 # CARD F17-06 — Normalização mais precisa: senioridade, skills, local e país
 
-- **Status:** Backlog
+- **Status:** Em revisão — `seniority-v2`, `regions-v1` e o script de lacunas
+  (`scripts/unmatched_skill_terms.py`) já entregues em código. Curadoria manual de
+  `skills-v2` feita em 2026-09-26 (card F20-02): 3 entradas novas na `SKILL_TAXONOMY`
+  (`ai`, `cicd`, `observability`), ver
+  [`docs/pesquisas/curadoria-skills-v2.md`](../../../pesquisas/curadoria-skills-v2.md).
+  **Não fechar como `Done`:** o reprocessamento oficial do acervo (bump de
+  `NORMALIZER_VERSION`) fica fora do escopo de arquivos do F20-02 e dispara uma onda de
+  reanálise de matching que esse card proíbe alterar; a cobertura de skills medida
+  (48,46% → 90,74%) veio de reexecutar `extract_skills` direto sobre o texto armazenado,
+  não do pipeline de reprocessamento — `opportunity_skill` no banco ainda reflete a
+  taxonomia anterior até alguém rodar o reprocessamento de verdade.
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
 - **Depende de:** F17-01
 - **Bloqueia:** Milestone P

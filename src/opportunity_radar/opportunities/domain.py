@@ -217,6 +217,17 @@ SKILL_TAXONOMY: tuple[SkillTaxonomyEntry, ...] = (
     SkillTaxonomyEntry("gcp", ("gcp", "google cloud platform")),
     SkillTaxonomyEntry("terraform", ("terraform",)),
     SkillTaxonomyEntry("graphql", ("graphql",)),
+    # Added by F20-02 curation (`docs/pesquisas/curadoria-skills-v2.md`) from
+    # `scripts/unmatched_skill_terms.py` over the reference-machine acervo.
+    SkillTaxonomyEntry(
+        "ai",
+        ("ai", "artificial intelligence", "machine learning", "ml", "agentic ai"),
+    ),
+    SkillTaxonomyEntry(
+        "cicd",
+        ("ci/cd", "ci", "continuous integration", "continuous deployment"),
+    ),
+    SkillTaxonomyEntry("observability", ("observability",)),
 )
 
 

@@ -1,9 +1,15 @@
 # CARD F20-01 — Baselines e relatórios da busca
 
-- **Status:** Parcial — requer `make up` com o acervo real e marcação manual de relevância
-  na Inbox (passo 2) e a máquina de referência para `make eval-search`; não executável
-  neste ambiente (sem Docker, sem acervo real). Nenhum código alterado, como pede este
-  card.
+- **Status:** Parcial — feito na máquina de referência em 2026-09-26. Baseline do F17-01
+  medido e completo (`docs/pesquisas/baseline-f17-01.md`, marcado `Done`). Relatório do
+  `eval_search.py` do F17-03 medido e versionado (`docs/pesquisas/eval-search-f17-03.md`),
+  mas **inconclusivo** para o critério de aceite do F17-03 — viés conhecido na construção
+  automática do conjunto de referência (as vagas "relevantes" foram escolhidas pelo mesmo
+  critério de substring que o modo `like` usa, favorecendo-o por construção). F17-03 segue
+  "Em revisão", não `Done`. A marcação de relevância (141 oportunidades, acima do mínimo
+  de 100) usou uma heurística de título, não leitura humana descrição a descrição — ver
+  limitação no relatório. Nenhum código de produção alterado, como pede este card (só
+  `docs/pesquisas/` e os dois cards de origem).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** A — Fechamento do que está em revisão
 - **Depende de:** Nenhum
@@ -47,8 +53,8 @@ O código do F17-01 (`f2fca7a`) e do F17-03 (`2e5fa5c`, `48bf252`) está integra
 
 ## Critérios de aceite
 
-- [ ] Os dois relatórios estão versionados e citados nos cards de origem.
-- [ ] O relatório diz tamanho da amostra, data e o que ficou inconclusivo.
+- [x] Os dois relatórios estão versionados e citados nos cards de origem.
+- [x] O relatório diz tamanho da amostra, data e o que ficou inconclusivo.
 
 ## Testes
 

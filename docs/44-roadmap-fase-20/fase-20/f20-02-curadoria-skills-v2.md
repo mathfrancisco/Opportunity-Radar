@@ -1,9 +1,14 @@
 # CARD F20-02 — Curadoria manual de `skills-v2`
 
-- **Status:** Parcial — a curadoria manual (passos 1-5) exige rodar
-  `scripts/unmatched_skill_terms.py` contra o acervo real e decidir termo a termo; não
-  executável neste ambiente (sem Docker, sem acervo real). Nenhuma alteração de código ou
-  taxonomia feita sem essa medição, como pede o card.
+- **Status:** Parcial — feito na máquina de referência em 2026-09-26.
+  `scripts/unmatched_skill_terms.py` rodado contra o acervo real (648 oportunidades, 630
+  descrições), saída e decisão por termo em `docs/pesquisas/curadoria-skills-v2.md`. Três
+  entradas novas na `SKILL_TAXONOMY` (`ai`, `cicd`, `observability`) com testes de
+  regressão usando texto real. Cobertura de skills medida
+  (48,46% → 90,74% das oportunidades com ≥1 skill), mas **não** pelo reprocessamento
+  oficial do acervo — bump de `NORMALIZER_VERSION` fica fora da lista de arquivos deste
+  card e dispararia reanálise de matching, que o card proíbe alterar. F17-06 segue "Em
+  revisão", não `Done` — ver limitação no relatório de curadoria.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** A — Fechamento do que está em revisão
 - **Depende de:** Nenhum
@@ -45,9 +50,13 @@ O F17-06 entregou `seniority-v2`, `regions-v1`, reprocessamento e o script de la
 
 ## Critérios de aceite
 
-- [ ] Toda entrada nova tem teste de regressão.
-- [ ] O reprocessamento não regride evidência existente.
-- [ ] F17-06 marcado como Done com link para `curadoria-skills-v2.md`.
+- [x] Toda entrada nova tem teste de regressão.
+- [ ] O reprocessamento não regride evidência existente. Não verificável ainda: o
+      reprocessamento oficial (bump de `NORMALIZER_VERSION`) não foi executado nesta
+      sessão — ver limitação em `docs/pesquisas/curadoria-skills-v2.md`.
+- [ ] F17-06 marcado como Done com link para `curadoria-skills-v2.md`. F17-06 segue "Em
+      revisão": a curadoria da taxonomia está feita, mas fechar o card exige o
+      reprocessamento oficial do acervo, que fica fora do escopo de arquivos deste card.
 
 ## Testes
 
