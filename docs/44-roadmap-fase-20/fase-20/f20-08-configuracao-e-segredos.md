@@ -1,6 +1,6 @@
 # CARD F20-08 — Configuração da IA cloud e segredos
 
-- **Status:** WIP parcial — snapshot integrado; critérios de aceite e testes específicos pendentes.
+- **Status:** Feito — critérios cobertos por `tests/backend/platform/ai/test_config.py` e `tests/backend/matching/test_adapters.py` (rodados no `.venv` local; Docker indisponível nesta máquina).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-07
@@ -86,9 +86,9 @@ class AnalysisFailureCode(StrEnum):
 
 ## Critérios de aceite
 
-- [ ] Sem chave: `ai_status` = `blocked_by_configuration` e nenhuma exceção.
-- [ ] `AI_REASONING_EFFORT=extreme` falha no start.
-- [ ] `.env.example` lista todas as variáveis novas.
+- [x] Sem chave: `ai_status` = `blocked_by_configuration` e nenhuma exceção.
+- [x] `AI_REASONING_EFFORT=extreme` falha no start.
+- [x] `.env.example` lista todas as variáveis novas.
 
 ## Testes
 

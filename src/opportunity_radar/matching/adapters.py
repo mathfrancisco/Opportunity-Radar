@@ -14,6 +14,7 @@ from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.logging import get_logger
 
 logger = get_logger("opportunity_radar.matching.adapters")
+_missing_key_warned = False
 
 
 def build_analysis_adapter(settings: Settings) -> SemanticAnalysisPort:
@@ -26,7 +27,10 @@ def build_analysis_adapter(settings: Settings) -> SemanticAnalysisPort:
     if state is AIState.DISABLED:
         return NullAnalysisAdapter()
     if state is AIState.BLOCKED_BY_CONFIGURATION:
-        logger.warning("groq api key missing")
+        global _missing_key_warned
+        if not _missing_key_warned:
+            logger.warning("groq api key missing")
+            _missing_key_warned = True
         return NullAnalysisAdapter()
     # Until F20-17 supplies GroqAnalysisAdapter, enabled cloud configuration keeps
     # the existing local adapter as required by F20-08.

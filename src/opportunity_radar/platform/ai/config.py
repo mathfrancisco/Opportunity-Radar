@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from pydantic import SecretStr
+
 from opportunity_radar.platform.config import Settings
 
 
@@ -28,7 +30,7 @@ class AISettings:
     """Cloud AI settings passed to future provider adapters."""
 
     provider: str
-    api_key: str
+    api_key: SecretStr  # unwrapped only inside the provider
     base_url: str
     reasoning_model: str
     fast_model: str
@@ -50,7 +52,7 @@ class AISettings:
     def from_settings(cls, settings: Settings) -> "AISettings":
         return cls(
             provider=settings.ai_provider,
-            api_key=settings.groq_api_key.get_secret_value(),
+            api_key=settings.groq_api_key,
             base_url=settings.groq_base_url,
             reasoning_model=settings.groq_reasoning_model,
             fast_model=settings.groq_fast_model,
