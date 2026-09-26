@@ -106,13 +106,17 @@ def follow_inert_correction(
     identifier_key = IDENTIFIER_KEYS.get(source_type)
     if identifier_key is None:
         return ProposalFollowUp("outdated", proposal)
+    if (
+        proposal.source_type == source_type
+        and proposal_key(proposal) == board_key
+        and not configuration_updates
+    ):
+        return ProposalFollowUp("none", proposal)
     if not is_inert(proposal) or proposal.source_type != source_type:
         # A different ATS is a different collector: a source never changes type, so the
         # proposal stays as it is and the screen says why.
         return ProposalFollowUp("outdated", proposal)
     configuration = dict(proposal.configuration or {})
-    if proposal_key(proposal) == board_key and not configuration_updates:
-        return ProposalFollowUp("none", proposal)
     configuration[identifier_key] = board_key
     configuration["discovery_evidence"] = discovery_evidence
     configuration.update(configuration_updates or {})
