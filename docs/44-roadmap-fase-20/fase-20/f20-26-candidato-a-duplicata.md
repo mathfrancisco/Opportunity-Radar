@@ -18,6 +18,9 @@
   `tests/backend/test_duplicate_candidates_http_integration.py` (rotas HTTP + selo) e
   `apps/web/src/routes/OpportunityDetailPage.test.tsx` /
   `apps/web/src/features/dashboard/api.test.ts` no frontend.
+  Correções P2 registradas: empate em `created_at` resolve por UUID menor; a sobrevivente
+  recebe bump de versão quando a junção move dados, e normalização reutilizada recebe bump
+  quando muda enriquecimento relevante.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-01
