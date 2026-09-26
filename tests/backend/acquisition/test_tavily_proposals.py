@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator, Iterator
 from dataclasses import replace
 from uuid import uuid4
 
+import httpx
 import pytest
 from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
@@ -22,7 +23,8 @@ from opportunity_radar.acquisition.domain import (
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.models import RawItemModel, SourceDefinitionModel, SourceRunModel
 from opportunity_radar.acquisition.service import AcquisitionService
-from opportunity_radar.companies.models import Company
+from opportunity_radar.acquisition.tavily import TavilyClient, TavilySearchCollector
+from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.platform.database import create_database_engine
 
 pytestmark = [
@@ -219,6 +221,90 @@ def test_company_not_found_becomes_pending_outcome() -> None:
         report = AcquisitionService(session).propose_from_tavily_evidence((item,))
 
         assert report.outcomes == ((type(report.outcomes[0]))(item.url or "", "company_not_found"),)
+
+
+def test_catalog_owner_resolves_real_tavily_collector_item_without_company_name() -> None:
+    with Session(_engine()) as session:
+        company = _company(session)
+        session.add(
+            CompanySource(
+                company_id=company.id,
+                source_type="greenhouse",
+                endpoint="https://boards.greenhouse.io/acme",
+                external_key="acme",
+            )
+        )
+        source = SourceDefinitionModel(
+            source_type="tavily_search",
+            name=f"{_PREFIX}real-{uuid4().hex}",
+            enabled=True,
+            configuration={}, evidence_status="confirmed", terms_reviewed=True,
+            collector_local_tested=True,
+        )
+        session.add(source)
+        session.commit()
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == "/search"
+            return httpx.Response(200, json={"results": [{
+                "url": "https://boards.greenhouse.io/acme/jobs/1",
+                "title": "Backend", "content": "evidence", "score": 0.8,
+            }], "usage": {"credits": 1}})
+
+        collector = TavilySearchCollector(
+            client=TavilyClient(
+                api_key="test",
+                client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+            )
+        )
+        service = AcquisitionService(
+            session, registry=CollectorRegistry((collector, GreenhouseCollector()))
+        )
+        asyncio.run(service.execute(source.id, CollectionRequest(keywords=("backend",))))
+        proposal = session.scalar(select(SourceDefinitionModel).where(
+            SourceDefinitionModel.company_source_id.is_not(None),
+            SourceDefinitionModel.source_type == "greenhouse",
+        ))
+        assert proposal is not None
+        assert proposal.company_source_id is not None
+        assert proposal.configuration["company_name"] == company.canonical_name
+
+
+def test_ambiguous_catalog_owner_stays_pending() -> None:
+    with Session(_engine()) as session:
+        first, second = _company(session), _company(session)
+        for company in (first, second):
+            session.add(
+                CompanySource(
+                    company_id=company.id,
+                    source_type="lever",
+                    endpoint=f"https://jobs.lever.co/{company.id}",
+                    external_key="shared",
+                )
+            )
+        session.commit()
+        item = CollectedItem(
+            source_type="tavily_search", raw_payload={}, url="https://jobs.lever.co/shared/1",
+            metadata={"source_proposal_candidate": True},
+        )
+        report = AcquisitionService(session).propose_from_tavily_evidence((item,))
+        assert report.outcomes[0].outcome == "company_not_found"
+
+
+def test_explicit_company_conflicting_with_catalog_stays_pending() -> None:
+    with Session(_engine()) as session:
+        owner, named = _company(session), _company(session)
+        session.add(
+            CompanySource(
+                company_id=owner.id, source_type="ashby",
+                endpoint="https://jobs.ashbyhq.com/acme", external_key="acme",
+            )
+        )
+        session.commit()
+        report = AcquisitionService(session).propose_from_tavily_evidence(
+            (_candidate(named, "https://jobs.ashbyhq.com/acme/jobs/1"),)
+        )
+        assert report.outcomes[0].outcome == "company_not_found"
 
 
 class _TavilyCollector:
