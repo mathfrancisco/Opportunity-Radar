@@ -1,14 +1,71 @@
+import os
 from pathlib import Path
+from uuid import uuid4
 
-from opportunity_radar.companies.models import CompanySource
+import pytest
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from opportunity_radar.companies.models import Company, CompanySource
+from opportunity_radar.platform.database import create_database_engine
 from scripts.import_research_catalog import (
     DEFAULT_INPUTS,
     ResearchRow,
     _record_source_metadata,
     _resolve_source_key,
     extract_ats_key,
+    import_research_file,
     read_research_rows,
 )
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("RUN_DATABASE_INTEGRATION") != "1",
+    reason="database integration is enabled only in the isolated CI database",
+)
+def test_import_research_file_is_idempotent_for_completed_file(tmp_path: Path) -> None:
+    company_name = f"F20 Idempotence {uuid4().hex}"
+    research = tmp_path / "research.md"
+    research.write_text(
+        "\n".join(
+            (
+                "| Empresa | Situação | ATS | Fonte consultada | Evidência / observação |",
+                "| --- | --- | --- | --- | --- |",
+                f"| {company_name} | ATS identificado | Ashby | "
+                "[Carreiras](https://example.com/careers) | "
+                "[Board](https://jobs.ashbyhq.com/idempotence-board) |",
+            )
+        ),
+        encoding="utf-8",
+    )
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+
+    with Session(engine) as session:
+        first = import_research_file(
+            session, research, dry_run=False, resume=False
+        )
+        session.commit()
+        second = import_research_file(
+            session, research, dry_run=False, resume=False
+        )
+
+        company_count = session.scalar(
+            select(func.count()).select_from(Company).where(
+                Company.canonical_name == company_name
+            )
+        )
+        source_count = session.scalar(
+            select(func.count())
+            .select_from(CompanySource)
+            .join(CompanySource.company)
+            .where(Company.canonical_name == company_name)
+        )
+
+    assert first["status"] == "completed"
+    assert second["status"] == "already_completed"
+    assert company_count == 1
+    assert source_count == 2  # Ashby board plus the careers page.
 
 
 def test_reads_only_company_rows_and_preserves_consulted_url(tmp_path: Path) -> None:

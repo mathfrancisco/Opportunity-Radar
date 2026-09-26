@@ -80,7 +80,7 @@ pesquisa.
 | Toda empresa Ashby/Greenhouse/Lever com chave resolvível tem proposta inerte | `tests/backend/test_research_catalog_import.py::test_resolve_source_key_extracts_and_validates_board_link`, `::test_record_source_metadata_surfaces_unresolved_ats_keys` |
 | Chave extraída de link é validada pelo coletor e guarda o link como evidência | `test_extract_ats_key_validates_each_ats_board_link_shape`, `test_extract_ats_key_rejects_links_outside_the_ats_domain_or_pattern` |
 | Empresas sem chave resolvível aparecem como pendência com motivo | `test_resolve_source_key_reports_unresolved_when_no_link_matches` |
-| O import continua idempotente | parcial: `uq_company_source_company_type_endpoint` (`src/opportunity_radar/companies/models.py`) impede duplicar `CompanySource` no banco; não há teste que rode o import duas vezes e confira zero duplicação — abrir card de acompanhamento se essa regressão for necessária |
+| O import continua idempotente | `tests/backend/test_research_catalog_import.py::test_import_research_file_is_idempotent_for_completed_file` roda o mesmo arquivo duas vezes e confirma um registro de empresa e as duas fontes esperadas; teste requer `RUN_DATABASE_INTEGRATION=1` |
 | O E2E passa com as contagens novas, justificadas no PR | contagens citadas no próprio status do card (`sources_total == 16`); evidência de execução do E2E fica com o PR que mudou `.github/workflows/pipeline.yml`, não revalidada nesta revisão documental |
 
 ## Arquivos prováveis

@@ -154,6 +154,23 @@ class _PartiallyInvalidCollector(_Collector):
         )
 
 
+class _RepeatedCursorLoopCollector(_Collector):
+    async def discover(
+        self, request: CollectionRequest
+    ) -> AsyncIterator[CollectedItem]:
+        del request
+        yield CollectedItem(
+            source_type=self.source_type,
+            external_id="job-1",
+            raw_payload={"title": "First"},
+            cursor="cursor-1",
+        )
+        raise AcquisitionError(
+            AcquisitionErrorCode.PARSER_SCHEMA_CHANGED,
+            "provider repeated cursor cursor-1",
+        )
+
+
 class _UnderReportingCollector(_Collector):
     """Announces more items than it ever yields, like a board with broken pagination."""
 
@@ -231,6 +248,21 @@ def test_run_deduplicates_identical_identity_but_preserves_changed_payload() -> 
     assert run.items_skipped == 1
     assert run.checkpoint_after == "cursor-2"
     assert session.committed
+
+
+def test_repeated_cursor_loop_error_never_marks_run_complete() -> None:
+    service, _ = _service(_RepeatedCursorLoopCollector())
+
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+        )
+    )
+
+    assert run.status == "PARTIAL"
+    assert run.complete is False
+    assert run.checkpoint_after is None
 
 
 def test_run_defaults_to_on_demand_execution_trigger() -> None:
@@ -329,6 +361,7 @@ def test_pagination_gap_alert_does_not_fire_when_max_items_caps_the_run() -> Non
 
     assert run.items_seen == 1
     assert run.items_announced == 5
+    assert run.complete is False
     assert notifier.messages == []
 
 

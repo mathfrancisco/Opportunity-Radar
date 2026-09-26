@@ -54,7 +54,7 @@ Código integrado: F17-02 (`c73cf8f`, `1287ba0`), F17-04 (`ef8345d`), F17-07 (`2
 ## Comando de verificação
 
 ```bash
-docker compose -p f20-03 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend/test_role_family_integration.py tests/backend/test_research_catalog_import.py tests/backend/opportunities/test_run_closures.py
+docker compose -p f20-03 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend/test_role_family_integration.py tests/backend/test_research_catalog_import.py tests/backend/opportunities/test_run_closures.py tests/backend/acquisition/test_service.py tests/backend/acquisition/test_lever_collector.py
 docker compose -p f20-03 -f compose.yaml -f compose.dev.yaml run --rm api ruff check .
 docker compose -p f20-03 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```
