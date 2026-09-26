@@ -28,6 +28,7 @@ from opportunity_radar.acquisition.proposals import (
     follow_correction,
 )
 from opportunity_radar.acquisition.teamtailor import TeamtailorCollector
+from opportunity_radar.acquisition.workable import WorkableCollector
 from opportunity_radar.acquisition.workday import WorkdayCollector
 from opportunity_radar.companies.domain import (
     AmbiguousCompanyIdentityError,
@@ -47,7 +48,7 @@ from opportunity_radar.companies.service import CompanyService
 PRIORITIES = ("high", "normal", "low")
 RADAR_STATUSES = ("active", "paused")
 # The ATS types a proposal can be made from; anything else has no collector to feed.
-SUPPORTED_ATS = ("ashby", "lever", "greenhouse", "workday", "teamtailor")
+SUPPORTED_ATS = ("ashby", "lever", "greenhouse", "workday", "teamtailor", "workable")
 
 
 class CompanyRegistrationError(ValueError):
@@ -378,6 +379,7 @@ def _source_values(
         "greenhouse": GreenhouseCollector.validate_board_token,
         "workday": WorkdayCollector.validate_tenant_identifier,
         "teamtailor": TeamtailorCollector.validate_company_identifier,
+        "workable": WorkableCollector.validate_account_identifier,
     }
     try:
         validators[ats](key)
