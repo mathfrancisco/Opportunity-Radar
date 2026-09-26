@@ -26,6 +26,7 @@ import asyncio
 import json
 import re
 from collections import defaultdict
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -60,6 +61,8 @@ from opportunity_radar.platform.database import create_database_engine
 
 CASES_DIR = prompts_root() / "opportunity_analysis" / "eval" / "cases"
 OUTPUT_DIR = Path("data/evals")
+# Soft limits allow 25 requests per minute. A 50-case baseline may exceed them.
+# Waiting is an operator choice, never the default.
 
 
 def resolve_routes(settings: Settings, model: str | None) -> dict[AITask, ModelRoute]:
@@ -118,7 +121,12 @@ async def _run(
     adapter: GroqAnalysisAdapter,
     cases: list[EvalCase],
     repeat: int,
+    *,
+    quota_wait_seconds: float = 0.0,
+    sleeper: Callable[[float], Awaitable[None]] | None = None,
 ) -> tuple[list[CaseScore], dict[str, list[CaseScore]], dict[str, Any], str | None]:
+    if sleeper is None:
+        sleeper = asyncio.sleep
     await adapter.warm_up()
     server = dict(await adapter.describe())
     scores: list[CaseScore] = []
@@ -132,11 +140,33 @@ async def _run(
         runs = repeat if case.critical else 1
         for attempt in range(runs):
             outcome = await adapter.analyze(request, prepared=prepared, use_cache=False)
-            score = score_case(case, outcome, evidence_sources=prepared.evidence_sources)
             quota_blocked = (
                 outcome.status is AnalysisStatus.AI_FAILED
                 and outcome.failure_code is AnalysisFailureCode.QUOTA_EXHAUSTED
             )
+            if quota_blocked and quota_wait_seconds > 0:
+                wait_seconds = quota_wait_seconds
+                quota_guard = adapter.quota_guard
+                if quota_guard is not None:
+                    next_available = await asyncio.to_thread(
+                        quota_guard.next_available_at, adapter.model
+                    )
+                    seconds_until_available = (
+                        next_available - datetime.now(UTC)
+                    ).total_seconds()
+                    wait_seconds = max(wait_seconds, seconds_until_available)
+                print(
+                    f"{case.case_id}: quota exhausted; waiting {wait_seconds:.0f}s "
+                    "before one retry",
+                    flush=True,
+                )
+                await sleeper(wait_seconds)
+                outcome = await adapter.analyze(request, prepared=prepared, use_cache=False)
+                quota_blocked = (
+                    outcome.status is AnalysisStatus.AI_FAILED
+                    and outcome.failure_code is AnalysisFailureCode.QUOTA_EXHAUSTED
+                )
+            score = score_case(case, outcome, evidence_sources=prepared.evidence_sources)
             if quota_blocked:
                 score = replace(score, status="QUOTA_BLOCKED")
                 quota_blocked_case = case.case_id
@@ -236,6 +266,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--split", choices=("all", *SPLITS), default="all")
     parser.add_argument("--repeat", type=int, default=3, help="runs of each critical case")
     parser.add_argument("--label", help="goes in the report file name, e.g. baseline")
+    parser.add_argument(
+        "--quota-wait-seconds",
+        type=float,
+        default=0.0,
+        help="wait at least this long and retry once after quota exhaustion; 0 stops immediately",
+    )
     args = parser.parse_args(argv)
 
     settings = Settings()  # type: ignore[call-arg]  # values come from the environment
@@ -256,6 +292,7 @@ def main(argv: list[str] | None = None) -> int:
             _adapter(settings, args, engine),
             cases,
             max(1, args.repeat),
+            quota_wait_seconds=args.quota_wait_seconds,
         )
     )
     summary = summarize_by_split(scores)

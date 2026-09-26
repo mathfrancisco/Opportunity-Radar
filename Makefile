@@ -71,7 +71,7 @@ collect:
 	@docker compose run --rm --build -v "$(CURDIR):/workspace" api python scripts/collect.py $(if $(SOURCE_ID),--source-id "$(SOURCE_ID)",) $(if $(SOURCE_TYPE),--source-type "$(SOURCE_TYPE)",) $(if $(KEYWORDS),--keywords "$(KEYWORDS)",) $(if $(MODE),--mode "$(MODE)",) $(if $(MAX_ITEMS),--max-items "$(MAX_ITEMS)",)
 
 eval-analysis:
-	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/eval_analysis.py --cases /workspace/prompts/opportunity_analysis/eval/cases --output /workspace/data/evals $(if $(PROMPT),--prompt "$(PROMPT)",) $(if $(MODEL),--model "$(MODEL)",) $(if $(BASELINE),--baseline "/workspace/$(BASELINE)",) $(if $(SPLIT),--split "$(SPLIT)",) $(if $(REPEAT),--repeat "$(REPEAT)",) $(if $(LABEL),--label "$(LABEL)",)
+	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/eval_analysis.py --cases /workspace/prompts/opportunity_analysis/eval/cases --output /workspace/data/evals $(if $(PROMPT),--prompt "$(PROMPT)",) $(if $(MODEL),--model "$(MODEL)",) $(if $(BASELINE),--baseline "/workspace/$(BASELINE)",) $(if $(SPLIT),--split "$(SPLIT)",) $(if $(REPEAT),--repeat "$(REPEAT)",) $(if $(LABEL),--label "$(LABEL)",) $(if $(QUOTA_WAIT),--quota-wait-seconds "$(QUOTA_WAIT)",)
 
 eval-search:
 	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/eval_search.py $(if $(MODE),--mode "$(MODE)",--mode both) $(if $(REF_PATH),--path "/workspace/$(REF_PATH)",)
