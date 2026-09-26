@@ -216,7 +216,14 @@ export interface BatchProbeResult {
 }
 
 /** The collectors a source can be created for, with the configuration each one needs. */
-export const sourceTypes = ['ashby', 'lever', 'greenhouse', 'remotive', 'manual'] as const
+export const sourceTypes = [
+  'ashby',
+  'lever',
+  'greenhouse',
+  'remotive',
+  'teamtailor',
+  'manual',
+] as const
 export type SourceType = (typeof sourceTypes)[number]
 
 export interface SourceDefinition {

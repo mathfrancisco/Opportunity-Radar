@@ -21,12 +21,13 @@ from opportunity_radar.acquisition.domain import (
 )
 
 # The collectors a probe can exercise: every one with a public endpoint to call.
-PROBE_TYPES = ("ashby", "lever", "greenhouse", "remotive")
+PROBE_TYPES = ("ashby", "lever", "greenhouse", "remotive", "teamtailor")
 PUBLIC_ENDPOINT_REFERENCES = {
     "ashby": "https://developers.ashbyhq.com/docs/public-job-posting-api",
     "greenhouse": "https://docs.greenhouse.io/job-board.html",
     "lever": "https://github.com/lever/postings-api",
     "remotive": "https://remotive.com/api-documentation",
+    "teamtailor": "https://jsonfeed.org/version/1.1",
 }
 
 
@@ -61,6 +62,9 @@ def probe_request(
         common["api_region"] = configuration.get("api_region", "global")
     elif source_type == "greenhouse":
         common["company_reference"] = _required(configuration, "board_token")
+        common["company_name"] = configuration.get("company_name")
+    elif source_type == "teamtailor":
+        common["company_reference"] = _required(configuration, "company_identifier")
         common["company_name"] = configuration.get("company_name")
     return CollectionRequest(**common)
 

@@ -54,6 +54,15 @@ const configFields: Record<SourceType, ConfigField[]> = {
     { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
   ],
   remotive: [],
+  teamtailor: [
+    {
+      key: 'company_identifier',
+      label: 'Domínio do board',
+      required: true,
+      hint: 'O host do site de carreiras, ex.: jobs.empresa.com (sem https:// nem caminho).',
+    },
+    { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
+  ],
   manual: [],
 }
 
@@ -62,6 +71,7 @@ const typeLabels: Record<SourceType, string> = {
   lever: 'Lever',
   greenhouse: 'Greenhouse',
   remotive: 'Remotive',
+  teamtailor: 'Teamtailor',
   manual: 'Manual (entrada avulsa de vaga)',
 }
 
