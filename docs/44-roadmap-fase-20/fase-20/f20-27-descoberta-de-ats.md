@@ -1,6 +1,12 @@
 # CARD F20-27 — Descoberta de ATS
 
-- **Status:** WIP parcial — snapshot integrado; critérios de aceite pendentes.
+- **Status:** Feito no código — `detect_ats`, `eligible_companies`, `discover_one`
+  (respeita `robots.txt` e uma req/s), `record_discovery_attempt`/`record_ats_identified`,
+  a tabela `company_radar.discovery_attempt`, `scripts/discover_ats.py` e o alvo `make
+  discover-ats` implementados; critérios 1–3 cobertos por
+  `tests/backend/companies/test_discovery.py` (15 testes). **Pendente:** critério 4 (o
+  relatório por tipo de ATS em `docs/pesquisas/`) exige a execução real na máquina de
+  referência, fora deste ambiente — não marcado, não fabricado.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-03
@@ -60,11 +66,12 @@ negativo não significa empresa sem vagas; guardar motivo e próxima pesquisa.
 
 ## Critérios de aceite
 
-- [ ] Uma execução percorre as empresas elegíveis com uma requisição cada, respeitando
+- [x] Uma execução percorre as empresas elegíveis com uma requisição cada, respeitando
       `robots.txt` e o ritmo.
-- [ ] ATS encontrado vira `CompanySource` com evidência e método `discovery`.
-- [ ] Tentativas ficam registradas e não se repetem antes do intervalo.
-- [ ] O relatório por tipo de ATS está em `docs/pesquisas/`.
+- [x] ATS encontrado vira `CompanySource` com evidência e método `discovery`.
+- [x] Tentativas ficam registradas e não se repetem antes do intervalo.
+- [ ] O relatório por tipo de ATS está em `docs/pesquisas/`. (exige execução real na
+      máquina de referência, fora deste ambiente)
 
 ## Verificação
 

@@ -1,6 +1,14 @@
 # CARD F20-26 — Candidato a duplicata (sem sinal vetorial)
 
-- **Status:** WIP parcial — snapshot integrado; critérios de aceite pendentes.
+- **Status:** Feito no backend — regra `title_location_window` (sem sinal vetorial,
+  conforme "Ajustes da Fase 20"), tabela `duplicate_candidate`, `duplicate_of`,
+  confirmar/recusar e as três rotas HTTP implementados; todos os critérios de aceite
+  cobertos por `tests/backend/opportunities/test_duplicates.py` (10 testes) e
+  `tests/backend/dashboard/test_metrics.py::test_duplicate_rate_reported_before_and_after`.
+  **Pendente:** o selo "possível duplicata" na Inbox e a comparação lado a lado no
+  detalhe (seção "Escopo", não é critério de aceite) — o endpoint
+  `GET /opportunities/{id}/duplicate-candidates` já existe para essa tela, mas a Inbox
+  ainda não expõe se uma oportunidade tem candidato pendente; ficou fora por tempo.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-01
@@ -66,13 +74,13 @@ num board da empresa e numa fonte ampla em dias diferentes, vira duas oportunida
 
 ## Critérios de aceite
 
-- [ ] Pares que atendem a regra viram candidatos, sem juntar nada sozinhos.
-- [ ] Confirmar junta ocorrências e preserva procedência; recusar não sugere de novo.
-- [ ] A taxa de duplicatas é medida antes e depois.
+- [x] Pares que atendem a regra viram candidatos, sem juntar nada sozinhos.
+- [x] Confirmar junta ocorrências e preserva procedência; recusar não sugere de novo.
+- [x] A taxa de duplicatas é medida antes e depois.
 
-- [ ] Duas candidaturas ativas geram conflito sem mutação parcial.
-- [ ] Repetição, concorrência, ids antigos e ciclo de duplicatas têm cobertura no CI.
-- [ ] Junção não perde marcas/histórico e invalida avaliações derivadas quando necessário.
+- [x] Duas candidaturas ativas geram conflito sem mutação parcial.
+- [x] Repetição, concorrência, ids antigos e ciclo de duplicatas têm cobertura no CI.
+- [x] Junção não perde marcas/histórico e invalida avaliações derivadas quando necessário.
 
 ## Verificação
 

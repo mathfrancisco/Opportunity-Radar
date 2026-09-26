@@ -9,6 +9,8 @@ export interface SourceHealth {
   termsReviewed: boolean
   collectorLocalTested: boolean
   schedule: string | null
+  /** Optimistic-concurrency version, needed to probe this source from a batch (F20-25). */
+  version: number
   lastRunId: string | null
   lastRunStatus: string | null
   lastRunStartedAt: string | null
@@ -86,6 +88,7 @@ function parseHealth(value: unknown): SourceHealth | null {
     termsReviewed: value.terms_reviewed === true,
     collectorLocalTested: value.collector_local_tested === true,
     schedule: text(value.schedule),
+    version: count(value.version) || 1,
     lastRunId: text(value.last_run_id),
     lastRunStatus: text(value.last_run_status),
     lastRunStartedAt: text(value.last_run_started_at),
@@ -129,8 +132,11 @@ function parseRun(value: unknown): SourceRun | null {
   }
 }
 
-export async function getSourceHealth(): Promise<SourceHealthList> {
-  const response = await fetch(apiUrl('/source-health'), {
+export async function getSourceHealth(params?: {
+  status?: 'proposed'
+}): Promise<SourceHealthList> {
+  const query = params?.status ? `?status=${encodeURIComponent(params.status)}` : ''
+  const response = await fetch(apiUrl(`/source-health${query}`), {
     headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
@@ -198,6 +204,15 @@ export async function runSource(sourceId: string): Promise<SourceRun> {
   const run = parseRun(body)
   if (run === null) throw new Error('A API retornou uma execução inválida.')
   return run
+}
+
+/** One row of the "test several" batch in the homologation queue (F20-25). */
+export interface BatchProbeResult {
+  sourceId: string
+  ok: boolean
+  detail: string | null
+  errorCode: string | null
+  retryAfterSeconds: number | null
 }
 
 /** The collectors a source can be created for, with the configuration each one needs. */
@@ -383,6 +398,10 @@ export interface SourceProbe {
   detail: string | null
   evidenceRecorded: boolean
   finishedAt: string | null
+  /** Only set when `errorCode` is `SOURCE_RATE_LIMITED`, from the response's
+   * `Retry-After` header. A batch of probes (F20-25) waits this long before the next
+   * one instead of a fixed guess. */
+  retryAfterSeconds: number | null
 }
 
 /**
@@ -413,6 +432,7 @@ export async function probeSource(
       detail: text(probe.detail),
       evidenceRecorded: probe.evidence_recorded === true,
       finishedAt: text(probe.finished_at),
+      retryAfterSeconds: optionalNumber(probe.retry_after_seconds),
     },
   }
 }

@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import (
@@ -19,6 +20,7 @@ from opportunity_radar.companies.models import Company
 from opportunity_radar.dashboard.metrics import (
     METRIC_WINDOWS,
     SourceWindowMetrics,
+    duplicate_rate_report,
     source_metrics,
 )
 from opportunity_radar.opportunities.domain import SENIORITY_MAPPING_VERSION
@@ -320,3 +322,55 @@ def test_unknown_seniority_is_reported_with_its_provenance() -> None:
         assert seniority_metrics.percentages["UNKNOWN"] == pytest.approx(66.67, abs=0.01)
         assert seniority_metrics.mapping_versions == {SENIORITY_MAPPING_VERSION: 3}
         assert seniority_metrics.evidence == {"title": 2, "conflict": 1}
+
+
+def test_duplicate_rate_reported_before_and_after() -> None:
+    """F20-26: the same report, called before and after a confirm, shows the rate move."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        marker = uuid4().hex[:8]
+        survivor = OpportunityModel(
+            fingerprint=uuid4().hex + uuid4().hex,
+            fingerprint_version="v1",
+            canonical_title=f"Backend Engineer {marker}",
+            normalized_title="backend engineer",
+            work_mode="UNKNOWN",
+            seniority="UNKNOWN",
+            contract_type="UNKNOWN",
+            lifecycle_status="ACTIVE",
+            version=1,
+        )
+        duplicate = OpportunityModel(
+            fingerprint=uuid4().hex + uuid4().hex,
+            fingerprint_version="v1",
+            canonical_title=f"Backend Engineer {marker} 2",
+            normalized_title="backend engineer",
+            work_mode="UNKNOWN",
+            seniority="UNKNOWN",
+            contract_type="UNKNOWN",
+            lifecycle_status="ACTIVE",
+            version=1,
+        )
+        session.add_all([survivor, duplicate])
+        session.commit()
+        try:
+            before = duplicate_rate_report(session)
+            assert before.duplicate_of_count == 0
+
+            duplicate.duplicate_of = survivor.id
+            session.commit()
+
+            after = duplicate_rate_report(session)
+            assert after.duplicate_of_count == before.duplicate_of_count + 1
+            assert after.total_opportunities == before.total_opportunities
+            assert after.duplicate_rate is not None
+            assert after.duplicate_rate > (before.duplicate_rate or 0)
+        finally:
+            duplicate.duplicate_of = None
+            session.commit()
+            session.execute(
+                delete(OpportunityModel).where(
+                    OpportunityModel.id.in_([survivor.id, duplicate.id])
+                )
+            )
+            session.commit()

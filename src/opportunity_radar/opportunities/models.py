@@ -142,8 +142,14 @@ class OpportunityModel(Base):
     search_document: Mapped[Any | None] = mapped_column(
         TSVECTOR, Computed("NULL", persisted=True)
     )
+    #: Set once a `DuplicateCandidateModel` is confirmed and this opportunity is the one
+    #: absorbed (F20-26). `None` for a survivor or an opportunity with no known duplicate.
+    duplicate_of: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.opportunity.id", ondelete="SET NULL"),
+    )
     occurrences: Mapped[list["SourceOccurrenceModel"]] = relationship(
-        back_populates="opportunity"
+        back_populates="opportunity", foreign_keys="SourceOccurrenceModel.opportunity_id"
     )
     normalization_results: Mapped[list["NormalizationResultModel"]] = relationship(
         back_populates="opportunity"
@@ -194,6 +200,59 @@ class RelevanceMarkModel(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     opportunity: Mapped[OpportunityModel] = relationship()
+
+
+class DuplicateCandidateModel(Base):
+    """A pair of opportunities that the detection rule says may be the same posting.
+
+    Never merges anything by itself (F20-26): a row here is a suggestion until an
+    operator confirms or rejects it. `opportunity_id` is always the smaller of the two
+    ids in the pair, so the same pair is never stored twice in either order.
+    """
+
+    __tablename__ = "duplicate_candidate"
+    __table_args__ = (
+        CheckConstraint(
+            "rule IN ('title_location_window', 'embedding')",
+            name="ck_duplicate_candidate_rule",
+        ),
+        CheckConstraint(
+            "status IN ('PENDING', 'CONFIRMED', 'REJECTED')",
+            name="ck_duplicate_candidate_status",
+        ),
+        CheckConstraint(
+            "opportunity_id < duplicate_opportunity_id",
+            name="ck_duplicate_candidate_ordered_pair",
+        ),
+        UniqueConstraint(
+            "opportunity_id",
+            "duplicate_opportunity_id",
+            name="uq_duplicate_candidate_pair",
+        ),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    opportunity_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.opportunity.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    duplicate_opportunity_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.opportunity.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    rule: Mapped[str] = mapped_column(String(32), nullable=False)
+    score: Mapped[Decimal | None] = mapped_column(Numeric(4, 3))
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="PENDING")
+    decided_by: Mapped[str | None] = mapped_column(String(255))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class SourceOccurrenceModel(Base):

@@ -18,7 +18,15 @@ from opportunity_radar.opportunities.domain import (
     OpportunityStatus,
     WorkMode,
 )
+from opportunity_radar.opportunities.duplicates import (
+    DuplicateCandidateNotFoundError,
+    DuplicateConflictError,
+    DuplicateCycleError,
+    confirm_duplicate,
+    reject_duplicate,
+)
 from opportunity_radar.opportunities.models import (
+    DuplicateCandidateModel,
     NormalizationResultModel,
     OpportunityCompensationModel,
     OpportunityModel,
@@ -109,6 +117,22 @@ class RelevanceMarkResponse(BaseModel):
     marked_at: datetime
 
 
+class DuplicateCandidateResponse(BaseModel):
+    id: UUID
+    opportunity_id: UUID
+    duplicate_opportunity_id: UUID
+    rule: str
+    score: Decimal | None
+    status: str
+    decided_by: str | None
+    decided_at: datetime | None
+    created_at: datetime
+
+
+class DuplicateCandidatePageResponse(BaseModel):
+    items: list[DuplicateCandidateResponse]
+
+
 class OpportunityResponse(BaseModel):
     id: UUID
     fingerprint: str
@@ -186,6 +210,16 @@ class RelevanceMarkBody(BaseModel):
         if self.reason not in _RELEVANCE_REASONS:
             raise ValueError(f"invalid reason: {self.reason}")
         return self.reason
+
+
+class ConfirmDuplicateBody(BaseModel):
+    expected_version_survivor: int = Field(ge=1)
+    expected_version_absorbed: int = Field(ge=1)
+    decided_by: str = Field(min_length=1, max_length=255)
+
+
+class RejectDuplicateBody(BaseModel):
+    decided_by: str = Field(min_length=1, max_length=255)
 
 
 @router.post("/normalizations/pending", response_model=NormalizePendingResponse)
@@ -368,6 +402,116 @@ def mark_relevance(
             },
         ) from error
     return _relevance_mark_response(mark)
+
+
+@router.get(
+    "/{opportunity_id}/duplicate-candidates",
+    response_model=DuplicateCandidatePageResponse,
+)
+def list_duplicate_candidates(
+    opportunity_id: UUID,
+    session: Session = Depends(get_session),
+) -> DuplicateCandidatePageResponse:
+    rows = session.scalars(
+        select(DuplicateCandidateModel).where(
+            (DuplicateCandidateModel.opportunity_id == opportunity_id)
+            | (DuplicateCandidateModel.duplicate_opportunity_id == opportunity_id)
+        )
+    ).all()
+    return DuplicateCandidatePageResponse(
+        items=[_duplicate_candidate_response(row) for row in rows]
+    )
+
+
+@router.post(
+    "/duplicate-candidates/{candidate_id}/confirm",
+    response_model=DuplicateCandidateResponse,
+)
+def confirm_duplicate_candidate(
+    candidate_id: UUID,
+    body: ConfirmDuplicateBody,
+    session: Session = Depends(get_session),
+) -> DuplicateCandidateResponse:
+    try:
+        candidate = confirm_duplicate(
+            session,
+            candidate_id,
+            expected_version_survivor=body.expected_version_survivor,
+            expected_version_absorbed=body.expected_version_absorbed,
+            decided_by=body.decided_by,
+        )
+    except DuplicateCandidateNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "duplicate_candidate_not_found",
+                "message": "Duplicate candidate not found.",
+            },
+        ) from error
+    except OpportunityVersionConflictError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "version_conflict", "message": str(error)},
+        ) from error
+    except DuplicateConflictError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "duplicate_conflict", "message": str(error)},
+        ) from error
+    except DuplicateCycleError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "duplicate_cycle", "message": str(error)},
+        ) from error
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "invalid_duplicate_transition", "message": str(error)},
+        ) from error
+    return _duplicate_candidate_response(candidate)
+
+
+@router.post(
+    "/duplicate-candidates/{candidate_id}/reject",
+    response_model=DuplicateCandidateResponse,
+)
+def reject_duplicate_candidate(
+    candidate_id: UUID,
+    body: RejectDuplicateBody,
+    session: Session = Depends(get_session),
+) -> DuplicateCandidateResponse:
+    try:
+        candidate = reject_duplicate(session, candidate_id, decided_by=body.decided_by)
+    except DuplicateCandidateNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "duplicate_candidate_not_found",
+                "message": "Duplicate candidate not found.",
+            },
+        ) from error
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "invalid_duplicate_transition", "message": str(error)},
+        ) from error
+    return _duplicate_candidate_response(candidate)
+
+
+def _duplicate_candidate_response(
+    candidate: DuplicateCandidateModel,
+) -> DuplicateCandidateResponse:
+    return DuplicateCandidateResponse(
+        id=candidate.id,
+        opportunity_id=candidate.opportunity_id,
+        duplicate_opportunity_id=candidate.duplicate_opportunity_id,
+        rule=candidate.rule,
+        score=candidate.score,
+        status=candidate.status,
+        decided_by=candidate.decided_by,
+        decided_at=candidate.decided_at,
+        created_at=candidate.created_at,
+    )
 
 
 def _relevance_mark_response(mark: RelevanceMarkModel) -> RelevanceMarkResponse:

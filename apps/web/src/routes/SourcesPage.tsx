@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { DataTable } from '../components/DataTable'
@@ -277,6 +278,12 @@ export function SourcesPage() {
         {creating === null && (
           <Button onClick={() => setCreating('greenhouse')}>Nova fonte</Button>
         )}
+        <Link
+          className="rounded-xl border border-line-strong px-5 py-3 text-sm font-medium hover:border-ink"
+          to="/sources/homologation-queue"
+        >
+          Fila de homologação
+        </Link>
         {created && (
           <p className="text-sm text-success-ink" role="status">
             Fonte “{created}” criada, desabilitada. A homologação dela está no cartão abaixo.

@@ -1,9 +1,9 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help bootstrap dev up up-cpu down restart status logs migrate test test-integration check doctor soak import-companies enable-sources collect backup restore-check eval-analysis eval-search export-eval-cases
+.PHONY: help bootstrap dev up up-cpu down restart status logs migrate test test-integration check doctor soak import-companies enable-sources discover-ats collect backup restore-check eval-analysis eval-search export-eval-cases
 
 help:
-	@echo "Targets: bootstrap dev up up-cpu down restart status logs migrate import-companies enable-sources collect"
+	@echo "Targets: bootstrap dev up up-cpu down restart status logs migrate import-companies enable-sources discover-ats collect"
 	@echo "Operations: doctor soak backup restore-check eval-analysis eval-search export-eval-cases"
 	@echo "Validation (run only when requested): test test-integration check"
 
@@ -59,6 +59,10 @@ import-companies:
 enable-sources:
 	@test "$(TERMS_REVIEWED)" = "1" || (echo "Use TERMS_REVIEWED=1 after reviewing the public source terms." && exit 2)
 	@docker compose run --rm --build -v "$(CURDIR):/workspace" api python scripts/enable_sources.py --accept-terms $(if $(DRY_RUN),--dry-run,) $(if $(EXCLUDE_REMOTIVE),--exclude-remotive,) $(if $(MAX_ITEMS),--max-items "$(MAX_ITEMS)",)
+
+# Off by default: a manual run, or a low-frequency job an operator schedules separately.
+discover-ats:
+	@docker compose run --rm --build api python scripts/discover_ats.py
 
 backup:
 	@docker compose run --rm -v "$(CURDIR)/data/backups:/app/data/backups" api python scripts/backup.py $(if $(LABEL),--label "$(LABEL)",)

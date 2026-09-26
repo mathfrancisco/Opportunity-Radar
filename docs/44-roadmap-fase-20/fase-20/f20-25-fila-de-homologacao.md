@@ -1,6 +1,12 @@
 # CARD F20-25 — Fila de homologação
 
-- **Status:** WIP parcial — snapshot integrado; critérios de aceite pendentes.
+- **Status:** Feito — critérios de aceite fechados e cobertos por teste (backend:
+  `tests/backend/dashboard/test_queries.py::test_list_source_health_filters_by_status_proposed`,
+  `::test_list_source_health_orders_by_company_priority`,
+  `tests/backend/acquisition/test_service.py::test_probe_reports_retry_after_on_rate_limit`;
+  frontend: `apps/web/src/components/HomologationQueue.test.tsx`, 4 testes, um por critério).
+  Pendente apenas a medição na máquina de referência (fora do CI): homologar as propostas
+  reais do F20-03 pela fila e colar no PR quantas foram confirmadas/falharam.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-03
@@ -52,10 +58,10 @@ entre testes da mesma fonte, não entre fontes diferentes.
 
 ## Critérios de aceite
 
-- [ ] A fila lista as propostas por estado e prioridade.
-- [ ] O modo sequencial leva de uma proposta à próxima sem voltar à lista.
-- [ ] O lote de sondas respeita `Retry-After` e mostra o resultado de cada uma.
-- [ ] Termos e habilitação nunca acontecem em lote.
+- [x] A fila lista as propostas por estado e prioridade.
+- [x] O modo sequencial leva de uma proposta à próxima sem voltar à lista.
+- [x] O lote de sondas respeita `Retry-After` e mostra o resultado de cada uma.
+- [x] Termos e habilitação nunca acontecem em lote.
 
 ## Verificação
 
