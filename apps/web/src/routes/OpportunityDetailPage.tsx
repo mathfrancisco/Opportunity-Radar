@@ -6,10 +6,9 @@ import { Card } from '../components/Card'
 import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
 import { EmptyState, ErrorState, LoadingState } from '../components/states'
+import { AnalysisPanel } from '../features/matching/AnalysisPanel'
 import {
-  type AnalysisMetrics,
   type EligibilityDetail,
-  type MatchAnalysis,
   type MatchAssessment,
   type MatchFactor,
 } from '../features/matching/api'
@@ -18,9 +17,19 @@ import {
   useEvaluateOpportunity,
   useLatestAssessment,
 } from '../features/matching/useAssessment'
-import { type OpportunityDetail } from '../features/opportunities/api'
+import { type DuplicateCandidate, type OpportunityDetail } from '../features/opportunities/api'
 import { verdictLabels } from '../features/matching/verdicts'
-import { useOpportunity } from '../features/opportunities/useOpportunity'
+import {
+  useConfirmDuplicate,
+  useDuplicateCandidates,
+  useMarkRelevance,
+  useOpportunity,
+  useRejectDuplicate,
+} from '../features/opportunities/useOpportunity'
+
+/** Single-operator MVP (SPEC 43): no login, so duplicate decisions are attributed to a
+ * fixed operator identity rather than a per-user one. */
+const DUPLICATE_DECIDED_BY = 'web-operator'
 
 const resultLabels: Record<string, string> = {
   TRUE: 'Atende',
@@ -36,22 +45,6 @@ function formatDate(value: string | null) {
   if (!value) return '—'
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString('pt-BR')
-}
-
-/**
- * What the model call cost, in one line. Absent is said as absent: a cached answer or a row
- * from before the cost was recorded did not cost zero, it is simply not known.
- */
-function analysisCost(metrics: AnalysisMetrics | null) {
-  if (!metrics || metrics.totalMs === null) return 'Custo da chamada indisponível.'
-  const seconds = (metrics.totalMs / 1000).toLocaleString('pt-BR', {
-    maximumFractionDigits: 1,
-  })
-  const tokens =
-    metrics.promptTokens !== null && metrics.outputTokens !== null
-      ? ` · ${metrics.promptTokens} tokens de entrada, ${metrics.outputTokens} de saída`
-      : ''
-  return `Gerada em ${seconds} s${tokens}.`
 }
 
 function formatNumber(value: string | null, digits = 1) {
@@ -206,6 +199,217 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
   )
 }
 
+const RELEVANCE_REASONS = [
+  { value: 'AREA', label: 'Área' },
+  { value: 'SENIORITY', label: 'Senioridade' },
+  { value: 'LOCATION', label: 'Localização' },
+  { value: 'COMPANY', label: 'Empresa' },
+  { value: 'COMPENSATION', label: 'Remuneração' },
+  { value: 'OTHER', label: 'Outro' },
+]
+
+/** The relevance mark is operator evaluation data (F17-01): it never feeds the score. */
+function RelevanceMark({ opportunity }: { opportunity: OpportunityDetail }) {
+  const mark = useMarkRelevance(opportunity.id)
+  const current = opportunity.relevanceMark
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          disabled={mark.isPending}
+          onClick={() => mark.mutate({ relevant: true })}
+        >
+          Relevante
+        </Button>
+        <select
+          aria-label="Motivo de não ser para mim"
+          className="rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm"
+          disabled={mark.isPending}
+          onChange={(event) => {
+            const reason = event.target.value
+            mark.mutate({ relevant: false, reason: reason === '' ? null : reason })
+            event.target.value = ''
+          }}
+          value=""
+        >
+          <option value="">Não é para mim…</option>
+          {RELEVANCE_REASONS.map((reason) => (
+            <option key={reason.value} value={reason.value}>
+              {reason.label}
+            </option>
+          ))}
+        </select>
+        {current && (
+          <span className="text-sm text-muted">
+            Marcada como {current.relevant ? 'relevante' : 'não relevante'}
+            {current.reason ? ` (${current.reason.toLowerCase()})` : ''} em{' '}
+            {formatDate(current.markedAt)}.
+          </span>
+        )}
+      </div>
+      {mark.isError && (
+        <p className="mt-2 text-sm text-danger-ink">Não foi possível registrar a marca.</p>
+      )}
+    </div>
+  )
+}
+
+const DUPLICATE_COMPARISON_FIELDS: {
+  label: string
+  read: (opportunity: OpportunityDetail) => string
+}[] = [
+  { label: 'Título', read: (o) => o.title },
+  { label: 'Empresa', read: (o) => display(o.companyName) },
+  { label: 'Localização', read: (o) => display(o.location) },
+  { label: 'Modalidade', read: (o) => o.workMode },
+  { label: 'Senioridade', read: (o) => o.seniority },
+  { label: 'Contrato', read: (o) => o.contractType },
+  { label: 'Publicada', read: (o) => formatDate(o.publishedAt) },
+]
+
+/** One `PENDING` candidate, the two opportunities side by side with differences
+ * highlighted, and the confirm/reject actions (F20-26 "Escopo"). Fetches the other side
+ * of the pair itself so `OpportunityDetailPage` only has to know the candidate row. */
+function DuplicateCandidateCard({
+  candidate,
+  opportunity,
+}: {
+  candidate: DuplicateCandidate
+  opportunity: OpportunityDetail
+}) {
+  const otherId =
+    candidate.opportunityId === opportunity.id
+      ? candidate.duplicateOpportunityId
+      : candidate.opportunityId
+  const other = useOpportunity(otherId)
+  const confirm = useConfirmDuplicate(opportunity.id, otherId)
+  const reject = useRejectDuplicate(opportunity.id, otherId)
+  const busy = confirm.isPending || reject.isPending
+
+  if (other.isPending) return <LoadingState>Carregando a outra vaga do par…</LoadingState>
+  if (other.isError || !other.data) {
+    return <ErrorState onRetry={() => void other.refetch()}>Não foi possível carregar a outra vaga.</ErrorState>
+  }
+
+  const otherOpportunity = other.data
+  // `confirm_duplicate` always keeps the older `created_at` as the survivor — shown here
+  // so the operator sees which side "É a mesma vaga" would keep before confirming.
+  const survivorIsCurrent = opportunity.createdAt <= otherOpportunity.createdAt
+  const survivor = survivorIsCurrent ? opportunity : otherOpportunity
+  const absorbed = survivorIsCurrent ? otherOpportunity : opportunity
+
+  return (
+    <Card as="article" className="text-sm">
+      <p className="text-xs text-muted">
+        Regra: {candidate.rule}
+        {candidate.score !== null ? ` · score ${candidate.score}` : ''}
+      </p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        {[opportunity, otherOpportunity].map((side) => (
+          <div className="rounded-2xl border border-line bg-surface p-4" key={side.id}>
+            <p className="font-semibold">
+              {side.id === survivor.id ? (
+                <Link
+                  className="underline decoration-accent decoration-2 underline-offset-4"
+                  to={`/opportunities/${side.id}`}
+                >
+                  {side.title}
+                </Link>
+              ) : (
+                <Link to={`/opportunities/${side.id}`}>{side.title}</Link>
+              )}
+            </p>
+            <p className="mt-1 text-xs font-medium text-muted">
+              {side.id === survivor.id ? 'Ficaria como sobrevivente' : 'Seria absorvida'}
+            </p>
+            <dl className="mt-3 grid gap-2">
+              {DUPLICATE_COMPARISON_FIELDS.map((field) => {
+                const value = field.read(side)
+                const differs = field.read(opportunity) !== field.read(otherOpportunity)
+                return (
+                  <div key={field.label}>
+                    <dt className="text-muted">{field.label}</dt>
+                    <dd
+                      className={
+                        differs
+                          ? 'mt-0.5 rounded bg-warning-surface px-1 font-medium text-warning-ink'
+                          : 'mt-0.5 font-medium'
+                      }
+                    >
+                      {value}
+                    </dd>
+                  </div>
+                )
+              })}
+            </dl>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button
+          disabled={busy}
+          onClick={() =>
+            confirm.mutate({
+              candidateId: candidate.id,
+              expectedVersionSurvivor: survivor.version,
+              expectedVersionAbsorbed: absorbed.version,
+              decidedBy: DUPLICATE_DECIDED_BY,
+            })
+          }
+        >
+          É a mesma vaga
+        </Button>
+        <Button
+          disabled={busy}
+          onClick={() =>
+            reject.mutate({ candidateId: candidate.id, decidedBy: DUPLICATE_DECIDED_BY })
+          }
+          variant="secondary"
+        >
+          São vagas diferentes
+        </Button>
+      </div>
+      {(confirm.isError || reject.isError) && (
+        <p className="mt-2 text-sm text-danger-ink">
+          {(confirm.error ?? reject.error)?.message ?? 'Não foi possível registrar a decisão.'}
+        </p>
+      )}
+    </Card>
+  )
+}
+
+/** Section "Possível duplicata": every `PENDING` candidate naming this opportunity, each
+ * with its own side-by-side comparison and confirm/reject actions. */
+export function DuplicateCandidates({ opportunity }: { opportunity: OpportunityDetail }) {
+  const candidates = useDuplicateCandidates(opportunity.id)
+
+  if (candidates.isPending) return <LoadingState>Carregando candidatos a duplicata…</LoadingState>
+  if (candidates.isError) {
+    return (
+      <ErrorState onRetry={() => void candidates.refetch()}>
+        Não foi possível carregar os candidatos a duplicata.
+      </ErrorState>
+    )
+  }
+  const pending = candidates.data.filter((candidate) => candidate.status === 'PENDING')
+  if (pending.length === 0) {
+    return <EmptyState>Nenhum candidato a duplicata pendente para esta oportunidade.</EmptyState>
+  }
+  return (
+    <div className="grid gap-4">
+      {pending.map((candidate) => (
+        <DuplicateCandidateCard
+          candidate={candidate}
+          key={candidate.id}
+          opportunity={opportunity}
+        />
+      ))}
+    </div>
+  )
+}
+
 function Eligibility({ details }: { details: EligibilityDetail[] }) {
   if (details.length === 0) return <p className="text-subtle">Nenhum filtro avaliado.</p>
   return (
@@ -264,107 +468,6 @@ function Factors({ factors }: { factors: MatchFactor[] }) {
   )
 }
 
-function Analysis({
-  assessment,
-  analysis,
-  onRun,
-  running,
-  failed,
-}: {
-  assessment: MatchAssessment
-  analysis: MatchAnalysis | null
-  onRun: (refresh: boolean) => void
-  running: boolean
-  failed: boolean
-}) {
-  return (
-    <>
-      {analysis === null && (
-        <EmptyState>Nenhuma análise semântica registrada para esta avaliação.</EmptyState>
-      )}
-      {analysis && analysis.status !== 'AI_COMPLETED' && (
-        <div className="rounded-2xl border border-warning-line bg-warning-surface p-5 text-sm">
-          <p className="font-medium text-warning-ink">
-            Camada semântica degradada ({analysis.status}
-            {analysis.failureCode ? `, ${analysis.failureCode}` : ''}).
-          </p>
-          <p className="mt-2 text-subtle">
-            {analysis.detail ?? 'A decisão determinística acima permanece completa.'}
-          </p>
-        </div>
-      )}
-      {analysis?.status === 'AI_COMPLETED' && (
-        <Card className="text-sm">
-          <p className="text-body">{analysis.summary}</p>
-          {analysis.strengths.length > 0 && (
-            <>
-              <h3 className="mt-4 font-semibold">Pontos fortes</h3>
-              <ul className="mt-2 list-disc pl-5 text-subtle">
-                {analysis.strengths.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </>
-          )}
-          {analysis.risks.length > 0 && (
-            <>
-              <h3 className="mt-4 font-semibold">Riscos</h3>
-              <ul className="mt-2 list-disc pl-5 text-subtle">
-                {analysis.risks.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </>
-          )}
-          {analysis.unknowns.length > 0 && (
-            <>
-              <h3 className="mt-4 font-semibold">O anúncio não responde</h3>
-              <ul className="mt-2 list-disc pl-5 text-subtle">
-                {analysis.unknowns.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </>
-          )}
-          {analysis.recommendedReview && (
-            <p className="mt-4 font-medium text-warning-ink">
-              A análise sugere revisão humana antes de aplicar.
-            </p>
-          )}
-          <p className="mt-4 text-xs text-muted">
-            {analysis.modelId} · {analysis.promptVersion} · {analysis.schemaVersion} ·{' '}
-            {formatDate(analysis.analyzedAt)}
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            {analysisCost(analysis.metrics)}
-          </p>
-        </Card>
-      )}
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Button
-          disabled={running}
-          onClick={() => onRun(analysis?.status === 'AI_COMPLETED')}
-        >
-          {running
-            ? 'Analisando…'
-            : analysis?.status === 'AI_COMPLETED'
-              ? 'Analisar novamente'
-              : 'Analisar com Ollama'}
-        </Button>
-        <span className="text-xs text-muted">
-          A análise é consultiva: não altera score, verdict nem elegibilidade da avaliação{' '}
-          {assessment.id.slice(0, 8)}.
-        </span>
-      </div>
-      {failed && (
-        <p className="mt-3 text-sm text-danger-ink">
-          Não foi possível falar com a API. Tente novamente.
-        </p>
-      )}
-    </>
-  )
-}
-
 function Decision({
   assessment,
   opportunityId,
@@ -408,7 +511,7 @@ function Decision({
       </Section>
 
       <Section title="Análise semântica">
-        <Analysis
+        <AnalysisPanel
           analysis={assessment.analysis}
           assessment={assessment}
           failed={analyze.isError}
@@ -458,6 +561,14 @@ export function OpportunityDetailPage() {
         {opportunity.data && (
           <>
             <Facts opportunity={opportunity.data} />
+
+            <Section title="Relevância">
+              <RelevanceMark opportunity={opportunity.data} />
+            </Section>
+
+            <Section title="Possível duplicata">
+              <DuplicateCandidates opportunity={opportunity.data} />
+            </Section>
 
             {opportunity.data.description && (
               <Section title="Descrição">

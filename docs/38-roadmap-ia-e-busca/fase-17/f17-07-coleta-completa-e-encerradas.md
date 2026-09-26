@@ -1,6 +1,7 @@
 # CARD F17-07 — Coleta completa, alerta de paginação e vaga encerrada
 
-- **Status:** Backlog
+- **Status:** Em revisão — evidência por critério abaixo (card F20-03); dois critérios
+  sem teste dedicado localizado
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
 - **Depende de:** Nenhum
 - **Bloqueia:** Milestone P
@@ -19,22 +20,25 @@ Inbox para sempre, poluindo a precisão com vagas mortas.
 
 ## Escopo
 
-- **`items_announced`** em `SourceRun`, quando a API informa o total: Greenhouse
-  (`meta.total`), Lever (contagem das páginas), Ashby (tamanho da lista `jobs`). Sem total
-  informado, `null`.
-- **Execução completa:** `SUCCEEDED`, sem `max_items`, sem erro de paginação e com
-  `items_seen ≥ items_announced` quando houver total. Marcada em `SourceRun.complete`.
-- **Alerta de paginação:** execução com `items_seen < items_announced` gera incidente no
-  canal de alertas existente (`SourceAlertService`), com os dois números.
-- **Última vez vista:** `SourceOccurrence.last_seen_run_id` e `last_seen_at` atualizados a
-  cada execução completa que vê a vaga.
-- **Encerramento:** vaga cuja ocorrência não aparece em **duas execuções completas
-  seguidas** da mesma fonte passa a `CLOSED`, com evidência (ids das duas execuções).
-  Execução parcial ou falha nunca encerra.
-- **Reabertura:** vaga encerrada que reaparece volta ao estado anterior, com evidência.
-- **Frequência por prioridade:** o agendamento padrão de fonte de empresa de prioridade
-  alta é mais curto que o de prioridade baixa, sempre dentro do intervalo mínimo da
-  política de rede.
+- `items_announced` é total declarado independentemente pela API, quando houver;
+  total inferido da lista/páginas é reportado separadamente. Não inventar total
+  oficial para provedores que não o expõem.
+- `SourceRun.complete` exige sucesso, paginação esgotada comprovada, nenhum limite
+  atingido, cursor sem loop e contagem de ids únicos compatível com o total.
+- Persistir escopo/configuração da coleta e conjunto observado por execução,
+  incluindo itens já conhecidos. `last_seen_at` nunca retrocede.
+- Duas ausências completas comparáveis encerram a ocorrência, não diretamente
+  a oportunidade agregada. Parcial/falha não contam; presença interrompe a ausência.
+- Encerrar automaticamente a oportunidade apenas quando todas as ocorrências
+  autoritativas de board estiverem encerradas e nenhuma outra tiver presença
+  posterior. Sem fonte autoritativa, sinalizar desatualizada/desconhecida.
+- Guardar ids das execuções e motivo; mudança de board/filtro invalida comparação.
+- Reaparecimento reativa ocorrência e só desfaz fechamento automático. Preservar
+  descarte/arquivamento/fechamento manual e estágio de candidatura; avisar no pipeline.
+- Coletas filtradas/manual/Remotive não provam ausência. Checkpoint de retomada
+  não converte trecho restante do board em nova varredura completa.
+- Intervalos básicos por prioridade respeitam política da fonte; adaptação por
+  rendimento e orçamento agregado do host ficam em F18-04.
 
 ## Fora de escopo
 
@@ -52,15 +56,30 @@ Inbox para sempre, poluindo a precisão com vagas mortas.
 
 - [ ] Cada execução registra anunciados × lidos quando a API informa.
 - [ ] Paginação incompleta gera alerta com os números.
-- [ ] Vaga ausente em duas execuções completas seguidas vira `CLOSED`, com evidência.
+- [ ] Duas ausências comparáveis encerram ocorrência; outra fonte ativa impede
+      encerramento agregado.
 - [ ] Execução parcial ou falha nunca encerra vaga.
-- [ ] Vaga que reaparece é reaberta.
+- [ ] Reaparecimento desfaz apenas encerramento automático.
+- [ ] Mudança de escopo, loop de cursor e limite atingido nunca provam ausência.
+- [ ] Itens repetidos registram presença sem duplicar evidência/conteúdo.
 
 ## Verificação
 
 - **CI:** testes dos coletores com fixtures paginadas e totais; teste de integração do
   encerramento (duas completas, uma parcial no meio, reaparecimento); E2E com o board
   falso servindo menos vagas numa segunda coleta.
+
+## Critério → evidência (card F20-03)
+
+| Critério | Evidência |
+| --- | --- |
+| Cada execução registra anunciados × lidos quando a API informa | `tests/backend/acquisition/test_service.py::test_pagination_gap_alert_fires_for_an_unbounded_shortfall` (`run.items_announced == 5`) |
+| Paginação incompleta gera alerta com os números | `test_pagination_gap_is_announced_with_the_two_counts` (`test_alerts.py`), `test_pagination_gap_alert_fires_for_an_unbounded_shortfall`, `test_pagination_gap_alert_does_not_fire_when_max_items_caps_the_run` |
+| Duas ausências comparáveis encerram ocorrência; outra fonte ativa impede encerramento agregado | `tests/backend/opportunities/test_run_closures.py::test_missing_from_two_consecutive_complete_runs_closes_with_evidence` |
+| Execução parcial ou falha nunca encerra vaga | `test_run_closures.py::test_partial_and_failed_runs_never_close_anything` |
+| Reaparecimento desfaz apenas encerramento automático | `test_run_closures.py::test_reappearing_reopens_a_closed_opportunity` |
+| Mudança de escopo, loop de cursor e limite atingido nunca provam ausência | parcial: `tests/backend/acquisition/test_lever_collector.py::test_repeated_page_raises_instead_of_claiming_complete_board` confirma que página repetida gera `PARSER_SCHEMA_CHANGED`; `tests/backend/acquisition/test_service.py::test_repeated_cursor_loop_error_never_marks_run_complete` confirma execução parcial sem checkpoint; `::test_pagination_gap_alert_does_not_fire_when_max_items_caps_the_run` confirma que execução limitada não é completa. Invalidação por mudança de escopo continua sem evidência. |
+| Itens repetidos registram presença sem duplicar evidência/conteúdo | `test_service.py::test_run_deduplicates_identical_identity_but_preserves_changed_payload` |
 
 ## Arquivos prováveis
 

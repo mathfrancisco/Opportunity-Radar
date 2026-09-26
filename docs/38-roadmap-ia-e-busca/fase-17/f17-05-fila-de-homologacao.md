@@ -2,7 +2,7 @@
 
 - **Status:** Backlog
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
-- **Depende de:** F17-04, F17-02
+- **Depende de:** F17-04, F17-02, F17-07
 - **Bloqueia:** Milestone P
 - **Origem:** [SPEC de busca](../../37-spec-busca.md), §4
 

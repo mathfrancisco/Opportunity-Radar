@@ -1,6 +1,6 @@
 # CARD F16-02 — `qwen3:8b-q4_K_M` como padrão e opções explícitas da chamada
 
-- **Status:** Em revisão (PR #18)
+- **Status:** Implementação integrada (PR #18); aceite documental pendente
 - **Fase:** 16 — Camada local de IA
 - **Depende de:** F16-01
 - **Bloqueia:** F16-03, F16-04, Milestone O
@@ -12,7 +12,7 @@ Toda análise usa o `qwen3:8b-q4_K_M` com janela, limite de saída, semente, `ke
 raciocínio desligado declarados na própria requisição, e nenhuma dessas escolhas depende
 de padrão do servidor.
 
-## Contexto
+## Contexto inicial (antes da implementação)
 
 O padrão atual é `llama3.2:3b`, escolhido pelo custo em CPU antes de haver GPU e
 avaliação. A requisição (`matching/ollama.py:196`) envia só `temperature: 0`: a janela de
@@ -59,6 +59,12 @@ código lê.
   com o modelo novo — não listar o `qwen3` no falso.
 - `tests/backend/matching/test_ollama_adapter.py:102` confere `temperature`; estender para
   as demais opções.
+
+## Reprodutibilidade
+
+Seed e temperatura fixos reduzem variação, sem garantir saída idêntica.
+Registrar identidade resolvida do modelo, servidor e opções efetivas, conforme
+SPEC §6.4. O cache e o relatório do F16-06 usam a mesma identidade.
 
 ## Critérios de aceite
 

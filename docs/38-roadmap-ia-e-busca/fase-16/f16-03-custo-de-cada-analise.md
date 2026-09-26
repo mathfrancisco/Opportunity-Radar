@@ -1,6 +1,6 @@
 # CARD F16-03 — Custo de cada análise: durações e tokens
 
-- **Status:** Em revisão (PR #18)
+- **Status:** Implementação integrada (PR #18); aceite documental pendente
 - **Fase:** 16 — Camada local de IA
 - **Depende de:** F16-02
 - **Bloqueia:** F16-05, F16-06, F16-08, F16-13
@@ -11,7 +11,7 @@
 Cada análise grava quanto custou — tempo total, carga do modelo, tokens de entrada e de
 saída e o tempo de cada fase — e a API devolve esses números com a análise.
 
-## Contexto
+## Contexto inicial (antes da implementação)
 
 O Ollama devolve em toda resposta `total_duration`, `load_duration`, `prompt_eval_count`,
 `prompt_eval_duration`, `eval_count` e `eval_duration` (em nanossegundos). O adaptador

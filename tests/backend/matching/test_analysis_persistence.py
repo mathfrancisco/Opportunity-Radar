@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -20,7 +21,9 @@ from opportunity_radar.matching.analysis import (
     AnalysisRequest,
     AnalysisStatus,
     NullAnalysisAdapter,
+    PreparedAnalysis,
     SemanticAnalysis,
+    analysis_key,
 )
 from opportunity_radar.matching.models import MatchAnalysisModel
 from opportunity_radar.matching.repository import (
@@ -47,7 +50,7 @@ _PROMPT_VERSION = "opportunity_analysis/v1"
 
 
 class _StubAdapter:
-    """Stands in for Ollama: the service must not care which outcome it receives."""
+    """Stands in for the analysis provider: the service must not care which outcome it receives."""
 
     def __init__(self, outcome: AnalysisOutcome) -> None:
         self._outcome = outcome
@@ -63,7 +66,39 @@ class _StubAdapter:
     def prompt_version(self) -> str:
         return _PROMPT_VERSION
 
-    async def analyze(self, request: AnalysisRequest) -> AnalysisOutcome:
+    @property
+    def requires(self) -> frozenset[str]:
+        return frozenset()
+
+    def prepare(self, request: AnalysisRequest) -> PreparedAnalysis:
+        payload_hash = hashlib.sha256(
+            f"{request.opportunity_id}:{request.profile_version_id}:"
+            f"{request.opportunity_content_version}".encode()
+        ).hexdigest()
+        return PreparedAnalysis(
+            cache_key=analysis_key(
+                request,
+                model_id=self.model,
+                prompt_version=self.prompt_version,
+                schema_version="stub-v1",
+                prompt_digest="stub",
+                payload_hash=payload_hash,
+                options={},
+            ),
+            payload_hash=payload_hash,
+            payload={},
+            inference={"model": self.model},
+            size=AnalysisMetrics(),
+        )
+
+    async def analyze(
+        self,
+        request: AnalysisRequest,
+        *,
+        prepared: PreparedAnalysis | None = None,
+        use_cache: bool = True,
+    ) -> AnalysisOutcome:
+        del prepared, use_cache
         self.calls += 1
         self.requests.append(request)
         return self._outcome
@@ -93,7 +128,7 @@ def _failed() -> AnalysisOutcome:
     return AnalysisOutcome(
         status=AnalysisStatus.AI_FAILED,
         failure_code=AnalysisFailureCode.TRANSPORT_ERROR,
-        detail="could not connect to ollama",
+        detail="could not connect to provider",
     )
 
 

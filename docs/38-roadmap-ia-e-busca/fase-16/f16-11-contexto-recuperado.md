@@ -46,6 +46,15 @@ determinística num fluxo que precisa ser reproduzível.
 - O orçamento do F16-05 passa a ter duas partes elásticas; o bloco recuperado tem teto
   fixo pequeno e vem antes da descrição na prioridade de corte.
 
+## Limites de uso
+
+Este card é opcional após o Milestone P e a varredura básica. Não bloqueia fonte
+nova nem busca textual. Excluir própria vaga e duplicatas; recuperar decisões do
+perfil compatível, sem interpretar ausência de candidatura como rejeição.
+Persistir o snapshot das decisões, suas versões e hashes no payload da
+`analysis-key-v2`, não apenas ids mutáveis. Avaliar com corte temporal: decisões
+posteriores ao caso avaliado não podem entrar no contexto.
+
 ## Critérios de aceite
 
 - [ ] O payload leva até 3 decisões parecidas, e a análise grava quais recebeu.

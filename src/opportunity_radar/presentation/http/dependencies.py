@@ -16,7 +16,7 @@ from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.matching.adapters import build_analysis_adapter
 from opportunity_radar.matching.analysis import SemanticAnalysisPort
 from opportunity_radar.platform.config import Settings, get_settings
-from opportunity_radar.platform.database import open_session
+from opportunity_radar.platform.database import create_database_engine, open_session
 
 
 def get_session(settings: Settings = Depends(get_settings)) -> Iterator[Session]:
@@ -47,7 +47,13 @@ def get_alert_service(
 @lru_cache
 def cached_collector_registry() -> CollectorRegistry:
     settings = get_settings()
-    return build_collector_registry(greenhouse_base_url=settings.greenhouse_base_url)
+    return build_collector_registry(
+        greenhouse_base_url=settings.greenhouse_base_url,
+        tavily_api_key=settings.tavily_api_key,
+        tavily_base_url=settings.tavily_base_url,
+        tavily_search_depth=settings.tavily_search_depth,
+        tavily_credit_budget_per_run=settings.tavily_credit_budget_per_run,
+    )
 
 
 def get_collector_registry() -> CollectorRegistry:
@@ -58,7 +64,8 @@ def get_collector_registry() -> CollectorRegistry:
 @lru_cache
 def cached_analysis_adapter() -> SemanticAnalysisPort:
     """One adapter per process: its in-memory cache is worthless if rebuilt per request."""
-    return build_analysis_adapter(get_settings())
+    settings = get_settings()
+    return build_analysis_adapter(settings, create_database_engine(settings.database_url))
 
 
 def get_analysis_adapter() -> SemanticAnalysisPort:

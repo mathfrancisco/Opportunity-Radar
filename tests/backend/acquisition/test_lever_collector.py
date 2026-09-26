@@ -71,18 +71,19 @@ def test_uses_eu_api_and_paginates_until_short_page() -> None:
         delays.append(delay)
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    collection_request = CollectionRequest(
+        company_reference="acme",
+        api_region="eu",
+        network_policy=CollectionNetworkPolicy(
+            minimum_interval_seconds=2,
+            max_retry_delay_seconds=30,
+        ),
+    )
     try:
         items = asyncio.run(
             _collect(
                 LeverCollector(client=client, sleeper=sleeper),
-                CollectionRequest(
-                    company_reference="acme",
-                    api_region="eu",
-                    network_policy=CollectionNetworkPolicy(
-                        minimum_interval_seconds=2,
-                        max_retry_delay_seconds=30,
-                    ),
-                ),
+                collection_request,
             )
         )
     finally:
@@ -93,6 +94,39 @@ def test_uses_eu_api_and_paginates_until_short_page() -> None:
     assert calls[1].url.params["skip"] == "100"
     assert len(delays) == 1
     assert 0 < delays[0] <= 2
+    # A short final page is how Lever signals the whole board was read: the announced
+    # count is the sum of every page fetched, matching what was actually seen.
+    assert collection_request.telemetry.items_announced == 101
+
+
+def test_repeated_page_raises_instead_of_claiming_complete_board() -> None:
+    page = [
+        {
+            "id": f"job-{number}",
+            "hostedUrl": f"https://jobs.lever.co/acme/{number}",
+        }
+        for number in range(100)
+    ]
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json=page)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(AcquisitionError) as error:
+            asyncio.run(
+                _collect(
+                    LeverCollector(client=client),
+                    CollectionRequest(company_reference="acme"),
+                )
+            )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert error.value.code is AcquisitionErrorCode.PARSER_SCHEMA_CHANGED
+    assert [call.url.params["skip"] for call in calls] == ["0", "100"]
 
 
 def test_stops_at_max_items() -> None:
@@ -100,16 +134,20 @@ def test_stops_at_max_items() -> None:
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
     )
+    collection_request = CollectionRequest(company_reference="acme", max_items=1)
     try:
         items = asyncio.run(
             _collect(
                 LeverCollector(client=client),
-                CollectionRequest(company_reference="acme", max_items=1),
+                collection_request,
             )
         )
     finally:
         asyncio.run(client.aclose())
     assert len(items) == 1
+    # Capped by max_items: the collector never learns whether the board had more, so it
+    # must not claim an announced total.
+    assert collection_request.telemetry.items_announced is None
 
 
 def test_retries_rate_limit_with_network_policy() -> None:

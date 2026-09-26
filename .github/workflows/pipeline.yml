@@ -62,11 +62,12 @@ jobs:
     timeout-minutes: 15
     env:
       DATABASE_URL: postgresql+psycopg://opportunity_radar:ci-password@127.0.0.1:5432/opportunity_radar
-      OLLAMA_BASE_URL: http://127.0.0.1:11434
       RUN_DATABASE_INTEGRATION: "1"
     services:
       postgres:
-        image: postgres:17.2-alpine
+        # Always an empty database here, so the official pgvector image is safe to use; the
+        # compose job builds the project's alpine image with pgvector, as production does.
+        image: pgvector/pgvector:0.8.6-pg17
         env:
           POSTGRES_DB: opportunity_radar
           POSTGRES_USER: opportunity_radar
@@ -87,6 +88,17 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: requirements-dev.txt
+      - name: Install PostgreSQL 17 client tools
+        run: |
+          sudo install --directory --mode 0755 /usr/share/postgresql-common/pgdg
+          sudo curl --fail --silent --show-error --location \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            --output /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          pg_dump --version | grep -E ' 17\.'
+          pg_restore --version | grep -E ' 17\.'
       - name: Install backend
         run: |
           python -m pip install -r requirements-dev.txt
@@ -100,10 +112,10 @@ jobs:
       - name: Run backend tests
         run: pytest -q
       - name: Run the 72-hour soak gate against a controlled clock
-        # The local model is not part of this gate: with no Ollama reachable, every
+        # The cloud provider is not part of this gate: with no Groq reachable, every
         # analysis pass would spend its timeout proving something the e2e job proves.
         env:
-          OLLAMA_ANALYSIS_ENABLED: "false"
+          AI_ENABLED: "false"
         run: python scripts/soak_gate.py --json
 
   frontend:
@@ -143,11 +155,11 @@ jobs:
         run: docker compose -f compose.yaml -f compose.ci.yaml config --quiet
       - name: Start application
         run: docker compose -f compose.yaml -f compose.ci.yaml up --detach --build api worker frontend
-      - name: Verify API, frontend and degraded AI mode
+      - name: Verify API, frontend and AI mode against the fake Groq stub
         run: |
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:3000/
-          curl --fail http://127.0.0.1:8000/health | python -c "import json,sys; data=json.load(sys.stdin); assert data['ollama']['status'] == 'degraded'"
+          curl --fail http://127.0.0.1:8000/health | python -c "import json,sys; data=json.load(sys.stdin); assert data['ai']['status'] == 'healthy'"
           test "$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose -f compose.yaml -f compose.ci.yaml ps -q worker)")" = "healthy"
       - name: Import and expose the researched company catalog
         run: |
@@ -159,7 +171,7 @@ jobs:
           curl --fail http://127.0.0.1:3000/api/companies | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 220"
           curl --fail http://127.0.0.1:3000/api/sources | \
-            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 7; assert {item['source_type'] for item in data['items']} == {'ashby', 'lever', 'greenhouse', 'remotive'}; assert all(not item['enabled'] for item in data['items']); greenhouse=next(item for item in data['items'] if item['source_type'] == 'greenhouse'); assert greenhouse['evidence_status'] == 'ats_identified'; assert greenhouse['configuration']['board_token'] == 'assemblyai'; remotive=next(item for item in data['items'] if item['source_type'] == 'remotive'); assert remotive['evidence_status'] == 'unverified'; assert remotive['rate_limit_policy']['minimum_run_interval_seconds'] == 21600"
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 16; assert {item['source_type'] for item in data['items']} == {'ashby', 'lever', 'greenhouse', 'remotive'}; assert all(not item['enabled'] for item in data['items']); greenhouse=next(item for item in data['items'] if item['source_type'] == 'greenhouse'); assert greenhouse['evidence_status'] == 'ats_identified'; assert greenhouse['configuration']['board_token'] == 'assemblyai'; remotive=next(item for item in data['items'] if item['source_type'] == 'remotive'); assert remotive['evidence_status'] == 'unverified'; assert remotive['rate_limit_policy']['minimum_run_interval_seconds'] == 21600"
       - name: Verify manual acquisition through the public API
         run: |
           source_id="$(curl --fail --silent \
@@ -217,7 +229,7 @@ jobs:
       - name: Verify the dashboard read models
         run: |
           curl --fail --silent http://127.0.0.1:3000/api/overview | \
-            python -c "import json,sys; data=json.load(sys.stdin); assert data['opportunities_total'] == 1; assert data['assessed_opportunities'] == 1; assert data['verdict_counts']['REVIEW_REQUIRED'] == 1; assert data['analyses_degraded'] == 0; assert data['sources_total'] == 8; assert data['sources_failing'] == 0; assert data['pending_normalizations'] == 0; assert data['applications_active'] == 0; assert data['applications_by_stage'] == {}; assert data['follow_ups_due'] == 0"
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['opportunities_total'] == 1; assert data['assessed_opportunities'] == 1; assert data['verdict_counts']['REVIEW_REQUIRED'] == 1; assert data['analyses_degraded'] == 0; assert data['sources_total'] == 17; assert data['sources_failing'] == 0; assert data['pending_normalizations'] == 0; assert data['applications_active'] == 0; assert data['applications_by_stage'] == {}; assert data['follow_ups_due'] == 0"
           curl --fail --silent 'http://127.0.0.1:3000/api/inbox?order=score' | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 1; assert data['order'] == 'score'; item=data['items'][0]; assert item['verdict'] == 'REVIEW_REQUIRED'; assert item['analysis_status'] == 'AI_COMPLETED'; assert item['company_name'] == 'Example'; assert float(item['score']) >= 0"
           curl --fail --silent 'http://127.0.0.1:3000/api/inbox?only_assessed=true' | \
@@ -232,11 +244,11 @@ jobs:
           curl --fail --silent "http://127.0.0.1:3000/api/opportunities/$inbox_opportunity_id" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['fingerprint_version'] == 'v1'; assert len(data['occurrences']) == 2; assert len(data['normalization_results']) == 2; assert len(data['compensations']) == 2; assert all(item['payload_retained'] and item['payload_expired_at'] is None for item in data['occurrences'])"
           curl --fail --silent 'http://127.0.0.1:3000/api/source-health' | \
-            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 8; assert data['failing'] == 0; ran=[item for item in data['items'] if item['last_run_status'] is not None]; assert len(ran) == 1; assert ran[0]['last_run_status'] == 'SUCCEEDED'; assert ran[0]['last_run_items_seen'] == 2; assert ran[0]['last_run_items_skipped'] == 2; assert ran[0]['last_run_duration_seconds'] >= 0; idle=[item for item in data['items'] if item['last_run_id'] is None]; assert len(idle) == 7; assert all(item['last_run_items_seen'] is None for item in idle)"
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 17; assert data['failing'] == 0; ran=[item for item in data['items'] if item['last_run_status'] is not None]; assert len(ran) == 1; assert ran[0]['last_run_status'] == 'SUCCEEDED'; assert ran[0]['last_run_items_seen'] == 2; assert ran[0]['last_run_items_skipped'] == 2; assert ran[0]['last_run_duration_seconds'] >= 0; idle=[item for item in data['items'] if item['last_run_id'] is None]; assert len(idle) == 16; assert all(item['last_run_items_seen'] is None for item in idle)"
           curl --fail --silent 'http://127.0.0.1:3000/api/source-health?only_failing=true' | \
             python -c "import json,sys; assert json.load(sys.stdin)['total'] == 0"
           curl --fail --silent 'http://127.0.0.1:3000/api/source-metrics' | \
-            python -c "import json,sys; data=json.load(sys.stdin); assert [item['window'] for item in data['windows']] == ['24h', '7d']; day=data['windows'][0]; assert len(day['sources']) == 8; ran=[item for item in day['sources'] if item['has_runs']]; assert len(ran) == 1, ran; assert ran[0]['runs'] == 2; assert ran[0]['dedupe_rate'] == 0.5; assert ran[0]['error_rate'] == 0.0; assert ran[0]['coverage_state'] == 'SUCCEEDED'; assert ran[0]['seniority']['unknown'] == 0; assert ran[0]['seniority']['counts']['SENIOR'] == 2; assert ran[0]['seniority']['mapping_versions'] == {'seniority-v1': 2}; idle=[item for item in day['sources'] if not item['has_runs']]; assert all(item['error_rate'] is None and item['dedupe_rate'] is None for item in idle); assert {item['coverage_state'] for item in idle} == {'NOT_ENABLED'}"
+            python -c "import json,sys; data=json.load(sys.stdin); assert [item['window'] for item in data['windows']] == ['24h', '7d']; day=data['windows'][0]; assert len(day['sources']) == 17; ran=[item for item in day['sources'] if item['has_runs']]; assert len(ran) == 1, ran; assert ran[0]['runs'] == 2; assert ran[0]['dedupe_rate'] == 0.5; assert ran[0]['error_rate'] == 0.0; assert ran[0]['coverage_state'] == 'SUCCEEDED'; assert ran[0]['seniority']['unknown'] == 0; assert ran[0]['seniority']['counts']['SENIOR'] == 2; assert ran[0]['seniority']['mapping_versions'] == {'seniority-v1': 2}; idle=[item for item in day['sources'] if not item['has_runs']]; assert all(item['error_rate'] is None and item['dedupe_rate'] is None for item in idle); assert {item['coverage_state'] for item in idle} == {'NOT_ENABLED'}"
           metrics_status="$(curl --silent --output /dev/null --write-out '%{http_code}' 'http://127.0.0.1:3000/api/source-metrics?window=90d')"
           test "$metrics_status" = "422"
           curl --fail --silent http://127.0.0.1:3000/api/profile | \

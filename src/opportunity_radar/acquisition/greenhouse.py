@@ -22,6 +22,7 @@ from opportunity_radar.acquisition.domain import (
     CollectorCapabilities,
     HealthcheckContext,
     HealthResult,
+    parse_retry_after_seconds,
 )
 
 _BOARD_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
@@ -80,7 +81,8 @@ class GreenhouseCollector:
         self, request: CollectionRequest
     ) -> AsyncIterator[CollectedItem]:
         board = self.validate_board_token(request.company_reference)
-        jobs = await self._fetch_jobs(board, request)
+        jobs, total = await self._fetch_jobs(board, request)
+        request.telemetry.record_items_announced(total)
         emitted = 0
         for job in jobs:
             try:
@@ -106,7 +108,7 @@ class GreenhouseCollector:
 
     async def _fetch_jobs(
         self, board: str, request: CollectionRequest
-    ) -> list[Mapping[str, Any]]:
+    ) -> tuple[list[Mapping[str, Any]], int]:
         if self._client is not None:
             return await self._fetch_jobs_with_client(self._client, board, request)
         async with self._client_factory() as client:
@@ -117,7 +119,7 @@ class GreenhouseCollector:
         client: httpx.AsyncClient,
         board: str,
         request: CollectionRequest,
-    ) -> list[Mapping[str, Any]]:
+    ) -> tuple[list[Mapping[str, Any]], int]:
         url = f"{self._base_url}/v1/boards/{quote(board)}/jobs"
         policy = request.network_policy
         max_retries = policy.max_retries if policy is not None else self._max_retries
@@ -201,6 +203,11 @@ class GreenhouseCollector:
                 code,
                 f"Greenhouse returned HTTP {status}",
                 retryable=status == 429,
+                retry_after_seconds=(
+                    parse_retry_after_seconds(response.headers.get("Retry-After"))
+                    if status == 429
+                    else None
+                ),
             )
         if 500 <= status < 600:
             return AcquisitionError(
@@ -239,7 +246,7 @@ class GreenhouseCollector:
         return min(delay, maximum)
 
     @staticmethod
-    def _jobs(response: httpx.Response) -> list[Mapping[str, Any]]:
+    def _jobs(response: httpx.Response) -> tuple[list[Mapping[str, Any]], int]:
         try:
             payload = response.json()
         except ValueError as error:
@@ -272,7 +279,7 @@ class GreenhouseCollector:
                 AcquisitionErrorCode.PARSER_SCHEMA_CHANGED,
                 "Greenhouse response meta.total must be a non-negative integer",
             )
-        return jobs
+        return jobs, total
 
     @staticmethod
     def _item(

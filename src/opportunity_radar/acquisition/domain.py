@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from enum import StrEnum
 from math import isfinite
 from typing import Any, Mapping
@@ -26,6 +27,13 @@ class AcquisitionErrorCode(StrEnum):
     CIRCUIT_OPEN = "CIRCUIT_OPEN"
     UNKNOWN_EXTERNAL_ERROR = "UNKNOWN_EXTERNAL_ERROR"
     MANUAL_INPUT_INVALID = "MANUAL_INPUT_INVALID"
+    #: The provider says the calling account has exhausted its account-wide credit or
+    #: usage budget (Tavily HTTP 433). CREDIT_BUDGET_EXCEEDED separately reports the
+    #: per-run ceiling configured by the radar.
+    SOURCE_QUOTA_EXHAUSTED = "SOURCE_QUOTA_EXHAUSTED"
+    #: The radar stopped this run at its own Tavily credit ceiling. This is separate
+    #: from SOURCE_QUOTA_EXHAUSTED, which reports the provider's account-wide quota.
+    CREDIT_BUDGET_EXCEEDED = "CREDIT_BUDGET_EXCEEDED"
 
 
 class AcquisitionError(Exception):
@@ -38,6 +46,7 @@ class AcquisitionError(Exception):
         *,
         retryable: bool = False,
         field: str | None = None,
+        retry_after_seconds: float | None = None,
     ) -> None:
         super().__init__(summary)
         self.code = code
@@ -46,11 +55,37 @@ class AcquisitionError(Exception):
         # The request field that caused a configuration error, dotted for nested keys
         # ("configuration.board_token"), so a form can show the refusal where it belongs.
         self.field = field
+        # Only set for SOURCE_RATE_LIMITED, parsed from the response's Retry-After header
+        # (F20-25): lets a caller batching several probes wait the right amount.
+        self.retry_after_seconds = retry_after_seconds
 
 
 class InvalidSourceRunTransitionError(AcquisitionError):
     def __init__(self, summary: str) -> None:
         super().__init__(AcquisitionErrorCode.INVALID_CONFIGURATION, summary)
+
+
+def parse_retry_after_seconds(header_value: str | None) -> float | None:
+    """Parse a `Retry-After` header value (delta-seconds or HTTP-date) into seconds.
+
+    Returns `None` when the header is absent or unparseable, so a caller can fall back to
+    its own default without pretending the server gave a number.
+    """
+    if header_value is None:
+        return None
+    try:
+        seconds = float(header_value)
+    except ValueError:
+        try:
+            parsed_date = parsedate_to_datetime(header_value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if parsed_date.tzinfo is None:
+            parsed_date = parsed_date.replace(tzinfo=timezone.utc)
+        seconds = (parsed_date - datetime.now(timezone.utc)).total_seconds()
+    if not isfinite(seconds):
+        return None
+    return max(0.0, seconds)
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +148,17 @@ class CollectionTelemetry:
     last_http_attempt_at: datetime | None = None
     invalid_items: int = 0
     last_invalid_item_error: str | None = None
+    #: What the source's own API said the board holds, when it says so at all. `None`
+    #: means the collector never learned a total, not that the board announced zero.
+    items_announced: int | None = None
+    #: Credits charged by the provider during this request. It is copied to the
+    #: run by AcquisitionService after collection completes.
+    credits_used: int = 0
+
+    def record_items_announced(self, total: int) -> None:
+        if total < 0:
+            raise ValueError("items_announced cannot be negative")
+        self.items_announced = total
 
     def record_http_attempt(self, *, retry: bool = False) -> None:
         self.http_requests += 1
@@ -122,6 +168,11 @@ class CollectionTelemetry:
 
     def record_rate_limit(self) -> None:
         self.rate_limit_events += 1
+
+    def record_credits(self, amount: int) -> None:
+        if amount < 0:
+            raise ValueError("credits cannot be negative")
+        self.credits_used += amount
 
     def record_invalid_item(self, summary: str) -> None:
         self.invalid_items += 1
@@ -186,6 +237,9 @@ class CollectionRequest:
         default_factory=CollectionTelemetry, compare=False, repr=False
     )
     network_policy: CollectionNetworkPolicy | None = None
+    known_ats_boards: frozenset[tuple[str, str]] | None = field(
+        default=None, compare=False, repr=False
+    )
 
     def __post_init__(self) -> None:
         if self.max_items is not None and self.max_items < 1:
@@ -277,10 +331,21 @@ class SourceRun:
     http_requests: int = 0
     retry_count: int = 0
     rate_limit_events: int = 0
+    #: Provider credits spent by this run (e.g. Tavily's usage.credits), a different unit
+    #: from http_requests/retry_count, which keep counting HTTP calls regardless of what a
+    #: source charges per call. A generic field, not Tavily-specific: any future paid API
+    #: source can report spend the same way (F20-43, docs/41-spec-tavily.md section 6).
+    credits_used: int = 0
     error_code: AcquisitionErrorCode | None = None
     error_summary: str | None = None
     checkpoint_before: str | None = None
     checkpoint_after: str | None = None
+    #: What the source announced this run, when it said so. `None` means unknown, not zero.
+    items_announced: int | None = None
+    #: Whether this run read the whole board: `SUCCEEDED`, unbounded by `max_items`, and
+    #: (when a total is known) `items_seen` reached it. Only a complete run may close a
+    #: job that stopped appearing — see `evaluate_completeness`.
+    complete: bool = False
 
     def start(self, at: datetime | None = None) -> None:
         if self.status is not SourceRunStatus.PENDING:
@@ -327,6 +392,12 @@ class SourceRun:
         self.retry_count += retries
         self.rate_limit_events += rate_limit_events
 
+    def record_credits(self, amount: int) -> None:
+        self._require_running()
+        if amount < 0:
+            raise ValueError("credits cannot be negative")
+        self.credits_used += amount
+
     def finish(
         self,
         status: SourceRunStatus,
@@ -355,3 +426,27 @@ class SourceRun:
     def _require_running(self) -> None:
         if self.status is not SourceRunStatus.RUNNING:
             raise InvalidSourceRunTransitionError("source run is not running")
+
+
+def evaluate_completeness(
+    *,
+    status: SourceRunStatus,
+    max_items: int | None,
+    items_seen: int,
+    items_announced: int | None,
+) -> bool:
+    """Did this run read the whole board?
+
+    Only a `SUCCEEDED` run that was never bounded by `max_items` can be complete, because a
+    capped run stopping short of the total is by design, not evidence of anything missing.
+    Without a known total the run is trusted as complete on those two conditions alone; a
+    known total additionally requires `items_seen` to have reached it, which is what makes
+    a shrunk `items_seen` from broken pagination visible.
+    """
+    if status is not SourceRunStatus.SUCCEEDED:
+        return False
+    if max_items is not None:
+        return False
+    if items_announced is None:
+        return True
+    return items_seen >= items_announced

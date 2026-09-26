@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 import { CompaniesPage } from '../routes/CompaniesPage'
 import { CompanyDetailPage } from '../routes/CompanyDetailPage'
+import { HomologationQueuePage } from '../routes/HomologationQueuePage'
 import { InboxPage } from '../routes/InboxPage'
 import { OpportunityDetailPage } from '../routes/OpportunityDetailPage'
 import { OverviewPage } from '../routes/OverviewPage'
@@ -19,6 +20,7 @@ export function App() {
       <Route path="/companies" element={<CompaniesPage />} />
       <Route path="/companies/:companyId" element={<CompanyDetailPage />} />
       <Route path="/sources" element={<SourcesPage />} />
+      <Route path="/sources/homologation-queue" element={<HomologationQueuePage />} />
       <Route path="/profile" element={<ProfilePage />} />
       <Route path="/status" element={<StatusPage />} />
       <Route path="*" element={<OverviewPage />} />

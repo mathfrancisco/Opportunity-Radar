@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import RawItemModel, SourceRunModel
@@ -26,19 +26,36 @@ from opportunity_radar.opportunities.domain import (
     build_candidate,
     seniority_classification,
 )
+from opportunity_radar.opportunities.duplicates import find_title_location_window_candidates
 from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
     OpportunityCompensationModel,
     OpportunityModel,
     OpportunitySkillModel,
+    RelevanceMarkModel,
     SourceOccurrenceModel,
 )
 from opportunity_radar.opportunities.repository import (
     OpportunityRepository,
     RawItemEvidence,
 )
+from opportunity_radar.opportunities.role_family import (
+    ROLE_FAMILY_VERSION,
+    RoleFamily,
+    classify_role_family,
+    departments_from_metadata,
+)
 
-NORMALIZER_VERSION = "v3"
+NORMALIZER_VERSION = "v4"
+
+
+class PayloadExpiredError(NormalizationError):
+    """Retention already purged the raw payload this pre-contract item needs.
+
+    Card F17-06: an expired payload is never reconstructed by guesswork. The caller
+    marks the item unavailable (a `FAILED` `NormalizationResultModel`, kept — never
+    deleted — as history) and reports that only a fresh collection can fix it.
+    """
 
 
 class RawItemNotFoundError(LookupError):
@@ -84,6 +101,21 @@ class OpportunityService:
         evidence = self.repository.raw_item_evidence(raw_item_id)
         if evidence is None:
             raise RawItemNotFoundError(str(raw_item_id))
+        if evidence.raw_item.item_metadata.get("source_proposal_candidate") is True:
+            result = NormalizationResultModel(
+                raw_item_id=raw_item_id,
+                status="FAILED",
+                normalizer_version=NORMALIZER_VERSION,
+                identity_decision=None,
+                reasons=[{"code": "SOURCE_PROPOSAL_CANDIDATE"}],
+                error_summary=(
+                    "source proposal candidates await F20-46 and cannot become opportunities"
+                ),
+            )
+            self.session.add(result)
+            self.session.commit()
+            self.session.refresh(result)
+            return result
         existing = self.repository.normalization_result(
             raw_item_id, NORMALIZER_VERSION
         )
@@ -97,6 +129,19 @@ class OpportunityService:
                 normalization_input.metadata,
                 source_type=normalization_input.source_type,
             )
+        except PayloadExpiredError as error:
+            result = NormalizationResultModel(
+                raw_item_id=raw_item_id,
+                status="FAILED",
+                normalizer_version=NORMALIZER_VERSION,
+                identity_decision=None,
+                reasons=[{"code": "PAYLOAD_EXPIRED_RECOLLECTION_REQUIRED"}],
+                error_summary=str(error),
+            )
+            self.session.add(result)
+            self.session.commit()
+            self.session.refresh(result)
+            return result
         except (NormalizationError, TypeError, ValueError) as error:
             result = NormalizationResultModel(
                 raw_item_id=raw_item_id,
@@ -159,6 +204,7 @@ class OpportunityService:
             occurrence.source_url = candidate.source_url
             occurrence.normalized_source_url = candidate.normalized_url
             occurrence.last_seen_at = raw_item.fetched_at
+            occurrence.last_seen_run_id = raw_item.source_run_id
             occurrence.source_published_at = candidate.published_at
             occurrence.source_updated_at = candidate.source_updated_at
         else:
@@ -210,6 +256,7 @@ class OpportunityService:
                 normalized_source_url=candidate.normalized_url,
                 first_seen_at=raw_item.fetched_at,
                 last_seen_at=raw_item.fetched_at,
+                last_seen_run_id=raw_item.source_run_id,
                 source_published_at=candidate.published_at,
                 source_updated_at=candidate.source_updated_at,
             )
@@ -225,6 +272,13 @@ class OpportunityService:
         if enrichment_reasons:
             reasons.extend(enrichment_reasons)
             result_status = "REVIEW_REQUIRED"
+        opportunity.search_skills = _search_skills_text(opportunity.skills)
+
+        if decision == "NEW":
+            # F20-26: a brand-new opportunity is the only case that can introduce a fresh
+            # duplicate pair — REFRESHED/MERGED reuse an existing opportunity, which was
+            # already checked when it was first created.
+            find_title_location_window_candidates(self.session, opportunity)
 
         result = NormalizationResultModel(
             raw_item_id=raw_item.id,
@@ -274,6 +328,78 @@ class OpportunityService:
             ),
             failed=sum(item.status == "FAILED" for item in results),
         )
+
+    def reconcile_run_closures(self, source_run_id: UUID) -> None:
+        """Close jobs that vanished for two complete runs in a row, and reopen ones back.
+
+        Only a complete run may change anything here: a partial or failed run tells us
+        nothing about what the board still has, so absence from it is not evidence.
+        """
+        run = self.session.get(SourceRunModel, source_run_id)
+        if run is None:
+            raise SourceRunNotFoundError(source_run_id)
+        if not run.complete:
+            return
+        source_definition_id = run.source_definition_id
+
+        for occurrence in self.repository.occurrences_seen_in_run(
+            source_definition_id, source_run_id
+        ):
+            opportunity = occurrence.opportunity
+            if opportunity.lifecycle_status != OpportunityStatus.CLOSED.value:
+                continue
+            opportunity.lifecycle_status = OpportunityStatus.ACTIVE.value
+            opportunity.closure_evidence = {
+                **(opportunity.closure_evidence or {}),
+                "reopened_by_run_id": str(source_run_id),
+            }
+            opportunity.version += 1
+
+        previous_run_id = self.repository.previous_complete_run_id(
+            source_definition_id, before_run_id=source_run_id
+        )
+        if previous_run_id is not None:
+            for occurrence in self.repository.occurrences_missing_from_both_runs(
+                source_definition_id,
+                current_run_id=source_run_id,
+                previous_complete_run_id=previous_run_id,
+            ):
+                opportunity = occurrence.opportunity
+                current_status = OpportunityStatus(opportunity.lifecycle_status)
+                if current_status is OpportunityStatus.CLOSED:
+                    continue
+                if not current_status.can_transition_to(OpportunityStatus.CLOSED):
+                    continue
+                opportunity.lifecycle_status = OpportunityStatus.CLOSED.value
+                opportunity.closure_evidence = {
+                    "closed_by_run_ids": [str(previous_run_id), str(source_run_id)],
+                }
+                opportunity.version += 1
+
+        self.session.commit()
+
+    def mark_relevance(
+        self,
+        opportunity_id: UUID,
+        *,
+        relevant: bool,
+        reason: str | None,
+        note: str | None,
+        profile_version_id: UUID | None,
+    ) -> RelevanceMarkModel:
+        """Record an operator judgement. Out of scope: it never feeds score or verdict."""
+        opportunity = self.repository.get(opportunity_id)
+        if opportunity is None:
+            raise OpportunityNotFoundError(str(opportunity_id))
+        mark = self.repository.add_relevance_mark(
+            opportunity_id,
+            relevant=relevant,
+            reason=reason,
+            note=note,
+            profile_version_id=profile_version_id,
+        )
+        self.session.commit()
+        return mark
 
     def transition(
         self,
@@ -533,9 +659,12 @@ def _legacy_collected_item_v1(evidence: RawItemEvidence) -> dict[str, Any]:
     payload = raw_item.payload
     if payload is None:
         # Only pre-contract items reach here, and only they can be unreadable: retention
-        # expires the body, so the adapter says so rather than reading an empty object.
-        raise NormalizationError(
-            "raw item payload is no longer retained; it cannot be reprocessed"
+        # expires the body, so the adapter says so rather than reading an empty object,
+        # or guessing at fields it can no longer see.
+        raise PayloadExpiredError(
+            "raw item payload is no longer retained by retention; it cannot be "
+            "reconstructed by guesswork — a fresh collection of the same source is "
+            "the only way to reprocess this item"
         )
     metadata = dict(raw_item.item_metadata)
     metadata.pop(COLLECTED_ITEM_V1_KEY, None)
@@ -643,6 +772,79 @@ def _clean_optional(value: str | None) -> str | None:
     return cleaned or None
 
 
+def _latest_occurrence_departments(
+    session: Session, opportunity_id: UUID
+) -> tuple[str, ...]:
+    """Departments from the raw item of the occurrence last seen, per the card's notes."""
+    occurrence = session.execute(
+        select(SourceOccurrenceModel)
+        .where(SourceOccurrenceModel.opportunity_id == opportunity_id)
+        .order_by(SourceOccurrenceModel.last_seen_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if occurrence is None:
+        return ()
+    raw_item = session.get(RawItemModel, occurrence.raw_item_id)
+    if raw_item is None:
+        return ()
+    snapshot = raw_item.item_metadata.get(COLLECTED_ITEM_V1_KEY)
+    if not isinstance(snapshot, Mapping):
+        return ()
+    metadata = snapshot.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return ()
+    return departments_from_metadata(metadata)
+
+
+def reclassify_role_families(session: Session, *, batch_size: int = 500) -> dict[str, int]:
+    """Classify every opportunity not yet on `ROLE_FAMILY_VERSION`.
+
+    Card F17-02's retroactive job: title and department come from the RawItem
+    `collected_item_v1` snapshot of the occurrence last seen, the same evidence
+    normalization uses for a new item.
+    """
+    total = 0
+    updated = 0
+    unknown = 0
+    query = (
+        select(OpportunityModel.id)
+        .where(
+            OpportunityModel.role_family_version.is_(None)
+            | (OpportunityModel.role_family_version != ROLE_FAMILY_VERSION)
+        )
+        .order_by(OpportunityModel.id)
+    )
+    for opportunity_id in session.scalars(query).all():
+        opportunity = session.get(OpportunityModel, opportunity_id)
+        if opportunity is None:
+            continue
+        total += 1
+        departments = _latest_occurrence_departments(session, opportunity.id)
+        decision = classify_role_family(
+            title=opportunity.canonical_title,
+            departments=departments,
+            description=opportunity.description,
+        )
+        opportunity.role_family = decision.role_family.value
+        opportunity.role_family_evidence = dict(decision.evidence) or None
+        opportunity.role_family_version = decision.version
+        updated += 1
+        if decision.role_family is RoleFamily.UNKNOWN:
+            unknown += 1
+        if total % batch_size == 0:
+            session.commit()
+    session.commit()
+    return {"total": total, "updated": updated, "unknown": unknown}
+
+
+def _search_skills_text(skills: list[OpportunitySkillModel]) -> str | None:
+    """Denormalized skill names for `search_document` (F17-03): a generated column
+    cannot read another table's rows, so this stays in sync here, on every
+    normalization — first insert and every reprocessing alike."""
+    names = sorted({skill.canonical_name.replace("_", " ") for skill in skills})
+    return " ".join(names) or None
+
+
 def _new_opportunity(candidate: CanonicalCandidate) -> OpportunityModel:
     return OpportunityModel(
         fingerprint=candidate.fingerprint,
@@ -661,32 +863,113 @@ def _new_opportunity(candidate: CanonicalCandidate) -> OpportunityModel:
         lifecycle_status=OpportunityStatus.DISCOVERED.value,
         published_at=candidate.published_at,
         source_updated_at=candidate.source_updated_at,
+        role_family=candidate.role_family.value,
+        role_family_evidence=dict(candidate.role_family_evidence) or None,
+        role_family_version=candidate.role_family_version,
+        allowed_countries=list(candidate.allowed_countries) or None,
+        allowed_countries_version=(
+            candidate.allowed_countries_version if candidate.allowed_countries else None
+        ),
     )
+
+
+def _set_if_changed(opportunity: OpportunityModel, field: str, value: Any) -> bool:
+    if getattr(opportunity, field) == value:
+        return False
+    setattr(opportunity, field, value)
+    return True
+
+
+def _apply_rule_fields(
+    opportunity: OpportunityModel, candidate: CanonicalCandidate
+) -> bool:
+    """Recompute every rule-derived field, independent of source freshness.
+
+    Card F17-06: "Reprocessar pela nova regra mesmo quando a fonte não fornece
+    `source_updated_at`". Work mode, seniority, contract type, role area and allowed
+    countries are rules applied to evidence the raw item already carries — a normalizer
+    version bump must reach every raw item, `source_updated_at` or not. Returns whether
+    anything actually changed, so an identical replay never claims a semantic change.
+    """
+    changed = False
+    changed |= _set_if_changed(opportunity, "work_mode", candidate.work_mode.value)
+    changed |= _set_if_changed(opportunity, "seniority", candidate.seniority.value)
+    changed |= _set_if_changed(opportunity, "contract_type", candidate.contract_type.value)
+    changed |= _set_if_changed(
+        opportunity, "allowed_countries", list(candidate.allowed_countries) or None
+    )
+    changed |= _set_if_changed(
+        opportunity,
+        "allowed_countries_version",
+        candidate.allowed_countries_version if candidate.allowed_countries else None,
+    )
+    changed |= _set_if_changed(opportunity, "role_family", candidate.role_family.value)
+    changed |= _set_if_changed(
+        opportunity,
+        "role_family_evidence",
+        dict(candidate.role_family_evidence) or None,
+    )
+    changed |= _set_if_changed(
+        opportunity, "role_family_version", candidate.role_family_version
+    )
+    return changed
+
+
+def _apply_evidence_fields(
+    opportunity: OpportunityModel, candidate: CanonicalCandidate
+) -> bool:
+    """Apply the evidence-based fields (title, company, location, description,
+    `published_at`/`source_updated_at`, fingerprint), gated by source freshness.
+
+    Card F17-06: "Replay antigo não regride ... campos baseados em evidência mais
+    recente". A candidate with no `source_updated_at` carries no ordering signal — the
+    same raw item being reprocessed under a new rule, not a different, possibly older,
+    one — so it applies normally. A candidate strictly older than what the opportunity
+    already recorded is the one case this refuses: an out-of-order replay must never
+    regress content a fresher raw item already established.
+    """
+    if (
+        candidate.source_updated_at is not None
+        and opportunity.source_updated_at is not None
+        and candidate.source_updated_at < opportunity.source_updated_at
+    ):
+        return False
+    changed = False
+    changed |= _set_if_changed(opportunity, "canonical_title", candidate.original_title)
+    changed |= _set_if_changed(opportunity, "normalized_title", candidate.normalized_title)
+    changed |= _set_if_changed(opportunity, "canonical_company_id", candidate.company_id)
+    changed |= _set_if_changed(opportunity, "company_name", candidate.company_name)
+    changed |= _set_if_changed(
+        opportunity, "normalized_company_name", candidate.normalized_company_name
+    )
+    changed |= _set_if_changed(opportunity, "location_text", candidate.location_text)
+    changed |= _set_if_changed(
+        opportunity, "normalized_location", candidate.normalized_location
+    )
+    changed |= _set_if_changed(opportunity, "description", candidate.description)
+    changed |= _set_if_changed(opportunity, "published_at", candidate.published_at)
+    changed |= _set_if_changed(
+        opportunity, "source_updated_at", candidate.source_updated_at
+    )
+    changed |= _set_if_changed(opportunity, "fingerprint", candidate.fingerprint)
+    changed |= _set_if_changed(
+        opportunity, "fingerprint_version", candidate.fingerprint_version
+    )
+    return changed
 
 
 def _refresh_opportunity(
     opportunity: OpportunityModel, candidate: CanonicalCandidate
 ) -> None:
-    if candidate.source_updated_at is None:
-        return
-    if (
-        opportunity.source_updated_at is not None
-        and candidate.source_updated_at < opportunity.source_updated_at
-    ):
-        return
-    opportunity.canonical_title = candidate.original_title
-    opportunity.normalized_title = candidate.normalized_title
-    opportunity.canonical_company_id = candidate.company_id
-    opportunity.company_name = candidate.company_name
-    opportunity.normalized_company_name = candidate.normalized_company_name
-    opportunity.location_text = candidate.location_text
-    opportunity.normalized_location = candidate.normalized_location
-    opportunity.work_mode = candidate.work_mode.value
-    opportunity.seniority = candidate.seniority.value
-    opportunity.contract_type = candidate.contract_type.value
-    opportunity.description = candidate.description
-    opportunity.published_at = candidate.published_at
-    opportunity.source_updated_at = candidate.source_updated_at
-    opportunity.fingerprint = candidate.fingerprint
-    opportunity.fingerprint_version = candidate.fingerprint_version
-    opportunity.version += 1
+    """Reprocess one opportunity from a raw item's evidence.
+
+    Two independent decisions, per the card's "Reprocessamento e limites semânticos":
+    rule-derived fields always recompute; evidence-based fields only ever advance, never
+    regress under an out-of-order replay. `version` — and therefore matching/index/vector
+    invalidation — bumps only when a field's *value* actually changed, so an identical
+    replay creates no reanalysis wave.
+    """
+    rules_changed = _apply_rule_fields(opportunity, candidate)
+    evidence_changed = _apply_evidence_fields(opportunity, candidate)
+    if rules_changed or evidence_changed:
+        opportunity.version += 1

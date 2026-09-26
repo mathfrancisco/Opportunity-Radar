@@ -1,12 +1,16 @@
-"""Clean job descriptions and fit a prompt into the model's context window.
+"""Clean job descriptions and fit a prompt into its task's token budget.
 
 Pure functions, no I/O. Two jobs that belong together because the second depends on the
 first: a description full of markup and boilerplate spends tokens on nothing, and the
 budget only means something once the text it measures is the text that will be sent.
 
-The Ollama server truncates an oversized prompt from the start — where the instructions
-are — and reports it only in its own log. Everything here exists so the radar never sends
-a prompt that would be cut without anyone knowing.
+An oversized prompt is truncated from the start — where the instructions are — by a
+server that reports it, if at all, only in its own log. Everything here exists so the
+radar never sends a prompt that would be cut without anyone knowing.
+
+`platform.ai.budget` (F20-13) is the same idea for the cloud router: `TaskBudget.
+max_input_tokens` is the ceiling here `num_ctx` used to be, now set by the task
+(SPEC 43, section 6) instead of a local model's context window.
 """
 
 from __future__ import annotations
@@ -14,14 +18,18 @@ from __future__ import annotations
 import html
 import math
 import re
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 
 #: Version of the cleaning rules below. Any change to the patterns bumps it.
-CLEANER_VERSION = "cleaner-v1"
+CLEANER_VERSION = "cleaner-v2"
 
 #: Tokens per character before any analysis of the model has been measured. Deliberately
 #: high: overestimating only cuts a description sooner, underestimating overflows.
 DEFAULT_TOKENS_PER_CHAR = 0.35
+
+#: Measured analyses a model and prompt need before their own ratio replaces the default.
+MIN_CALIBRATION_SAMPLE = 20
 
 #: Headings that open a section with nothing about the job itself. Matched against a
 #: whole line, so a sentence that merely mentions benefits is kept.
@@ -68,6 +76,20 @@ def _whole_line(alternatives: tuple[str, ...]) -> re.Pattern[str]:
     )
 
 
+#: Facts a candidate decides on. A benefits or "about us" section that states the pay,
+#: the visa policy, the contract, the country or the time zone keeps those lines even
+#: though the section itself is dropped.
+_DECISIVE_FACT = re.compile(
+    r"sal[áa]r|salary|compensa|remunera|\bpay\b|\$|€|£|\busd\b|\bbrl\b|\beur\b"
+    r"|visa|visto|sponsor|patroc[íi]n|work (?:permit|authori[sz]ation)"
+    r"|\bclt\b|\bpj\b|contract|contrato|full[- ]time|part[- ]time|freelanc|tempo integral"
+    r"|fully remote|100% remot|remote[- ]first|trabalho remoto|work from anywhere"
+    r"|h[íi]brido|hybrid|on[- ]?site|presencial|relocat|realoca"
+    r"|countr|pa[íi]s|brazil|brasil|latam|latin america|europe|\beua\b"
+    r"|time ?zone|fuso|\butc\b|\bgmt\b|\bbrt\b|overlap",
+    re.IGNORECASE,
+)
+
 _BOILERPLATE = _whole_line(_BOILERPLATE_HEADINGS)
 _JOB_HEADING = _whole_line(_JOB_HEADINGS)
 # A marked heading — from `<hN>` or Markdown — or a short line ending in a colon ends a
@@ -83,29 +105,55 @@ _BLANK_LINES = re.compile(r"\n{3,}")
 _SENTENCE_END = re.compile(r"[.!?](?=\s)|\n\n")
 
 
-def clean_description(text: str | None) -> str:
+@dataclass(frozen=True, slots=True)
+class CleanedText:
+    """What the cleaner kept, and the headings of the sections it dropped."""
+
+    text: str
+    removed_sections: tuple[str, ...] = ()
+    kept_facts: int = 0
+
+
+def clean_description_report(text: str | None) -> CleanedText:
     """Plain text with markup, entities and listed boilerplate sections removed.
 
     Greenhouse sends HTML that is itself escaped, so entities are decoded before tags are
     stripped and once more after, which leaves a literal `&amp;` in plain text intact.
+    Inside a dropped section, a line that states pay, visa, contract, country or time zone
+    is kept: those are the facts a "Benefits" heading most often hides.
     """
     if not text:
-        return ""
+        return CleanedText(text="")
     decoded = html.unescape(text)
     blocked = _BLOCK_TAGS.sub("\n", _HEADING_OPEN.sub("\n# ", decoded))
     plain = html.unescape(_TAGS.sub(" ", blocked))
     lines = [_SPACES.sub(" ", line).strip() for line in plain.replace("\r", "").split("\n")]
     kept: list[str] = []
+    removed: list[str] = []
+    kept_facts = 0
     skipping = False
     for line in lines:
         if _BOILERPLATE.match(line):
             skipping = True
+            removed.append(line.lstrip("# ").rstrip(":.! ").strip())
             continue
         if skipping and (_JOB_HEADING.match(line) or _MARKED_HEADING.match(line)):
             skipping = False
         if not skipping:
             kept.append(line)
-    return _BLANK_LINES.sub("\n\n", "\n".join(kept)).strip()
+        elif line and _DECISIVE_FACT.search(line):
+            kept.append(line)
+            kept_facts += 1
+    return CleanedText(
+        text=_BLANK_LINES.sub("\n\n", "\n".join(kept)).strip(),
+        removed_sections=tuple(removed),
+        kept_facts=kept_facts,
+    )
+
+
+def clean_description(text: str | None) -> str:
+    """The cleaned text alone; see `clean_description_report`."""
+    return clean_description_report(text).text
 
 
 def truncate_at_sentence(text: str, max_chars: int) -> tuple[str, bool]:
@@ -126,9 +174,95 @@ def estimate_tokens(chars: int, tokens_per_char: float) -> int:
     return math.ceil(chars * tokens_per_char)
 
 
-def prompt_budget(num_ctx: int, num_predict: int) -> int:
-    """Tokens a prompt may use: the window, minus the answer, minus a 10% margin."""
-    return num_ctx - num_predict - num_ctx // 10
+def prompt_budget(max_input_tokens: int, max_output_tokens: int, margin: int | None = None) -> int:
+    """Tokens a prompt may use: the task's input budget, minus the answer, minus a margin.
+
+    `max_input_tokens` and `max_output_tokens` come from the task's `TaskBudget`
+    (`platform.ai.tasks`, SPEC 43 section 6) rather than a model's own context window.
+    The margin starts at 10% of `max_input_tokens`; a calibration whose observed prompts
+    cost more than the ratio in use predicts widens it (`TokenCalibration.margin`).
+    """
+    return max_input_tokens - max_output_tokens - (
+        max_input_tokens // 10 if margin is None else margin
+    )
+
+
+def _nearest_rank(values: Sequence[float], percentile: float) -> float:
+    ordered = sorted(values)
+    rank = max(1, math.ceil(percentile * len(ordered)))
+    return ordered[rank - 1]
+
+
+@dataclass(frozen=True, slots=True)
+class TokenCalibration:
+    """How many tokens a character costs for one model and prompt, from real calls.
+
+    A mean says nothing about the prompt that overflows, so the ratio in use is the 95th
+    percentile of the observed ratios, and the margin grows when even that ratio
+    underestimated some prompt by more than the default 10%. With fewer than
+    `MIN_CALIBRATION_SAMPLE` measured calls the default ratio stands and the state says
+    so: an estimate is never presented as calibrated when it is not, and no estimate is
+    presented as proof that nothing was truncated.
+    """
+
+    samples: int
+    ratios: tuple[float, ...] = field(default=(), repr=False)
+    # Relative underestimation of past estimates: (actual - estimate) / actual.
+    estimate_errors: tuple[float, ...] = field(default=(), repr=False)
+
+    @property
+    def calibrated(self) -> bool:
+        return self.samples >= MIN_CALIBRATION_SAMPLE
+
+    @property
+    def ratio(self) -> float:
+        if not self.calibrated:
+            return DEFAULT_TOKENS_PER_CHAR
+        return _nearest_rank(self.ratios, 0.95)
+
+    @property
+    def mean_ratio(self) -> float | None:
+        return sum(self.ratios) / len(self.ratios) if self.ratios else None
+
+    @property
+    def worst_excess(self) -> float | None:
+        """How far above the ratio in use the costliest measured prompt went (fraction)."""
+        if not self.ratios:
+            return None
+        return max(self.ratios) / self.ratio - 1
+
+    def margin(self, max_input_tokens: int, max_output_tokens: int) -> int:
+        default = max_input_tokens // 10
+        excess = self.worst_excess
+        if not self.calibrated or excess is None or excess <= 0:
+            return default
+        return max(default, math.ceil((max_input_tokens - max_output_tokens) * excess))
+
+    def as_dict(self) -> dict[str, object]:
+        errors = [abs(error) for error in self.estimate_errors]
+        return {
+            "state": "calibrated" if self.calibrated else "uncalibrated",
+            "samples": self.samples,
+            "ratio": self.ratio,
+            "mean_ratio": self.mean_ratio,
+            "worst_excess": self.worst_excess,
+            "estimate_error_p95": _nearest_rank(errors, 0.95) if errors else None,
+            "worst_underestimate": max(self.estimate_errors) if self.estimate_errors else None,
+        }
+
+
+def calibrate(measured: Sequence[tuple[int, int, int | None]]) -> TokenCalibration:
+    """From `(prompt_tokens, prompt_chars, prompt_tokens_estimate)` of real calls."""
+    usable = [(tokens, chars, estimate) for tokens, chars, estimate in measured if chars > 0]
+    return TokenCalibration(
+        samples=len(usable),
+        ratios=tuple(tokens / chars for tokens, chars, _ in usable),
+        estimate_errors=tuple(
+            (tokens - estimate) / tokens
+            for tokens, _, estimate in usable
+            if estimate is not None and tokens > 0
+        ),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,8 +283,13 @@ def fit_description(
 __all__ = [
     "CLEANER_VERSION",
     "DEFAULT_TOKENS_PER_CHAR",
+    "MIN_CALIBRATION_SAMPLE",
+    "CleanedText",
     "FittedText",
+    "TokenCalibration",
+    "calibrate",
     "clean_description",
+    "clean_description_report",
     "estimate_tokens",
     "fit_description",
     "prompt_budget",

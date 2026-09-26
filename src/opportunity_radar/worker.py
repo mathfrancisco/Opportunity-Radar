@@ -25,9 +25,9 @@ from opportunity_radar.acquisition.models import SourceDefinitionModel
 from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.scheduling import CollectionGate, evaluate_gate
 from opportunity_radar.acquisition.service import AcquisitionService
+from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
 from opportunity_radar.matching.adapters import build_analysis_adapter
 from opportunity_radar.matching.analysis import (
-    AnalysisMetrics,
     AnalysisStatus,
     SemanticAnalysisPort,
 )
@@ -40,6 +40,7 @@ from opportunity_radar.matching.service import (
 from opportunity_radar.operations.retention import PayloadRetentionService
 from opportunity_radar.operations.service import observe_job
 from opportunity_radar.opportunities.service import OpportunityService
+from opportunity_radar.platform.ai.telemetry import purge_older_than
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.logging import (
@@ -133,20 +134,6 @@ def evaluate_pending(engine: Engine, *, batch_size: int = 50) -> None:
                 )
 
 
-def warm_up_models(adapter: SemanticAnalysisPort) -> None:
-    """Load the model once at startup, so the first analysis does not pay for it."""
-    _log_warm_up(run_async(adapter.warm_up()), reason="startup")
-
-
-def _log_warm_up(metrics: AnalysisMetrics | None, *, reason: str) -> None:
-    if metrics is None:
-        return
-    logger.info(
-        "analysis model warmed up",
-        extra={"job": "warm-up", "reason": reason, "load_ms": metrics.load_ms},
-    )
-
-
 def analyze_pending(
     engine: Engine,
     adapter: SemanticAnalysisPort,
@@ -160,9 +147,9 @@ def analyze_pending(
 ) -> None:
     """Attach the semantic layer to current assessments, one claim at a time.
 
-    The adapter classifies its own failures instead of raising, so an Ollama that is down
-    degrades this job alone: evaluation keeps running and the failure is persisted as the
-    history entry that the cooldown then reads.
+    The adapter classifies its own failures instead of raising, so a provider that is
+    down degrades this job alone: evaluation keeps running and the failure is persisted
+    as the history entry that the cooldown then reads.
     """
     with observe_job(
         engine, job_name="analyze_pending", interval=timedelta(seconds=120)
@@ -177,11 +164,15 @@ def analyze_pending(
                 max_attempts=max_attempts,
             )
             if pending:
-                # After an idle stretch longer than `keep_alive` the server has unloaded
-                # the model; loading it here keeps that cost out of the first analysis.
-                _log_warm_up(
-                    run_async(adapter.warm_up(only_if_idle=True)), reason="idle"
-                )
+                # After an idle stretch the provider connection may need re-warming
+                # (a no-op for the cloud adapter); this keeps that cost out of the
+                # first analysis of the batch.
+                metrics = run_async(adapter.warm_up(only_if_idle=True))
+                if metrics is not None:
+                    logger.info(
+                        "analysis model warmed up",
+                        extra={"job": "warm-up", "reason": "idle", "load_ms": metrics.load_ms},
+                    )
             completed = reused = degraded = claimed_elsewhere = failed = 0
             for assessment_id in pending:
                 try:
@@ -231,9 +222,15 @@ def expire_raw_payloads(
     retention_days: int = 365,
     batch_size: int = 500,
     interval_seconds: int = 21600,
+    ai_call_record_retention_days: int | None = None,
     now: datetime | None = None,
 ) -> None:
-    """Drop raw bodies the policy has released, and account for every one of them."""
+    """Drop raw bodies the policy has released, and account for every one of them.
+
+    `ai_call_record_retention_days` piggybacks on this same daily pass (card F20-19):
+    the telemetry table carries no PII, so it only needs its own short retention, not a
+    dedicated job.
+    """
     with observe_job(
         engine,
         job_name="expire_raw_payloads",
@@ -254,6 +251,17 @@ def expire_raw_payloads(
                     "retention_days": outcome.retention_days,
                 },
             )
+        if ai_call_record_retention_days is not None:
+            purged = purge_older_than(engine, ai_call_record_retention_days, now=now)
+            if purged:
+                logger.info(
+                    "ai call record retention batch finished",
+                    extra={
+                        "job": "retention",
+                        "purged": purged,
+                        "retention_days": ai_call_record_retention_days,
+                    },
+                )
 
 
 def collect_enabled_sources(
@@ -328,6 +336,20 @@ def collect_enabled_sources(
                         extra={"job": "collect", "source_id": str(source.id)},
                     )
                     continue
+                if run.complete:
+                    # Closure compares this run's occurrences against the previous complete
+                    # run, so its items must be normalized first: an occurrence that has
+                    # not been touched yet would read as absent and close by mistake.
+                    try:
+                        opportunity_service = OpportunityService(session)
+                        opportunity_service.normalize_run(run.id)
+                        opportunity_service.reconcile_run_closures(run.id)
+                    except Exception:
+                        session.rollback()
+                        logger.exception(
+                            "run closure reconciliation failed",
+                            extra={"job": "collect", "source_id": str(source.id)},
+                        )
                 outcome = "failed" if run.status == "FAILED" else "completed"
                 summary[outcome] += 1
                 logger.info(
@@ -348,10 +370,33 @@ def collect_enabled_sources(
 
 def collection_service_factory(settings: Settings) -> Callable[[Session], AcquisitionService]:
     """Build the collectors once per worker, with the endpoints this deployment points at."""
-    registry = build_collector_registry(greenhouse_base_url=settings.greenhouse_base_url)
+    registry = build_collector_registry(
+        greenhouse_base_url=settings.greenhouse_base_url,
+        tavily_api_key=settings.tavily_api_key,
+        tavily_base_url=settings.tavily_base_url,
+        tavily_search_depth=settings.tavily_search_depth,
+        tavily_credit_budget_per_run=settings.tavily_credit_budget_per_run,
+    )
     notifier = build_source_alert_notifier(
         settings.source_alert_webhook_url,
         timeout_seconds=settings.source_alert_timeout_seconds,
+    )
+    # F20-45: fills in a missing description via Tavily `/extract` for any collector's
+    # items, not only tavily_search's own. Disabled (None) the same way tavily_search
+    # itself is when no API key is configured — a supported deployment, not an error.
+    tavily_extraction = (
+        TavilyExtractionSettings(
+            client_factory=lambda: TavilyClient(
+                api_key=settings.tavily_api_key,
+                base_url=settings.tavily_base_url,
+            ),
+            cache_ttl_seconds=settings.tavily_extract_cache_ttl_seconds,
+            credit_budget_per_run=settings.tavily_credit_budget_per_run,
+            extract_depth=settings.tavily_extract_depth,
+            format=settings.tavily_extract_format,
+        )
+        if settings.tavily_api_key
+        else None
     )
 
     def build(session: Session) -> AcquisitionService:
@@ -363,6 +408,7 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
                 notifier=notifier,
                 threshold=settings.source_alert_failure_threshold,
             ),
+            tavily_extraction=tavily_extraction,
         )
 
     return build
@@ -452,20 +498,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             next_run_time=first_run,
         )
     if settings.worker_analyze_enabled:
-        # One adapter for both jobs: it remembers when it last reached the model.
-        adapter = build_analysis_adapter(settings)
-        if settings.ollama_analysis_enabled:
-            # One-off, so it stays out of FUNCTIONAL_JOB_IDS.
-            scheduler.add_job(
-                warm_up_models,
-                "date",
-                run_date=first_run,
-                args=(adapter,),
-                id="warm-up-models",
-                replace_existing=True,
-                # A one-off that misses its instant is dropped, not deferred, by default.
-                misfire_grace_time=None,
-            )
+        adapter = build_analysis_adapter(settings, engine)
         scheduler.add_job(
             analyze_pending,
             "interval",
@@ -495,6 +528,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
                 "retention_days": settings.payload_retention_days,
                 "batch_size": settings.payload_retention_batch_size,
                 "interval_seconds": settings.payload_retention_interval_seconds,
+                "ai_call_record_retention_days": settings.ai_call_record_retention_days,
             },
             id="expire-raw-payloads",
             replace_existing=True,

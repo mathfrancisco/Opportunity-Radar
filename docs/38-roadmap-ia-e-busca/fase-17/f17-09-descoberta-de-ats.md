@@ -42,6 +42,12 @@ Greenhouse, Lever, Gupy ou Teamtailor, embutido por link, iframe ou script.
 - Habilitar fonte: a descoberta produz evidência; a proposta passa pela sonda e pela
   homologação.
 
+## Continuidade
+
+Este card mantém a descoberta de ATS em uma página. F18-02 amplia para links e
+sitemaps com limites, aproveitando as mesmas assinaturas e propostas. Resultado
+negativo não significa empresa sem vagas; guardar motivo e próxima pesquisa.
+
 ## Notas de implementação
 
 - A descoberta é pesquisa, não coleta: não cria `SourceRun` nem `RawItem`.

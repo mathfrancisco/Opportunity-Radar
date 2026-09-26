@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from collections.abc import Awaitable, Callable, Iterator, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from math import ceil, isfinite
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from sqlalchemy import func, select, update
@@ -33,6 +33,7 @@ from opportunity_radar.acquisition.domain import (
     CollectionTelemetry,
     SourceRun,
     SourceRunStatus,
+    evaluate_completeness,
 )
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.lever import LeverCollector
@@ -50,16 +51,45 @@ from opportunity_radar.acquisition.probing import (
     collector_test_audit,
     run_probe,
 )
-from opportunity_radar.acquisition.proposals import IDENTIFIER_KEYS
+from opportunity_radar.acquisition.proposals import (
+    IDENTIFIER_KEYS,
+    follow_inert_correction,
+)
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.repository import AcquisitionRepository
-from opportunity_radar.acquisition.scheduling import SourceSchedulingState
+from opportunity_radar.acquisition.scheduling import (
+    SourceSchedulingState,
+    default_schedule_for_priority,
+)
+from opportunity_radar.acquisition.tavily import (
+    TavilyClient,
+    TavilyCreditBudget,
+    TavilyExtractionCache,
+    TavilyExtractionSettings,
+    apply_extracted_description,
+    detect_ats_board,
+    extract_missing_descriptions,
+)
 from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.platform.logging import get_logger
 
 COLLECTED_ITEM_V1_KEY = "collected_item_v1"
 
 logger = get_logger("opportunity_radar.acquisition.service")
+
+
+@dataclass(frozen=True, slots=True)
+class TavilyProposalOutcome:
+    url: str
+    outcome: Literal[
+        "created", "already_proposed", "unmatched_pattern", "company_not_found"
+    ]
+    proposal_id: UUID | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TavilyProposalReport:
+    outcomes: tuple[TavilyProposalOutcome, ...]
 
 
 class SourceNotFoundError(AcquisitionError):
@@ -121,6 +151,7 @@ class AcquisitionService:
         sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
         alert_notifier: SourceAlertNotifier | None = None,
         alerts: SourceAlertService | None = None,
+        tavily_extraction: TavilyExtractionSettings | None = None,
     ) -> None:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
@@ -135,6 +166,11 @@ class AcquisitionService:
             )
         )
         self._sleeper = sleeper
+        # F20-45: fills in a missing description via Tavily `/extract` after discovery,
+        # for any collector's items, not only tavily_search's own. `None` (the default)
+        # disables it — the same "absent is a supported deployment" treatment
+        # `tavily_api_key` gets elsewhere.
+        self._tavily_extraction = tavily_extraction
 
     def create_source(
         self,
@@ -151,6 +187,7 @@ class AcquisitionService:
         reviewed_at: datetime | None = None,
         terms_reviewed: bool = False,
         collector_local_tested: bool = False,
+        commit: bool = True,
     ) -> SourceDefinitionModel:
         normalized_type = source_type.strip().casefold()
         normalized_name = name.strip()
@@ -167,7 +204,11 @@ class AcquisitionService:
             _reject_secret_configuration(source_configuration)
         source_rate_limit_policy = dict(rate_limit_policy or {})
         with _refusing_field("rate_limit_policy"):
-            _network_policy(source_rate_limit_policy)
+            resolved_network_policy = _network_policy(source_rate_limit_policy)
+        if schedule is None and company_source_id is not None:
+            schedule = self._default_schedule(
+                company_source_id, resolved_network_policy
+            )
         if normalized_type == "ashby":
             with _refusing_field("configuration.board_identifier"):
                 AshbyCollector.validate_board_identifier(
@@ -216,15 +257,35 @@ class AcquisitionService:
         )
         self.session.add(source)
         try:
-            self.session.commit()
+            if commit:
+                self.session.commit()
+            else:
+                self.session.flush()
         except IntegrityError as error:
-            self.session.rollback()
+            if commit:
+                self.session.rollback()
             raise AcquisitionError(
                 AcquisitionErrorCode.INVALID_CONFIGURATION,
                 "source definition conflicts with an existing record",
             ) from error
-        self.session.refresh(source)
+        if commit:
+            self.session.refresh(source)
         return source
+
+    def _default_schedule(
+        self, company_source_id: UUID, network_policy: CollectionNetworkPolicy
+    ) -> str | None:
+        priority = self.session.scalar(
+            select(Company.priority)
+            .join(CompanySource, CompanySource.company_id == Company.id)
+            .where(CompanySource.id == company_source_id)
+        )
+        if priority is None:
+            return None
+        return default_schedule_for_priority(
+            priority,
+            minimum_run_interval_seconds=network_policy.minimum_run_interval_seconds,
+        )
 
     def list_sources(
         self, *, offset: int, limit: int
@@ -276,6 +337,142 @@ class AcquisitionService:
             evidence_status="ats_identified",
         )
         return proposal, "proposed"
+
+    def propose_from_tavily_evidence(
+        self, items: Iterable[CollectedItem], *, commit: bool = True
+    ) -> TavilyProposalReport:
+        """Turn marked, persisted Tavily results into inert ATS source proposals.
+
+        Company names intentionally use exact canonical-name equality.  A Tavily search
+        result is evidence of a board, not authority to guess which company owns it.
+        """
+        outcomes: list[TavilyProposalOutcome] = []
+        for item in items:
+            if item.metadata.get("source_proposal_candidate") is not True:
+                continue
+            url = item.url or ""
+            detected = detect_ats_board(url)
+            if detected is None:
+                outcomes.append(TavilyProposalOutcome(url, "unmatched_pattern"))
+                continue
+            source_type, board_key = detected
+            companies = (
+                self.session.scalars(
+                    select(Company)
+                    .where(Company.canonical_name == item.company_name)
+                    .limit(2)
+                ).all()
+                if item.company_name
+                else []
+            )
+            catalog_sources = self.session.scalars(
+                select(CompanySource)
+                .where(
+                    CompanySource.source_type == source_type,
+                    CompanySource.external_key == board_key,
+                )
+                .limit(2)
+            ).all()
+            if not companies and len(catalog_sources) == 1:
+                company = self.session.get(Company, catalog_sources[0].company_id)
+                companies = [company] if company is not None else []
+            if len(companies) != 1 or (
+                item.company_name
+                and catalog_sources
+                and any(source.company_id != companies[0].id for source in catalog_sources)
+            ):
+                outcomes.append(TavilyProposalOutcome(url, "company_not_found"))
+                continue
+            company = companies[0]
+            company_source_id = (
+                catalog_sources[0].id if len(catalog_sources) == 1 else None
+            )
+            configuration = _tavily_proposal_configuration(
+                company=company,
+                source_type=source_type,
+                board_key=board_key,
+                item=item,
+            )
+
+            identifier_key = IDENTIFIER_KEYS[source_type]
+            by_board = self.session.scalar(
+                select(SourceDefinitionModel).where(
+                    SourceDefinitionModel.source_type == source_type,
+                    SourceDefinitionModel.configuration[identifier_key].as_string()
+                    == board_key,
+                )
+            )
+            if by_board is not None:
+                if by_board.configuration.get("discovery_via") == "tavily_search":
+                    follow_inert_correction(
+                        self.session,
+                        by_board,
+                        source_type=source_type,
+                        board_key=board_key,
+                        discovery_evidence=url,
+                        configuration_updates=configuration,
+                    )
+                outcomes.append(
+                    TavilyProposalOutcome(url, "already_proposed", by_board.id)
+                )
+                continue
+
+            by_company = self.session.scalar(
+                select(SourceDefinitionModel)
+                .where(
+                    SourceDefinitionModel.source_type == source_type,
+                    SourceDefinitionModel.configuration["company_name"].as_string()
+                    == company.canonical_name,
+                    SourceDefinitionModel.configuration["discovery_via"].as_string()
+                    == "tavily_search",
+                )
+                .order_by(SourceDefinitionModel.created_at)
+            )
+            if by_company is not None:
+                follow_up = follow_inert_correction(
+                    self.session,
+                    by_company,
+                    source_type=source_type,
+                    board_key=board_key,
+                    discovery_evidence=url,
+                    configuration_updates=configuration,
+                )
+                proposal = follow_up.proposal
+                outcomes.append(
+                    TavilyProposalOutcome(
+                        url,
+                        "already_proposed",
+                        proposal.id if proposal is not None else by_company.id,
+                    )
+                )
+                continue
+
+            proposal = self.create_source(
+                source_type=source_type,
+                name=f"Proposed {company.canonical_name} {source_type}",
+                company_source_id=company_source_id,
+                configuration=configuration,
+                evidence_status="ats_identified",
+                commit=False,
+            )
+            outcomes.append(TavilyProposalOutcome(url, "created", proposal.id))
+
+        report = TavilyProposalReport(tuple(outcomes))
+        if commit:
+            self.session.commit()
+        for outcome in report.outcomes:
+            logger.info(
+                "tavily source proposal evaluated",
+                extra={
+                    "job": "tavily_source_proposal",
+                    "url": outcome.url,
+                    "outcome": outcome.outcome,
+                    "proposal_id": str(outcome.proposal_id)
+                    if outcome.proposal_id is not None
+                    else None,
+                },
+            )
+        return report
 
     def update_source_controls(
         self,
@@ -403,7 +600,7 @@ class AcquisitionService:
         *,
         expected_version: int,
         requested_by: str = "interface",
-    ) -> tuple[SourceProbeModel, SourceDefinitionModel]:
+    ) -> tuple[SourceProbeModel, SourceDefinitionModel, ProbeOutcome]:
         """Test the collector against the public endpoint and, if it reads, confirm evidence.
 
         The probe is written before the request goes out, under a lock on the source, so
@@ -458,7 +655,10 @@ class AcquisitionService:
             max_items=PROBE_MAX_ITEMS,
             network_policy=network_policy,
         )
-        return self._record_probe(source, probe, outcome, expected_version)
+        recorded_probe, recorded_source = self._record_probe(
+            source, probe, outcome, expected_version
+        )
+        return recorded_probe, recorded_source, outcome
 
     def _probe_wait(
         self, source: SourceDefinitionModel, policy: CollectionNetworkPolicy
@@ -689,6 +889,23 @@ class AcquisitionService:
 
         error: AcquisitionError | None = None
         last_cursor: str | None = None
+        tavily_proposal_items: list[CollectedItem] = []
+        # Built once per run, not per item: reused by `_fill_missing_description` below
+        # for every item in this run that needs one, and closed once the run's discovery
+        # loop is done (successfully or not — every branch below is caught, so control
+        # always reaches the `aclose()` call after this try/except). The budget is
+        # per-run too — a fresh one per item would never see the cumulative spend and
+        # so would never stop a run whose extractions, added up, exceed the ceiling.
+        extraction_client = (
+            self._tavily_extraction.client_factory()
+            if self._tavily_extraction is not None
+            else None
+        )
+        extraction_budget = (
+            TavilyCreditBudget(limit=self._tavily_extraction.credit_budget_per_run)
+            if self._tavily_extraction is not None
+            else None
+        )
         try:
             if throttle_error is not None:
                 raise throttle_error
@@ -706,9 +923,22 @@ class AcquisitionService:
                 api_region=api_region or request.api_region,
                 telemetry=run_telemetry,
                 network_policy=network_policy,
+                known_ats_boards=(
+                    self.repository.enabled_ats_boards()
+                    if source.source_type == "tavily_search"
+                    else request.known_ats_boards
+                ),
             )
             async for item in collector.discover(collector_request):
                 run.record_items(seen=1)
+                item = await self._fill_missing_description(
+                    item,
+                    client=extraction_client,
+                    budget=extraction_budget,
+                    telemetry=run_telemetry,
+                    network_policy=network_policy,
+                    run=run,
+                )
                 try:
                     created = self._persist_item(
                         source.id,
@@ -726,12 +956,31 @@ class AcquisitionService:
                     run.record_items(persisted=1)
                 else:
                     run.record_items(skipped=1)
+                if source.source_type == "tavily_search":
+                    tavily_proposal_items.append(item)
                 if item.cursor is not None:
                     last_cursor = item.cursor
+            # `_persist_item` flushed every candidate's immutable raw evidence before
+            # this pass.  A proposal failure is isolated to a savepoint so it cannot
+            # erase that evidence or the source run that explains it.
+            if tavily_proposal_items:
+                try:
+                    with self.session.begin_nested():
+                        self.propose_from_tavily_evidence(
+                            tavily_proposal_items, commit=False
+                        )
+                except Exception as proposal_error:
+                    error = AcquisitionError(
+                        AcquisitionErrorCode.INVALID_CONFIGURATION,
+                        f"tavily source proposal failed: {proposal_error}",
+                    )
         except AcquisitionError as caught:
             error = caught
         except Exception as caught:  # Preserve a stable external error boundary.
             error = AcquisitionError(AcquisitionErrorCode.UNKNOWN_EXTERNAL_ERROR, str(caught))
+        finally:
+            if extraction_client is not None:
+                await extraction_client.aclose()
 
         if run_telemetry.invalid_items:
             run.record_items(
@@ -749,6 +998,7 @@ class AcquisitionService:
             retries=run_telemetry.retry_count,
             rate_limit_events=run_telemetry.rate_limit_events,
         )
+        run.record_credits(run_telemetry.credits_used)
 
         if error is None:
             final_status = (
@@ -756,7 +1006,10 @@ class AcquisitionService:
                 if run.items_invalid
                 else SourceRunStatus.SUCCEEDED
             )
-        elif error.code is AcquisitionErrorCode.INVALID_ITEM:
+        elif error.code in {
+            AcquisitionErrorCode.INVALID_ITEM,
+            AcquisitionErrorCode.CREDIT_BUDGET_EXCEEDED,
+        }:
             final_status = SourceRunStatus.PARTIAL
         elif run.items_persisted:
             final_status = SourceRunStatus.PARTIAL
@@ -768,6 +1021,13 @@ class AcquisitionService:
             checkpoint_after=(
                 last_cursor if final_status is SourceRunStatus.SUCCEEDED else None
             ),
+        )
+        run.items_announced = run_telemetry.items_announced
+        run.complete = evaluate_completeness(
+            status=run.status,
+            max_items=request.max_items,
+            items_seen=run.items_seen,
+            items_announced=run.items_announced,
         )
         self._copy_run(run, persisted_run)
         if run_telemetry.last_http_attempt_at is not None:
@@ -785,11 +1045,15 @@ class AcquisitionService:
             self.session.add(checkpoint)
         self.session.commit()
         self.session.refresh(persisted_run)
-        self._announce(source, persisted_run)
+        self._announce(source, persisted_run, max_items=request.max_items)
         return persisted_run
 
     def _announce(
-        self, source: SourceDefinitionModel, run: SourceRunModel
+        self,
+        source: SourceDefinitionModel,
+        run: SourceRunModel,
+        *,
+        max_items: int | None,
     ) -> None:
         """Report what this run changed about the source being up.
 
@@ -809,6 +1073,83 @@ class AcquisitionService:
                 "source alert evaluation failed",
                 extra={"job": "alert", "source_id": str(source.id), "run_id": str(run.id)},
             )
+        # A run capped by max_items is expected to fall short of the announced total, so
+        # a shortfall there is by design, not evidence of broken pagination.
+        if (
+            max_items is None
+            and run.items_announced is not None
+            and run.items_seen < run.items_announced
+        ):
+            try:
+                self.alerts.record_pagination_gap(
+                    source,
+                    run,
+                    items_seen=run.items_seen,
+                    items_announced=run.items_announced,
+                )
+            except Exception:
+                logger.exception(
+                    "pagination alert evaluation failed",
+                    extra={
+                        "job": "alert",
+                        "source_id": str(source.id),
+                        "run_id": str(run.id),
+                    },
+                )
+
+    async def _fill_missing_description(
+        self,
+        item: CollectedItem,
+        *,
+        client: TavilyClient | None,
+        budget: TavilyCreditBudget | None,
+        telemetry: CollectionTelemetry,
+        network_policy: CollectionNetworkPolicy,
+        run: SourceRun,
+    ) -> CollectedItem:
+        """Extracts a body for `item` when it has none, from any source, not only
+        `tavily_search`'s own results (F20-45). A no-op when extraction is not configured
+        (`client`/`budget` are `None`, no Tavily API key for this deployment) or the item
+        already has a description.
+
+        Called once per item, inside the same evidence-first loop `execute()` already
+        runs, with a client and budget built once for the whole run (see the caller).
+        `extract_missing_descriptions` itself still partitions into batches of up to 20
+        (SPEC 41 §3.2) when given more than one URL, but calling it with a single URL here
+        keeps this item's persistence exactly as atomic and order-preserving as every
+        other item's — an extraction failure part-way through a run must not un-persist
+        evidence a prior item in the same run already wrote (see
+        `test_collector_failure_after_evidence_marks_run_partial`, the invariant this
+        preserves). A cache hit costs no network call regardless, so this only turns into
+        one `/extract` call per still-uncached URL rather than one call per run.
+        """
+        if (
+            self._tavily_extraction is None
+            or client is None
+            or budget is None
+            or item.url is None
+        ):
+            return item
+        if (item.description or "").strip():
+            return item
+        cache = TavilyExtractionCache(
+            session=self.session,
+            ttl_seconds=self._tavily_extraction.cache_ttl_seconds,
+        )
+        results = await extract_missing_descriptions(
+            client,
+            cache,
+            [item.url],
+            extract_depth=self._tavily_extraction.extract_depth,
+            format=self._tavily_extraction.format,
+            telemetry=telemetry,
+            network_policy=network_policy,
+            budget=budget,
+            run=run,
+        )
+        if not results:
+            return item
+        return apply_extracted_description(item, results[0])
 
     def _persist_item(
         self,
@@ -871,6 +1212,9 @@ class AcquisitionService:
         model.error_code = run.error_code.value if run.error_code else None
         model.error_summary = run.error_summary
         model.checkpoint_after = run.checkpoint_after
+        model.items_announced = run.items_announced
+        model.complete = run.complete
+        model.credits_used = run.credits_used
 
 
 def canonical_payload_hash(payload: Mapping[str, Any]) -> str:
@@ -954,6 +1298,33 @@ def _required_string(configuration: Mapping[str, Any], key: str) -> str:
 def _optional_string(configuration: Mapping[str, Any], key: str) -> str | None:
     value = configuration.get(key)
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _tavily_proposal_configuration(
+    *,
+    company: Company,
+    source_type: str,
+    board_key: str,
+    item: CollectedItem,
+) -> dict[str, Any]:
+    metadata = item.metadata
+    configuration: dict[str, Any] = {
+        "company_name": company.canonical_name,
+        IDENTIFIER_KEYS[source_type]: board_key,
+        "discovery_evidence": item.url,
+        "discovery_via": "tavily_search",
+    }
+    for metadata_key, configuration_key in (
+        ("query", "discovery_query"),
+        ("rank", "discovery_rank"),
+        ("score", "discovery_score"),
+    ):
+        value = metadata.get(metadata_key)
+        if value is not None:
+            configuration[configuration_key] = value
+    if item.description:
+        configuration["discovery_excerpt"] = item.description
+    return configuration
 
 
 def _collector_settings(

@@ -406,13 +406,46 @@ def _seniority_by_source(
     return distributions
 
 
+@dataclass(frozen=True, slots=True)
+class DuplicateRateReport:
+    """Duplicate rate report for F20-01 (before/after F20-26 ships), card F20-26.
+
+    `duplicate_of_count` is how many opportunities were confirmed as a duplicate of
+    another; `duplicate_rate` is that count over the total catalogue, so calling this
+    before any candidate is confirmed and again afterwards gives the before/after the
+    card asks for.
+    """
+
+    total_opportunities: int
+    duplicate_of_count: int
+    duplicate_rate: float | None
+
+
+def duplicate_rate_report(session: Session) -> DuplicateRateReport:
+    total = session.scalar(select(func.count()).select_from(OpportunityModel)) or 0
+    absorbed = (
+        session.scalar(
+            select(func.count())
+            .select_from(OpportunityModel)
+            .where(OpportunityModel.duplicate_of.is_not(None))
+        )
+        or 0
+    )
+    rate = (absorbed / total) if total else None
+    return DuplicateRateReport(
+        total_opportunities=total, duplicate_of_count=absorbed, duplicate_rate=rate
+    )
+
+
 __all__ = [
     "METRIC_WINDOWS",
     "SENIORITY_REASON_CODE",
     "UNKNOWN_SENIORITY",
+    "DuplicateRateReport",
     "SeniorityDistribution",
     "SourceMetricsReport",
     "SourceMetricsWindow",
     "SourceWindowMetrics",
+    "duplicate_rate_report",
     "source_metrics",
 ]

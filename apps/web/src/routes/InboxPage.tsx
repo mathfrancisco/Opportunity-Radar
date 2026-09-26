@@ -12,7 +12,9 @@ import { Toolbar } from '../components/Toolbar'
 import { type InboxItem, type InboxOrder, inboxOrders } from '../features/dashboard/api'
 import { useInbox } from '../features/dashboard/useInbox'
 import { verdictLabels, verdictTones } from '../features/matching/verdicts'
+import { useMarkRelevance } from '../features/opportunities/useOpportunity'
 import { type ApplicationStage, stageLabels } from '../features/pipeline/api'
+import { roleFamilies } from '../features/dashboard/roleFamilies'
 
 const pageSize = 25
 
@@ -24,6 +26,17 @@ const orderLabels: Record<InboxOrder, string> = {
 
 const workModes = ['REMOTE', 'HYBRID', 'ONSITE', 'UNKNOWN']
 const lifecycleStatuses = ['DISCOVERED', 'ACTIVE', 'STALE', 'CLOSED']
+const seniorities = [
+  'INTERN',
+  'JUNIOR',
+  'MID',
+  'SENIOR',
+  'STAFF',
+  'LEAD',
+  'MANAGER',
+  'DIRECTOR',
+  'UNKNOWN',
+]
 
 function display(value: string | null) {
   return value === null || value === '' ? '—' : value
@@ -58,6 +71,28 @@ const appliedOptions = [
   { value: 'false', label: 'Ainda não aplicada' },
 ] as const
 
+/** Operator relevance mark (F17-01). It is evaluation data: it never feeds the score. */
+function RelevanceButtons({ opportunityId }: { opportunityId: string }) {
+  const mark = useMarkRelevance(opportunityId)
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      <Button
+        disabled={mark.isPending}
+        onClick={() => mark.mutate({ relevant: true })}
+      >
+        Relevante
+      </Button>
+      <Button
+        disabled={mark.isPending}
+        onClick={() => mark.mutate({ relevant: false })}
+        variant="secondary"
+      >
+        Não é para mim
+      </Button>
+    </div>
+  )
+}
+
 function ItemCard({ item }: { item: InboxItem }) {
   return (
     <Card as="article">
@@ -77,6 +112,11 @@ function ItemCard({ item }: { item: InboxItem }) {
         </div>
         <div className="flex flex-col items-end gap-2">
           <VerdictBadge verdict={item.verdict} />
+          {item.hasPendingDuplicate && (
+            <span className="inline-flex rounded-full border border-warning-line bg-warning-surface px-3 py-1 text-xs font-medium text-warning-ink">
+              Possível duplicata
+            </span>
+          )}
           {item.applied && (
             <span className="inline-flex rounded-full border border-success-line bg-success-surface px-3 py-1 text-xs font-medium text-success-ink">
               Candidatura: {stageLabels[item.applicationStage as ApplicationStage] ??
@@ -132,6 +172,7 @@ function ItemCard({ item }: { item: InboxItem }) {
           A análise sugere revisão humana antes de aplicar.
         </p>
       )}
+      <RelevanceButtons opportunityId={item.opportunityId} />
     </Card>
   )
 }
@@ -152,6 +193,13 @@ export function InboxPage() {
     : 'priority'
   const page = Math.max(1, Number(params.get('page') ?? '1') || 1)
   const [searchInput, setSearchInput] = useState(search)
+  const allAreas = params.get('all_areas') === 'true'
+  const areaFilter = params.getAll('area')
+  const seniority = params.get('seniority') ?? ''
+  const salaryMin = params.get('salary_min') ?? ''
+  const salaryMax = params.get('salary_max') ?? ''
+  const source = params.get('source') ?? ''
+  const allowedCountry = params.get('allowed_country') ?? ''
 
   const inbox = useInbox({
     page,
@@ -165,6 +213,13 @@ export function InboxPage() {
     applied: appliedFilter === '' ? undefined : appliedFilter === 'true',
     search: search || undefined,
     order,
+    roleFamilies: allAreas || areaFilter.length === 0 ? undefined : areaFilter,
+    allAreas,
+    seniorities: seniority ? [seniority] : undefined,
+    salaryMin: salaryMin || undefined,
+    salaryMax: salaryMax || undefined,
+    sourceDefinitionIds: source ? [source] : undefined,
+    allowedCountry: allowedCountry || undefined,
   })
   const totalPages = inbox.data ? Math.max(1, Math.ceil(inbox.data.total / pageSize)) : 0
 
@@ -175,6 +230,27 @@ export function InboxPage() {
       else next.set(key, value)
     }
     if (!('page' in changes)) next.delete('page')
+    setParams(next)
+  }
+
+  function toggleArea(code: string) {
+    const next = new URLSearchParams(params)
+    next.delete('all_areas')
+    const current = next.getAll('area')
+    next.delete('area')
+    const updated = current.includes(code)
+      ? current.filter((item) => item !== code)
+      : [...current, code]
+    updated.forEach((item) => next.append('area', item))
+    next.delete('page')
+    setParams(next)
+  }
+
+  function showAllAreas() {
+    const next = new URLSearchParams(params)
+    next.delete('area')
+    next.set('all_areas', 'true')
+    next.delete('page')
     setParams(next)
   }
 
@@ -256,6 +332,63 @@ export function InboxPage() {
           />
         </Field>
 
+        <Field label="Senioridade">
+          <select
+            className={controlClassName}
+            onChange={(event) => update({ seniority: event.target.value })}
+            value={seniority}
+          >
+            <option value="">Todas</option>
+            {seniorities.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Remuneração mínima">
+          <input
+            className={controlClassName}
+            min={0}
+            onChange={(event) => update({ salary_min: event.target.value })}
+            type="number"
+            value={salaryMin}
+          />
+        </Field>
+
+        <Field label="Remuneração máxima">
+          <input
+            className={controlClassName}
+            min={0}
+            onChange={(event) => update({ salary_max: event.target.value })}
+            type="number"
+            value={salaryMax}
+          />
+        </Field>
+
+        <Field label="Fonte (id)">
+          <input
+            className={controlClassName}
+            onChange={(event) => update({ source: event.target.value })}
+            placeholder="uuid da fonte"
+            type="text"
+            value={source}
+          />
+        </Field>
+
+        <Field label="País permitido">
+          <input
+            className={controlClassName}
+            onChange={(event) =>
+              update({ allowed_country: event.target.value.trim().toUpperCase() })
+            }
+            placeholder="ISO, ex.: BR"
+            type="text"
+            value={allowedCountry}
+          />
+        </Field>
+
         <Field label="Ordenar por">
           <select
             className={controlClassName}
@@ -280,6 +413,42 @@ export function InboxPage() {
         />
         Somente oportunidades já avaliadas
       </label>
+
+      <fieldset className="mt-4" aria-describedby="area-filter-hint">
+        <legend className="text-sm font-medium">Área</legend>
+        <p className="text-sm text-muted" id="area-filter-hint">
+          Sem marcação, usa as áreas de interesse do perfil. Vagas fora do filtro nunca são
+          apagadas — continuam buscáveis.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-4">
+          {roleFamilies.map((family) => (
+            <label className="flex items-center gap-2 text-sm" key={family.code}>
+              <input
+                checked={!allAreas && areaFilter.includes(family.code)}
+                className="h-4 w-4"
+                onChange={() => toggleArea(family.code)}
+                type="checkbox"
+              />
+              {family.label}
+            </label>
+          ))}
+        </div>
+        {(allAreas || areaFilter.length > 0 || (inbox.data && inbox.data.offFilterCount > 0)) && (
+          <p className="mt-2 text-sm text-subtle">
+            {allAreas ? (
+              'Mostrando todas as áreas.'
+            ) : (
+              <>
+                {inbox.data ? inbox.data.offFilterCount : 0} vaga
+                {inbox.data?.offFilterCount === 1 ? '' : 's'} em outras áreas.{' '}
+                <button className="font-medium underline" onClick={showAllAreas} type="button">
+                  Ver todas
+                </button>
+              </>
+            )}
+          </p>
+        )}
+      </fieldset>
 
       {companyId && (
         <p className="mt-4 text-sm text-subtle">

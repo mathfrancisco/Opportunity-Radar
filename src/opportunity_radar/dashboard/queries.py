@@ -11,11 +11,12 @@ still in the inbox: hiding it would make the screen quietly disagree with the ca
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any
+from functools import reduce
+from typing import Any, Literal
 from uuid import UUID
 
 from sqlalchemy import Select, case, func, literal, select
@@ -27,14 +28,19 @@ from opportunity_radar.acquisition.models import (
     SourceRunModel,
 )
 from opportunity_radar.companies.models import Company, CompanySource
+from opportunity_radar.dashboard.search_synonyms import synonym_variants
 from opportunity_radar.matching import currency
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
 from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.models import (
+    DuplicateCandidateModel,
     NormalizationResultModel,
+    OpportunityCompensationModel,
     OpportunityModel,
+    RelevanceMarkModel,
     SourceOccurrenceModel,
 )
+from opportunity_radar.opportunities.regions import ANY_COUNTRY
 from opportunity_radar.pipeline.models import ApplicationProcessModel
 
 NEW_OPPORTUNITY_WINDOW_DAYS = 7
@@ -63,6 +69,7 @@ class InboxItem:
     seniority: str
     contract_type: str
     lifecycle_status: str
+    role_family: str
     published_at: datetime | None
     opportunity_version: int
     assessment_id: UUID | None = None
@@ -82,6 +89,10 @@ class InboxItem:
     application_id: UUID | None = None
     application_stage: str | None = None
     application_next_action_at: datetime | None = None
+    #: Whether a `PENDING` `duplicate_candidate` row names this opportunity, on either
+    #: side of the pair (F20-26). Never `True` for a `CONFIRMED`/`REJECTED` row — the
+    #: badge is for a decision still owed, not a settled one.
+    has_pending_duplicate: bool = False
 
     @property
     def applied(self) -> bool:
@@ -96,6 +107,10 @@ class InboxPage:
     total: int
     offset: int
     limit: int
+    #: Opportunities the same filters would show without the area filter. 0 when no
+    #: `role_families` filter is active, so a client never subtracts a filter it did not
+    #: apply. Never a count of hidden rows: they stay one click away, never deleted.
+    off_filter_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,7 +126,27 @@ class InboxQuery:
     only_assessed: bool = False
     applied: bool | None = None
     search: str | None = None
+    #: `role-family-v1` codes. Empty means every area — never a filter that hides rows.
+    role_families: tuple[str, ...] = ()
     profile_version_id: UUID | None = None
+    #: Empty means every seniority — an unknown/blank value is never an implicit
+    #: exclusion (SPEC 37, "Contrato de consulta").
+    seniorities: tuple[str, ...] = ()
+    #: ISO country code from the `regions-v1` table (`opportunities.regions`). `None`
+    #: means every country. An opportunity whose `allowed_countries` is unknown (`NULL`)
+    #: still matches — unknown never becomes an implicit exclusion (card F17-06, same
+    #: contract as `role_families`/`seniorities` above).
+    allowed_country: str | None = None
+    #: Compensation range, compared as-is against `OpportunityCompensationModel`
+    #: amounts. No currency conversion: mixing currencies in one query compares raw
+    #: numbers, a known limitation until a conversion service exists for filtering
+    #: (`matching.currency` only converts for scoring today).
+    salary_min: Decimal | None = None
+    salary_max: Decimal | None = None
+    #: `SourceDefinitionModel` ids. Matches on the opportunity's occurrences (`EXISTS`),
+    #: never a join — an opportunity with several matching sources still appears once
+    #: (SPEC 37, "Contrato de consulta": "fonte filtra ocorrências, não duplica").
+    source_definition_ids: tuple[UUID, ...] = ()
     order: InboxOrder = InboxOrder.PRIORITY
     offset: int = 0
     limit: int = 50
@@ -140,6 +175,9 @@ class SourceHealth:
     last_run_items_skipped: int | None = None
     last_run_items_invalid: int | None = None
     seniority_counts: dict[str, int] = field(default_factory=dict)
+    #: The optimistic-concurrency version (F20-25): a batch probe over several proposals
+    #: needs each one's own version, not the id it started the batch with.
+    version: int = 1
 
     @property
     def last_run_duration_seconds(self) -> float | None:
@@ -188,6 +226,67 @@ class OverviewSummary:
     #: Active applications whose next action is already due or falls inside the window.
     follow_ups_due: int = 0
     follow_up_window_days: int = FOLLOW_UP_WINDOW_DAYS
+    #: Support line data for the "Acervo" block (F17-01). `precision_percent` is `None`
+    #: when there are not enough marks to compute it — never a frail number.
+    precision_percent: Decimal | None = None
+    precision_marked_count: int = 0
+    companies_covered: int = 0
+    companies_with_ats: int = 0
+
+
+#: Source types with a collector registered (`registry.py`), i.e. an ATS the radar can
+#: actually collect from. "Empresas com ATS identificado" per the SPEC notes.
+ATS_COLLECTOR_SOURCE_TYPES = ("ashby", "greenhouse", "lever")
+#: Number of top Inbox rows, in the default order, that the precision report samples.
+PRECISION_SAMPLE_SIZE = 50
+
+
+@dataclass(frozen=True, slots=True)
+class SourceCoverageMetric:
+    source_definition_id: UUID
+    name: str
+    runs: int
+    items_seen: int
+    items_persisted: int
+    items_duplicate: int
+    items_invalid: int
+    new_opportunities: int
+
+
+@dataclass(frozen=True, slots=True)
+class CoverageMetrics:
+    window_days: int
+    runs: int
+    items_seen: int
+    items_persisted: int
+    items_duplicate: int
+    items_invalid: int
+    new_opportunities: int
+    companies_covered: int
+    companies_with_ats: int
+    seniority_unknown_rate: Decimal | None
+    #: Rate of `role_family == 'UNKNOWN'` in the whole catalogue. Card F17-02's acceptance
+    #: is < 10%, measured here rather than fabricated.
+    role_family_unknown_rate: Decimal | None
+    by_source: tuple[SourceCoverageMetric, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PrecisionMetrics:
+    """Precision of the top `sample_size` Inbox rows, computed only over marked ones."""
+
+    sample_size: int
+    marked_count: int
+    relevant_count: int
+    precision: Decimal | None
+
+
+@dataclass(frozen=True, slots=True)
+class SearchMetricsReport:
+    window_days: int
+    generated_at: datetime
+    coverage: CoverageMetrics
+    precision: PrecisionMetrics
 
 
 def _latest_assessments(profile_version_id: UUID | None) -> Any:
@@ -287,6 +386,7 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
             OpportunityModel.seniority,
             OpportunityModel.contract_type,
             OpportunityModel.lifecycle_status,
+            OpportunityModel.role_family,
             OpportunityModel.published_at,
             OpportunityModel.version,
             assessments.c.assessment_id,
@@ -306,6 +406,14 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
             applications.c.application_id,
             applications.c.current_stage,
             applications.c.next_action_at,
+            select(DuplicateCandidateModel.id)
+            .where(
+                DuplicateCandidateModel.status == "PENDING",
+                (DuplicateCandidateModel.opportunity_id == OpportunityModel.id)
+                | (DuplicateCandidateModel.duplicate_opportunity_id == OpportunityModel.id),
+            )
+            .exists()
+            .label("has_pending_duplicate"),
         )
         .select_from(OpportunityModel)
         .outerjoin(assessments, assessments.c.opportunity_id == OpportunityModel.id)
@@ -340,20 +448,84 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
         filters.append(OpportunityModel.work_mode == query.work_mode)
     if query.lifecycle_status:
         filters.append(OpportunityModel.lifecycle_status == query.lifecycle_status)
+    if query.role_families:
+        filters.append(OpportunityModel.role_family.in_(query.role_families))
     if query.published_after is not None:
         filters.append(OpportunityModel.published_at >= query.published_after)
-    if query.search and query.search.strip():
-        pattern = f"%{query.search.strip().lower()}%"
+    if query.seniorities:
+        filters.append(OpportunityModel.seniority.in_(query.seniorities))
+    if query.allowed_country:
         filters.append(
-            func.lower(OpportunityModel.canonical_title).like(pattern)
-            | func.lower(func.coalesce(OpportunityModel.company_name, "")).like(pattern)
+            OpportunityModel.allowed_countries.is_(None)
+            | OpportunityModel.allowed_countries.any(query.allowed_country)
+            | OpportunityModel.allowed_countries.any(ANY_COUNTRY)
         )
+    if query.salary_min is not None or query.salary_max is not None:
+        compensation_conditions = [
+            OpportunityCompensationModel.opportunity_id == OpportunityModel.id
+        ]
+        if query.salary_min is not None:
+            compensation_conditions.append(
+                OpportunityCompensationModel.amount_max.is_(None)
+                | (OpportunityCompensationModel.amount_max >= query.salary_min)
+            )
+        if query.salary_max is not None:
+            compensation_conditions.append(
+                OpportunityCompensationModel.amount_min.is_(None)
+                | (OpportunityCompensationModel.amount_min <= query.salary_max)
+            )
+        filters.append(
+            select(OpportunityCompensationModel.id)
+            .where(*compensation_conditions)
+            .exists()
+        )
+    if query.source_definition_ids:
+        filters.append(
+            select(SourceOccurrenceModel.id)
+            .where(
+                SourceOccurrenceModel.opportunity_id == OpportunityModel.id,
+                SourceOccurrenceModel.source_definition_id.in_(
+                    query.source_definition_ids
+                ),
+            )
+            .exists()
+        )
+    term = query.search.strip() if query.search else ""
+    if term:
+        filters.append(OpportunityModel.search_document.op("@@")(_search_tsquery(term)))
     return filters
 
 
-def _inbox_ordering(order: InboxOrder, assessments: Any) -> list[Any]:
+_DICTIONARIES = ("portuguese", "english")
+
+
+def _search_tsquery(term: str) -> Any:
+    """`websearch_to_tsquery` over both dictionaries, ORed across synonym variants.
+
+    Quoted phrases, `AND`/`OR`/`-negation` in `term` come from `websearch_to_tsquery`
+    itself; `synonym_variants` only substitutes plain tokens before parsing, so those
+    semantics survive (SPEC 37, "Contrato de consulta").
+    """
+    expressions: list[Any] = [
+        func.websearch_to_tsquery(dictionary, variant)
+        for variant in synonym_variants(term)
+        for dictionary in _DICTIONARIES
+    ]
+    return reduce(lambda left, right: left.op("||")(right), expressions)
+
+
+def _search_rank(term: str) -> Any:
+    return func.ts_rank_cd(OpportunityModel.search_document, _search_tsquery(term))
+
+
+def _inbox_ordering(order: InboxOrder, assessments: Any, search_term: str = "") -> list[Any]:
     recency = OpportunityModel.published_at.desc().nulls_last()
     score = assessments.c.score.desc().nulls_last()
+    if search_term:
+        # Contract: rank when there is a term; tie-break by recency then id so
+        # pagination never repeats or drops a row on a tie (SPEC 37, "Contrato de
+        # consulta").
+        return [_search_rank(search_term).desc(), recency, OpportunityModel.id]
     if order is InboxOrder.RECENCY:
         return [recency, score, OpportunityModel.id]
     if order is InboxOrder.SCORE:
@@ -367,15 +539,30 @@ def list_opportunity_inbox(session: Session, query: InboxQuery) -> InboxPage:
         session.scalar(select(func.count()).select_from(statement.subquery("inbox"))) or 0
     )
     rows = session.execute(
-        statement.order_by(*_inbox_ordering(query.order, assessments))
+        statement.order_by(
+            *_inbox_ordering(
+                query.order, assessments, (query.search or "").strip()
+            )
+        )
         .offset(query.offset)
         .limit(query.limit)
     ).all()
+    off_filter_count = 0
+    if query.role_families:
+        broader_statement, _, _ = _inbox_statement(replace(query, role_families=()))
+        broader_total = (
+            session.scalar(
+                select(func.count()).select_from(broader_statement.subquery("inbox_all"))
+            )
+            or 0
+        )
+        off_filter_count = max(broader_total - total, 0)
     return InboxPage(
         items=tuple(_inbox_item(row) for row in rows),
         total=total,
         offset=query.offset,
         limit=query.limit,
+        off_filter_count=off_filter_count,
     )
 
 
@@ -391,25 +578,27 @@ def _inbox_item(row: Any) -> InboxItem:
         seniority=row[7],
         contract_type=row[8],
         lifecycle_status=row[9],
-        published_at=row[10],
-        opportunity_version=row[11],
-        assessment_id=row[12],
-        assessment_opportunity_version=row[13],
-        assessment_profile_version_id=row[14],
-        current_profile_version_id=row[15],
-        verdict=row[16],
-        eligibility=row[17],
-        score=row[18],
-        confidence=row[19],
-        rules_version=row[20],
-        is_stale=row[21],
-        assessed_at=row[22],
-        analysis_status=row[23],
-        analysis_recommended_review=row[24],
-        analysis_summary=row[25],
-        application_id=row[26],
-        application_stage=row[27],
-        application_next_action_at=row[28],
+        role_family=row[10],
+        published_at=row[11],
+        opportunity_version=row[12],
+        assessment_id=row[13],
+        assessment_opportunity_version=row[14],
+        assessment_profile_version_id=row[15],
+        current_profile_version_id=row[16],
+        verdict=row[17],
+        eligibility=row[18],
+        score=row[19],
+        confidence=row[20],
+        rules_version=row[21],
+        is_stale=row[22],
+        assessed_at=row[23],
+        analysis_status=row[24],
+        analysis_recommended_review=row[25],
+        analysis_summary=row[26],
+        application_id=row[27],
+        application_stage=row[28],
+        application_next_action_at=row[29],
+        has_pending_duplicate=bool(row[30]),
     )
 
 
@@ -441,6 +630,8 @@ def summarize_overview(
         .group_by(ApplicationProcessModel.current_stage)
     ).all()
     applications_by_stage = {str(stage): int(total) for stage, total in stage_rows}
+    precision = _precision_metrics(session, profile_version_id=profile_version_id)
+    companies_covered, companies_with_ats = _companies_coverage(session)
     return OverviewSummary(
         opportunities_total=_count(session, select(func.count(OpportunityModel.id))),
         opportunities_active=_count(
@@ -481,6 +672,10 @@ def summarize_overview(
                 <= reference + timedelta(days=FOLLOW_UP_WINDOW_DAYS),
             ),
         ),
+        precision_percent=precision.precision,
+        precision_marked_count=precision.marked_count,
+        companies_covered=companies_covered,
+        companies_with_ats=companies_with_ats,
     )
 
 
@@ -531,8 +726,14 @@ def list_source_health(
     session: Session,
     *,
     only_failing: bool = False,
+    status: Literal["proposed"] | None = None,
 ) -> tuple[SourceHealth, ...]:
-    """Every source with its last run. A source that never ran reports `None`, not zero."""
+    """Every source with its last run. A source that never ran reports `None`, not zero.
+
+    `status="proposed"` narrows the listing to disabled sources awaiting homologation
+    (F20-25) and orders them by the priority of the company that proposed them, highest
+    first, so the queue surfaces the sources that matter most.
+    """
     latest = _latest_runs()
     statement = (
         select(
@@ -544,6 +745,7 @@ def list_source_health(
             SourceDefinitionModel.terms_reviewed,
             SourceDefinitionModel.collector_local_tested,
             SourceDefinitionModel.schedule,
+            SourceDefinitionModel.version,
             latest.c.run_id,
             latest.c.status,
             latest.c.started_at,
@@ -558,13 +760,18 @@ def list_source_health(
         .select_from(SourceDefinitionModel)
         .outerjoin(latest, latest.c.source_definition_id == SourceDefinitionModel.id)
     )
+    if status == "proposed":
+        statement = statement.outerjoin(
+            CompanySource, CompanySource.id == SourceDefinitionModel.company_source_id
+        ).outerjoin(Company, Company.id == CompanySource.company_id)
+        statement = statement.where(SourceDefinitionModel.enabled.is_(False))
     if only_failing:
         statement = statement.where(latest.c.status.in_(FAILING_RUN_STATUSES))
-    rows = session.execute(
-        statement.order_by(
-            latest.c.finished_at.desc().nulls_last(), SourceDefinitionModel.name
-        )
-    ).all()
+    if status == "proposed":
+        order_by = (_priority_rank().desc(), SourceDefinitionModel.name)
+    else:
+        order_by = (latest.c.finished_at.desc().nulls_last(), SourceDefinitionModel.name)
+    rows = session.execute(statement.order_by(*order_by)).all()
     seniority_rows = session.execute(
         select(
             SourceOccurrenceModel.source_definition_id,
@@ -590,16 +797,17 @@ def list_source_health(
             terms_reviewed=row[5],
             collector_local_tested=row[6],
             schedule=row[7],
-            last_run_id=row[8],
-            last_run_status=row[9],
-            last_run_started_at=row[10],
-            last_run_finished_at=row[11],
-            last_run_error_code=row[12],
-            last_run_error=row[13],
-            last_run_items_seen=row[14],
-            last_run_items_persisted=row[15],
-            last_run_items_skipped=row[16],
-            last_run_items_invalid=row[17],
+            version=row[8],
+            last_run_id=row[9],
+            last_run_status=row[10],
+            last_run_started_at=row[11],
+            last_run_finished_at=row[12],
+            last_run_error_code=row[13],
+            last_run_error=row[14],
+            last_run_items_seen=row[15],
+            last_run_items_persisted=row[16],
+            last_run_items_skipped=row[17],
+            last_run_items_invalid=row[18],
             seniority_counts=seniority_by_source.get(row[0], {}),
         )
         for row in rows
@@ -687,20 +895,212 @@ def source_coverage_report(
     )
 
 
+def _companies_coverage(session: Session) -> tuple[int, int]:
+    """(empresas com pelo menos uma fonte habilitada, empresas com ATS identificado)."""
+    covered = _count(
+        session,
+        select(func.count(func.distinct(CompanySource.company_id)))
+        .select_from(CompanySource)
+        .join(
+            SourceDefinitionModel,
+            SourceDefinitionModel.company_source_id == CompanySource.id,
+        )
+        .where(SourceDefinitionModel.enabled.is_(True)),
+    )
+    with_ats = _count(
+        session,
+        select(func.count(func.distinct(CompanySource.company_id))).where(
+            CompanySource.source_type.in_(ATS_COLLECTOR_SOURCE_TYPES)
+        ),
+    )
+    return covered, with_ats
+
+
+def _precision_metrics(
+    session: Session,
+    *,
+    profile_version_id: UUID | None = None,
+    sample_size: int = PRECISION_SAMPLE_SIZE,
+) -> PrecisionMetrics:
+    """Precision over the top `sample_size` Inbox rows in the default order.
+
+    Computed only over marked opportunities, `None` when nothing is marked yet: a
+    percentage over zero marks would be a frail number, not a metric.
+    """
+    page = list_opportunity_inbox(
+        session,
+        InboxQuery(order=InboxOrder.PRIORITY, limit=sample_size, offset=0),
+    )
+    opportunity_ids = [item.opportunity_id for item in page.items]
+    if not opportunity_ids:
+        return PrecisionMetrics(
+            sample_size=0, marked_count=0, relevant_count=0, precision=None
+        )
+    latest = (
+        select(
+            RelevanceMarkModel.opportunity_id.label("opportunity_id"),
+            RelevanceMarkModel.relevant.label("relevant"),
+            func.row_number()
+            .over(
+                partition_by=RelevanceMarkModel.opportunity_id,
+                order_by=(
+                    RelevanceMarkModel.marked_at.desc(),
+                    RelevanceMarkModel.id.desc(),
+                ),
+            )
+            .label("position"),
+        )
+        .where(RelevanceMarkModel.opportunity_id.in_(opportunity_ids))
+        .subquery("ranked_marks")
+    )
+    marks = session.execute(
+        select(latest.c.relevant).where(latest.c.position == 1)
+    ).all()
+    marked_count = len(marks)
+    relevant_count = sum(1 for (relevant,) in marks if relevant)
+    precision = (
+        Decimal(relevant_count) / Decimal(marked_count) if marked_count > 0 else None
+    )
+    return PrecisionMetrics(
+        sample_size=len(opportunity_ids),
+        marked_count=marked_count,
+        relevant_count=relevant_count,
+        precision=precision,
+    )
+
+
+def search_metrics(
+    session: Session,
+    *,
+    window_days: int = 7,
+    profile_version_id: UUID | None = None,
+    now: datetime | None = None,
+) -> SearchMetricsReport:
+    """The cobertura and precisão report the SPEC (§3) and F17-01 call for."""
+    reference = now or datetime.now(UTC)
+    since = reference - timedelta(days=window_days)
+
+    run_rows = session.execute(
+        select(
+            SourceRunModel.source_definition_id,
+            SourceDefinitionModel.name,
+            func.count(SourceRunModel.id),
+            func.coalesce(func.sum(SourceRunModel.items_seen), 0),
+            func.coalesce(func.sum(SourceRunModel.items_persisted), 0),
+            func.coalesce(func.sum(SourceRunModel.items_skipped), 0),
+            func.coalesce(func.sum(SourceRunModel.items_invalid), 0),
+        )
+        .join(
+            SourceDefinitionModel,
+            SourceDefinitionModel.id == SourceRunModel.source_definition_id,
+        )
+        .where(SourceRunModel.started_at >= since)
+        .group_by(SourceRunModel.source_definition_id, SourceDefinitionModel.name)
+        .order_by(SourceDefinitionModel.name)
+    ).all()
+
+    new_by_source: dict[UUID, int] = {
+        row[0]: row[1]
+        for row in session.execute(
+            select(SourceOccurrenceModel.source_definition_id, func.count())
+            .join(
+                OpportunityModel,
+                OpportunityModel.id == SourceOccurrenceModel.opportunity_id,
+            )
+            .where(OpportunityModel.created_at >= since)
+            .group_by(SourceOccurrenceModel.source_definition_id)
+        ).all()
+    }
+
+    by_source = tuple(
+        SourceCoverageMetric(
+            source_definition_id=row[0],
+            name=row[1],
+            runs=int(row[2]),
+            items_seen=int(row[3]),
+            items_persisted=int(row[4]),
+            items_duplicate=int(row[5]),
+            items_invalid=int(row[6]),
+            new_opportunities=int(new_by_source.get(row[0], 0)),
+        )
+        for row in run_rows
+    )
+
+    new_opportunities = _count(
+        session,
+        select(func.count(OpportunityModel.id)).where(
+            OpportunityModel.created_at >= since
+        ),
+    )
+    seniority_total = _count(session, select(func.count(OpportunityModel.id)))
+    seniority_unknown = _count(
+        session,
+        select(func.count(OpportunityModel.id)).where(
+            OpportunityModel.seniority == "UNKNOWN"
+        ),
+    )
+    seniority_unknown_rate = (
+        Decimal(seniority_unknown) / Decimal(seniority_total)
+        if seniority_total > 0
+        else None
+    )
+    role_family_unknown = _count(
+        session,
+        select(func.count(OpportunityModel.id)).where(
+            OpportunityModel.role_family == "UNKNOWN"
+        ),
+    )
+    role_family_unknown_rate = (
+        Decimal(role_family_unknown) / Decimal(seniority_total)
+        if seniority_total > 0
+        else None
+    )
+    companies_covered, companies_with_ats = _companies_coverage(session)
+
+    coverage = CoverageMetrics(
+        window_days=window_days,
+        runs=sum(item.runs for item in by_source),
+        items_seen=sum(item.items_seen for item in by_source),
+        items_persisted=sum(item.items_persisted for item in by_source),
+        items_duplicate=sum(item.items_duplicate for item in by_source),
+        items_invalid=sum(item.items_invalid for item in by_source),
+        new_opportunities=new_opportunities,
+        companies_covered=companies_covered,
+        companies_with_ats=companies_with_ats,
+        seniority_unknown_rate=seniority_unknown_rate,
+        role_family_unknown_rate=role_family_unknown_rate,
+        by_source=by_source,
+    )
+    precision = _precision_metrics(session, profile_version_id=profile_version_id)
+    return SearchMetricsReport(
+        window_days=window_days,
+        generated_at=reference,
+        coverage=coverage,
+        precision=precision,
+    )
+
+
 __all__ = [
+    "ATS_COLLECTOR_SOURCE_TYPES",
     "FAILING_RUN_STATUSES",
     "FOLLOW_UP_WINDOW_DAYS",
     "NEW_OPPORTUNITY_WINDOW_DAYS",
+    "PRECISION_SAMPLE_SIZE",
+    "CoverageMetrics",
     "InboxItem",
     "InboxOrder",
     "InboxPage",
     "InboxQuery",
     "OverviewSummary",
+    "PrecisionMetrics",
+    "SearchMetricsReport",
+    "SourceCoverageMetric",
     "SourceHealth",
     "SourceCoverage",
     "SourceCoverageReport",
     "list_opportunity_inbox",
     "list_source_health",
+    "search_metrics",
     "source_coverage_report",
     "summarize_overview",
 ]

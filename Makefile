@@ -1,10 +1,10 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help bootstrap dev up up-cpu down restart status logs migrate test test-integration check doctor soak import-companies enable-sources collect backup restore-check
+.PHONY: help bootstrap dev up down restart status logs migrate test test-integration check doctor soak import-companies enable-sources discover-ats collect backup restore-check eval-analysis eval-search export-eval-cases
 
 help:
-	@echo "Targets: bootstrap dev up up-cpu down restart status logs migrate import-companies enable-sources collect"
-	@echo "Operations: doctor soak backup restore-check"
+	@echo "Targets: bootstrap dev up down restart status logs migrate import-companies enable-sources discover-ats collect"
+	@echo "Operations: doctor soak backup restore-check eval-analysis eval-search export-eval-cases"
 	@echo "Validation (run only when requested): test test-integration check"
 
 bootstrap:
@@ -16,9 +16,6 @@ dev: up
 
 up:
 	@docker compose up --build -d
-
-up-cpu:
-	@docker compose -f compose.yaml -f compose.cpu.yaml up --build -d
 
 down:
 	@docker compose down
@@ -60,6 +57,10 @@ enable-sources:
 	@test "$(TERMS_REVIEWED)" = "1" || (echo "Use TERMS_REVIEWED=1 after reviewing the public source terms." && exit 2)
 	@docker compose run --rm --build -v "$(CURDIR):/workspace" api python scripts/enable_sources.py --accept-terms $(if $(DRY_RUN),--dry-run,) $(if $(EXCLUDE_REMOTIVE),--exclude-remotive,) $(if $(MAX_ITEMS),--max-items "$(MAX_ITEMS)",)
 
+# Off by default: a manual run, or a low-frequency job an operator schedules separately.
+discover-ats:
+	@docker compose run --rm --build api python scripts/discover_ats.py
+
 backup:
 	@docker compose run --rm -v "$(CURDIR)/data/backups:/app/data/backups" api python scripts/backup.py $(if $(LABEL),--label "$(LABEL)",)
 
@@ -68,6 +69,15 @@ restore-check:
 
 collect:
 	@docker compose run --rm --build -v "$(CURDIR):/workspace" api python scripts/collect.py $(if $(SOURCE_ID),--source-id "$(SOURCE_ID)",) $(if $(SOURCE_TYPE),--source-type "$(SOURCE_TYPE)",) $(if $(KEYWORDS),--keywords "$(KEYWORDS)",) $(if $(MODE),--mode "$(MODE)",) $(if $(MAX_ITEMS),--max-items "$(MAX_ITEMS)",)
+
+eval-analysis:
+	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/eval_analysis.py --cases /workspace/prompts/opportunity_analysis/eval/cases --output /workspace/data/evals $(if $(PROMPT),--prompt "$(PROMPT)",) $(if $(MODEL),--model "$(MODEL)",) $(if $(BASELINE),--baseline "/workspace/$(BASELINE)",) $(if $(SPLIT),--split "$(SPLIT)",) $(if $(REPEAT),--repeat "$(REPEAT)",) $(if $(LABEL),--label "$(LABEL)",)
+
+eval-search:
+	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/eval_search.py $(if $(MODE),--mode "$(MODE)",--mode both) $(if $(REF_PATH),--path "/workspace/$(REF_PATH)",)
+
+export-eval-cases:
+	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/export_eval_cases.py --output /workspace/prompts/opportunity_analysis/eval/drafts $(if $(PER_VERDICT),--per-verdict "$(PER_VERDICT)",)
 
 .DEFAULT:
 	@echo "Target '$@' is not implemented yet."

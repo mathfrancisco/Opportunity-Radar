@@ -3,7 +3,26 @@ import { apiUrl, requestFailure } from '../../lib/api'
 export interface ProfileSkill {
   canonicalName: string
   level: string | null
+  /** ISO date (YYYY-MM-DD). */
+  lastUsedAt: string | null
   experienceMonths: number | null
+}
+
+export interface ProfileExperience {
+  companyName: string
+  title: string
+  /** ISO dates (YYYY-MM-DD); no end date means the position is current. */
+  startedOn: string
+  endedOn: string | null
+  summary: string | null
+}
+
+export interface ProfileProject {
+  name: string
+  startedOn: string | null
+  endedOn: string | null
+  description: string | null
+  url: string | null
 }
 
 export interface ProfilePreferences {
@@ -18,6 +37,8 @@ export interface ProfilePreferences {
   compensationPeriod: string | null
   relocationAllowed: boolean
   sponsorshipRequired: boolean
+  /** `role-family-v1` codes. Empty means every area. */
+  targetRoleFamilies: string[]
 }
 
 export interface ProfileVersion {
@@ -26,11 +47,16 @@ export interface ProfileVersion {
   status: string
   profileLockVersion: number
   skills: ProfileSkill[]
+  experiences: ProfileExperience[]
+  projects: ProfileProject[]
   preferences: ProfilePreferences
 }
 
+/** A whole snapshot: what is not in the draft is not in the saved version. */
 export interface ProfileDraft {
   skills: ProfileSkill[]
+  experiences: ProfileExperience[]
+  projects: ProfileProject[]
   preferences: ProfilePreferences
 }
 
@@ -46,6 +72,7 @@ export const emptyPreferences: ProfilePreferences = {
   compensationPeriod: null,
   relocationAllowed: false,
   sponsorshipRequired: false,
+  targetRoleFamilies: [],
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -69,8 +96,44 @@ function parseSkill(value: unknown): ProfileSkill | null {
   return {
     canonicalName: value.canonical_name,
     level: text(value.level),
+    lastUsedAt: text(value.last_used_at),
     experienceMonths: numberOrNull(value.experience_months),
   }
+}
+
+function parseExperience(value: unknown): ProfileExperience | null {
+  if (
+    !isRecord(value) ||
+    typeof value.company_name !== 'string' ||
+    typeof value.title !== 'string' ||
+    typeof value.started_on !== 'string'
+  ) {
+    return null
+  }
+  return {
+    companyName: value.company_name,
+    title: value.title,
+    startedOn: value.started_on,
+    endedOn: text(value.ended_on),
+    summary: text(value.summary),
+  }
+}
+
+function parseProject(value: unknown): ProfileProject | null {
+  if (!isRecord(value) || typeof value.name !== 'string') return null
+  return {
+    name: value.name,
+    startedOn: text(value.started_on),
+    endedOn: text(value.ended_on),
+    description: text(value.description),
+    url: text(value.url),
+  }
+}
+
+function parseList<T>(value: unknown, parse: (item: unknown) => T | null): T[] {
+  return (Array.isArray(value) ? value : [])
+    .map(parse)
+    .filter((item): item is T => item !== null)
 }
 
 function parsePreferences(value: unknown): ProfilePreferences {
@@ -89,6 +152,7 @@ function parsePreferences(value: unknown): ProfilePreferences {
     compensationPeriod: text(value.compensation_period),
     relocationAllowed: value.relocation_allowed === true,
     sponsorshipRequired: value.sponsorship_required === true,
+    targetRoleFamilies: stringList(value.target_role_families),
   }
 }
 
@@ -99,9 +163,9 @@ function parseVersion(value: unknown): ProfileVersion | null {
     number: numberOrNull(value.number) ?? 0,
     status: typeof value.status === 'string' ? value.status : 'UNKNOWN',
     profileLockVersion: numberOrNull(value.profile_lock_version) ?? 0,
-    skills: (Array.isArray(value.skills) ? value.skills : [])
-      .map(parseSkill)
-      .filter((item): item is ProfileSkill => item !== null),
+    skills: parseList(value.skills, parseSkill),
+    experiences: parseList(value.experiences, parseExperience),
+    projects: parseList(value.projects, parseProject),
     preferences: parsePreferences(value.preferences),
   }
 }
@@ -119,6 +183,33 @@ function serializePreferences(preferences: ProfilePreferences) {
     compensation_period: preferences.compensationPeriod,
     relocation_allowed: preferences.relocationAllowed,
     sponsorship_required: preferences.sponsorshipRequired,
+    target_role_families: preferences.targetRoleFamilies,
+  }
+}
+
+function serializeDraft(draft: ProfileDraft) {
+  return {
+    skills: draft.skills.map((skill) => ({
+      canonical_name: skill.canonicalName,
+      level: skill.level,
+      last_used_at: skill.lastUsedAt,
+      experience_months: skill.experienceMonths,
+    })),
+    experiences: draft.experiences.map((experience) => ({
+      company_name: experience.companyName,
+      title: experience.title,
+      started_on: experience.startedOn,
+      ended_on: experience.endedOn,
+      summary: experience.summary,
+    })),
+    projects: draft.projects.map((project) => ({
+      name: project.name,
+      started_on: project.startedOn,
+      ended_on: project.endedOn,
+      description: project.description,
+      url: project.url,
+    })),
+    preferences: serializePreferences(draft.preferences),
   }
 }
 
@@ -128,7 +219,7 @@ async function readVersion(response: Response, what: string): Promise<ProfileVer
     throw requestFailure(
       response.status,
       response.status === 409
-        ? `O perfil mudou enquanto você editava, então nada foi gravado ao ${what}.`
+        ? `Outra edição mudou o perfil enquanto você editava, então nada foi gravado ao ${what}. Recarregue para ver a versão atual.`
         : `A API respondeu com ${response.status} ao ${what}.`,
     )
   }
@@ -165,40 +256,27 @@ function post(path: string, payload: unknown) {
 }
 
 /**
- * A relevant change is a new version, never an edit of the current one: create, publish,
- * activate. Each step carries the lock version the previous one returned, so a concurrent
- * edit fails with a conflict instead of silently winning.
+ * A relevant change is a new version, never an edit of the current one. One request
+ * creates, publishes and activates it in a single transaction, so a failure leaves no
+ * draft or published version behind and the active one untouched.
+ *
+ * The draft is the whole snapshot — experiences, projects and skill dates included — and
+ * `baseVersionId` names the version it was read from, so the server fills anything this
+ * client does not know about from it instead of erasing it. The lock version makes a
+ * concurrent edit fail with a conflict instead of silently winning.
  */
 export async function saveProfileVersion(
   draft: ProfileDraft,
   expectedProfileVersion: number,
+  baseVersionId: string | null,
 ): Promise<ProfileVersion> {
-  const created = await readVersion(
+  return readVersion(
     await post('/profile/versions', {
       expected_profile_version: expectedProfileVersion,
-      skills: draft.skills.map((skill) => ({
-        canonical_name: skill.canonicalName,
-        level: skill.level,
-        experience_months: skill.experienceMonths,
-      })),
-      experiences: [],
-      projects: [],
-      preferences: serializePreferences(draft.preferences),
+      base_version_id: baseVersionId,
+      activate: true,
+      ...serializeDraft(draft),
     }),
-    'criar a versão',
-  )
-
-  const published = await readVersion(
-    await post(`/profile/versions/${created.id}/publish`, {
-      expected_profile_version: created.profileLockVersion,
-    }),
-    'publicar a versão',
-  )
-
-  return readVersion(
-    await post(`/profile/versions/${published.id}/activate`, {
-      expected_profile_version: published.profileLockVersion,
-    }),
-    'ativar a versão',
+    'salvar a versão',
   )
 }

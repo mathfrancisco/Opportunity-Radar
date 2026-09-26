@@ -1,57 +1,67 @@
-# Roadmap — IA local e busca de vagas
+# Roadmap — IA local, busca e varredura produtiva
+
+> **Consolidado na [Fase 20](44-roadmap-fase-20/README.md).** O status oficial destes cards passa a ser o da Fase 20
+> ([SPEC 43](43-spec-llm-cloud-e-consolidacao.md)). Os cards abaixo seguem como referência de escopo.
 
 ## 1. Objetivo
 
-Duas frentes que se apoiam, cada uma com a sua SPEC:
+Encontrar oportunidades únicas, abertas e relevantes nos sites de interesse,
+com rastreabilidade, baixo atraso e custo controlado de coleta e análise local.
 
-```text
-Fase 16  camada local de IA        o modelo na GPU, medido, lendo a vaga de verdade
-Fase 17  busca de vagas            mais vagas relevantes, menos ruído, busca que acha
-```
+- [SPEC 36 — IA](36-spec-ollama.md): contexto, qualidade, cache e recursos locais.
+- [SPEC 37 — Busca](37-spec-busca.md): cobertura, precisão e consulta na Inbox.
+- [SPEC 39 — Varredura produtiva](39-spec-varredura-produtiva.md): descoberta
+  limitada, páginas públicas, delta, agenda e utilidade por custo.
 
-- [SPEC da camada de IA](36-spec-ollama.md) — Ollama 0.34.4 na RTX 5060, `qwen3:8b-q4_K_M`,
-  custo medido, prompt `v2`, pgvector e embeddings, avaliação e quantização.
-- [SPEC de busca](37-spec-busca.md) — cobertura (quantidade) e precisão (acurácia), da
-  coleta à Inbox.
-
-Cards de execução: [38-roadmap-ia-e-busca](38-roadmap-ia-e-busca/README.md).
+[Cards 16/17](38-roadmap-ia-e-busca/README.md) e
+[cards 18](40-roadmap-varredura-produtiva/README.md).
 
 ## 2. Hardware de referência
 
-Xeon E5-2680 v4 (14 núcleos, AVX2, sem AVX-512), 16 GB de RAM, RTX 5060 com 8 GB de VRAM.
-A VRAM é o limite que decide modelo, quantização e janela de contexto (SPEC de IA §3.1).
+Xeon E5-2680 v4, 16 GB de RAM e RTX 5060 com 8 GB de VRAM.
+Medir análise e embedding juntos; a busca textual não depende de GPU.
 
 ## 3. Milestones
 
-## Milestone O — IA local na GPU, medida
+### Milestone O — IA local medida
 
-```text
-o modelo roda inteiro na GPU, e cada análise diz quanto custou
-```
+F16-01 a F16-04 e F16-13. Parte da implementação está integrada; os cards
+distinguem isso de aceite com medição real. Não marcar Done só pelo merge.
 
-F16-01, F16-02, F16-03, F16-04 e F16-13.
+### Milestone P — Busca confiável e cobertura básica
 
-## Milestone P — Busca que mede e cresce com precisão
+F17-01 a F17-07: medição, área, full-text, propostas/homologação, normalização
+retroativa e completude/encerramento. A coleta parcial não aparenta sucesso vazio.
+F16-10 não bloqueia esse marco; é opção posterior condicionada ao ganho medido.
 
-```text
-o radar sabe quantas vagas relevantes encontra e quantas das mostradas servem,
-e aumenta a cobertura sem piorar a Inbox
-```
+### Milestone Q — Varredura produtiva
 
-F17-01 a F17-05 e F16-10.
+F18-01 a F18-09: mapa de lacunas, descoberta limitada, JobPosting, orçamento
+de rede, delta/presença, IA útil e prova de integridade/recuperação.
+RAG e relevância aprendida não bloqueiam esse marco.
 
-## 4. Ordem entre as fases
+## 4. Ordem de execução
 
-1. **F16-01** e **F17-01** em paralelo: GPU e medição de busca não disputam arquivo.
-2. **F16-02, F16-03** (modelo e custo) e **F17-02, F17-03** (área e full-text).
-3. **F17-04, F17-05**: volume, só depois da área da vaga.
-4. **F16-04 a F16-08**: tempo, orçamento, avaliação, prompt `v2`, cache.
-5. **F16-09, F16-10, F17-06 a F17-08**: vetores, vagas parecidas, normalização, duplicatas.
-6. **F17-09 a F17-12, F16-11 a F16-13**: descoberta, coletores novos, palavras-chave,
-   buscas salvas, RAG, confirmação de modelo, métricas.
+1. F18-07/08: preservar perfil e tornar backup verificável durante operação.
+   F17-01 e F17-07 podem começar em paralelo.
+2. F17-02/06/03: área, renormalização confiável e full-text. F17-04 pode propor
+   fontes antes, mas habilitação em massa espera F17-02/07.
+3. F17-05: homologação; F16-05/06/07/08: contexto, avaliação reservada e cache.
+   Atualizar contratos já implementados conforme os reforços dos cards.
+4. F18-01 e F17-09 → F18-02: medir lacunas e ampliar descoberta. F17-10 e
+   F18-03 ampliam coletores conforme rendimento, com normalização/completude prontas.
+5. F18-04/05: orçamento por host e coleta incremental; F17-08/11/12: identidade,
+   rotação de consultas e buscas salvas, observando suas dependências.
+6. F18-06/09: IA seletiva, prova pela interface e relatório de produtividade.
+7. F16-09/10 podem evoluir após seus pré-requisitos, sem atrasar full-text.
+   F16-11 e F17-13 são experimentos opcionais após os marcos básicos; F16-12
+   confirma modelo com evidência, sem bloquear o ganho de cobertura.
+
+A numeração identifica trabalho, não impõe esperar a fase inteira anterior.
+Dependências detalhadas nos cards prevalecem sobre paralelismo ilustrativo.
 
 ## 5. Recorte explícito
 
-Não entram: serviços de IA remotos, modelo decidindo score ou veredito, sites que
-proíbem automação ou exigem login, navegador headless, fine-tuning e candidatura
-automática.
+Não entram serviços de IA remotos, modelo decidindo score/veredito, fontes que
+proíbem automação ou exigem login, navegador headless, fine-tuning ou candidatura
+automática. Sites públicos estáticos homologados entram pela SPEC 39.

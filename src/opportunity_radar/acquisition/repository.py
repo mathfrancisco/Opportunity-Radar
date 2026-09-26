@@ -13,6 +13,7 @@ from opportunity_radar.acquisition.models import (
     SourceRunModel,
 )
 from opportunity_radar.acquisition.scheduling import SourceRunHistory
+from opportunity_radar.companies.models import CompanySource
 
 _UNFINISHED_RUN_STATUSES = ("PENDING", "RUNNING")
 
@@ -26,6 +27,25 @@ class AcquisitionRepository:
             select(SourceDefinitionModel)
             .where(SourceDefinitionModel.id == source_id)
             .options(selectinload(SourceDefinitionModel.checkpoint))
+        )
+
+    def enabled_ats_boards(self) -> frozenset[tuple[str, str]]:
+        rows = self.session.execute(
+            select(CompanySource.source_type, CompanySource.external_key)
+            .join(
+                SourceDefinitionModel,
+                SourceDefinitionModel.company_source_id == CompanySource.id,
+            )
+            .where(
+                SourceDefinitionModel.enabled.is_(True),
+                CompanySource.external_key.is_not(None),
+                CompanySource.source_type.in_(("ashby", "greenhouse", "lever")),
+            )
+        )
+        return frozenset(
+            (source_type, external_key)
+            for source_type, external_key in rows
+            if external_key
         )
 
     def list_sources(

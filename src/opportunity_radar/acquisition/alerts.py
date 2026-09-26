@@ -126,6 +126,38 @@ class SourceAlertService:
             return None
         return self._open(source, run, consecutive_failures, moment)
 
+    def record_pagination_gap(
+        self,
+        source: SourceDefinitionModel,
+        run: SourceRunModel,
+        *,
+        items_seen: int,
+        items_announced: int,
+        now: datetime | None = None,
+    ) -> None:
+        """Announce that a run read fewer items than the source said it had.
+
+        One message per run: this is a fact about that run's pagination, not an ongoing
+        state like a source being down, so it carries no incident lifecycle of its own.
+        """
+        moment = now or datetime.now(UTC)
+        self._deliver(
+            {
+                "event": "source_pagination_gap",
+                "source_definition_id": str(source.id),
+                "source_name": source.name,
+                "source_type": source.source_type,
+                "run_id": str(run.id),
+                "items_seen": items_seen,
+                "items_announced": items_announced,
+                "detected_at": moment.isoformat(),
+                "correlation_id": run.correlation_id,
+            },
+            event="source_pagination_gap",
+            source=source,
+            incident_id=run.id,
+        )
+
     def _open_incident(self, source_id: UUID) -> SourceAlertIncidentModel | None:
         return self.session.scalar(
             select(SourceAlertIncidentModel).where(

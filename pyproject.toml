@@ -47,6 +47,14 @@ select = ["E", "F", "I"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["src", "apps"]
+files = ["src", "apps", "scripts/search_reference.py"]
+# `scripts/eval_search.py` imports `scripts.search_reference` (package-qualified) while
+# `scripts/search_reference.py` is also run directly as `python scripts/search_reference.py`
+# (top-level). Without an explicit base, mypy resolves the same file under both module
+# names and refuses ("Source file found twice under different module names"). Only this
+# one script is added to `files`: the rest of `scripts/` is intentionally out of the
+# strict gate this card covers.
+explicit_package_bases = true
+mypy_path = "."
 ignore_missing_imports = true
 disallow_untyped_defs = true

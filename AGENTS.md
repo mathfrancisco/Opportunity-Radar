@@ -2,18 +2,18 @@
 
 ## Orchestration
 
-- The primary `gpt-5.6-sol`/high agent owns scope, decisions, integration, validation, and the final answer.
-- For implementation that divides cleanly, delegate bounded slices to at most three subagents. Use `explorer` for cheap read-only discovery and `worker` for code changes.
-- Give every worker explicit file/responsibility ownership and acceptance criteria. Workers are not alone in the codebase and must not revert other edits.
-- After workers finish, the primary agent inspects the combined diff and decides whether more work is needed.
-- Keep trivial or tightly coupled work in the primary thread; delegation must save context or wall time.
+- Sol and Astra coordinate and review read-only; they own scope, planning, assignments, integration decisions, verification assessment, and the final answer; they do not implement work, documentation, or configuration, and make no mutations themselves.
+- Assign every mutation to one bounded Luna or Terra worker; use at most three workers only for independent scopes. Give each worker owned files or responsibility and acceptance criteria.
+- The assigned executor role overrides inherited coordinator instructions and environment. Workers do not recursively delegate or orchestrate; receive a compact brief and return changed-file references, evidence, and uncertainty. Never claim unrun checks passed.
+- For long tasks only, retain a compact durable checkpoint of decisions, completed work, pending work, and blockers before compaction.
 
 ## Validation
 
-- Do not run unit tests, integration tests, E2E tests, linters, type checks, builds, audits, or equivalent local validation unless the user explicitly asks for that run.
-- Put repeatable validation in `.github/workflows/pipeline.yml` and rely on CI feedback by default.
-- Read-only inspection and edits needed to implement the requested change remain allowed.
-- If CI reports a failure, inspect that failure and fix it without repeating unrelated validation locally.
+- Run local validation (tests, linters, type checks) when it verifies the change. Start with the narrowest target (one test file or module), then widen if needed.
+- Run backend checks against the working tree without rebuilding images: `docker compose -p <unique> -f compose.yaml -f compose.dev.yaml run --rm api pytest -q`. Rebuild only when `requirements*.txt` or a Dockerfile changes. Run the full suite (and `RUN_DATABASE_INTEGRATION=1`) once at the end, not per iteration.
+- Every acceptance criterion ships with a test that exercises it.
+- Keep repeatable validation in `.github/workflows/pipeline.yml`; add new checks there too.
+- If CI reports a failure, inspect that failure and fix it.
 
 ## Review
 
@@ -32,7 +32,7 @@ Architecture and threat modeling remain separate skills.
 - Keep command output bounded: search first, select relevant lines, and summarize large logs inside the shell.
 - Do not load multiple overlapping skills for one task. Prefer the narrowest matching workflow.
 - Start a new thread when the task or repository changes materially.
-- RTK is applied automatically only to simple supported commands. Use `rtk gain` for its savings report.
+- Use RTK explicitly for supported simple git status/diff/log and package/test commands when checks are allowed. Do not double-prefix commands; use the RTK proxy for raw output when evidence requires it. Codex has no automatic RTK hook.
 
 ## Git identity
 

@@ -1,26 +1,31 @@
 # Cards da Fase 17 — Busca de vagas: cobertura e precisão
 
+> **Consolidado na [Fase 20](../../44-roadmap-fase-20/README.md).** O status oficial destes cards passa a ser o da Fase 20
+> ([SPEC 43](../../43-spec-llm-cloud-e-consolidacao.md)). Os cards abaixo seguem como referência de escopo.
+
 Estes cards executam a [SPEC de busca](../../37-spec-busca.md). A ordem é: medir, ganhar
 precisão e só então aumentar o volume — porque cada fonte nova sem filtro de área enche a
 Inbox de vagas que não servem.
 
 | Ordem | Card | Depende de | Status |
 | --- | --- | --- | --- |
-| 1 | [F17-01 — relevância e relatórios](f17-01-relevancia-e-relatorios.md) | Nenhum | Backlog |
-| 2 | [F17-02 — área da vaga](f17-02-area-da-vaga.md) | F17-01 | Backlog |
-| 3 | [F17-03 — busca full-text](f17-03-busca-full-text.md) | F17-01 | Backlog |
-| 4 | [F17-04 — importador propõe todo ATS](f17-04-importador-propoe-todo-ats.md) | Nenhum (habilitação em massa espera F17-02) | Backlog |
-| 5 | [F17-05 — fila de homologação](f17-05-fila-de-homologacao.md) | F17-04, F17-02 | Backlog |
-| 6 | [F17-06 — normalização mais precisa](f17-06-normalizacao-mais-precisa.md) | F17-01 | Backlog |
-| 7 | [F17-07 — coleta completa e encerradas](f17-07-coleta-completa-e-encerradas.md) | Nenhum | Backlog |
-| 8 | [F17-08 — candidato a duplicata](f17-08-candidato-a-duplicata.md) | F17-01 | Backlog |
+| 1 | [F17-01 — relevância e relatórios](f17-01-relevancia-e-relatorios.md) | Nenhum | Em revisão — baseline pendente |
+| 2 | [F17-02 — área da vaga](f17-02-area-da-vaga.md) | F17-01, F18-07 | Em revisão |
+| 3 | [F17-03 — busca full-text](f17-03-busca-full-text.md) | F17-01, F17-02 | Em revisão — relatório do `eval_search.py` na máquina de referência pendente |
+| 4 | [F17-04 — importador propõe todo ATS](f17-04-importador-propoe-todo-ats.md) | Nenhum (habilitação em massa espera F17-02 e F17-07) | Em revisão |
+| 5 | [F17-05 — fila de homologação](f17-05-fila-de-homologacao.md) | F17-04, F17-02, F17-07 | Backlog |
+| 6 | [F17-06 — normalização mais precisa](f17-06-normalizacao-mais-precisa.md) | F17-01 | Em revisão — `seniority-v2`, `regions-v1`/`allowed_countries`, filtro de país permitido, reprocessamento (regra sempre reaplica, evidência nunca regride, payload expirado explicitado, lotes retomáveis) e o script de lacunas de `skills-v2` (`scripts/unmatched_skill_terms.py`) entraram; a curadoria manual das novas entradas de `skills-v2` (aliases/desambiguação) segue pendente |
+| 7 | [F17-07 — coleta completa e encerradas](f17-07-coleta-completa-e-encerradas.md) | Nenhum | Em revisão |
+| 8 | [F17-08 — candidato a duplicata](f17-08-candidato-a-duplicata.md) | F17-01 (sinal vetorial após F16-09) | Backlog |
 | 9 | [F17-09 — descoberta de ATS](f17-09-descoberta-de-ats.md) | F17-04 | Backlog |
-| 10 | [F17-10 — coletores novos](f17-10-coletores-novos.md) | F17-09, F17-02 | Backlog |
-| 11 | [F17-11 — palavras-chave do perfil](f17-11-palavras-chave-do-perfil.md) | F17-02 | Backlog |
+| 10 | [F17-10 — coletores novos](f17-10-coletores-novos.md) | F17-09, F17-02, F17-06, F17-07 | Backlog |
+| 11 | [F17-11 — palavras-chave do perfil](f17-11-palavras-chave-do-perfil.md) | F17-02, F18-07 | Backlog |
 | 12 | [F17-12 — buscas salvas](f17-12-buscas-salvas.md) | F17-03 | Backlog |
-| 13 | [F17-13 — relevância aprendida](f17-13-relevancia-aprendida.md) | F17-01, F16-09 | Backlog |
+| 13 | [F17-13 — relevância aprendida](f17-13-relevancia-aprendida.md) | F17-01, F16-09 | Backlog experimental; após Milestone P |
 
-F17-01 a F17-05 fecham o Milestone P junto com F16-10.
+F17-01 a F17-07 fecham o Milestone P. Antecipar F17-07 em paralelo com F17-01;
+numeração não impõe sequência. F16-10 e F17-13 são opcionais após esse marco.
+A expansão produtiva continua na [Fase 18](../../40-roadmap-varredura-produtiva/README.md).
 
 ## Invariantes da fase
 

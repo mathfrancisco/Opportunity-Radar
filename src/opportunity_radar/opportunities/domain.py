@@ -15,6 +15,16 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 from opportunity_radar.companies.domain import normalize_name
+from opportunity_radar.opportunities.regions import (
+    REGIONS_VERSION,
+    resolve_allowed_countries,
+)
+from opportunity_radar.opportunities.role_family import (
+    ROLE_FAMILY_VERSION,
+    RoleFamily,
+    classify_role_family,
+    departments_from_metadata,
+)
 
 
 class WorkMode(StrEnum):
@@ -109,7 +119,7 @@ class NormalizationError(ValueError):
     """Raised when a collected item cannot form a canonical candidate."""
 
 
-SKILL_TAXONOMY_VERSION = "skills-v1"
+SKILL_TAXONOMY_VERSION = "skills-v2"
 _MAX_DATABASE_AMOUNT = Decimal("999999999999.99")
 _AMBIGUOUS_SKILL_ALIASES = frozenset({"go", "react"})
 
@@ -207,6 +217,17 @@ SKILL_TAXONOMY: tuple[SkillTaxonomyEntry, ...] = (
     SkillTaxonomyEntry("gcp", ("gcp", "google cloud platform")),
     SkillTaxonomyEntry("terraform", ("terraform",)),
     SkillTaxonomyEntry("graphql", ("graphql",)),
+    # Added by F20-02 curation (`docs/pesquisas/curadoria-skills-v2.md`) from
+    # `scripts/unmatched_skill_terms.py` over the reference-machine acervo.
+    SkillTaxonomyEntry(
+        "ai",
+        ("ai", "artificial intelligence", "machine learning", "ml", "agentic ai"),
+    ),
+    SkillTaxonomyEntry(
+        "cicd",
+        ("ci/cd", "ci", "continuous integration", "continuous deployment"),
+    ),
+    SkillTaxonomyEntry("observability", ("observability",)),
 )
 
 
@@ -258,6 +279,14 @@ class CanonicalCandidate:
     compensation: Compensation | None = None
     skills: tuple[ExtractedSkill, ...] = ()
     fingerprint_version: str = "v1"
+    role_family: RoleFamily = RoleFamily.UNKNOWN
+    role_family_evidence: dict[str, str] = field(default_factory=dict)
+    role_family_version: str = ROLE_FAMILY_VERSION
+    #: ISO country codes (or `regions.ANY_COUNTRY`) the `regions-v1` table resolved from
+    #: `location_text`. Empty means unknown — office location is never allowed country,
+    #: and this must never be read as "no country allowed" (card F17-06).
+    allowed_countries: tuple[str, ...] = ()
+    allowed_countries_version: str = REGIONS_VERSION
 
 
 def _clean_text(value: str | None) -> str | None:
@@ -776,9 +805,17 @@ def infer_seniority(
         {
             Seniority.INTERN: (r"\bintern(ship)?\b", r"\best[aá]gi[oa]\b"),
             Seniority.JUNIOR: (r"\bjunior\b", r"\bjr\.?\b"),
-            Seniority.MID: (r"\bmid(?:[- ]level)?\b", r"\bmiddle\b", r"\bpleno\b"),
+            Seniority.MID: (
+                r"\bmid(?:[- ]level)?\b",
+                r"\bmiddle\b",
+                r"\bpleno\b",
+                r"\bpl\.?\b",
+            ),
             Seniority.SENIOR: (r"\bsenior\b", r"\bsr\.?\b"),
-            Seniority.STAFF: (r"\bstaff\b",),
+            # "especialista" and "principal" have no dedicated enum tier; both denote a
+            # deep individual-contributor level closest to STAFF, so they are folded
+            # into it rather than inventing a new Seniority member (card F17-06 scope).
+            Seniority.STAFF: (r"\bstaff\b", r"\bespecialista\b", r"\bprincipal\b"),
             Seniority.LEAD: (r"\blead\b", r"\bl[ií]der\b"),
             Seniority.MANAGER: (r"\bmanager\b", r"\bgerente\b"),
             Seniority.DIRECTOR: (r"\bdirector\b", r"\bdiretor\b"),
@@ -788,10 +825,16 @@ def infer_seniority(
     return Seniority(result)
 
 
-SENIORITY_MAPPING_VERSION = "seniority-v1"
+SENIORITY_MAPPING_VERSION = "seniority-v2"
 
 # Collector payloads are intentionally listed even when they have no approved level
 # field. Adding a field here is part of that collector's homologation, not a heuristic.
+#
+# seniority-v2 checked the real fixtures under tests/backend/acquisition/ for Ashby,
+# Greenhouse and Lever payloads: none of them carry a structured seniority/level field
+# (no key such as "level", "seniority", "experienceLevel" appears in any fixture), so
+# those three collectors remain unmapped (()). Adding an entry later requires the same
+# fixture evidence, per the mapping-version comment above.
 HOMOLOGATED_SENIORITY_FIELDS: dict[str, tuple[str, ...]] = {
     "ashby": (),
     "greenhouse": (),
@@ -922,6 +965,12 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
         original_title, value.metadata, source_type=value.source_type
     )
     contract_type = infer_contract_type(original_title, location_text, value.metadata)
+    role_family_decision = classify_role_family(
+        title=original_title,
+        departments=departments_from_metadata(value.metadata),
+        description=value.description,
+    )
+    allowed_countries = resolve_allowed_countries(location_text)
     return CanonicalCandidate(
         original_title=original_title,
         normalized_title=normalized_title,
@@ -957,6 +1006,10 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
             source_type=value.source_type,
         ),
         skills=extract_skills(original_title, value.description, value.metadata),
+        role_family=role_family_decision.role_family,
+        role_family_evidence=dict(role_family_decision.evidence),
+        role_family_version=role_family_decision.version,
+        allowed_countries=allowed_countries,
     )
 
 

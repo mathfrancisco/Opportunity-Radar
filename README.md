@@ -598,82 +598,42 @@ Cada fase precisa terminar com um slice testável antes da próxima expansão.
 
 ## 16. Mapa da documentação
 
-### Roadmaps em execução
+### Escopo em execução e planejado
 
-Estes são os documentos de escopo vigentes, com seus cards atômicos:
+- [MVP](docs/29-roadmap-mvp.md) e [pós-MVP](docs/33-roadmap-pos-mvp.md),
+  com [cards das fases 10–13](docs/33-roadmap-pos-mvp/README.md).
+- [Interface](docs/34-roadmap-interface.md),
+  com [cards das fases 14–15](docs/34-roadmap-interface/README.md).
+- [IA local e busca](docs/38-roadmap-ia-e-busca.md),
+  [SPEC de IA](docs/36-spec-ollama.md), [SPEC de busca](docs/37-spec-busca.md)
+  e [cards das fases 16–17](docs/38-roadmap-ia-e-busca/README.md).
+- [Varredura produtiva](docs/39-spec-varredura-produtiva.md) e
+  [cards da fase 18](docs/40-roadmap-varredura-produtiva/README.md):
+  cobertura dos sites, coleta incremental e análise útil sob orçamento.
+- [Runbook](docs/30-runbook.md): operação disponível. Cards planejados não
+  significam capacidade já entregue; cada um registra status e evidência de aceite.
 
-- [Roadmap do MVP](docs/29-roadmap-mvp.md) — concluído;
-- [Roadmap pós-MVP](docs/33-roadmap-pos-mvp.md) e seus
-  [cards](docs/33-roadmap-pos-mvp/README.md) — Fases 10 a 13, concluídas;
-- [Roadmap de interface](docs/34-roadmap-interface.md) e seus
-  [cards](docs/34-roadmap-interface/README.md) — Fases 14 e 15, em aberto;
-- [Runbook operacional](docs/30-runbook.md).
+### Referências existentes
 
-
-### Produto e arquitetura
-
-1. [Visão, objetivos e escopo](docs/01-visao-escopo.md)
-2. [Arquitetura do MVP](docs/02-arquitetura-mvp.md)
-3. [Arquitetura da versão final](docs/03-arquitetura-final.md)
-4. [Decisões arquiteturais](docs/04-decisoes-arquiteturais.md)
-5. [Tecnologias](docs/05-tecnologias.md)
-6. [Estrutura do projeto MVP](docs/06-estrutura-projeto-mvp.md)
-7. [Estrutura do projeto final](docs/07-estrutura-projeto-final.md)
-
-### DDD e dados
-
-8. [DDD estratégico e Context Map](docs/08-ddd-estrategico.md)
-9. [DDD tático: agregados, entidades e objetos de valor](docs/09-ddd-tatico.md)
-10. [Eventos, comandos, CQRS e Unit of Work](docs/10-eventos-comandos-cqrs.md)
-11. [Visão geral da modelagem de dados](docs/11-modelagem-dados.md)
-12. [Dados de perfil e empresas](docs/12-dados-perfil-empresas.md)
-13. [Dados de aquisição e oportunidades](docs/13-dados-aquisicao-oportunidades.md)
-14. [Dados de matching e CRM](docs/14-dados-matching-crm.md)
-15. [Dados de outreach, propostas e entrevistas](docs/15-dados-outreach-propostas-entrevistas.md)
-16. [Dados de automação e plataforma](docs/16-dados-automacao-plataforma.md)
-
-### Busca, IA e execução
-
-17. [Fontes e coletores](docs/17-fontes-coletores.md)
-18. [Estratégia de busca e Google Boolean](docs/18-busca-google-boolean.md)
-19. [Normalização, deduplicação e taxonomias](docs/19-normalizacao-deduplicacao.md)
-20. [Matching, filtros e scoring](docs/20-matching-scoring.md)
-21. [Ollama, prompts e resultados estruturados](docs/21-ollama-prompts.md)
-22. [Workflows e máquinas de estado](docs/22-workflows-estados.md)
-23. [API e contratos](docs/23-api-contratos.md)
-24. [Processamento assíncrono e resiliência](docs/24-assincrono-resiliencia.md)
-
-### Operação e entrega
-
-25. [Docker e execução local](docs/25-docker-execucao-local.md)
-26. [Segurança, privacidade e conformidade](docs/26-seguranca-privacidade.md)
-27. [Observabilidade, backup e recuperação](docs/27-observabilidade-backup.md)
-28. [Testes e qualidade](docs/28-testes-qualidade.md)
-29. [Roadmap do MVP e critérios de aceite](docs/29-roadmap-mvp.md)
-30. [Roadmap da versão final](docs/30-roadmap-final.md)
-31. [Runbook operacional](docs/31-runbook.md)
-32. [Rastreabilidade dos 46 pontos](docs/32-rastreabilidade-46-pontos.md)
-33. [Glossário](docs/33-glossario.md)
-
----
+- Arquitetura: [MVP](docs/02-arquitetura-mvp.md),
+  [alvo](docs/03-arquitetura-final.md), [tecnologias](docs/05-tecnologias.md).
+- Estrutura: [MVP](docs/06-estrutura-projeto-mvp.md) e
+  [alvo](docs/07-estrutura-projeto-final.md).
+- Domínio: [DDD estratégico](docs/08-ddd-estrategico.md),
+  [DDD tático](docs/09-ddd-tatico.md), [dados](docs/11-modelagem-dados.md).
+- Aquisição e análise: [coletores](docs/17-fontes-coletores.md),
+  [matching](docs/20-matching-scoring.md), [prompts](docs/21-ollama-prompts.md).
+- Execução: [Docker](docs/25-docker-execucao-local.md),
+  [rastreabilidade](docs/32-rastreabilidade-46-pontos.md),
+  [tokens de design](docs/35-design-tokens.md).
+- Catálogo: [pesquisas](docs/pesquisas/README-pesquisa.md).
 
 ## 17. Ordem recomendada de leitura
 
-### Para entender o produto
-
-`01 → 02 → 20 → 29`
-
-### Para implementar o MVP
-
-`05 → 06 → 11 → 13 → 17 → 19 → 20 → 23 → 25 → 29`
-
-### Para revisar a arquitetura completa
-
-`03 → 08 → 09 → 10 → 16 → 24`
-
-### Para operar o sistema
-
-`25 → 26 → 27 → 28 → 31`
+- Produto: este README → arquitetura MVP → matching → roadmap vigente.
+- Busca e varredura: SPEC 37 → SPEC 39 → cards 17/18.
+- IA: SPEC 36 → cards 16 → gates de qualidade e orçamento.
+- Operação: Docker → runbook; planejamento futuro fica nas specs.
 
 ---
 

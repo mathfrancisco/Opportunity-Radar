@@ -44,14 +44,31 @@ num board da empresa e numa fonte ampla em dias diferentes, vira duas oportunida
 
 - A junção reaproveita a lógica de `MERGED` da normalização; a oportunidade absorvida não
   é apagada, ganha `duplicate_of`.
-- Candidatura aberta na vaga absorvida é movida para a vaga que fica, com registro no
-  histórico do pipeline.
+- Uma única candidatura ativa na vaga absorvida pode ser movida com histórico.
+  Duas candidaturas ativas bloqueiam a junção com conflito acionável; não escolher
+  uma nem encerrar outra automaticamente.
+
+## Contrato de junção
+
+- Confirmar exige versões esperadas de ambas as oportunidades, transação única e
+  operação idempotente. Confirmar novamente retorna a mesma resolução.
+- Preservar procedência, avaliações históricas, marcas e candidaturas; redirecionar
+  ids absorvidos. Avaliações antigas não viram avaliações atuais da sobrevivente.
+- Registrar antes/depois e ids movidos para permitir correção supervisionada.
+  Conflitos de marcação ficam explícitos; não escolher silenciosamente.
+- Impedir ciclos de `duplicate_of` e normalizar pares. Candidatos vetoriais exigem
+  vetores atuais. Recusa é contextualizada por versão, com política para revisão
+  após mudança material; não sugerir o mesmo par inalterado repetidamente.
 
 ## Critérios de aceite
 
 - [ ] Pares que atendem a regra viram candidatos, sem juntar nada sozinhos.
 - [ ] Confirmar junta ocorrências e preserva procedência; recusar não sugere de novo.
 - [ ] A taxa de duplicatas é medida antes e depois.
+
+- [ ] Duas candidaturas ativas geram conflito sem mutação parcial.
+- [ ] Repetição, concorrência, ids antigos e ciclo de duplicatas têm cobertura no CI.
+- [ ] Junção não perde marcas/histórico e invalida avaliações derivadas quando necessário.
 
 ## Verificação
 

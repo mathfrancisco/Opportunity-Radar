@@ -2,7 +2,7 @@
 
 - **Status:** Backlog
 - **Fase:** 16 — Camada local de IA
-- **Depende de:** F16-05, F16-06
+- **Depende de:** F16-05, F16-06, F16-08, F18-07
 - **Bloqueia:** F16-11, F16-12
 - **Origem:** [SPEC da camada de IA](../../36-spec-ollama.md), §4.1, §4.2, §4.3
 
@@ -36,10 +36,11 @@ saída. É a maior perda de valor da camada (SPEC §2.1).
   anúncio afirma do que foi inferido; `user.md.j2` com a variável `posting`;
   `metadata.yaml` com `schema_version: analysis-v2`.
 - **Schema `analysis-v2`:** `strengths` e `risks` viram listas de
-  `{"claim": string, "evidence": string | null}`. `OUTPUT_SCHEMA_V2` em Python e
+  `{"claim": string, "evidence": string | null, "source": "posting" | "profile" | null}`. `OUTPUT_SCHEMA_V2` em Python e
   `output.schema.json` gerado por `scripts/export_prompt_schema.py`.
 - **Validador de evidência:** cada `evidence` não nulo precisa aparecer no payload enviado
-  (comparação normalizada: minúsculas, espaços colapsados, sem pontuação de borda).
+  na origem indicada (comparação normalizada: minúsculas, espaços colapsados,
+  sem pontuação de borda); evidência nula exige origem nula.
   Evidência inventada → `SCHEMA_MISMATCH`.
 - **Seleção por configuração:** `OLLAMA_ANALYSIS_PROMPT` (`v1` | `v2`). O `v1` continua
   carregável. O padrão só muda para `v2` depois do relatório do F16-06.
@@ -56,8 +57,12 @@ saída. É a maior perda de valor da camada (SPEC §2.1).
 
 - `load_prompt` valida `schema_version` contra uma constante única hoje; passa a aceitar a
   versão declarada pelo diretório do prompt, com um schema por versão.
-- `analysis_cache_key` já inclui `prompt_version` e `schema_version`: `v2` gera chaves
-  novas sem regra nova.
+- Aplicar a identidade F16-08 ao payload final, com hash do posting, resumo do
+  perfil, cortes e configuração. O hash permite auditoria, não reconstrução:
+  persistir snapshot mínimo enviado sob a política local de retenção.
+- Anúncio e histórico recuperado são dados, nunca instruções. O modelo não pode
+  obedecer comandos neles nem executar ferramentas.
+- F18-07 preserva experiências/projetos na edição do perfil antes deste consumo.
 - O `examples.json` do `v2` é reescrito no formato novo; os testes de `load_examples`
   validam cada exemplo contra o schema da própria versão.
 
@@ -69,6 +74,11 @@ saída. É a maior perda de valor da camada (SPEC §2.1).
 - [ ] `v1` e `v2` coexistem; a escolha é por configuração.
 - [ ] O relatório do F16-06 com `v2` não piora nenhum critério em relação ao `v1` e
       melhora cobertura — só então o padrão passa a `v2`.
+
+- [ ] Trecho existente na origem errada é recusado; requisitos opcionais e negação
+      são avaliados com rubrica, além do casamento literal.
+- [ ] Um anúncio com instruções para alterar score não muda regras ou contexto.
+- [ ] Mudança de payload/corte/configuração invalida cache e mantém análise antiga legível.
 
 ## Verificação
 

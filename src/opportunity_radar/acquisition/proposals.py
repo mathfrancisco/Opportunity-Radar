@@ -10,7 +10,7 @@ outdated, and bringing it up to date is an explicit reopening of its homologatio
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -79,15 +79,47 @@ def follow_correction(session: Session, record: CompanySource) -> ProposalFollow
     proposal = proposal_for(session, record.id)
     if proposal is None:
         return ProposalFollowUp("none")
-    if not is_outdated(proposal, record):
+    return follow_inert_correction(
+        session,
+        proposal,
+        source_type=record.source_type,
+        board_key=record.external_key,
+        discovery_evidence=record.evidence_note or record.endpoint,
+    )
+
+
+def follow_inert_correction(
+    session: Session,
+    proposal: SourceDefinitionModel,
+    *,
+    source_type: str,
+    board_key: str | None,
+    discovery_evidence: str,
+    configuration_updates: dict[str, Any] | None = None,
+) -> ProposalFollowUp:
+    """Apply a corrected board to an inert proposal in the caller's transaction.
+
+    Both researched CompanySource records and Tavily evidence use this guarded path.  A
+    proposal that has crossed the review/test gate remains untouched because those facts
+    describe its previous board.
+    """
+    identifier_key = IDENTIFIER_KEYS.get(source_type)
+    if identifier_key is None:
+        return ProposalFollowUp("outdated", proposal)
+    if (
+        proposal.source_type == source_type
+        and proposal_key(proposal) == board_key
+        and not configuration_updates
+    ):
         return ProposalFollowUp("none", proposal)
-    if not is_inert(proposal) or proposal.source_type != record.source_type:
+    if not is_inert(proposal) or proposal.source_type != source_type:
         # A different ATS is a different collector: a source never changes type, so the
         # proposal stays as it is and the screen says why.
         return ProposalFollowUp("outdated", proposal)
     configuration = dict(proposal.configuration or {})
-    configuration[IDENTIFIER_KEYS[record.source_type]] = record.external_key
-    configuration["discovery_evidence"] = record.evidence_note or record.endpoint
+    configuration[identifier_key] = board_key
+    configuration["discovery_evidence"] = discovery_evidence
+    configuration.update(configuration_updates or {})
     updated = session.scalar(
         update(SourceDefinitionModel)
         .where(

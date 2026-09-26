@@ -9,16 +9,18 @@ from decimal import Decimal
 from typing import Any, Sequence
 from uuid import UUID
 
-from sqlalchemy import Select, case, delete, func, literal, select, tuple_
+from sqlalchemy import Select, case, delete, func, literal, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.orm import Session, aliased, selectinload
 
+from opportunity_radar.matching.analysis import ANALYSIS_KEY_VERSION, Claim
 from opportunity_radar.matching.models import (
     MatchAnalysisClaimModel,
     MatchAnalysisModel,
     MatchAssessmentModel,
     MatchFactorModel,
 )
+from opportunity_radar.matching.text import TokenCalibration, calibrate
 from opportunity_radar.opportunities.models import OpportunityModel
 
 # A degraded attempt is what the retry budget counts. `AI_PENDING` is not an attempt and
@@ -28,6 +30,10 @@ ANALYSIS_ATTEMPT_STATUSES = ("AI_FAILED", "AI_SKIPPED")
 # The order the operator reads the Inbox in, so a backlog spends the model on what will be
 # read first. A verdict outside this list still queues, after all of these.
 ANALYSIS_VERDICT_PRIORITY = ("HIGH_PRIORITY", "RECOMMENDED", "REVIEW_REQUIRED", "WATCHLIST")
+
+
+def _stored_item(item: Any) -> Any:
+    return item.as_dict() if isinstance(item, Claim) else item
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,8 +65,9 @@ class AnalysisRecord:
     failure_code: str | None = None
     detail: str | None = None
     summary: str | None = None
-    strengths: tuple[str, ...] = ()
-    risks: tuple[str, ...] = ()
+    # Strings under `analysis-v1`; claims (or their stored objects) from `analysis-v2` on.
+    strengths: tuple[Any, ...] = ()
+    risks: tuple[Any, ...] = ()
     inferences: tuple[str, ...] = ()
     unknowns: tuple[str, ...] = ()
     recommended_review: bool | None = None
@@ -74,6 +81,13 @@ class AnalysisRecord:
     eval_ms: int | None = None
     prompt_chars: int | None = None
     prompt_tokens_estimate: int | None = None
+    # Identity of the call (card F16-08): absent on rows written before it existed.
+    key_version: str | None = None
+    payload_hash: str | None = None
+    payload: dict[str, Any] | None = None
+    inference: dict[str, Any] | None = None
+    context_refs: tuple[Any, ...] = ()
+    prompt_budget: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,17 +194,54 @@ class SqlAlchemyMatchingRepository:
         self.session.add(assessment)
         return assessment
 
-    def get_completed_analysis(self, assessment_id: UUID) -> MatchAnalysisModel | None:
-        """The reusable analysis: a completed one survives restarts, a degraded one does not."""
+    def get_completed_analysis(
+        self, assessment_id: UUID, *, cache_key: str | None = None
+    ) -> MatchAnalysisModel | None:
+        """The reusable analysis: a completed one survives restarts, a degraded one does not.
+
+        With `cache_key`, only a row keyed by that exact `analysis-key-v2` qualifies: the
+        assessment's older answer under another prompt, model or payload is history.
+        """
+        conditions = [
+            MatchAnalysisModel.assessment_id == assessment_id,
+            MatchAnalysisModel.status == "AI_COMPLETED",
+        ]
+        if cache_key is not None:
+            conditions += [
+                MatchAnalysisModel.cache_key == cache_key,
+                MatchAnalysisModel.key_version == ANALYSIS_KEY_VERSION,
+            ]
         return self.session.scalars(
             select(MatchAnalysisModel)
-            .where(
-                MatchAnalysisModel.assessment_id == assessment_id,
-                MatchAnalysisModel.status == "AI_COMPLETED",
-            )
+            .where(*conditions)
             .order_by(MatchAnalysisModel.analyzed_at.desc(), MatchAnalysisModel.id)
             .limit(1)
         ).one_or_none()
+
+    def token_calibration(
+        self, model_id: str, prompt_version: str, *, sample: int
+    ) -> TokenCalibration:
+        """The model's real cost per character under this prompt, from its latest calls.
+
+        Per prompt version because the formatter changes the ratio: a JSON-only `v1`
+        prompt and a `v2` prompt carrying prose are different texts to a tokenizer.
+        """
+        rows = self.session.execute(
+            select(
+                MatchAnalysisModel.prompt_tokens,
+                MatchAnalysisModel.prompt_chars,
+                MatchAnalysisModel.prompt_tokens_estimate,
+            )
+            .where(
+                MatchAnalysisModel.model_id == model_id,
+                MatchAnalysisModel.prompt_version == prompt_version,
+                MatchAnalysisModel.prompt_tokens.is_not(None),
+                MatchAnalysisModel.prompt_chars > 0,
+            )
+            .order_by(MatchAnalysisModel.analyzed_at.desc(), MatchAnalysisModel.id)
+            .limit(sample)
+        ).all()
+        return calibrate([(tokens, chars, estimate) for tokens, chars, estimate in rows])
 
     def tokens_per_char(self, model_id: str, *, sample: int) -> float | None:
         """Real tokens per character over the model's latest measured analyses."""
@@ -210,14 +261,27 @@ class SqlAlchemyMatchingRepository:
         ).one()
         return float(tokens) / float(chars) if tokens and chars else None
 
-    def completed_analysis_by_key(self, cache_key: str) -> MatchAnalysisModel | None:
-        """The newest completed analysis under a key, whichever assessment it belongs to."""
+    def completed_analysis_by_key(
+        self, cache_key: str, *, model_digest: str | None = None
+    ) -> MatchAnalysisModel | None:
+        """The newest completed analysis under a key, whichever assessment it belongs to.
+
+        Only `analysis-key-v2` rows qualify. When the weights behind the tag are known, a
+        row recorded against other weights does not: the same tag re-pulled is another
+        model. A row that never learned its digest is accepted, since the tag pins the
+        quantization and nothing says the weights differ.
+        """
+        conditions = [
+            MatchAnalysisModel.cache_key == cache_key,
+            MatchAnalysisModel.status == "AI_COMPLETED",
+            MatchAnalysisModel.key_version == ANALYSIS_KEY_VERSION,
+        ]
+        if model_digest:
+            recorded = MatchAnalysisModel.inference["model_digest"].astext
+            conditions.append(or_(recorded.is_(None), recorded == model_digest))
         return self.session.scalars(
             select(MatchAnalysisModel)
-            .where(
-                MatchAnalysisModel.cache_key == cache_key,
-                MatchAnalysisModel.status == "AI_COMPLETED",
-            )
+            .where(*conditions)
             .order_by(MatchAnalysisModel.analyzed_at.desc(), MatchAnalysisModel.id)
             .limit(1)
         ).one_or_none()
@@ -419,8 +483,9 @@ class SqlAlchemyMatchingRepository:
             failure_code=record.failure_code,
             detail=record.detail,
             summary=record.summary,
-            strengths=list(record.strengths),
-            risks=list(record.risks),
+            # `analysis-v2` items are claims with evidence; JSONB stores them as objects.
+            strengths=[_stored_item(item) for item in record.strengths],
+            risks=[_stored_item(item) for item in record.risks],
             inferences=list(record.inferences),
             unknowns=list(record.unknowns),
             recommended_review=record.recommended_review,
@@ -436,6 +501,12 @@ class SqlAlchemyMatchingRepository:
             eval_ms=record.eval_ms,
             prompt_chars=record.prompt_chars,
             prompt_tokens_estimate=record.prompt_tokens_estimate,
+            key_version=record.key_version,
+            payload_hash=record.payload_hash,
+            payload=deepcopy(record.payload) if record.payload is not None else None,
+            inference=deepcopy(record.inference) if record.inference is not None else None,
+            context_refs=[dict(item) for item in record.context_refs] or None,
+            prompt_budget=record.prompt_budget,
         )
         self.session.add(analysis)
         return analysis

@@ -23,6 +23,7 @@ from opportunity_radar.acquisition.domain import (
     CollectorCapabilities,
     HealthcheckContext,
     HealthResult,
+    parse_retry_after_seconds,
 )
 
 _BOARD_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
@@ -74,6 +75,7 @@ class AshbyCollector:
         board = self.validate_board_identifier(request.company_reference)
         payload = await self._fetch_jobs(board, request)
         jobs = self._jobs(payload)
+        request.telemetry.record_items_announced(len(jobs))
         emitted = 0
         for job in jobs:
             if job.get("isListed") is not True:
@@ -186,6 +188,11 @@ class AshbyCollector:
                 code,
                 f"Ashby returned HTTP {status}",
                 retryable=status == 429,
+                retry_after_seconds=(
+                    parse_retry_after_seconds(response.headers.get("Retry-After"))
+                    if status == 429
+                    else None
+                ),
             )
         if 500 <= status < 600:
             return AcquisitionError(

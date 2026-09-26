@@ -22,6 +22,7 @@ from opportunity_radar.acquisition.domain import (
     CollectorCapabilities,
     HealthcheckContext,
     HealthResult,
+    parse_retry_after_seconds,
 )
 
 _SITE_SLUG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
@@ -103,6 +104,7 @@ class LeverCollector:
         emitted: int,
     ) -> AsyncIterator[CollectedItem]:
         seen_pages: set[tuple[tuple[str, str], ...]] = set()
+        total_fetched = 0
         while request.max_items is None or emitted < request.max_items:
             remaining = (
                 None if request.max_items is None else request.max_items - emitted
@@ -121,6 +123,7 @@ class LeverCollector:
                     "Lever pagination repeated a page without making progress",
                 )
             seen_pages.add(page_signature)
+            total_fetched += len(postings)
             for posting in postings:
                 try:
                     item = self._item(posting, company_name=request.company_name)
@@ -134,6 +137,9 @@ class LeverCollector:
                 if request.max_items is not None and emitted >= request.max_items:
                     return
             if len(postings) < limit:
+                # A short page is how Lever signals the end: no field states the total,
+                # so this exhaustive read is itself the announced count.
+                request.telemetry.record_items_announced(total_fetched)
                 return
             skip += len(postings)
 
@@ -237,7 +243,14 @@ class LeverCollector:
         code = codes.get(status)
         if code is not None:
             return AcquisitionError(
-                code, f"Lever returned HTTP {status}", retryable=status == 429
+                code,
+                f"Lever returned HTTP {status}",
+                retryable=status == 429,
+                retry_after_seconds=(
+                    parse_retry_after_seconds(response.headers.get("Retry-After"))
+                    if status == 429
+                    else None
+                ),
             )
         if 500 <= status < 600:
             return AcquisitionError(

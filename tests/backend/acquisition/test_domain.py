@@ -15,6 +15,7 @@ from opportunity_radar.acquisition.domain import (
     ManualInputKind,
     SourceRun,
     SourceRunStatus,
+    evaluate_completeness,
 )
 
 
@@ -91,3 +92,57 @@ def test_run_interval_is_independent_from_request_retry_delays() -> None:
 def test_collection_request_rejects_invalid_keywords() -> None:
     with pytest.raises(ValueError, match="at most 10 non-empty strings"):
         CollectionRequest(keywords=("",))
+
+
+def test_completeness_requires_succeeded_status() -> None:
+    assert not evaluate_completeness(
+        status=SourceRunStatus.PARTIAL,
+        max_items=None,
+        items_seen=10,
+        items_announced=10,
+    )
+    assert not evaluate_completeness(
+        status=SourceRunStatus.FAILED,
+        max_items=None,
+        items_seen=0,
+        items_announced=None,
+    )
+
+
+def test_completeness_requires_no_max_items() -> None:
+    assert not evaluate_completeness(
+        status=SourceRunStatus.SUCCEEDED,
+        max_items=50,
+        items_seen=50,
+        items_announced=50,
+    )
+
+
+def test_completeness_trusts_a_succeeded_unbounded_run_with_no_known_total() -> None:
+    assert evaluate_completeness(
+        status=SourceRunStatus.SUCCEEDED,
+        max_items=None,
+        items_seen=7,
+        items_announced=None,
+    )
+
+
+def test_completeness_requires_items_seen_to_reach_the_known_total() -> None:
+    assert not evaluate_completeness(
+        status=SourceRunStatus.SUCCEEDED,
+        max_items=None,
+        items_seen=8,
+        items_announced=10,
+    )
+    assert evaluate_completeness(
+        status=SourceRunStatus.SUCCEEDED,
+        max_items=None,
+        items_seen=10,
+        items_announced=10,
+    )
+    assert evaluate_completeness(
+        status=SourceRunStatus.SUCCEEDED,
+        max_items=None,
+        items_seen=11,
+        items_announced=10,
+    )

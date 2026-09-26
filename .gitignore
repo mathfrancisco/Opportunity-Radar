@@ -21,6 +21,7 @@ dist/
 # Local runtime data
 data/exports/
 data/backups/
+data/search-reference/
 local_exports/
 local_backups/
 
@@ -33,3 +34,5 @@ local_backups/
 *.swp
 .DS_Store
 Thumbs.db
+data/evals/
+prompts/opportunity_analysis/eval/drafts/

@@ -106,6 +106,10 @@ class SourceRunModel(Base):
             "AND rate_limit_events >= 0",
             name="ck_source_run_counters",
         ),
+        CheckConstraint(
+            "credits_used >= 0",
+            name="ck_source_run_credits_used",
+        ),
         Index("ix_source_run_source_started", "source_definition_id", "started_at"),
         Index(
             "uq_source_run_active",
@@ -142,15 +146,58 @@ class SourceRunModel(Base):
     rate_limit_events: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0
     )
+    #: Provider credits spent by this run (e.g. Tavily's usage.credits). A different unit
+    #: from http_requests/retry_count, which count HTTP calls regardless of what a source
+    #: charges per call (F20-43).
+    credits_used: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     error_code: Mapped[str | None] = mapped_column(String(64))
     error_summary: Mapped[str | None] = mapped_column(Text)
     checkpoint_before: Mapped[str | None] = mapped_column(Text)
     checkpoint_after: Mapped[str | None] = mapped_column(Text)
     correlation_id: Mapped[str | None] = mapped_column(String(255))
+    #: What the source's own API announced the board holds, when it said so.
+    items_announced: Mapped[int | None] = mapped_column(Integer)
+    #: Whether this run read the whole board. Only a complete run may close a job that
+    #: stopped appearing (see `opportunity_radar.acquisition.domain.evaluate_completeness`).
+    complete: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     source_definition: Mapped[SourceDefinitionModel] = relationship(back_populates="runs")
     raw_items: Mapped[list["RawItemModel"]] = relationship(
         back_populates="source_run"
     )
+
+
+class TavilyExtractCacheModel(Base):
+    """Cache of `/extract` results, keyed by the canonical URL's hash (F20-45).
+
+    A hit never calls Tavily again within its validity; an expired row is a miss, not an
+    error. `status` records success or failure per URL so a failed extraction is not
+    retried inside the same TTL window (see `TavilyExtractionCache`).
+    """
+
+    __tablename__ = "tavily_extract_cache"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('success', 'failed')",
+            name="ck_tavily_extract_cache_status",
+        ),
+        {"schema": "acquisition"},
+    )
+
+    #: sha256 of `canonicalize_url(url)` — the same normalization the collector's dedupe
+    #: uses (F20-44), so the same URL never lands in two entries over a query/case diff.
+    url_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    canonical_url: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_content: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error: Mapped[str | None] = mapped_column(Text)
+    extracted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class RawItemModel(Base):

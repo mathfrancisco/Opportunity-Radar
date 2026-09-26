@@ -8,7 +8,7 @@ is how backoff and minimum-interval bugs stay hidden until production.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
 from apscheduler.triggers.cron import CronTrigger
@@ -59,6 +59,46 @@ class SourceSchedulingState:
     history: SourceRunHistory = SourceRunHistory()
     last_http_attempt_at: datetime | None = None
     minimum_run_interval_seconds: float | None = None
+
+
+#: Cron schedules for a company source that names no schedule of its own. A high-priority
+#: company is worth checking far more often than a low one; every cadence here stays well
+#: inside a source's own minimum run interval for any policy this codebase configures.
+DEFAULT_SCHEDULE_BY_COMPANY_PRIORITY = {
+    "high": "0 */6 * * *",  # every 6 hours
+    "normal": "0 0 * * *",  # once a day
+    "low": "0 0 * * 0",  # once a week
+}
+
+
+def default_schedule_for_priority(
+    priority: str, *, minimum_run_interval_seconds: float | None = None
+) -> str:
+    """The default cron schedule for a company source of this priority.
+
+    Falls back to the next cadence down whenever the network policy's own minimum run
+    interval would make the priority's usual cadence tighter than the source allows.
+    """
+    order = ("high", "normal", "low")
+    start = order.index(priority) if priority in order else order.index("normal")
+    for candidate in order[start:]:
+        schedule = DEFAULT_SCHEDULE_BY_COMPANY_PRIORITY[candidate]
+        if minimum_run_interval_seconds is None or _cron_interval_seconds(
+            schedule
+        ) >= minimum_run_interval_seconds:
+            return schedule
+    return DEFAULT_SCHEDULE_BY_COMPANY_PRIORITY["low"]
+
+
+def _cron_interval_seconds(schedule: str) -> float:
+    """A cheap lower bound on how often `schedule` can fire, for the fallback above."""
+    reference = datetime(2026, 1, 1, tzinfo=UTC)
+    trigger = CronTrigger.from_crontab(schedule, timezone="UTC")
+    first = trigger.get_next_fire_time(None, reference)
+    second = trigger.get_next_fire_time(first, first)
+    if first is None or second is None:
+        return float("inf")
+    return (second - first).total_seconds()
 
 
 def backoff_delay(

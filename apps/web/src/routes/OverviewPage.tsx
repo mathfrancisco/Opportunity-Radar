@@ -393,6 +393,91 @@ function AnalysisSupport() {
   )
 }
 
+/**
+ * Card F20-20: saldo diário, taxa de fallback e breaker por modelo, nas últimas 24 h.
+ *
+ * Some when AI is disabled or nothing was called in the window: the card still explains
+ * why there is nothing to show, instead of disappearing silently.
+ */
+function AIUsageCard() {
+  const metrics = useAnalysisMetrics()
+  const ai = metrics.data?.ai
+  const percent = (value: number | null) => (value === null ? '—' : `${(value * 100).toFixed(0)}%`)
+
+  if (metrics.isError) {
+    return (
+      <Card>
+        <p className="text-sm text-muted">IA (Groq)</p>
+        <p className="mt-2 text-sm text-subtle">Não foi possível carregar as métricas de IA.</p>
+      </Card>
+    )
+  }
+  if (!ai || ai.state !== 'enabled') {
+    return (
+      <Card>
+        <p className="text-sm text-muted">IA (Groq)</p>
+        <p className="mt-2 text-sm text-subtle">
+          {ai?.state === 'blocked_by_configuration'
+            ? 'Bloqueada por configuração: falta a chave da Groq.'
+            : 'Desligada (AI_ENABLED=false).'}
+        </p>
+      </Card>
+    )
+  }
+  if (ai.byModel.length === 0) {
+    return (
+      <Card>
+        <p className="text-sm text-muted">IA (Groq)</p>
+        <p className="mt-2 text-sm text-subtle">
+          Nenhuma chamada nas últimas {ai.windowHours} h.
+        </p>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <p className="text-sm text-muted">IA (Groq) · últimas {ai.windowHours} h</p>
+      <ul className="mt-3 space-y-3">
+        {ai.byModel.map((model) => {
+          const used = model.dayRequestsLimit
+            ? Math.min(1, model.dayRequestsUsed / model.dayRequestsLimit)
+            : null
+          const breakerOpen = model.breaker !== 'closed'
+          return (
+            <li key={model.model}>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="truncate text-sm font-medium">{model.model}</span>
+                {breakerOpen && (
+                  <span className="rounded-full bg-danger-surface px-2 py-0.5 text-xs font-semibold text-danger-ink">
+                    breaker {model.breaker}
+                  </span>
+                )}
+              </div>
+              {used !== null && (
+                <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-line">
+                  <div
+                    className="h-full rounded-full bg-ink"
+                    style={{ width: `${(used * 100).toFixed(0)}%` }}
+                  />
+                </div>
+              )}
+              <p className="mt-1 text-xs text-subtle">
+                {model.dayRequestsUsed}
+                {model.dayRequestsLimit ? ` / ${model.dayRequestsLimit}` : ''} req hoje ·
+                {' '}fallback {percent(model.fallbackRate)} · 429 {percent(model.rateLimitedRate)}
+              </p>
+            </li>
+          )
+        })}
+      </ul>
+      {ai.cacheHitRate !== null && (
+        <p className="mt-3 text-xs text-subtle">Cache hit: {percent(ai.cacheHitRate)}</p>
+      )}
+    </Card>
+  )
+}
+
 function Block({
   title,
   description,
@@ -507,6 +592,22 @@ function Summary({ overview }: { overview: Overview }) {
             to="/applications"
             value={String(overview.applicationsActive)}
           />
+          <SupportItem
+            hint={
+              overview.precisionPercent === null
+                ? `sem marcação suficiente · ${overview.companiesCovered} de ${overview.companiesWithAts} empresas cobertas`
+                : `(${overview.precisionMarkedCount} marcadas) · ${overview.companiesCovered} de ${overview.companiesWithAts} empresas cobertas`
+            }
+            label={`${overview.newOpportunityWindowDays} dias: vagas novas`}
+            value={String(overview.newOpportunities)}
+          />
+          {overview.precisionPercent !== null && (
+            <SupportItem
+              hint={`${overview.precisionMarkedCount} marcadas`}
+              label="Precisão da Inbox"
+              value={`${Number(overview.precisionPercent).toFixed(0)}%`}
+            />
+          )}
         </dl>
       </Block>
 
@@ -521,7 +622,7 @@ function Summary({ overview }: { overview: Overview }) {
             value={String(overview.sourcesFailing)}
           />
           <SupportItem
-            hint="Ollama indisponível, fora do contrato ou desligado"
+            hint="IA (Groq) indisponível, sem quota ou desligada"
             label="Análises degradadas"
             value={String(overview.analysesDegraded)}
           />
@@ -529,6 +630,9 @@ function Summary({ overview }: { overview: Overview }) {
         </dl>
         <div className="mt-block">
           <FailingSources sources={overview.failingSources} />
+        </div>
+        <div className="mt-block">
+          <AIUsageCard />
         </div>
         <SourceMetricsSection />
       </Block>
