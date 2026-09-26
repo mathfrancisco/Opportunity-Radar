@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
+from sqlalchemy.engine import Engine
 
 from opportunity_radar.matching.analysis import (
     AnalysisFailureCode,
@@ -31,9 +34,10 @@ from opportunity_radar.matching.evaluation import (
     summarize,
 )
 from opportunity_radar.matching.prompts import prompts_root
-from opportunity_radar.platform.ai.tasks import AITask
+from opportunity_radar.platform.ai.tasks import AITask, default_routes
 from opportunity_radar.platform.config import Settings
-from scripts.eval_analysis import _analyze_with_quota_retry, resolve_routes
+from scripts import eval_analysis
+from scripts.eval_analysis import _adapter, _run, resolve_routes
 
 _CASE = {
     "kinds": ["strong_match", "missing_compensation"],
@@ -224,6 +228,7 @@ def test_the_model_flag_overrides_only_the_job_match_chain_and_drops_fallback() 
     default = resolve_routes(settings, None)
     overridden = resolve_routes(settings, "openai/gpt-oss-120b")
 
+    assert default == default_routes(settings)
     assert default[AITask.JOB_MATCH].chain[0] == settings.groq_reasoning_model
     assert overridden[AITask.JOB_MATCH].chain == ("openai/gpt-oss-120b",)
     # Every other route is untouched by the override.
@@ -231,61 +236,120 @@ def test_the_model_flag_overrides_only_the_job_match_chain_and_drops_fallback() 
     assert overridden[AITask.JOB_EXTRACTION] == default[AITask.JOB_EXTRACTION]
 
 
-def test_a_quota_exhausted_case_is_retried_then_gives_up() -> None:
+@pytest.mark.parametrize(("model", "fallback"), [(None, True), ("configured/model", False)])
+def test_adapter_keeps_quota_guard_and_sets_fallback_for_the_model_flag(
+    monkeypatch: pytest.MonkeyPatch, model: str | None, fallback: bool
+) -> None:
+    settings = Settings(
+        database_url="postgresql+psycopg://u:p@localhost/db", ai_fallback_enabled=True
+    )
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(eval_analysis, "GroqProvider", lambda **kwargs: object())
+    monkeypatch.setattr(eval_analysis, "QuotaGuard", lambda engine, limits: "quota-guard")
+    monkeypatch.setattr(eval_analysis, "CircuitBreaker", lambda **kwargs: object())
+
+    def build_router(provider: object, routes: object, **kwargs: object) -> object:
+        captured.update(kwargs)
+        captured["routes"] = routes
+        return object()
+
+    monkeypatch.setattr(eval_analysis, "AIRouter", build_router)
+    monkeypatch.setattr(eval_analysis, "load_prompt", lambda prompt: object())
+    monkeypatch.setattr(
+        eval_analysis, "GroqAnalysisAdapter", lambda **kwargs: kwargs
+    )
+
+    _adapter(
+        settings,
+        SimpleNamespace(prompt="v1", model=model),
+        cast(Engine, object()),
+    )
+
+    assert captured["fallback_enabled"] is fallback
+    assert captured["quota_guard"] == "quota-guard"
+    routes = captured["routes"]
+    assert routes == resolve_routes(settings, model)  # type: ignore[comparison-overlap]
+
+
+def test_quota_refusal_marks_case_blocked_and_stops_without_retrying() -> None:
     quota_exhausted = AnalysisOutcome(
         status=AnalysisStatus.AI_FAILED, failure_code=AnalysisFailureCode.QUOTA_EXHAUSTED
     )
-    outcomes = [
-        quota_exhausted,
-        quota_exhausted,
-        AnalysisOutcome(status=AnalysisStatus.AI_COMPLETED, analysis=_analysis()),
-    ]
 
     class _FakeAdapter:
+        calls = 0
+
+        async def warm_up(self) -> None:
+            return None
+
+        async def describe(self) -> dict[str, object]:
+            return {}
+
+        def prepare(self, request: object) -> SimpleNamespace:
+            return SimpleNamespace(inference={}, evidence_sources={})
+
         async def analyze(
             self, request: object, *, prepared: object, use_cache: bool
         ) -> AnalysisOutcome:
             del request, prepared, use_cache
-            return outcomes.pop(0)
+            self.calls += 1
+            return quota_exhausted
 
-    waited: list[float] = []
+    adapter = _FakeAdapter()
+    scores, repeats, identity, blocked_case = asyncio.run(_run(adapter, [_case(), _case()], 1))
 
-    async def fake_sleep(seconds: float) -> None:
-        waited.append(seconds)
-
-    result = asyncio.run(
-        _analyze_with_quota_retry(
-            _FakeAdapter(), object(), object(), wait_seconds=5.0, sleeper=fake_sleep
-        )
-    )
-
-    assert result.status == AnalysisStatus.AI_COMPLETED
-    assert waited == [5.0, 5.0]
+    assert adapter.calls == 1
+    assert blocked_case == "01-case"
+    assert len(scores) == 1
+    assert scores[0].status == "QUOTA_BLOCKED"
+    assert scores[0].failure_code == "QUOTA_EXHAUSTED"
+    assert repeats == {}
+    assert identity == {"server": {}, "inference": {}}
 
 
-def test_a_quota_exhausted_case_gives_up_after_the_retry_budget() -> None:
-    class _FakeAdapter:
+def test_main_writes_the_quota_blocked_case_and_returns_nonzero(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class _QuotaBlockedAdapter:
+        async def warm_up(self) -> None:
+            return None
+
+        async def describe(self) -> dict[str, object]:
+            return {}
+
+        def prepare(self, request: object) -> SimpleNamespace:
+            return SimpleNamespace(inference={}, evidence_sources={})
+
         async def analyze(
             self, request: object, *, prepared: object, use_cache: bool
         ) -> AnalysisOutcome:
             del request, prepared, use_cache
             return AnalysisOutcome(
-                status=AnalysisStatus.AI_FAILED, failure_code=AnalysisFailureCode.QUOTA_EXHAUSTED
+                status=AnalysisStatus.AI_FAILED,
+                failure_code=AnalysisFailureCode.QUOTA_EXHAUSTED,
             )
 
-    waited: list[float] = []
+    settings = Settings(database_url="postgresql+psycopg://u:p@localhost/db")
+    monkeypatch.setattr(eval_analysis, "Settings", lambda: settings)
+    monkeypatch.setattr(eval_analysis, "load_cases", lambda path: [_case()])
+    monkeypatch.setattr(eval_analysis, "create_database_engine", lambda url: object())
 
-    async def fake_sleep(seconds: float) -> None:
-        waited.append(seconds)
+    def build_adapter(settings: Settings, args: object, engine: object) -> _QuotaBlockedAdapter:
+        return _QuotaBlockedAdapter()
 
-    result = asyncio.run(
-        _analyze_with_quota_retry(
-            _FakeAdapter(), object(), object(), wait_seconds=1.0, sleeper=fake_sleep
-        )
-    )
+    monkeypatch.setattr(eval_analysis, "_adapter", build_adapter)
 
-    assert result.status == AnalysisStatus.AI_FAILED
-    assert len(waited) == 3  # _QUOTA_RETRY_ATTEMPTS, never a fourth wait
+    exit_code = eval_analysis.main(["--output", str(tmp_path)])
+
+    reports = list(tmp_path.glob("*.json"))
+    assert exit_code == 1
+    assert len(reports) == 1
+    report = json.loads(reports[0].read_text(encoding="utf-8"))
+    assert report["quota_blocked_case"] == "01-case"
+    assert report["cases"][0]["status"] == "QUOTA_BLOCKED"
+    assert report["cases"][0]["failure_code"] == "QUOTA_EXHAUSTED"
+    assert "quota guard blocked case 01-case" in capsys.readouterr().out
 
 
 def test_the_comparison_reads_each_criterion_in_its_own_direction() -> None:

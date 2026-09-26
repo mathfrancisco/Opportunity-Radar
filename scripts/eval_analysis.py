@@ -114,66 +114,43 @@ def _adapter(settings: Settings, args: argparse.Namespace, engine: Engine) -> Gr
     )
 
 
-#: The free-tier per-minute token budget is small enough that a 50-case run outruns it
-#: in seconds; a quota failure is retried after a wait rather than recorded immediately,
-#: so the reported completed_rate reflects the model, not the eval loop's pace.
-_QUOTA_RETRY_WAIT_SECONDS = 20.0
-_QUOTA_RETRY_ATTEMPTS = 3
-
-
-async def _analyze_with_quota_retry(
-    adapter: GroqAnalysisAdapter,
-    request: Any,
-    prepared: Any,
-    *,
-    wait_seconds: float,
-    sleeper: Any = asyncio.sleep,
-) -> Any:
-    for attempt in range(_QUOTA_RETRY_ATTEMPTS + 1):
-        outcome = await adapter.analyze(request, prepared=prepared, use_cache=False)
-        quota_blocked = (
-            outcome.status is AnalysisStatus.AI_FAILED
-            and outcome.failure_code is AnalysisFailureCode.QUOTA_EXHAUSTED
-        )
-        if not quota_blocked or attempt == _QUOTA_RETRY_ATTEMPTS or wait_seconds <= 0:
-            return outcome
-        print(
-            f"  quota exhausted, waiting {wait_seconds:.0f}s before retry "
-            f"{attempt + 1}/{_QUOTA_RETRY_ATTEMPTS}",
-            flush=True,
-        )
-        await sleeper(wait_seconds)
-    return outcome  # pragma: no cover - loop always returns above
-
-
 async def _run(
     adapter: GroqAnalysisAdapter,
     cases: list[EvalCase],
     repeat: int,
-    *,
-    quota_wait_seconds: float = _QUOTA_RETRY_WAIT_SECONDS,
-) -> tuple[list[CaseScore], dict[str, list[CaseScore]], dict[str, Any]]:
+) -> tuple[list[CaseScore], dict[str, list[CaseScore]], dict[str, Any], str | None]:
     await adapter.warm_up()
     server = dict(await adapter.describe())
     scores: list[CaseScore] = []
     repeats: dict[str, list[CaseScore]] = defaultdict(list)
     settings_seen: dict[str, Any] = {}
+    quota_blocked_case: str | None = None
     for case in cases:
         request = case.request()
         prepared = adapter.prepare(request)
         settings_seen = dict(prepared.inference)
         runs = repeat if case.critical else 1
         for attempt in range(runs):
-            outcome = await _analyze_with_quota_retry(
-                adapter, request, prepared, wait_seconds=quota_wait_seconds
-            )
+            outcome = await adapter.analyze(request, prepared=prepared, use_cache=False)
             score = score_case(case, outcome, evidence_sources=prepared.evidence_sources)
+            quota_blocked = (
+                outcome.status is AnalysisStatus.AI_FAILED
+                and outcome.failure_code is AnalysisFailureCode.QUOTA_EXHAUSTED
+            )
+            if quota_blocked:
+                score = replace(score, status="QUOTA_BLOCKED")
+                quota_blocked_case = case.case_id
             if attempt == 0:
                 scores.append(score)
             if runs > 1:
                 repeats[case.case_id].append(score)
-            print(f"{case.case_id} [{attempt + 1}/{runs}]: {outcome.status.value}", flush=True)
-    return scores, repeats, {"server": server, "inference": settings_seen}
+            status = "QUOTA_BLOCKED" if quota_blocked else outcome.status.value
+            print(f"{case.case_id} [{attempt + 1}/{runs}]: {status}", flush=True)
+            if quota_blocked:
+                break
+        if quota_blocked_case is not None:
+            break
+    return scores, repeats, {"server": server, "inference": settings_seen}, quota_blocked_case
 
 
 def _fmt(value: Any) -> str:
@@ -259,12 +236,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--split", choices=("all", *SPLITS), default="all")
     parser.add_argument("--repeat", type=int, default=3, help="runs of each critical case")
     parser.add_argument("--label", help="goes in the report file name, e.g. baseline")
-    parser.add_argument(
-        "--quota-wait-seconds",
-        type=float,
-        default=_QUOTA_RETRY_WAIT_SECONDS,
-        help="wait this long and retry (up to 3 times) on a quota-exhausted case; 0 disables",
-    )
     args = parser.parse_args(argv)
 
     settings = Settings()  # type: ignore[call-arg]  # values come from the environment
@@ -280,12 +251,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"warning: the set does not cover {', '.join(sorted(gaps))}")
 
     engine = create_database_engine(settings.database_url)
-    scores, repeats, identity = asyncio.run(
+    scores, repeats, identity, quota_blocked_case = asyncio.run(
         _run(
             _adapter(settings, args, engine),
             cases,
             max(1, args.repeat),
-            quota_wait_seconds=args.quota_wait_seconds,
         )
     )
     summary = summarize_by_split(scores)
@@ -301,6 +271,7 @@ def main(argv: list[str] | None = None) -> int:
         "summary": summary,
         "cases": [score.as_dict() for score in scores],
         "variation": variation(repeats),
+        "quota_blocked_case": quota_blocked_case,
         # Filled by the operator: case id -> {"adherence": 0|1, "support": 0|1, "notes": ""}.
         "human_review": {score.case_id: {"adherence": None, "support": None} for score in scores},
     }
@@ -324,6 +295,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     (args.output / f"{stem}.md").write_text(_markdown(report), encoding="utf-8")
     print(f"wrote {args.output / stem}.json and .md")
+    if quota_blocked_case is not None:
+        print(f"quota guard blocked case {quota_blocked_case}; stopping evaluation", flush=True)
+        return 1
     return 0
 
 
