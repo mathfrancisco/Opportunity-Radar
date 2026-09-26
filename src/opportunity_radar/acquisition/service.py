@@ -365,10 +365,28 @@ class AcquisitionService:
                 if item.company_name
                 else []
             )
-            if len(companies) != 1:
+            catalog_sources = self.session.scalars(
+                select(CompanySource)
+                .where(
+                    CompanySource.source_type == source_type,
+                    CompanySource.external_key == board_key,
+                )
+                .limit(2)
+            ).all()
+            if not companies and len(catalog_sources) == 1:
+                company = self.session.get(Company, catalog_sources[0].company_id)
+                companies = [company] if company is not None else []
+            if len(companies) != 1 or (
+                item.company_name
+                and catalog_sources
+                and any(source.company_id != companies[0].id for source in catalog_sources)
+            ):
                 outcomes.append(TavilyProposalOutcome(url, "company_not_found"))
                 continue
             company = companies[0]
+            company_source_id = (
+                catalog_sources[0].id if len(catalog_sources) == 1 else None
+            )
 
             identifier_key = IDENTIFIER_KEYS[source_type]
             by_board = self.session.scalar(
@@ -423,6 +441,7 @@ class AcquisitionService:
             proposal = self.create_source(
                 source_type=source_type,
                 name=f"Proposed {company.canonical_name} {source_type}",
+                company_source_id=company_source_id,
                 configuration=configuration,
                 evidence_status="ats_identified",
                 commit=False,

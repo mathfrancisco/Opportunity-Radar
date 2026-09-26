@@ -5,10 +5,10 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import AsyncIterator, Iterator
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.collectors import CollectorRegistry
@@ -18,7 +18,8 @@ from opportunity_radar.acquisition.domain import (
     CollectorCapabilities,
     HealthResult,
 )
-from opportunity_radar.acquisition.models import RawItemModel, SourceDefinitionModel
+from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
+from opportunity_radar.acquisition.models import RawItemModel, SourceDefinitionModel, SourceRunModel
 from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.companies.models import Company
 from opportunity_radar.platform.database import create_database_engine
@@ -40,11 +41,35 @@ def _engine():
 
 @pytest.fixture(autouse=True)
 def _cleanup() -> Iterator[None]:
+    _purge()
     yield
+    _purge()
+
+
+def _purge() -> None:
     with Session(_engine()) as session:
-        session.execute(
-            delete(SourceDefinitionModel).where(SourceDefinitionModel.name.startswith(_PREFIX))
+        source_ids = list(
+            session.scalars(
+                select(SourceDefinitionModel.id).where(
+                    or_(
+                        SourceDefinitionModel.name.startswith(_PREFIX),
+                        SourceDefinitionModel.configuration[
+                            "company_name"
+                        ].as_string().startswith(_PREFIX),
+                    )
+                )
+            )
         )
+        if source_ids:
+            session.execute(
+                delete(RawItemModel).where(RawItemModel.source_definition_id.in_(source_ids))
+            )
+            session.execute(
+                delete(SourceRunModel).where(SourceRunModel.source_definition_id.in_(source_ids))
+            )
+            session.execute(
+                delete(SourceDefinitionModel).where(SourceDefinitionModel.id.in_(source_ids))
+            )
         session.execute(
             delete(Company).where(Company.canonical_name.startswith(_PREFIX))
         )
@@ -131,7 +156,10 @@ def test_rerun_over_same_result_does_not_duplicate_proposal() -> None:
             ),
         )
         assert session.scalars(
-            select(SourceDefinitionModel).where(SourceDefinitionModel.name.startswith(_PREFIX))
+            select(SourceDefinitionModel).where(
+                SourceDefinitionModel.configuration["company_name"].as_string()
+                == company.canonical_name
+            )
         ).all().__len__() == 1
 
 
@@ -211,7 +239,8 @@ def test_execute_creates_proposal_after_persisting_tavily_raw_evidence() -> None
         session.add(source)
         session.commit()
         service = AcquisitionService(
-            session, registry=CollectorRegistry((_TavilyCollector(item),))
+            session,
+            registry=CollectorRegistry((_TavilyCollector(item), GreenhouseCollector())),
         )
 
         run = asyncio.run(service.execute(source.id, CollectionRequest()))
@@ -222,7 +251,8 @@ def test_execute_creates_proposal_after_persisting_tavily_raw_evidence() -> None
         ) is not None
         proposal = session.scalar(
             select(SourceDefinitionModel).where(
-                SourceDefinitionModel.name == f"Proposed {company.canonical_name} greenhouse"
+                SourceDefinitionModel.configuration["company_name"].as_string()
+                == company.canonical_name
             )
         )
         assert proposal is not None
