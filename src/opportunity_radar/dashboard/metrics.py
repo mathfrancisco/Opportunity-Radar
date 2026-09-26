@@ -222,12 +222,7 @@ def _coverage_state(source: SourceDefinitionModel, latest: Any) -> str:
     """
     if not source.enabled:
         return "NOT_ENABLED"
-    if source.source_type != "manual" and not (
-        source.evidence_status == "confirmed"
-        and source.reviewed_at is not None
-        and source.terms_reviewed
-        and source.collector_local_tested
-    ):
+    if not _is_homologated(source):
         return "CONFIGURATION_BLOCKED"
     if source.source_type != "manual" and not source.schedule:
         return "NOT_SCHEDULED"
@@ -236,6 +231,16 @@ def _coverage_state(source: SourceDefinitionModel, latest: Any) -> str:
     if latest.status == "SUCCEEDED" and (latest.items_seen or 0) == 0:
         return "SUCCEEDED_ZERO"
     return str(latest.status)
+
+
+def _is_homologated(source: SourceDefinitionModel) -> bool:
+    """Apply the existing homologation gate; manual sources do not use that gate."""
+    return source.source_type == "manual" or (
+        source.evidence_status == "confirmed"
+        and source.reviewed_at is not None
+        and source.terms_reviewed
+        and source.collector_local_tested
+    )
 
 
 def _run_aggregates(session: Session, since: datetime) -> dict[UUID, Any]:

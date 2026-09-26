@@ -25,6 +25,7 @@ from opportunity_radar.dashboard.metrics import (
 )
 from opportunity_radar.dashboard.queries import (
     FAILING_RUN_STATUSES,
+    CompanyCoverageFunnel,
     InboxItem,
     InboxOrder,
     InboxQuery,
@@ -32,11 +33,14 @@ from opportunity_radar.dashboard.queries import (
     SearchMetricsReport,
     SourceCoverageReport,
     SourceHealth,
+    UsefulYieldMetric,
+    company_coverage_funnel,
     list_opportunity_inbox,
     list_source_health,
     search_metrics,
     source_coverage_report,
     summarize_overview,
+    useful_yield_metrics,
 )
 from opportunity_radar.matching.analysis import SemanticAnalysisPort
 from opportunity_radar.matching.service import MatchingService
@@ -305,11 +309,40 @@ class PrecisionMetricsResponse(BaseModel):
     precision: str | None
 
 
+class CompanyFunnelStageResponse(BaseModel):
+    stage: str
+    companies: int
+    of_previous: int | None
+
+
+class CompanyCoverageFunnelResponse(BaseModel):
+    window_days: int
+    generated_at: datetime
+    canonical_companies_total: int
+    stages: list[CompanyFunnelStageResponse]
+    enabled_but_unhealthy: int
+
+
+class UsefulYieldMetricResponse(BaseModel):
+    window_days: int
+    requests: int
+    new_unique_opportunities: int
+    judged_opportunities: int
+    judged_relevant: int | None
+    judgement_rate: str | None
+    yield_per_100_requests: str | None
+    discovery_delay_p50_seconds: float | None
+    discovery_delay_p95_seconds: float | None
+    contribution_by_source: dict[UUID, int]
+
+
 class SearchMetricsResponse(BaseModel):
     window_days: int
     generated_at: datetime
     coverage: CoverageMetricsResponse
     precision: PrecisionMetricsResponse
+    company_coverage_funnel: CompanyCoverageFunnelResponse
+    useful_yield: UsefulYieldMetricResponse
 
 
 @router.get("/inbox", response_model=InboxPageResponse)
@@ -502,7 +535,11 @@ def get_search_metrics(
     report = search_metrics(
         session, window_days=window_days, profile_version_id=profile_version_id
     )
-    return _search_metrics_response(report)
+    return _search_metrics_response(
+        report,
+        company_coverage_funnel(session, window_days=window_days),
+        useful_yield_metrics(session, window_days=window_days),
+    )
 
 
 @router.get("/overview", response_model=OverviewResponse)
@@ -667,7 +704,11 @@ def _overview_response(summary: OverviewSummary) -> OverviewResponse:
     )
 
 
-def _search_metrics_response(report: SearchMetricsReport) -> SearchMetricsResponse:
+def _search_metrics_response(
+    report: SearchMetricsReport,
+    funnel: CompanyCoverageFunnel,
+    useful_yield: UsefulYieldMetric,
+) -> SearchMetricsResponse:
     coverage = report.coverage
     precision = report.precision
     return SearchMetricsResponse(
@@ -714,6 +755,40 @@ def _search_metrics_response(report: SearchMetricsReport) -> SearchMetricsRespon
             precision=(
                 str(precision.precision) if precision.precision is not None else None
             ),
+        ),
+        company_coverage_funnel=CompanyCoverageFunnelResponse(
+            window_days=funnel.window_days,
+            generated_at=funnel.generated_at,
+            canonical_companies_total=funnel.canonical_companies_total,
+            stages=[
+                CompanyFunnelStageResponse(
+                    stage=item.stage,
+                    companies=item.companies,
+                    of_previous=item.of_previous,
+                )
+                for item in funnel.stages
+            ],
+            enabled_but_unhealthy=funnel.enabled_but_unhealthy,
+        ),
+        useful_yield=UsefulYieldMetricResponse(
+            window_days=useful_yield.window_days,
+            requests=useful_yield.requests,
+            new_unique_opportunities=useful_yield.new_unique_opportunities,
+            judged_opportunities=useful_yield.judged_opportunities,
+            judged_relevant=useful_yield.judged_relevant,
+            judgement_rate=(
+                str(useful_yield.judgement_rate)
+                if useful_yield.judgement_rate is not None
+                else None
+            ),
+            yield_per_100_requests=(
+                str(useful_yield.yield_per_100_requests)
+                if useful_yield.yield_per_100_requests is not None
+                else None
+            ),
+            discovery_delay_p50_seconds=useful_yield.discovery_delay_p50_seconds,
+            discovery_delay_p95_seconds=useful_yield.discovery_delay_p95_seconds,
+            contribution_by_source=useful_yield.contribution_by_source,
         ),
     )
 

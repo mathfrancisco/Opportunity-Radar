@@ -28,6 +28,7 @@ from opportunity_radar.acquisition.models import (
     SourceRunModel,
 )
 from opportunity_radar.companies.models import Company, CompanySource
+from opportunity_radar.dashboard.metrics import _is_homologated
 from opportunity_radar.dashboard.search_synonyms import synonym_variants
 from opportunity_radar.matching import currency
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
@@ -287,6 +288,39 @@ class SearchMetricsReport:
     generated_at: datetime
     coverage: CoverageMetrics
     precision: PrecisionMetrics
+
+
+@dataclass(frozen=True, slots=True)
+class CompanyFunnelStage:
+    stage: str
+    companies: int
+    of_previous: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class CompanyCoverageFunnel:
+    window_days: int
+    generated_at: datetime
+    canonical_companies_total: int
+    stages: tuple[CompanyFunnelStage, ...]
+    enabled_but_unhealthy: int
+
+
+@dataclass(frozen=True, slots=True)
+class UsefulYieldMetric:
+    window_days: int
+    requests: int
+    new_unique_opportunities: int
+    judged_opportunities: int
+    judged_relevant: int | None
+    judgement_rate: Decimal | None
+    yield_per_100_requests: Decimal | None
+    discovery_delay_p50_seconds: float | None
+    discovery_delay_p95_seconds: float | None
+    contribution_by_source: dict[UUID, int]
+
+
+MIN_JUDGEMENT_SAMPLE = 20
 
 
 def _latest_assessments(profile_version_id: UUID | None) -> Any:
@@ -896,17 +930,9 @@ def source_coverage_report(
 
 
 def _companies_coverage(session: Session) -> tuple[int, int]:
-    """(empresas com pelo menos uma fonte habilitada, empresas com ATS identificado)."""
-    covered = _count(
-        session,
-        select(func.count(func.distinct(CompanySource.company_id)))
-        .select_from(CompanySource)
-        .join(
-            SourceDefinitionModel,
-            SourceDefinitionModel.company_source_id == CompanySource.id,
-        )
-        .where(SourceDefinitionModel.enabled.is_(True)),
-    )
+    """(canonical companies with an enabled homologated source, companies with ATS)."""
+    funnel = company_coverage_funnel(session)
+    covered = funnel.stages[3].companies
     with_ats = _count(
         session,
         select(func.count(func.distinct(CompanySource.company_id))).where(
@@ -914,6 +940,244 @@ def _companies_coverage(session: Session) -> tuple[int, int]:
         ),
     )
     return covered, with_ats
+
+
+def company_coverage_funnel(
+    session: Session, *, window_days: int = 7, now: datetime | None = None
+) -> CompanyCoverageFunnel:
+    reference = now or datetime.now(UTC)
+    since = reference - timedelta(days=window_days)
+    company_ids = set(session.scalars(select(Company.id)).all())
+    company_source_rows = session.execute(
+        select(CompanySource.id, CompanySource.company_id)
+    ).all()
+    discovered = {company_id for _, company_id in company_source_rows}
+
+    source_rows = session.execute(
+        select(SourceDefinitionModel, CompanySource.company_id)
+        .join(
+            CompanySource,
+            SourceDefinitionModel.company_source_id == CompanySource.id,
+        )
+    ).all()
+    homologated_source_ids = {
+        source.id for source, _ in source_rows if _is_homologated(source)
+    }
+    homologated = {
+        company_id
+        for source, company_id in source_rows
+        if source.id in homologated_source_ids
+    }
+    enabled = {
+        company_id
+        for source, company_id in source_rows
+        if source.id in homologated_source_ids and source.enabled
+    }
+
+    latest_runs = (
+        select(
+            SourceRunModel.source_definition_id.label("source_definition_id"),
+            SourceRunModel.status.label("status"),
+            SourceRunModel.complete.label("complete"),
+            SourceRunModel.started_at.label("started_at"),
+            func.row_number()
+            .over(
+                partition_by=SourceRunModel.source_definition_id,
+                order_by=(
+                    SourceRunModel.started_at.desc(),
+                    SourceRunModel.finished_at.desc(),
+                    SourceRunModel.id.desc(),
+                ),
+            )
+            .label("position"),
+        )
+        .subquery("latest_company_source_runs")
+    )
+    latest_by_source = {
+        source_id: (status, complete, started_at)
+        for source_id, status, complete, started_at in session.execute(
+            select(
+                latest_runs.c.source_definition_id,
+                latest_runs.c.status,
+                latest_runs.c.complete,
+                latest_runs.c.started_at,
+            ).where(latest_runs.c.position == 1)
+        ).all()
+    }
+    unhealthy = {
+        company_id
+        for source, company_id in source_rows
+        if source.id in homologated_source_ids
+        and source.enabled
+        and latest_by_source.get(source.id, (None, False, None))[0]
+        in FAILING_RUN_STATUSES
+    }
+    collected = {
+        company_id
+        for source, company_id in source_rows
+        if source.id in homologated_source_ids
+        and source.enabled
+        and (run := latest_by_source.get(source.id)) is not None
+        and run[0] == "SUCCEEDED"
+        and run[1]
+        and run[2] is not None
+        and run[2] >= since
+        and run[2] <= reference
+    }
+
+    counts = (
+        len(company_ids),
+        len(discovered & company_ids),
+        len(homologated & company_ids),
+        len(enabled & company_ids),
+        len(collected & company_ids),
+    )
+    names = (
+        "cataloged",
+        "endpoint_discovered",
+        "homologated",
+        "enabled",
+        "collected_recently",
+    )
+    stages = tuple(
+        CompanyFunnelStage(
+            stage=name,
+            companies=count,
+            of_previous=None if index == 0 else counts[index - 1],
+        )
+        for index, (name, count) in enumerate(zip(names, counts, strict=True))
+    )
+    return CompanyCoverageFunnel(
+        window_days=window_days,
+        generated_at=reference,
+        canonical_companies_total=len(company_ids),
+        stages=stages,
+        enabled_but_unhealthy=len(unhealthy & company_ids),
+    )
+
+
+def useful_yield_metrics(
+    session: Session, *, window_days: int = 7, now: datetime | None = None
+) -> UsefulYieldMetric:
+    reference = now or datetime.now(UTC)
+    since = reference - timedelta(days=window_days)
+    requests = int(
+        session.scalar(
+            select(func.coalesce(func.sum(SourceRunModel.http_requests), 0)).where(
+                SourceRunModel.started_at >= since,
+                SourceRunModel.started_at <= reference,
+            )
+        )
+        or 0
+    )
+    opportunity_ids = list(
+        session.scalars(
+            select(OpportunityModel.id).where(
+                OpportunityModel.created_at >= since,
+                OpportunityModel.created_at <= reference,
+            )
+        ).all()
+    )
+    new_unique_opportunities = len(opportunity_ids)
+    latest_marks = (
+        select(
+            RelevanceMarkModel.opportunity_id.label("opportunity_id"),
+            RelevanceMarkModel.relevant.label("relevant"),
+            func.row_number()
+            .over(
+                partition_by=RelevanceMarkModel.opportunity_id,
+                order_by=(RelevanceMarkModel.marked_at.desc(), RelevanceMarkModel.id.desc()),
+            )
+            .label("position"),
+        )
+        .where(RelevanceMarkModel.opportunity_id.in_(opportunity_ids))
+        .subquery("latest_yield_marks")
+    )
+    marks = session.execute(
+        select(latest_marks.c.relevant).where(latest_marks.c.position == 1)
+    ).all() if opportunity_ids else []
+    judged_count = len(marks)
+    judged_relevant = sum(1 for (relevant,) in marks if relevant)
+    enough_judgements = judged_count >= MIN_JUDGEMENT_SAMPLE
+    judgement_rate = (
+        Decimal(judged_count) / Decimal(new_unique_opportunities)
+        if enough_judgements and new_unique_opportunities
+        else None
+    )
+    yield_per_100_requests = (
+        Decimal(judged_relevant * 100) / Decimal(requests)
+        if enough_judgements and requests > 0
+        else None
+    )
+
+    contribution_by_source = {
+        source_id: int(count)
+        for source_id, count in session.execute(
+            select(
+                SourceOccurrenceModel.source_definition_id,
+                func.count(func.distinct(SourceOccurrenceModel.opportunity_id)),
+            )
+            .join(
+                OpportunityModel,
+                OpportunityModel.id == SourceOccurrenceModel.opportunity_id,
+            )
+            .where(
+                OpportunityModel.created_at >= since,
+                OpportunityModel.created_at <= reference,
+            )
+            .group_by(SourceOccurrenceModel.source_definition_id)
+        ).all()
+    }
+    occurrence_rows = session.execute(
+        select(
+            SourceOccurrenceModel.opportunity_id,
+            SourceOccurrenceModel.first_seen_at,
+            SourceOccurrenceModel.source_published_at,
+        )
+        .join(
+            OpportunityModel,
+            OpportunityModel.id == SourceOccurrenceModel.opportunity_id,
+        )
+        .where(
+            OpportunityModel.id.in_(opportunity_ids),
+            SourceOccurrenceModel.first_seen_at <= reference,
+        )
+    ).all() if opportunity_ids else []
+    first_seen: dict[UUID, datetime] = {}
+    trustworthy_publication: dict[UUID, list[datetime]] = {}
+    for opportunity_id, observed_at, published_at in occurrence_rows:
+        first_seen[opportunity_id] = min(
+            first_seen.get(opportunity_id, observed_at), observed_at
+        )
+        if published_at is not None and published_at <= observed_at:
+            trustworthy_publication.setdefault(opportunity_id, []).append(published_at)
+    delays = sorted(
+        (first_seen[opportunity_id] - min(publications)).total_seconds()
+        for opportunity_id, publications in trustworthy_publication.items()
+        if opportunity_id in first_seen
+    )
+    return UsefulYieldMetric(
+        window_days=window_days,
+        requests=requests,
+        new_unique_opportunities=new_unique_opportunities,
+        judged_opportunities=judged_count,
+        judged_relevant=judged_relevant if enough_judgements else None,
+        judgement_rate=judgement_rate,
+        yield_per_100_requests=yield_per_100_requests,
+        discovery_delay_p50_seconds=_percentile(delays, 0.50),
+        discovery_delay_p95_seconds=_percentile(delays, 0.95),
+        contribution_by_source=contribution_by_source,
+    )
+
+
+def _percentile(values: list[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    index = (len(values) - 1) * percentile
+    lower = int(index)
+    upper = min(lower + 1, len(values) - 1)
+    fraction = index - lower
+    return values[lower] + (values[upper] - values[lower]) * fraction
 
 
 def _precision_metrics(
