@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import delete, func, select
@@ -59,12 +59,13 @@ def _opportunity(
     *,
     created_at: datetime,
     published_at: datetime | None,
+    id: UUID | None = None,
     title: str = "backend engineer",
     company: str = "acme",
     location: str = "sao paulo",
 ) -> OpportunityModel:
     return OpportunityModel(
-        id=uuid4(),
+        id=id or uuid4(),
         fingerprint=uuid4().hex + uuid4().hex,
         fingerprint_version="v1",
         canonical_title="Backend Engineer",
@@ -266,6 +267,7 @@ def test_confirm_duplicate_merges_and_preserves_provenance() -> None:
         )
         session.add_all([older, newer])
         session.commit()
+        older_version, newer_version = older.version, newer.version
         occurrence = _occurrence_chain(session, newer.id)
         try:
             [candidate] = find_title_location_window_candidates(session, newer)
@@ -274,8 +276,8 @@ def test_confirm_duplicate_merges_and_preserves_provenance() -> None:
             confirmed = confirm_duplicate(
                 session,
                 candidate.id,
-                expected_version_survivor=older.version,
-                expected_version_absorbed=newer.version,
+                expected_version_survivor=older_version,
+                expected_version_absorbed=newer_version,
                 decided_by="operator@example.com",
             )
 
@@ -284,9 +286,82 @@ def test_confirm_duplicate_merges_and_preserves_provenance() -> None:
             refreshed_newer = session.get(OpportunityModel, newer.id)
             assert refreshed_newer is not None
             assert refreshed_newer.duplicate_of == older.id
+            refreshed_older = session.get(OpportunityModel, older.id)
+            assert refreshed_older is not None
+            assert refreshed_older.version == older_version + 1
+            assert refreshed_newer.version == newer_version + 1
             refreshed_occurrence = session.get(SourceOccurrenceModel, occurrence.id)
             assert refreshed_occurrence is not None
             assert refreshed_occurrence.opportunity_id == older.id
+        finally:
+            _cleanup(session, [older.id, newer.id])
+
+
+def test_confirm_duplicate_tie_uses_lower_id_as_survivor() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    lower_id, higher_id = sorted((uuid4(), uuid4()))
+    with Session(engine) as session:
+        lower = _opportunity(
+            id=lower_id, created_at=NOW, published_at=NOW, title="tie role"
+        )
+        higher = _opportunity(
+            id=higher_id, created_at=NOW, published_at=NOW + timedelta(days=1),
+            title="tie role",
+        )
+        session.add_all([lower, higher])
+        session.commit()
+        lower_version, higher_version = lower.version, higher.version
+        try:
+            [candidate] = find_title_location_window_candidates(session, higher)
+            session.commit()
+
+            assert candidate.opportunity_id == lower_id
+            assert candidate.duplicate_opportunity_id == higher_id
+            confirmed = confirm_duplicate(
+                session,
+                candidate.id,
+                expected_version_survivor=lower_version,
+                expected_version_absorbed=higher_version,
+                decided_by="operator@example.com",
+            )
+
+            assert confirmed.status == "CONFIRMED"
+            refreshed_higher = session.get(OpportunityModel, higher_id)
+            assert refreshed_higher is not None
+            assert refreshed_higher.duplicate_of == lower_id
+            refreshed_lower = session.get(OpportunityModel, lower_id)
+            assert refreshed_lower is not None
+            assert refreshed_lower.version == lower_version
+        finally:
+            _cleanup(session, [lower_id, higher_id])
+
+
+def test_confirm_duplicate_without_moved_rows_does_not_bump_survivor() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        older = _opportunity(created_at=NOW - timedelta(days=1), published_at=NOW)
+        newer = _opportunity(created_at=NOW, published_at=NOW + timedelta(days=1))
+        session.add_all([older, newer])
+        session.commit()
+        older_version, newer_version = older.version, newer.version
+        try:
+            [candidate] = find_title_location_window_candidates(session, newer)
+            session.commit()
+
+            confirm_duplicate(
+                session,
+                candidate.id,
+                expected_version_survivor=older_version,
+                expected_version_absorbed=newer_version,
+                decided_by="operator@example.com",
+            )
+
+            refreshed_older = session.get(OpportunityModel, older.id)
+            refreshed_newer = session.get(OpportunityModel, newer.id)
+            assert refreshed_older is not None
+            assert refreshed_newer is not None
+            assert refreshed_older.version == older_version
+            assert refreshed_newer.version == newer_version + 1
         finally:
             _cleanup(session, [older.id, newer.id])
 

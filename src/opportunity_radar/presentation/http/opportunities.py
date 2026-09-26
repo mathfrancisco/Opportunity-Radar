@@ -24,6 +24,7 @@ from opportunity_radar.opportunities.duplicates import (
     DuplicateCycleError,
     confirm_duplicate,
     reject_duplicate,
+    resolve_survivor,
 )
 from opportunity_radar.opportunities.models import (
     DuplicateCandidateModel,
@@ -121,6 +122,8 @@ class DuplicateCandidateResponse(BaseModel):
     id: UUID
     opportunity_id: UUID
     duplicate_opportunity_id: UUID
+    survivor_opportunity_id: UUID
+    absorbed_opportunity_id: UUID
     rule: str
     score: Decimal | None
     status: str
@@ -423,7 +426,7 @@ def list_duplicate_candidates(
         )
     ).all()
     return DuplicateCandidatePageResponse(
-        items=[_duplicate_candidate_response(row) for row in rows]
+        items=[_duplicate_candidate_response(session, row) for row in rows]
     )
 
 
@@ -472,7 +475,7 @@ def confirm_duplicate_candidate(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={"code": "invalid_duplicate_transition", "message": str(error)},
         ) from error
-    return _duplicate_candidate_response(candidate)
+    return _duplicate_candidate_response(session, candidate)
 
 
 @router.post(
@@ -499,16 +502,29 @@ def reject_duplicate_candidate(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={"code": "invalid_duplicate_transition", "message": str(error)},
         ) from error
-    return _duplicate_candidate_response(candidate)
+    return _duplicate_candidate_response(session, candidate)
 
 
 def _duplicate_candidate_response(
-    candidate: DuplicateCandidateModel,
+    session: Session, candidate: DuplicateCandidateModel
 ) -> DuplicateCandidateResponse:
+    first = session.get(OpportunityModel, candidate.opportunity_id)
+    second = session.get(OpportunityModel, candidate.duplicate_opportunity_id)
+    if first is None or second is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "duplicate_candidate_opportunity_not_found",
+                "message": "Opportunity for duplicate candidate not found.",
+            },
+        )
+    survivor, absorbed = resolve_survivor(first, second)
     return DuplicateCandidateResponse(
         id=candidate.id,
         opportunity_id=candidate.opportunity_id,
         duplicate_opportunity_id=candidate.duplicate_opportunity_id,
+        survivor_opportunity_id=survivor.id,
+        absorbed_opportunity_id=absorbed.id,
         rule=candidate.rule,
         score=candidate.score,
         status=candidate.status,

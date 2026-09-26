@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -36,10 +36,15 @@ NOW = datetime.now(UTC)
 
 
 def _opportunity(
-    *, created_at: datetime, published_at: datetime | None, title: str, marker: str
+    *,
+    created_at: datetime,
+    published_at: datetime | None,
+    title: str,
+    marker: str,
+    id: UUID | None = None,
 ) -> OpportunityModel:
     return OpportunityModel(
-        id=uuid4(),
+        id=id or uuid4(),
         fingerprint=uuid4().hex + uuid4().hex,
         fingerprint_version="v1",
         canonical_title=f"{title} {marker}",
@@ -217,3 +222,40 @@ def test_confirm_unknown_candidate_returns_404() -> None:
     )
     assert missing.status_code == 404
     assert missing.json()["detail"]["code"] == "duplicate_candidate_not_found"
+
+
+def test_candidate_payload_resolves_equal_created_at_by_lower_id() -> None:
+    database_url = os.environ["DATABASE_URL"]
+    engine = create_database_engine(database_url)
+    client = TestClient(create_app(Settings(database_url=database_url)))
+    marker = uuid4().hex[:10]
+    lower_id, higher_id = sorted((uuid4(), uuid4()))
+
+    with Session(engine) as session:
+        lower = _opportunity(
+            id=lower_id,
+            created_at=NOW,
+            published_at=NOW,
+            title="Duplicate HTTP Tie Role",
+            marker=marker,
+        )
+        higher = _opportunity(
+            id=higher_id,
+            created_at=NOW,
+            published_at=NOW + timedelta(days=1),
+            title="Duplicate HTTP Tie Role",
+            marker=marker,
+        )
+        session.add_all([lower, higher])
+        session.commit()
+        [candidate] = find_title_location_window_candidates(session, higher)
+        session.commit()
+        try:
+            listed = client.get(f"/opportunities/{higher_id}/duplicate-candidates")
+
+            assert listed.status_code == 200
+            [payload] = listed.json()["items"]
+            assert payload["survivor_opportunity_id"] == str(lower_id)
+            assert payload["absorbed_opportunity_id"] == str(higher_id)
+        finally:
+            _cleanup(session, [lower_id, higher_id])

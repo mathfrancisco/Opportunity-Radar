@@ -293,11 +293,11 @@ function DuplicateCandidateCard({
   }
 
   const otherOpportunity = other.data
-  // `confirm_duplicate` always keeps the older `created_at` as the survivor — shown here
-  // so the operator sees which side "É a mesma vaga" would keep before confirming.
-  const survivorIsCurrent = opportunity.createdAt <= otherOpportunity.createdAt
-  const survivor = survivorIsCurrent ? opportunity : otherOpportunity
-  const absorbed = survivorIsCurrent ? otherOpportunity : opportunity
+  // The backend resolves timestamp ties by UUID and sends the resolved roles here.
+  const survivor =
+    opportunity.id === candidate.survivorOpportunityId ? opportunity : otherOpportunity
+  const absorbed =
+    opportunity.id === candidate.absorbedOpportunityId ? opportunity : otherOpportunity
 
   return (
     <Card as="article" className="text-sm">

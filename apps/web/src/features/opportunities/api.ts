@@ -80,6 +80,8 @@ export interface DuplicateCandidate {
   id: string
   opportunityId: string
   duplicateOpportunityId: string
+  survivorOpportunityId: string
+  absorbedOpportunityId: string
   rule: string
   score: string | null
   status: string
@@ -220,6 +222,8 @@ function parseDuplicateCandidate(value: unknown): DuplicateCandidate | null {
     id: value.id,
     opportunityId: required(value.opportunity_id),
     duplicateOpportunityId: required(value.duplicate_opportunity_id),
+    survivorOpportunityId: required(value.survivor_opportunity_id),
+    absorbedOpportunityId: required(value.absorbed_opportunity_id),
     rule: required(value.rule, 'title_location_window'),
     score: text(value.score),
     status: required(value.status, 'PENDING'),

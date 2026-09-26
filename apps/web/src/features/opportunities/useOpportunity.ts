@@ -39,12 +39,14 @@ function invalidateAfterDuplicateDecision(
   client: ReturnType<typeof useQueryClient>,
   opportunityId: string,
   otherOpportunityId: string,
+  includeOverview = false,
 ) {
   void client.invalidateQueries({ queryKey: ['duplicate-candidates', opportunityId] })
   void client.invalidateQueries({ queryKey: ['duplicate-candidates', otherOpportunityId] })
   void client.invalidateQueries({ queryKey: ['opportunity', opportunityId] })
   void client.invalidateQueries({ queryKey: ['opportunity', otherOpportunityId] })
   void client.invalidateQueries({ queryKey: ['inbox'] })
+  if (includeOverview) void client.invalidateQueries({ queryKey: ['overview'] })
 }
 
 export function useConfirmDuplicate(opportunityId: string, otherOpportunityId: string) {
@@ -62,7 +64,7 @@ export function useConfirmDuplicate(opportunityId: string, otherOpportunityId: s
         decidedBy: input.decidedBy,
       }),
     onSuccess: () =>
-      invalidateAfterDuplicateDecision(client, opportunityId, otherOpportunityId),
+      invalidateAfterDuplicateDecision(client, opportunityId, otherOpportunityId, true),
   })
 }
 

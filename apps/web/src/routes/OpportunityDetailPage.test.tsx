@@ -58,6 +58,8 @@ function candidate(overrides: Record<string, unknown> = {}) {
     id: 'candidate-1',
     opportunity_id: 'opportunity-1',
     duplicate_opportunity_id: 'opportunity-2',
+    survivor_opportunity_id: 'opportunity-1',
+    absorbed_opportunity_id: 'opportunity-2',
     rule: 'title_location_window',
     score: null,
     status: 'PENDING',
@@ -225,6 +227,53 @@ describe('DuplicateCandidates', () => {
     expect(confirmedBody).toEqual({
       expected_version_survivor: 2,
       expected_version_absorbed: 4,
+      decided_by: 'web-operator',
+    })
+  })
+
+  it('empate mantém o menor id como sobrevivente mesmo na página de maior id', async () => {
+    let confirmedBody: unknown = null
+    stubFetch({
+      candidates: [candidate()],
+      otherOpportunity: {
+        id: 'opportunity-1',
+        title: 'Backend Engineer menor id',
+        createdAt: '2026-09-05T00:00:00Z',
+        version: 3,
+      },
+      onConfirm: (body) => {
+        confirmedBody = body
+      },
+    })
+
+    const container = renderWithProviders(
+      <DuplicateCandidates
+        opportunity={opportunity({
+          id: 'opportunity-2',
+          createdAt: '2026-09-05T00:00:00Z',
+          version: 7,
+        })}
+      />,
+    )
+    await flush()
+    await flush()
+
+    const survivorLabel = Array.from(container.querySelectorAll('p')).find(
+      (paragraph) => paragraph.textContent === 'Ficaria como sobrevivente',
+    )
+    expect(survivorLabel?.parentElement?.querySelector('a')?.getAttribute('href')).toBe(
+      '/opportunities/opportunity-1',
+    )
+
+    const confirmButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'É a mesma vaga',
+    )
+    act(() => confirmButton?.click())
+    await flush()
+
+    expect(confirmedBody).toEqual({
+      expected_version_survivor: 3,
+      expected_version_absorbed: 7,
       decided_by: 'web-operator',
     })
   })

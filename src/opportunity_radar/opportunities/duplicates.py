@@ -14,9 +14,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from opportunity_radar.opportunities.models import (
@@ -54,6 +56,15 @@ class _OrderedPair:
 
 def _ordered_pair(first: UUID, second: UUID) -> _OrderedPair:
     return _OrderedPair(first, second) if first < second else _OrderedPair(second, first)
+
+
+def resolve_survivor(
+    first: OpportunityModel, second: OpportunityModel
+) -> tuple[OpportunityModel, OpportunityModel]:
+    """Resolve survivor consistently: oldest row, then lower UUID on a timestamp tie."""
+    if (first.created_at, first.id) <= (second.created_at, second.id):
+        return first, second
+    return second, first
 
 
 def find_title_location_window_candidates(
@@ -155,10 +166,7 @@ def confirm_duplicate(
     if first is None or second is None:
         raise DuplicateCandidateNotFoundError(str(candidate_id))
 
-    survivor, absorbed = (first, second) if first.created_at <= second.created_at else (
-        second,
-        first,
-    )
+    survivor, absorbed = resolve_survivor(first, second)
     if (
         survivor.version != expected_version_survivor
         or absorbed.version != expected_version_absorbed
@@ -176,22 +184,33 @@ def confirm_duplicate(
         raise DuplicateConflictError(
             "both opportunities have an active application; resolve manually"
         )
+    moved_applications = 0
     if absorbed_active and not survivor_active:
-        session.execute(
-            update(ApplicationProcessModel)
-            .where(
-                ApplicationProcessModel.opportunity_id == absorbed.id,
+        application_result = cast(
+            CursorResult[Any],
+            session.execute(
+                update(ApplicationProcessModel)
+                .where(
+                    ApplicationProcessModel.opportunity_id == absorbed.id,
                 ApplicationProcessModel.status == "ACTIVE",
-            )
-            .values(opportunity_id=survivor.id)
+                )
+                .values(opportunity_id=survivor.id)
+            ),
         )
+        moved_applications = application_result.rowcount or 0
 
-    session.execute(
-        update(SourceOccurrenceModel)
-        .where(SourceOccurrenceModel.opportunity_id == absorbed.id)
-        .values(opportunity_id=survivor.id)
+    occurrence_result = cast(
+        CursorResult[Any],
+        session.execute(
+            update(SourceOccurrenceModel)
+            .where(SourceOccurrenceModel.opportunity_id == absorbed.id)
+            .values(opportunity_id=survivor.id)
+        ),
     )
+    moved_occurrences = occurrence_result.rowcount or 0
 
+    if moved_applications or moved_occurrences:
+        survivor.version += 1
     absorbed.duplicate_of = survivor.id
     absorbed.version = absorbed.version + 1
     candidate.status = "CONFIRMED"

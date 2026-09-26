@@ -177,6 +177,7 @@ class OpportunityService:
                 f"review:{company_key}:{candidate.normalized_title}"
             )
         self.repository.lock_candidate_identities(identity_locks)
+        refresh_changed = False
         occurrence = self.repository.occurrence_by_external_identity(
             source_definition_id=raw_item.source_definition_id,
             external_id=external_id,
@@ -193,7 +194,7 @@ class OpportunityService:
                 reasons: list[dict[str, Any]] = [
                     {"code": "SAME_SOURCE_EXTERNAL_IDENTITY"}
                 ]
-                _refresh_opportunity(opportunity, candidate)
+                refresh_changed = _refresh_opportunity(opportunity, candidate)
             else:
                 decision = "REVIEW"
                 result_status = "REVIEW_REQUIRED"
@@ -263,16 +264,28 @@ class OpportunityService:
             self.session.add(occurrence)
 
         self.session.flush()
+        enrichment_before = _enrichment_state(opportunity)
         enrichment_reasons = _reconcile_enrichment(
             opportunity=opportunity,
             occurrence=occurrence,
             candidate=candidate,
             raw_item_id=raw_item.id,
         )
+        enrichment_changed = enrichment_before != _enrichment_state(opportunity)
         if enrichment_reasons:
             reasons.extend(enrichment_reasons)
             result_status = "REVIEW_REQUIRED"
-        opportunity.search_skills = _search_skills_text(opportunity.skills)
+        search_skills = _search_skills_text(opportunity.skills)
+        search_skills_changed = opportunity.search_skills != search_skills
+        opportunity.search_skills = search_skills
+
+        # REFRESHED already bumps in `_refresh_opportunity`; do not bump twice.
+        if (
+            decision != "NEW"
+            and not refresh_changed
+            and (enrichment_changed or search_skills_changed)
+        ):
+            opportunity.version += 1
 
         if decision == "NEW":
             # F20-26: a brand-new opportunity is the only case that can introduce a fresh
@@ -549,6 +562,37 @@ def _reconcile_enrichment(
         _refresh_skill_requirement(current_skill)
         current_skill.normalizer_version = NORMALIZER_VERSION
     return reasons
+
+
+def _enrichment_state(opportunity: OpportunityModel) -> tuple[object, ...]:
+    """Snapshot every field `_reconcile_enrichment` can change for versioning."""
+    compensations = tuple(
+        (
+            item.amount_min,
+            item.amount_max,
+            item.currency,
+            item.period,
+            item.gross_net,
+            item.evidence_text,
+            item.evidence_source,
+            item.normalizer_version,
+            item.source_occurrence_id,
+            item.raw_item_id,
+        )
+        for item in opportunity.compensations
+    )
+    skills = tuple(
+        (
+            item.canonical_name,
+            item.display_name,
+            item.requirement,
+            item.evidence,
+            item.taxonomy_version,
+            item.normalizer_version,
+        )
+        for item in opportunity.skills
+    )
+    return compensations, skills
 
 
 def _compensation_conflicts(
@@ -960,7 +1004,7 @@ def _apply_evidence_fields(
 
 def _refresh_opportunity(
     opportunity: OpportunityModel, candidate: CanonicalCandidate
-) -> None:
+) -> bool:
     """Reprocess one opportunity from a raw item's evidence.
 
     Two independent decisions, per the card's "Reprocessamento e limites semânticos":
@@ -971,5 +1015,7 @@ def _refresh_opportunity(
     """
     rules_changed = _apply_rule_fields(opportunity, candidate)
     evidence_changed = _apply_evidence_fields(opportunity, candidate)
-    if rules_changed or evidence_changed:
+    changed = rules_changed or evidence_changed
+    if changed:
         opportunity.version += 1
+    return changed
