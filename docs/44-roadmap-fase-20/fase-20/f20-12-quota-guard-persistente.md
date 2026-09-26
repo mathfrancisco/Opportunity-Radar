@@ -1,6 +1,6 @@
 # CARD F20-12 — Quota Guard persistente por modelo
 
-- **Status:** Corrigido — cabeçalhos de quota agora respeitam janela reportada e limites absolutos não aumentam após recarga; migração `20260926_0034`. Testes de quota com `RUN_DATABASE_INTEGRATION=1` (18 passaram) e Ruff passaram. Mypy aponta dois erros em `src/opportunity_radar/opportunities/duplicates.py`, fora do escopo.
+- **Status:** Corrigido — cabeçalhos de quota agora respeitam janela reportada e limites absolutos não aumentam após recarga; migração `20260926_0034`. Testes de quota com `RUN_DATABASE_INTEGRATION=1` (18 passaram), Ruff e mypy passaram na verificação final.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-10
