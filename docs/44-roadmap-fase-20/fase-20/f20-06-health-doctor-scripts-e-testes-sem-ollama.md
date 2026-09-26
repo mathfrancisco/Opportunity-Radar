@@ -1,6 +1,6 @@
 # CARD F20-06 — Health, doctor, scripts e testes sem Ollama
 
-- **Status:** Quase feito — `platform/health.py` tem `ai_health` (sem chamada de rede) no lugar de `ollama_health`; `/health` devolve `ai`; `scripts/doctor.py` tem `check_ai` (nunca imprime a chave, testado); `scripts/eval_analysis.py` usa `build_analysis_adapter`; `scripts/measure_descriptions.py` usa o `TaskBudget` de `job_match`; `tests/e2e/fake_ollama.py` apagado; frontend (`health/api.ts`, `AnalysisPanel.tsx`, `OverviewPage.tsx`) e seus testes atualizados; `npm run check` passa. Ressalva: `grep -rni ollama` ainda acha uma linha de comentário histórico em `matching/groq.py` ("the retired `OllamaAnalysisAdapter`") — fora de escopo por instrução explícita de não tocar `matching/groq.py` além de limpeza de import; ver nota no PR.
+- **Status:** Feito — grep de `ollama` vazio em src, scripts, tests, compose, Makefile e apps/web/src após o merge `282682c`; `/health` com a chave `ai`; `npm run check` verde.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-04, F20-05, F20-08
@@ -63,7 +63,7 @@ def ai_health(settings: Settings) -> DependencyHealth:
 
 ## Critérios de aceite
 
-- [ ] `grep -rni ollama src scripts tests compose*.yaml Makefile apps/web/src` não retorna nada — falta 1 linha em `matching/groq.py` (comentário histórico), fora de escopo por instrução explícita de não tocar esse arquivo além de limpeza de import.
+- [x] `grep -rni ollama src scripts tests compose*.yaml Makefile apps/web/src` não retorna nada — falta 1 linha em `matching/groq.py` (comentário histórico), fora de escopo por instrução explícita de não tocar esse arquivo além de limpeza de import.
 - [x] `/health` tem a chave `ai` e não tem `ollama`.
 - [x] `npm run check` em `apps/web` passa.
 
