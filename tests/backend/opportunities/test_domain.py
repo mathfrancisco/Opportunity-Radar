@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from opportunity_radar.opportunities.domain import (
+    SKILL_TAXONOMY,
     Compensation,
     CompensationPeriod,
     ContractType,
@@ -279,7 +280,7 @@ def test_extracts_versioned_canonical_skills_with_conservative_classification() 
     assert set(by_id) == {"react", "python", "postgresql", "docker"}
     assert by_id["react"].classification is SkillClassification.REQUIRED
     assert by_id["docker"].classification is SkillClassification.PREFERRED
-    assert by_id["react"].taxonomy_version == "skills-v1"
+    assert by_id["react"].taxonomy_version == "skills-v2"
     assert "Required: React.js" in by_id["react"].evidence_text
 
 
@@ -287,6 +288,55 @@ def test_extracts_skills_from_structured_tags() -> None:
     skills = extract_skills(None, None, {"tags": ["python", "ReactJS"]})
 
     assert {skill.canonical_id for skill in skills} == {"python", "react"}
+
+
+def test_skills_v2_never_removes_or_narrows_a_skills_v1_entry() -> None:
+    """Criterion: 'reprocessamento não regride evidência existente' (F20-02/F17-06).
+
+    `skills-v2` (`docs/pesquisas/curadoria-skills-v2.md`) only added `ai`, `cicd` and
+    `observability` on top of the 27 `skills-v1` entries. Every `skills-v1` canonical id
+    keeps every one of its original aliases in `skills-v2`: a description that matched a
+    skill before the bump still matches the same skill after it, so the official
+    reprocessing (`NORMALIZER_VERSION` bump) can only add evidence, never drop it.
+    """
+    skills_v1_baseline: dict[str, tuple[str, ...]] = {
+        "python": ("python",),
+        "typescript": ("typescript",),
+        "javascript": ("javascript",),
+        "react": ("react", "react.js", "reactjs"),
+        "nextjs": ("next.js", "nextjs"),
+        "nodejs": ("node.js", "nodejs"),
+        "fastapi": ("fastapi",),
+        "django": ("django",),
+        "flask": ("flask",),
+        "java": ("java",),
+        "kotlin": ("kotlin",),
+        "go": ("golang", "go"),
+        "rust": ("rust",),
+        "csharp": ("c#", "csharp", "c-sharp"),
+        "dotnet": (".net", "dotnet", ".net core"),
+        "sql": ("sql",),
+        "postgresql": ("postgresql", "postgres"),
+        "mysql": ("mysql",),
+        "mongodb": ("mongodb", "mongo db"),
+        "redis": ("redis",),
+        "docker": ("docker",),
+        "kubernetes": ("kubernetes", "k8s"),
+        "aws": ("aws", "amazon web services"),
+        "azure": ("azure",),
+        "gcp": ("gcp", "google cloud platform"),
+        "terraform": ("terraform",),
+        "graphql": ("graphql",),
+    }
+    current_by_id = {entry.canonical_id: set(entry.aliases) for entry in SKILL_TAXONOMY}
+
+    assert set(skills_v1_baseline) <= set(current_by_id)
+    for canonical_id, baseline_aliases in skills_v1_baseline.items():
+        assert set(baseline_aliases) <= current_by_id[canonical_id], (
+            f"{canonical_id} lost a skills-v1 alias in skills-v2"
+        )
+    # F20-02's curated additions are net-new entries, not replacements.
+    assert {"ai", "cicd", "observability"} <= set(current_by_id) - set(skills_v1_baseline)
 
 
 def test_ambiguous_skill_aliases_require_technical_context() -> None:

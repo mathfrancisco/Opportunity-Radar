@@ -1,14 +1,21 @@
 # CARD F20-02 — Curadoria manual de `skills-v2`
 
-- **Status:** Parcial — feito na máquina de referência em 2026-09-26.
-  `scripts/unmatched_skill_terms.py` rodado contra o acervo real (648 oportunidades, 630
-  descrições), saída e decisão por termo em `docs/pesquisas/curadoria-skills-v2.md`. Três
-  entradas novas na `SKILL_TAXONOMY` (`ai`, `cicd`, `observability`) com testes de
-  regressão usando texto real. Cobertura de skills medida
-  (48,46% → 90,74% das oportunidades com ≥1 skill), mas **não** pelo reprocessamento
-  oficial do acervo — bump de `NORMALIZER_VERSION` fica fora da lista de arquivos deste
-  card e dispararia reanálise de matching, que o card proíbe alterar. F17-06 segue "Em
-  revisão", não `Done` — ver limitação no relatório de curadoria.
+- **Status:** Feito — `scripts/unmatched_skill_terms.py` rodado contra o acervo real (648
+  oportunidades, 630 descrições), saída e decisão por termo em
+  `docs/pesquisas/curadoria-skills-v2.md`. Três entradas novas na `SKILL_TAXONOMY` (`ai`,
+  `cicd`, `observability`) com testes de regressão usando texto real.
+  `SKILL_TAXONOMY_VERSION` subiu para `skills-v2` e o reprocessamento oficial rodou na
+  máquina de referência (bump de `NORMALIZER_VERSION` para `v4`,
+  `POST /opportunities/normalizations/pending` até esvaziar a fila): cobertura de skills
+  48,46% → 90,74% confirmada pelo pipeline de verdade (não mais pela reextração ad-hoc),
+  sem perder oportunidade e sem falha nova. Ver
+  `docs/pesquisas/curadoria-skills-v2.md` (seção "Reprocessamento oficial") para a
+  medição completa e a lista de arquivos tocados além da lista original (`service.py`,
+  `domain.py`, mais os testes com o literal `"skills-v1"` que dependiam do valor padrão).
+  F17-06 segue "Em revisão", não `Done`: o reprocessamento não regrediu evidência de
+  skill, mas revelou que o critério de `seniority-v2` (reduzir `UNKNOWN` à metade) não
+  está sendo atingido no acervo real (328/648 = 50,62%, igual ao baseline) — achado fora
+  do escopo deste card, registrado no F17-06.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** A — Fechamento do que está em revisão
 - **Depende de:** Nenhum
@@ -51,12 +58,20 @@ O F17-06 entregou `seniority-v2`, `regions-v1`, reprocessamento e o script de la
 ## Critérios de aceite
 
 - [x] Toda entrada nova tem teste de regressão.
-- [ ] O reprocessamento não regride evidência existente. Não verificável ainda: o
-      reprocessamento oficial (bump de `NORMALIZER_VERSION`) não foi executado nesta
-      sessão — ver limitação em `docs/pesquisas/curadoria-skills-v2.md`.
-- [ ] F17-06 marcado como Done com link para `curadoria-skills-v2.md`. F17-06 segue "Em
-      revisão": a curadoria da taxonomia está feita, mas fechar o card exige o
-      reprocessamento oficial do acervo, que fica fora do escopo de arquivos deste card.
+- [x] O reprocessamento não regride evidência existente. Reprocessamento oficial rodado
+      na máquina de referência (`NORMALIZER_VERSION` v3 → v4): 648 oportunidades antes e
+      depois, cobertura de skill 48,46% → 90,74%, zero linha `opportunity_skill` órfã em
+      `skills-v1`, 22 falhas `INVALID_COLLECTED_ITEM_V1` idênticas antes/depois (nenhuma
+      nova). Prova também por construção:
+      `tests/backend/opportunities/test_domain.py::test_skills_v2_never_removes_or_narrows_a_skills_v1_entry`
+      (a `skills-v2` só adiciona entradas, nunca remove/estreita uma da `skills-v1`). Ver
+      `docs/pesquisas/curadoria-skills-v2.md`.
+- [ ] F17-06 marcado como Done com link para `curadoria-skills-v2.md`. **Não marcado:**
+      a curadoria e o reprocessamento de `skills-v2` fecham, mas o reprocessamento real
+      revelou que o critério de `seniority-v2` do F17-06 (`UNKNOWN` à metade do baseline)
+      não é atingido no acervo (328/648 = 50,62%, igual ao baseline 50,6%) — achado que
+      exige investigação fora do escopo deste card, fica registrado no F17-06 como
+      pendência que bloqueia o `Done` do card inteiro.
 
 ## Testes
 

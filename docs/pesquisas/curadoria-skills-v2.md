@@ -98,28 +98,70 @@ lista completa de skills esperadas por vaga (isso exigiria leitura humana vaga a
 não coube nesta sessão). O número acima é uma proxy honesta (cobertura sobre o acervo
 inteiro, não recall sobre um gabarito), documentada como tal.
 
-## Limitações
+## Reprocessamento oficial (2026-09-26, sessão de fechamento do gap)
 
-- **`NORMALIZER_VERSION` não foi incrementado.** O card F20-02 pede "rodar o
-  reprocessamento retomável do F17-06" pelo pipeline oficial (`normalize_pending` por
-  versão, em `src/opportunity_radar/opportunities/service.py`). Isso exigiria editar
-  `service.py`, fora da lista de arquivos deste card, e dispara uma onda de reanálise de
-  matching (rescore de todas as 648 oportunidades) — o card F20-02 explicitamente proíbe
-  alterar elegibilidade, score ou veredito. Por isso a medição de cobertura acima foi feita
-  chamando `extract_skills` diretamente sobre o texto já armazenado, sem passar pelo
-  pipeline de normalização/reprocessamento nem tocar no banco. O ganho de cobertura é real
-  e reproduzível, mas os registros de `opportunity_skill` no banco **não foram
-  atualizados** — isso só acontece quando alguém rodar o reprocessamento oficial
-  (bump de `NORMALIZER_VERSION`, fora de escopo aqui).
+A limitação acima ("`NORMALIZER_VERSION` não foi incrementado") foi resolvida: o gap foi
+fechado numa sessão seguinte que teve autorização para tocar `service.py`/`domain.py` além
+da lista original de arquivos do card (registrado aqui, não escondido).
+
+- `SKILL_TAXONOMY_VERSION` subiu de `"skills-v1"` para `"skills-v2"`
+  (`src/opportunity_radar/opportunities/domain.py:122`).
+- `NORMALIZER_VERSION` subiu de `"v3"` para `"v4"`
+  (`src/opportunity_radar/opportunities/service.py:49`), o gatilho que faz
+  `pending_raw_item_ids` reenfileirar todo `RawItem` para `normalize_pending`.
+- Todos os 13 literais de teste que comparavam contra `"skills-v1"` foram auditados; dois
+  eram o próprio valor padrão do normalizador e foram corrigidos para `"skills-v2"`
+  (`tests/backend/opportunities/test_domain.py`,
+  `tests/backend/test_opportunities_integration.py`); dois helpers de fixture que
+  representavam "a versão atual" passaram a importar `SKILL_TAXONOMY_VERSION` em vez de
+  hardcodar (`tests/backend/matching/test_currency.py`,
+  `tests/backend/dashboard/test_queries.py`) — o restante usa `"skills-v1"` como um valor
+  arbitrário de teste para lógica de mistura de versões (`opportunity_taxonomy_version`,
+  bump de taxonomia em `test_reevaluation.py`) e não precisava mudar.
+- Novo teste de regressão:
+  `tests/backend/opportunities/test_domain.py::test_skills_v2_never_removes_or_narrows_a_skills_v1_entry`
+  — prova, por construção, que `skills-v2` é estritamente aditiva sobre as 27 entradas
+  `skills-v1` (nenhum `canonical_id`/alias removido ou trocado), então o reprocessamento
+  oficial só pode ganhar evidência, nunca perder.
+- Reprocessamento rodado na máquina de referência (projeto compose `opportunity-radar`,
+  containers `api`+`worker` reconstruídos com o código novo, sem `down -v`, banco e
+  volumes intactos), disparado via
+  `POST /opportunities/normalizations/pending?limit=500` até `processed=0`:
+
+  ```
+  antes  (normalizer_version=v3, taxonomy_version=skills-v1):
+    opportunities: 648
+    opportunities com >=1 skill: 314 (48.46%)
+    opportunity_skill rows: 955, todas skills-v1
+
+  depois (normalizer_version=v4, taxonomy_version=skills-v2):
+    opportunities: 648  (nenhuma perdida/duplicada)
+    opportunities com >=1 skill: 588 (90.74%)
+    opportunity_skill rows: 1844, todas skills-v2 (nenhuma linha skills-v1 órfã sobrou —
+      _reconcile_enrichment substitui a evidência por ocorrência corretamente)
+    normalization_result: 670 v3 + 670 v4 (todo o acervo de RawItem reprocessado)
+    falhas (status=FAILED, INVALID_COLLECTED_ITEM_V1): 22 sob v3 e 22 sob v4 — o mesmo
+      conjunto de raw_item_id, zero falha nova introduzida pelo bump
+  ```
+
+  90,74% bate exatamente com a medição ad-hoc anterior (fora do pipeline), agora
+  confirmada pelo pipeline oficial de reprocessamento sobre o banco real. Nenhuma
+  oportunidade regrediu: a tabela `opportunity_skill` não guarda mais nenhuma linha
+  `skills-v1`, e a contagem de oportunidades com skill subiu (314 → 588), nunca desceu,
+  como a taxonomia aditiva garante.
+
+- Rescore de matching: o bump de `NORMALIZER_VERSION`/`SKILL_TAXONOMY_VERSION` muda o
+  `input_hash` das avaliações afetadas, então a fila de reavaliação (`F16-04`) absorve a
+  onda como comportamento esperado (nota de implementação do F17-06) — não é uma
+  regressão, é a reanálise que o próprio card documenta como certa.
+
+## Limitações remanescentes
+
 - **Termo `ci` é um alias curto (2 caracteres) sem desambiguação por contexto**, ao
   contrário de `go`/`react` que já têm uma função de contexto dedicada
-  (`_is_unambiguous_skill_use`). Adicionar essa mesma desambiguação ficou fora do escopo
-  de arquivos permitido (`domain.py` só na tupla `SKILL_TAXONOMY`, não na lógica de
-  extração). Risco residual: `ci` pode gerar falso positivo em vagas que citam "CI" como
-  sigla de outra coisa (raro, mas não impossível).
-- **Versão da taxonomia não subiu para `skills-v2`.** `SKILL_TAXONOMY_VERSION = "skills-v1"`
-  está hardcoded como literal (`"skills-v1"`) em 13 arquivos de teste fora da lista de
-  arquivos deste card (`tests/backend/dashboard/`, `tests/backend/matching/`, etc.) —
-  bump do nome de versão exigiria tocar todos eles. Optei por manter o nome de versão e só
-  adicionar entradas à mesma tupla, que é aditivo e não quebra nada existente. Registrado
-  aqui como decisão deliberada, não omissão.
+  (`_is_unambiguous_skill_use`). Risco residual: `ci` pode gerar falso positivo em vagas
+  que citam "CI" como sigla de outra coisa (raro, mas não impossível). Não corrigido nesta
+  sessão — mudar a lógica de extração é maior que o escopo do fechamento do gap.
+- A meta "recall ≥ 90% num conjunto marcado de 30 vagas" do F17-06 continua medida como
+  proxy (cobertura sobre o acervo inteiro, 90,74%), não como recall sobre um gabarito
+  humano de 30 vagas — esse gabarito não existe e não foi criado nesta sessão.

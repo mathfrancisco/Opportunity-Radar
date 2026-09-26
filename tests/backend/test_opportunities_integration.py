@@ -135,7 +135,7 @@ def test_normalizes_and_deduplicates_manual_evidence_with_provenance() -> None:
         "python",
         "react",
     }
-    assert all(item["taxonomy_version"] == "skills-v1" for item in opportunity["skills"])
+    assert all(item["taxonomy_version"] == "skills-v2" for item in opportunity["skills"])
     assert len(opportunity["occurrences"]) == 3
     assert {item["raw_item_id"] for item in opportunity["occurrences"]}
 

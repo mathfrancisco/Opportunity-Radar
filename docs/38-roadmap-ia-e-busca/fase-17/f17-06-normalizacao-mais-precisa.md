@@ -1,16 +1,25 @@
 # CARD F17-06 — Normalização mais precisa: senioridade, skills, local e país
 
-- **Status:** Em revisão — `seniority-v2`, `regions-v1` e o script de lacunas
-  (`scripts/unmatched_skill_terms.py`) já entregues em código. Curadoria manual de
-  `skills-v2` feita em 2026-09-26 (card F20-02): 3 entradas novas na `SKILL_TAXONOMY`
-  (`ai`, `cicd`, `observability`), ver
-  [`docs/pesquisas/curadoria-skills-v2.md`](../../../pesquisas/curadoria-skills-v2.md).
-  **Não fechar como `Done`:** o reprocessamento oficial do acervo (bump de
-  `NORMALIZER_VERSION`) fica fora do escopo de arquivos do F20-02 e dispara uma onda de
-  reanálise de matching que esse card proíbe alterar; a cobertura de skills medida
-  (48,46% → 90,74%) veio de reexecutar `extract_skills` direto sobre o texto armazenado,
-  não do pipeline de reprocessamento — `opportunity_skill` no banco ainda reflete a
-  taxonomia anterior até alguém rodar o reprocessamento de verdade.
+- **Status:** Em revisão — `skills-v2` fecha nesta sessão: `SKILL_TAXONOMY_VERSION` subiu
+  para `skills-v2` e `NORMALIZER_VERSION` para `v4`, o reprocessamento oficial rodou na
+  máquina de referência (`opportunity-radar`,
+  `POST /opportunities/normalizations/pending` até esvaziar a fila) e a cobertura de
+  skills subiu de 48,46% para 90,74% das 648 oportunidades reais pelo pipeline de
+  verdade, sem perder nem duplicar oportunidade e sem falha nova (22
+  `INVALID_COLLECTED_ITEM_V1` idênticas antes/depois). Ver
+  [`docs/pesquisas/curadoria-skills-v2.md`](../../../pesquisas/curadoria-skills-v2.md) para
+  a medição completa.
+  **Não fechar como `Done` ainda:** medido nesta sessão contra a mesma máquina de
+  referência, `seniority-v2` **não** reduziu a taxa de `UNKNOWN` — ainda 328/648 = 50,62%,
+  estatisticamente igual ao baseline do F17-01 (50,6%,
+  [`docs/pesquisas/baseline-f17-01.md`](../../../pesquisas/baseline-f17-01.md)), longe da
+  meta de metade (~25,3%). Isso é um achado, não uma correção feita: `seniority-v2` está
+  em código mas não está reduzindo `UNKNOWN` no acervo real como o critério exige — precisa
+  de investigação (os padrões de título pt/en cobrem os casos certos? os coletores
+  preenchem os campos estruturados que `seniority-v2` espera?) que fica fora do escopo
+  desta sessão de fechamento de gap. `regions-v1` está funcional (251/648 oportunidades
+  com `allowed_countries` preenchido), mas o critério de "país permitido" desse card
+  também não foi remedido a fundo aqui.
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
 - **Depende de:** F17-01
 - **Bloqueia:** Milestone P
@@ -81,16 +90,31 @@ menos `UNKNOWN`, cada regra nova versionada e medida contra o que havia antes.
 
 ## Critérios de aceite
 
-- [ ] `seniority-v2` reduz a taxa de `UNKNOWN` à metade do baseline do F17-01.
-- [ ] `skills-v2` atinge recall ≥ 90% no conjunto marcado.
+- [ ] `seniority-v2` reduz a taxa de `UNKNOWN` à metade do baseline do F17-01. **Não
+      atingido:** medido nesta sessão contra o acervo real pós-reprocessamento, 328/648
+      (50,62%) — igual ao baseline (50,6%), não a metade. Precisa de investigação, não
+      marcado.
+- [x] `skills-v2` atinge recall ≥ 90% no conjunto marcado. Medido como proxy honesta
+      (cobertura de "≥1 skill" sobre as 648 oportunidades reais via o pipeline oficial de
+      reprocessamento): 90,74%. Não existe o conjunto marcado de 30 vagas que o texto do
+      card supõe — ver limitação em `docs/pesquisas/curadoria-skills-v2.md`.
 - [ ] Regiões resolvem para países pela tabela versionada, e "Remote — Brazil" preenche o
-      país permitido.
-- [ ] O acervo é renormalizado sem perder procedência.
+      país permitido. Funcional em código (251/648 oportunidades com `allowed_countries`
+      preenchido), não remedido a fundo nesta sessão — não marcado por falta de
+      verificação direta.
+- [x] O acervo é renormalizado sem perder procedência: 648 oportunidades antes e depois do
+      bump de `NORMALIZER_VERSION`, 670/670 `RawItem` com resultado `v4`, mesmas 22 falhas
+      `INVALID_COLLECTED_ITEM_V1` antes e depois (nenhuma nova).
 
-- [ ] Regra nova altera corretamente item sem `source_updated_at`.
-- [ ] Replay fora de ordem não regride conteúdo/última observação.
-- [ ] Reinício retoma lotes; repetição sem mudança não invalida avaliações.
-- [ ] Payload expirado é explicitado e não impede o restante do reprocessamento.
+- [x] Regra nova altera corretamente item sem `source_updated_at` —
+      `tests/backend/opportunities/test_reprocessing.py::test_rule_fields_reprocess_even_without_source_updated_at`.
+- [x] Replay fora de ordem não regride conteúdo/última observação —
+      `tests/backend/opportunities/test_reprocessing.py::test_out_of_order_replay_does_not_regress_evidence_fields`.
+- [x] Reinício retoma lotes; repetição sem mudança não invalida avaliações —
+      `tests/backend/test_reprocessing_batches_integration.py::test_normalize_pending_resumes_a_batch_without_repeating_or_skipping`,
+      `tests/backend/opportunities/test_reprocessing.py::test_identical_replay_does_not_bump_version`.
+- [x] Payload expirado é explicitado e não impede o restante do reprocessamento —
+      `tests/backend/opportunities/test_reprocessing.py::test_legacy_item_with_an_expired_payload_raises_payload_expired`.
 
 ## Verificação
 

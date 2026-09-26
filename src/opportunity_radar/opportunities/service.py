@@ -46,7 +46,7 @@ from opportunity_radar.opportunities.role_family import (
     departments_from_metadata,
 )
 
-NORMALIZER_VERSION = "v3"
+NORMALIZER_VERSION = "v4"
 
 
 class PayloadExpiredError(NormalizationError):

@@ -119,7 +119,7 @@ class NormalizationError(ValueError):
     """Raised when a collected item cannot form a canonical candidate."""
 
 
-SKILL_TAXONOMY_VERSION = "skills-v1"
+SKILL_TAXONOMY_VERSION = "skills-v2"
 _MAX_DATABASE_AMOUNT = Decimal("999999999999.99")
 _AMBIGUOUS_SKILL_ALIASES = frozenset({"go", "react"})
 

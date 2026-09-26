@@ -74,7 +74,7 @@ eval-analysis:
 	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/eval_analysis.py --cases /workspace/prompts/opportunity_analysis/eval/cases --output /workspace/data/evals $(if $(PROMPT),--prompt "$(PROMPT)",) $(if $(MODEL),--model "$(MODEL)",) $(if $(BASELINE),--baseline "/workspace/$(BASELINE)",) $(if $(SPLIT),--split "$(SPLIT)",) $(if $(REPEAT),--repeat "$(REPEAT)",) $(if $(NUM_CTX),--num-ctx "$(NUM_CTX)",) $(if $(LABEL),--label "$(LABEL)",) $(if $(THINK),--think,) $(if $(UNLOAD),--unload-after,)
 
 eval-search:
-	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/eval_search.py --reference /workspace/data/search-reference/queries.json --output /workspace/docs/pesquisas $(if $(MODES),--modes "$(MODES)",) $(if $(SPLIT),--split "$(SPLIT)",)
+	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/eval_search.py $(if $(MODE),--mode "$(MODE)",--mode both) $(if $(REF_PATH),--path "/workspace/$(REF_PATH)",)
 
 export-eval-cases:
 	@docker compose run --rm -v "$(CURDIR):/workspace" api python scripts/export_eval_cases.py --output /workspace/prompts/opportunity_analysis/eval/drafts $(if $(PER_VERDICT),--per-verdict "$(PER_VERDICT)",)
