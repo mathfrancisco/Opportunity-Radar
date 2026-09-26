@@ -23,6 +23,7 @@ from opportunity_radar.acquisition.domain import (
     CollectorCapabilities,
     HealthcheckContext,
     HealthResult,
+    parse_retry_after_seconds,
 )
 
 _BOARD_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
@@ -187,6 +188,11 @@ class AshbyCollector:
                 code,
                 f"Ashby returned HTTP {status}",
                 retryable=status == 429,
+                retry_after_seconds=(
+                    parse_retry_after_seconds(response.headers.get("Retry-After"))
+                    if status == 429
+                    else None
+                ),
             )
         if 500 <= status < 600:
             return AcquisitionError(

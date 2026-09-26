@@ -21,6 +21,7 @@ from opportunity_radar.acquisition.domain import (
     CollectorCapabilities,
     HealthcheckContext,
     HealthResult,
+    parse_retry_after_seconds,
 )
 
 _API_URL = "https://remotive.com/api/remote-jobs"
@@ -186,6 +187,11 @@ class RemotiveCollector:
                 code,
                 f"Remotive returned HTTP {status}",
                 retryable=status == 429,
+                retry_after_seconds=(
+                    parse_retry_after_seconds(response.headers.get("Retry-After"))
+                    if status == 429
+                    else None
+                ),
             )
         if 500 <= status < 600:
             return AcquisitionError(
