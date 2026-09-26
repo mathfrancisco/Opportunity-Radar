@@ -1,6 +1,6 @@
 # CARD F20-13 — Token Guard por tarefa
 
-- **Status:** Backlog
+- **Status:** WIP — `platform/ai/budget.py` (`estimate_tokens`, `fits`) e `matching/text.py` (comentários/parâmetros apontando para `TaskBudget`) prontos, com `tests/backend/platform/ai/test_budget.py` e `tests/backend/matching/test_text.py` verdes (`docker compose ... run --rm api pytest -q`, `ruff check .`, `mypy`). Faltam os dois itens que dependem do adapter Groq (F20-17, fora do escopo dos Arquivos deste card): o `prepare` que chama `fits`/`overflow` antes do router, e a medição do erro de estimativa com 20+ vagas reais (`make eval-analysis`), que exige uma chamada real ao Groq — proibida nos testes deste card.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-09
@@ -55,9 +55,9 @@ def fits(system: str, user: str, budget: TaskBudget, **kw) -> bool: ...
 
 ## Critérios de aceite
 
-- [ ] Nenhuma chamada sai com estimativa acima de `max_input_tokens`.
-- [ ] Prompt impossível: `CONTEXT_OVERFLOW` sem chamada ao provider e sem reserva de quota.
-- [ ] Erro de estimativa medido e registrado no PR.
+- [x] Nenhuma chamada sai com estimativa acima de `max_input_tokens` — garantido por `fits()`, provado em `test_fits_one_token_over_the_limit` e `test_fits_with_default_margin_rejects_a_prompt_the_raw_length_would_allow`.
+- [ ] Prompt impossível: `CONTEXT_OVERFLOW` sem chamada ao provider e sem reserva de quota — depende do `prepare` do adapter Groq (F20-17), que ainda não existe; não marcado.
+- [ ] Erro de estimativa medido e registrado no PR — exige medir com 20+ vagas reais via `make eval-analysis`/`scripts/measure_descriptions.py`, o que chamaria o Groq real; não feito nesta sessão (regra "não fazer chamada real ao Groq").
 
 ## Testes
 

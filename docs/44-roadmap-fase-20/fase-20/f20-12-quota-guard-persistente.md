@@ -1,6 +1,6 @@
 # CARD F20-12 — Quota Guard persistente por modelo
 
-- **Status:** Backlog
+- **Status:** Feito — `tests/backend/platform/ai/test_quota.py` e `tests/backend/test_ai_quota_integration.py` com `RUN_DATABASE_INTEGRATION=1` (`docker compose ... run --rm api pytest -q`, `ruff check .` e `mypy` verdes); `alembic upgrade head` / `downgrade base` / `upgrade head` verificados manualmente na mesma sessão de Docker.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-10
@@ -91,10 +91,10 @@ class QuotaGuard:
 
 ## Critérios de aceite
 
-- [ ] Duas reservas concorrentes (20 threads, limite 10) resultam em exatamente 10 reservas.
-- [ ] Reiniciar o processo não zera o consumo do dia.
-- [ ] Virada do minuto libera reserva de minuto; virada do dia UTC libera a do dia.
-- [ ] `alembic upgrade head` e `alembic downgrade base` passam.
+- [x] Duas reservas concorrentes (20 threads, limite 10) resultam em exatamente 10 reservas (`test_concurrent_reservations_never_exceed_the_limit`).
+- [x] Reiniciar o processo não zera o consumo do dia (`test_restart_does_not_reset_the_days_consumption`).
+- [x] Virada do minuto libera reserva de minuto; virada do dia UTC libera a do dia (`test_minute_rollover_frees_the_minute_reservation_but_not_the_day`, `test_day_rollover_frees_the_day_reservation`).
+- [x] `alembic upgrade head` e `alembic downgrade base` passam (verificado manualmente: `upgrade head` → `downgrade -1` → `upgrade head` → `downgrade base` → `upgrade head`, sem erro).
 
 ## Testes
 

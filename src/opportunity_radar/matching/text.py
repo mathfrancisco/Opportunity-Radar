@@ -1,12 +1,17 @@
-"""Clean job descriptions and fit a prompt into the model's context window.
+"""Clean job descriptions and fit a prompt into its task's token budget.
 
 Pure functions, no I/O. Two jobs that belong together because the second depends on the
 first: a description full of markup and boilerplate spends tokens on nothing, and the
 budget only means something once the text it measures is the text that will be sent.
 
-The Ollama server truncates an oversized prompt from the start — where the instructions
-are — and reports it only in its own log. Everything here exists so the radar never sends
+An oversized prompt is truncated from the start — where the instructions are — by a
+server that reports it, if at all, only in its own log (true of the retired Ollama
+adapter, and assumed of any future one). Everything here exists so the radar never sends
 a prompt that would be cut without anyone knowing.
+
+`platform.ai.budget` (F20-13) is the same idea for the cloud router: `TaskBudget.
+max_input_tokens` is the ceiling here `num_ctx` used to be, now set by the task
+(SPEC 43, section 6) instead of a local model's context window.
 """
 
 from __future__ import annotations
@@ -170,13 +175,17 @@ def estimate_tokens(chars: int, tokens_per_char: float) -> int:
     return math.ceil(chars * tokens_per_char)
 
 
-def prompt_budget(num_ctx: int, num_predict: int, margin: int | None = None) -> int:
-    """Tokens a prompt may use: the window, minus the answer, minus a margin.
+def prompt_budget(max_input_tokens: int, max_output_tokens: int, margin: int | None = None) -> int:
+    """Tokens a prompt may use: the task's input budget, minus the answer, minus a margin.
 
-    The margin starts at 10% of the window; a calibration whose observed prompts cost
-    more than the ratio in use predicts widens it (`TokenCalibration.margin`).
+    `max_input_tokens` and `max_output_tokens` come from the task's `TaskBudget`
+    (`platform.ai.tasks`, SPEC 43 section 6) rather than a model's own context window.
+    The margin starts at 10% of `max_input_tokens`; a calibration whose observed prompts
+    cost more than the ratio in use predicts widens it (`TokenCalibration.margin`).
     """
-    return num_ctx - num_predict - (num_ctx // 10 if margin is None else margin)
+    return max_input_tokens - max_output_tokens - (
+        max_input_tokens // 10 if margin is None else margin
+    )
 
 
 def _nearest_rank(values: Sequence[float], percentile: float) -> float:
@@ -223,12 +232,12 @@ class TokenCalibration:
             return None
         return max(self.ratios) / self.ratio - 1
 
-    def margin(self, num_ctx: int, num_predict: int) -> int:
-        default = num_ctx // 10
+    def margin(self, max_input_tokens: int, max_output_tokens: int) -> int:
+        default = max_input_tokens // 10
         excess = self.worst_excess
         if not self.calibrated or excess is None or excess <= 0:
             return default
-        return max(default, math.ceil((num_ctx - num_predict) * excess))
+        return max(default, math.ceil((max_input_tokens - max_output_tokens) * excess))
 
     def as_dict(self) -> dict[str, object]:
         errors = [abs(error) for error in self.estimate_errors]

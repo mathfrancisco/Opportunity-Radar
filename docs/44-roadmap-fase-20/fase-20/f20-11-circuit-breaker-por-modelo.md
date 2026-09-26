@@ -1,6 +1,6 @@
 # CARD F20-11 — Circuit breaker por modelo
 
-- **Status:** Backlog
+- **Status:** Feito — `tests/backend/platform/ai/test_breaker.py` e `test_router.py` (`docker compose ... run --rm api pytest -q`, `ruff check .` e `mypy` verdes).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-10
@@ -60,8 +60,8 @@ class CircuitBreaker:
 
 ## Critérios de aceite
 
-- [ ] 5 falhas transitórias abrem; o router pula o modelo aberto.
-- [ ] Depois de 120 s, uma chamada de prova; sucesso fecha.
+- [x] 5 falhas transitórias abrem; o router pula o modelo aberto (`test_opens_after_n_failures`, `test_router_skips_open_model`).
+- [x] Depois de 120 s, uma chamada de prova; sucesso fecha (`test_half_open_after_cooldown`, `test_success_closes`).
 
 ## Testes
 
