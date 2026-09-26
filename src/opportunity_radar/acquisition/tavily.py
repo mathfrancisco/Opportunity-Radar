@@ -11,28 +11,90 @@ stops new calls once a ceiling is hit is F20-43 (`TavilyCreditBudget` below).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import math
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+import re
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
-from typing import Any
+from typing import Any, Protocol
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
+from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
     AcquisitionErrorCode,
+    CollectedItem,
     CollectionNetworkPolicy,
+    CollectionRequest,
     CollectionTelemetry,
+    CollectorCapabilities,
     HealthcheckContext,
     HealthResult,
+    SourceRun,
 )
+from opportunity_radar.acquisition.models import TavilyExtractCacheModel
 
 _SEARCH_PATH = "/search"
 _EXTRACT_PATH = "/extract"
 _MAX_EXTRACT_URLS = 20
+_SEARCH_PARSER_VERSION = "tavily-search-v1"
+
+# Query keys that identify a click's origin rather than the resource itself. Stripped so
+# two links to the same job posting that differ only by campaign tagging canonicalize to
+# the same URL (F20-44). Mirrors the tracking-key list `opportunities.domain.normalize_url`
+# already uses for the same reason; kept local rather than imported to avoid giving
+# `acquisition` a new dependency on `opportunities` for one helper (acquisition currently
+# has no such dependency in either direction) — noted here as a deliberate choice.
+_TRACKING_QUERY_PREFIXES = ("utm_",)
+_TRACKING_QUERY_KEYS = frozenset({"ref", "source", "gclid", "fbclid"})
+
+# Board key location per ATS, matching `acquisition.proposals.IDENTIFIER_KEYS`.
+_ATS_BOARD_PATTERNS: dict[str, re.Pattern[str]] = {
+    "ashby": re.compile(r"^jobs\.ashbyhq\.com/([^/?#]+)"),
+    "greenhouse": re.compile(r"^boards\.greenhouse\.io/([^/?#]+)"),
+    "lever": re.compile(r"^jobs\.lever\.co/([^/?#]+)"),
+}
+
+
+def canonicalize_url(url: str) -> str:
+    """Lowercase host, no fragment, no tracking query params.
+
+    The single normalization used both for within-run dedupe here (F20-44) and for the
+    extraction cache hash (F20-45) — one function, not two copies of the same rule.
+    """
+    parsed = urlsplit(url.strip())
+    hostname = (parsed.hostname or "").casefold()
+    netloc = hostname if parsed.port is None else f"{hostname}:{parsed.port}"
+    path = parsed.path.rstrip("/") or "/"
+    query = urlencode(
+        sorted(
+            (key, value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            if not (
+                key.casefold().startswith(_TRACKING_QUERY_PREFIXES)
+                or key.casefold() in _TRACKING_QUERY_KEYS
+            )
+        ),
+        doseq=True,
+    )
+    return urlunsplit((parsed.scheme.casefold(), netloc, path, query, ""))
+
+
+def detect_ats_board(url: str) -> tuple[str, str] | None:
+    """`(source_type, board_key)` when `url` matches a known ATS board pattern, else `None`."""
+    parsed = urlsplit(url.strip())
+    hostname = (parsed.hostname or "").casefold()
+    candidate = f"{hostname}{parsed.path}"
+    for source_type, pattern in _ATS_BOARD_PATTERNS.items():
+        match = pattern.match(candidate)
+        if match:
+            return source_type, match.group(1)
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,12 +156,12 @@ class TavilyCreditBudget:
         """Raise before starting a new /search or /extract call once the ceiling is hit.
 
         This is a deliberate budget stop, never a network or provider failure: callers
-        catch `AcquisitionError` with `SOURCE_QUOTA_EXHAUSTED` and finish the run
+        catch `AcquisitionError` with `CREDIT_BUDGET_EXCEEDED` and finish the run
         `PARTIAL`, not `FAILED` (SPEC 41, section 6).
         """
         if self.exhausted:
             raise AcquisitionError(
-                AcquisitionErrorCode.SOURCE_QUOTA_EXHAUSTED,
+                AcquisitionErrorCode.CREDIT_BUDGET_EXCEEDED,
                 f"Tavily credit budget for this run exhausted "
                 f"({self.spent} of {self.limit} credits spent)",
             )
@@ -507,3 +569,267 @@ class TavilyClient:
             credits_used=TavilyClient._credits_used(payload),
             raw_payload=payload,
         )
+
+
+class TavilySearchCollector:
+    """Keyword-search discovery over the Tavily `/search` endpoint (F20-44).
+
+    Sits next to `RemotiveCollector` in the registry: same `keyword_search` capability,
+    same `CollectedItem` contract. Credit budgeting (F20-43) is applied per discovery run.
+    Its Tavily call is guarded before it starts, then its reported usage is charged to
+    the same run-scoped budget before items are emitted.
+    """
+
+    source_type = "tavily_search"
+    capabilities = CollectorCapabilities(keyword_search=True)
+
+    def __init__(
+        self,
+        *,
+        client: TavilyClient | None = None,
+        client_factory: Callable[[], TavilyClient] | None = None,
+        time_range: str = "month",
+        include_domains: Sequence[str] = (),
+        max_results: int = 10,
+        known_ats_boards: frozenset[tuple[str, str]] = frozenset(),
+        credit_budget_per_run: int = 100,
+    ) -> None:
+        if client is not None and client_factory is not None:
+            raise ValueError("provide either client or client_factory, not both")
+        if client is None and client_factory is None:
+            raise ValueError("provide client or client_factory")
+        self._client = client
+        self._client_factory = client_factory
+        # Never open (card acceptance criterion): a default is always in effect, and
+        # nothing in this class accepts `None` to widen it.
+        self._time_range = time_range
+        self._include_domains = tuple(include_domains)
+        self._max_results = max_results
+        if credit_budget_per_run < 0:
+            raise ValueError("credit_budget_per_run cannot be negative")
+        self._credit_budget_per_run = credit_budget_per_run
+        # Pre-calculated pairs of (source_type, board_key) that already have a
+        # CompanySource enabled for that board. Injected by whoever builds the registry,
+        # since collectors carry no database session (see `Collector` Protocol).
+        self._known_ats_boards = known_ats_boards
+
+    async def healthcheck(
+        self, context: HealthcheckContext | None = None
+    ) -> HealthResult:
+        return await self._resolve_client().healthcheck(context)
+
+    async def discover(
+        self, request: CollectionRequest
+    ) -> AsyncIterator[CollectedItem]:
+        if not request.keywords:
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                "tavily_search requires at least one keyword",
+                field="keywords",
+            )
+        client = self._resolve_client()
+        budget = TavilyCreditBudget(limit=self._credit_budget_per_run)
+        budget.ensure_can_call()
+        query = " ".join(keyword.strip() for keyword in request.keywords)
+        response = await client.search(
+            query=query,
+            max_results=self._max_results,
+            time_range=self._time_range,
+            include_domains=self._include_domains or None,
+            telemetry=request.telemetry,
+            network_policy=request.network_policy,
+        )
+        # Tavily reports usage only with the response, so this paid call can reach the
+        # ceiling. The guard below prevents every subsequent call in this run.
+        budget.charge(response.credits_used)
+        request.telemetry.record_credits(response.credits_used or 0)
+        seen_urls: set[str] = set()
+        emitted = 0
+        for rank, result in enumerate(response.results):
+            canonical = canonicalize_url(result.url)
+            if canonical in seen_urls:
+                continue
+            seen_urls.add(canonical)
+            metadata: dict[str, Any] = {
+                "query": query,
+                "rank": rank,
+                "score": result.score,
+                "retrieved_at": datetime.now(UTC).isoformat(),
+                "parser_version": _SEARCH_PARSER_VERSION,
+            }
+            board = detect_ats_board(result.url)
+            known_ats_boards = (
+                request.known_ats_boards
+                if request.known_ats_boards is not None
+                else self._known_ats_boards
+            )
+            if board is not None and board not in known_ats_boards:
+                metadata["source_proposal_candidate"] = True
+            yield CollectedItem(
+                source_type=self.source_type,
+                url=result.url,
+                title=result.title,
+                description=result.content,
+                raw_payload=result.raw_payload,
+                metadata=metadata,
+            )
+            emitted += 1
+            if request.max_items is not None and emitted >= request.max_items:
+                budget.ensure_can_call()
+                return
+        budget.ensure_can_call()
+
+    def _resolve_client(self) -> TavilyClient:
+        if self._client is not None:
+            return self._client
+        assert self._client_factory is not None
+        return self._client_factory()
+
+
+@dataclass(frozen=True, slots=True)
+class ExtractionResult:
+    url: str
+    raw_content: str | None
+    #: `AcquisitionErrorCode.value` when this URL failed inside an otherwise successful
+    #: batch. `None` means the extraction succeeded (or found nothing, which is not an
+    #: error — see `TavilyExtractResponse.results` vs `failed_results`).
+    error: str | None
+    from_cache: bool
+
+
+class ExtractionCachePort(Protocol):
+    """What `extract_missing_descriptions` needs from a cache (F20-45).
+
+    A `Protocol`, not a hard dependency on `TavilyExtractionCache`: the batching and
+    partial-failure logic below is exercised in tests against a plain in-memory stand-in,
+    the same way `Collector` lets adapters be tested without a database.
+    """
+
+    def get(self, url: str) -> ExtractionResult | None: ...
+    def put(self, url: str, result: ExtractionResult) -> None: ...
+
+
+class TavilyExtractionCache:
+    """Persists `/extract` results by canonical URL hash, one row per URL, forever within
+    its TTL (F20-45). Reuses `canonicalize_url` (F20-44) for the hash so the dedupe in the
+    collector and the cache key here never disagree about what "the same URL" means.
+    """
+
+    def __init__(self, *, session: Session, ttl_seconds: int) -> None:
+        if ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be positive")
+        self._session = session
+        self._ttl_seconds = ttl_seconds
+
+    def get(self, url: str) -> ExtractionResult | None:
+        row = self._session.get(TavilyExtractCacheModel, self._hash(url))
+        if row is None:
+            return None
+        if row.expires_at <= datetime.now(UTC):
+            return None
+        return ExtractionResult(
+            url=row.canonical_url,
+            raw_content=row.raw_content,
+            error=row.error,
+            from_cache=True,
+        )
+
+    def put(self, url: str, result: ExtractionResult) -> None:
+        url_hash = self._hash(url)
+        canonical = canonicalize_url(url)
+        now = datetime.now(UTC)
+        row = self._session.get(TavilyExtractCacheModel, url_hash)
+        if row is None:
+            row = TavilyExtractCacheModel(url_hash=url_hash, canonical_url=canonical)
+            self._session.add(row)
+        row.canonical_url = canonical
+        row.raw_content = result.raw_content
+        row.status = "failed" if result.error else "success"
+        row.error = result.error
+        row.extracted_at = now
+        row.expires_at = now + timedelta(seconds=self._ttl_seconds)
+
+    @staticmethod
+    def _hash(url: str) -> str:
+        return hashlib.sha256(canonicalize_url(url).encode()).hexdigest()
+
+
+def _partition(urls: Sequence[str], size: int) -> list[list[str]]:
+    return [list(urls[index : index + size]) for index in range(0, len(urls), size)]
+
+
+async def extract_missing_descriptions(
+    client: TavilyClient,
+    cache: ExtractionCachePort,
+    urls: Sequence[str],
+    *,
+    extract_depth: str | None = None,
+    format: str | None = None,
+    telemetry: CollectionTelemetry,
+    network_policy: CollectionNetworkPolicy | None = None,
+    budget: TavilyCreditBudget | None = None,
+    run: SourceRun | None = None,
+) -> list[ExtractionResult]:
+    """Fills in bodies for URLs with no description, one cache entry per URL forever.
+
+    Partitions `urls` into batches of at most 20 (`/extract`'s own limit, not a radar
+    choice), serves cache hits without a call, and only sends misses. A failure isolated to
+    one URL inside a batch is recorded for that URL and never drops the batch's other
+    results (SPEC 41, F20-45 acceptance criteria).
+    """
+    results: list[ExtractionResult] = []
+    for batch in _partition(list(urls), _MAX_EXTRACT_URLS):
+        misses: list[str] = []
+        for url in batch:
+            cached = cache.get(url)
+            if cached is not None:
+                results.append(cached)
+            else:
+                misses.append(url)
+        if not misses:
+            continue
+        if budget is not None:
+            budget.ensure_can_call()
+        response = await client.extract(
+            urls=misses,
+            extract_depth=extract_depth,
+            format=format,
+            telemetry=telemetry,
+            network_policy=network_policy,
+        )
+        if budget is not None:
+            budget.charge(response.credits_used)
+        if run is not None:
+            run.record_credits(response.credits_used or 0)
+        failed_by_url = {
+            entry.get("url"): entry.get("error")
+            for entry in response.failed_results
+            if isinstance(entry.get("url"), str)
+        }
+        succeeded_urls = {page.url for page in response.results}
+        for page in response.results:
+            result = ExtractionResult(
+                url=page.url, raw_content=page.raw_content, error=None, from_cache=False
+            )
+            cache.put(page.url, result)
+            results.append(result)
+        for url in misses:
+            if url in succeeded_urls:
+                continue
+            error = failed_by_url.get(url) or AcquisitionErrorCode.INVALID_ITEM.value
+            result = ExtractionResult(url=url, raw_content=None, error=str(error), from_cache=False)
+            cache.put(url, result)
+            results.append(result)
+    return results
+
+
+def apply_extracted_description(item: CollectedItem, result: ExtractionResult) -> CollectedItem:
+    """Swaps in the extracted markdown when present; otherwise the item is unchanged.
+
+    A failed or cache-miss-that-stayed-a-miss result carries `raw_content=None`, and the
+    provisional description a collector already set (F20-44) is left standing rather than
+    erased by an extraction that found nothing.
+    """
+    if result.raw_content is None:
+        return item
+    return replace(item, description=result.raw_content)

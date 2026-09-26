@@ -729,6 +729,11 @@ class AcquisitionService:
                 api_region=api_region or request.api_region,
                 telemetry=run_telemetry,
                 network_policy=network_policy,
+                known_ats_boards=(
+                    self.repository.enabled_ats_boards()
+                    if source.source_type == "tavily_search"
+                    else request.known_ats_boards
+                ),
             )
             async for item in collector.discover(collector_request):
                 run.record_items(seen=1)
@@ -772,6 +777,7 @@ class AcquisitionService:
             retries=run_telemetry.retry_count,
             rate_limit_events=run_telemetry.rate_limit_events,
         )
+        run.record_credits(run_telemetry.credits_used)
 
         if error is None:
             final_status = (
@@ -779,7 +785,10 @@ class AcquisitionService:
                 if run.items_invalid
                 else SourceRunStatus.SUCCEEDED
             )
-        elif error.code is AcquisitionErrorCode.INVALID_ITEM:
+        elif error.code in {
+            AcquisitionErrorCode.INVALID_ITEM,
+            AcquisitionErrorCode.CREDIT_BUDGET_EXCEEDED,
+        }:
             final_status = SourceRunStatus.PARTIAL
         elif run.items_persisted:
             final_status = SourceRunStatus.PARTIAL
@@ -930,6 +939,7 @@ class AcquisitionService:
         model.checkpoint_after = run.checkpoint_after
         model.items_announced = run.items_announced
         model.complete = run.complete
+        model.credits_used = run.credits_used
 
 
 def canonical_payload_hash(payload: Mapping[str, Any]) -> str:

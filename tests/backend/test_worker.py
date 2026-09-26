@@ -3,9 +3,24 @@ import logging
 import pytest
 
 from opportunity_radar.platform.config import Settings
-from opportunity_radar.worker import FUNCTIONAL_JOB_IDS, build_scheduler
+from opportunity_radar.worker import (
+    FUNCTIONAL_JOB_IDS,
+    build_scheduler,
+    collection_service_factory,
+)
 
 _DATABASE_URL = "postgresql+psycopg://test:test@localhost/test"
+
+
+@pytest.mark.parametrize("budget", [0, 7])
+def test_scheduled_collection_uses_configured_tavily_credit_budget(budget: int) -> None:
+    service = collection_service_factory(
+        Settings(database_url=_DATABASE_URL, tavily_credit_budget_per_run=budget)
+    )(None)  # type: ignore[arg-type]
+
+    collector = service.registry.resolve("tavily_search")
+
+    assert collector._credit_budget_per_run == budget  # type: ignore[attr-defined]
 
 
 def test_worker_scheduler_has_a_heartbeat_job() -> None:

@@ -100,6 +100,21 @@ class OpportunityService:
         evidence = self.repository.raw_item_evidence(raw_item_id)
         if evidence is None:
             raise RawItemNotFoundError(str(raw_item_id))
+        if evidence.raw_item.item_metadata.get("source_proposal_candidate") is True:
+            result = NormalizationResultModel(
+                raw_item_id=raw_item_id,
+                status="FAILED",
+                normalizer_version=NORMALIZER_VERSION,
+                identity_decision=None,
+                reasons=[{"code": "SOURCE_PROPOSAL_CANDIDATE"}],
+                error_summary=(
+                    "source proposal candidates await F20-46 and cannot become opportunities"
+                ),
+            )
+            self.session.add(result)
+            self.session.commit()
+            self.session.refresh(result)
+            return result
         existing = self.repository.normalization_result(
             raw_item_id, NORMALIZER_VERSION
         )

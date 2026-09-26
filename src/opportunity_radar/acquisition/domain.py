@@ -26,12 +26,13 @@ class AcquisitionErrorCode(StrEnum):
     CIRCUIT_OPEN = "CIRCUIT_OPEN"
     UNKNOWN_EXTERNAL_ERROR = "UNKNOWN_EXTERNAL_ERROR"
     MANUAL_INPUT_INVALID = "MANUAL_INPUT_INVALID"
-    #: The provider says the calling account is correct and authenticated, but its credit
-    #: or usage budget is spent — either the provider's own limit (Tavily HTTP 433) or a
-    #: per-run ceiling the radar configured itself (F20-43). Distinct from
-    #: SOURCE_RATE_LIMITED (retry in seconds) and SOURCE_FORBIDDEN (a permission problem):
-    #: neither describes "correct key, no budget left" (docs/41-spec-tavily.md, section 4).
+    #: The provider says the calling account has exhausted its account-wide credit or
+    #: usage budget (Tavily HTTP 433). CREDIT_BUDGET_EXCEEDED separately reports the
+    #: per-run ceiling configured by the radar.
     SOURCE_QUOTA_EXHAUSTED = "SOURCE_QUOTA_EXHAUSTED"
+    #: The radar stopped this run at its own Tavily credit ceiling. This is separate
+    #: from SOURCE_QUOTA_EXHAUSTED, which reports the provider's account-wide quota.
+    CREDIT_BUDGET_EXCEEDED = "CREDIT_BUDGET_EXCEEDED"
 
 
 class AcquisitionError(Exception):
@@ -122,6 +123,9 @@ class CollectionTelemetry:
     #: What the source's own API said the board holds, when it says so at all. `None`
     #: means the collector never learned a total, not that the board announced zero.
     items_announced: int | None = None
+    #: Credits charged by the provider during this request. It is copied to the
+    #: run by AcquisitionService after collection completes.
+    credits_used: int = 0
 
     def record_items_announced(self, total: int) -> None:
         if total < 0:
@@ -136,6 +140,11 @@ class CollectionTelemetry:
 
     def record_rate_limit(self) -> None:
         self.rate_limit_events += 1
+
+    def record_credits(self, amount: int) -> None:
+        if amount < 0:
+            raise ValueError("credits cannot be negative")
+        self.credits_used += amount
 
     def record_invalid_item(self, summary: str) -> None:
         self.invalid_items += 1
@@ -200,6 +209,9 @@ class CollectionRequest:
         default_factory=CollectionTelemetry, compare=False, repr=False
     )
     network_policy: CollectionNetworkPolicy | None = None
+    known_ats_boards: frozenset[tuple[str, str]] | None = field(
+        default=None, compare=False, repr=False
+    )
 
     def __post_init__(self) -> None:
         if self.max_items is not None and self.max_items < 1:
