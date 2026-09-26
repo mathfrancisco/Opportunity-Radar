@@ -177,11 +177,37 @@ export interface AnalysisMetricsWindow {
   models: ModelAnalysisMetrics[]
 }
 
+export interface ModelAIMetrics {
+  model: string
+  requests: number
+  successRate: number | null
+  rateLimitedRate: number | null
+  fallbackRate: number | null
+  latencyMsAvg: number | null
+  latencyMsP95: number | null
+  promptTokens: number
+  completionTokens: number
+  jsonValidRate: number | null
+  breaker: string
+  dayRequestsUsed: number
+  dayRequestsLimit: number | null
+  dayTokensUsed: number
+  dayTokensLimit: number | null
+}
+
+export interface AIMetrics {
+  state: string
+  windowHours: number
+  byModel: ModelAIMetrics[]
+  cacheHitRate: number | null
+}
+
 export interface AnalysisMetricsReport {
   generatedAt: string
   currentModel: string
   pending: number
   windows: AnalysisMetricsWindow[]
+  ai: AIMetrics
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -424,6 +450,43 @@ function parseModelAnalysisMetrics(value: unknown): ModelAnalysisMetrics | null 
   }
 }
 
+function parseModelAIMetrics(value: unknown): ModelAIMetrics | null {
+  if (!isRecord(value) || typeof value.model !== 'string') return null
+  return {
+    model: value.model,
+    requests: count(value.requests),
+    successRate: optionalNumber(value.success_rate),
+    rateLimitedRate: optionalNumber(value.rate_limited_rate),
+    fallbackRate: optionalNumber(value.fallback_rate),
+    latencyMsAvg: optionalNumber(value.latency_ms_avg),
+    latencyMsP95: optionalNumber(value.latency_ms_p95),
+    promptTokens: count(value.prompt_tokens),
+    completionTokens: count(value.completion_tokens),
+    jsonValidRate: optionalNumber(value.json_valid_rate),
+    breaker: text(value.breaker) ?? 'closed',
+    dayRequestsUsed: count(value.day_requests_used),
+    dayRequestsLimit: optionalNumber(value.day_requests_limit),
+    dayTokensUsed: count(value.day_tokens_used),
+    dayTokensLimit: optionalNumber(value.day_tokens_limit),
+  }
+}
+
+function parseAIMetrics(value: unknown): AIMetrics {
+  if (!isRecord(value)) {
+    return { state: 'disabled', windowHours: 24, byModel: [], cacheHitRate: null }
+  }
+  return {
+    state: text(value.state) ?? 'disabled',
+    windowHours: count(value.window_hours),
+    byModel: Array.isArray(value.by_model)
+      ? value.by_model
+          .map(parseModelAIMetrics)
+          .filter((item): item is ModelAIMetrics => item !== null)
+      : [],
+    cacheHitRate: optionalNumber(value.cache_hit_rate),
+  }
+}
+
 export async function getAnalysisMetrics(): Promise<AnalysisMetricsReport> {
   const response = await fetch(apiUrl('/analysis-metrics'), {
     headers: { Accept: 'application/json' },
@@ -452,6 +515,7 @@ export async function getAnalysisMetrics(): Promise<AnalysisMetricsReport> {
         }
       })
       .filter((entry): entry is AnalysisMetricsWindow => entry !== null),
+    ai: parseAIMetrics(body.ai),
   }
 }
 

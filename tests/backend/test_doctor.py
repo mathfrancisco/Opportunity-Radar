@@ -149,6 +149,7 @@ def test_doctor_has_no_embedding_coverage_check(monkeypatch) -> None:
         "check_worker_jobs",
         "check_source_incidents",
         "check_analysis",
+        "check_ai",
         "check_ollama",
         "check_ollama_gpu",
     ):
@@ -161,3 +162,77 @@ def test_doctor_has_no_embedding_coverage_check(monkeypatch) -> None:
     checks = doctor.run_checks(Path(__file__).parents[2])
 
     assert not any("embedding" in check.name.casefold() for check in checks)
+
+
+@dataclass(frozen=True)
+class _AISettings:
+    ai_enabled: bool = True
+    groq_api_key_value: str = "gsk_test"
+    database_url: str = "postgresql+psycopg://test:test@localhost/test"
+    ai_minute_requests_soft_limit: int = 25
+    ai_minute_tokens_soft_limit: int = 7_000
+    ai_daily_requests_soft_limit: int = 850
+    ai_daily_tokens_soft_limit: int = 170_000
+    ai_breaker_failures: int = 5
+    groq_reasoning_model: str = "openai/gpt-oss-120b"
+    groq_fast_model: str = "openai/gpt-oss-20b"
+    groq_alt_model: str = "qwen/qwen3.8-27b"
+
+    @property
+    def groq_api_key(self) -> object:
+        class _Secret:
+            def __init__(self, value: str) -> None:
+                self._value = value
+
+            def get_secret_value(self) -> str:
+                return self._value
+
+        return _Secret(self.groq_api_key_value)
+
+
+def test_check_ai_skips_everything_when_ai_is_disabled() -> None:
+    check = doctor.check_ai(_AISettings(ai_enabled=False))
+
+    assert check.status == doctor.OK
+    assert "disabled" in check.detail
+
+
+def test_check_ai_alerts_when_daily_balance_and_breaker_are_bad(monkeypatch) -> None:
+    settings = _AISettings()
+    monkeypatch.setattr(doctor, "create_database_engine", lambda _url: object())
+
+    class _StubGuard:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def snapshot(self) -> list[dict]:
+            return [
+                {
+                    "model": settings.groq_reasoning_model,
+                    "window_kind": "day",
+                    "window_start": doctor.day_window(doctor.datetime.now(doctor.UTC)),
+                    "requests": 800,  # 94% of the 850 soft limit
+                    "tokens": 1000,
+                }
+            ]
+
+    monkeypatch.setattr(doctor, "QuotaGuard", _StubGuard)
+    monkeypatch.setattr(
+        doctor, "_models_with_a_recent_failure_streak", lambda *_a, **_k: {settings.groq_fast_model}
+    )
+    monkeypatch.setattr(doctor, "Session", lambda _engine: _NullSessionContext())
+
+    check = doctor.check_ai(settings)
+
+    assert check.status == doctor.WARN
+    assert settings.groq_reasoning_model in check.detail
+    assert settings.groq_fast_model in check.detail
+    assert check.remedy is not None
+
+
+class _NullSessionContext:
+    def __enter__(self) -> "_NullSessionContext":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None

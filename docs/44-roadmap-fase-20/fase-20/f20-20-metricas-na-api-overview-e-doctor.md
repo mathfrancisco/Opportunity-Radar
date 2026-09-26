@@ -1,6 +1,6 @@
 # CARD F20-20 — Métricas da IA na API, no Overview e no `doctor`
 
-- **Status:** Backlog
+- **Status:** Feito — `src/opportunity_radar/platform/ai/metrics.py` (`ai_metrics`), bloco `ai` em `GET /analysis-metrics` (`presentation/http/dashboard.py`), card "IA (Groq)" em `apps/web/src/routes/OverviewPage.tsx`, `check_ai` em `scripts/doctor.py`; testes `tests/backend/platform/ai/test_metrics.py` (4), `tests/backend/dashboard/test_analysis_metrics.py` (+1), `tests/backend/test_doctor.py` (+2) — 20 passed com `RUN_DATABASE_INTEGRATION=1`; `ruff check .` e `mypy` limpos; `npm run check` (lint+typecheck+vitest 125 passed+build) dentro do estágio `build` do Dockerfile do frontend.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-19, F20-11, F20-12
@@ -64,9 +64,9 @@ O F16-13 expõe métricas da análise em `presentation/http/dashboard.py` (linha
 
 ## Critérios de aceite
 
-- [ ] Overview mostra saldo diário e taxa de fallback por modelo.
-- [ ] `doctor` alerta breaker aberto e saldo < 10 %.
-- [ ] `cd apps/web && npm run check` passa.
+- [x] Overview mostra saldo diário e taxa de fallback por modelo.
+- [x] `doctor` alerta breaker aberto e saldo < 10 % (heurística de F20-19: `_models_with_a_recent_failure_streak`, já que o breaker em memória não é visível a partir do processo do `doctor` — ver observações no PR).
+- [x] `cd apps/web && npm run check` passa.
 
 ## Testes
 

@@ -20,12 +20,15 @@ from pathlib import Path
 from typing import Any
 from urllib.request import urlopen
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from opportunity_radar.dashboard.analysis_metrics import analysis_metrics
 from opportunity_radar.dashboard.metrics import METRIC_WINDOWS
 from opportunity_radar.matching.service import MatchingService
+from opportunity_radar.platform.ai.config import AIState, ai_status
+from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits, day_window
+from opportunity_radar.platform.ai.telemetry import ai_call_record
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.health import database_health
@@ -38,6 +41,9 @@ _SYMBOLS = {OK: "PASS", WARN: "WARN", FAIL: "FAIL"}
 
 #: SPEC 36, section 3.2: p95 of a warm analysis on the reference GPU.
 ANALYSIS_P95_TARGET_MS = 15_000
+
+#: SPEC 43 §8.5, card F20-20: below this share of the daily quota left, alert.
+AI_DAY_BALANCE_ALERT_RATIO = 0.10
 
 
 @dataclass(frozen=True)
@@ -465,6 +471,92 @@ def check_analysis(settings: Settings) -> Check:
     return Check("analysis", OK, f"{measured}; {pending} pending", None, facts)
 
 
+def _models_with_a_recent_failure_streak(session: Session, threshold: int) -> set[str]:
+    """A same-process approximation of "breaker open" (card F20-20).
+
+    `CircuitBreaker` (card F20-11) is in-memory inside the API and the worker; this
+    script is a third process and has no way to read it live. A model whose last
+    `threshold` non-cache calls (SPEC 43 §8.5 telemetry, card F20-19) all failed
+    transiently is the same condition that opens the real breaker, read after the
+    fact from `platform.ai_call_record` instead of from live process state.
+    """
+    models = session.execute(select(ai_call_record.c.model).distinct()).scalars().all()
+    flagged: set[str] = set()
+    for model in models:
+        rows = session.execute(
+            select(ai_call_record.c.success, ai_call_record.c.error_kind)
+            .where(ai_call_record.c.model == model, ai_call_record.c.cache_hit.is_(False))
+            .order_by(ai_call_record.c.created_at.desc())
+            .limit(threshold)
+        ).all()
+        if len(rows) >= threshold and all(
+            success is False and error_kind == "transient" for success, error_kind in rows
+        ):
+            flagged.add(model)
+    return flagged
+
+
+def check_ai(settings: Settings) -> Check:
+    """Daily Groq quota balance and a telemetry-based breaker alert (card F20-20)."""
+    state = ai_status(settings)
+    if state is not AIState.ENABLED:
+        return Check("ai", OK, f"AI is {state.value}; nothing to check")
+    try:
+        engine = create_database_engine(settings.database_url)
+        guard = QuotaGuard(
+            engine,
+            QuotaLimits(
+                minute_requests=settings.ai_minute_requests_soft_limit,
+                minute_tokens=settings.ai_minute_tokens_soft_limit,
+                day_requests=settings.ai_daily_requests_soft_limit,
+                day_tokens=settings.ai_daily_tokens_soft_limit,
+            ),
+        )
+        today = day_window(datetime.now(UTC))
+        day_rows = {
+            row["model"]: row
+            for row in guard.snapshot()
+            if row["window_kind"] == "day" and row["window_start"] == today
+        }
+        with Session(engine) as session:
+            likely_open = _models_with_a_recent_failure_streak(
+                session, settings.ai_breaker_failures
+            )
+    except Exception as error:  # pragma: no cover - depends on the local environment
+        return Check("ai", WARN, f"could not read AI quota or telemetry: {error}")
+
+    alerts: list[str] = []
+    facts: dict[str, Any] = {"models": {}}
+    for model in (
+        settings.groq_reasoning_model,
+        settings.groq_fast_model,
+        settings.groq_alt_model,
+    ):
+        used = day_rows.get(model, {}).get("requests", 0)
+        limit = settings.ai_daily_requests_soft_limit
+        remaining_ratio = 1 - used / limit if limit else 1.0
+        breaker_alert = model in likely_open
+        facts["models"][model] = {
+            "day_requests_used": used,
+            "day_requests_limit": limit,
+            "remaining_ratio": remaining_ratio,
+            "likely_breaker_open": breaker_alert,
+        }
+        if remaining_ratio < AI_DAY_BALANCE_ALERT_RATIO:
+            alerts.append(f"{model} daily balance at {remaining_ratio:.0%}")
+        if breaker_alert:
+            alerts.append(f"{model} breaker likely open (recent calls all failed)")
+    if alerts:
+        return Check(
+            "ai",
+            WARN,
+            "; ".join(alerts),
+            "check Groq status and AI_DAILY_REQUESTS_SOFT_LIMIT",
+            facts,
+        )
+    return Check("ai", OK, "daily quota balance healthy; no breaker alert", None, facts)
+
+
 def run_checks(root: Path) -> list[Check]:
     checks = [check_environment(), check_dotenv(root), check_prompts(root)]
     if checks[0].status == FAIL:
@@ -478,6 +570,7 @@ def run_checks(root: Path) -> list[Check]:
         checks.append(check_worker_jobs(settings))
         checks.append(check_source_incidents(settings))
         checks.append(check_analysis(settings))
+        checks.append(check_ai(settings))
     checks.append(check_ollama(settings))
     checks.append(check_ollama_gpu(settings))
     return checks
