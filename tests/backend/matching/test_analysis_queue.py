@@ -56,7 +56,7 @@ _PROMPT_VERSION = "opportunity_analysis/v1"
 
 
 class _StubAdapter:
-    """Stands in for Ollama. Counts calls, because the cap per pass is the point."""
+    """Stands in for the analysis provider. Counts calls, because the cap per pass is the point."""
 
     def __init__(self, outcome: AnalysisOutcome) -> None:
         self._outcome = outcome
@@ -132,7 +132,7 @@ def _failed() -> AnalysisOutcome:
     return AnalysisOutcome(
         status=AnalysisStatus.AI_FAILED,
         failure_code=AnalysisFailureCode.TRANSPORT_ERROR,
-        detail="could not connect to ollama",
+        detail="could not connect to provider",
     )
 
 

@@ -537,7 +537,7 @@ function Summary({ overview }: { overview: Overview }) {
             value={String(overview.sourcesFailing)}
           />
           <SupportItem
-            hint="Ollama indisponível, fora do contrato ou desligado"
+            hint="IA (Groq) indisponível, sem quota ou desligada"
             label="Análises degradadas"
             value={String(overview.analysesDegraded)}
           />

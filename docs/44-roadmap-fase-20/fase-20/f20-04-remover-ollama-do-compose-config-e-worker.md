@@ -1,6 +1,6 @@
 # CARD F20-04 — Remover o Ollama do compose, da config e do worker
 
-- **Status:** Backlog
+- **Status:** Feito — `ollama`/`ollama-init`/`ollama_models` fora de `compose.yaml`; `compose.cpu.yaml` apagado e `up-cpu` fora do `Makefile`; `compose.ci.yaml` roda `groq`/`fake_groq.py`; `platform/config.py` sem campos `ollama_*`; `worker.py` sem `GpuAdmission`/`warm_up_models`/admissão de GPU; `matching/ollama.py` e `test_ollama_adapter.py` apagados; suíte cheia 653 passed/10 skipped/0 failed (`RUN_DATABASE_INTEGRATION=1`), `ruff check .` e `mypy` limpos, `docker compose -p f20-04 config --quiet` e `... -f compose.ci.yaml config --quiet` passam.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-17
@@ -54,9 +54,9 @@ Este card roda **depois** do F20-17: o `GroqAnalysisAdapter` é escrito movendo 
 
 ## Critérios de aceite
 
-- [ ] `docker compose up` sobe sem GPU e sem baixar modelo.
-- [ ] `docker compose -f compose.yaml -f compose.ci.yaml config --quiet` passa.
-- [ ] Sem `GROQ_API_KEY`, coleta, normalização, avaliação e Inbox funcionam e a análise aparece como bloqueada por configuração.
+- [x] `docker compose up` sobe sem GPU e sem baixar modelo.
+- [x] `docker compose -f compose.yaml -f compose.ci.yaml config --quiet` passa.
+- [x] Sem `GROQ_API_KEY`, coleta, normalização, avaliação e Inbox funcionam e a análise aparece como bloqueada por configuração.
 
 ## Testes
 

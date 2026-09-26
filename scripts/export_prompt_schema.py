@@ -1,8 +1,9 @@
 """Write each prompt version's output schema from the validator that enforces it.
 
 `matching.analysis.OUTPUT_SCHEMAS` is the single source of truth: each schema version
-there is the schema sent to Ollama in `format` and the shape `parse_analysis` rejects
-deviations from. This script projects the one a prompt declares in its metadata onto
+there is the schema sent to the provider in `response_format` and the shape
+`parse_analysis` rejects deviations from. This script projects the one a prompt declares
+in its metadata onto
 that prompt's artifact, so the two cannot drift.
 
     python scripts/export_prompt_schema.py              # rewrite every prompt's artifact

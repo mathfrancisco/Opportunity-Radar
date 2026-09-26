@@ -1,9 +1,9 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help bootstrap dev up up-cpu down restart status logs migrate test test-integration check doctor soak import-companies enable-sources collect backup restore-check eval-analysis eval-search export-eval-cases
+.PHONY: help bootstrap dev up down restart status logs migrate test test-integration check doctor soak import-companies enable-sources collect backup restore-check eval-analysis eval-search export-eval-cases
 
 help:
-	@echo "Targets: bootstrap dev up up-cpu down restart status logs migrate import-companies enable-sources collect"
+	@echo "Targets: bootstrap dev up down restart status logs migrate import-companies enable-sources collect"
 	@echo "Operations: doctor soak backup restore-check eval-analysis eval-search export-eval-cases"
 	@echo "Validation (run only when requested): test test-integration check"
 
@@ -16,9 +16,6 @@ dev: up
 
 up:
 	@docker compose up --build -d
-
-up-cpu:
-	@docker compose -f compose.yaml -f compose.cpu.yaml up --build -d
 
 down:
 	@docker compose down

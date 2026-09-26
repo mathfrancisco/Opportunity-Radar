@@ -207,7 +207,7 @@ def test_the_endpoint_answers_both_windows_and_rejects_an_unknown_one() -> None:
         session.commit()
     client = TestClient(
         create_app(
-            Settings(database_url=os.environ["DATABASE_URL"], ollama_model_analysis=model)
+            Settings(database_url=os.environ["DATABASE_URL"], groq_reasoning_model=model)
         )
     )
 

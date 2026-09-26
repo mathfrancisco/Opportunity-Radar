@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import signal
 from asyncio import run as run_async
-from collections import deque
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
-from threading import Event, Lock
+from threading import Event
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -30,7 +28,6 @@ from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
 from opportunity_radar.matching.adapters import build_analysis_adapter
 from opportunity_radar.matching.analysis import (
-    AnalysisMetrics,
     AnalysisStatus,
     SemanticAnalysisPort,
 )
@@ -65,59 +62,6 @@ FUNCTIONAL_JOB_IDS = {
 }
 
 logger = get_logger("opportunity_radar.worker")
-
-
-class GpuAdmission:
-    """One model call on the GPU at a time, served in arrival order.
-
-    Analysis and embedding share 8 GB of VRAM on the reference machine (SPEC 36, section
-    3.1), and whether both models fit resident with their contexts is still to be
-    measured. Admission is per model call — one analysis, one embedding batch — so neither
-    job holds the GPU for a whole pass. The turn is handed straight to the oldest waiter on
-    release: with a plain lock, the analysis loop, which re-acquires at once, could keep
-    the embedding job out for its whole batch.
-
-    Process-wide by design: the API's query embeddings are not counted here.
-    """
-
-    def __init__(self) -> None:
-        self._mutex = Lock()
-        self._busy = False
-        self._waiting: deque[Event] = deque()
-
-    def acquire(self, timeout: float | None = None) -> bool:
-        """Wait for the turn; `False` when `timeout` passed first. `None` waits forever."""
-        with self._mutex:
-            if not self._busy:
-                self._busy = True
-                return True
-            turn = Event()
-            self._waiting.append(turn)
-        if turn.wait(timeout):
-            return True
-        with self._mutex:
-            if turn.is_set():  # handed over between the timeout and this line
-                return True
-            self._waiting.remove(turn)
-            return False
-
-    def release(self) -> None:
-        with self._mutex:
-            if self._waiting:
-                self._waiting.popleft().set()
-            else:
-                self._busy = False
-
-    @contextmanager
-    def hold(self) -> Iterator[None]:
-        self.acquire()
-        try:
-            yield
-        finally:
-            self.release()
-
-
-GPU_ADMISSION = GpuAdmission()
 
 
 def heartbeat() -> None:
@@ -189,24 +133,6 @@ def evaluate_pending(engine: Engine, *, batch_size: int = 50) -> None:
                 )
 
 
-def warm_up_models(
-    adapter: SemanticAnalysisPort, *, admission: GpuAdmission = GPU_ADMISSION
-) -> None:
-    """Load the model once at startup, so the first analysis does not pay for it."""
-    with admission.hold():
-        metrics = run_async(adapter.warm_up())
-    _log_warm_up(metrics, reason="startup")
-
-
-def _log_warm_up(metrics: AnalysisMetrics | None, *, reason: str) -> None:
-    if metrics is None:
-        return
-    logger.info(
-        "analysis model warmed up",
-        extra={"job": "warm-up", "reason": reason, "load_ms": metrics.load_ms},
-    )
-
-
 def analyze_pending(
     engine: Engine,
     adapter: SemanticAnalysisPort,
@@ -217,13 +143,12 @@ def analyze_pending(
     attempt_window_seconds: int = 86400,
     max_attempts: int = 3,
     lease_seconds: int = 900,
-    admission: GpuAdmission = GPU_ADMISSION,
 ) -> None:
     """Attach the semantic layer to current assessments, one claim at a time.
 
-    The adapter classifies its own failures instead of raising, so an Ollama that is down
-    degrades this job alone: evaluation keeps running and the failure is persisted as the
-    history entry that the cooldown then reads. Each model call waits for its GPU turn.
+    The adapter classifies its own failures instead of raising, so a provider that is
+    down degrades this job alone: evaluation keeps running and the failure is persisted
+    as the history entry that the cooldown then reads.
     """
     with observe_job(
         engine, job_name="analyze_pending", interval=timedelta(seconds=120)
@@ -238,23 +163,26 @@ def analyze_pending(
                 max_attempts=max_attempts,
             )
             if pending:
-                # After an idle stretch longer than `keep_alive` the server has unloaded
-                # the model; loading it here keeps that cost out of the first analysis.
-                with admission.hold():
-                    metrics = run_async(adapter.warm_up(only_if_idle=True))
-                _log_warm_up(metrics, reason="idle")
+                # After an idle stretch the provider connection may need re-warming
+                # (a no-op for the cloud adapter); this keeps that cost out of the
+                # first analysis of the batch.
+                metrics = run_async(adapter.warm_up(only_if_idle=True))
+                if metrics is not None:
+                    logger.info(
+                        "analysis model warmed up",
+                        extra={"job": "warm-up", "reason": "idle", "load_ms": metrics.load_ms},
+                    )
             completed = reused = degraded = claimed_elsewhere = failed = 0
             for assessment_id in pending:
                 try:
-                    with admission.hold():
-                        analysis = run_async(
-                            service.analyze(
-                                assessment_id,
-                                adapter,
-                                owner=correlation_id,
-                                lease=timedelta(seconds=lease_seconds),
-                            )
+                    analysis = run_async(
+                        service.analyze(
+                            assessment_id,
+                            adapter,
+                            owner=correlation_id,
+                            lease=timedelta(seconds=lease_seconds),
                         )
+                    )
                 except AnalysisInProgressError:
                     # The manual action or another worker holds it. Not an error.
                     claimed_elsewhere += 1
@@ -552,20 +480,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             next_run_time=first_run,
         )
     if settings.worker_analyze_enabled:
-        # One adapter for both jobs: it remembers when it last reached the model.
         adapter = build_analysis_adapter(settings, engine)
-        if settings.ollama_analysis_enabled:
-            # One-off, so it stays out of FUNCTIONAL_JOB_IDS.
-            scheduler.add_job(
-                warm_up_models,
-                "date",
-                run_date=first_run,
-                args=(adapter,),
-                id="warm-up-models",
-                replace_existing=True,
-                # A one-off that misses its instant is dropped, not deferred, by default.
-                misfire_grace_time=None,
-            )
         scheduler.add_job(
             analyze_pending,
             "interval",

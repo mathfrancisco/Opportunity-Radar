@@ -141,7 +141,7 @@ export function AnalysisPanel({
             ? 'Analisando…'
             : analysis?.status === 'AI_COMPLETED'
               ? 'Analisar novamente'
-              : 'Analisar com Ollama'}
+              : 'Analisar com IA'}
         </Button>
         <span className="text-xs text-muted">
           A análise é consultiva: não altera score, verdict nem elegibilidade da avaliação{' '}

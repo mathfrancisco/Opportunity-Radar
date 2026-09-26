@@ -11,7 +11,7 @@ Todo comando abaixo pressupõe o repositório clonado e Docker disponível.
 
 ```bash
 make bootstrap    # cria .env a partir de .env.example e valida o compose
-make up           # sobe postgres, ollama, migrate, api, worker e frontend
+make up           # sobe postgres, migrate, api, worker e frontend
 make doctor       # diz o que está quebrado, e o que fazer a respeito
 ```
 
@@ -24,8 +24,8 @@ Depois disso:
 | `http://localhost:8000/docs` | contrato da API |
 
 `make doctor` sai com código 1 quando algo está quebrado, e 0 quando o ambiente está
-utilizável. Aviso não derruba o código de saída: Ollama fora do ar é degradação
-esperada, não falha de ambiente.
+utilizável. Aviso não derruba o código de saída: IA desligada, sem chave ou o Groq fora
+do ar é degradação esperada, não falha de ambiente.
 
 ---
 
@@ -56,7 +56,7 @@ A importação é idempotente: reexecutar não duplica empresa.
 5. O worker normaliza os itens pendentes a cada 60 segundos; para forçar,
    `POST /api/opportunities/normalizations/pending`.
 6. Avalie em `/inbox` ou por `POST /api/matches/evaluate`.
-7. Analise com Ollama pelo detalhe da oportunidade.
+7. Analise com IA (Groq) pelo detalhe da oportunidade.
 8. Registre a candidatura e acompanhe-a em `/applications`.
 
 ---
@@ -270,16 +270,14 @@ docker compose logs api --tail=100
 
 Causa mais comum: migração fora do head. `make migrate` resolve.
 
-### `/health` responde `degraded` em `ollama`
+### `/health` responde `degraded` em `ai`
 
-Esperado quando o Ollama não está no ar ou o modelo não foi baixado. O fluxo
-determinístico continua inteiro; só a camada semântica degrada. Para baixar o modelo:
+Esperado quando `AI_ENABLED=false`, `GROQ_API_KEY` está ausente ou o Groq está fora do
+ar. O fluxo determinístico continua inteiro; só a camada semântica degrada. `make doctor`
+mostra o motivo exato no check `ai` (IA ligada/desligada, chave presente, modelo por
+papel — nunca a chave em si).
 
-```bash
-docker compose exec ollama ollama pull qwen3:8b-q4_K_M
-```
-
-Para desligar a camada semântica de vez, `OLLAMA_ANALYSIS_ENABLED=false`.
+Para desligar a camada semântica de vez, `AI_ENABLED=false`.
 
 ### Uma fonte falha
 
@@ -333,29 +331,18 @@ make soak               # gate de 72 horas contra relógio controlado
 ```
 
 
-## GPU para o Ollama
+## IA na nuvem (Groq)
 
-O serviço `ollama` reserva a GPU NVIDIA e roda a imagem `ollama/ollama:0.34.4`, a primeira
-linha com suporte a Blackwell (RTX 50) usada pelo projeto. O modelo de análise é baixado
-pelo serviço `ollama-init` na primeira subida; não é preciso `ollama pull` à mão.
+A análise semântica roda no Groq (SPEC 43), não mais localmente: nenhuma GPU, download
+de modelo ou `compose.cpu.yaml` é necessário. Para ligar:
 
-Pré-requisitos no Windows:
+1. defina `AI_ENABLED=true` e `GROQ_API_KEY=<chave real>` no `.env` (nunca commitado);
+2. suba normalmente com `make up`.
 
-1. driver NVIDIA recente instalado no Windows (o WSL2 o expõe aos containers; não se
-   instala driver dentro da imagem);
-2. Docker Desktop com o backend WSL2 ligado ("Use the WSL 2 based engine");
-3. Docker Compose 2.24 ou mais recente (o `compose.cpu.yaml` usa `!reset`).
-
-Conferir que o modelo está na GPU, depois de uma análise:
-
-```bash
-docker compose exec ollama ollama ps        # coluna PROCESSOR deve mostrar 100% GPU
-docker compose exec -T api python scripts/doctor.py   # check "ollama gpu"
-```
-
-Máquina sem GPU NVIDIA: `make up-cpu` (ou `docker compose -f compose.yaml -f
-compose.cpu.yaml up --build -d`). Funciona, mais devagar; as metas de latência da
-`docs/36-spec-ollama.md` são para a GPU.
+Sem chave, ou com `AI_ENABLED=false`, a análise fica bloqueada por configuração e o
+resto do radar — coleta, normalização, avaliação — continua funcionando (ver a seção
+"`/health` responde `degraded` em `ai`" acima). `make doctor` mostra o check `ai` com o
+estado, se a chave está presente e o modelo por papel, sem nunca imprimir a chave.
 
 
 ## Embeddings (F20-05)

@@ -228,7 +228,7 @@ class MatchAnalysisModel(Base):
     recommended_review: Mapped[bool | None] = mapped_column(Boolean)
     model_id: Mapped[str | None] = mapped_column(String(128))
     prompt_version: Mapped[str | None] = mapped_column(String(64))
-    # What the call cost, as the server reported it (docs/36-spec-ollama.md, section 9).
+    # What the call cost, as the provider reported it (docs/43-spec-llm-cloud-e-consolidacao.md).
     # Null on rows written before it was recorded, and on calls that never reached the
     # model: unavailable, never zero.
     total_ms: Mapped[int | None] = mapped_column(Integer)

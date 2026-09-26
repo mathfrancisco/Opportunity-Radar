@@ -101,18 +101,17 @@ def test_the_startup_log_reports_what_the_scheduler_actually_holds(
     assert reported["analyze_pending"] is False
 
 
-def test_the_model_is_warmed_up_once_at_startup_when_analysis_is_on() -> None:
+def test_no_warm_up_job_is_scheduled_for_a_cloud_adapter() -> None:
+    """The Groq adapter has nothing to warm up, so no separate startup job exists."""
     scheduler = build_scheduler(Settings(database_url=_DATABASE_URL))
-    warm_up = scheduler.get_job("warm-up-models")
-    analyze = scheduler.get_job("analyze-pending")
-
-    assert warm_up is not None and analyze is not None
-    assert warm_up.args[0] is analyze.args[1]
-    assert "warm-up-models" not in FUNCTIONAL_JOB_IDS.values()
-
-
-@pytest.mark.parametrize("switch", ["worker_analyze_enabled", "ollama_analysis_enabled"])
-def test_no_warm_up_without_analysis(switch: str) -> None:
-    scheduler = build_scheduler(Settings(database_url=_DATABASE_URL, **{switch: False}))
 
     assert scheduler.get_job("warm-up-models") is None
+    assert scheduler.get_job("analyze-pending") is not None
+
+
+def test_no_analyze_job_without_analysis_enabled() -> None:
+    scheduler = build_scheduler(
+        Settings(database_url=_DATABASE_URL, worker_analyze_enabled=False)
+    )
+
+    assert scheduler.get_job("analyze-pending") is None

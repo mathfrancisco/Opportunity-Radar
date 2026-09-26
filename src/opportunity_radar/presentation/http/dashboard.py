@@ -402,7 +402,7 @@ def get_analysis_metrics(
     )
     report = analysis_metrics(
         session,
-        current_model=settings.ollama_model_analysis,
+        current_model=settings.groq_reasoning_model,
         pending=pending,
         windows=selected,
     )

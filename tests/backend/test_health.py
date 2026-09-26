@@ -1,14 +1,14 @@
-from io import BytesIO
-
 from fastapi.testclient import TestClient
 
 from opportunity_radar.platform.config import Settings
-from opportunity_radar.platform.health import DependencyHealth, ollama_health
+from opportunity_radar.platform.health import DependencyHealth, ai_health
 from opportunity_radar.presentation.http.app import create_app
 
 
-def settings() -> Settings:
-    return Settings(database_url="postgresql+psycopg://test:test@localhost/test")
+def settings(**overrides: object) -> Settings:
+    return Settings(
+        database_url="postgresql+psycopg://test:test@localhost/test", **overrides
+    )
 
 
 def test_live_health_does_not_require_dependencies() -> None:
@@ -42,26 +42,35 @@ def test_ready_returns_503_when_database_is_unavailable(monkeypatch) -> None:
     assert response.json() == {"status": "not_ready"}
 
 
-def test_ollama_degradation_does_not_make_api_unready(monkeypatch) -> None:
+def test_ai_degradation_does_not_make_api_unready(monkeypatch) -> None:
     monkeypatch.setattr(
         "opportunity_radar.presentation.http.routes.ready_health",
         lambda _: DependencyHealth("healthy"),
     )
     monkeypatch.setattr(
-        "opportunity_radar.presentation.http.routes.ollama_health",
-        lambda _: DependencyHealth("degraded", "ollama unavailable"),
+        "opportunity_radar.presentation.http.routes.ai_health",
+        lambda _: DependencyHealth("degraded", "ai disabled"),
     )
 
     response = TestClient(create_app(settings())).get("/health")
 
     assert response.status_code == 200
-    assert response.json()["ollama"]["status"] == "degraded"
+    assert response.json()["ai"]["status"] == "degraded"
 
 
-def test_ollama_is_degraded_when_analysis_model_is_missing() -> None:
-    response = BytesIO(b'{"models": []}')
-    response.status = 200  # type: ignore[attr-defined]
+def test_ai_health_never_makes_a_network_call_and_is_degraded_when_off() -> None:
+    result = ai_health(settings(ai_enabled=False))
 
-    result = ollama_health(settings(), opener=lambda *_, **__: response)
+    assert result == DependencyHealth("degraded", "ai disabled")
 
-    assert result == DependencyHealth("degraded", "ollama analysis model is not installed")
+
+def test_ai_health_is_degraded_when_enabled_without_a_key() -> None:
+    result = ai_health(settings(ai_enabled=True, groq_api_key=""))
+
+    assert result == DependencyHealth("degraded", "groq api key missing")
+
+
+def test_ai_health_is_healthy_when_enabled_with_a_key() -> None:
+    result = ai_health(settings(ai_enabled=True, groq_api_key="a-real-key"))
+
+    assert result == DependencyHealth("healthy")

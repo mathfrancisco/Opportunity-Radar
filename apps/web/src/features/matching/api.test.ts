@@ -87,7 +87,7 @@ describe('analyzeAssessment', () => {
       assessment_id: 'assessment-1',
       status: 'AI_FAILED',
       failure_code: 'TRANSPORT_ERROR',
-      detail: 'could not connect to ollama',
+      detail: 'could not connect to provider',
       summary: null,
       strengths: [],
       risks: [],

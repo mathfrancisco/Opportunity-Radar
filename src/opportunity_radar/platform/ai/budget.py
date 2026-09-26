@@ -1,6 +1,6 @@
 """Token Guard per task (SPEC 43, section 7.2).
 
-`TaskBudget.max_input_tokens` replaces the Ollama context window as the ceiling a
+`TaskBudget.max_input_tokens` replaces a local model's context window as the ceiling a
 prompt must fit under before it is ever sent; `estimate_tokens` is the cheap character
 count the router and the Quota Guard use before a real tokenizer count exists.
 """
