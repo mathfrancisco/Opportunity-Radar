@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -98,6 +99,7 @@ class SourceHealthResponse(BaseModel):
     terms_reviewed: bool
     collector_local_tested: bool
     schedule: str | None
+    version: int
     last_run_id: UUID | None
     last_run_status: str | None
     last_run_started_at: datetime | None
@@ -347,10 +349,11 @@ def list_inbox(
 @router.get("/source-health", response_model=SourceHealthListResponse)
 def list_sources_health(
     only_failing: bool = False,
+    status_filter: Literal["proposed"] | None = Query(default=None, alias="status"),
     session: Session = Depends(get_session),
 ) -> SourceHealthListResponse:
     """Named `/source-health` rather than `/sources/health`: that path is a source id."""
-    items = list_source_health(session, only_failing=only_failing)
+    items = list_source_health(session, only_failing=only_failing, status=status_filter)
     failing = sum(1 for item in items if item.last_run_status in FAILING_RUN_STATUSES)
     return SourceHealthListResponse(
         items=[_source_response(item) for item in items],
@@ -650,6 +653,7 @@ def _source_response(source: SourceHealth) -> SourceHealthResponse:
         terms_reviewed=source.terms_reviewed,
         collector_local_tested=source.collector_local_tested,
         schedule=source.schedule,
+        version=source.version,
         last_run_id=source.last_run_id,
         last_run_status=source.last_run_status,
         last_run_started_at=source.last_run_started_at,

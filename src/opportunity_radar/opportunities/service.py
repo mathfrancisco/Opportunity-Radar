@@ -26,6 +26,7 @@ from opportunity_radar.opportunities.domain import (
     build_candidate,
     seniority_classification,
 )
+from opportunity_radar.opportunities.duplicates import find_title_location_window_candidates
 from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
     OpportunityCompensationModel,
@@ -272,6 +273,12 @@ class OpportunityService:
             reasons.extend(enrichment_reasons)
             result_status = "REVIEW_REQUIRED"
         opportunity.search_skills = _search_skills_text(opportunity.skills)
+
+        if decision == "NEW":
+            # F20-26: a brand-new opportunity is the only case that can introduce a fresh
+            # duplicate pair — REFRESHED/MERGED reuse an existing opportunity, which was
+            # already checked when it was first created.
+            find_title_location_window_candidates(self.session, opportunity)
 
         result = NormalizationResultModel(
             raw_item_id=raw_item.id,

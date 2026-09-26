@@ -8,6 +8,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -154,6 +155,34 @@ class CompanySourceRevision(Base):
     changes: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     evidence_note: Mapped[str] = mapped_column(Text, nullable=False)
     company_source: Mapped[CompanySource] = relationship(back_populates="revisions")
+
+
+class DiscoveryAttemptModel(Base):
+    """One `discover_ats` GET against a company's careers page (F20-27).
+
+    Recorded whether or not it found anything, so `eligible_companies` never repeats the
+    same company inside the revisit interval. Discovery itself never creates a
+    `SourceRun` or `RawItem`: this table is the only trace of the attempt.
+    """
+
+    __tablename__ = "discovery_attempt"
+    __table_args__ = (
+        Index("ix_discovery_attempt_company_attempted", "company_id", "attempted_at"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey(f"{SCHEMA}.company.id", ondelete="CASCADE"), nullable=False
+    )
+    checked_url: Mapped[str] = mapped_column(Text, nullable=False)
+    http_status: Mapped[int | None] = mapped_column(Integer)
+    ats_found: Mapped[str | None] = mapped_column(String(50))
+    attempted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class CompanyImportBatch(Base):

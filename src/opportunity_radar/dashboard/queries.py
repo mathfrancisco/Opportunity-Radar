@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
 from functools import reduce
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from sqlalchemy import Select, case, func, literal, select
@@ -170,6 +170,9 @@ class SourceHealth:
     last_run_items_skipped: int | None = None
     last_run_items_invalid: int | None = None
     seniority_counts: dict[str, int] = field(default_factory=dict)
+    #: The optimistic-concurrency version (F20-25): a batch probe over several proposals
+    #: needs each one's own version, not the id it started the batch with.
+    version: int = 1
 
     @property
     def last_run_duration_seconds(self) -> float | None:
@@ -709,8 +712,14 @@ def list_source_health(
     session: Session,
     *,
     only_failing: bool = False,
+    status: Literal["proposed"] | None = None,
 ) -> tuple[SourceHealth, ...]:
-    """Every source with its last run. A source that never ran reports `None`, not zero."""
+    """Every source with its last run. A source that never ran reports `None`, not zero.
+
+    `status="proposed"` narrows the listing to disabled sources awaiting homologation
+    (F20-25) and orders them by the priority of the company that proposed them, highest
+    first, so the queue surfaces the sources that matter most.
+    """
     latest = _latest_runs()
     statement = (
         select(
@@ -722,6 +731,7 @@ def list_source_health(
             SourceDefinitionModel.terms_reviewed,
             SourceDefinitionModel.collector_local_tested,
             SourceDefinitionModel.schedule,
+            SourceDefinitionModel.version,
             latest.c.run_id,
             latest.c.status,
             latest.c.started_at,
@@ -736,13 +746,18 @@ def list_source_health(
         .select_from(SourceDefinitionModel)
         .outerjoin(latest, latest.c.source_definition_id == SourceDefinitionModel.id)
     )
+    if status == "proposed":
+        statement = statement.outerjoin(
+            CompanySource, CompanySource.id == SourceDefinitionModel.company_source_id
+        ).outerjoin(Company, Company.id == CompanySource.company_id)
+        statement = statement.where(SourceDefinitionModel.enabled.is_(False))
     if only_failing:
         statement = statement.where(latest.c.status.in_(FAILING_RUN_STATUSES))
-    rows = session.execute(
-        statement.order_by(
-            latest.c.finished_at.desc().nulls_last(), SourceDefinitionModel.name
-        )
-    ).all()
+    if status == "proposed":
+        order_by = (_priority_rank().desc(), SourceDefinitionModel.name)
+    else:
+        order_by = (latest.c.finished_at.desc().nulls_last(), SourceDefinitionModel.name)
+    rows = session.execute(statement.order_by(*order_by)).all()
     seniority_rows = session.execute(
         select(
             SourceOccurrenceModel.source_definition_id,
@@ -768,16 +783,17 @@ def list_source_health(
             terms_reviewed=row[5],
             collector_local_tested=row[6],
             schedule=row[7],
-            last_run_id=row[8],
-            last_run_status=row[9],
-            last_run_started_at=row[10],
-            last_run_finished_at=row[11],
-            last_run_error_code=row[12],
-            last_run_error=row[13],
-            last_run_items_seen=row[14],
-            last_run_items_persisted=row[15],
-            last_run_items_skipped=row[16],
-            last_run_items_invalid=row[17],
+            version=row[8],
+            last_run_id=row[9],
+            last_run_status=row[10],
+            last_run_started_at=row[11],
+            last_run_finished_at=row[12],
+            last_run_error_code=row[13],
+            last_run_error=row[14],
+            last_run_items_seen=row[15],
+            last_run_items_persisted=row[16],
+            last_run_items_skipped=row[17],
+            last_run_items_invalid=row[18],
             seniority_counts=seniority_by_source.get(row[0], {}),
         )
         for row in rows

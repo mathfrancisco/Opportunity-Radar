@@ -27,6 +27,7 @@ from opportunity_radar.acquisition.models import (
     SourceCheckpointModel,
     SourceDefinitionModel,
 )
+from opportunity_radar.acquisition.probing import run_probe
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.scheduling import SourceRunHistory
 from opportunity_radar.acquisition.service import (
@@ -433,6 +434,54 @@ def test_ashby_source_configuration_reaches_collector_and_records_http_metrics()
     assert snapshot["metadata"]["parser_version"] == "ashby-job-board-v2"
     assert len(throttling_delays) == 1
     assert 0 < throttling_delays[0] <= 5
+
+
+def test_probe_reports_retry_after_on_rate_limit() -> None:
+    """F20-25: a probe against a rate-limited endpoint surfaces `Retry-After` so the
+    homologation queue's batch mode knows how long to wait before the next probe."""
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(429, headers={"Retry-After": "12"})
+        )
+    )
+    registry = CollectorRegistry((AshbyCollector(client=client, max_retries=0),))
+    try:
+        outcome = asyncio.run(
+            run_probe(
+                "ashby",
+                {"board_identifier": "acme", "company_name": "Acme"},
+                registry,
+                max_items=5,
+            )
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert outcome.ok is False
+    assert outcome.error_code == AcquisitionErrorCode.SOURCE_RATE_LIMITED.value
+    assert outcome.retry_after_seconds == 12.0
+
+
+def test_probe_leaves_retry_after_unset_when_not_rate_limited() -> None:
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(500))
+    )
+    registry = CollectorRegistry((AshbyCollector(client=client, max_retries=0),))
+    try:
+        outcome = asyncio.run(
+            run_probe(
+                "ashby",
+                {"board_identifier": "acme", "company_name": "Acme"},
+                registry,
+                max_items=5,
+            )
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert outcome.ok is False
+    assert outcome.error_code == AcquisitionErrorCode.SOURCE_SERVER_ERROR.value
+    assert outcome.retry_after_seconds is None
 
 
 def test_reused_request_does_not_leak_telemetry_between_runs() -> None:

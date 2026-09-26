@@ -529,6 +529,85 @@ def test_source_health_reports_the_last_run_and_keeps_never_run_sources() -> Non
         assert never_run.id not in failing_ids
 
 
+def test_list_source_health_filters_by_status_proposed() -> None:
+    """F20-25: the homologation queue only lists disabled sources awaiting evidence."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        marker = uuid4().hex[:8]
+        company = _company(session, "normal")
+        company_source = CompanySource(
+            company_id=company.id,
+            source_type="greenhouse",
+            endpoint=f"https://boards.greenhouse.io/{marker}",
+        )
+        session.add(company_source)
+        session.flush()
+
+        proposed = SourceDefinitionModel(
+            source_type="greenhouse",
+            name=f"Proposed {marker}",
+            enabled=False,
+            evidence_status="unverified",
+            company_source_id=company_source.id,
+        )
+        enabled = SourceDefinitionModel(
+            source_type="manual", name=f"Enabled {marker}", enabled=True
+        )
+        session.add_all([proposed, enabled])
+        session.commit()
+
+        proposed_only = list_source_health(session, status="proposed")
+        proposed_ids = {item.source_definition_id for item in proposed_only}
+
+        assert proposed.id in proposed_ids
+        assert enabled.id not in proposed_ids
+
+
+def test_list_source_health_orders_by_company_priority() -> None:
+    """F20-25: the fila de homologação orders proposals by company priority, highest first."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        marker = uuid4().hex[:8]
+        high_company = _company(session, "high")
+        low_company = _company(session, "low")
+        high_source = CompanySource(
+            company_id=high_company.id,
+            source_type="greenhouse",
+            endpoint=f"https://boards.greenhouse.io/high-{marker}",
+        )
+        low_source = CompanySource(
+            company_id=low_company.id,
+            source_type="greenhouse",
+            endpoint=f"https://boards.greenhouse.io/low-{marker}",
+        )
+        session.add_all([high_source, low_source])
+        session.flush()
+
+        low_definition = SourceDefinitionModel(
+            source_type="greenhouse",
+            name=f"Low priority {marker}",
+            enabled=False,
+            company_source_id=low_source.id,
+        )
+        high_definition = SourceDefinitionModel(
+            source_type="greenhouse",
+            name=f"High priority {marker}",
+            enabled=False,
+            company_source_id=high_source.id,
+        )
+        # Insert the low-priority one first so a name/insertion-order sort would fail.
+        session.add_all([low_definition, high_definition])
+        session.commit()
+
+        ordered = [
+            item.source_definition_id
+            for item in list_source_health(session, status="proposed")
+            if item.source_definition_id in {low_definition.id, high_definition.id}
+        ]
+
+        assert ordered == [high_definition.id, low_definition.id]
+
+
 def test_source_coverage_distinguishes_disabled_not_run_and_successful_zero() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
