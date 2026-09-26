@@ -513,6 +513,7 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
         tavily_api_key=settings.tavily_api_key,
         tavily_base_url=settings.tavily_base_url,
         tavily_search_depth=settings.tavily_search_depth,
+        tavily_credit_budget_per_run=settings.tavily_credit_budget_per_run,
     )
     notifier = build_source_alert_notifier(
         settings.source_alert_webhook_url,

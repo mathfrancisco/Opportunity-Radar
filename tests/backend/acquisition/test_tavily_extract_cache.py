@@ -19,7 +19,13 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from opportunity_radar.acquisition.domain import CollectedItem, CollectionTelemetry, SourceRun
+from opportunity_radar.acquisition.domain import (
+    AcquisitionError,
+    AcquisitionErrorCode,
+    CollectedItem,
+    CollectionTelemetry,
+    SourceRun,
+)
 from opportunity_radar.acquisition.tavily import (
     ExtractionResult,
     TavilyClient,
@@ -272,6 +278,50 @@ def test_extraction_credits_feed_the_shared_run_accumulator() -> None:
 
     assert run.credits_used == 3
     assert budget.spent == 3
+
+
+def test_budget_stops_second_uncached_extract_batch_after_paid_first_batch() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        import json
+
+        payload = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"url": url, "raw_content": "# Job"} for url in payload["urls"]
+                ],
+                "usage": {"credits": 2},
+            },
+        )
+
+    client = _client(handler)
+    cache = _FakeCache(ttl_seconds=3600)
+    budget = TavilyCreditBudget(limit=2)
+    run = SourceRun(source_definition_id=uuid4())
+    run.start()
+    urls = [f"https://example.com/jobs/{index}" for index in range(21)]
+
+    import asyncio
+
+    try:
+        with pytest.raises(AcquisitionError) as error:
+            asyncio.run(
+                extract_missing_descriptions(
+                    client, cache, urls, telemetry=_telemetry(), budget=budget, run=run
+                )
+            )
+    finally:
+        asyncio.run(_aclose(client))
+
+    assert error.value.code is AcquisitionErrorCode.CREDIT_BUDGET_EXCEEDED
+    assert calls == 1
+    assert run.credits_used == 2
+    assert cache.get(urls[0]) is not None
 
 
 def test_extracted_markdown_replaces_provisional_description() -> None:

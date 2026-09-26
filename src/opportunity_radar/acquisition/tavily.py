@@ -788,6 +788,8 @@ async def extract_missing_descriptions(
                 misses.append(url)
         if not misses:
             continue
+        if budget is not None:
+            budget.ensure_can_call()
         response = await client.extract(
             urls=misses,
             extract_depth=extract_depth,
