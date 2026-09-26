@@ -48,6 +48,8 @@ def test_workday_validator_raises_acquisition_error_for_bad_identifier() -> None
 
     with pytest.raises(AcquisitionError):
         WorkdayCollector.validate_tenant_identifier("acme-without-site")
+
+
 def test_registration_accepts_teamtailor_source_type() -> None:
     assert "teamtailor" in SUPPORTED_ATS
     values = _source_values(
@@ -70,3 +72,35 @@ def test_registration_rejects_invalid_teamtailor_identifier() -> None:
             "found in careers footer",
         )
     assert error.value.field == "external_key"
+
+
+def test_registration_accepts_workable_source_type() -> None:
+    assert "workable" in SUPPORTED_ATS
+
+    values = _source_values(
+        "workable",
+        "https://apply.workable.com/acme",
+        "acme",
+        "found via careers page discovery",
+    )
+
+    assert values["source_type"] == "workable"
+    assert values["external_key"] == "acme"
+
+
+def test_registration_rejects_malformed_workable_account_identifier() -> None:
+    with pytest.raises(CompanyRegistrationError) as error:
+        _source_values(
+            "workable",
+            "https://apply.workable.com/acme",
+            "-not valid-",
+            "found via careers page discovery",
+        )
+    assert error.value.field == "external_key"
+
+
+def test_workable_validator_raises_acquisition_error_for_bad_identifier() -> None:
+    from opportunity_radar.acquisition.workable import WorkableCollector
+
+    with pytest.raises(AcquisitionError):
+        WorkableCollector.validate_account_identifier("-not valid-")

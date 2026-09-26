@@ -9,6 +9,7 @@ from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.tavily import TavilyClient, TavilySearchCollector
 from opportunity_radar.acquisition.teamtailor import TeamtailorCollector
+from opportunity_radar.acquisition.workable import WorkableCollector
 from opportunity_radar.acquisition.workday import WorkdayCollector
 
 
@@ -38,6 +39,7 @@ def build_collector_registry(
             RemotiveCollector(),
             WorkdayCollector(),
             TeamtailorCollector(),
+            WorkableCollector(),
             TavilySearchCollector(
                 client_factory=lambda: TavilyClient(
                     api_key=tavily_api_key,

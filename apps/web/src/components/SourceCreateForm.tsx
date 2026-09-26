@@ -68,6 +68,15 @@ const configFields: Record<SourceType, ConfigField[]> = {
     },
     { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
   ],
+  workable: [
+    {
+      key: 'account_identifier',
+      label: 'Identificador da conta',
+      required: true,
+      hint: 'O slug em apply.workable.com/<identificador>.',
+    },
+    { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
+  ],
   remotive: [],
   teamtailor: [
     {
@@ -86,6 +95,7 @@ const typeLabels: Record<SourceType, string> = {
   lever: 'Lever',
   greenhouse: 'Greenhouse',
   workday: 'Workday',
+  workable: 'Workable',
   remotive: 'Remotive',
   teamtailor: 'Teamtailor',
   manual: 'Manual (entrada avulsa de vaga)',

@@ -65,10 +65,20 @@ Endpoints candidatos, **a confirmar na revisão de termos** (não são fato até
 
 ## Critérios de aceite (por sub-card)
 
-- [ ] Termos revisados e registrados antes do código.
-- [ ] Coletor com teste contra board falso, incluindo paginação e erro.
-- [ ] Sonda, proposta, cadastro e formulário reconhecem o ATS.
-- [ ] Pelo menos uma empresa real do catálogo homologada e coletando.
+- [x] Termos revisados e registrados antes do código
+      (`docs/pesquisas/termos-workable.md`).
+- [x] Coletor com teste contra board falso, incluindo paginação e erro — a revisão de
+      termos encontrou que o widget do Workable **não pagina** (resposta única com todo o
+      board); o teste cobre esse comportamento (`test_single_response_has_no_pagination_and_stops_at_max_items`)
+      e os caminhos de erro (`tests/backend/acquisition/test_workable_collector.py`, 8
+      testes; `tests/e2e/fake_workable_board.py` com 404/429/500).
+- [x] Sonda, proposta, cadastro e formulário reconhecem o ATS (`probing.py`,
+      `proposals.py`, `registration.py`, `SourceCreateForm.tsx`/`api.ts`, com teste de
+      integração em `test_service.py::test_probe_recognizes_workable_source_type` e
+      `tests/backend/companies/test_registration.py`).
+- [ ] Pelo menos uma empresa real do catálogo homologada e coletando — pendente: exige a
+      fila de homologação (F20-25) rodando contra uma conta Workable real do catálogo, na
+      máquina de referência. Não executado neste ambiente; não fabricado.
 
 ## Verificação
 
@@ -99,7 +109,9 @@ Endpoints candidatos, **a confirmar na revisão de termos** (não são fato até
 | Criar | `tests/backend/acquisition/test_workable_collector.py` | Testes do coletor contra um board falso, no formato de `tests/backend/acquisition/test_lever_collector.py`. |
 | Criar | `tests/e2e/fake_workable_board.py` | Servidor falso do Workable (paginação, erro, 429), no formato de `tests/e2e/fake_job_board.py`. |
 
-Endpoint provável do Workable: widget público por conta — **a confirmar na revisão de termos**, não é fato até lá.
+Endpoint confirmado na revisão de termos: `GET https://apply.workable.com/api/v1/widget/accounts/<account>?details=true`
+— widget público sem autenticação, resposta única `{"jobs": [...]}` sem paginação (ver
+`docs/pesquisas/termos-workable.md`).
 
 ## Interfaces
 
@@ -110,7 +122,9 @@ class WorkableCollector:
     da revisão de termos em docs/pesquisas/termos-workable.md."""
 
     source_type = "workable"
-    capabilities = CollectorCapabilities(company_jobs=True, pagination=True)
+    # Atualizado pela revisão de termos: o widget não pagina (ver docs/pesquisas/
+    # termos-workable.md), então capabilities declara pagination=False.
+    capabilities = CollectorCapabilities(company_jobs=True, pagination=False)
 
     def __init__(
         self,
@@ -192,6 +206,56 @@ docker compose -p f20-30 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```
 
 Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
+
+## Evidências F20-30
+
+- `docker compose -p f20-30 -f compose.yaml -f compose.dev.yaml run --rm -e
+  RUN_DATABASE_INTEGRATION=1 api pytest -q tests/backend/acquisition
+  tests/backend/companies`: 224 passed, 8 skipped. Inclui os 8 testes de
+  `test_workable_collector.py`, `test_service.py::test_probe_recognizes_workable_source_type`
+  e os 3 novos testes de `test_registration.py`. Depois de resolver o rebase sobre
+  `feature/f20-groq-e-consolidacao` (que já traz o Teamtailor, F20-29), a suíte completa
+  `tests/backend` também rodou: 807 passed, 10 skipped.
+- `docker compose -p f20-30 -f compose.yaml -f compose.dev.yaml run --rm api ruff check .`:
+  All checks passed.
+- `docker compose -p f20-30 -f compose.yaml -f compose.dev.yaml run --rm api mypy`:
+  Success: no issues found in 114 source files.
+- `cd apps/web && npm run check` (lint + typecheck + vitest + build): 26 arquivos de
+  teste, 134 testes, build ok.
+- `docker compose -p f20-30 down -v` executado ao final.
+- Descoberta importante na revisão de termos: o widget do Workable
+  (`apply.workable.com/api/v1/widget/accounts/<account>`) **não pagina** — devolve todo o
+  board ativo em uma única resposta JSON. A tabela de "Endpoints candidatos" do card F20-30
+  e a assinatura de `capabilities` na seção "Interfaces" foram atualizadas
+  (`pagination=False`) para refletir isso, conforme o passo 2 pedia. O teste
+  `test_paginates_until_short_page` sugerido virou
+  `test_single_response_has_no_pagination_and_stops_at_max_items`, que cobre o
+  comportamento real (uma chamada HTTP, `max_items` truncando a resposta única) em vez de
+  um loop de páginas que o endpoint não tem.
+- `account_identifier` é o campo de configuração (mesma convenção de `board_identifier`/
+  `site_identifier`/`board_token`); reaproveita `company_reference` como os demais
+  coletores.
+- Mapeamento de departamento (F20-03) não foi feito: o payload do widget (`id`, `title`,
+  `url`, `location`, `description`/`full_description`, `experience`, `published_on`,
+  `created_at`, `state`) não expõe um campo de departamento — nenhuma correspondência foi
+  inventada. O campo `experience` (o sinal mais próximo de senioridade que o endpoint
+  expõe) foi preservado em `metadata["experience"]`, sem inventar um mapeamento formal
+  para `Seniority`, já que a classificação de senioridade (F20-02) é genérica sobre
+  título/descrição e não por-coletor nos demais coletores (Ashby/Greenhouse/Lever/Workday
+  também não fazem esse mapeamento explícito).
+- `tests/e2e/fake_workable_board.py` foi criado no formato de `fake_workday_board.py`
+  (sem paginação — resposta única —, 404, 429 com `Retry-After`, 500), mas **não foi
+  ligado a `compose.ci.yaml`**, pela mesma razão registrada em F20-28: `WorkableCollector`
+  monta a URL fixa `https://apply.workable.com/...`, sem parâmetro de `base_url`.
+  Registrado como item em aberto, consistente com o precedente do Workday.
+- **Pendente, fora deste ambiente:** homologar uma empresa real do catálogo com Workable e
+  colar a primeira coleta real no PR (exige F20-25 e a máquina de referência); e o
+  relatório de descoberta do F20-27 por tipo de ATS segue pendente (ver F20-27).
+- **Coordenação com o sub-card irmão (Teamtailor, F20-29):** este branch foi rebaseado
+  sobre `feature/f20-groq-e-consolidacao` (`f02d6a4`, que já inclui o Teamtailor) para
+  resolver os conflitos aditivos esperados em `registry.py`, `probing.py`, `proposals.py`,
+  `registration.py`, `test_service.py` e `test_registration.py` — todas as entradas de
+  ambos os ATS foram mantidas.
 
 ## Pronto quando
 

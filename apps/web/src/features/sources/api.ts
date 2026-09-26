@@ -221,6 +221,7 @@ export const sourceTypes = [
   'lever',
   'greenhouse',
   'workday',
+  'workable',
   'remotive',
   'teamtailor',
   'manual',

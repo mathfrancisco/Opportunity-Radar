@@ -37,6 +37,7 @@ from opportunity_radar.acquisition.service import (
 )
 from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
 from opportunity_radar.acquisition.teamtailor import TeamtailorCollector
+from opportunity_radar.acquisition.workable import WorkableCollector
 from opportunity_radar.acquisition.workday import WorkdayCollector
 
 
@@ -916,3 +917,42 @@ def test_probe_recognizes_workday_source_type() -> None:
     assert outcome.ok is True
     assert outcome.items_seen == 1
     assert calls[0].url.host == "acme.wd5.myworkdayjobs.com"
+
+
+def test_probe_recognizes_workable_source_type() -> None:
+    """F20-30: the sonda knows how to build a Workable request from its configuration."""
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "jobs": [
+                    {
+                        "id": "abc123",
+                        "title": "Backend Engineer",
+                        "url": "https://apply.workable.com/acme/j/ABC123/",
+                        "location": {"location_str": "Remote"},
+                    }
+                ]
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    registry = CollectorRegistry((WorkableCollector(client=client),))
+    try:
+        outcome = asyncio.run(
+            run_probe(
+                "workable",
+                {"account_identifier": "acme", "company_name": "Acme"},
+                registry,
+                max_items=5,
+            )
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert outcome.ok is True
+    assert outcome.items_seen == 1
+    assert calls[0].url.host == "apply.workable.com"
