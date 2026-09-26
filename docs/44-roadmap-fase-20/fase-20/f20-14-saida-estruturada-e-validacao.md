@@ -1,6 +1,6 @@
 # CARD F20-14 — Saída estruturada: JSON Schema estrito e validação
 
-- **Status:** Backlog
+- **Status:** Feito — `strict_compatible` e `make_validator` em `platform/ai/schema.py`; `tests/backend/platform/ai/test_schema.py` (11 testes) e o comando de verificação abaixo passam (75 testes, `ruff check .`, `mypy` limpos); `export_prompt_schema.py --check` confirma que `OUTPUT_SCHEMAS` já era estrito-compatível (não precisou de mudança em `analysis.py`, que continua com `additionalProperties: false` e todos os campos em `required`).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-07
@@ -57,9 +57,9 @@ def make_validator(parse: Callable[[Any], object]) -> Callable[[str], None]:
 
 ## Critérios de aceite
 
-- [ ] `strict_compatible(OUTPUT_SCHEMAS[v]) == []` para todas as versões.
-- [ ] `scripts/export_prompt_schema.py --check` passa.
-- [ ] Resposta fora do schema vira `INVALID_OUTPUT` e nunca é persistida.
+- [x] `strict_compatible(OUTPUT_SCHEMAS[v]) == []` para todas as versões.
+- [x] `scripts/export_prompt_schema.py --check` passa.
+- [x] Resposta fora do schema vira `INVALID_OUTPUT` e nunca é persistida.
 
 ## Testes
 
