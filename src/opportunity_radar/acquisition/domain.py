@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from enum import StrEnum
 from math import isfinite
 from typing import Any, Mapping
@@ -44,6 +45,7 @@ class AcquisitionError(Exception):
         *,
         retryable: bool = False,
         field: str | None = None,
+        retry_after_seconds: float | None = None,
     ) -> None:
         super().__init__(summary)
         self.code = code
@@ -52,11 +54,37 @@ class AcquisitionError(Exception):
         # The request field that caused a configuration error, dotted for nested keys
         # ("configuration.board_token"), so a form can show the refusal where it belongs.
         self.field = field
+        # Only set for SOURCE_RATE_LIMITED, parsed from the response's Retry-After header
+        # (F20-25): lets a caller batching several probes wait the right amount.
+        self.retry_after_seconds = retry_after_seconds
 
 
 class InvalidSourceRunTransitionError(AcquisitionError):
     def __init__(self, summary: str) -> None:
         super().__init__(AcquisitionErrorCode.INVALID_CONFIGURATION, summary)
+
+
+def parse_retry_after_seconds(header_value: str | None) -> float | None:
+    """Parse a `Retry-After` header value (delta-seconds or HTTP-date) into seconds.
+
+    Returns `None` when the header is absent or unparseable, so a caller can fall back to
+    its own default without pretending the server gave a number.
+    """
+    if header_value is None:
+        return None
+    try:
+        seconds = float(header_value)
+    except ValueError:
+        try:
+            parsed_date = parsedate_to_datetime(header_value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if parsed_date.tzinfo is None:
+            parsed_date = parsed_date.replace(tzinfo=timezone.utc)
+        seconds = (parsed_date - datetime.now(timezone.utc)).total_seconds()
+    if not isfinite(seconds):
+        return None
+    return max(0.0, seconds)
 
 
 @dataclass(frozen=True, slots=True)

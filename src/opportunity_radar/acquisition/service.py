@@ -426,7 +426,7 @@ class AcquisitionService:
         *,
         expected_version: int,
         requested_by: str = "interface",
-    ) -> tuple[SourceProbeModel, SourceDefinitionModel]:
+    ) -> tuple[SourceProbeModel, SourceDefinitionModel, ProbeOutcome]:
         """Test the collector against the public endpoint and, if it reads, confirm evidence.
 
         The probe is written before the request goes out, under a lock on the source, so
@@ -481,7 +481,10 @@ class AcquisitionService:
             max_items=PROBE_MAX_ITEMS,
             network_policy=network_policy,
         )
-        return self._record_probe(source, probe, outcome, expected_version)
+        recorded_probe, recorded_source = self._record_probe(
+            source, probe, outcome, expected_version
+        )
+        return recorded_probe, recorded_source, outcome
 
     def _probe_wait(
         self, source: SourceDefinitionModel, policy: CollectionNetworkPolicy
