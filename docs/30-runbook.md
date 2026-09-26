@@ -200,6 +200,31 @@ histórico.
 A API e a tela da oportunidade marcam a ocorrência cujo conteúdo expirou: a procedência
 continua, o reprocessamento não.
 
+### Dados enviados ao Groq
+
+A análise semântica só chama a nuvem quando `AI_ENABLED=true` e `GROQ_API_KEY` está
+configurada; sem chave, a análise fica bloqueada por configuração e o resto do radar
+segue normalmente (mesma regra da Tavily). O operador liga a IA conscientemente,
+sabendo o que sai da máquina.
+
+`sanitize_for_llm` (`platform/ai/sanitizer.py`) roda sobre o payload inteiro antes de
+renderizar o prompt e antes de calcular o `payload_hash` do cache. O que é removido:
+
+- chaves de contato do candidato (`name`, `full_name`, `email`, `phone`, `address`,
+  `cpf`, `document`, `linkedin_url`, `github_url`, `website`, `birth_date`), onde quer
+  que apareçam no payload;
+- e-mail, telefone (BR e internacional), CPF e URL de LinkedIn/GitHub citados dentro de
+  texto livre (por exemplo, colados na descrição da vaga por engano);
+- padrões de chave e token (`gsk_...`, `sk-...`, `tvly-...`, `Bearer ...`), caso um
+  vazem para dentro de um campo de texto.
+
+O que continua intacto: o texto da vaga (é público e é o objeto da análise), cargo,
+trilha, anos de experiência, skills e a evidência de cada experiência/projeto — o
+perfil enviado ao modelo é o **perfil estruturado mínimo**, sem nome nem contato.
+
+O Free Plan da Groq pode ter retenção de dados diferente do plano pago; trate o que sai
+da máquina de acordo com esse risco, não como se fosse local.
+
 ### Gate de 72 horas
 
 ```bash

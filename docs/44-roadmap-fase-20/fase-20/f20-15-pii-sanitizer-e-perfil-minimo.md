@@ -1,6 +1,6 @@
 # CARD F20-15 — PII sanitizer e perfil mínimo
 
-- **Status:** Backlog
+- **Status:** Parcial — `sanitize_for_llm` e `PII_KEYS` implementados em `platform/ai/sanitizer.py`, com `tests/backend/platform/ai/test_sanitizer.py` (16 testes) cobrindo cada padrão, chave aninhada em lista, imutabilidade do original e preservação de evidência profissional; runbook atualizado ("Dados enviados ao Groq"). Falta o primeiro critério de aceite: ele exige o adapter Groq do F20-17 (ainda não existe nesta base) chamando `sanitize_for_llm` sobre o payload real antes do `MockTransport` capturar o corpo HTTP. Este card entrega a função pronta para esse adapter usar; o card só pode ir para "Feito" depois que F20-17 existir e o teste de integração passar.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-07, F20-40
@@ -55,8 +55,8 @@ def sanitize_for_llm(value: Any) -> Any:
 
 ## Critérios de aceite
 
-- [ ] Com um perfil de teste cheio de PII, nenhum desses valores aparece no corpo HTTP capturado pelo `MockTransport` (teste no F20-17).
-- [ ] Skills, cargos e evidências continuam no payload.
+- [ ] Com um perfil de teste cheio de PII, nenhum desses valores aparece no corpo HTTP capturado pelo `MockTransport` (teste no F20-17 — card ainda não implementado nesta base; `sanitize_for_llm` está pronta para o adapter chamar).
+- [x] Skills, cargos e evidências continuam no payload (`test_pii_key_nested_in_a_list_is_removed`, `test_professional_evidence_is_preserved`).
 
 ## Testes
 
