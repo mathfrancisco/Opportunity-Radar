@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from collections.abc import Awaitable, Callable, Iterator, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from math import ceil, isfinite
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from sqlalchemy import func, select, update
@@ -51,7 +51,10 @@ from opportunity_radar.acquisition.probing import (
     collector_test_audit,
     run_probe,
 )
-from opportunity_radar.acquisition.proposals import IDENTIFIER_KEYS
+from opportunity_radar.acquisition.proposals import (
+    IDENTIFIER_KEYS,
+    follow_inert_correction,
+)
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.repository import AcquisitionRepository
 from opportunity_radar.acquisition.scheduling import (
@@ -64,6 +67,7 @@ from opportunity_radar.acquisition.tavily import (
     TavilyExtractionCache,
     TavilyExtractionSettings,
     apply_extracted_description,
+    detect_ats_board,
     extract_missing_descriptions,
 )
 from opportunity_radar.companies.models import Company, CompanySource
@@ -72,6 +76,20 @@ from opportunity_radar.platform.logging import get_logger
 COLLECTED_ITEM_V1_KEY = "collected_item_v1"
 
 logger = get_logger("opportunity_radar.acquisition.service")
+
+
+@dataclass(frozen=True, slots=True)
+class TavilyProposalOutcome:
+    url: str
+    outcome: Literal[
+        "created", "already_proposed", "unmatched_pattern", "company_not_found"
+    ]
+    proposal_id: UUID | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TavilyProposalReport:
+    outcomes: tuple[TavilyProposalOutcome, ...]
 
 
 class SourceNotFoundError(AcquisitionError):
@@ -169,6 +187,7 @@ class AcquisitionService:
         reviewed_at: datetime | None = None,
         terms_reviewed: bool = False,
         collector_local_tested: bool = False,
+        commit: bool = True,
     ) -> SourceDefinitionModel:
         normalized_type = source_type.strip().casefold()
         normalized_name = name.strip()
@@ -238,14 +257,19 @@ class AcquisitionService:
         )
         self.session.add(source)
         try:
-            self.session.commit()
+            if commit:
+                self.session.commit()
+            else:
+                self.session.flush()
         except IntegrityError as error:
-            self.session.rollback()
+            if commit:
+                self.session.rollback()
             raise AcquisitionError(
                 AcquisitionErrorCode.INVALID_CONFIGURATION,
                 "source definition conflicts with an existing record",
             ) from error
-        self.session.refresh(source)
+        if commit:
+            self.session.refresh(source)
         return source
 
     def _default_schedule(
@@ -313,6 +337,114 @@ class AcquisitionService:
             evidence_status="ats_identified",
         )
         return proposal, "proposed"
+
+    def propose_from_tavily_evidence(
+        self, items: Iterable[CollectedItem], *, commit: bool = True
+    ) -> TavilyProposalReport:
+        """Turn marked, persisted Tavily results into inert ATS source proposals.
+
+        Company names intentionally use exact canonical-name equality.  A Tavily search
+        result is evidence of a board, not authority to guess which company owns it.
+        """
+        outcomes: list[TavilyProposalOutcome] = []
+        for item in items:
+            if item.metadata.get("source_proposal_candidate") is not True:
+                continue
+            url = item.url or ""
+            detected = detect_ats_board(url)
+            if detected is None:
+                outcomes.append(TavilyProposalOutcome(url, "unmatched_pattern"))
+                continue
+            source_type, board_key = detected
+            companies = (
+                self.session.scalars(
+                    select(Company)
+                    .where(Company.canonical_name == item.company_name)
+                    .limit(2)
+                ).all()
+                if item.company_name
+                else []
+            )
+            if len(companies) != 1:
+                outcomes.append(TavilyProposalOutcome(url, "company_not_found"))
+                continue
+            company = companies[0]
+
+            identifier_key = IDENTIFIER_KEYS[source_type]
+            by_board = self.session.scalar(
+                select(SourceDefinitionModel).where(
+                    SourceDefinitionModel.source_type == source_type,
+                    SourceDefinitionModel.configuration[identifier_key].as_string()
+                    == board_key,
+                )
+            )
+            if by_board is not None:
+                outcomes.append(
+                    TavilyProposalOutcome(url, "already_proposed", by_board.id)
+                )
+                continue
+
+            by_company = self.session.scalar(
+                select(SourceDefinitionModel)
+                .where(
+                    SourceDefinitionModel.source_type == source_type,
+                    SourceDefinitionModel.configuration["company_name"].as_string()
+                    == company.canonical_name,
+                    SourceDefinitionModel.configuration["discovery_via"].as_string()
+                    == "tavily_search",
+                )
+                .order_by(SourceDefinitionModel.created_at)
+            )
+            configuration = _tavily_proposal_configuration(
+                company=company,
+                source_type=source_type,
+                board_key=board_key,
+                item=item,
+            )
+            if by_company is not None:
+                follow_up = follow_inert_correction(
+                    self.session,
+                    by_company,
+                    source_type=source_type,
+                    board_key=board_key,
+                    discovery_evidence=url,
+                    configuration_updates=configuration,
+                )
+                proposal = follow_up.proposal
+                outcomes.append(
+                    TavilyProposalOutcome(
+                        url,
+                        "already_proposed",
+                        proposal.id if proposal is not None else by_company.id,
+                    )
+                )
+                continue
+
+            proposal = self.create_source(
+                source_type=source_type,
+                name=f"Proposed {company.canonical_name} {source_type}",
+                configuration=configuration,
+                evidence_status="ats_identified",
+                commit=False,
+            )
+            outcomes.append(TavilyProposalOutcome(url, "created", proposal.id))
+
+        report = TavilyProposalReport(tuple(outcomes))
+        if commit:
+            self.session.commit()
+        for outcome in report.outcomes:
+            logger.info(
+                "tavily source proposal evaluated",
+                extra={
+                    "job": "tavily_source_proposal",
+                    "url": outcome.url,
+                    "outcome": outcome.outcome,
+                    "proposal_id": str(outcome.proposal_id)
+                    if outcome.proposal_id is not None
+                    else None,
+                },
+            )
+        return report
 
     def update_source_controls(
         self,
@@ -729,6 +861,7 @@ class AcquisitionService:
 
         error: AcquisitionError | None = None
         last_cursor: str | None = None
+        tavily_proposal_items: list[CollectedItem] = []
         # Built once per run, not per item: reused by `_fill_missing_description` below
         # for every item in this run that needs one, and closed once the run's discovery
         # loop is done (successfully or not — every branch below is caught, so control
@@ -795,8 +928,24 @@ class AcquisitionService:
                     run.record_items(persisted=1)
                 else:
                     run.record_items(skipped=1)
+                if source.source_type == "tavily_search":
+                    tavily_proposal_items.append(item)
                 if item.cursor is not None:
                     last_cursor = item.cursor
+            # `_persist_item` flushed every candidate's immutable raw evidence before
+            # this pass.  A proposal failure is isolated to a savepoint so it cannot
+            # erase that evidence or the source run that explains it.
+            if tavily_proposal_items:
+                try:
+                    with self.session.begin_nested():
+                        self.propose_from_tavily_evidence(
+                            tavily_proposal_items, commit=False
+                        )
+                except Exception as proposal_error:
+                    error = AcquisitionError(
+                        AcquisitionErrorCode.INVALID_CONFIGURATION,
+                        f"tavily source proposal failed: {proposal_error}",
+                    )
         except AcquisitionError as caught:
             error = caught
         except Exception as caught:  # Preserve a stable external error boundary.
@@ -1121,6 +1270,33 @@ def _required_string(configuration: Mapping[str, Any], key: str) -> str:
 def _optional_string(configuration: Mapping[str, Any], key: str) -> str | None:
     value = configuration.get(key)
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _tavily_proposal_configuration(
+    *,
+    company: Company,
+    source_type: str,
+    board_key: str,
+    item: CollectedItem,
+) -> dict[str, Any]:
+    metadata = item.metadata
+    configuration: dict[str, Any] = {
+        "company_name": company.canonical_name,
+        IDENTIFIER_KEYS[source_type]: board_key,
+        "discovery_evidence": item.url,
+        "discovery_via": "tavily_search",
+    }
+    for metadata_key, configuration_key in (
+        ("query", "discovery_query"),
+        ("rank", "discovery_rank"),
+        ("score", "discovery_score"),
+    ):
+        value = metadata.get(metadata_key)
+        if value is not None:
+            configuration[configuration_key] = value
+    if item.description:
+        configuration["discovery_excerpt"] = item.description
+    return configuration
 
 
 def _collector_settings(
