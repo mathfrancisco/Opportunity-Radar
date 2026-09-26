@@ -5,6 +5,10 @@ inspecting HTTP status codes or exception types itself.
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from opportunity_radar.platform.ai.router import Attempt
 
 
 class ErrorKind(StrEnum):
@@ -39,3 +43,6 @@ class ProviderError(Exception):
         self.status = status
         self.retry_after_seconds = retry_after_seconds
         self.model = model
+        # Filled by `AIRouter.run` (card F20-19) right before it re-raises, so a caller
+        # can record per-call telemetry even for a call that never returned a response.
+        self.attempts: tuple["Attempt", ...] = ()

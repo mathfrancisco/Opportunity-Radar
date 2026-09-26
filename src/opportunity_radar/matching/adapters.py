@@ -95,4 +95,4 @@ def build_analysis_adapter(
         breaker=breaker,
         quota_guard=quota_guard,
     )
-    return GroqAnalysisAdapter(router=router, prompt=prompt, policy=policy)
+    return GroqAnalysisAdapter(router=router, prompt=prompt, policy=policy, engine=engine)

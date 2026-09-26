@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Literal
+from typing import Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from opportunity_radar.dashboard.analysis_metrics import (
@@ -37,10 +38,13 @@ from opportunity_radar.dashboard.queries import (
     source_coverage_report,
     summarize_overview,
 )
+from opportunity_radar.matching.analysis import SemanticAnalysisPort
 from opportunity_radar.matching.service import MatchingService
 from opportunity_radar.opportunities.domain import OpportunityStatus, Seniority, WorkMode
+from opportunity_radar.platform.ai.config import ai_status
+from opportunity_radar.platform.ai.metrics import ModelAIMetrics, ai_metrics
 from opportunity_radar.platform.config import Settings, get_settings
-from opportunity_radar.presentation.http.dependencies import get_session
+from opportunity_radar.presentation.http.dependencies import get_analysis_adapter, get_session
 from opportunity_radar.profile.domain import ProfileNotFoundError
 from opportunity_radar.profile.service import ProfileService
 
@@ -211,11 +215,37 @@ class AnalysisMetricsWindowResponse(BaseModel):
     models: list[ModelAnalysisMetricsResponse]
 
 
+class ModelAIMetricsResponse(BaseModel):
+    model: str
+    requests: int
+    success_rate: float | None
+    rate_limited_rate: float | None
+    fallback_rate: float | None
+    latency_ms_avg: float | None
+    latency_ms_p95: float | None
+    prompt_tokens: int
+    completion_tokens: int
+    json_valid_rate: float | None
+    breaker: str
+    day_requests_used: int
+    day_requests_limit: int | None
+    day_tokens_used: int
+    day_tokens_limit: int | None
+
+
+class AIMetricsResponse(BaseModel):
+    state: str
+    window_hours: int
+    by_model: list[ModelAIMetricsResponse]
+    cache_hit_rate: float | None
+
+
 class AnalysisMetricsReportResponse(BaseModel):
     generated_at: datetime
     current_model: str
     pending: int
     windows: list[AnalysisMetricsWindowResponse]
+    ai: AIMetricsResponse
 
 
 class OverviewResponse(BaseModel):
@@ -394,6 +424,7 @@ def get_analysis_metrics(
     ),
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
+    adapter: SemanticAnalysisPort = Depends(get_analysis_adapter),
 ) -> AnalysisMetricsReportResponse:
     """Grouped by model, because a window can span a model change."""
     selected = _selected_window(window)
@@ -414,6 +445,48 @@ def get_analysis_metrics(
         current_model=report.current_model,
         pending=report.pending,
         windows=[_analysis_window_response(item) for item in report.windows],
+        ai=_ai_metrics_response(session, settings, adapter),
+    )
+
+
+def _ai_metrics_response(
+    session: Session, settings: Settings, adapter: SemanticAnalysisPort
+) -> AIMetricsResponse:
+    """Card F20-20: the block never removes or renames an existing metrics field."""
+    engine = cast(Engine, session.get_bind())
+    report = ai_metrics(
+        engine,
+        state=ai_status(settings).value,
+        guard=getattr(adapter, "quota_guard", None),
+        breaker=getattr(adapter, "breaker", None),
+        day_requests_limit=settings.ai_daily_requests_soft_limit,
+        day_tokens_limit=settings.ai_daily_tokens_soft_limit,
+    )
+    return AIMetricsResponse(
+        state=report.state,
+        window_hours=report.window_hours,
+        cache_hit_rate=report.cache_hit_rate,
+        by_model=[_model_ai_metrics_response(item) for item in report.by_model],
+    )
+
+
+def _model_ai_metrics_response(item: ModelAIMetrics) -> ModelAIMetricsResponse:
+    return ModelAIMetricsResponse(
+        model=item.model,
+        requests=item.requests,
+        success_rate=item.success_rate,
+        rate_limited_rate=item.rate_limited_rate,
+        fallback_rate=item.fallback_rate,
+        latency_ms_avg=item.latency_ms_avg,
+        latency_ms_p95=item.latency_ms_p95,
+        prompt_tokens=item.prompt_tokens,
+        completion_tokens=item.completion_tokens,
+        json_valid_rate=item.json_valid_rate,
+        breaker=item.breaker,
+        day_requests_used=item.day_requests_used,
+        day_requests_limit=item.day_requests_limit,
+        day_tokens_used=item.day_tokens_used,
+        day_tokens_limit=item.day_tokens_limit,
     )
 
 

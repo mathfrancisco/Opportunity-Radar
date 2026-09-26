@@ -40,6 +40,7 @@ from opportunity_radar.matching.service import (
 from opportunity_radar.operations.retention import PayloadRetentionService
 from opportunity_radar.operations.service import observe_job
 from opportunity_radar.opportunities.service import OpportunityService
+from opportunity_radar.platform.ai.telemetry import purge_older_than
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.logging import (
@@ -221,9 +222,15 @@ def expire_raw_payloads(
     retention_days: int = 365,
     batch_size: int = 500,
     interval_seconds: int = 21600,
+    ai_call_record_retention_days: int | None = None,
     now: datetime | None = None,
 ) -> None:
-    """Drop raw bodies the policy has released, and account for every one of them."""
+    """Drop raw bodies the policy has released, and account for every one of them.
+
+    `ai_call_record_retention_days` piggybacks on this same daily pass (card F20-19):
+    the telemetry table carries no PII, so it only needs its own short retention, not a
+    dedicated job.
+    """
     with observe_job(
         engine,
         job_name="expire_raw_payloads",
@@ -244,6 +251,17 @@ def expire_raw_payloads(
                     "retention_days": outcome.retention_days,
                 },
             )
+        if ai_call_record_retention_days is not None:
+            purged = purge_older_than(engine, ai_call_record_retention_days, now=now)
+            if purged:
+                logger.info(
+                    "ai call record retention batch finished",
+                    extra={
+                        "job": "retention",
+                        "purged": purged,
+                        "retention_days": ai_call_record_retention_days,
+                    },
+                )
 
 
 def collect_enabled_sources(
@@ -510,6 +528,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
                 "retention_days": settings.payload_retention_days,
                 "batch_size": settings.payload_retention_batch_size,
                 "interval_seconds": settings.payload_retention_interval_seconds,
+                "ai_call_record_retention_days": settings.ai_call_record_retention_days,
             },
             id="expire-raw-payloads",
             replace_existing=True,

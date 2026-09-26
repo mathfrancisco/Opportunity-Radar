@@ -224,3 +224,21 @@ def test_the_endpoint_answers_both_windows_and_rejects_an_unknown_one() -> None:
     week = client.get("/analysis-metrics?window=7d").json()
     assert [window["window"] for window in week["windows"]] == ["7d"]
     assert client.get("/analysis-metrics?window=90d").status_code == 422
+
+
+def test_the_endpoint_answers_carries_an_ai_block() -> None:
+    """Card F20-20: the response gets a new `ai` block, none of the old fields move."""
+    client = TestClient(
+        create_app(Settings(database_url=os.environ["DATABASE_URL"]))
+    )
+
+    body = client.get("/analysis-metrics").json()
+
+    assert "ai" in body
+    ai = body["ai"]
+    assert ai["state"] in {"enabled", "disabled", "blocked_by_configuration"}
+    assert ai["window_hours"] == 24
+    assert isinstance(ai["by_model"], list)
+    assert "cache_hit_rate" in ai
+    # Old fields are still there, untouched.
+    assert "current_model" in body and "pending" in body and "windows" in body

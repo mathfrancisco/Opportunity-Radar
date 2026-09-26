@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     ai_minute_requests_soft_limit: int = 25
     ai_breaker_failures: int = 5
     ai_breaker_cooldown_seconds: int = 120
+    # SPEC 43 §8.5: per-call telemetry (`platform.ai_call_record`) carries no PII, so it
+    # only needs enough retention to explain recent cost and failure, not an audit trail.
+    ai_call_record_retention_days: int = 30
     # Optional on purpose: presence decides whether the Tavily source participates in
     # runs at all. Absent, it is a supported deployment (bloqueada por configuração),
     # the same treatment source_alert_webhook_url already gets above.
@@ -111,6 +114,7 @@ class Settings(BaseSettings):
             "AI_MINUTE_REQUESTS_SOFT_LIMIT": self.ai_minute_requests_soft_limit,
             "AI_BREAKER_FAILURES": self.ai_breaker_failures,
             "AI_BREAKER_COOLDOWN_SECONDS": self.ai_breaker_cooldown_seconds,
+            "AI_CALL_RECORD_RETENTION_DAYS": self.ai_call_record_retention_days,
         }
         for name, value in positive_limits.items():
             if value <= 0:
