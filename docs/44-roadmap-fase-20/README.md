@@ -67,7 +67,7 @@ evidência de aceite ou correção.
 
 | Card | Depende de | Status |
 | --- | --- | --- |
-| [F20-35 — Mapa de cobertura e rendimento](fase-20/f20-35-mapa-de-cobertura-e-rendimento.md) | F20-01, F20-03 | Backlog |
+| [F20-35 — Mapa de cobertura e rendimento](fase-20/f20-35-mapa-de-cobertura-e-rendimento.md) | F20-01, F20-03 | Implementado — `102a53d`; critério 4 (baseline de sete dias) depende da máquina de referência |
 | [F20-36 — Descoberta limitada de sites e sitemaps](fase-20/f20-36-descoberta-limitada-de-sites.md) | F20-27, F20-35 | Backlog |
 | [F20-37 — Coletor JobPosting público](fase-20/f20-37-coletor-jobposting-publico.md) | F20-36, F20-03 | Backlog |
 | [F20-38 — Agenda por rendimento e orçamento de rede](fase-20/f20-38-agenda-adaptativa-e-http-condicional.md) | F20-35 | Backlog |
