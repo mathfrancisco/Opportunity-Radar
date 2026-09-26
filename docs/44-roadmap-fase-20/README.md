@@ -26,7 +26,7 @@ O status oficial passa a ser o desta fase.
 | [F20-06 — Health, doctor, scripts e testes sem Ollama](fase-20/f20-06-health-doctor-scripts-e-testes-sem-ollama.md) | F20-04, F20-05, F20-08 | Backlog |
 | [F20-07 — Porta `LLMProvider` e `GroqProvider`](fase-20/f20-07-porta-llmprovider-e-groqprovider.md) | Nenhum | Feito |
 | [F20-08 — Configuração da IA cloud e segredos](fase-20/f20-08-configuracao-e-segredos.md) | F20-07 | Feito |
-| [F20-09 — Tarefas (`AITask`) e roteamento por tarefa](fase-20/f20-09-tarefas-e-roteamento.md) | F20-07, F20-08 | Backlog |
+| [F20-09 — Tarefas (`AITask`) e roteamento por tarefa](fase-20/f20-09-tarefas-e-roteamento.md) | F20-07, F20-08 | Feito |
 | [F20-10 — Retry com jitter e fallback entre modelos](fase-20/f20-10-retry-e-fallback-entre-modelos.md) | F20-09 | Backlog |
 | [F20-11 — Circuit breaker por modelo](fase-20/f20-11-circuit-breaker-por-modelo.md) | F20-10 | Backlog |
 | [F20-12 — Quota Guard persistente por modelo](fase-20/f20-12-quota-guard-persistente.md) | F20-10 | Backlog |

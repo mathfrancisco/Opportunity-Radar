@@ -1,6 +1,6 @@
 # CARD F20-09 — Tarefas (`AITask`) e roteamento por tarefa
 
-- **Status:** Backlog
+- **Status:** Feito — `tests/backend/platform/ai/test_router.py` (rodado no `.venv` local; Docker indisponível nesta máquina).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-07, F20-08
@@ -98,9 +98,9 @@ class AIRouter:
 
 ## Critérios de aceite
 
-- [ ] Mudar `GROQ_REASONING_MODEL` muda o modelo chamado em `job_match`.
-- [ ] `AI_FALLBACK_ENABLED=false` usa só o primeiro modelo.
-- [ ] 401 no primeiro modelo não tenta o segundo.
+- [x] Mudar `GROQ_REASONING_MODEL` muda o modelo chamado em `job_match`.
+- [x] `AI_FALLBACK_ENABLED=false` usa só o primeiro modelo.
+- [x] 401 no primeiro modelo não tenta o segundo.
 
 ## Testes
 
