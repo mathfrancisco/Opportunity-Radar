@@ -99,6 +99,36 @@ def test_uses_eu_api_and_paginates_until_short_page() -> None:
     assert collection_request.telemetry.items_announced == 101
 
 
+def test_repeated_page_raises_instead_of_claiming_complete_board() -> None:
+    page = [
+        {
+            "id": f"job-{number}",
+            "hostedUrl": f"https://jobs.lever.co/acme/{number}",
+        }
+        for number in range(100)
+    ]
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json=page)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(AcquisitionError) as error:
+            asyncio.run(
+                _collect(
+                    LeverCollector(client=client),
+                    CollectionRequest(company_reference="acme"),
+                )
+            )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert error.value.code is AcquisitionErrorCode.PARSER_SCHEMA_CHANGED
+    assert [call.url.params["skip"] for call in calls] == ["0", "100"]
+
+
 def test_stops_at_max_items() -> None:
     payload = json.loads(_FIXTURE.read_text(encoding="utf-8"))
     client = httpx.AsyncClient(

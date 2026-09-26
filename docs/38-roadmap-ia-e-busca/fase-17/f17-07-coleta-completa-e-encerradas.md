@@ -78,7 +78,7 @@ Inbox para sempre, poluindo a precisão com vagas mortas.
 | Duas ausências comparáveis encerram ocorrência; outra fonte ativa impede encerramento agregado | `tests/backend/opportunities/test_run_closures.py::test_missing_from_two_consecutive_complete_runs_closes_with_evidence` |
 | Execução parcial ou falha nunca encerra vaga | `test_run_closures.py::test_partial_and_failed_runs_never_close_anything` |
 | Reaparecimento desfaz apenas encerramento automático | `test_run_closures.py::test_reappearing_reopens_a_closed_opportunity` |
-| Mudança de escopo, loop de cursor e limite atingido nunca provam ausência | sem evidência verificável nesta revisão — nenhum teste com esses três nomes foi localizado; abrir card de acompanhamento para uma regressão dedicada |
+| Mudança de escopo, loop de cursor e limite atingido nunca provam ausência | parcial: `tests/backend/acquisition/test_lever_collector.py::test_repeated_page_raises_instead_of_claiming_complete_board` confirma que página repetida gera `PARSER_SCHEMA_CHANGED`; `tests/backend/acquisition/test_service.py::test_repeated_cursor_loop_error_never_marks_run_complete` confirma execução parcial sem checkpoint; `::test_pagination_gap_alert_does_not_fire_when_max_items_caps_the_run` confirma que execução limitada não é completa. Invalidação por mudança de escopo continua sem evidência. |
 | Itens repetidos registram presença sem duplicar evidência/conteúdo | `test_service.py::test_run_deduplicates_identical_identity_but_preserves_changed_payload` |
 
 ## Arquivos prováveis
