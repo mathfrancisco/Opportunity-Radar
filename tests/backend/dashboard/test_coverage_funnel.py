@@ -1,9 +1,14 @@
-"""Canonical-company coverage and acquisition yield metrics (F20-35)."""
+"""Canonical-company coverage and acquisition yield metrics (F20-35).
+
+Fixtures use fixed 2040 timestamps, outside the persisted corpus, and pass that clock to
+metric queries. This keeps yield cohorts absolute and independent of database contents.
+"""
 
 from __future__ import annotations
 
 import os
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -38,8 +43,8 @@ pytestmark = [
     ),
 ]
 
-# A controlled, isolated clock keeps persisted CI fixtures outside this metric window.
-NOW = datetime(2040, 1, 1, tzinfo=UTC) + timedelta(days=uuid4().int % 100_000)
+# A fixed clock keeps persisted corpus rows outside every test metric window.
+NOW = datetime(2040, 1, 1, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -210,7 +215,7 @@ def _seed_funnel(session: Session) -> None:
             normalized_alias=f"f20-35-alias-{uuid4().hex}",
         )
     )
-    for suffix, recent in (("a", True), ("b", False)):
+    for suffix in ("a", "b"):
         source = _source_definition(
             session,
             _company_source(session, collected, f"collected-{suffix}"),
@@ -222,7 +227,7 @@ def _seed_funnel(session: Session) -> None:
             session,
             source,
             status="SUCCEEDED",
-            complete=recent,
+            complete=True,
             started_at=NOW - timedelta(hours=1),
             http_requests=4,
         )
@@ -273,7 +278,6 @@ def test_enabled_source_with_failing_run_is_not_operational(session: Session) ->
 
 
 def test_multisource_opportunity_counts_once(session: Session) -> None:
-    baseline = useful_yield_metrics(session, window_days=7, now=NOW)
     company = _company(session, "multisource-opportunity")
     sources = tuple(
         _source_definition(
@@ -311,20 +315,19 @@ def test_multisource_opportunity_counts_once(session: Session) -> None:
 
     report = useful_yield_metrics(session, window_days=7, now=NOW)
 
-    assert report.new_unique_opportunities == baseline.new_unique_opportunities + 20
-    assert report.requests == baseline.requests + 5
+    assert report.new_unique_opportunities == 20
+    assert report.requests == 5
     assert report.discovery_delay_p50_seconds == pytest.approx(6_000)
     assert report.discovery_delay_p95_seconds == pytest.approx(6_000)
     assert report.contribution_by_source[sources[0].id] == 20
     assert report.contribution_by_source[sources[1].id] == 20
     assert report.judged_relevant == 10
     assert report.judged_opportunities == 20
-    assert report.judgement_rate == 1
-    assert report.yield_per_100_requests == 200
+    assert report.judgement_rate == Decimal("0.5")
+    assert report.yield_per_100_requests == Decimal("200")
 
 
 def test_metrics_expose_window_denominator_support_and_null(session: Session) -> None:
-    baseline = useful_yield_metrics(session, window_days=7, now=NOW)
     company = _company(session, "no-trustworthy-publication")
     source = _source_definition(
         session,
@@ -344,14 +347,216 @@ def test_metrics_expose_window_denominator_support_and_null(session: Session) ->
     report = useful_yield_metrics(session, window_days=7, now=NOW)
 
     assert report.window_days == 7
-    assert report.requests == baseline.requests + 12
-    assert report.new_unique_opportunities == baseline.new_unique_opportunities + 1
-    assert report.judged_opportunities == baseline.judged_opportunities + 1
-    assert report.judged_relevant is None
-    assert report.judgement_rate is None
-    assert report.yield_per_100_requests is None
+    assert report.requests == 12
+    assert report.new_unique_opportunities == 1
+    assert report.judged_opportunities == 1
+    assert report.judged_relevant == 1
+    assert report.judgement_rate == Decimal("1")
+    assert report.yield_per_100_requests == Decimal(100) / Decimal(12)
     assert report.discovery_delay_p50_seconds is None
     assert report.discovery_delay_p95_seconds is None
+
+
+def test_latest_successful_incomplete_run_is_unhealthy_and_not_operational(
+    session: Session,
+) -> None:
+    baseline = company_coverage_funnel(session, window_days=7, now=NOW)
+    company = _company(session, "incomplete-success")
+    source = _source_definition(
+        session,
+        _company_source(session, company, "incomplete-success"),
+        "incomplete-success",
+        enabled=True,
+        homologated=True,
+    )
+    _run(session, source, status="SUCCEEDED", complete=False)
+
+    report = company_coverage_funnel(session, window_days=7, now=NOW)
+
+    assert report.enabled_but_unhealthy == baseline.enabled_but_unhealthy + 1
+    assert report.stages[-1].companies == baseline.stages[-1].companies
+
+
+def test_absorbed_duplicate_is_not_a_new_unique_opportunity(session: Session) -> None:
+    company = _company(session, "absorbed-duplicate")
+    source = _source_definition(
+        session,
+        _company_source(session, company, "absorbed-duplicate"),
+        "absorbed-duplicate",
+        enabled=True,
+        homologated=True,
+    )
+    survivor = _opportunity(session, company, (source,), tag="survivor")
+    duplicate = _opportunity(session, company, (source,), tag="absorbed")
+    duplicate.duplicate_of = survivor.id
+    session.add_all(
+        [
+            RelevanceMarkModel(
+                opportunity_id=survivor.id, relevant=True, marked_at=NOW
+            ),
+            RelevanceMarkModel(
+                opportunity_id=duplicate.id, relevant=False, marked_at=NOW
+            ),
+        ]
+    )
+
+    report = useful_yield_metrics(session, window_days=7, now=NOW)
+
+    assert report.new_unique_opportunities == 1
+    assert report.judged_opportunities == 1
+    assert report.judged_relevant == 1
+    assert report.judgement_rate == Decimal("1")
+    assert report.contribution_by_source[source.id] == 1
+
+
+def test_mark_after_now_does_not_change_historical_report(session: Session) -> None:
+    since = NOW - timedelta(days=7)
+    company = _company(session, "historical-marks")
+    source = _source_definition(
+        session,
+        _company_source(session, company, "historical-marks"),
+        "historical-marks",
+    )
+    in_window = _opportunity(session, company, (source,), tag="marked-in-window")
+    old_only = _opportunity(
+        session,
+        company,
+        (source,),
+        tag="mark-before-window",
+        created_at=since + timedelta(hours=1),
+    )
+    session.add_all(
+        [
+            RelevanceMarkModel(
+                opportunity_id=in_window.id,
+                relevant=True,
+                marked_at=NOW - timedelta(days=1),
+            ),
+            RelevanceMarkModel(
+                opportunity_id=in_window.id,
+                relevant=False,
+                marked_at=NOW + timedelta(seconds=1),
+            ),
+            RelevanceMarkModel(
+                opportunity_id=old_only.id,
+                relevant=False,
+                marked_at=since - timedelta(seconds=1),
+            ),
+        ]
+    )
+
+    report = useful_yield_metrics(session, window_days=7, now=NOW)
+
+    assert report.new_unique_opportunities == 2
+    assert report.judged_opportunities == 1
+    assert report.judged_relevant == 1
+    assert report.judgement_rate == Decimal("1")
+
+
+def test_occurrence_after_window_gets_no_contribution_credit(session: Session) -> None:
+    company = _company(session, "future-occurrence")
+    source = _source_definition(
+        session,
+        _company_source(session, company, "future-occurrence"),
+        "future-occurrence",
+    )
+    _opportunity(
+        session,
+        company,
+        (source,),
+        tag="seen-after-now",
+        first_seen_at=(NOW + timedelta(seconds=1),),
+    )
+
+    report = useful_yield_metrics(session, window_days=7, now=NOW)
+
+    assert report.new_unique_opportunities == 1
+    assert report.contribution_by_source.get(source.id, 0) == 0
+
+
+def test_untrustworthy_source_mix_is_omitted_and_valid_delays_interpolate(
+    session: Session,
+) -> None:
+    company = _company(session, "delay-mix")
+    sources = tuple(
+        _source_definition(
+            session,
+            _company_source(session, company, f"delay-{index}"),
+            f"delay-{index}",
+        )
+        for index in range(2)
+    )
+    _opportunity(
+        session,
+        company,
+        sources,
+        tag="negative-mix",
+        first_seen_at=(NOW - timedelta(hours=2), NOW - timedelta(hours=1)),
+        source_published_at=(None, NOW - timedelta(minutes=90)),
+    )
+    first_seen = NOW - timedelta(hours=2)
+    for index, delay in enumerate((60, 120, 300, 600)):
+        _opportunity(
+            session,
+            company,
+            sources,
+            tag=f"valid-delay-{index}",
+            first_seen_at=(first_seen, first_seen + timedelta(minutes=1)),
+            source_published_at=(
+                first_seen - timedelta(seconds=delay),
+                first_seen - timedelta(seconds=delay),
+            ),
+        )
+
+    report = useful_yield_metrics(session, window_days=7, now=NOW)
+
+    assert report.discovery_delay_p50_seconds == 210
+    assert report.discovery_delay_p95_seconds == 555
+
+
+def test_one_negative_mark_reports_zero_judgement_rate(session: Session) -> None:
+    company = _company(session, "negative-mark")
+    source = _source_definition(
+        session,
+        _company_source(session, company, "negative-mark"),
+        "negative-mark",
+    )
+    _run(session, source, http_requests=5)
+    opportunity = _opportunity(session, company, (source,), tag="negative-mark")
+    session.add(
+        RelevanceMarkModel(
+            opportunity_id=opportunity.id, relevant=False, marked_at=NOW
+        )
+    )
+
+    report = useful_yield_metrics(session, window_days=7, now=NOW)
+
+    assert report.judged_opportunities == 1
+    assert report.judged_relevant == 0
+    assert report.judgement_rate == Decimal("0")
+    assert report.yield_per_100_requests == Decimal("0")
+
+
+def test_zero_requests_leave_useful_yield_null(session: Session) -> None:
+    company = _company(session, "zero-requests")
+    source = _source_definition(
+        session,
+        _company_source(session, company, "zero-requests"),
+        "zero-requests",
+    )
+    opportunity = _opportunity(session, company, (source,), tag="zero-requests")
+    session.add(
+        RelevanceMarkModel(
+            opportunity_id=opportunity.id, relevant=True, marked_at=NOW
+        )
+    )
+
+    report = useful_yield_metrics(session, window_days=7, now=NOW)
+
+    assert report.requests == 0
+    assert report.judged_opportunities == 1
+    assert report.judged_relevant == 1
+    assert report.yield_per_100_requests is None
 
 
 def test_endpoint_reports_funnel_block(session: Session) -> None:

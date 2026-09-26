@@ -308,6 +308,12 @@ class CompanyCoverageFunnel:
 
 @dataclass(frozen=True, slots=True)
 class UsefulYieldMetric:
+    """Windowed yield; `judged_opportunities` shows support for relevance rates.
+
+    An unmarked opportunity is not a negative mark. Rates are null only when their
+    denominator is zero, and a measured zero relevance rate remains zero.
+    """
+
     window_days: int
     requests: int
     new_unique_opportunities: int
@@ -318,9 +324,6 @@ class UsefulYieldMetric:
     discovery_delay_p50_seconds: float | None
     discovery_delay_p95_seconds: float | None
     contribution_by_source: dict[UUID, int]
-
-
-MIN_JUDGEMENT_SAMPLE = 20
 
 
 def _latest_assessments(profile_version_id: UUID | None) -> Any:
@@ -1004,14 +1007,19 @@ def company_coverage_funnel(
             ).where(latest_runs.c.position == 1)
         ).all()
     }
-    unhealthy = {
-        company_id
-        for source, company_id in source_rows
-        if source.id in homologated_source_ids
-        and source.enabled
-        and latest_by_source.get(source.id, (None, False, None))[0]
-        in FAILING_RUN_STATUSES
-    }
+    unhealthy: set[UUID] = set()
+    for source, company_id in source_rows:
+        latest = latest_by_source.get(source.id)
+        terminal_incomplete = latest is not None and (
+            latest[0] in ("SUCCEEDED", "CANCELLED") and not latest[1]
+        )
+        if (
+            source.id in homologated_source_ids
+            and source.enabled
+            and latest is not None
+            and (latest[0] in FAILING_RUN_STATUSES or terminal_incomplete)
+        ):
+            unhealthy.add(company_id)
     collected = {
         company_id
         for source, company_id in source_rows
@@ -1070,15 +1078,18 @@ def useful_yield_metrics(
         )
         or 0
     )
-    opportunity_ids = list(
-        session.scalars(
-            select(OpportunityModel.id).where(
-                OpportunityModel.created_at >= since,
-                OpportunityModel.created_at <= reference,
-            )
-        ).all()
+    cohort = (
+        select(OpportunityModel.id.label("opportunity_id"))
+        .where(
+            OpportunityModel.created_at >= since,
+            OpportunityModel.created_at <= reference,
+            OpportunityModel.duplicate_of.is_(None),
+        )
+        .subquery("yield_opportunity_cohort")
     )
-    new_unique_opportunities = len(opportunity_ids)
+    new_unique_opportunities = int(
+        session.scalar(select(func.count()).select_from(cohort)) or 0
+    )
     latest_marks = (
         select(
             RelevanceMarkModel.opportunity_id.label("opportunity_id"),
@@ -1090,23 +1101,29 @@ def useful_yield_metrics(
             )
             .label("position"),
         )
-        .where(RelevanceMarkModel.opportunity_id.in_(opportunity_ids))
+        # Support counts judgments made inside this report window, not older or future marks.
+        .where(
+            RelevanceMarkModel.opportunity_id.in_(
+                select(cohort.c.opportunity_id)
+            ),
+            RelevanceMarkModel.marked_at >= since,
+            RelevanceMarkModel.marked_at <= reference,
+        )
         .subquery("latest_yield_marks")
     )
     marks = session.execute(
         select(latest_marks.c.relevant).where(latest_marks.c.position == 1)
-    ).all() if opportunity_ids else []
+    ).all()
     judged_count = len(marks)
     judged_relevant = sum(1 for (relevant,) in marks if relevant)
-    enough_judgements = judged_count >= MIN_JUDGEMENT_SAMPLE
     judgement_rate = (
-        Decimal(judged_count) / Decimal(new_unique_opportunities)
-        if enough_judgements and new_unique_opportunities
+        Decimal(judged_relevant) / Decimal(judged_count)
+        if judged_count > 0
         else None
     )
     yield_per_100_requests = (
         Decimal(judged_relevant * 100) / Decimal(requests)
-        if enough_judgements and requests > 0
+        if requests > 0
         else None
     )
 
@@ -1118,12 +1135,12 @@ def useful_yield_metrics(
                 func.count(func.distinct(SourceOccurrenceModel.opportunity_id)),
             )
             .join(
-                OpportunityModel,
-                OpportunityModel.id == SourceOccurrenceModel.opportunity_id,
+                cohort,
+                cohort.c.opportunity_id == SourceOccurrenceModel.opportunity_id,
             )
             .where(
-                OpportunityModel.created_at >= since,
-                OpportunityModel.created_at <= reference,
+                SourceOccurrenceModel.first_seen_at >= since,
+                SourceOccurrenceModel.first_seen_at <= reference,
             )
             .group_by(SourceOccurrenceModel.source_definition_id)
         ).all()
@@ -1135,33 +1152,35 @@ def useful_yield_metrics(
             SourceOccurrenceModel.source_published_at,
         )
         .join(
-            OpportunityModel,
-            OpportunityModel.id == SourceOccurrenceModel.opportunity_id,
+            cohort,
+            cohort.c.opportunity_id == SourceOccurrenceModel.opportunity_id,
         )
         .where(
-            OpportunityModel.id.in_(opportunity_ids),
             SourceOccurrenceModel.first_seen_at <= reference,
         )
-    ).all() if opportunity_ids else []
+    ).all()
     first_seen: dict[UUID, datetime] = {}
     trustworthy_publication: dict[UUID, list[datetime]] = {}
     for opportunity_id, observed_at, published_at in occurrence_rows:
         first_seen[opportunity_id] = min(
             first_seen.get(opportunity_id, observed_at), observed_at
         )
-        if published_at is not None and published_at <= observed_at:
+        if published_at is not None:
             trustworthy_publication.setdefault(opportunity_id, []).append(published_at)
     delays = sorted(
         (first_seen[opportunity_id] - min(publications)).total_seconds()
         for opportunity_id, publications in trustworthy_publication.items()
         if opportunity_id in first_seen
+        and min(publications) <= first_seen[opportunity_id]
     )
     return UsefulYieldMetric(
         window_days=window_days,
         requests=requests,
         new_unique_opportunities=new_unique_opportunities,
         judged_opportunities=judged_count,
-        judged_relevant=judged_relevant if enough_judgements else None,
+        judged_relevant=(
+            judged_relevant if new_unique_opportunities > 0 else None
+        ),
         judgement_rate=judgement_rate,
         yield_per_100_requests=yield_per_100_requests,
         discovery_delay_p50_seconds=_percentile(delays, 0.50),
@@ -1173,11 +1192,14 @@ def useful_yield_metrics(
 def _percentile(values: list[float], percentile: float) -> float | None:
     if not values:
         return None
-    index = (len(values) - 1) * percentile
+    decimal_percentile = Decimal(str(percentile))
+    index = Decimal(len(values) - 1) * decimal_percentile
     lower = int(index)
     upper = min(lower + 1, len(values) - 1)
     fraction = index - lower
-    return values[lower] + (values[upper] - values[lower]) * fraction
+    lower_value = Decimal(str(values[lower]))
+    upper_value = Decimal(str(values[upper]))
+    return float(lower_value + (upper_value - lower_value) * fraction)
 
 
 def _precision_metrics(
