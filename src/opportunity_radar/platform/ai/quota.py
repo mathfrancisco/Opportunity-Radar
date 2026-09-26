@@ -34,6 +34,8 @@ ai_quota_usage = sa.Table(
     sa.Column("tokens", sa.Integer, nullable=False, server_default="0"),
     sa.Column("remaining_requests_reported", sa.Integer),
     sa.Column("remaining_tokens_reported", sa.Integer),
+    sa.Column("requests_ceiling", sa.Integer),
+    sa.Column("tokens_ceiling", sa.Integer),
     sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
 )
 
@@ -68,15 +70,28 @@ def day_window(now: datetime) -> datetime:
     return now.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
-def effective_limit(internal_limit: int, remaining_reported: int | None, already_used: int) -> int:
-    """The smaller of the configured soft limit and what the provider last reported.
+def effective_ceiling(internal_limit: int, ceiling: int | None) -> int:
+    """The smaller of the configured soft limit and the stored absolute ceiling."""
+    return internal_limit if ceiling is None else min(internal_limit, ceiling)
 
-    `remaining_reported` is "how many are left", so it is turned back into an absolute
-    ceiling by adding what this window already used before that header arrived.
-    """
-    if remaining_reported is None:
-        return internal_limit
-    return min(internal_limit, remaining_reported + already_used)
+
+def _reported_remaining_for_window(
+    rate_limit: RateLimit | None, window_kind: str
+) -> tuple[int | None, int | None]:
+    if rate_limit is None:
+        return None, None
+
+    # A missing reset duration leaves the header's window unknown, so do not store it.
+    requests_window = (
+        "day" if rate_limit.reset_requests_seconds > 60 else "minute"
+    ) if rate_limit.reset_requests_seconds is not None else None
+    tokens_window = (
+        "day" if rate_limit.reset_tokens_seconds > 60 else "minute"
+    ) if rate_limit.reset_tokens_seconds is not None else None
+    return (
+        rate_limit.remaining_requests if requests_window == window_kind else None,
+        rate_limit.remaining_tokens if tokens_window == window_kind else None,
+    )
 
 
 _RESERVE_SQL = text(
@@ -89,24 +104,19 @@ _RESERVE_SQL = text(
         tokens = {TABLE_NAME}.tokens + EXCLUDED.tokens,
         updated_at = now()
     WHERE
-        {TABLE_NAME}.requests + 1 <= CASE
-            WHEN {TABLE_NAME}.remaining_requests_reported IS NULL THEN :requests_limit
-            ELSE LEAST(
-                :requests_limit,
-                {TABLE_NAME}.remaining_requests_reported + {TABLE_NAME}.requests
-            )
-        END
-        AND {TABLE_NAME}.tokens + :tokens <= CASE
-            WHEN {TABLE_NAME}.remaining_tokens_reported IS NULL THEN :tokens_limit
-            ELSE LEAST(:tokens_limit, {TABLE_NAME}.remaining_tokens_reported + {TABLE_NAME}.tokens)
-        END
+        {TABLE_NAME}.requests + 1 <= LEAST(
+            :requests_limit, COALESCE({TABLE_NAME}.requests_ceiling, :requests_limit)
+        )
+        AND {TABLE_NAME}.tokens + :tokens <= LEAST(
+            :tokens_limit, COALESCE({TABLE_NAME}.tokens_ceiling, :tokens_limit)
+        )
     RETURNING requests, tokens
     """
 )
 
 _SELECT_SQL = text(
     f"""
-    SELECT requests, tokens, remaining_requests_reported, remaining_tokens_reported
+    SELECT requests, tokens, requests_ceiling, tokens_ceiling
     FROM {SCHEMA}.{TABLE_NAME}
     WHERE model = :model AND window_kind = :window_kind AND window_start = :window_start
     """
@@ -118,6 +128,20 @@ _SETTLE_SQL = text(
     SET tokens = GREATEST(0, tokens + :token_delta),
         remaining_requests_reported = COALESCE(:remaining_requests, remaining_requests_reported),
         remaining_tokens_reported = COALESCE(:remaining_tokens, remaining_tokens_reported),
+        requests_ceiling = CASE
+            WHEN :remaining_requests IS NULL THEN requests_ceiling
+            ELSE LEAST(
+                COALESCE(requests_ceiling, :remaining_requests + requests),
+                :remaining_requests + requests
+            )
+        END,
+        tokens_ceiling = CASE
+            WHEN :remaining_tokens IS NULL THEN tokens_ceiling
+            ELSE LEAST(
+                COALESCE(tokens_ceiling, :remaining_tokens + tokens + :token_delta),
+                :remaining_tokens + tokens + :token_delta
+            )
+        END,
         updated_at = now()
     WHERE model = :model AND window_kind = :window_kind AND window_start = :window_start
     """
@@ -210,13 +234,14 @@ class QuotaGuard:
         rate_limit: RateLimit | None,
     ) -> None:
         token_delta = 0 if actual_tokens is None else actual_tokens - reservation.tokens
-        remaining_requests = rate_limit.remaining_requests if rate_limit else None
-        remaining_tokens = rate_limit.remaining_tokens if rate_limit else None
         with self._engine.begin() as connection:
             for window_kind, window_start in (
                 ("minute", reservation.minute_start),
                 ("day", reservation.day_start),
             ):
+                remaining_requests, remaining_tokens = _reported_remaining_for_window(
+                    rate_limit, window_kind
+                )
                 connection.execute(
                     _SETTLE_SQL,
                     {
@@ -284,12 +309,8 @@ class QuotaGuard:
     def _window_exhausted(
         self, row: Any, requests_limit: int, tokens_limit: int
     ) -> bool:
-        limit = effective_limit(
-            requests_limit, row["remaining_requests_reported"], row["requests"]
-        )
-        token_limit = effective_limit(
-            tokens_limit, row["remaining_tokens_reported"], row["tokens"]
-        )
+        limit = effective_ceiling(requests_limit, row["requests_ceiling"])
+        token_limit = effective_ceiling(tokens_limit, row["tokens_ceiling"])
         return bool(row["requests"] >= limit or row["tokens"] >= token_limit)
 
     def snapshot(self) -> list[dict[str, Any]]:
@@ -310,6 +331,6 @@ __all__ = [
     "Reservation",
     "ai_quota_usage",
     "day_window",
-    "effective_limit",
+    "effective_ceiling",
     "minute_window",
 ]

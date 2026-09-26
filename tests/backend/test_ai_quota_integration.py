@@ -146,6 +146,89 @@ def test_settle_records_reported_remaining_and_adjusts_tokens() -> None:
 
     rows = guard.snapshot()
     minute_row = next(row for row in rows if row["window_kind"] == "minute")
+    day_row = next(row for row in rows if row["window_kind"] == "day")
     assert minute_row["tokens"] == 60  # 100 reserved, settled down to the real 60
+    assert minute_row["remaining_requests_reported"] == 29
     assert minute_row["remaining_tokens_reported"] == 7940
+    assert minute_row["requests_ceiling"] == 30
+    assert minute_row["tokens_ceiling"] == 8000
+    assert day_row["remaining_requests_reported"] is None
+    assert day_row["remaining_tokens_reported"] is None
+
+
+def test_settle_does_not_apply_a_day_remainder_to_the_minute_window() -> None:
+    engine = _engine()
+    _reset(engine)
+    now = datetime(2026, 9, 26, 12, 0, 0, tzinfo=UTC)
+    guard = QuotaGuard(engine, _limits(), now=lambda: now)
+    reservation = guard.reserve(_MODEL, estimated_tokens=1)
+    assert reservation is not None
+
+    guard.settle(
+        reservation,
+        actual_tokens=1,
+        rate_limit=RateLimit(1000, 1_000_000, 900, None, 86_400.0, None),
+    )
+
+    rows = guard.snapshot()
+    minute_row = next(row for row in rows if row["window_kind"] == "minute")
+    day_row = next(row for row in rows if row["window_kind"] == "day")
+    assert minute_row["remaining_requests_reported"] is None
+    assert minute_row["requests_ceiling"] is None
+    assert day_row["remaining_requests_reported"] == 900
+    assert day_row["requests_ceiling"] == day_row["requests"] + 900
+
+
+def test_settle_does_not_apply_a_minute_token_remainder_to_the_day_window() -> None:
+    engine = _engine()
+    _reset(engine)
+    now = datetime(2026, 9, 26, 12, 0, 0, tzinfo=UTC)
+    guard = QuotaGuard(engine, _limits(), now=lambda: now)
+    reservation = guard.reserve(_MODEL, estimated_tokens=1)
+    assert reservation is not None
+
+    guard.settle(
+        reservation,
+        actual_tokens=1,
+        rate_limit=RateLimit(1000, 1_000_000, None, 900_000, None, 59.0),
+    )
+
+    rows = guard.snapshot()
+    minute_row = next(row for row in rows if row["window_kind"] == "minute")
+    day_row = next(row for row in rows if row["window_kind"] == "day")
+    assert minute_row["remaining_tokens_reported"] == 900_000
+    assert minute_row["tokens_ceiling"] == minute_row["tokens"] + 900_000
+    assert day_row["remaining_tokens_reported"] is None
+    assert day_row["tokens_ceiling"] is None
+
+
+def test_a_provider_refill_never_raises_the_window_ceiling() -> None:
+    engine = _engine()
+    _reset(engine)
+    now = datetime(2026, 9, 26, 12, 0, 0, tzinfo=UTC)
+    guard = QuotaGuard(engine, _limits(minute_requests=100, day_requests=100), now=lambda: now)
+    first = guard.reserve(_MODEL, estimated_tokens=1)
+    assert first is not None
+    guard.settle(
+        first,
+        actual_tokens=1,
+        rate_limit=RateLimit(100, 100, 5, 5, 59.0, 59.0),
+    )
+
+    second = guard.reserve(_MODEL, estimated_tokens=1)
+    third = guard.reserve(_MODEL, estimated_tokens=1)
+    assert second is not None
+    assert third is not None
+    guard.settle(
+        third,
+        actual_tokens=1,
+        rate_limit=RateLimit(100, 100, 20, 20, 59.0, 59.0),
+    )
+
+    minute_row = next(row for row in guard.snapshot() if row["window_kind"] == "minute")
+    assert minute_row["requests_ceiling"] == 6
+    assert minute_row["tokens_ceiling"] == 6
+    for _ in range(3):
+        assert guard.reserve(_MODEL, estimated_tokens=1) is not None
+    assert guard.reserve(_MODEL, estimated_tokens=1) is None
 
