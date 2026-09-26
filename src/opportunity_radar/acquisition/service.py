@@ -772,6 +772,7 @@ class AcquisitionService:
             retries=run_telemetry.retry_count,
             rate_limit_events=run_telemetry.rate_limit_events,
         )
+        run.record_credits(run_telemetry.credits_used)
 
         if error is None:
             final_status = (
@@ -779,7 +780,10 @@ class AcquisitionService:
                 if run.items_invalid
                 else SourceRunStatus.SUCCEEDED
             )
-        elif error.code is AcquisitionErrorCode.INVALID_ITEM:
+        elif error.code in {
+            AcquisitionErrorCode.INVALID_ITEM,
+            AcquisitionErrorCode.CREDIT_BUDGET_EXCEEDED,
+        }:
             final_status = SourceRunStatus.PARTIAL
         elif run.items_persisted:
             final_status = SourceRunStatus.PARTIAL

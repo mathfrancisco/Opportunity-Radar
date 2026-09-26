@@ -16,6 +16,7 @@ def build_collector_registry(
     tavily_api_key: str | None = None,
     tavily_base_url: str = "https://api.tavily.com",
     tavily_search_depth: str = "basic",
+    tavily_credit_budget_per_run: int = 100,
 ) -> CollectorRegistry:
     """One registry for the worker and the API.
 
@@ -38,7 +39,8 @@ def build_collector_registry(
                     api_key=tavily_api_key,
                     base_url=tavily_base_url,
                     search_depth=tavily_search_depth,
-                )
+                ),
+                credit_budget_per_run=tavily_credit_budget_per_run,
             ),
         )
     )

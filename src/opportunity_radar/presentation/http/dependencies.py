@@ -56,6 +56,7 @@ def cached_collector_registry() -> CollectorRegistry:
         tavily_api_key=settings.tavily_api_key,
         tavily_base_url=settings.tavily_base_url,
         tavily_search_depth=settings.tavily_search_depth,
+        tavily_credit_budget_per_run=settings.tavily_credit_budget_per_run,
     )
 
 

@@ -156,12 +156,12 @@ class TavilyCreditBudget:
         """Raise before starting a new /search or /extract call once the ceiling is hit.
 
         This is a deliberate budget stop, never a network or provider failure: callers
-        catch `AcquisitionError` with `SOURCE_QUOTA_EXHAUSTED` and finish the run
+        catch `AcquisitionError` with `CREDIT_BUDGET_EXCEEDED` and finish the run
         `PARTIAL`, not `FAILED` (SPEC 41, section 6).
         """
         if self.exhausted:
             raise AcquisitionError(
-                AcquisitionErrorCode.SOURCE_QUOTA_EXHAUSTED,
+                AcquisitionErrorCode.CREDIT_BUDGET_EXCEEDED,
                 f"Tavily credit budget for this run exhausted "
                 f"({self.spent} of {self.limit} credits spent)",
             )
@@ -575,9 +575,9 @@ class TavilySearchCollector:
     """Keyword-search discovery over the Tavily `/search` endpoint (F20-44).
 
     Sits next to `RemotiveCollector` in the registry: same `keyword_search` capability,
-    same `CollectedItem` contract. Credit budgeting (F20-43) is out of scope here per the
-    card — this collector calls `TavilyClient.search()` plainly; a run-scoped ceiling is a
-    later wiring decision, not duplicated or half-wired in this class.
+    same `CollectedItem` contract. Credit budgeting (F20-43) is applied per discovery run.
+    Its Tavily call is guarded before it starts, then its reported usage is charged to
+    the same run-scoped budget before items are emitted.
     """
 
     source_type = "tavily_search"
@@ -592,6 +592,7 @@ class TavilySearchCollector:
         include_domains: Sequence[str] = (),
         max_results: int = 10,
         known_ats_boards: frozenset[tuple[str, str]] = frozenset(),
+        credit_budget_per_run: int = 100,
     ) -> None:
         if client is not None and client_factory is not None:
             raise ValueError("provide either client or client_factory, not both")
@@ -604,6 +605,9 @@ class TavilySearchCollector:
         self._time_range = time_range
         self._include_domains = tuple(include_domains)
         self._max_results = max_results
+        if credit_budget_per_run < 0:
+            raise ValueError("credit_budget_per_run cannot be negative")
+        self._credit_budget_per_run = credit_budget_per_run
         # Pre-calculated pairs of (source_type, board_key) that already have a
         # CompanySource enabled for that board. Injected by whoever builds the registry,
         # since collectors carry no database session (see `Collector` Protocol).
@@ -624,6 +628,8 @@ class TavilySearchCollector:
                 field="keywords",
             )
         client = self._resolve_client()
+        budget = TavilyCreditBudget(limit=self._credit_budget_per_run)
+        budget.ensure_can_call()
         query = " ".join(keyword.strip() for keyword in request.keywords)
         response = await client.search(
             query=query,
@@ -633,6 +639,10 @@ class TavilySearchCollector:
             telemetry=request.telemetry,
             network_policy=request.network_policy,
         )
+        # Tavily reports usage only with the response, so this paid call can reach the
+        # ceiling. The guard below prevents every subsequent call in this run.
+        budget.charge(response.credits_used)
+        request.telemetry.record_credits(response.credits_used or 0)
         seen_urls: set[str] = set()
         emitted = 0
         for rank, result in enumerate(response.results):
@@ -660,7 +670,9 @@ class TavilySearchCollector:
             )
             emitted += 1
             if request.max_items is not None and emitted >= request.max_items:
+                budget.ensure_can_call()
                 return
+        budget.ensure_can_call()
 
     def _resolve_client(self) -> TavilyClient:
         if self._client is not None:
