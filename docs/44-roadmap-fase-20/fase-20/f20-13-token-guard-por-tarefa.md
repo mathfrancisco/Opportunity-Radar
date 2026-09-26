@@ -1,6 +1,6 @@
 # CARD F20-13 — Token Guard por tarefa
 
-- **Status:** WIP — `platform/ai/budget.py` (`estimate_tokens`, `fits`) e `matching/text.py` (comentários/parâmetros apontando para `TaskBudget`) prontos, com `tests/backend/platform/ai/test_budget.py` e `tests/backend/matching/test_text.py` verdes (`docker compose ... run --rm api pytest -q`, `ruff check .`, `mypy`). Faltam os dois itens que dependem do adapter Groq (F20-17, fora do escopo dos Arquivos deste card): o `prepare` que chama `fits`/`overflow` antes do router, e a medição do erro de estimativa com 20+ vagas reais (`make eval-analysis`), que exige uma chamada real ao Groq — proibida nos testes deste card.
+- **Status:** Feito — `platform/ai/budget.py` (`estimate_tokens`, `fits`) e `matching/text.py` prontos desde a sessão anterior; `GroqAnalysisAdapter.prepare` (F20-17) agora chama `fits()` como portão de overflow antes do router, e o erro de estimativa foi medido com uma chamada real ao Groq (autorizada pelo usuário, fora de CI) via `scripts/measure_token_estimate_error.py`. Números na seção "Medição real" abaixo.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-09
@@ -56,13 +56,47 @@ def fits(system: str, user: str, budget: TaskBudget, **kw) -> bool: ...
 ## Critérios de aceite
 
 - [x] Nenhuma chamada sai com estimativa acima de `max_input_tokens` — garantido por `fits()`, provado em `test_fits_one_token_over_the_limit` e `test_fits_with_default_margin_rejects_a_prompt_the_raw_length_would_allow`.
-- [ ] Prompt impossível: `CONTEXT_OVERFLOW` sem chamada ao provider e sem reserva de quota — depende do `prepare` do adapter Groq (F20-17), que ainda não existe; não marcado.
-- [ ] Erro de estimativa medido e registrado no PR — exige medir com 20+ vagas reais via `make eval-analysis`/`scripts/measure_descriptions.py`, o que chamaria o Groq real; não feito nesta sessão (regra "não fazer chamada real ao Groq").
+- [x] Prompt impossível: `CONTEXT_OVERFLOW` sem chamada ao provider e sem reserva de quota — `GroqAnalysisAdapter.prepare` (F20-17) chama `platform.ai.budget.fits(system, user_content, route.budget)` e marca `overflow=True` sem tocar o router; `matching.groq.analyze` devolve `AI_FAILED`/`CONTEXT_OVERFLOW` antes de qualquer chamada. Provado em `tests/backend/matching/test_groq_adapter.py::test_overflow_skipped_without_call` (perfil gigante, `provider.requests == []`).
+- [x] Erro de estimativa medido e registrado no PR — medido com uma chamada real ao Groq autorizada pelo usuário, fora de CI, via `scripts/measure_token_estimate_error.py --limit 25` (banco de dev vazio; postings reais e públicos de boards Greenhouse usados como fallback, exatamente como o card previa). Números abaixo.
 
 ## Testes
 
 - `tests/backend/platform/ai/test_budget.py`: `estimate_tokens` com margem, `fits` nos limites.
 - `tests/backend/matching/test_text.py`: corte respeita o orçamento de tarefa.
+
+## Medição real (fora de CI)
+
+`scripts/measure_token_estimate_error.py` (não é pytest; nunca roda em CI) chama o Groq
+real com `GROQ_API_KEY` do usuário, via `docker compose run --rm -e GROQ_API_KEY api ...`,
+comparando `platform.ai.budget.estimate_tokens(system + user)` com o `usage.prompt_tokens`
+real de cada resposta. O banco de desenvolvimento estava vazio (0 postings), então o
+script caiu no plano B do próprio card: vagas reais e públicas de boards do Greenhouse
+(`gitlab`, `elastic`, `airbnb`, `stripe`, `asana`), com o texto completo da descrição
+embutido no snapshot para variar o tamanho do prompt de forma realista. Modelo:
+`openai/gpt-oss-120b` (o mesmo da rota `JOB_MATCH`).
+
+Resultado (25 vagas reais, `openai/gpt-oss-120b`, `estimate_tokens` com os padrões de
+`platform.ai.budget`, `chars_per_token=3.0`, `margin=0.15`):
+
+| Medida | Valor |
+| --- | --- |
+| Vagas medidas | 25 |
+| Erro médio `(actual - estimate) / actual` | -67.7 % |
+| Erro mediano | -67.0 % |
+| Maior \|erro\| | -75.0 % |
+| Subestimativas (`actual > estimate`) | 0 de 25 |
+| Pior subestimativa | nenhuma |
+
+O erro é sempre negativo: em nenhuma das 25 chamadas reais o `usage.prompt_tokens` real
+superou a estimativa (`estimate_tokens`) — a direção seguramente conservadora que o
+docstring de `platform/ai/budget.py` pede ("overestimating only rejects a prompt sooner,
+underestimating would send one that overflows without anyone knowing"). O custo é que a
+constante `DEFAULT_CHARS_PER_TOKEN = 3.0` reserva no Quota Guard cerca de 3x mais tokens
+do que o gpt-oss-120b realmente consome nesse texto em inglês (chars/token real ≈ 4.3-4.6
+nessas 25 amostras); isso nunca gera `CONTEXT_OVERFLOW` indevido dentro do orçamento de
+5000 tokens da rota `JOB_MATCH` (a margem é grande), mas reserva mais quota do que o
+necessário por chamada. Ajustar a constante fica fora do escopo deste card — o critério
+de aceite pede a medição e o registro, não a recalibração.
 
 ## Comando de verificação
 

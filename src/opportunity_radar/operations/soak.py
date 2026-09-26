@@ -166,7 +166,7 @@ def run_soak(
     started_at = start or datetime.now(UTC)
     steps = max(1, (hours * 60) // step_minutes)
     bootstrap = _bootstrap(engine, settings, started_at, retention_days=retention_days)
-    adapter = build_analysis_adapter(settings)
+    adapter = build_analysis_adapter(settings, engine)
 
     clock = started_at
     for step in range(steps):

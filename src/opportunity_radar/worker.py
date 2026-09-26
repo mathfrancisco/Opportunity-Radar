@@ -534,7 +534,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
         )
     if settings.worker_analyze_enabled:
         # One adapter for both jobs: it remembers when it last reached the model.
-        adapter = build_analysis_adapter(settings)
+        adapter = build_analysis_adapter(settings, engine)
         if settings.ollama_analysis_enabled:
             # One-off, so it stays out of FUNCTIONAL_JOB_IDS.
             scheduler.add_job(
