@@ -1,6 +1,9 @@
 from functools import lru_cache
 
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_VALID_REASONING_EFFORTS = frozenset({"low", "medium", "high"})
 
 
 class Settings(BaseSettings):
@@ -67,6 +70,27 @@ class Settings(BaseSettings):
     payload_retention_interval_seconds: int = 21600
     # How late a job may be before the doctor calls it late rather than merely busy.
     doctor_job_grace_seconds: int = 120
+
+    # Cloud AI is deliberately opt-in. F20-17 will replace the temporary Ollama adapter.
+    ai_enabled: bool = False
+    ai_provider: str = "groq"
+    groq_api_key: SecretStr = SecretStr("")
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_reasoning_model: str = "openai/gpt-oss-120b"
+    groq_fast_model: str = "openai/gpt-oss-20b"
+    groq_alt_model: str = "qwen/qwen3.8-27b"
+    ai_timeout_seconds: float = 25.0
+    ai_connect_timeout_seconds: float = 5.0
+    ai_max_retries: int = 2
+    ai_fallback_enabled: bool = True
+    ai_reasoning_effort: str = "low"
+    ai_analysis_prompt: str = "v1"
+    ai_daily_requests_soft_limit: int = 850
+    ai_daily_tokens_soft_limit: int = 170_000
+    ai_minute_tokens_soft_limit: int = 7_000
+    ai_minute_requests_soft_limit: int = 25
+    ai_breaker_failures: int = 5
+    ai_breaker_cooldown_seconds: int = 120
     # Optional on purpose: presence decides whether the Tavily source participates in
     # runs at all. Absent, it is a supported deployment (bloqueada por configuração),
     # the same treatment source_alert_webhook_url already gets above.
@@ -91,6 +115,32 @@ class Settings(BaseSettings):
             for item in self.worker_analyze_verdicts.split(",")
             if item.strip()
         )
+
+    @model_validator(mode="after")
+    def _validate_ai_settings(self) -> "Settings":
+        if self.ai_provider != "groq":
+            raise ValueError(f"AI_PROVIDER must be 'groq', got {self.ai_provider!r}")
+        if self.ai_reasoning_effort not in _VALID_REASONING_EFFORTS:
+            raise ValueError(
+                "AI_REASONING_EFFORT must be one of "
+                f"{sorted(_VALID_REASONING_EFFORTS)}, got {self.ai_reasoning_effort!r}"
+            )
+        positive_limits = {
+            "AI_TIMEOUT_SECONDS": self.ai_timeout_seconds,
+            "AI_CONNECT_TIMEOUT_SECONDS": self.ai_connect_timeout_seconds,
+            "AI_DAILY_REQUESTS_SOFT_LIMIT": self.ai_daily_requests_soft_limit,
+            "AI_DAILY_TOKENS_SOFT_LIMIT": self.ai_daily_tokens_soft_limit,
+            "AI_MINUTE_TOKENS_SOFT_LIMIT": self.ai_minute_tokens_soft_limit,
+            "AI_MINUTE_REQUESTS_SOFT_LIMIT": self.ai_minute_requests_soft_limit,
+            "AI_BREAKER_FAILURES": self.ai_breaker_failures,
+            "AI_BREAKER_COOLDOWN_SECONDS": self.ai_breaker_cooldown_seconds,
+        }
+        for name, value in positive_limits.items():
+            if value <= 0:
+                raise ValueError(f"{name} must be positive, got {value!r}")
+        if self.ai_max_retries < 0:
+            raise ValueError(f"AI_MAX_RETRIES cannot be negative, got {self.ai_max_retries!r}")
+        return self
 
 
 @lru_cache
