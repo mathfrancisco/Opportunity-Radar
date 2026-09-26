@@ -28,7 +28,9 @@ ANALYSIS_SCHEMA_V2 = "analysis-v2"
 #: Identity of an analysis from card F16-08: the payload actually sent, the prompt's
 #: content, the model and every option that changes the answer. Rows keyed before it
 #: have `key_version` NULL and are never reused as if they were keyed by it.
-ANALYSIS_KEY_VERSION = "analysis-key-v2"
+#: Bumped to v3 (card F20-16): `options` now carries the provider and the model chain,
+#: so a Groq analysis never collides with an Ollama one keyed under the same v2 digest.
+ANALYSIS_KEY_VERSION = "analysis-key-v3"
 #: Where a quoted piece of evidence may come from in the payload that was sent.
 CLAIM_SOURCES = ("posting", "profile")
 
@@ -569,7 +571,7 @@ def analysis_key(
     payload_hash: str,
     options: Mapping[str, Any],
 ) -> str:
-    """`analysis-key-v2`: the one definition the service, the adapter and the table share.
+    """`ANALYSIS_KEY_VERSION`: the one definition the service, the adapter and the table share.
 
     The payload hash covers what the model read — the posting as cleaned and cut, the
     profile history, the retrieved decisions, the deterministic result — so a different

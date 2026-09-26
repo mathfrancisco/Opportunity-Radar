@@ -1,6 +1,6 @@
 # CARD F20-15 — PII sanitizer e perfil mínimo
 
-- **Status:** Parcial — `sanitize_for_llm` e `PII_KEYS` implementados em `platform/ai/sanitizer.py`, com `tests/backend/platform/ai/test_sanitizer.py` (16 testes) cobrindo cada padrão, chave aninhada em lista, imutabilidade do original e preservação de evidência profissional; runbook atualizado ("Dados enviados ao Groq"). Falta o primeiro critério de aceite: ele exige o adapter Groq do F20-17 (ainda não existe nesta base) chamando `sanitize_for_llm` sobre o payload real antes do `MockTransport` capturar o corpo HTTP. Este card entrega a função pronta para esse adapter usar; o card só pode ir para "Feito" depois que F20-17 existir e o teste de integração passar.
+- **Status:** Feito — `sanitize_for_llm` e `PII_KEYS` em `platform/ai/sanitizer.py`, com `tests/backend/platform/ai/test_sanitizer.py` (16 testes); runbook atualizado ("Dados enviados ao Groq"). `GroqAnalysisAdapter.prepare` (F20-17) agora chama `sanitize_for_llm` sobre `posting`, `profile`, `profile_history`, `opportunity` e `similar_decisions` antes de renderizar o prompt e antes de calcular o `payload_hash`. `tests/backend/matching/test_groq_adapter.py::test_no_pii_in_http_body` prova, com `GroqProvider` real sobre `httpx.MockTransport`, que nome, e-mail, telefone, CPF e URL pessoal de um perfil de teste não aparecem no corpo HTTP capturado, enquanto a evidência profissional (`"Senior Python Engineer"`) sobrevive.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-07, F20-40
@@ -55,7 +55,7 @@ def sanitize_for_llm(value: Any) -> Any:
 
 ## Critérios de aceite
 
-- [ ] Com um perfil de teste cheio de PII, nenhum desses valores aparece no corpo HTTP capturado pelo `MockTransport` (teste no F20-17 — card ainda não implementado nesta base; `sanitize_for_llm` está pronta para o adapter chamar).
+- [x] Com um perfil de teste cheio de PII, nenhum desses valores aparece no corpo HTTP capturado pelo `MockTransport` — `tests/backend/matching/test_groq_adapter.py::test_no_pii_in_http_body`.
 - [x] Skills, cargos e evidências continuam no payload (`test_pii_key_nested_in_a_list_is_removed`, `test_professional_evidence_is_preserved`).
 
 ## Testes

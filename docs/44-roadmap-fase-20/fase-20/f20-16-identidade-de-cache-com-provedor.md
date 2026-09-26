@@ -1,6 +1,6 @@
 # CARD F20-16 — Identidade de cache com provedor e rota
 
-- **Status:** Backlog
+- **Status:** Feito — `ANALYSIS_KEY_VERSION` subiu para `analysis-key-v3`; `GroqAnalysisAdapter.prepare` passa `model_id=route.chain[0]` e `options={"provider": "groq", "chain": ..., "reasoning_effort": ..., "max_completion_tokens": ..., "temperature": ..., "seed": ...}` ao `analysis_key`. Testes em `tests/backend/matching/test_groq_adapter.py`: `test_key_stable_for_same_inputs`, `test_key_changes_with_chain`, `test_key_changes_with_reasoning_effort`. Verificado com `docker compose -p f20-16 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend/matching/test_groq_adapter.py tests/backend/matching/test_analysis_persistence.py` (com `RUN_DATABASE_INTEGRATION=1`), `ruff check .` e `mypy` limpos.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-17
@@ -41,8 +41,8 @@ O reuso persistente já existe: `matching/service.py:339-397` chama `adapter.pre
 
 ## Critérios de aceite
 
-- [ ] Segunda análise idêntica não chama o provider nem reserva quota.
-- [ ] Mudar modelo da rota, prompt, schema ou `reasoning_effort` muda o `cache_key`.
+- [x] Segunda análise idêntica não chama o provider nem reserva quota — reuso persistente em `matching/service.py` (F16-08, inalterado) pesquisa por `cache_key` antes de qualquer chamada; `test_key_stable_for_same_inputs` prova que o mesmo input sempre produz o mesmo `cache_key`.
+- [x] Mudar modelo da rota, prompt, schema ou `reasoning_effort` muda o `cache_key` — `test_key_changes_with_chain`, `test_key_changes_with_reasoning_effort`.
 
 ## Testes
 

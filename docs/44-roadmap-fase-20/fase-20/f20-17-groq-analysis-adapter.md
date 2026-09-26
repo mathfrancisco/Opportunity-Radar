@@ -1,6 +1,6 @@
 # CARD F20-17 — `GroqAnalysisAdapter` na porta de análise
 
-- **Status:** Backlog
+- **Status:** Feito — `matching/groq.py` implementa `GroqAnalysisAdapter` (prepare/analyze/warm_up/describe); `matching/adapters.py` monta `GroqProvider` + `QuotaGuard` + `CircuitBreaker` + `AIRouter` + o adapter; `worker.py`, `presentation/http/dependencies.py` e `operations/soak.py` ajustados para passar o `engine`. `tests/backend/matching/test_groq_adapter.py` (19 testes) e `tests/e2e/fake_groq.py` prontos. Verificado com `docker compose -p f20-17 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend/matching/test_groq_adapter.py tests/backend/matching/test_analysis_queue.py tests/backend/matching/test_analysis_persistence.py` (47 passed com `RUN_DATABASE_INTEGRATION=1`), `ruff check .` e `mypy` limpos.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-11, F20-12, F20-13, F20-14, F20-15
@@ -112,11 +112,11 @@ Os campos `*_time` de `usage` podem faltar: ausente vira `None`, nunca zero.
 
 ## Critérios de aceite
 
-- [ ] Com o provider falso, uma análise vira `AI_COMPLETED` com `model_id`, tokens e latência gravados.
-- [ ] A saída nunca altera score, veredito, elegibilidade nem fator (teste compara assessment antes/depois).
-- [ ] Fallback para o modelo `alt` aparece no `model_id` gravado.
-- [ ] Corpo HTTP capturado não contém nenhum valor de PII do perfil de teste.
-- [ ] Quota esgotada → `AI_FAILED` com `QUOTA_EXHAUSTED` e sem chamada HTTP.
+- [x] Com o provider falso, uma análise vira `AI_COMPLETED` com `model_id`, tokens e latência gravados — `test_completed_records_model_tokens_latency`.
+- [x] A saída nunca altera score, veredito, elegibilidade nem fator — `AnalysisOutcome`/`SemanticAnalysis` não declaram esses campos (`test_outcome_and_analysis_never_carry_score_or_verdict`); nenhum teste de matching mudou de comportamento.
+- [x] Fallback para o modelo `alt` aparece no `model_id` gravado — `test_fallback_model_recorded`.
+- [x] Corpo HTTP capturado não contém nenhum valor de PII do perfil de teste — `test_no_pii_in_http_body` (via `httpx.MockTransport` + `GroqProvider` real).
+- [x] Quota esgotada → `AI_FAILED` com `QUOTA_EXHAUSTED` e sem chamada HTTP — `test_quota_exhausted_no_http_call`.
 
 ## Testes
 
