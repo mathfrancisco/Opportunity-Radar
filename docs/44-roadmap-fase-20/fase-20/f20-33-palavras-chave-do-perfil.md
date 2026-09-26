@@ -56,11 +56,9 @@ O perfil não tem campo de cargos-alvo.
 
 - [ ] O perfil declara cargos-alvo. Bloqueado: `profile/service.py` precisa persistir e
       recuperar o campo, mas não está no escopo autorizado.
-- [x] A Remotive busca pelos termos derivados do perfil, em rotação, e a execução
-      registra os termos usados. Evidência: `test_receives_keywords_derived_from_profile`,
-      `test_derive_keywords_combines_target_titles_and_top_skills`,
-      `test_rotate_wraps_around_after_last_block` e
-      `test_keyword_rotation_checkpoint_advances_only_after_confirmed_batch`.
+- [ ] A Remotive busca pelos termos derivados do perfil, em rotação, e a execução
+      registra os termos usados. Os testes cobrem a derivação e o pedido Remotive, mas
+      `profile/service.py` ainda não persiste nem carrega `target_titles`.
 - [ ] A pesquisa de fontes amplas está registrada.
 - [x] Nenhuma fonte ampla é habilitada antes do filtro de área. Verificação manual: esta
       mudança não cria nem habilita fontes; o filtro de área F20-03 já existe e o gate de
@@ -175,8 +173,8 @@ Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
 - `test_target_titles_reject_duplicates` cobre rejeição de cargos duplicados.
 - `test_target_titles_round_trip_through_preference_body` cobre normalização e deduplicação
   no contrato HTTP. O salvamento no perfil permanece bloqueado por `profile/service.py`.
-- `test_receives_keywords_derived_from_profile` usa `httpx.MockTransport`; não faz chamada
-  real à Remotive.
+- `test_receives_keywords_derived_from_profile` injeta um perfil ativo falso e usa
+  `httpx.MockTransport`; não prova persistência do perfil e não chama Remotive real.
 - `worker.py` registra `run_id` e `terms_used` no evento de conclusão da execução. A rotação
   persiste o próximo bloco em `SourceCheckpointModel.cursor` com
   `checkpoint_type="keyword_rotation"`; nenhum campo novo foi adicionado.
