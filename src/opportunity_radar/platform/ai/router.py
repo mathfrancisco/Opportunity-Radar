@@ -35,6 +35,7 @@ class Attempt:
     attempt: int  # 0 = first attempt on that model
     error_kind: ErrorKind | None
     latency_ms: int | None
+    http_status: int | None = None
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,16 @@ class AIRouter:
 
     def route(self, task: AITask) -> ModelRoute:
         return self._routes[task]
+
+    @property
+    def breaker(self) -> CircuitBreaker:
+        """The live per-model breaker (card F20-20 reads its `snapshot()` for metrics)."""
+        return self._breaker
+
+    @property
+    def quota_guard(self) -> QuotaGuard | None:
+        """`None` only when this router was built without persistent quota tracking."""
+        return self._quota_guard
 
     def _is_blocked(self, model: str) -> bool:
         until = self._blocked_until.get(model)
@@ -163,10 +174,13 @@ class AIRouter:
                     if self._validator is not None:
                         self._validator(response.content)
                 except ProviderError as error:
-                    attempts.append(Attempt(model, attempt_index, error.kind, None))
+                    attempts.append(
+                        Attempt(model, attempt_index, error.kind, None, error.status)
+                    )
                     last_error = error
                     if error.kind is ErrorKind.CONFIGURATION or error.kind is ErrorKind.REQUEST:
                         await self._release(reservation)
+                        error.attempts = tuple(attempts)
                         raise
                     if error.kind is ErrorKind.TRANSIENT:
                         self._breaker.record_failure(model)
@@ -193,16 +207,21 @@ class AIRouter:
                 else:
                     self._breaker.record_success(model)
                     await self._settle(reservation, response)
-                    attempts.append(Attempt(model, attempt_index, None, response.latency_ms))
+                    attempts.append(
+                        Attempt(model, attempt_index, None, response.latency_ms, 200)
+                    )
                     return RouterResult(response, tuple(attempts), model != route.chain[0])
         if not any_model_tried:
             soonest = min(self._blocked_until.values(), default=self._clock())
-            raise ProviderError(
+            no_quota_error = ProviderError(
                 ErrorKind.QUOTA,
                 "all models rate limited",
                 retry_after_seconds=max(0.0, soonest - self._clock()),
             )
+            no_quota_error.attempts = tuple(attempts)
+            raise no_quota_error
         assert last_error is not None  # a route chain is never empty
+        last_error.attempts = tuple(attempts)
         raise last_error
 
     def _clock_to_deadline(self, model: str) -> float:

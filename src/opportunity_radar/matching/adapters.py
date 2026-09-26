@@ -90,4 +90,4 @@ def build_analysis_adapter(settings: Settings, engine: Engine) -> SemanticAnalys
         breaker=breaker,
         quota_guard=quota_guard,
     )
-    return GroqAnalysisAdapter(router=router, prompt=prompt)
+    return GroqAnalysisAdapter(router=router, prompt=prompt, engine=engine)

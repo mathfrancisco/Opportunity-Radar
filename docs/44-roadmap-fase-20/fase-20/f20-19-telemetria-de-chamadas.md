@@ -1,6 +1,6 @@
 # CARD F20-19 — Telemetria de chamadas sem PII
 
-- **Status:** Backlog
+- **Status:** Feito — `src/opportunity_radar/platform/ai/telemetry.py` (`AICallRecord`, `record_calls`, `purge_older_than`, `records_from_attempts`), migração `migrations/versions/20260926_0033_ai_call_record.py`, gravação por chamada em `matching/groq.py` e purga diária plugada em `worker.py::expire_raw_payloads`; `tests/backend/platform/ai/test_telemetry.py` (6 passed, incl. `RUN_DATABASE_INTEGRATION=1`), `ruff check .` e `mypy` limpos.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-17
@@ -72,9 +72,9 @@ class AICallRecord:  # mesmos campos, sem id/created_at
 
 ## Critérios de aceite
 
-- [ ] Uma análise com um retry e um fallback gera 3 registros coerentes.
-- [ ] Teste confirma que nenhuma coluna contém valores do payload de teste.
-- [ ] Purga remove só registros mais antigos que o limite.
+- [x] Uma análise com um retry e um fallback gera 3 registros coerentes.
+- [x] Teste confirma que nenhuma coluna contém valores do payload de teste.
+- [x] Purga remove só registros mais antigos que o limite.
 
 ## Testes
 

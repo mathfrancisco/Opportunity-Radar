@@ -10,10 +10,13 @@ sanitizer (F20-15) and the cache identity (F20-16).
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Any
+
+from sqlalchemy.engine import Engine
 
 from opportunity_radar.matching.analysis import (
     OUTPUT_SCHEMAS,
@@ -46,9 +49,13 @@ from opportunity_radar.platform.ai.budget import estimate_tokens as _budget_esti
 from opportunity_radar.platform.ai.budget import fits
 from opportunity_radar.platform.ai.errors import ErrorKind, ProviderError
 from opportunity_radar.platform.ai.providers.base import LLMResponse
-from opportunity_radar.platform.ai.router import AIRouter
+from opportunity_radar.platform.ai.router import AIRouter, Attempt
 from opportunity_radar.platform.ai.sanitizer import sanitize_for_llm
 from opportunity_radar.platform.ai.tasks import AITask, ModelRoute
+from opportunity_radar.platform.ai.telemetry import record_calls, records_from_attempts
+from opportunity_radar.platform.logging import get_logger
+
+logger = get_logger("opportunity_radar.matching.groq")
 
 #: Rounds of re-fitting when JSON escaping made the rendered prompt longer than planned.
 _FIT_ROUNDS = 3
@@ -66,10 +73,14 @@ class GroqAnalysisAdapter:
         router: AIRouter,
         prompt: PromptArtifacts,
         policy: AnalysisPolicy | None = None,
+        engine: Engine | None = None,
     ) -> None:
         self._router = router
         self._prompt = prompt
         self._policy = policy or AnalysisPolicy()
+        # Optional (card F20-19): without it, telemetry is skipped rather than raising,
+        # the same tolerance the rest of this adapter has for a missing dependency.
+        self._engine = engine
 
     @property
     def _route(self) -> ModelRoute:
@@ -82,6 +93,16 @@ class GroqAnalysisAdapter:
     @property
     def prompt_version(self) -> str:
         return self._prompt.version
+
+    @property
+    def quota_guard(self) -> Any:
+        """The router's live quota guard (card F20-20 reads it for metrics)."""
+        return self._router.quota_guard
+
+    @property
+    def breaker(self) -> Any:
+        """The router's live circuit breaker (card F20-20 reads it for metrics)."""
+        return self._router.breaker
 
     @property
     def requires(self) -> frozenset[str]:
@@ -269,10 +290,14 @@ class GroqAnalysisAdapter:
                 estimated_input_tokens=prepared.size.prompt_tokens_estimate or 0,
             )
         except ProviderError as error:
+            await self._record_telemetry(error.attempts, fallback_used=False, response=None)
             failure = _classify(error)
             failure.metrics = _with_size(None, prepared.size)
             return failed_outcome(failure)
 
+        await self._record_telemetry(
+            result.attempts, fallback_used=result.fallback_used, response=result.response
+        )
         response = result.response
         try:
             payload = json.loads(response.content)
@@ -297,6 +322,35 @@ class GroqAnalysisAdapter:
 
         metrics = _with_size(_response_metrics(response), prepared.size)
         return completed_outcome(analysis, metrics)
+
+    async def _record_telemetry(
+        self,
+        attempts: Sequence[Attempt],
+        *,
+        fallback_used: bool,
+        response: LLMResponse | None,
+    ) -> None:
+        """One `AICallRecord` per attempt the router made (card F20-19, SPEC 43 §8.5).
+
+        Only the attempt that produced `response` carries token counts: that is the only
+        one the provider actually billed usage for. Never raises: a telemetry write that
+        failed must not turn a completed or a failed analysis into a worse failure.
+        """
+        if self._engine is None or not attempts:
+            return
+        records = records_from_attempts(
+            attempts,
+            task=AITask.JOB_MATCH.value,
+            provider="groq",
+            fallback_used=fallback_used,
+            prompt_version=self._prompt.version,
+            prompt_tokens=response.usage.prompt_tokens if response is not None else None,
+            completion_tokens=response.usage.completion_tokens if response is not None else None,
+        )
+        try:
+            await asyncio.to_thread(record_calls, self._engine, records)
+        except Exception:  # pragma: no cover - telemetry must never break an analysis
+            logger.warning("ai call telemetry write failed", exc_info=True)
 
     async def warm_up(self, *, only_if_idle: bool = False) -> AnalysisMetrics | None:
         del only_if_idle
