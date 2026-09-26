@@ -263,6 +263,7 @@ class ProfileService:
             relocation_allowed=preferences.relocation_allowed,
             sponsorship_required=preferences.sponsorship_required,
             target_role_families=list(preferences.target_role_families),
+            target_titles=list(preferences.target_titles),
         )
 
     @staticmethod
@@ -312,6 +313,7 @@ class ProfileService:
                 relocation_allowed=preference.relocation_allowed,
                 sponsorship_required=preference.sponsorship_required,
                 target_role_families=tuple(preference.target_role_families),
+                target_titles=tuple(preference.target_titles),
             ),
         )
         return ProfileVersion(

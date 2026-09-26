@@ -39,6 +39,7 @@ export interface ProfilePreferences {
   sponsorshipRequired: boolean
   /** `role-family-v1` codes. Empty means every area. */
   targetRoleFamilies: string[]
+  targetTitles: string[]
 }
 
 export interface ProfileVersion {
@@ -73,6 +74,7 @@ export const emptyPreferences: ProfilePreferences = {
   relocationAllowed: false,
   sponsorshipRequired: false,
   targetRoleFamilies: [],
+  targetTitles: [],
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -153,6 +155,7 @@ function parsePreferences(value: unknown): ProfilePreferences {
     relocationAllowed: value.relocation_allowed === true,
     sponsorshipRequired: value.sponsorship_required === true,
     targetRoleFamilies: stringList(value.target_role_families),
+    targetTitles: stringList(value.target_titles),
   }
 }
 
@@ -184,6 +187,7 @@ function serializePreferences(preferences: ProfilePreferences) {
     relocation_allowed: preferences.relocationAllowed,
     sponsorship_required: preferences.sponsorshipRequired,
     target_role_families: preferences.targetRoleFamilies,
+    target_titles: preferences.targetTitles,
   }
 }
 

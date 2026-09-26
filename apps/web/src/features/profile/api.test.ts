@@ -17,6 +17,7 @@ const preferences = {
   relocation_allowed: false,
   sponsorship_required: false,
   target_role_families: ['SOFTWARE_ENGINEERING', 'DATA'],
+  target_titles: ['backend engineer'],
 }
 
 const skills = [

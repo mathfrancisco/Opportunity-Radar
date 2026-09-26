@@ -319,6 +319,20 @@ def test_target_titles_round_trip_through_preference_body() -> None:
     assert serialized.target_titles == ["backend engineer", "engenheiro de software"]
 
 
+def test_target_titles_round_trip_through_database(client: TestClient) -> None:
+    base = _activate_full_profile(client)
+    titles = ["backend engineer", "engenheiro de software"]
+
+    saved = _edit(client, base, {"preferences": {"target_titles": titles}})
+
+    assert saved.status_code == 201, saved.text
+    assert saved.json()["preferences"]["target_titles"] == titles
+    assert client.get("/profile").json()["preferences"]["target_titles"] == titles
+    with _session() as session:
+        persisted = ProfileService(session).get_version(UUID(saved.json()["id"]))
+    assert persisted.snapshot.preferences.target_titles == tuple(titles)
+
+
 def test_an_unknown_base_version_is_not_found(client: TestClient) -> None:
     before = _version_states()
 

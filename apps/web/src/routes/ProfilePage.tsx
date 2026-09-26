@@ -276,6 +276,19 @@ export function ProfilePage() {
             </div>
           </fieldset>
 
+          <label className="text-sm">
+            <span className="font-medium">Cargos-alvo</span>
+            <span className="block text-muted">Separados por vírgula.</span>
+            <input
+              className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
+              onChange={(event) =>
+                updatePreferences({ targetTitles: toList(event.target.value) })
+              }
+              placeholder="backend engineer, engenheiro de software"
+              value={preferences.targetTitles.join(', ')}
+            />
+          </label>
+
           <fieldset>
             <legend className="text-sm font-medium">Modalidades aceitas</legend>
             <div className="mt-2 flex flex-wrap gap-4">

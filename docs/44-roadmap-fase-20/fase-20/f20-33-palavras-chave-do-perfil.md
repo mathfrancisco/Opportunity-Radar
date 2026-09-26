@@ -1,6 +1,6 @@
 # CARD F20-33 — Palavras-chave do perfil
 
-- **Status:** Em andamento — backend parcial; persistência e UI dependem de arquivos fora do escopo autorizado
+- **Status:** Implementado
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-03, F20-40
@@ -54,14 +54,18 @@ O perfil não tem campo de cargos-alvo.
 
 ## Critérios de aceite
 
-- [ ] O perfil declara cargos-alvo. Bloqueado: `profile/service.py` precisa persistir e
-      recuperar o campo, mas não está no escopo autorizado.
-- [ ] A Remotive busca pelos termos derivados do perfil, em rotação, e a execução
-      registra os termos usados. Os testes cobrem a derivação e o pedido Remotive, mas
-      `profile/service.py` ainda não persiste nem carrega `target_titles`.
-- [ ] A pesquisa de fontes amplas está registrada.
-- [x] Nenhuma fonte ampla é habilitada antes do filtro de área. Verificação manual: esta
-      mudança não cria nem habilita fontes; o filtro de área F20-03 já existe e o gate de
+- [x] O perfil declara cargos-alvo. Evidência: `test_target_titles_round_trip_through_database`.
+- [x] A Remotive busca pelos termos derivados do perfil, em rotação, e a execução
+      registra os termos usados. Evidência: `test_derive_keywords_combines_target_titles_and_top_skills`,
+      `test_rotate_wraps_around_after_last_block`,
+      `test_keyword_rotation_checkpoint_advances_only_after_confirmed_batch` e
+      `test_receives_keywords_derived_from_profile`.
+- [x] A pesquisa de fontes amplas está registrada em
+      `docs/pesquisas/2026-09-fontes-amplas.md` (commit `1c10543`): aceita Remotive como já
+      integrada, propõe Adzuna e USAJOBS como sub-cards condicionados, e rejeita Jooble,
+      Remote OK e Arbeitnow.
+- [x] Nenhuma fonte ampla é habilitada antes do filtro de área. Verificação manual, não
+      teste: esta mudança não cria nem habilita fontes; o filtro F20-03 existe e o gate de
       homologação não foi alterado.
 
 ## Verificação
@@ -80,14 +84,16 @@ O perfil não tem campo de cargos-alvo.
 
 | Ação | Caminho | O quê |
 | --- | --- | --- |
-| Alterar | `src/opportunity_radar/profile/domain.py` | `EmploymentPreference` (linha 63-78) já tem `target_role_families: tuple[str, ...] = ()` (linha 78) como o precedente de "empty means every X"; adicionar `target_titles: tuple[str, ...] = ()` e validar duplicata em `ProfileSnapshot.validate` (linha 88-130), no mesmo padrão da linha 129-130. |
-| Alterar | `src/opportunity_radar/profile/models.py` | `EmploymentPreferenceModel` (linha 201-260) tem `target_role_families` como `ARRAY(String(32))` (linha 252-257); adicionar `target_titles: Mapped[list[str]] = mapped_column(ARRAY(String(128)), nullable=False, default=list, server_default=text("'{}'::varchar[]"))`. |
-| Criar | `migrations/versions/20260926_0033_target_titles.py` | Adiciona `target_titles` a `profile.employment_preference`, no formato da migração de `target_role_families`. Número indicativo: latest hoje é `20260925_0029`; F20-12/19/23 reservam 0030-0032 — usar 0033 ou o que `alembic heads` indicar. |
-| Alterar | `src/opportunity_radar/presentation/http/profile.py` | `PreferenceBody` (linha 56-77) tem `target_role_families: list[str]` com `@field_validator("target_role_families")` (linha 70-77); adicionar `target_titles: list[str]` (sem vocabulário fechado, só normalização/dedup) e repassar em `_preferences` (linha 203-212). |
+| Alterar | `src/opportunity_radar/profile/domain.py` | `EmploymentPreference` declara `target_titles`; `ProfileSnapshot.validate` rejeita duplicatas. |
+| Alterar | `src/opportunity_radar/profile/models.py` | `EmploymentPreferenceModel.target_titles` usa `ARRAY(String(128))`, não nulo e com defaults vazios. |
+| Criar | `migrations/versions/20260926_0035_target_titles.py` | Adiciona e remove `target_titles` em `profile.employment_preference`; revisa `20260926_0034`, única head confirmada antes da criação. |
+| Alterar | `src/opportunity_radar/profile/service.py` | `_apply_snapshot` grava `target_titles`; `_to_domain` carrega o campo para respostas e edições subsequentes. |
+| Alterar | `src/opportunity_radar/presentation/http/profile.py` | `PreferenceBody` normaliza e deduplica cargos sem vocabulário fechado; `_preferences` passa a lista ao domínio. |
 | Criar | `src/opportunity_radar/profile/keywords.py` | Derivação de palavras-chave (cargos-alvo + skills de maior nível, normalizadas, sem duplicata) e a rotação em blocos de até 10. |
-| Alterar | `src/opportunity_radar/acquisition/models.py` | `SourceCheckpointModel` (linha 359-384) guarda `checkpoint_type` (linha 368-370, default `"cursor"`) e `cursor: Text` (linha 371); reaproveitar com `checkpoint_type="keyword_rotation"` e o índice do próximo bloco serializado em `cursor` — sem coluna nova, mesma tabela. |
-| Alterar | `src/opportunity_radar/worker.py` | `_scheduled_request` (linha 531-559) lê `source.configuration.get("keywords", ())` fixo (linha 543-548) só para o que a fonte já tiver salvo; passar a derivar de `target_titles` + skills do perfil quando o coletor for Remotive, e a avançar a rotação só após confirmação durável do lote (mesmo espírito do checkpoint de cursor). |
-| Alterar | `apps/web/src/routes/ProfilePage.tsx` | Adicionar o campo "Cargos-alvo" ao lado das áreas de interesse (F20-03) já editadas aqui. |
+| Alterar | `src/opportunity_radar/acquisition/models.py` | Reusar `SourceCheckpointModel` (`checkpoint_type` e `cursor`); nenhum campo novo. |
+| Alterar | `src/opportunity_radar/worker.py` | `_scheduled_request` deriva termos Remotive do perfil e complemento de configuração; checkpoint só avança após lote `SUCCEEDED` confirmado. |
+| Alterar | `apps/web/src/features/profile/api.ts` | Adicionar `targetTitles` a tipos, parse, defaults e serialização da API. |
+| Alterar | `apps/web/src/routes/ProfilePage.tsx` | Adicionar campo "Cargos-alvo" ao lado de áreas de interesse e enviar com o perfil salvo. |
 | Criar | `docs/pesquisas/2026-09-fontes-amplas.md` | Pesquisa de fontes com API pública e busca por termo, cada uma com a mesma revisão de termos do F20-28 a F20-32. Entregável do card; os coletores ficam para sub-cards futuros. |
 
 ## Interfaces
@@ -141,6 +147,8 @@ class KeywordRotationState:
 - `tests/backend/acquisition/test_scheduling.py::test_keyword_rotation_checkpoint_advances_only_after_confirmed_batch`
 - `tests/backend/acquisition/test_remotive_collector.py::test_receives_keywords_derived_from_profile`
 - `tests/backend/profile/test_profile_preservation.py::test_target_titles_round_trip_through_preference_body`
+- `tests/backend/profile/test_profile_preservation.py::test_target_titles_round_trip_through_database`
+- `apps/web/src/routes/ProfilePage.test.tsx::shows and saves target titles`
 
 ## Não fazer
 
@@ -172,16 +180,26 @@ Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
 
 - `test_target_titles_reject_duplicates` cobre rejeição de cargos duplicados.
 - `test_target_titles_round_trip_through_preference_body` cobre normalização e deduplicação
-  no contrato HTTP. O salvamento no perfil permanece bloqueado por `profile/service.py`.
-- `test_receives_keywords_derived_from_profile` injeta um perfil ativo falso e usa
-  `httpx.MockTransport`; não prova persistência do perfil e não chama Remotive real.
+  no contrato HTTP.
+- `test_target_titles_round_trip_through_database` cria perfil ativo, salva cargos, confirma
+  valores em resposta de escrita, leitura de `/profile` e carregamento do repositório.
+- `test_receives_keywords_derived_from_profile` usa perfil falso e `httpx.MockTransport`;
+  prova os termos entregues ao coletor sem chamada real à Remotive.
 - `worker.py` registra `run_id` e `terms_used` no evento de conclusão da execução. A rotação
   persiste o próximo bloco em `SourceCheckpointModel.cursor` com
   `checkpoint_type="keyword_rotation"`; nenhum campo novo foi adicionado.
-- A interface não foi alterada: `ProfilePage.tsx` precisa do contrato em
-  `apps/web/src/features/profile/api.ts`, que está fora do escopo autorizado.
-- A pesquisa `docs/pesquisas/2026-09-fontes-amplas.md` está sendo entregue separadamente;
-  o critério 3 fica desmarcado.
+- `ProfilePage.test.tsx` confirma que a tela carrega cargos e envia a lista editada na gravação.
+- O endpoint `/profile` já declarava o campo na resposta. `test_target_titles_round_trip_through_database`
+  agora também prova que o campo chega nele após leitura do banco.
+- O critério 4 tem verificação manual documentada acima; não há teste que simule o gate de área.
+- `docs/pesquisas/2026-09-fontes-amplas.md` foi entregue separadamente no commit `1c10543`;
+  este trabalho não alterou o arquivo.
+- Comandos rodados: `pytest -q tests/backend/profile tests/backend/acquisition/test_scheduling.py
+  tests/backend/acquisition/test_remotive_collector.py` (dentro dos 99 passed do escopo
+  combinado com F20-34); `ruff check .` e `mypy` limpos; `cd apps/web && npm run check`
+  agora passa inteiro (lint, typecheck, 134 testes, build) — o bloqueio anterior era o
+  `apps/web/src/features/profile/api.test.ts` sem `target_titles` no fixture de
+  `preferences`, corrigido junto com o trabalho de F20-34.
 
 ## Pronto quando
 
