@@ -1,6 +1,6 @@
 # CARD F20-12 — Quota Guard persistente por modelo
 
-- **Status:** Feito — `tests/backend/platform/ai/test_quota.py` e `tests/backend/test_ai_quota_integration.py` com `RUN_DATABASE_INTEGRATION=1` (`docker compose ... run --rm api pytest -q`, `ruff check .` e `mypy` verdes); `alembic upgrade head` / `downgrade base` / `upgrade head` verificados manualmente na mesma sessão de Docker.
+- **Status:** Corrigido — cabeçalhos de quota agora respeitam janela reportada e limites absolutos não aumentam após recarga; migração `20260926_0034`. Testes de quota com `RUN_DATABASE_INTEGRATION=1` (18 passaram) e Ruff passaram. Mypy aponta dois erros em `src/opportunity_radar/opportunities/duplicates.py`, fora do escopo.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-10
