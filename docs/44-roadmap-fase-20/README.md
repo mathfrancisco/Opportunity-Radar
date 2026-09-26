@@ -7,6 +7,11 @@ fechar tudo o que ficou pendente nas fases 16 a 19. Cada card é autocontido: os
 herdados trazem o escopo original copiado, com uma seção "Ajustes da Fase 20" no topo.
 O status oficial passa a ser o desta fase.
 
+O inventário auditável desta sessão está em
+[estado-local-2026-09-26.md](estado-local-2026-09-26.md). As tabelas abaixo preservam
+o roteiro dos cards; o inventário prevalece quando uma implementação ainda exige
+evidência de aceite ou correção.
+
 ## Cards
 
 ### Bloco A — Fechamento do que está em revisão
@@ -29,7 +34,7 @@ O status oficial passa a ser o desta fase.
 | [F20-09 — Tarefas (`AITask`) e roteamento por tarefa](fase-20/f20-09-tarefas-e-roteamento.md) | F20-07, F20-08 | Feito |
 | [F20-10 — Retry com jitter e fallback entre modelos](fase-20/f20-10-retry-e-fallback-entre-modelos.md) | F20-09 | Backlog |
 | [F20-11 — Circuit breaker por modelo](fase-20/f20-11-circuit-breaker-por-modelo.md) | F20-10 | Backlog |
-| [F20-12 — Quota Guard persistente por modelo](fase-20/f20-12-quota-guard-persistente.md) | F20-10 | Backlog |
+| [F20-12 — Quota Guard persistente por modelo](fase-20/f20-12-quota-guard-persistente.md) | F20-10 | Implementado com correções obrigatórias em andamento: escopo RPD/TPM e teto concorrente |
 | [F20-13 — Token Guard por tarefa](fase-20/f20-13-token-guard-por-tarefa.md) | F20-09 | Backlog |
 | [F20-14 — Saída estruturada: JSON Schema estrito e validação](fase-20/f20-14-saida-estruturada-e-validacao.md) | F20-07 | Backlog |
 | [F20-15 — PII sanitizer e perfil mínimo](fase-20/f20-15-pii-sanitizer-e-perfil-minimo.md) | F20-07, F20-40 | Backlog |
@@ -48,7 +53,7 @@ O status oficial passa a ser o desta fase.
 | Card | Depende de | Status |
 | --- | --- | --- |
 | [F20-25 — Fila de homologação](fase-20/f20-25-fila-de-homologacao.md) | F20-03 | Backlog |
-| [F20-26 — Candidato a duplicata (sem sinal vetorial)](fase-20/f20-26-candidato-a-duplicata.md) | F20-01 | Backlog |
+| [F20-26 — Candidato a duplicata (sem sinal vetorial)](fase-20/f20-26-candidato-a-duplicata.md) | F20-01 | Parcial — backend/UI integrados; dois P2 pendentes |
 | [F20-27 — Descoberta de ATS](fase-20/f20-27-descoberta-de-ats.md) | F20-03 | Backlog |
 | [F20-28 — Coletor Workday](fase-20/f20-28-coletor-workday.md) | F20-27, F20-03 | Backlog |
 | [F20-29 — Coletor Teamtailor](fase-20/f20-29-coletor-teamtailor.md) | F20-27, F20-03 | Backlog |
