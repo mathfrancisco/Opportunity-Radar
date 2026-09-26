@@ -34,6 +34,7 @@ from opportunity_radar.acquisition.service import (
     AcquisitionService,
     canonical_payload_hash,
 )
+from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
 
 
 class _MemorySession:
@@ -63,6 +64,13 @@ class _MemorySession:
     def scalar(self, statement: object) -> None:
         """No incident has ever been opened in memory, which is what a query would say."""
         del statement
+        return None
+
+    def get(self, model: type, primary_key: object) -> None:
+        """No cache row has ever been written here, so every lookup is a cache miss —
+        exactly what `TavilyExtractionCache.get`/`put` need to run without a real
+        database (see `test_execute_fills_missing_description_via_tavily_extraction`)."""
+        del model, primary_key
         return None
 
 
@@ -196,6 +204,22 @@ class _UnderReportingCollector(_Collector):
             yield item
 
 
+class _NoDescriptionCollector(_Collector):
+    """Yields one item with a URL but no description, like any collector normalizing an
+    item that arrived with no body — not only `tavily_search`'s own results (F20-45)."""
+
+    async def discover(
+        self, request: CollectionRequest
+    ) -> AsyncIterator[CollectedItem]:
+        del request
+        yield CollectedItem(
+            source_type=self.source_type,
+            external_id="job-1",
+            url="https://example.com/jobs/1",
+            raw_payload={"title": "First"},
+        )
+
+
 class _RecordingNotifier:
     def __init__(self) -> None:
         self.messages: list[dict[str, object]] = []
@@ -248,6 +272,81 @@ def test_run_deduplicates_identical_identity_but_preserves_changed_payload() -> 
     assert run.items_skipped == 1
     assert run.checkpoint_after == "cursor-2"
     assert session.committed
+
+
+def test_execute_fills_missing_description_via_tavily_extraction() -> None:
+    """The real wiring gap this closes (F20-45): before this, nothing in the collection
+    flow called `extract_missing_descriptions` — the routine existed and was tested in
+    isolation, but no run ever reached it. `_NoDescriptionCollector` stands in for any
+    collector (not `tavily_search` itself) whose item arrived with no body."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"url": "https://example.com/jobs/1", "raw_content": "# Full body"}
+                ],
+                "usage": {"credits": 1},
+            },
+        )
+
+    tavily_extraction = TavilyExtractionSettings(
+        client_factory=lambda: TavilyClient(
+            api_key="test-key",
+            client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        ),
+        cache_ttl_seconds=3600,
+        credit_budget_per_run=100,
+    )
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="example",
+        name="Example",
+        enabled=True,
+        configuration={},
+    )
+    session = _MemorySession()
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((_NoDescriptionCollector(),)),
+        repository=_MemoryRepository(source),  # type: ignore[arg-type]
+        alerts=SourceAlertService(session, notifier=None),  # type: ignore[arg-type]
+        tavily_extraction=tavily_extraction,
+    )
+
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+        )
+    )
+
+    assert run.status == "SUCCEEDED"
+    assert run.credits_used == 1
+    raw_items = [item for item in session.added if isinstance(item, RawItemModel)]
+    assert len(raw_items) == 1
+    persisted = raw_items[0].item_metadata[COLLECTED_ITEM_V1_KEY]
+    assert persisted["description"] == "# Full body"
+
+
+def test_execute_leaves_description_alone_when_extraction_is_not_configured() -> None:
+    """No `tavily_extraction` passed to `AcquisitionService` (the default): the run must
+    still succeed, with the item's own (absent) description untouched — extraction is an
+    opt-in enrichment, not a requirement for collection to work."""
+    service, session = _service(_NoDescriptionCollector())
+
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+        )
+    )
+
+    assert run.status == "SUCCEEDED"
+    raw_items = [item for item in session.added if isinstance(item, RawItemModel)]
+    assert len(raw_items) == 1
+    assert raw_items[0].item_metadata[COLLECTED_ITEM_V1_KEY]["description"] is None
 
 
 def test_repeated_cursor_loop_error_never_marks_run_complete() -> None:

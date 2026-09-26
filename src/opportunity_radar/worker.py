@@ -27,6 +27,7 @@ from opportunity_radar.acquisition.models import SourceDefinitionModel
 from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.scheduling import CollectionGate, evaluate_gate
 from opportunity_radar.acquisition.service import AcquisitionService
+from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
 from opportunity_radar.matching.adapters import build_analysis_adapter
 from opportunity_radar.matching.analysis import (
     AnalysisMetrics,
@@ -434,6 +435,23 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
         settings.source_alert_webhook_url,
         timeout_seconds=settings.source_alert_timeout_seconds,
     )
+    # F20-45: fills in a missing description via Tavily `/extract` for any collector's
+    # items, not only tavily_search's own. Disabled (None) the same way tavily_search
+    # itself is when no API key is configured — a supported deployment, not an error.
+    tavily_extraction = (
+        TavilyExtractionSettings(
+            client_factory=lambda: TavilyClient(
+                api_key=settings.tavily_api_key,
+                base_url=settings.tavily_base_url,
+            ),
+            cache_ttl_seconds=settings.tavily_extract_cache_ttl_seconds,
+            credit_budget_per_run=settings.tavily_credit_budget_per_run,
+            extract_depth=settings.tavily_extract_depth,
+            format=settings.tavily_extract_format,
+        )
+        if settings.tavily_api_key
+        else None
+    )
 
     def build(session: Session) -> AcquisitionService:
         return AcquisitionService(
@@ -444,6 +462,7 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
                 notifier=notifier,
                 threshold=settings.source_alert_failure_threshold,
             ),
+            tavily_extraction=tavily_extraction,
         )
 
     return build

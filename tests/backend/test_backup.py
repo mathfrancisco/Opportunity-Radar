@@ -18,7 +18,11 @@ from typing import Any
 
 import pytest
 
-from opportunity_radar.platform.backup import FORMAT_VERSION, sha256_file
+from opportunity_radar.platform.backup import (
+    FORBIDDEN_MANIFEST_STRINGS,
+    FORMAT_VERSION,
+    sha256_file,
+)
 from scripts import backup, restore_check
 
 
@@ -217,6 +221,19 @@ def test_prune_removes_dumps_and_manifests_past_the_retention(tmp_path: Path) ->
     assert not old_dump.exists()
     assert not old_manifest.exists()
     assert new_dump.exists()
+
+
+def test_manifest_never_contains_groq_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Defense in depth: even if a future field carried the key by accident, the
+    manifest's serialized JSON must never contain it or the forbidden marker string."""
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_super_secret_value_for_this_test")
+
+    manifest = _manifest(counts={"companies": 3, "ai_call_record": 0})
+    serialized = json.dumps(manifest)
+
+    for forbidden in FORBIDDEN_MANIFEST_STRINGS:
+        assert forbidden not in serialized
+    assert os.environ["GROQ_API_KEY"] not in serialized
 
 
 def test_prune_does_nothing_when_retention_is_not_positive(tmp_path: Path) -> None:

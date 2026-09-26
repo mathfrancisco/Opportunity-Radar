@@ -1,11 +1,16 @@
 # CARD F20-45 — Extração de conteúdo com cache
 
-- **Status:** Parcial — cache e rotina de extração implementados e testados (unidade,
-  `httpx.MockTransport`); `TavilyExtractionCache` contra o schema real só é verificável em
-  CI com `RUN_DATABASE_INTEGRATION=1` (Docker indisponível neste ambiente); wiring do
-  `apply_extracted_description()` no worker/pipeline de coleta não incluído — a rotina
-  existe e é testada isoladamente, mas nada chama `extract_missing_descriptions()` a
-  partir do fluxo real de coleta ainda
+- **Status:** Feito — cache e rotina de extração implementados e testados (unidade,
+  `httpx.MockTransport`); `TavilyExtractionCache` verificada contra o schema real via
+  `RUN_DATABASE_INTEGRATION=1` (`docker compose -p f20-pt`); `AcquisitionService.execute`
+  agora chama `extract_missing_descriptions()` para qualquer item sem descrição, de
+  qualquer coletor (não só `tavily_search`), com `TavilyExtractionSettings` construído em
+  `worker.py::collection_service_factory` a partir de `Settings` (novo campo
+  `tavily_extract_cache_ttl_seconds`) — desligado (`None`) quando `TAVILY_API_KEY` não está
+  configurada, mesmo tratamento de "ausente é um deployment suportado" que o próprio
+  `tavily_search` já recebe. Extração roda por item (lote de 1), não em lotes de até 20,
+  para preservar a garantia já testada de que evidência persistida antes de um erro no
+  meio da descoberta não é descartada — ver nota em "Notas de implementação".
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** E — Tavily
 - **Depende de:** F20-44
@@ -57,15 +62,34 @@ realmente ficaram sem corpo depois da normalização.
 - Erro de item dentro de um lote de sucesso parcial usa o mesmo `AcquisitionErrorCode`
   por item que os coletores já aplicam a item inválido (`INVALID_ITEM`/
   `PARSER_SCHEMA_CHANGED`, conforme a causa), sem falhar a chamada inteira.
+- **Wiring em `AcquisitionService.execute` (`acquisition/service.py`):** chama
+  `extract_missing_descriptions()` uma vez por item sem descrição, dentro do mesmo loop
+  que já persiste evidência item a item — não materializa a lista inteira de itens
+  descobertos antes de persistir. Essa foi uma escolha deliberada: a primeira versão
+  chamava a rotina uma vez por *run* com todos os itens (lote real de até 20), mas isso
+  quebrou três testes existentes que provam que evidência já persistida antes de um erro
+  no meio da descoberta não pode ser descartada
+  (`test_collector_failure_after_evidence_marks_run_partial`,
+  `test_repeated_cursor_loop_error_never_marks_run_complete`,
+  `test_execute_persists_paid_tavily_results_before_budget_partial`) — materializar a
+  lista inteira antes de persistir descarta os itens já vistos quando a descoberta
+  levanta uma exceção no meio. A rotina em si (`extract_missing_descriptions`) continua
+  particionando em lotes de até 20 quando chamada com mais de uma URL (é isso que os
+  testes de unidade em `test_tavily_extract_cache.py` provam); o `client` e o
+  `TavilyCreditBudget` são construídos uma vez por *run*, não por item, então o custo é
+  amortizado e o teto de créditos é respeitado ao longo do run inteiro — só o número de
+  chamadas HTTP deixa de ser agrupado em lotes de 20. Registrado aqui em vez de mudar o
+  "Não fazer": nenhuma chamada real à Tavily nos testes, e a garantia de persistência
+  parcial prevalece sobre a otimização de lote nesta integração específica.
 
 ## Critérios de aceite
 
-- [ ] Uma URL nunca gera duas chamadas de extração bem-sucedidas dentro da validade do
+- [x] Uma URL nunca gera duas chamadas de extração bem-sucedidas dentro da validade do
       cache.
-- [ ] Cache expirado é tratado como miss, com nova chamada e novo registro.
-- [ ] Lote de 20 URLs com uma falha isolada preserva o resultado das demais 19.
-- [ ] Créditos gastos na extração aparecem no acumulador do F20-43 (antigo F19-03).
-- [ ] Markdown extraído substitui a descrição provisória quando presente.
+- [x] Cache expirado é tratado como miss, com nova chamada e novo registro.
+- [x] Lote de 20 URLs com uma falha isolada preserva o resultado das demais 19.
+- [x] Créditos gastos na extração aparecem no acumulador do F20-43 (antigo F19-03).
+- [x] Markdown extraído substitui a descrição provisória quando presente.
 
 ## Verificação
 
@@ -73,6 +97,17 @@ realmente ficaram sem corpo depois da normalização.
   particionado acima de 20 URLs; teste de falha isolada dentro de um lote; teste de
   soma de créditos compartilhada com F20-43 (antigo F19-03).
 - **Máquina de referência:** sem chamada real à Tavily.
+
+## Critério → evidência
+
+| Critério | Evidência |
+| --- | --- |
+| Uma URL nunca gera duas chamadas de extração bem-sucedidas dentro da validade do cache | `test_tavily_extract_cache.py::test_url_extracted_once_stays_cached_within_ttl`; `::test_cache_get_put_roundtrip_against_real_schema` (`RUN_DATABASE_INTEGRATION=1`, schema real) |
+| Cache expirado é tratado como miss, com nova chamada e novo registro | `::test_expired_cache_entry_is_treated_as_miss_and_recorded_again`; `::test_cache_expired_row_reads_as_miss_against_real_schema` (`RUN_DATABASE_INTEGRATION=1`, schema real) |
+| Lote de 20 URLs com uma falha isolada preserva o resultado das demais 19 | `::test_batch_over_twenty_urls_is_partitioned`; `::test_isolated_failure_in_batch_preserves_other_nineteen_results` |
+| Créditos gastos na extração aparecem no acumulador do F20-43 | `::test_extraction_credits_feed_the_shared_run_accumulator`; `::test_budget_stops_second_uncached_extract_batch_after_paid_first_batch`; `tests/backend/acquisition/test_service.py::test_execute_fills_missing_description_via_tavily_extraction` (`run.credits_used == 1` depois de uma extração real dentro de `AcquisitionService.execute`) |
+| Markdown extraído substitui a descrição provisória quando presente | `::test_extracted_markdown_replaces_provisional_description`; `::test_extraction_miss_or_failure_keeps_provisional_description`; `test_service.py::test_execute_fills_missing_description_via_tavily_extraction` (fim a fim: item sem descrição chega persistido com o markdown extraído) |
+| Wiring: algo no fluxo real de coleta chama `extract_missing_descriptions()` | `test_service.py::test_execute_fills_missing_description_via_tavily_extraction` (extração ligada, via `httpx.MockTransport`) e `::test_execute_leaves_description_alone_when_extraction_is_not_configured` (extração desligada, `tavily_extraction=None`, comportamento inalterado) |
 
 ## Arquivos prováveis
 
@@ -84,10 +119,15 @@ realmente ficaram sem corpo depois da normalização.
 
 | Ação | Caminho | O quê |
 | --- | --- | --- |
-| Alterar | `src/opportunity_radar/acquisition/tavily.py` | `TavilyExtractionCache`, rotina de extração em lote |
+| Alterar | `src/opportunity_radar/acquisition/tavily.py` | `TavilyExtractionCache`, rotina de extração em lote, `TavilyExtractionSettings` (bundle usado pelo wiring) |
 | Alterar | `src/opportunity_radar/acquisition/models.py` | `TavilyExtractCacheModel` (tabela nova) |
 | Criar | `migrations/versions/20260926_0051_tavily_extract_cache.py` | `down_revision = "20260926_0050"` (a migração do F20-43); numeração 0050+ é indicativa |
 | Criar | `tests/backend/acquisition/test_tavily_extract_cache.py` | testes deste card (não `tests/acquisition/`, ver nota do F20-42) |
+| Alterar | `src/opportunity_radar/acquisition/service.py` | wiring: `AcquisitionService.__init__` recebe `tavily_extraction`; `_fill_missing_description` chama a rotina por item dentro de `execute()` (fora da lista original — sem isto nada chamava a rotina; ver nota em "Notas de implementação") |
+| Alterar | `src/opportunity_radar/worker.py` | `collection_service_factory` monta `TavilyExtractionSettings` a partir de `Settings` e passa para `AcquisitionService` (fora da lista original, mesmo motivo) |
+| Alterar | `src/opportunity_radar/platform/config.py` | novo campo `tavily_extract_cache_ttl_seconds` (fora da lista original, mesmo motivo) |
+| Alterar | `.env.example` | `TAVILY_EXTRACT_CACHE_TTL_SECONDS` (fora da lista original, mesmo motivo) |
+| Alterar | `tests/backend/acquisition/test_service.py` | prova o wiring fim a fim, ligado e desligado |
 
 ## Interfaces
 
@@ -219,7 +259,7 @@ causa) na telemetria da execução, sem interromper o lote.
 ## Comando de verificação
 
 ```bash
-docker compose -p f20-45 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend/acquisition/test_tavily_extract_cache.py
+docker compose -p f20-45 -f compose.yaml -f compose.dev.yaml run --rm -e RUN_DATABASE_INTEGRATION=1 api pytest -q tests/backend/acquisition/test_tavily_extract_cache.py tests/backend/acquisition/test_service.py
 docker compose -p f20-45 -f compose.yaml -f compose.dev.yaml run --rm api ruff check .
 docker compose -p f20-45 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```

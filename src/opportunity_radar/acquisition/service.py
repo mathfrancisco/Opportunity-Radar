@@ -58,6 +58,14 @@ from opportunity_radar.acquisition.scheduling import (
     SourceSchedulingState,
     default_schedule_for_priority,
 )
+from opportunity_radar.acquisition.tavily import (
+    TavilyClient,
+    TavilyCreditBudget,
+    TavilyExtractionCache,
+    TavilyExtractionSettings,
+    apply_extracted_description,
+    extract_missing_descriptions,
+)
 from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.platform.logging import get_logger
 
@@ -125,6 +133,7 @@ class AcquisitionService:
         sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
         alert_notifier: SourceAlertNotifier | None = None,
         alerts: SourceAlertService | None = None,
+        tavily_extraction: TavilyExtractionSettings | None = None,
     ) -> None:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
@@ -139,6 +148,11 @@ class AcquisitionService:
             )
         )
         self._sleeper = sleeper
+        # F20-45: fills in a missing description via Tavily `/extract` after discovery,
+        # for any collector's items, not only tavily_search's own. `None` (the default)
+        # disables it — the same "absent is a supported deployment" treatment
+        # `tavily_api_key` gets elsewhere.
+        self._tavily_extraction = tavily_extraction
 
     def create_source(
         self,
@@ -715,6 +729,22 @@ class AcquisitionService:
 
         error: AcquisitionError | None = None
         last_cursor: str | None = None
+        # Built once per run, not per item: reused by `_fill_missing_description` below
+        # for every item in this run that needs one, and closed once the run's discovery
+        # loop is done (successfully or not — every branch below is caught, so control
+        # always reaches the `aclose()` call after this try/except). The budget is
+        # per-run too — a fresh one per item would never see the cumulative spend and
+        # so would never stop a run whose extractions, added up, exceed the ceiling.
+        extraction_client = (
+            self._tavily_extraction.client_factory()
+            if self._tavily_extraction is not None
+            else None
+        )
+        extraction_budget = (
+            TavilyCreditBudget(limit=self._tavily_extraction.credit_budget_per_run)
+            if self._tavily_extraction is not None
+            else None
+        )
         try:
             if throttle_error is not None:
                 raise throttle_error
@@ -740,6 +770,14 @@ class AcquisitionService:
             )
             async for item in collector.discover(collector_request):
                 run.record_items(seen=1)
+                item = await self._fill_missing_description(
+                    item,
+                    client=extraction_client,
+                    budget=extraction_budget,
+                    telemetry=run_telemetry,
+                    network_policy=network_policy,
+                    run=run,
+                )
                 try:
                     created = self._persist_item(
                         source.id,
@@ -763,6 +801,9 @@ class AcquisitionService:
             error = caught
         except Exception as caught:  # Preserve a stable external error boundary.
             error = AcquisitionError(AcquisitionErrorCode.UNKNOWN_EXTERNAL_ERROR, str(caught))
+        finally:
+            if extraction_client is not None:
+                await extraction_client.aclose()
 
         if run_telemetry.invalid_items:
             run.record_items(
@@ -878,6 +919,60 @@ class AcquisitionService:
                         "run_id": str(run.id),
                     },
                 )
+
+    async def _fill_missing_description(
+        self,
+        item: CollectedItem,
+        *,
+        client: TavilyClient | None,
+        budget: TavilyCreditBudget | None,
+        telemetry: CollectionTelemetry,
+        network_policy: CollectionNetworkPolicy,
+        run: SourceRun,
+    ) -> CollectedItem:
+        """Extracts a body for `item` when it has none, from any source, not only
+        `tavily_search`'s own results (F20-45). A no-op when extraction is not configured
+        (`client`/`budget` are `None`, no Tavily API key for this deployment) or the item
+        already has a description.
+
+        Called once per item, inside the same evidence-first loop `execute()` already
+        runs, with a client and budget built once for the whole run (see the caller).
+        `extract_missing_descriptions` itself still partitions into batches of up to 20
+        (SPEC 41 §3.2) when given more than one URL, but calling it with a single URL here
+        keeps this item's persistence exactly as atomic and order-preserving as every
+        other item's — an extraction failure part-way through a run must not un-persist
+        evidence a prior item in the same run already wrote (see
+        `test_collector_failure_after_evidence_marks_run_partial`, the invariant this
+        preserves). A cache hit costs no network call regardless, so this only turns into
+        one `/extract` call per still-uncached URL rather than one call per run.
+        """
+        if (
+            self._tavily_extraction is None
+            or client is None
+            or budget is None
+            or item.url is None
+        ):
+            return item
+        if (item.description or "").strip():
+            return item
+        cache = TavilyExtractionCache(
+            session=self.session,
+            ttl_seconds=self._tavily_extraction.cache_ttl_seconds,
+        )
+        results = await extract_missing_descriptions(
+            client,
+            cache,
+            [item.url],
+            extract_depth=self._tavily_extraction.extract_depth,
+            format=self._tavily_extraction.format,
+            telemetry=telemetry,
+            network_policy=network_policy,
+            budget=budget,
+            run=run,
+        )
+        if not results:
+            return item
+        return apply_extracted_description(item, results[0])
 
     def _persist_item(
         self,

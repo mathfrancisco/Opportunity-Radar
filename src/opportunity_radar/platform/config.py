@@ -102,6 +102,10 @@ class Settings(BaseSettings):
     tavily_search_depth: str = "basic"
     tavily_extract_depth: str = "basic"
     tavily_extract_format: str = "markdown"
+    # A URL is extracted once, ever, within this window (F20-45 acceptance criterion:
+    # "uma URL nunca gera duas chamadas de extração bem-sucedidas dentro da validade do
+    # cache"). 30 days is generous relative to how often a posting's body changes.
+    tavily_extract_cache_ttl_seconds: int = 30 * 24 * 60 * 60
     # Conservative on purpose: the free plan is 1,000 credits/month shared by /search and
     # /extract; a single run capped at 100 leaves room for roughly ten runs/day before the
     # monthly ceiling is a concern, until real usage is measured (docs/41-spec-tavily.md,

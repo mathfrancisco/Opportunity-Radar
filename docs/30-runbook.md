@@ -118,9 +118,28 @@ momento, e o descartável é removido ao final — use `--keep` se quiser inspec
   as criam entrarem, elas entram em `MANIFEST_QUERIES`
   (`src/opportunity_radar/platform/backup.py`), o único lugar de onde os dois scripts leem
   a lista.
-- Periodicidade proposta: backup a cada 24 h, idade máxima tolerada de 24 h, tempo de
-  recuperação medido (RTO) até 30 min — metas a confirmar contra uma medição real na
-  máquina de referência; nenhum número abaixo foi medido lá ainda.
+- Periodicidade: backup a cada 24 h; idade máxima tolerada do dump mais recente antes de
+  soar alerta: 24 h (ou seja, um RPO alvo de 24 h — até 24 h de escrita podem se perder
+  entre dois backups consecutivos). Cópia deve viver num local separado do volume
+  `local_backups` do host (ex.: bucket externo ou disco distinto), o que este repositório
+  ainda não automatiza — hoje o dump só sai do container quando alguém copia
+  manualmente `data/backups/*.dump` para fora.
+- RTO medido em 2026-09-26, na máquina de referência deste worktree
+  (`docker compose -p f20-pt -f compose.yaml -f compose.dev.yaml`), contra o banco de
+  teste local (13 tabelas do fluxo vertical, dump de 157 KB — bem menor que um banco de
+  produção, então o tempo escala com o volume de dados, mas o piso de infraestrutura
+  abaixo não muda):
+  - `scripts/backup.py` (dump + manifesto, sem contar o tempo de subida do container):
+    **≈1.6 s**.
+  - `scripts/restore_check.py` (criar banco descartável + `pg_restore` + smoke queries +
+    comparação): **≈2.2 s**.
+  - Total do ciclo dump→restauração→verificação num único container: **≈3.8 s**, bem
+    dentro da meta de 30 min. Com a sobrecarga de subir os containers do zero
+    (`postgres` saudável + `migrate`), cada invocação separada de `make backup` ou
+    `make restore-check` levou **≈6–6.5 s** de ponta a ponta neste ambiente.
+  - Limitação: esta medição usa um banco de teste pequeno num laptop; não substitui uma
+    medição contra um dump de produção real, que é o que decide se 30 min segue sendo um
+    alvo realista em escala.
 
 `BACKUP_RETENTION_DAYS` no `.env` controla a poda de dumps antigos.
 
