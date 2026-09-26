@@ -1,3 +1,4 @@
+import { useQueries } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card } from '../components/Card'
@@ -20,7 +21,19 @@ import {
   useSourceMetrics,
 } from '../features/dashboard/useOverview'
 import { verdictCountLabels, verdictOrder } from '../features/matching/verdicts'
+import { type SavedSearchFilters, getSavedSearchNewCount } from '../features/saved-searches/api'
+import { useOpenSavedSearch, useSavedSearches } from '../features/saved-searches/useSavedSearches'
 import { coverageLabels, coverageTones } from '../features/sources/states'
+
+function savedSearchInboxLink(filters: SavedSearchFilters): string {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (Array.isArray(value)) value.forEach((item) => params.append(key, item))
+    else params.set(key, value)
+  }
+  const query = params.toString()
+  return query ? `/inbox?${query}` : '/inbox'
+}
 
 function Tile({
   label,
@@ -502,6 +515,46 @@ function Block({
  * Primeiro bloco e o único com peso de cartão: se nada aqui pede ação, o operador pode
  * parar de ler a página, e a tela precisa deixar isso claro sem que ele desça até o fim.
  */
+/** Card F20-34: só as buscas salvas com vaga nova desde a última abertura aparecem aqui. */
+function SavedSearchesWithNews() {
+  const searches = useSavedSearches()
+  const open = useOpenSavedSearch()
+  const counts = useQueries({
+    queries: (searches.data ?? []).map((savedSearch) => ({
+      queryKey: ['saved-search-new-count', savedSearch.id],
+      queryFn: () => getSavedSearchNewCount(savedSearch.id),
+      enabled: searches.data !== undefined,
+    })),
+  })
+
+  const withNews = (searches.data ?? []).flatMap((savedSearch, index) => {
+    const count = counts[index]?.data
+    return count ? [{ savedSearch, count }] : []
+  })
+
+  if (withNews.length === 0) return null
+
+  return (
+    <div className="mt-4">
+      <p className="text-sm font-medium">Buscas salvas com novidade</p>
+      <ul className="mt-2 flex flex-wrap gap-3">
+        {withNews.map(({ savedSearch, count }) => (
+          <li key={savedSearch.id}>
+            <Link
+              className="flex items-baseline gap-2 rounded-full border border-line-strong bg-surface px-4 py-2 text-sm hover:border-ink"
+              onClick={() => open.mutate(savedSearch.id)}
+              to={savedSearchInboxLink(savedSearch.filters)}
+            >
+              <span className="text-subtle">{savedSearch.name}</span>
+              <span className="font-semibold">{count}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function PendingDecisions({ overview }: { overview: Overview }) {
   const highPriority = overview.verdictCounts.HIGH_PRIORITY ?? 0
   const recommended = overview.verdictCounts.RECOMMENDED ?? 0
@@ -557,6 +610,8 @@ function PendingDecisions({ overview }: { overview: Overview }) {
           ))}
         </ul>
       )}
+
+      <SavedSearchesWithNews />
     </section>
   )
 }

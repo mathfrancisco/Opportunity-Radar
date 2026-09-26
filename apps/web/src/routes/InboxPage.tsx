@@ -15,6 +15,14 @@ import { verdictLabels, verdictTones } from '../features/matching/verdicts'
 import { useMarkRelevance } from '../features/opportunities/useOpportunity'
 import { type ApplicationStage, stageLabels } from '../features/pipeline/api'
 import { roleFamilies } from '../features/dashboard/roleFamilies'
+import type { SavedSearch, SavedSearchFilters } from '../features/saved-searches/api'
+import {
+  useCreateSavedSearch,
+  useDeleteSavedSearch,
+  useOpenSavedSearch,
+  useRenameSavedSearch,
+  useSavedSearches,
+} from '../features/saved-searches/useSavedSearches'
 
 const pageSize = 25
 
@@ -177,6 +185,137 @@ function ItemCard({ item }: { item: InboxItem }) {
   )
 }
 
+function filtersFromParams(params: URLSearchParams): SavedSearchFilters {
+  const filters: SavedSearchFilters = {}
+  for (const key of new Set(params.keys())) {
+    if (key === 'page') continue
+    const values = params.getAll(key)
+    filters[key] = values.length > 1 ? values : values[0]
+  }
+  return filters
+}
+
+function paramsFromFilters(filters: SavedSearchFilters): URLSearchParams {
+  const next = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (Array.isArray(value)) value.forEach((item) => next.append(key, item))
+    else next.set(key, value)
+  }
+  return next
+}
+
+/** Card F20-34: nome e filtros/termo atuais viram uma busca salva reaberta depois. */
+function SaveSearchForm({ filters, term }: { filters: SavedSearchFilters; term: string }) {
+  const [name, setName] = useState('')
+  const create = useCreateSavedSearch()
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const trimmed = name.trim()
+    if (!trimmed) return
+    create.mutate(
+      { name: trimmed, term: term || null, filters },
+      { onSuccess: () => setName('') },
+    )
+  }
+
+  return (
+    <form className="mt-4 flex flex-wrap items-end gap-2" onSubmit={submit}>
+      <Field label="Salvar esta busca">
+        <input
+          className={controlClassName}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Nome da busca"
+          type="text"
+          value={name}
+        />
+      </Field>
+      <Button disabled={create.isPending || name.trim() === ''} type="submit">
+        Salvar
+      </Button>
+      {create.isError && (
+        <p className="text-sm text-danger-ink">Não foi possível salvar esta busca.</p>
+      )}
+    </form>
+  )
+}
+
+function SavedSearchRow({
+  savedSearch,
+  onApply,
+}: {
+  savedSearch: SavedSearch
+  onApply: (filters: SavedSearchFilters) => void
+}) {
+  const open = useOpenSavedSearch()
+  const rename = useRenameSavedSearch(savedSearch.id)
+  const remove = useDeleteSavedSearch()
+  const [renaming, setRenaming] = useState(false)
+  const [name, setName] = useState(savedSearch.name)
+
+  if (renaming) {
+    return (
+      <li className="flex items-center gap-2 rounded-full border border-line-strong bg-surface px-3 py-1 text-sm">
+        <input
+          className="w-32 rounded border border-line-strong px-2 py-1 text-sm"
+          onChange={(event) => setName(event.target.value)}
+          value={name}
+        />
+        <button
+          className="font-medium underline"
+          onClick={() => {
+            const trimmed = name.trim()
+            if (trimmed) rename.mutate(trimmed)
+            setRenaming(false)
+          }}
+          type="button"
+        >
+          Confirmar
+        </button>
+        <button onClick={() => setRenaming(false)} type="button">
+          Cancelar
+        </button>
+      </li>
+    )
+  }
+
+  return (
+    <li className="flex items-center gap-2 rounded-full border border-line-strong bg-surface px-3 py-1 text-sm">
+      <button
+        className="font-medium underline"
+        onClick={() => {
+          onApply(savedSearch.filters)
+          open.mutate(savedSearch.id)
+        }}
+        type="button"
+      >
+        {savedSearch.name}
+      </button>
+      <button onClick={() => setRenaming(true)} type="button">
+        Renomear
+      </button>
+      <button onClick={() => remove.mutate(savedSearch.id)} type="button">
+        Remover
+      </button>
+    </li>
+  )
+}
+
+function SavedSearches({ onApply }: { onApply: (filters: SavedSearchFilters) => void }) {
+  const searches = useSavedSearches()
+  if (!searches.data || searches.data.length === 0) return null
+  return (
+    <div className="mt-2">
+      <p className="text-sm font-medium">Buscas salvas</p>
+      <ul className="mt-2 flex flex-wrap gap-3">
+        {searches.data.map((savedSearch) => (
+          <SavedSearchRow key={savedSearch.id} onApply={onApply} savedSearch={savedSearch} />
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export function InboxPage() {
   const [params, setParams] = useSearchParams()
   const verdict = params.get('verdict') ?? ''
@@ -259,6 +398,12 @@ export function InboxPage() {
     update({ search: searchInput.trim() })
   }
 
+  function applySavedSearch(filters: SavedSearchFilters) {
+    const next = paramsFromFilters(filters)
+    setSearchInput(next.get('search') ?? '')
+    setParams(next)
+  }
+
   return (
     <PageShell
       current="/inbox"
@@ -274,6 +419,9 @@ export function InboxPage() {
         placeholder="Título ou empresa"
         value={searchInput}
       />
+
+      <SavedSearches onApply={applySavedSearch} />
+      <SaveSearchForm filters={filtersFromParams(params)} term={search} />
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Field label="Verdict">

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Literal, cast
+from typing import Any, Literal, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -41,6 +41,16 @@ from opportunity_radar.dashboard.queries import (
     source_coverage_report,
     summarize_overview,
     useful_yield_metrics,
+)
+from opportunity_radar.dashboard.saved_searches import (
+    SavedSearch,
+    SavedSearchNotFoundError,
+    create_saved_search,
+    delete_saved_search,
+    list_saved_searches,
+    new_count,
+    open_saved_search,
+    rename_saved_search,
 )
 from opportunity_radar.matching.analysis import SemanticAnalysisPort
 from opportunity_radar.matching.service import MatchingService
@@ -97,6 +107,30 @@ class InboxPageResponse(BaseModel):
     limit: int
     order: str
     off_filter_count: int
+
+
+class SavedSearchCreateRequest(BaseModel):
+    name: str
+    term: str | None = None
+    filters: dict[str, Any] = Field(default_factory=dict)
+
+
+class SavedSearchPatchRequest(BaseModel):
+    name: str | None = None
+    open: bool = False
+
+
+class SavedSearchResponse(BaseModel):
+    id: UUID
+    name: str
+    term: str | None
+    filters: dict[str, Any]
+    last_opened_at: datetime | None
+    created_at: datetime
+
+
+class SavedSearchNewCountResponse(BaseModel):
+    new_count: int
 
 
 class SourceHealthResponse(BaseModel):
@@ -343,6 +377,91 @@ class SearchMetricsResponse(BaseModel):
     precision: PrecisionMetricsResponse
     company_coverage_funnel: CompanyCoverageFunnelResponse
     useful_yield: UsefulYieldMetricResponse
+
+
+def _saved_search_response(saved_search: SavedSearch) -> SavedSearchResponse:
+    return SavedSearchResponse(
+        id=saved_search.id,
+        name=saved_search.name,
+        term=saved_search.term,
+        filters=saved_search.filters,
+        last_opened_at=saved_search.last_opened_at,
+        created_at=saved_search.created_at,
+    )
+
+
+@router.post(
+    "/saved-searches",
+    response_model=SavedSearchResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def post_saved_search(
+    request: SavedSearchCreateRequest,
+    session: Session = Depends(get_session),
+) -> SavedSearchResponse:
+    return _saved_search_response(
+        create_saved_search(
+            session,
+            name=request.name,
+            term=request.term,
+            filters=request.filters,
+        )
+    )
+
+
+@router.get("/saved-searches", response_model=list[SavedSearchResponse])
+def get_saved_searches(session: Session = Depends(get_session)) -> list[SavedSearchResponse]:
+    return [_saved_search_response(item) for item in list_saved_searches(session)]
+
+
+@router.patch("/saved-searches/{saved_search_id}", response_model=SavedSearchResponse)
+def patch_saved_search(
+    saved_search_id: UUID,
+    request: SavedSearchPatchRequest,
+    session: Session = Depends(get_session),
+) -> SavedSearchResponse:
+    if request.name is None and not request.open:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
+    try:
+        saved_search = (
+            rename_saved_search(session, saved_search_id, name=request.name)
+            if request.name is not None
+            else None
+        )
+        if request.open:
+            saved_search = open_saved_search(session, saved_search_id)
+        if saved_search is None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
+    except SavedSearchNotFoundError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from error
+    return _saved_search_response(saved_search)
+
+
+@router.delete("/saved-searches/{saved_search_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_saved_search(
+    saved_search_id: UUID,
+    session: Session = Depends(get_session),
+) -> Response:
+    try:
+        delete_saved_search(session, saved_search_id)
+    except SavedSearchNotFoundError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from error
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/saved-searches/{saved_search_id}/new-count",
+    response_model=SavedSearchNewCountResponse,
+)
+def get_saved_search_new_count(
+    saved_search_id: UUID,
+    session: Session = Depends(get_session),
+) -> SavedSearchNewCountResponse:
+    saved_searches = {item.id: item for item in list_saved_searches(session)}
+    saved_search = saved_searches.get(saved_search_id)
+    if saved_search is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return SavedSearchNewCountResponse(new_count=new_count(session, saved_search))
 
 
 @router.get("/inbox", response_model=InboxPageResponse)

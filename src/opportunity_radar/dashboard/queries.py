@@ -124,6 +124,7 @@ class InboxQuery:
     work_mode: str | None = None
     lifecycle_status: str | None = None
     published_after: datetime | None = None
+    created_after: datetime | None = None
     only_assessed: bool = False
     applied: bool | None = None
     search: str | None = None
@@ -489,6 +490,8 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
         filters.append(OpportunityModel.role_family.in_(query.role_families))
     if query.published_after is not None:
         filters.append(OpportunityModel.published_at >= query.published_after)
+    if query.created_after is not None:
+        filters.append(OpportunityModel.created_at > query.created_after)
     if query.seniorities:
         filters.append(OpportunityModel.seniority.in_(query.seniorities))
     if query.allowed_country:

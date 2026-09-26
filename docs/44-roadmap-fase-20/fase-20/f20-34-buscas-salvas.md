@@ -1,6 +1,6 @@
 # CARD F20-34 — Buscas salvas
 
-- **Status:** Backlog
+- **Status:** Implementado
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-01
@@ -46,9 +46,15 @@ atrito, e não há como saber o que é novo desde a última visita.
 
 ## Critérios de aceite
 
-- [ ] Buscas são salvas, listadas, abertas, renomeadas e removidas.
-- [ ] A contagem de novidades usa a mesma consulta da Inbox.
-- [ ] A Visão geral mostra as buscas com novidade.
+- [x] Buscas são salvas, listadas, abertas, renomeadas e removidas. Evidência:
+      `test_create_list_rename_delete_saved_search`, `test_open_saved_search_updates_last_opened_at`,
+      `apps/web/src/features/saved-searches/api.test.ts`; UI em `InboxPage.tsx`.
+- [x] A contagem de novidades usa a mesma consulta da Inbox. Evidência:
+      `test_new_count_uses_same_query_as_inbox`,
+      `test_new_count_counts_only_opportunities_created_after_last_opened`,
+      `test_unknown_filter_key_is_ignored_with_warning`.
+- [x] A Visão geral mostra as buscas com novidade. Evidência: `SavedSearchesWithNews` em
+      `OverviewPage.tsx` (bloco "Decisão de hoje"); sem teste de componente, ver Evidências.
 
 ## Verificação
 
@@ -175,6 +181,57 @@ docker compose -p f20-34 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```
 
 Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
+
+## Evidências F20-34
+
+- Migração `migrations/versions/20260926_0036_saved_search.py` (`down_revision = "20260926_0035"`,
+  a única head antes dela — o número indicativo do card era `0033`; `0036` é o que
+  `alembic heads` apontou no momento da criação). O contexto `dashboard` nunca teve schema
+  próprio (era só leitura via `queries.py`); a migração agora cria `CREATE SCHEMA IF NOT
+  EXISTS dashboard` antes da tabela e remove o schema no downgrade — sem isso, o upgrade
+  falhava com `InvalidSchemaName`.
+- `src/opportunity_radar/dashboard/models.py` declara `SavedSearchModel`
+  (`dashboard.saved_search`); `saved_searches.py` implementa o CRUD e `new_count`,
+  reaproveitando `list_opportunity_inbox`/`InboxQuery` de `queries.py` sem segunda definição
+  de "casa com a busca".
+- `InboxQuery.created_after` (`queries.py`) e o filtro correspondente em
+  `list_opportunity_inbox`. Evidência: `test_inbox_query_filters_by_created_after`.
+- CRUD: `test_create_list_rename_delete_saved_search`,
+  `test_open_saved_search_updates_last_opened_at`.
+- Contagem de novidade usando a mesma consulta da Inbox:
+  `test_new_count_uses_same_query_as_inbox`,
+  `test_new_count_counts_only_opportunities_created_after_last_opened`.
+- Filtro obsoleto ignorado com aviso, não quebra a busca: `test_unknown_filter_key_is_ignored_with_warning`.
+- Rotas `POST/GET/PATCH/DELETE /saved-searches` e `GET /saved-searches/{id}/new-count` em
+  `presentation/http/dashboard.py`, no formato de `list_inbox`.
+- `apps/web/src/features/saved-searches/api.ts` e `useSavedSearches.ts`: cliente HTTP e hooks
+  React Query, no formato de `features/sources`. Evidência: `api.test.ts` (`salva, lista e
+  abre uma busca`).
+- `InboxPage.tsx`: "Salvar esta busca" (formulário com nome, filtros e termo atuais dos
+  `URLSearchParams` já lidos ali) e a lista de buscas salvas (abrir aplica os filtros salvos
+  e marca `last_opened_at`; renomear e remover inline). Sem teste de componente dedicado
+  para `InboxPage` — a lógica de conversão filtros↔query string está coberta indiretamente
+  pelos parsers já testados em `api.test.ts`; ficou como nota de PR, não bloqueia o card.
+- `OverviewPage.tsx`: bloco "Buscas salvas com novidade" dentro de `PendingDecisions`,
+  usando `useQueries` para consultar a contagem de cada busca salva e só listar as que têm
+  novidade (`> 0`); abrir marca `last_opened_at`. Não existe `OverviewPage.test.tsx` no
+  repositório — por isso não há teste automatizado deste bloco, conforme a ressalva do card
+  ("caso contrário, nota no PR").
+- Achado corrigido durante a verificação: `tests/backend/dashboard/test_queries.py::test_inbox_query_filters_by_created_after`
+  e três testes de `test_saved_searches.py` usavam um relógio fixo de 2040-01-01, o mesmo
+  usado pelas fixtures absolutas de `test_coverage_funnel.py` (F20-35). Como
+  `create_saved_search`/`open_saved_search` fazem `session.commit()`, as oportunidades
+  criadas nesses testes (antes só `flush`adas) eram persistidas de verdade e vazavam para a
+  janela fixa dos testes de rendimento, inflando `new_unique_opportunities`. Trocado para
+  `datetime.now(UTC)` nos dois arquivos; suíte completa roda limpa depois da correção.
+- Comandos rodados: `pytest -q tests/backend/profile tests/backend/dashboard
+  tests/backend/acquisition/test_scheduling.py tests/backend/acquisition/test_remotive_collector.py`
+  (99 passed); `ruff check .` (All checks passed); `mypy` (Success: no issues found in 111
+  source files); `cd apps/web && npm run check` (lint, typecheck, 134 testes, build, todos
+  verdes); suíte completa `pytest -q` (756 passed, 10 skipped) numa base limpa
+  (`docker compose -p f20-34 down -v` antes da corrida) — 1 falha isolada e não relacionada
+  (`test_tavily_proposals.py::test_catalog_owner_resolves_real_tavily_collector_item_without_company_name`,
+  já registrada como intermitente no README da Fase 20 em F20-46); passa sozinha.
 
 ## Pronto quando
 

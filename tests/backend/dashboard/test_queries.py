@@ -374,6 +374,36 @@ def test_inbox_filters_by_allowed_country_without_excluding_unknown_rows() -> No
         }
 
 
+def test_inbox_query_filters_by_created_after() -> None:
+    # Uses the module's real-clock `NOW`, not a fixed distant date: F20-35's coverage-funnel
+    # fixtures (tests/backend/dashboard/test_coverage_funnel.py) rely on a fixed 2040 clock to
+    # keep their absolute yield windows outside the persisted corpus. Committing opportunities
+    # near that same instant here would leak into those windows across test files.
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    reference = NOW
+    with Session(engine) as session:
+        company = _company(session, "normal")
+        before = _opportunity(
+            session, company, title="Created before", published_at=reference
+        )
+        before.created_at = reference - timedelta(seconds=1)
+        at_boundary = _opportunity(
+            session, company, title="Created at boundary", published_at=reference
+        )
+        at_boundary.created_at = reference
+        after = _opportunity(
+            session, company, title="Created after", published_at=reference
+        )
+        after.created_at = reference + timedelta(seconds=1)
+        session.commit()
+
+        page = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, created_after=reference)
+        )
+
+        assert [item.opportunity_id for item in page.items] == [after.id]
+
+
 def test_inbox_orders_by_priority_recency_and_score() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
