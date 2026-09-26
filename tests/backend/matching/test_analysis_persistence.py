@@ -50,7 +50,7 @@ _PROMPT_VERSION = "opportunity_analysis/v1"
 
 
 class _StubAdapter:
-    """Stands in for Ollama: the service must not care which outcome it receives."""
+    """Stands in for the analysis provider: the service must not care which outcome it receives."""
 
     def __init__(self, outcome: AnalysisOutcome) -> None:
         self._outcome = outcome
@@ -128,7 +128,7 @@ def _failed() -> AnalysisOutcome:
     return AnalysisOutcome(
         status=AnalysisStatus.AI_FAILED,
         failure_code=AnalysisFailureCode.TRANSPORT_ERROR,
-        detail="could not connect to ollama",
+        detail="could not connect to provider",
     )
 
 

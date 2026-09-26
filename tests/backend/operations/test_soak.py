@@ -25,9 +25,8 @@ TEST_HOURS = max(OUTAGE_STEPS) + 4
 
 
 def _settings() -> Settings:
-    return Settings(  # type: ignore[call-arg]  # the rest comes from the environment
-        ollama_analysis_enabled=False,
-    )
+    # ai_enabled defaults to False, so the soak window never reaches Groq.
+    return Settings()  # type: ignore[call-arg]  # values come from the environment
 
 
 def test_the_window_holds_and_reports_what_it_proved(

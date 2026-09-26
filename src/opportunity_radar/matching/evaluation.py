@@ -10,7 +10,7 @@ Cases are split into `tuning` and `reserved`: the prompt is adjusted on the firs
 change is decided on the second. A family of near-identical postings (`group`) lives on
 one side only, so the reserved set never grades what the tuning set taught.
 
-Pure functions only. Running the cases against Ollama lives in scripts/eval_analysis.py.
+Pure functions only. Running the cases against the provider lives in scripts/eval_analysis.py.
 """
 
 from __future__ import annotations

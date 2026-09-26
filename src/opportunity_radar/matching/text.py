@@ -5,9 +5,8 @@ first: a description full of markup and boilerplate spends tokens on nothing, an
 budget only means something once the text it measures is the text that will be sent.
 
 An oversized prompt is truncated from the start — where the instructions are — by a
-server that reports it, if at all, only in its own log (true of the retired Ollama
-adapter, and assumed of any future one). Everything here exists so the radar never sends
-a prompt that would be cut without anyone knowing.
+server that reports it, if at all, only in its own log. Everything here exists so the
+radar never sends a prompt that would be cut without anyone knowing.
 
 `platform.ai.budget` (F20-13) is the same idea for the cloud router: `TaskBudget.
 max_input_tokens` is the ceiling here `num_ctx` used to be, now set by the task

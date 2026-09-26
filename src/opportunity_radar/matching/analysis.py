@@ -1,7 +1,7 @@
 """Structured semantic-analysis contract for matching.
 
 This module is pure: it owns the analysis value object, its output schema, the cache
-key and the degradation states. It knows nothing about Ollama or HTTP — adapters do.
+key and the degradation states. It knows nothing about Groq or HTTP — adapters do.
 
 The analysis is advisory only. It carries no score, no eligibility and no disqualifier,
 so a model can never override the deterministic result in `domain.py`.
@@ -29,7 +29,8 @@ ANALYSIS_SCHEMA_V2 = "analysis-v2"
 #: content, the model and every option that changes the answer. Rows keyed before it
 #: have `key_version` NULL and are never reused as if they were keyed by it.
 #: Bumped to v3 (card F20-16): `options` now carries the provider and the model chain,
-#: so a Groq analysis never collides with an Ollama one keyed under the same v2 digest.
+#: so an analysis under one provider/model never collides with another keyed under the
+#: same v2 digest.
 ANALYSIS_KEY_VERSION = "analysis-key-v3"
 #: Where a quoted piece of evidence may come from in the payload that was sent.
 CLAIM_SOURCES = ("posting", "profile")

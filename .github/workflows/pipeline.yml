@@ -62,7 +62,6 @@ jobs:
     timeout-minutes: 15
     env:
       DATABASE_URL: postgresql+psycopg://opportunity_radar:ci-password@127.0.0.1:5432/opportunity_radar
-      OLLAMA_BASE_URL: http://127.0.0.1:11434
       RUN_DATABASE_INTEGRATION: "1"
     services:
       postgres:
@@ -102,10 +101,10 @@ jobs:
       - name: Run backend tests
         run: pytest -q
       - name: Run the 72-hour soak gate against a controlled clock
-        # The local model is not part of this gate: with no Ollama reachable, every
+        # The cloud provider is not part of this gate: with no Groq reachable, every
         # analysis pass would spend its timeout proving something the e2e job proves.
         env:
-          OLLAMA_ANALYSIS_ENABLED: "false"
+          AI_ENABLED: "false"
         run: python scripts/soak_gate.py --json
 
   frontend:
@@ -145,11 +144,11 @@ jobs:
         run: docker compose -f compose.yaml -f compose.ci.yaml config --quiet
       - name: Start application
         run: docker compose -f compose.yaml -f compose.ci.yaml up --detach --build api worker frontend
-      - name: Verify API, frontend and degraded AI mode
+      - name: Verify API, frontend and AI mode against the fake Groq stub
         run: |
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:3000/
-          curl --fail http://127.0.0.1:8000/health | python -c "import json,sys; data=json.load(sys.stdin); assert data['ollama']['status'] == 'degraded'"
+          curl --fail http://127.0.0.1:8000/health | python -c "import json,sys; data=json.load(sys.stdin); assert data['ai']['status'] == 'healthy'"
           test "$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose -f compose.yaml -f compose.ci.yaml ps -q worker)")" = "healthy"
       - name: Import and expose the researched company catalog
         run: |

@@ -11,6 +11,7 @@ from functools import partial
 from sqlalchemy.engine import Engine
 
 from opportunity_radar.matching.analysis import (
+    AnalysisPolicy,
     NullAnalysisAdapter,
     SemanticAnalysisPort,
     parse_analysis,
@@ -31,13 +32,17 @@ logger = get_logger("opportunity_radar.matching.adapters")
 _missing_key_warned = False
 
 
-def build_analysis_adapter(settings: Settings, engine: Engine) -> SemanticAnalysisPort:
+def build_analysis_adapter(
+    settings: Settings, engine: Engine, *, policy: AnalysisPolicy | None = None
+) -> SemanticAnalysisPort:
     """Build one adapter per process (SPEC 43; cards F20-10 to F20-17).
 
     `engine` backs the persistent Quota Guard (card F20-12): it is shared with the rest
     of the process, never a connection this function opens on its own. The prompt version
     comes from configuration (`AI_ANALYSIS_PROMPT`); an unknown one fails here, at
-    startup, rather than on the first analysis.
+    startup, rather than on the first analysis. `policy` is an override for callers that
+    are not the production worker, such as `scripts/eval_analysis.py`, which must reach
+    the model for every case regardless of what the default policy would skip.
     """
     state = ai_status(settings)
     if state is AIState.DISABLED:
@@ -90,4 +95,4 @@ def build_analysis_adapter(settings: Settings, engine: Engine) -> SemanticAnalys
         breaker=breaker,
         quota_guard=quota_guard,
     )
-    return GroqAnalysisAdapter(router=router, prompt=prompt)
+    return GroqAnalysisAdapter(router=router, prompt=prompt, policy=policy)

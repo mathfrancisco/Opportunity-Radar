@@ -4,20 +4,36 @@ x-app-environment: &app-environment
   APP_ENV: ${APP_ENV:-development}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://opportunity_radar:change-me-for-local-use@postgres:5432/opportunity_radar}
-  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
-  OLLAMA_MODEL_ANALYSIS: ${OLLAMA_MODEL_ANALYSIS:-qwen3:8b-q4_K_M}
-  OLLAMA_ANALYSIS_ENABLED: ${OLLAMA_ANALYSIS_ENABLED:-true}
-  OLLAMA_ANALYSIS_TIMEOUT_SECONDS: ${OLLAMA_ANALYSIS_TIMEOUT_SECONDS:-60}
-  OLLAMA_ANALYSIS_CONNECT_TIMEOUT_SECONDS: ${OLLAMA_ANALYSIS_CONNECT_TIMEOUT_SECONDS:-5}
-  OLLAMA_ANALYSIS_MAX_RETRIES: ${OLLAMA_ANALYSIS_MAX_RETRIES:-1}
-  OLLAMA_ANALYSIS_RETRY_AFTER_SECONDS: ${OLLAMA_ANALYSIS_RETRY_AFTER_SECONDS:-0.5}
-  OLLAMA_ANALYSIS_CACHE_ENTRIES: ${OLLAMA_ANALYSIS_CACHE_ENTRIES:-256}
-  OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-8192}
-  OLLAMA_NUM_PREDICT: ${OLLAMA_NUM_PREDICT:-1024}
-  OLLAMA_SEED: ${OLLAMA_SEED:-42}
-  OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
-  OLLAMA_THINK: ${OLLAMA_THINK:-false}
-  OLLAMA_ANALYSIS_PROMPT: ${OLLAMA_ANALYSIS_PROMPT:-v1}
+  # Cloud AI on Groq is opt-in (SPEC 43, section 5); a real key only ever comes from the
+  # untracked .env file, never from this default.
+  AI_ENABLED: ${AI_ENABLED:-false}
+  AI_PROVIDER: ${AI_PROVIDER:-groq}
+  GROQ_API_KEY: ${GROQ_API_KEY:-}
+  GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+  GROQ_REASONING_MODEL: ${GROQ_REASONING_MODEL:-openai/gpt-oss-120b}
+  GROQ_FAST_MODEL: ${GROQ_FAST_MODEL:-openai/gpt-oss-20b}
+  GROQ_ALT_MODEL: ${GROQ_ALT_MODEL:-qwen/qwen3.8-27b}
+  AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-25}
+  AI_CONNECT_TIMEOUT_SECONDS: ${AI_CONNECT_TIMEOUT_SECONDS:-5}
+  AI_MAX_RETRIES: ${AI_MAX_RETRIES:-2}
+  AI_FALLBACK_ENABLED: ${AI_FALLBACK_ENABLED:-true}
+  AI_REASONING_EFFORT: ${AI_REASONING_EFFORT:-low}
+  AI_ANALYSIS_PROMPT: ${AI_ANALYSIS_PROMPT:-v1}
+  AI_DAILY_REQUESTS_SOFT_LIMIT: ${AI_DAILY_REQUESTS_SOFT_LIMIT:-850}
+  AI_DAILY_TOKENS_SOFT_LIMIT: ${AI_DAILY_TOKENS_SOFT_LIMIT:-170000}
+  AI_MINUTE_TOKENS_SOFT_LIMIT: ${AI_MINUTE_TOKENS_SOFT_LIMIT:-7000}
+  AI_MINUTE_REQUESTS_SOFT_LIMIT: ${AI_MINUTE_REQUESTS_SOFT_LIMIT:-25}
+  AI_BREAKER_FAILURES: ${AI_BREAKER_FAILURES:-5}
+  AI_BREAKER_COOLDOWN_SECONDS: ${AI_BREAKER_COOLDOWN_SECONDS:-120}
+  # Tavily search/extract (docs/41-spec-tavily.md); absent key keeps the source blocked
+  # by configuration, the same treatment SOURCE_ALERT_WEBHOOK_URL gets below.
+  TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+  TAVILY_BASE_URL: ${TAVILY_BASE_URL:-https://api.tavily.com}
+  TAVILY_SEARCH_DEPTH: ${TAVILY_SEARCH_DEPTH:-basic}
+  TAVILY_EXTRACT_DEPTH: ${TAVILY_EXTRACT_DEPTH:-basic}
+  TAVILY_EXTRACT_FORMAT: ${TAVILY_EXTRACT_FORMAT:-markdown}
+  TAVILY_CREDIT_BUDGET_PER_RUN: ${TAVILY_CREDIT_BUDGET_PER_RUN:-100}
+  TAVILY_EXTRACT_CACHE_TTL_SECONDS: ${TAVILY_EXTRACT_CACHE_TTL_SECONDS:-2592000}
   FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
   COLLECTION_TIMEZONE: ${COLLECTION_TIMEZONE:-America/Sao_Paulo}
   WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
@@ -68,55 +84,6 @@ services:
       start_period: 5s
     networks: [app_net]
 
-  ollama:
-    # Pinned by digest: a tag can be republished, and a server version changes the
-    # tokenizer, the defaults and the speed under the same name. 0.34.4 carries the CUDA
-    # runners the RTX 5060 (Blackwell) needs; 0.5.13 predates them.
-    image: ollama/ollama:0.34.4@sha256:8262851b2846b87c649eddf3e76beb270c52f4d1bc94559f47efde16b0841551
-    environment:
-      # Flash attention and a q8 KV cache shrink the context's memory, which is what lets
-      # an 8B model and an 8k window share the 8 GB of VRAM (docs/36-spec-ollama.md 3.1).
-      OLLAMA_FLASH_ATTENTION: ${OLLAMA_FLASH_ATTENTION:-1}
-      OLLAMA_KV_CACHE_TYPE: ${OLLAMA_KV_CACHE_TYPE:-q8_0}
-      # Each parallel request reserves another context cache; 8 GB holds one.
-      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
-      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-2}
-      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
-    # If a model spills out of VRAM, the Ollama container runs out of memory, not Postgres.
-    mem_limit: ${OLLAMA_MEMORY_LIMIT:-6g}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    volumes:
-      - ollama_models:/root/.ollama
-    healthcheck:
-      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
-    networks: [app_net]
-
-  # Pulls the configured models once and exits, so a fresh machine does not need a
-  # terminal to get the semantic layer working. Nothing depends on it: analysis is
-  # optional, and a model still downloading reads as MODEL_UNAVAILABLE, classified.
-  ollama-init:
-    image: ollama/ollama:0.34.4@sha256:8262851b2846b87c649eddf3e76beb270c52f4d1bc94559f47efde16b0841551
-    entrypoint: ["/bin/sh", "-c"]
-    command: ['ollama pull "$$OLLAMA_MODEL_ANALYSIS"']
-    environment:
-      OLLAMA_HOST: http://ollama:11434
-      OLLAMA_MODEL_ANALYSIS: ${OLLAMA_MODEL_ANALYSIS:-qwen3:8b-q4_K_M}
-    depends_on:
-      ollama:
-        condition: service_healthy
-    restart: "no"
-    networks: [app_net]
-
   migrate:
     build:
       context: .
@@ -158,8 +125,6 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      ollama:
-        condition: service_started
     volumes:
       - local_exports:/app/data/exports
       - local_backups:/app/data/backups
@@ -194,6 +159,5 @@ networks:
 
 volumes:
   postgres_data:
-  ollama_models:
   local_exports:
   local_backups:

@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from opportunity_radar.platform.config import Settings
 from scripts import doctor
-from scripts.doctor import Check, classify_worker_jobs
+from scripts.doctor import Check, check_ai, classify_worker_jobs
 
 NOW = datetime(2026, 9, 22, 12, 0, tzinfo=UTC)
 GRACE = timedelta(seconds=120)
@@ -149,8 +150,7 @@ def test_doctor_has_no_embedding_coverage_check(monkeypatch) -> None:
         "check_worker_jobs",
         "check_source_incidents",
         "check_analysis",
-        "check_ollama",
-        "check_ollama_gpu",
+        "check_ai",
     ):
         monkeypatch.setattr(
             doctor,
@@ -161,3 +161,39 @@ def test_doctor_has_no_embedding_coverage_check(monkeypatch) -> None:
     checks = doctor.run_checks(Path(__file__).parents[2])
 
     assert not any("embedding" in check.name.casefold() for check in checks)
+
+
+def _settings(**overrides: object) -> Settings:
+    return Settings(
+        database_url="postgresql+psycopg://test:test@localhost/test", **overrides
+    )
+
+
+def test_check_ai_never_prints_the_key() -> None:
+    secret = "sk-super-secret-value"
+    check = check_ai(_settings(ai_enabled=True, groq_api_key=secret))
+
+    assert secret not in check.detail
+    assert secret not in str(check.facts)
+    assert secret not in (check.remedy or "")
+    assert check.facts["key_present"] is True
+
+
+def test_check_ai_warns_when_disabled() -> None:
+    check = check_ai(_settings(ai_enabled=False))
+
+    assert check.status == doctor.WARN
+    assert "disabled" in check.detail
+
+
+def test_check_ai_warns_when_key_is_missing() -> None:
+    check = check_ai(_settings(ai_enabled=True, groq_api_key=""))
+
+    assert check.status == doctor.WARN
+    assert check.facts["key_present"] is False
+
+
+def test_check_ai_is_ok_when_enabled_with_a_key() -> None:
+    check = check_ai(_settings(ai_enabled=True, groq_api_key="sk-fake"))
+
+    assert check.status == doctor.OK

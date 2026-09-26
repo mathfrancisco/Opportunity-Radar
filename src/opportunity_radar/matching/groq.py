@@ -1,6 +1,6 @@
 """Groq adapter for structured semantic analysis (SPEC 43; cards F20-16, F20-17).
 
-Infrastructure only, like the retired `OllamaAnalysisAdapter`: the domain never sees the
+Infrastructure only, like the retired local adapter: the domain never sees the
 Groq wire format, it depends on `SemanticAnalysisPort` and gets back an `AnalysisOutcome`
 that is already classified. Retry, fallback across the model chain, the circuit breaker
 and the quota reservation all live in the shared `AIRouter` (cards F20-10 to F20-12);

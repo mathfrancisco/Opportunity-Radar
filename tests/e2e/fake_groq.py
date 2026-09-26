@@ -3,8 +3,7 @@
 Answers the OpenAI-compatible chat-completions endpoint the real `GroqProvider` calls,
 with a schema-valid analysis and the `x-ratelimit-*` headers the Quota Guard reads. Port
 8080 and the `/openai/v1/chat/completions` path mirror how `GROQ_BASE_URL` would point at
-this stub in a compose override, the same way `tests/e2e/fake_ollama.py` stands in for a
-local Ollama server.
+this stub in `compose.ci.yaml`, the only place it runs.
 """
 
 import json

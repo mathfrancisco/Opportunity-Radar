@@ -18,7 +18,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.request import urlopen
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -36,7 +35,7 @@ FAIL = "fail"
 
 _SYMBOLS = {OK: "PASS", WARN: "WARN", FAIL: "FAIL"}
 
-#: SPEC 36, section 3.2: p95 of a warm analysis on the reference GPU.
+#: SPEC 43, section 4: target p95 latency of a Groq analysis call.
 ANALYSIS_P95_TARGET_MS = 15_000
 
 
@@ -351,75 +350,39 @@ def check_prompts(root: Path) -> Check:
     return Check("prompts", OK, "versioned prompt artifacts are present")
 
 
-def check_ollama(settings: Settings) -> Check:
-    url = f"{settings.ollama_base_url.rstrip('/')}/api/tags"
-    try:
-        with urlopen(url, timeout=settings.ollama_health_timeout_seconds) as response:
-            models = json.load(response).get("models", [])
-    except Exception:
-        return Check(
-            "ollama",
-            WARN,
-            "Ollama is unreachable; the semantic layer stays degraded",
-            "start it with `make up`, or set OLLAMA_ANALYSIS_ENABLED=false",
-        )
-    names = {model.get("name") for model in models if isinstance(model, dict)}
-    if settings.ollama_model_analysis not in names:
-        return Check(
-            "ollama",
-            WARN,
-            f"model {settings.ollama_model_analysis} is not installed",
-            f"run `ollama pull {settings.ollama_model_analysis}`",
-            {"installed": sorted(name for name in names if name)},
-        )
-    return Check("ollama", OK, f"model {settings.ollama_model_analysis} is installed")
+def check_ai(settings: Settings) -> Check:
+    """Whether the cloud AI is on, has a key, and which model runs each role.
 
-
-def check_ollama_gpu(settings: Settings) -> Check:
-    """Server version and whether the loaded models sit entirely in VRAM.
-
-    A model with `size_vram < size` has part of it in system RAM: it answers, slowly,
-    and competes with Postgres for memory. That is a warning, not a failure, because the
-    CPU path is a supported fallback (compose.cpu.yaml).
+    Never makes a network call — a doctor run should not spend Groq quota — and never
+    prints the key itself, only whether one is present.
     """
-    base = settings.ollama_base_url.rstrip("/")
-    try:
-        timeout = settings.ollama_health_timeout_seconds
-        with urlopen(f"{base}/api/version", timeout=timeout) as response:
-            version = json.load(response).get("version")
-        with urlopen(f"{base}/api/ps", timeout=timeout) as response:
-            loaded = json.load(response).get("models", [])
-    except Exception:
+    facts: dict[str, Any] = {
+        "enabled": settings.ai_enabled,
+        "provider": settings.ai_provider,
+        "key_present": bool(settings.groq_api_key.get_secret_value()),
+        "reasoning_model": settings.groq_reasoning_model,
+        "fast_model": settings.groq_fast_model,
+        "alt_model": settings.groq_alt_model,
+    }
+    if not settings.ai_enabled:
         return Check(
-            "ollama gpu",
+            "ai",
             WARN,
-            "could not read the Ollama version or its loaded models",
-            "check that the ollama service is up",
-        )
-    facts: dict[str, Any] = {"version": version, "loaded": []}
-    spilled: list[str] = []
-    for model in loaded if isinstance(loaded, list) else []:
-        if not isinstance(model, dict):
-            continue
-        size, in_vram = model.get("size"), model.get("size_vram")
-        facts["loaded"].append(
-            {"name": model.get("name"), "size": size, "size_vram": in_vram}
-        )
-        if isinstance(size, int) and isinstance(in_vram, int) and in_vram < size:
-            spilled.append(str(model.get("name")))
-    if spilled:
-        return Check(
-            "ollama gpu",
-            WARN,
-            f"loaded partly outside VRAM: {', '.join(spilled)}",
-            "reserve the GPU (docs/30-runbook.md) or use a smaller model or context",
+            "AI is disabled; the semantic layer stays degraded",
+            "set AI_ENABLED=true and a real GROQ_API_KEY to turn it on",
             facts,
         )
-    if not facts["loaded"]:
+    if not facts["key_present"]:
         return Check(
-            "ollama gpu", OK, f"server {version}; no model loaded right now", None, facts
+            "ai",
+            WARN,
+            "AI is enabled but GROQ_API_KEY is missing",
+            "set GROQ_API_KEY in the untracked .env file",
+            facts,
         )
-    return Check("ollama gpu", OK, f"server {version}; loaded models are in VRAM", None, facts)
+    return Check(
+        "ai", OK, f"Groq is on; reasoning model {settings.groq_reasoning_model}", None, facts
+    )
 
 
 def check_analysis(settings: Settings) -> Check:
@@ -436,17 +399,16 @@ def check_analysis(settings: Settings) -> Check:
             )
             report = analysis_metrics(
                 session,
-                current_model=settings.ollama_model_analysis,
+                current_model=settings.groq_reasoning_model,
                 pending=pending,
                 windows={"24h": METRIC_WINDOWS["24h"]},
             )
     except Exception as error:  # pragma: no cover - depends on the local environment
         return Check("analysis", WARN, f"could not read analysis metrics: {error}")
-    current = report.windows[0].for_model(settings.ollama_model_analysis)
+    current = report.windows[0].for_model(settings.groq_reasoning_model)
     p95 = current.total_ms_p95 if current else None
     facts: dict[str, Any] = {
-        "model": settings.ollama_model_analysis,
-        "keep_alive": settings.ollama_keep_alive,
+        "model": settings.groq_reasoning_model,
         "pending": pending,
         "p50_ms_24h": current.total_ms_p50 if current else None,
         "p95_ms_24h": p95,
@@ -458,7 +420,7 @@ def check_analysis(settings: Settings) -> Check:
             WARN,
             f"p95 over 24 h is {p95 / 1000:.1f} s, above the {ANALYSIS_P95_TARGET_MS // 1000} s"
             " target",
-            "check `ollama gpu` above: a model outside VRAM is the usual cause",
+            "check `ai` above: quota, fallback, or a slower model in the chain is the usual cause",
             facts,
         )
     measured = "no analysis measured in 24 h" if p95 is None else f"p95 {p95 / 1000:.1f} s"
@@ -478,8 +440,7 @@ def run_checks(root: Path) -> list[Check]:
         checks.append(check_worker_jobs(settings))
         checks.append(check_source_incidents(settings))
         checks.append(check_analysis(settings))
-    checks.append(check_ollama(settings))
-    checks.append(check_ollama_gpu(settings))
+    checks.append(check_ai(settings))
     return checks
 
 

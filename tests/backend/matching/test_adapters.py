@@ -5,7 +5,7 @@ import pytest
 
 from opportunity_radar.matching import adapters
 from opportunity_radar.matching.adapters import build_analysis_adapter
-from opportunity_radar.matching.analysis import NullAnalysisAdapter
+from opportunity_radar.matching.analysis import AnalysisPolicy, NullAnalysisAdapter
 from opportunity_radar.matching.groq import GroqAnalysisAdapter
 from opportunity_radar.platform.config import Settings
 
@@ -46,3 +46,15 @@ def test_enabled_builds_groq_adapter() -> None:
     assert isinstance(adapter, GroqAnalysisAdapter)
     assert adapter.model == settings.groq_reasoning_model
     assert adapter.prompt_version.endswith(settings.ai_analysis_prompt)
+
+
+def test_a_policy_override_reaches_the_adapter() -> None:
+    """scripts/eval_analysis.py needs every case to reach the model, whatever the
+    default production policy would skip."""
+    settings = _settings(ai_enabled=True, groq_api_key="k")
+    override = AnalysisPolicy(skip_verdicts=frozenset(), skip_ineligible=False)
+
+    adapter = build_analysis_adapter(settings, _engine(), policy=override)
+
+    assert isinstance(adapter, GroqAnalysisAdapter)
+    assert adapter._policy is override

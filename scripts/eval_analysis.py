@@ -1,19 +1,17 @@
-"""Run the evaluation set against the local model and compare it with a baseline.
+"""Run the evaluation set against the configured Groq model and compare it with a baseline.
 
-    python scripts/eval_analysis.py --prompt v1 --model qwen3:8b-q4_K_M
-    python scripts/eval_analysis.py --prompt v2 --model qwen3:8b-q4_K_M \
-        --baseline data/evals/2026-09-24-v1-qwen3_8b-q4_K_M.json
-    python scripts/eval_analysis.py --prompt v2 --model qwen3:8b-q4_K_M --think \
-        --label kv-q8_0 --unload-after            # a card F16-12 candidate
+    python scripts/eval_analysis.py --prompt v1
+    python scripts/eval_analysis.py --prompt v2 \
+        --baseline data/evals/2026-09-24-v1-openai_gpt-oss-120b.json
 
-Cards F16-06 and F16-12. Uses the production adapter with the production `Settings`, so
-it measures what will actually run, with every cache off: the adapter's memory is
-disabled and nothing is read from or written to the analyses table. Critical cases run
-`--repeat` times, because a fixed seed reduces variation and does not remove it.
+Cards F16-06, F20-06. Uses the production adapter (`build_analysis_adapter`) with the
+production `Settings`, so it measures what will actually run against Groq. The default
+policy is overridden so every case reaches the model, whatever verdict or eligibility
+the production worker would otherwise skip. Critical cases run `--repeat` times, because
+a fixed seed reduces variation and does not remove it.
 
 The report (`data/evals/<date>-<prompt>-<model>[-<label>].json` and `.md`) records the
-set's hash, the effective inference settings, the server version and model digest, and
-— after the run — what `/api/ps` says the model occupies. Nothing is estimated: a number
+set's hash and the provider/model identity Groq reported. Nothing is estimated: a number
 the server did not give is written as absent. Verdict adherence and whether each quoted
 passage supports its claim are blank columns for the operator; no model judges another.
 """
@@ -29,9 +27,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import httpx
-
-from opportunity_radar.matching.analysis import AnalysisPolicy
+from opportunity_radar.matching.adapters import build_analysis_adapter
+from opportunity_radar.matching.analysis import AnalysisPolicy, SemanticAnalysisPort
 from opportunity_radar.matching.evaluation import (
     CRITERIA,
     SPLITS,
@@ -46,37 +43,29 @@ from opportunity_radar.matching.evaluation import (
     switch_allowed,
     variation,
 )
-from opportunity_radar.matching.ollama import OllamaAnalysisAdapter
-from opportunity_radar.matching.prompts import load_prompt, prompts_root
+from opportunity_radar.matching.prompts import prompts_root
 from opportunity_radar.platform.config import Settings
+from opportunity_radar.platform.database import create_database_engine
 
 CASES_DIR = prompts_root() / "opportunity_analysis" / "eval" / "cases"
 OUTPUT_DIR = Path("data/evals")
 
+#: Every case must reach the model, whatever the production policy would skip.
+_EVAL_POLICY = AnalysisPolicy(skip_verdicts=frozenset(), skip_ineligible=False)
 
-def _adapter(settings: Settings, args: argparse.Namespace, model: str) -> OllamaAnalysisAdapter:
-    return OllamaAnalysisAdapter(
-        base_url=settings.ollama_base_url,
-        model=model,
-        prompt=load_prompt(args.prompt),
-        timeout_seconds=settings.ollama_analysis_timeout_seconds,
-        connect_timeout_seconds=settings.ollama_analysis_connect_timeout_seconds,
-        max_retries=settings.ollama_analysis_max_retries,
-        retry_after_seconds=settings.ollama_analysis_retry_after_seconds,
-        # Every case must reach the model, whatever the production policy would skip,
-        # and no answer may come from the in-memory cache of a previous case.
-        policy=AnalysisPolicy(skip_verdicts=frozenset(), skip_ineligible=False),
-        cache_max_entries=0,
-        num_ctx=args.num_ctx or settings.ollama_num_ctx,
-        num_predict=args.num_predict or settings.ollama_num_predict,
-        seed=settings.ollama_seed,
-        keep_alive=settings.ollama_keep_alive,
-        think=True if args.think else settings.ollama_think,
-    )
+
+def _adapter(settings: Settings) -> SemanticAnalysisPort:
+    engine = create_database_engine(settings.database_url)
+    adapter = build_analysis_adapter(settings, engine, policy=_EVAL_POLICY)
+    if adapter.__class__.__name__ == "NullAnalysisAdapter":
+        raise SystemExit(
+            "AI_ENABLED must be true and GROQ_API_KEY must be set to run the evaluation"
+        )
+    return adapter
 
 
 async def _run(
-    adapter: OllamaAnalysisAdapter, cases: list[EvalCase], repeat: int
+    adapter: SemanticAnalysisPort, cases: list[EvalCase], repeat: int
 ) -> tuple[list[CaseScore], dict[str, list[CaseScore]], dict[str, Any]]:
     await adapter.warm_up()
     server = dict(await adapter.describe())
@@ -99,37 +88,6 @@ async def _run(
     return scores, repeats, {"server": server, "inference": settings_seen}
 
 
-def _loaded_models(base_url: str) -> list[dict[str, Any]]:
-    """What the server reports resident right after the run: size and size in VRAM."""
-    try:
-        response = httpx.get(f"{base_url.rstrip('/')}/api/ps", timeout=5.0)
-        models = response.json().get("models") if response.status_code == 200 else None
-    except (httpx.HTTPError, ValueError):
-        return []
-    return [
-        {
-            "name": item.get("name"),
-            "size": item.get("size"),
-            "size_vram": item.get("size_vram"),
-            "context_length": item.get("context_length"),
-        }
-        for item in models or []
-        if isinstance(item, dict)
-    ]
-
-
-def _unload(base_url: str, model: str) -> None:
-    """`keep_alive: 0` frees the VRAM, so the next candidate is measured on its own."""
-    try:
-        httpx.post(
-            f"{base_url.rstrip('/')}/api/generate",
-            json={"model": model, "keep_alive": 0},
-            timeout=30.0,
-        )
-    except httpx.HTTPError:
-        print("warning: could not unload the model; the next measurement may include it")
-
-
 def _fmt(value: Any) -> str:
     if value is None:
         return "—"
@@ -144,8 +102,8 @@ def _markdown(report: dict[str, Any]) -> str:
         + (f" ({report['label']})" if report.get("label") else ""),
         "",
         f"Rodada em {report['ran_at']}, {len(report['cases'])} casos, conjunto "
-        f"`{report['cases_digest'][:12]}`. Servidor {report['server'].get('server_version', '—')}"
-        f", digest {report['server'].get('model_digest', '—')}.",
+        f"`{report['cases_digest'][:12]}`. Provedor {report['server'].get('provider', '—')}"
+        f", cadeia {', '.join(report['server'].get('chain', ())) or '—'}.",
         "",
         "Decisão pelo conjunto reservado; `não comparável` é critério que o baseline não "
         "media e exige o gabarito, não uma melhora.",
@@ -165,16 +123,6 @@ def _markdown(report: dict[str, Any]) -> str:
     if "switch_allowed" in report:
         lines += ["", f"Regra de troca atendida: {'sim' if report['switch_allowed'] else 'não'}."]
     lines += [
-        "",
-        "Memória do modelo após a rodada (`/api/ps`): "
-        + (
-            "; ".join(
-                f"{item['name']}: {item['size_vram']} de {item['size']} bytes na VRAM"
-                for item in report["loaded_models"]
-            )
-            or "não informada"
-        )
-        + ".",
         "",
         "Rubrica humana: aderência ao veredito (0/1) e sustentação — se cada trecho citado "
         "sustenta a afirmação, com atenção a negação e requisito opcional (0/1).",
@@ -213,21 +161,21 @@ def _markdown(report: dict[str, Any]) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prompt", default="v1", help="prompt version directory, e.g. v2")
-    parser.add_argument("--model", help="Ollama model; defaults to OLLAMA_MODEL_ANALYSIS")
+    parser.add_argument("--model", help="Groq model id; defaults to GROQ_REASONING_MODEL")
     parser.add_argument("--baseline", type=Path, help="a previous run's JSON report")
     parser.add_argument("--cases", type=Path, default=CASES_DIR)
     parser.add_argument("--output", type=Path, default=OUTPUT_DIR)
     parser.add_argument("--split", choices=("all", *SPLITS), default="all")
     parser.add_argument("--repeat", type=int, default=3, help="runs of each critical case")
-    parser.add_argument("--think", action="store_true", help="turn Qwen3 reasoning on")
-    parser.add_argument("--num-ctx", type=int, help="override OLLAMA_NUM_CTX")
-    parser.add_argument("--num-predict", type=int, help="override OLLAMA_NUM_PREDICT")
-    parser.add_argument("--label", help="server-side variant, e.g. kv-f16; goes in the name")
-    parser.add_argument("--unload-after", action="store_true", help="keep_alive 0 at the end")
+    parser.add_argument("--label", help="run variant, e.g. reasoning-medium; goes in the name")
     args = parser.parse_args(argv)
 
-    settings = Settings()  # type: ignore[call-arg]  # values come from the environment
-    model = args.model or settings.ollama_model_analysis
+    base_settings = Settings()  # type: ignore[call-arg]  # values come from the environment
+    overrides: dict[str, Any] = {"ai_analysis_prompt": args.prompt}
+    if args.model:
+        overrides["groq_reasoning_model"] = args.model
+    settings = base_settings.model_copy(update=overrides)
+    model = args.model or settings.groq_reasoning_model
     cases = load_cases(args.cases)
     if args.split != "all":
         cases = [case for case in cases if case.split == args.split]
@@ -239,11 +187,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"warning: the set does not cover {', '.join(sorted(gaps))}")
 
     scores, repeats, identity = asyncio.run(
-        _run(_adapter(settings, args, model), cases, max(1, args.repeat))
+        _run(_adapter(settings), cases, max(1, args.repeat))
     )
-    loaded = _loaded_models(settings.ollama_base_url)
-    if args.unload_after:
-        _unload(settings.ollama_base_url, model)
     summary = summarize_by_split(scores)
     report: dict[str, Any] = {
         "ran_at": datetime.now(UTC).isoformat(),
@@ -253,7 +198,6 @@ def main(argv: list[str] | None = None) -> int:
         "cases_digest": cases_digest(cases),
         "server": identity["server"],
         "inference": identity["inference"],
-        "loaded_models": loaded,
         "summary": summary,
         "cases": [score.as_dict() for score in scores],
         "variation": variation(repeats),
