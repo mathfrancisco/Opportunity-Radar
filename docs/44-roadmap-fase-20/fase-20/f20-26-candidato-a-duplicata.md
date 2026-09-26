@@ -1,6 +1,6 @@
 # CARD F20-26 — Candidato a duplicata (sem sinal vetorial)
 
-- **Status:** Backlog
+- **Status:** WIP parcial — snapshot integrado; critérios de aceite pendentes.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-01

@@ -1,6 +1,6 @@
 # CARD F20-08 — Configuração da IA cloud e segredos
 
-- **Status:** Backlog
+- **Status:** WIP parcial — snapshot integrado; testes e validação estática pendentes.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-07

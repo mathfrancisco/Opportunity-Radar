@@ -1,6 +1,6 @@
 # CARD F20-25 — Fila de homologação
 
-- **Status:** Backlog
+- **Status:** WIP parcial — snapshot integrado; critérios de aceite pendentes.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-03
