@@ -1,6 +1,6 @@
 # CARD F20-35 — Mapa de cobertura e rendimento
 
-- **Status:** Backlog
+- **Status:** Feito no código; critério 4 pendente da máquina de referência.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** D — Varredura produtiva
 - **Depende de:** F20-01, F20-03
@@ -29,10 +29,11 @@ Cada empresa mostra se está coberta, por que não está e qual é a próxima a�
 
 ## Critérios de aceite
 
-- [ ] Fonte habilitada falhando não conta como operacional.
-- [ ] Aliases e oportunidades multifuente não inflam totais.
-- [ ] Cada métrica expõe janela, denominador, suporte e null quando indisponível.
+- [x] Fonte habilitada falhando não conta como operacional — `test_enabled_source_with_failing_run_is_not_operational`.
+- [x] Aliases e oportunidades multifuente não inflam totais — `test_funnel_counts_each_stage_once_per_canonical_company`, `test_multisource_opportunity_counts_once`.
+- [x] Cada métrica expõe janela, denominador, suporte e null quando indisponível — `test_metrics_expose_window_denominator_support_and_null`, `test_multisource_opportunity_counts_once`.
 - [ ] Relatório registra baseline, lacunas acionáveis e plano de comparação.
+  - Pendente na máquina de referência: medir sete dias de operação registrada, fixar metas e tetos de recursos antes da mudança, e medir janela equivalente subsequente de sete dias ou replay controlado de snapshots. Fixtures não substituem essa medição.
 
 ## Verificação
 
