@@ -1,6 +1,6 @@
 # CARD F20-07 — Porta `LLMProvider` e `GroqProvider`
 
-- **Status:** Backlog
+- **Status:** Feito
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** Nenhum
@@ -169,9 +169,9 @@ Os campos `*_time` de `usage` podem faltar: ausente vira `None`, nunca zero.
 
 ## Critérios de aceite
 
-- [ ] Chamada 200 devolve `LLMResponse` com `usage` e `rate_limit` preenchidos.
-- [ ] Cada status da tabela e timeout/conexão vira o `ErrorKind` correto.
-- [ ] A chave não aparece em `repr`, em `summary` nem nos logs capturados.
+- [x] Chamada 200 devolve `LLMResponse` com `usage` e `rate_limit` preenchidos.
+- [x] Cada status da tabela e timeout/conexão vira o `ErrorKind` correto.
+- [x] A chave não aparece em `repr`, em `summary` nem nos logs capturados.
 
 ## Testes
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import UTC, datetime
 
@@ -29,16 +30,19 @@ def _settings() -> Settings:
     )
 
 
-def test_the_window_holds_and_reports_what_it_proved() -> None:
+def test_the_window_holds_and_reports_what_it_proved(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
 
-    result = run_soak(
-        engine,
-        _settings(),
-        hours=TEST_HOURS,
-        step_minutes=60,
-        start=datetime.now(UTC),
-    )
+    with caplog.at_level(logging.INFO, logger="opportunity_radar.worker"):
+        result = run_soak(
+            engine,
+            _settings(),
+            hours=TEST_HOURS,
+            step_minutes=60,
+            start=datetime.now(UTC),
+        )
 
     failures = [check for check in result.checks if not check.passed]
     assert not failures, [check.detail for check in failures]
@@ -51,6 +55,11 @@ def test_the_window_holds_and_reports_what_it_proved() -> None:
     }
     assert result.steps == TEST_HOURS
     assert result.passed is True
+    assert not any(
+        "embed" in record.getMessage().casefold()
+        for record in caplog.records
+        if record.name == "opportunity_radar.worker"
+    )
 
 
 def test_a_window_too_short_to_recover_fails_the_gate() -> None:

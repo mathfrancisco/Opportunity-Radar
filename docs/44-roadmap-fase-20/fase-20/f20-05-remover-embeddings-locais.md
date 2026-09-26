@@ -1,6 +1,6 @@
 # CARD F20-05 — Remover os embeddings locais e a busca por significado
 
-- **Status:** Backlog
+- **Status:** Parcial — alembic upgrade/downgrade não executado (sem Postgres/Docker nesta máquina); demais critérios feitos
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** Nenhum
@@ -54,15 +54,25 @@ O F16-09 (`0ddd0de`) gera embedding com `qwen3-embedding:0.6b` no Ollama. O Groq
 
 ## Critérios de aceite
 
-- [ ] O worker roda um ciclo completo sem log de embedding.
-- [ ] `GET /search/semantic` responde 404.
-- [ ] `alembic upgrade head` e `alembic downgrade base` continuam funcionando.
+- [x] O worker roda um ciclo completo sem log de embedding.
+- [x] `GET /search/semantic` responde 404 (rota removida).
+- [ ] `alembic upgrade head` e `alembic downgrade base` continuam funcionando — não executado (sem Postgres/Docker disponível nesta máquina; nenhuma migração foi criada ou alterada).
 
 ## Testes
 
-- `tests/backend/test_worker.py`: agendador sem `embed-opportunities`.
-- `tests/backend/operations/test_soak.py`: soak sem embedding.
-- `tests/backend/test_doctor.py`: doctor sem checagem de embedding.
+- `tests/backend/test_worker.py::test_worker_scheduler_has_no_embedding_job`: confirma que `embed-opportunities` não está registrado nem faz parte dos jobs funcionais.
+- `tests/backend/operations/test_soak.py::test_the_window_holds_and_reports_what_it_proved`: ciclo de soak integrado sem log de embedding (requer o banco de CI).
+- `tests/backend/test_semantic_search_removed.py::test_semantic_search_route_is_removed`: `GET /search/semantic` responde 404.
+- `tests/backend/test_doctor.py::test_doctor_has_no_embedding_coverage_check`: doctor não registra checagem de cobertura de embedding.
+
+## Critério → evidência
+
+| Critério | Evidência |
+| --- | --- |
+| O worker não agenda embeddings e o ciclo não emite log de embedding | `test_worker_scheduler_has_no_embedding_job`; `test_the_window_holds_and_reports_what_it_proved` (teste de integração, pulado localmente sem `RUN_DATABASE_INTEGRATION=1`) |
+| `GET /search/semantic` responde 404 | `tests/backend/test_semantic_search_removed.py::test_semantic_search_route_is_removed` |
+| Doctor não verifica cobertura de embedding | `tests/backend/test_doctor.py::test_doctor_has_no_embedding_coverage_check` |
+| `alembic upgrade head` e `alembic downgrade base` continuam funcionando | Não executado: requer PostgreSQL/Docker. Nenhuma migração foi criada ou alterada. |
 
 ## Comando de verificação
 

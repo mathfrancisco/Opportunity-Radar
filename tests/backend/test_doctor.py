@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
-from scripts.doctor import classify_worker_jobs
+from scripts import doctor
+from scripts.doctor import Check, classify_worker_jobs
 
 NOW = datetime(2026, 9, 22, 12, 0, tzinfo=UTC)
 GRACE = timedelta(seconds=120)
@@ -132,3 +134,30 @@ def test_a_disabled_job_is_simply_not_expected() -> None:
     result = classify_worker_jobs({"job": _healthy()}, [], now=NOW, grace=GRACE)
 
     assert result == {"missing": [], "failing": [], "late": [], "healthy": []}
+
+
+def test_doctor_has_no_embedding_coverage_check(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://test:test@localhost/test")
+    monkeypatch.setattr(doctor, "Settings", lambda: object())
+    monkeypatch.setattr(
+        doctor,
+        "check_database",
+        lambda _: Check("database", doctor.OK, "stub"),
+    )
+    for name in (
+        "check_tables",
+        "check_worker_jobs",
+        "check_source_incidents",
+        "check_analysis",
+        "check_ollama",
+        "check_ollama_gpu",
+    ):
+        monkeypatch.setattr(
+            doctor,
+            name,
+            lambda *args, _name=name, **kwargs: Check(_name, doctor.OK, "stub"),
+        )
+
+    checks = doctor.run_checks(Path(__file__).parents[2])
+
+    assert not any("embedding" in check.name.casefold() for check in checks)

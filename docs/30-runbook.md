@@ -312,3 +312,8 @@ docker compose exec -T api python scripts/doctor.py   # check "ollama gpu"
 Máquina sem GPU NVIDIA: `make up-cpu` (ou `docker compose -f compose.yaml -f
 compose.cpu.yaml up --build -d`). Funciona, mais devagar; as metas de latência da
 `docs/36-spec-ollama.md` são para a GPU.
+
+
+## Embeddings (F20-05)
+
+A coluna de embedding fica vazia até existir provedor de embedding; ver SPEC 43 §9.

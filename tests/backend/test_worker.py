@@ -19,6 +19,13 @@ def test_worker_scheduler_has_a_heartbeat_job() -> None:
     assert scheduler.get_job("expire-raw-payloads") is not None
 
 
+def test_worker_scheduler_has_no_embedding_job() -> None:
+    scheduler = build_scheduler(Settings(database_url=_DATABASE_URL))
+
+    assert scheduler.get_job("embed-opportunities") is None
+    assert "embed_opportunities" not in FUNCTIONAL_JOB_IDS
+
+
 def test_worker_kill_switches_only_remove_functional_jobs() -> None:
     scheduler = build_scheduler(
         Settings(
@@ -28,7 +35,6 @@ def test_worker_kill_switches_only_remove_functional_jobs() -> None:
             worker_match_enabled=False,
             worker_analyze_enabled=False,
             worker_retention_enabled=False,
-            worker_embed_enabled=False,
         )
     )
 
