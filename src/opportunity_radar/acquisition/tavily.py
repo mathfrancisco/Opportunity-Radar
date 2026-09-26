@@ -697,6 +697,23 @@ class ExtractionResult:
     from_cache: bool
 
 
+@dataclass(frozen=True, slots=True)
+class TavilyExtractionSettings:
+    """What `AcquisitionService` needs to fill in missing descriptions after a
+    collection run (F20-45), built once per deployment from `Settings`.
+
+    `None` on `AcquisitionService` (the default) means extraction is disabled — the same
+    "absent is a supported deployment" treatment `tavily_api_key` itself already gets: a
+    run with no Tavily credentials configured still collects, just without extraction.
+    """
+
+    client_factory: Callable[[], "TavilyClient"]
+    cache_ttl_seconds: int
+    credit_budget_per_run: int
+    extract_depth: str | None = None
+    format: str | None = None
+
+
 class ExtractionCachePort(Protocol):
     """What `extract_missing_descriptions` needs from a cache (F20-45).
 
