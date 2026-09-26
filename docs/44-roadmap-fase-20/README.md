@@ -34,7 +34,7 @@ evidência de aceite ou correção.
 | [F20-09 — Tarefas (`AITask`) e roteamento por tarefa](fase-20/f20-09-tarefas-e-roteamento.md) | F20-07, F20-08 | Feito |
 | [F20-10 — Retry com jitter e fallback entre modelos](fase-20/f20-10-retry-e-fallback-entre-modelos.md) | F20-09 | Implementado — `1c90af6` |
 | [F20-11 — Circuit breaker por modelo](fase-20/f20-11-circuit-breaker-por-modelo.md) | F20-10 | Implementado — `1c90af6` |
-| [F20-12 — Quota Guard persistente por modelo](fase-20/f20-12-quota-guard-persistente.md) | F20-10 | Implementado com correções obrigatórias em andamento: escopo RPD/TPM e teto concorrente |
+| [F20-12 — Quota Guard persistente por modelo](fase-20/f20-12-quota-guard-persistente.md) | F20-10 | Implementado — `b5072fd` |
 | [F20-13 — Token Guard por tarefa](fase-20/f20-13-token-guard-por-tarefa.md) | F20-09 | Implementado — `1c90af6` |
 | [F20-14 — Saída estruturada: JSON Schema estrito e validação](fase-20/f20-14-saida-estruturada-e-validacao.md) | F20-07 | Backlog |
 | [F20-15 — PII sanitizer e perfil mínimo](fase-20/f20-15-pii-sanitizer-e-perfil-minimo.md) | F20-07, F20-40 | Backlog |
@@ -53,7 +53,7 @@ evidência de aceite ou correção.
 | Card | Depende de | Status |
 | --- | --- | --- |
 | [F20-25 — Fila de homologação](fase-20/f20-25-fila-de-homologacao.md) | F20-03 | Implementado — `99d2067` |
-| [F20-26 — Candidato a duplicata (sem sinal vetorial)](fase-20/f20-26-candidato-a-duplicata.md) | F20-01 | Parcial — backend/UI integrados; dois P2 pendentes |
+| [F20-26 — Candidato a duplicata (sem sinal vetorial)](fase-20/f20-26-candidato-a-duplicata.md) | F20-01 | Implementado — `f6e4b16`; dois itens do contrato de junção seguem abertos |
 | [F20-27 — Descoberta de ATS](fase-20/f20-27-descoberta-de-ats.md) | F20-03 | Implementado; relatório real por ATS pendente |
 | [F20-28 — Coletor Workday](fase-20/f20-28-coletor-workday.md) | F20-27, F20-03 | Backlog |
 | [F20-29 — Coletor Teamtailor](fase-20/f20-29-coletor-teamtailor.md) | F20-27, F20-03 | Backlog |

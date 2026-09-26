@@ -9,14 +9,14 @@ branch `feature/f20-groq-e-consolidacao`. Não representa fechamento da fase.
 | 02 | skills-v2 local em `e46b755` | F17-06 segue aberto: UNKNOWN 50,62% |
 | 03 | implementado | validação final da fase |
 | 04–11 | implementados | validação final da fase |
-| 12 | em correção: RPD/TPM persistidos no window errado | corrigir Quota Guard e legado |
+| 12 | corrigido em `b5072fd`: `settle()` direciona o restante reportado pelo provedor conforme `reset_requests_seconds`/`reset_tokens_seconds` (> 60 s: dia; <= 60 s: minuto; ausente: escopo desconhecido, não armazenado); migration `20260926_0034` adiciona `requests_ceiling`/`tokens_ceiling` nullable, gravados como menor valor absoluto observado e sem aumento na janela; `reserve()` aplica `LEAST(limite interno, teto)` | nenhuma pendência além da validação final da fase |
 | 13–17 | implementados | validação final da fase |
 | 18 | não iniciado; depende de 21 | executar depois da avaliação |
 | 19–20 | implementados | validação final da fase |
-| 21 | harness em `5c894c6`, 18 testes passaram | auditar/copiar 50 casos ignorados; baseline atual 5/50, 45 quota exhausted |
+| 21 | harness em `5c894c6`, 18 testes passaram | auditar/copiar 50 casos; snapshot parcial 14/50 concluídos e 36 falhos, revalidar após execução |
 | 22–24 | pendentes | benchmark e contratos |
 | 25 | implementado | validação final da fila |
-| 26 | backend/UI em `7aeb407` | corrigir P2 de empate e invalidação de cache |
+| 26 | corrigido em `f6e4b16`: backend resolve o sobrevivente por `created_at` (empate pelo menor `id`) e publica `survivor_opportunity_id`/`absorbed_opportunity_id`; `confirm_duplicate` incrementa `version` quando move ocorrências/aplicações; normalização `MERGED` incrementa quando enriquecimento ou `search_skills` muda (no máximo uma vez por chamada; `NEW` não incrementa); UI invalida `['overview']` após confirmação | permitir nova sugestão de pares rejeitados após mudança material (recusa contextualizada por versão) e bloquear ciclo multi-hop em `confirm_duplicate` |
 | 27 | código implementado | relatório real de descoberta por ATS |
 | 28–32 | pendentes | termos/catálogo/prioridade antes de collectors |
 | 33–35 | pendentes | métricas e funil |
@@ -29,8 +29,9 @@ branch `feature/f20-groq-e-consolidacao`. Não representa fechamento da fase.
 
 ## Estado operacional
 
-- `28bb03f` adiciona cliente PostgreSQL 17 ao CI e a variável de retenção; o resultado
-  do novo CI ainda não foi confirmado.
+- `28bb03f` adiciona cliente PostgreSQL 17 ao CI e a variável de retenção. A execução
+  `36251420005` falhou no gate de versão: 17 instalou, mas PATH ainda resolve o cliente
+  16; o próximo patch deve antepor `/usr/lib/postgresql/17/bin` e gravá-lo em `GITHUB_PATH`.
 - GitGuardian sinaliza duas ocorrências históricas de fixture bearer dummy. A evidência
   aponta falso positivo; não reescrever histórico. Falta a classificação no dashboard.
 - O worktree ativo antigo `.claude/worktrees/agent-ac111829ec6920204` executa o baseline
@@ -44,4 +45,3 @@ branch `feature/f20-groq-e-consolidacao`. Não representa fechamento da fase.
 1. Corrigir F20-12 e os P2 de F20-26.
 2. Auditar os casos e medir F20-21; então F20-18, F20-22 e F20-35.
 3. Produzir o relatório de F20-27; fazer F20-28–32, F20-33–34, D e F20-23–24.
-
