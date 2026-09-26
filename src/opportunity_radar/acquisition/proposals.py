@@ -23,6 +23,7 @@ IDENTIFIER_KEYS = {
     "ashby": "board_identifier",
     "lever": "site_identifier",
     "greenhouse": "board_token",
+    "workday": "tenant_identifier",
 }
 
 ProposalOutcome = Literal["none", "updated", "outdated"]

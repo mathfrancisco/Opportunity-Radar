@@ -1,0 +1,19 @@
+{
+  "total": 2,
+  "jobPostings": [
+    {
+      "title": "Senior Backend Engineer",
+      "externalPath": "/job/Sao-Paulo/Senior-Backend-Engineer_R12345",
+      "locationsText": "Sao Paulo, Brazil",
+      "postedOn": "Posted 3 Days Ago",
+      "bulletFields": ["R12345"]
+    },
+    {
+      "title": "Product Designer",
+      "externalPath": "/job/Remote/Product-Designer_R67890",
+      "locationsText": "Remote",
+      "postedOn": "Posted Today",
+      "bulletFields": ["R67890"]
+    }
+  ]
+}

@@ -53,6 +53,21 @@ const configFields: Record<SourceType, ConfigField[]> = {
     },
     { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
   ],
+  workday: [
+    {
+      key: 'tenant_identifier',
+      label: 'Tenant e site',
+      required: true,
+      hint: '<tenant>/<site> em <tenant>.<pod>.myworkdayjobs.com/<site>.',
+    },
+    {
+      key: 'api_region',
+      label: 'Pod',
+      required: true,
+      hint: 'A parte <pod> do domínio, ex.: wd1, wd5.',
+    },
+    { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
+  ],
   remotive: [],
   manual: [],
 }
@@ -61,6 +76,7 @@ const typeLabels: Record<SourceType, string> = {
   ashby: 'Ashby',
   lever: 'Lever',
   greenhouse: 'Greenhouse',
+  workday: 'Workday',
   remotive: 'Remotive',
   manual: 'Manual (entrada avulsa de vaga)',
 }

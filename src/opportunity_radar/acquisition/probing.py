@@ -21,12 +21,15 @@ from opportunity_radar.acquisition.domain import (
 )
 
 # The collectors a probe can exercise: every one with a public endpoint to call.
-PROBE_TYPES = ("ashby", "lever", "greenhouse", "remotive")
+PROBE_TYPES = ("ashby", "lever", "greenhouse", "remotive", "workday")
 PUBLIC_ENDPOINT_REFERENCES = {
     "ashby": "https://developers.ashbyhq.com/docs/public-job-posting-api",
     "greenhouse": "https://docs.greenhouse.io/job-board.html",
     "lever": "https://github.com/lever/postings-api",
     "remotive": "https://remotive.com/api-documentation",
+    # No official Workday documentation: this is the CXS backend every tenant career
+    # site calls, reviewed in docs/pesquisas/termos-workday.md.
+    "workday": "docs/pesquisas/termos-workday.md",
 }
 
 
@@ -62,6 +65,10 @@ def probe_request(
     elif source_type == "greenhouse":
         common["company_reference"] = _required(configuration, "board_token")
         common["company_name"] = configuration.get("company_name")
+    elif source_type == "workday":
+        common["company_reference"] = _required(configuration, "tenant_identifier")
+        common["company_name"] = configuration.get("company_name")
+        common["api_region"] = _required(configuration, "api_region")
     return CollectionRequest(**common)
 
 
