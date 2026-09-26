@@ -76,6 +76,7 @@ def test_key_never_appears_in_repr() -> None:
     assert AISettings.from_settings(settings).api_key.get_secret_value() == "gsk-top-secret"
 
 
+@pytest.mark.skipif(not _ENV_EXAMPLE.exists(), reason=".env.example is not mounted")
 def test_env_example_lists_every_new_variable() -> None:
     names = {
         line.split("=", 1)[0].strip()
