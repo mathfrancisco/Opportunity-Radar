@@ -27,7 +27,11 @@ from opportunity_radar.acquisition.models import (
     SourceRunModel,
 )
 from opportunity_radar.acquisition.registry import build_collector_registry
-from opportunity_radar.acquisition.scheduling import CollectionGate, evaluate_gate
+from opportunity_radar.acquisition.scheduling import (
+    CollectionGate,
+    evaluate_gate,
+    next_due_at,
+)
 from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
 from opportunity_radar.matching.adapters import build_analysis_adapter
@@ -304,8 +308,14 @@ def collect_enabled_sources(
                 if not source.enabled or source.source_type == "manual":
                     continue
                 try:
+                    # Read once per source, right before it is judged: the host's shared
+                    # budget (F20-38) is state committed by whichever earlier source in
+                    # this same pass already spent against it, so re-reading it here (not
+                    # once for the whole pass) is what keeps the running total correct
+                    # without one failing source blocking the others on its host.
+                    state = service.scheduling_state(source, timezone=timezone)
                     gate = evaluate_gate(
-                        service.scheduling_state(source, timezone=timezone),
+                        state,
                         now=moment,
                         backoff_base=backoff_base,
                         backoff_ceiling=backoff_ceiling,
@@ -320,6 +330,12 @@ def collect_enabled_sources(
                     continue
                 if gate is not CollectionGate.DUE:
                     summary[gate.outcome] += 1
+                    _, reason = next_due_at(
+                        state,
+                        now=moment,
+                        backoff_base=backoff_base,
+                        backoff_ceiling=backoff_ceiling,
+                    )
                     logger.info(
                         "scheduled collection did not run",
                         extra={
@@ -327,6 +343,8 @@ def collect_enabled_sources(
                             "source_id": str(source.id),
                             "outcome": gate.outcome,
                             "gate": gate.value,
+                            "reason": reason,
+                            "host": state.host,
                         },
                     )
                     continue

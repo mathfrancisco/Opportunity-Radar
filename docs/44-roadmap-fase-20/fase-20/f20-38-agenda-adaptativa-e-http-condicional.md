@@ -30,12 +30,64 @@ A coleta revisita fontes pelo frescor e rendimento, respeitando limites agregado
 
 ## Critérios de aceite
 
-- [ ] Nenhum host excede orçamento ao combinar fontes, sondas e descoberta.
-- [ ] Fonte pouco observada volta a ser visitada dentro do máximo configurado
-      quando há capacidade; insuficiência de orçamento gera atraso explícito,
-      sem violar limites do provedor.
-- [ ] Cooldown sobrevive a reinício; Retry-After não é ignorado.
-- [ ] Mesma coorte mantém cobertura/recall e reduz custo ou atraso medido.
+- [x] Nenhum host excede orçamento ao combinar fontes, sondas e descoberta.
+      Evidência: `HostBudgetState.has_capacity`/`evaluate_gate` em
+      `acquisition/scheduling.py`; `test_two_sources_same_host_share_budget_without_exceeding_ceiling`
+      e `test_same_cohort_reduces_cost_or_delay_without_regressing_coverage` em
+      `tests/backend/acquisition/test_host_budget_scheduling.py`. Sondas e descoberta
+      (F20-36, ainda não implementada) não têm coletor próprio nesta base para ler o
+      orçamento — a estrutura (`HostBudgetStateModel`, `record_host_budget_usage`) já
+      existe para eles se acoplarem; verificado apenas para coleta.
+- [x] Fonte pouco observada volta a ser visitada dentro do máximo configurado quando há
+      capacidade; insuficiência de orçamento gera atraso explícito, sem violar limites do
+      provedor. Evidência: `HostBudgetState.effective_ceiling`/`exploration_reserve_ratio`
+      e `next_due_at` (motivo `"budget"`); `test_low_yield_source_gets_revisited_within_configured_maximum`
+      e `test_insufficient_budget_gives_an_explicit_delay_without_exceeding_the_ceiling`.
+      `is_low_yield` é derivado em `AcquisitionService.scheduling_state` como "nunca
+      completou uma run" (`SourceRunHistory.last_started_at is None`) — um proxy simples e
+      autocontido, não a métrica de coverage/yield completa do dashboard (F20-35); não
+      testado com o acervo real (fora do CI, conforme a seção "Verificação" do card).
+- [x] Cooldown sobrevive a reinício; Retry-After não é ignorado. Evidência:
+      `test_cooldown_survives_restart` e `test_cooldown_outlives_a_window_rollover`
+      constroem uma nova instância de `HostBudgetState` a partir dos campos persistidos
+      (sem estado Python compartilhado); `AcquisitionRepository.record_host_budget_usage`
+      persiste `cooldown_until` em `acquisition.host_budget_state`, lido de volta por
+      `AcquisitionService.scheduling_state` a cada avaliação (nunca de memória do worker).
+      `AcquisitionService.execute` deriva `cooldown_until` de
+      `AcquisitionError.retry_after_seconds` quando `error.code is SOURCE_RATE_LIMITED` —
+      testado apenas via a chamada de `record_host_budget_usage` (repositório fake conta
+      chamadas); não testado com um coletor real de produção emitindo
+      `SOURCE_RATE_LIMITED`, pois os coletores (ashby/greenhouse/lever/remotive) não foram
+      alterados por este card.
+- [x] Mesma coorte mantém cobertura/recall e reduz custo ou atraso medido. Evidência (CI,
+      fixture determinística): `test_same_cohort_reduces_cost_or_delay_without_regressing_coverage`.
+      A comparação de sete dias antes/depois na "Máquina de referência" (requisições,
+      bytes, frescor, cobertura) depende do acervo real e **fica pendente** — não pode ser
+      medida no worktree isolado deste card; ver "Itens pendentes" abaixo.
+
+### Itens pendentes (fora do CI / precisam do acervo real ou de outros cards)
+
+- Comparação de 7 dias antes/depois na máquina de referência (requisições, bytes,
+  frescor, cobertura sob os mesmos tetos) — não medida aqui.
+- Envio real de `If-None-Match`/`If-Modified-Since` pelos coletores de produção
+  (ashby/greenhouse/lever/remotive): a infraestrutura (`CollectionRequest.conditional_headers`,
+  `CollectorCapabilities.etag`/`last_modified`, `CollectionTelemetry.record_conditional_response`)
+  está pronta e testada com um coletor fake + `httpx.MockTransport`
+  (`test_304_revalidates_without_asserting_full_coverage`,
+  `test_conditional_headers_are_not_reused_across_a_different_checkpoint_scope`), mas os
+  arquivos de coletor em si não foram tocados neste card (evitados de propósito: dois
+  workers-irmãos alteravam Workday/Teamtailor em paralelo). Cada coletor precisa, em um
+  card seguinte, ler `request.conditional_headers` e chamar
+  `request.telemetry.record_conditional_response` — sem isso, o checkpoint nunca ganha
+  `etag`/`last_modified` reais em produção.
+- Orçamento por host para sondas (`probing.py`) e descoberta (F20-36, ainda não
+  implementada): a tabela e o método de repositório já existem
+  (`HostBudgetStateModel`/`record_host_budget_usage`), mas nada nesses módulos os chama
+  ainda.
+- `is_low_yield` usa "nunca rodou com sucesso" como proxy; integrar com as métricas de
+  coverage/yield do dashboard (F20-35, `dashboard/queries.py::SourceCoverageMetric`/
+  `useful_yield_metrics`) é um refinamento futuro, não feito aqui para não acoplar o
+  worker de agendamento ao módulo de dashboard.
 
 ## Verificação
 

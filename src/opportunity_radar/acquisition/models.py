@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -474,3 +475,42 @@ class SourceProbeModel(Base):
     # True only when this attempt is what wrote the confirmed evidence: a probe that passed
     # after the source changed under it recorded nothing.
     evidence_recorded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class HostBudgetStateModel(Base):
+    """Request budget shared by every source of one host/provider, across worker restarts.
+
+    Keyed by `host` (the provider identity `AcquisitionService` derives per source_type,
+    not a per-source column), so two sources hitting the same board share one row and one
+    counter. `cooldown_until` survives a restart because it is read from here, not from
+    in-process state (F20-38, acceptance criterion 3).
+    """
+
+    __tablename__ = "host_budget_state"
+    __table_args__ = (
+        CheckConstraint("requests_used >= 0", name="ck_host_budget_state_requests_used"),
+        CheckConstraint(
+            "requests_ceiling >= 0", name="ck_host_budget_state_requests_ceiling"
+        ),
+        CheckConstraint(
+            "exploration_reserve_ratio >= 0 AND exploration_reserve_ratio < 1",
+            name="ck_host_budget_state_exploration_reserve_ratio",
+        ),
+        {"schema": "acquisition"},
+    )
+
+    host: Mapped[str] = mapped_column(String(255), primary_key=True)
+    window_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    requests_used: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    requests_ceiling: Mapped[int] = mapped_column(Integer, nullable=False)
+    cooldown_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    exploration_reserve_ratio: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.10, server_default=text("0.10")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

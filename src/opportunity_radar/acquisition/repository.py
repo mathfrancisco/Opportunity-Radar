@@ -7,12 +7,16 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from opportunity_radar.acquisition.models import (
+    HostBudgetStateModel,
     RawItemModel,
     SourceCheckpointModel,
     SourceDefinitionModel,
     SourceRunModel,
 )
-from opportunity_radar.acquisition.scheduling import SourceRunHistory
+from opportunity_radar.acquisition.scheduling import (
+    DEFAULT_HOST_BUDGET_WINDOW,
+    SourceRunHistory,
+)
 from opportunity_radar.companies.models import CompanySource
 
 _UNFINISHED_RUN_STATUSES = ("PENDING", "RUNNING")
@@ -133,3 +137,40 @@ class AcquisitionRepository:
 
     def checkpoint(self, source_id: UUID) -> SourceCheckpointModel | None:
         return self.session.get(SourceCheckpointModel, source_id)
+
+    def get_host_budget(self, host: str) -> HostBudgetStateModel | None:
+        return self.session.get(HostBudgetStateModel, host)
+
+    def record_host_budget_usage(
+        self,
+        host: str,
+        *,
+        now: datetime,
+        requests: int,
+        default_ceiling: int,
+        cooldown_until: datetime | None = None,
+    ) -> None:
+        """Persist this run's spend against `host`'s shared budget (F20-38).
+
+        Read-modify-write on the same row every source of this host shares: two sources
+        collected in the same pass each call this once, so the second one to commit sees
+        the first one's spend already counted, not a stale ceiling. `cooldown_until` is set
+        unconditionally when given — the caller (a fresh `Retry-After`) always wins over
+        whatever cooldown was there before, never the other way round.
+        """
+        row = self.session.get(HostBudgetStateModel, host)
+        if row is None:
+            row = HostBudgetStateModel(
+                host=host,
+                window_start=now,
+                requests_used=0,
+                requests_ceiling=default_ceiling,
+            )
+            self.session.add(row)
+        elif now - row.window_start >= DEFAULT_HOST_BUDGET_WINDOW:
+            row.window_start = now
+            row.requests_used = 0
+        row.requests_used += requests
+        if cooldown_until is not None:
+            row.cooldown_until = cooldown_until
+        self.session.flush()
