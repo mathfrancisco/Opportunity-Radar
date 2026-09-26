@@ -48,3 +48,25 @@ def test_workday_validator_raises_acquisition_error_for_bad_identifier() -> None
 
     with pytest.raises(AcquisitionError):
         WorkdayCollector.validate_tenant_identifier("acme-without-site")
+def test_registration_accepts_teamtailor_source_type() -> None:
+    assert "teamtailor" in SUPPORTED_ATS
+    values = _source_values(
+        "teamtailor",
+        "https://jobs.acme-careers.test/jobs.json",
+        "jobs.acme-careers.test",
+        "found in careers footer",
+    )
+    assert values["source_type"] == "teamtailor"
+    assert values["external_key"] == "jobs.acme-careers.test"
+    assert values["endpoint"] == "https://jobs.acme-careers.test/jobs.json"
+
+
+def test_registration_rejects_invalid_teamtailor_identifier() -> None:
+    with pytest.raises(CompanyRegistrationError) as error:
+        _source_values(
+            "teamtailor",
+            "https://jobs.acme-careers.test/jobs.json",
+            "https://jobs.acme-careers.test/jobs.json",
+            "found in careers footer",
+        )
+    assert error.value.field == "external_key"

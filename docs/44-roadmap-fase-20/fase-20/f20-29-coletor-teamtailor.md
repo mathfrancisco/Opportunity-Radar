@@ -65,10 +65,12 @@ Endpoints candidatos, **a confirmar na revisão de termos** (não são fato até
 
 ## Critérios de aceite (por sub-card)
 
-- [ ] Termos revisados e registrados antes do código.
-- [ ] Coletor com teste contra board falso, incluindo paginação e erro.
-- [ ] Sonda, proposta, cadastro e formulário reconhecem o ATS.
-- [ ] Pelo menos uma empresa real do catálogo homologada e coletando.
+- [x] Termos revisados e registrados antes do código.
+- [x] Coletor com teste contra board falso, incluindo paginação e erro.
+- [x] Sonda, proposta, cadastro e formulário reconhecem o ATS.
+- [ ] Pelo menos uma empresa real do catálogo homologada e coletando. **Pendente** — precisa da
+      fila de homologação rodando contra a stack real (fora do CI); não simulado. Ver
+      "Pendências" abaixo.
 
 ## Verificação
 
@@ -192,6 +194,40 @@ docker compose -p f20-29 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```
 
 Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
+
+## Evidências F20-29
+
+- **Revisão de termos:** `docs/pesquisas/termos-teamtailor.md`. Conclusão: viável. Achado que
+  corrige a hipótese da tabela deste card e da tabela do F17-10: o feed público
+  (`GET /jobs.json`, JSON Feed 1.1) **não pagina** — verificado ao vivo contra dois boards
+  reais do catálogo (`jobs.seedtag.com`, `jobs.lingokids.com`). `robots.txt` (idêntico nos
+  dois) não bloqueia `/jobs.json` para `User-Agent: *`. Sem campo estruturado de
+  departamento/senioridade — só texto livre em `content_html`/descrição — então nenhum
+  mapeamento F20-02/F20-03 foi aplicado (nada para mapear).
+- **Identificador:** ao contrário de Ashby/Lever/Greenhouse (slug sob um host fixo), o board
+  do Teamtailor é per-domínio. `company_identifier` é portanto o hostname nu do site de
+  carreiras (ex.: `jobs.empresa.com`), validado por `TeamtailorCollector.validate_company_identifier`.
+- **Capacidades:** `CollectorCapabilities(company_jobs=True, pagination=False)` —
+  `pagination=False` reflete o achado da revisão de termos, não a hipótese original da
+  interface do card (`pagination=True`).
+
+| Critério | Evidência |
+| --- | --- |
+| Termos revisados e registrados antes do código | `docs/pesquisas/termos-teamtailor.md` |
+| Coletor com teste contra board falso, incluindo paginação e erro | `tests/backend/acquisition/test_teamtailor_collector.py` (9 testes: item válido, ausência real de paginação — `test_does_not_attempt_a_second_page` —, retentativa com `Retry-After`, 401/403/404/500, timeout/erro de transporte, identificador/schema inválidos, item malformado ignorado e reportado, `max_items`); `tests/e2e/fake_teamtailor_board.py` (board falso HTTP real, com `?fail=404/429/500`) |
+| Sonda, proposta, cadastro e formulário reconhecem o ATS | `probing.py` (`PROBE_TYPES`, `PUBLIC_ENDPOINT_REFERENCES`, ramo `teamtailor` em `probe_request`) + `tests/backend/acquisition/test_service.py::test_probe_recognizes_teamtailor_source_type`; `proposals.py` (`IDENTIFIER_KEYS["teamtailor"]`); `registration.py` (`SUPPORTED_ATS`, validador) + `tests/backend/companies/test_registration.py`; `apps/web/src/components/SourceCreateForm.tsx` (`configFields.teamtailor`, `typeLabels.teamtailor`) e `apps/web/src/features/sources/api.ts` (`sourceTypes`) |
+| Pelo menos uma empresa real do catálogo homologada e coletando | **Pendente**, ver "Pendências" |
+
+## Pendências
+
+- Homologação de uma empresa real (critério 4) não foi feita: exige a fila de homologação
+  (F20-25) rodando contra a stack real e uma chamada de rede de verdade a um board real, o
+  que este worker não faz fora do CI por instrução explícita do card ("nunca fazer chamada
+  real a boards... no CI"; a máquina de referência é medida fora do CI). Candidatos do
+  catálogo já citados em `docs/pesquisas/auditoria-186-empresas.md`: Lingokids
+  (`jobs.lingokids.com`), Seedtag (`jobs.seedtag.com`), Spendesk. Próximo passo: rodar a fila
+  de homologação apontando `company_identifier` para um desses domínios e colar o resultado
+  real no PR.
 
 ## Pronto quando
 

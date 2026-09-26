@@ -1,0 +1,58 @@
+{
+  "version": "https://jsonfeed.org/version/1.1",
+  "title": "Acme",
+  "home_page_url": "https://jobs.acme-careers.test/",
+  "feed_url": "https://jobs.acme-careers.test/jobs.json",
+  "items": [
+    {
+      "id": "d8f4799e-9412-4af5-a3f2-0325d7cae0a0",
+      "title": "Senior Backend Engineer",
+      "url": "https://jobs.acme-careers.test/jobs/12345-senior-backend-engineer",
+      "date_published": "2026-09-01T12:00:00Z",
+      "content_html": "<p>Build dependable services for customers.</p>",
+      "_jobposting": {
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        "title": "Senior Backend Engineer",
+        "description": "<p>Build dependable services for customers.</p>",
+        "identifier": {"@type": "PropertyValue", "name": "Acme", "value": "12345"},
+        "datePosted": "2026-09-01T12:00:00Z",
+        "hiringOrganization": {"@type": "Organization", "name": "Acme"},
+        "jobLocation": [
+          {
+            "@type": "Place",
+            "address": {
+              "@type": "PostalAddress",
+              "addressLocality": "Sao Paulo",
+              "addressRegion": "SP",
+              "addressCountry": "BR"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "bc5f04af-7d7f-4f7e-b5e3-6f6ed351ea21",
+      "title": "Product Designer",
+      "url": "https://jobs.acme-careers.test/jobs/12346-product-designer",
+      "date_published": "2026-09-02T09:30:00Z",
+      "content_html": "<p>Design clear, useful workflows.</p>",
+      "_jobposting": {
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        "title": "Product Designer",
+        "description": "<p>Design clear, useful workflows.</p>",
+        "identifier": {"@type": "PropertyValue", "name": "Acme", "value": "12346"},
+        "datePosted": "2026-09-02T09:30:00Z",
+        "hiringOrganization": {"@type": "Organization", "name": "Acme"},
+        "jobLocation": {
+          "@type": "Place",
+          "address": {
+            "@type": "PostalAddress",
+            "addressCountry": "Remote"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -36,6 +36,7 @@ from opportunity_radar.acquisition.service import (
     canonical_payload_hash,
 )
 from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
+from opportunity_radar.acquisition.teamtailor import TeamtailorCollector
 from opportunity_radar.acquisition.workday import WorkdayCollector
 
 
@@ -582,6 +583,44 @@ def test_probe_leaves_retry_after_unset_when_not_rate_limited() -> None:
     assert outcome.ok is False
     assert outcome.error_code == AcquisitionErrorCode.SOURCE_SERVER_ERROR.value
     assert outcome.retry_after_seconds is None
+
+
+def test_probe_recognizes_teamtailor_source_type() -> None:
+    """F20-29: the sonda (probe) must resolve `teamtailor` from a source's own
+    `company_identifier` configuration, the same way it already does for the other ATS
+    types, so homologation can test a Teamtailor board before it is enabled."""
+    payload = {
+        "items": [
+            {
+                "id": "job-1",
+                "title": "Backend Engineer",
+                "url": "https://jobs.acme-careers.test/jobs/job-1",
+                "date_published": "2026-09-01T12:00:00Z",
+            }
+        ]
+    }
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
+    )
+    registry = CollectorRegistry((TeamtailorCollector(client=client),))
+    try:
+        outcome = asyncio.run(
+            run_probe(
+                "teamtailor",
+                {
+                    "company_identifier": "jobs.acme-careers.test",
+                    "company_name": "Acme",
+                },
+                registry,
+                max_items=5,
+            )
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert outcome.ok is True
+    assert outcome.items_seen == 1
+    assert outcome.http_requests == 1
 
 
 def test_reused_request_does_not_leak_telemetry_between_runs() -> None:

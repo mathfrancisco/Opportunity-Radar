@@ -222,6 +222,7 @@ export const sourceTypes = [
   'greenhouse',
   'workday',
   'remotive',
+  'teamtailor',
   'manual',
 ] as const
 export type SourceType = (typeof sourceTypes)[number]

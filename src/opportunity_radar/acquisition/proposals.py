@@ -24,6 +24,7 @@ IDENTIFIER_KEYS = {
     "lever": "site_identifier",
     "greenhouse": "board_token",
     "workday": "tenant_identifier",
+    "teamtailor": "company_identifier",
 }
 
 ProposalOutcome = Literal["none", "updated", "outdated"]
