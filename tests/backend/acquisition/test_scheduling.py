@@ -7,7 +7,10 @@ microseconds rather than trusted.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from uuid import uuid4
 
+from opportunity_radar.acquisition.models import SourceCheckpointModel, SourceRunModel
 from opportunity_radar.acquisition.scheduling import (
     CollectionGate,
     SourceRunHistory,
@@ -16,6 +19,8 @@ from opportunity_radar.acquisition.scheduling import (
     evaluate_gate,
     is_due,
 )
+from opportunity_radar.profile.keywords import KeywordRotationState
+from opportunity_radar.worker import _advance_keyword_rotation_checkpoint
 
 _HOURLY = "0 * * * *"
 _NOON = datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC)
@@ -135,3 +140,49 @@ def test_the_backoff_never_pushes_the_next_attempt_beyond_the_ceiling() -> None:
     assert (
         evaluate_gate(state, now=failed_at + timedelta(hours=25)) is CollectionGate.DUE
     )
+
+
+def test_keyword_rotation_checkpoint_advances_only_after_confirmed_batch() -> None:
+    source_id = uuid4()
+    checkpoint = SourceCheckpointModel(
+        source_definition_id=source_id,
+        checkpoint_type="keyword_rotation",
+        cursor="1",
+    )
+
+    class Session:
+        commits = 0
+
+        def get(self, model: type[SourceCheckpointModel], key: object):
+            assert model is SourceCheckpointModel
+            assert key == source_id
+            return checkpoint
+
+        def commit(self) -> None:
+            self.commits += 1
+
+        def add(self, entity: SourceCheckpointModel) -> None:
+            assert entity is checkpoint
+
+    class Service:
+        session = Session()
+
+    service = Service()
+    source = SimpleNamespace(id=source_id)
+    run = SourceRunModel(id=uuid4(), source_definition_id=source_id, status="FAILED")
+    state = KeywordRotationState(block_index=1, terms_used=("term-10", "term-11"))
+
+    assert not _advance_keyword_rotation_checkpoint(
+        service, source, run, state, term_count=12
+    )
+    assert checkpoint.cursor == "1"
+    assert service.session.commits == 0
+
+    # A restarted worker reads the still-current index and retries the same block.
+    run.status = "SUCCEEDED"
+    assert _advance_keyword_rotation_checkpoint(
+        service, source, run, state, term_count=12
+    )
+    assert checkpoint.cursor == "0"
+    assert checkpoint.promoted_by_run_id == run.id
+    assert service.session.commits == 1

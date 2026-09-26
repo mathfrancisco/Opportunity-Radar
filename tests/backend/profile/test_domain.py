@@ -47,3 +47,17 @@ def test_snapshot_rejects_duplicate_target_role_families() -> None:
 
     with pytest.raises(InvalidProfileSnapshotError, match="target role families must be unique"):
         snapshot.validate()
+
+
+def test_target_titles_reject_duplicates() -> None:
+    snapshot = ProfileSnapshot(
+        skills=(),
+        experiences=(),
+        projects=(),
+        preferences=EmploymentPreference(
+            target_titles=("Backend Engineer", "Backend Engineer")
+        ),
+    )
+
+    with pytest.raises(InvalidProfileSnapshotError, match="target titles must be unique"):
+        snapshot.validate()

@@ -1,10 +1,13 @@
 import asyncio
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from uuid import uuid4
 
 import httpx
 import pytest
 
+from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
     AcquisitionErrorCode,
@@ -12,6 +15,15 @@ from opportunity_radar.acquisition.domain import (
     CollectionRequest,
 )
 from opportunity_radar.acquisition.remotive import RemotiveCollector
+from opportunity_radar.profile.domain import (
+    EmploymentPreference,
+    ProfileSnapshot,
+    ProfileVersion,
+    ProfileVersionStatus,
+    Skill,
+)
+from opportunity_radar.profile.service import ProfileService
+from opportunity_radar.worker import _scheduled_request
 
 _FIXTURE = Path(__file__).parents[2] / "fixtures" / "remotive_remote_jobs.json"
 
@@ -52,6 +64,46 @@ def test_queries_maps_and_preserves_public_payload() -> None:
     assert item.metadata["parser_version"] == "remotive-remote-jobs-v2"
     assert item.metadata["tags"] == ["python", "backend"]
     assert request.telemetry.http_requests == 1
+
+
+def test_receives_keywords_derived_from_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json={"job-count": 0, "jobs": []})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    profile = ProfileVersion(
+        id=uuid4(),
+        number=1,
+        status=ProfileVersionStatus.ACTIVE,
+        profile_lock_version=1,
+        snapshot=ProfileSnapshot(
+            skills=(Skill("Python", level="advanced"), Skill("React", level="basic")),
+            experiences=(),
+            projects=(),
+            preferences=EmploymentPreference(target_titles=("Backend Engineer",)),
+        ),
+    )
+    monkeypatch.setattr(ProfileService, "get_active", lambda self: profile)
+    source = SimpleNamespace(
+        id=uuid4(),
+        source_type="remotive",
+        configuration={"keywords": ["remote"]},
+        checkpoint=None,
+    )
+    registry = CollectorRegistry((RemotiveCollector(client=client),))
+    service = SimpleNamespace(session=object(), registry=registry)
+    request = _scheduled_request(service, source, "test-correlation")
+
+    try:
+        asyncio.run(_collect(registry.resolve("remotive"), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert request.keywords == ("backend engineer", "python", "remote")
+    assert calls[0].url.params["search"] == "backend engineer python remote"
 
 
 def test_retries_rate_limit_and_records_telemetry() -> None:

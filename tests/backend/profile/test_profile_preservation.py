@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.presentation.http.app import create_app
+from opportunity_radar.presentation.http.profile import PreferenceBody, _preferences
 from opportunity_radar.profile.domain import (
     EmploymentPreference,
     ProfileSnapshot,
@@ -304,6 +305,18 @@ def test_target_role_families_round_trip_and_refuse_unknown_codes(client: TestCl
         assert response.status_code == 422, refused
 
     assert _version_states() == before
+
+
+def test_target_titles_round_trip_through_preference_body() -> None:
+    body = PreferenceBody(
+        target_titles=[" Backend Engineer ", "backend engineer", "Engenheiro de Software"]
+    )
+
+    domain = _preferences(body, None)
+    serialized = PreferenceBody(**{"target_titles": list(domain.target_titles)})
+
+    assert domain.target_titles == ("backend engineer", "engenheiro de software")
+    assert serialized.target_titles == ["backend engineer", "engenheiro de software"]
 
 
 def test_an_unknown_base_version_is_not_found(client: TestClient) -> None:

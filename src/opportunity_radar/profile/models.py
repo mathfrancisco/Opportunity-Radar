@@ -255,6 +255,12 @@ class EmploymentPreferenceModel(Base):
         default=list,
         server_default=text("'{}'::varchar[]"),
     )
+    target_titles: Mapped[list[str]] = mapped_column(
+        ARRAY(String(128)),
+        nullable=False,
+        default=list,
+        server_default=text("'{}'::varchar[]"),
+    )
     profile_version: Mapped[ProfileVersionModel] = relationship(
         back_populates="preference"
     )

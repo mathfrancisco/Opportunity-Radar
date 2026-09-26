@@ -21,7 +21,11 @@ from opportunity_radar.acquisition.domain import (
     CollectionRequest,
     ExecutionTrigger,
 )
-from opportunity_radar.acquisition.models import SourceDefinitionModel
+from opportunity_radar.acquisition.models import (
+    SourceCheckpointModel,
+    SourceDefinitionModel,
+    SourceRunModel,
+)
 from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.scheduling import CollectionGate, evaluate_gate
 from opportunity_radar.acquisition.service import AcquisitionService
@@ -48,6 +52,12 @@ from opportunity_radar.platform.logging import (
     get_logger,
 )
 from opportunity_radar.profile.domain import ProfileNotFoundError
+from opportunity_radar.profile.keywords import (
+    KeywordRotationState,
+    derive_keywords,
+    rotate,
+)
+from opportunity_radar.profile.service import ProfileService
 
 WORKER_READY_FILE = Path("/tmp/opportunity-radar-worker-ready")
 
@@ -320,20 +330,29 @@ def collect_enabled_sources(
                         },
                     )
                     continue
+                request: CollectionRequest | None = None
                 try:
-                    run = run_async(
-                        service.execute(
-                            source.id,
-                            _scheduled_request(service, source, correlation_id),
-                        )
+                    request, rotation_state, term_count = _scheduled_request_with_rotation(
+                        service, source, correlation_id
                     )
+                    run = run_async(
+                        service.execute(source.id, request)
+                    )
+                    if rotation_state is not None:
+                        _advance_keyword_rotation_checkpoint(
+                            service, source, run, rotation_state, term_count=term_count
+                        )
                 except Exception:
                     # One unreachable source must not cost the others their pass.
                     session.rollback()
                     summary["failed"] += 1
                     logger.exception(
                         "scheduled collection failed",
-                        extra={"job": "collect", "source_id": str(source.id)},
+                        extra={
+                            "job": "collect",
+                            "source_id": str(source.id),
+                            "terms_used": list(request.keywords) if request is not None else [],
+                        },
                     )
                     continue
                 if run.complete:
@@ -359,6 +378,8 @@ def collect_enabled_sources(
                         "source_id": str(source.id),
                         "outcome": outcome,
                         "run_status": run.status,
+                        "run_id": str(run.id),
+                        "terms_used": list(request.keywords) if request is not None else [],
                         "items_persisted": run.items_persisted,
                     },
                 )
@@ -425,13 +446,52 @@ def _scheduled_request(
     configuration, which would report the source as broken when it is merely narrower than
     Remotive — so the capability decides, not the stored configuration.
     """
+    request, _, _ = _scheduled_request_with_rotation(service, source, correlation_id)
+    return request
+
+
+def _scheduled_request_with_rotation(
+    service: AcquisitionService,
+    source: SourceDefinitionModel,
+    correlation_id: str,
+) -> tuple[CollectionRequest, KeywordRotationState | None, int]:
     collector = service.registry.resolve(source.source_type)
     configured = source.configuration.get("keywords", ())
-    keywords = (
+    configured_keywords = (
         tuple(configured)
         if isinstance(configured, list) and all(isinstance(item, str) for item in configured)
         else ()
     )
+    rotation_state: KeywordRotationState | None = None
+    term_count = 0
+    if source.source_type == "remotive" and collector.capabilities.keyword_search:
+        profile_keywords: tuple[str, ...] = ()
+        try:
+            profile = ProfileService(service.session).get_active()
+        except ProfileNotFoundError:
+            pass
+        else:
+            profile_keywords = derive_keywords(
+                profile.snapshot.preferences, profile.snapshot.skills
+            )
+        terms = _normalize_keywords((*profile_keywords, *configured_keywords))
+        term_count = len(terms)
+        checkpoint = source.checkpoint
+        block_index = 0
+        if (
+            checkpoint is not None
+            and checkpoint.checkpoint_type == "keyword_rotation"
+            and checkpoint.cursor is not None
+        ):
+            try:
+                block_index = max(0, int(checkpoint.cursor))
+            except ValueError:
+                block_index = 0
+        keywords = rotate(terms, block_index=block_index)
+        if keywords:
+            rotation_state = KeywordRotationState(block_index, keywords)
+    else:
+        keywords = configured_keywords
     return CollectionRequest(
         source_definition_id=source.id,
         mode=(
@@ -442,7 +502,35 @@ def _scheduled_request(
         keywords=keywords if collector.capabilities.keyword_search else (),
         correlation_id=correlation_id,
         execution_trigger=ExecutionTrigger.SCHEDULED,
-    )
+    ), rotation_state, term_count
+
+
+def _normalize_keywords(terms: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(term.strip().casefold() for term in terms if term.strip()))
+
+
+def _advance_keyword_rotation_checkpoint(
+    service: AcquisitionService,
+    source: SourceDefinitionModel,
+    run: SourceRunModel,
+    state: KeywordRotationState,
+    *,
+    term_count: int,
+) -> bool:
+    """Commit next block only after `execute` durably commits a successful run."""
+    if run.status != "SUCCEEDED" or not state.terms_used or term_count == 0:
+        return False
+    checkpoint = service.session.get(SourceCheckpointModel, source.id)
+    if checkpoint is None:
+        checkpoint = SourceCheckpointModel(source_definition_id=source.id)
+    block_count = (term_count + 9) // 10
+    checkpoint.checkpoint_type = "keyword_rotation"
+    checkpoint.cursor = str((state.block_index + 1) % block_count)
+    checkpoint.promoted_by_run_id = run.id
+    checkpoint.promoted_at = datetime.now(ZoneInfo("UTC"))
+    service.session.add(checkpoint)
+    service.session.commit()
+    return True
 
 
 def build_scheduler(settings: Settings) -> BackgroundScheduler:

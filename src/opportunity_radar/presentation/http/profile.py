@@ -66,6 +66,7 @@ class PreferenceBody(BaseModel):
     relocation_allowed: bool = False
     sponsorship_required: bool = False
     target_role_families: list[str] = Field(default_factory=list)
+    target_titles: list[str] = Field(default_factory=list)
 
     @field_validator("target_role_families")
     @classmethod
@@ -75,6 +76,11 @@ class PreferenceBody(BaseModel):
         if unknown:
             raise ValueError(f"unknown role families: {', '.join(unknown)}")
         return value
+
+    @field_validator("target_titles")
+    @classmethod
+    def normalize_target_titles(cls, value: list[str]) -> list[str]:
+        return list(dict.fromkeys(title.strip().casefold() for title in value if title.strip()))
 
 
 class CreateVersionBody(BaseModel):

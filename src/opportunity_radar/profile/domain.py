@@ -76,6 +76,7 @@ class EmploymentPreference:
     #: `role-family-v1` areas the Inbox shows by default (card F17-02). Empty means every
     #: area, which is what a profile meant before the preference existed.
     target_role_families: tuple[str, ...] = ()
+    target_titles: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -128,6 +129,8 @@ class ProfileSnapshot:
             raise InvalidProfileSnapshotError("timezone window must be valid")
         if len(set(preferences.target_role_families)) != len(preferences.target_role_families):
             raise InvalidProfileSnapshotError("target role families must be unique")
+        if len(set(preferences.target_titles)) != len(preferences.target_titles):
+            raise InvalidProfileSnapshotError("target titles must be unique")
 
 
 @dataclass(frozen=True)
