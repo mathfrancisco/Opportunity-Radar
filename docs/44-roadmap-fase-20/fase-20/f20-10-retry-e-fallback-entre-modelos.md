@@ -1,6 +1,6 @@
 # CARD F20-10 — Retry com jitter e fallback entre modelos
 
-- **Status:** Backlog
+- **Status:** Feito — `tests/backend/platform/ai/test_router.py` (`docker compose ... run --rm api pytest -q`, `ruff check .` e `mypy` verdes).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-09
@@ -56,9 +56,9 @@ class AIRouter:
 
 ## Critérios de aceite
 
-- [ ] Número máximo de chamadas por `run` = `len(chain) × (1 + max_retries)`, provado em teste com todos transitórios.
-- [ ] Esperas registradas: `[1×j, 2×j]` para `max_retries=2`.
-- [ ] 401 → uma chamada só.
+- [x] Número máximo de chamadas por `run` = `len(chain) × (1 + max_retries)`, provado em teste com todos transitórios (`test_call_ceiling`).
+- [x] Esperas registradas: `[1×j, 2×j]` para `max_retries=2` (`test_backoff_sequence_with_jitter`, `test_transient_retried_then_success`).
+- [x] 401 → uma chamada só (`test_configuration_error_stops_chain[status=401]`).
 
 ## Testes
 
