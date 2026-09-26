@@ -1,6 +1,6 @@
 # CARD F20-35 — Mapa de cobertura e rendimento
 
-- **Status:** Feito no código; critério 4 pendente da máquina de referência.
+- **Status:** Feito no código e validado em 53 testes de dashboard; critério 4 pendente da máquina de referência.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** D — Varredura produtiva
 - **Depende de:** F20-01, F20-03
@@ -29,9 +29,9 @@ Cada empresa mostra se está coberta, por que não está e qual é a próxima a�
 
 ## Critérios de aceite
 
-- [x] Fonte habilitada falhando não conta como operacional — `test_enabled_source_with_failing_run_is_not_operational`.
-- [x] Aliases e oportunidades multifuente não inflam totais — `test_funnel_counts_each_stage_once_per_canonical_company`, `test_multisource_opportunity_counts_once`.
-- [x] Cada métrica expõe janela, denominador, suporte e null quando indisponível — `test_metrics_expose_window_denominator_support_and_null`, `test_multisource_opportunity_counts_once`.
+- [x] Fonte habilitada falhando ou terminando sem completude não conta como operacional — `test_enabled_source_with_failing_run_is_not_operational`, `test_latest_successful_incomplete_run_is_unhealthy_and_not_operational`.
+- [x] Aliases, duplicatas absorvidas e oportunidades multifuente não inflam totais — `test_funnel_counts_each_stage_once_per_canonical_company`, `test_absorbed_duplicate_is_not_a_new_unique_opportunity`, `test_multisource_opportunity_counts_once`.
+- [x] Cada métrica expõe janela, denominador, suporte e null quando indisponível — `test_metrics_expose_window_denominator_support_and_null`, `test_mark_after_now_does_not_change_historical_report`, `test_occurrence_after_window_gets_no_contribution_credit`, `test_untrustworthy_source_mix_is_omitted_and_valid_delays_interpolate`, `test_one_negative_mark_reports_zero_judgement_rate`, `test_zero_requests_leave_useful_yield_null`.
 - [ ] Relatório registra baseline, lacunas acionáveis e plano de comparação.
   - Pendente na máquina de referência: medir sete dias de operação registrada, fixar metas e tetos de recursos antes da mudança, e medir janela equivalente subsequente de sete dias ou replay controlado de snapshots. Fixtures não substituem essa medição.
 
@@ -107,8 +107,8 @@ class CompanyCoverageFunnel:
     generated_at: datetime
     canonical_companies_total: int
     stages: tuple[CompanyFunnelStage, ...]
-    #: Empresas com fonte habilitada cuja última execução falhou — não contam como
-    #: operacionais mesmo estando "enabled" (critério de aceite 1).
+    #: Empresas com fonte habilitada cuja última execução falhou ou terminou incompleta;
+    #: não contam como operacionais mesmo estando "enabled" (critério de aceite 1).
     enabled_but_unhealthy: int
 
 
@@ -117,7 +117,7 @@ class UsefulYieldMetric:
     window_days: int
     requests: int
     new_unique_opportunities: int
-    #: None quando a amostra de julgamento é pequena demais para sustentar a taxa.
+    #: None quando a janela não contém oportunidades únicas.
     judged_relevant: int | None
     judgement_rate: Decimal | None
     yield_per_100_requests: Decimal | None
