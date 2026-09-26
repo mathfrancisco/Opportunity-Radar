@@ -12,6 +12,8 @@ from opportunity_radar.opportunities.domain import NormalizationInput, build_can
 from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.opportunities.repository import RawItemEvidence
 from opportunity_radar.opportunities.service import (
+    NORMALIZER_VERSION,
+    OpportunityService,
     PayloadExpiredError,
     _apply_evidence_fields,
     _apply_rule_fields,
@@ -20,6 +22,59 @@ from opportunity_radar.opportunities.service import (
 )
 
 NOW = datetime.now(UTC)
+
+
+class _CandidateSession:
+    def __init__(self) -> None:
+        self.added: list[object] = []
+
+    def add(self, value: object) -> None:
+        self.added.append(value)
+
+    def commit(self) -> None:
+        return None
+
+    def refresh(self, value: object) -> None:
+        del value
+
+
+class _CandidateRepository:
+    def __init__(self, evidence: RawItemEvidence) -> None:
+        self.evidence = evidence
+
+    def normalization_result(self, *args: object) -> None:
+        del args
+        return None
+
+    def raw_item_evidence(self, raw_item_id: object) -> RawItemEvidence:
+        del raw_item_id
+        return self.evidence
+
+
+def test_direct_normalization_blocks_source_proposal_candidate() -> None:
+    raw_item = RawItemModel(
+        id=uuid4(),
+        source_run_id=uuid4(),
+        source_definition_id=uuid4(),
+        payload_hash="hash",
+        item_metadata={"source_proposal_candidate": True},
+    )
+    evidence = RawItemEvidence(
+        raw_item=raw_item,
+        source_type="tavily_search",
+        company_id=None,
+        company_name=None,
+        source_configuration={},
+    )
+    session = _CandidateSession()
+    result = OpportunityService(
+        session, repository=_CandidateRepository(evidence)  # type: ignore[arg-type]
+    ).normalize(raw_item.id)
+
+    assert result.status == "FAILED"
+    assert result.normalizer_version == NORMALIZER_VERSION
+    assert result.opportunity is None
+    assert result.reasons == [{"code": "SOURCE_PROPOSAL_CANDIDATE"}]
 
 
 def _opportunity(**overrides: object) -> OpportunityModel:

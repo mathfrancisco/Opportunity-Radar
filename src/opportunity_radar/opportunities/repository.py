@@ -97,7 +97,12 @@ class OpportunityRepository:
         return list(
             self.session.scalars(
                 select(RawItemModel)
-                .where(RawItemModel.source_run_id == source_run_id)
+                .where(
+                    RawItemModel.source_run_id == source_run_id,
+                    RawItemModel.item_metadata[
+                        "source_proposal_candidate"
+                    ].as_boolean().is_not(True),
+                )
                 .order_by(RawItemModel.fetched_at, RawItemModel.id)
             ).unique()
         )
@@ -119,6 +124,11 @@ class OpportunityRepository:
                     ),
                 )
                 .where(NormalizationResultModel.id.is_(None))
+                .where(
+                    RawItemModel.item_metadata[
+                        "source_proposal_candidate"
+                    ].as_boolean().is_not(True)
+                )
                 .order_by(RawItemModel.fetched_at, RawItemModel.id)
                 .limit(limit)
             )

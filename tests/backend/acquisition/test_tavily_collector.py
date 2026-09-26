@@ -125,13 +125,15 @@ def test_known_ats_board_marks_source_proposal_candidate() -> None:
     assert items[0].metadata["source_proposal_candidate"] is True
 
 
-def test_unknown_ats_board_url_does_not_marks_candidate() -> None:
+def test_enabled_ats_board_loaded_per_request_does_not_mark_candidate() -> None:
     client = _client({"results": [_result("https://boards.greenhouse.io/acme/jobs/1")]})
-    collector = TavilySearchCollector(
-        client=client, known_ats_boards=frozenset({("greenhouse", "acme")})
+    collector = TavilySearchCollector(client=client)
+    request = CollectionRequest(
+        keywords=("backend",),
+        known_ats_boards=frozenset({("greenhouse", "acme")}),
     )
 
-    items = asyncio.run(_collect(collector, CollectionRequest(keywords=("backend",))))
+    items = asyncio.run(_collect(collector, request))
 
     assert "source_proposal_candidate" not in items[0].metadata
 

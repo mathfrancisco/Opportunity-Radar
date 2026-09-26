@@ -209,6 +209,9 @@ class CollectionRequest:
         default_factory=CollectionTelemetry, compare=False, repr=False
     )
     network_policy: CollectionNetworkPolicy | None = None
+    known_ats_boards: frozenset[tuple[str, str]] | None = field(
+        default=None, compare=False, repr=False
+    )
 
     def __post_init__(self) -> None:
         if self.max_items is not None and self.max_items < 1:

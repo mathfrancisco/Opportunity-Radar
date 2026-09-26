@@ -185,6 +185,9 @@ class _Repository:
         del source_id
         return SourceRunHistory()
 
+    def enabled_ats_boards(self) -> frozenset[tuple[str, str]]:
+        return frozenset()
+
     def identical_raw_item_exists(
         self, *, source_id: object, identity_key: object, payload_hash: object
     ) -> bool:

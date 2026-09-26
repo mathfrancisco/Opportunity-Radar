@@ -729,6 +729,11 @@ class AcquisitionService:
                 api_region=api_region or request.api_region,
                 telemetry=run_telemetry,
                 network_policy=network_policy,
+                known_ats_boards=(
+                    self.repository.enabled_ats_boards()
+                    if source.source_type == "tavily_search"
+                    else request.known_ats_boards
+                ),
             )
             async for item in collector.discover(collector_request):
                 run.record_items(seen=1)

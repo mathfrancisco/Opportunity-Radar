@@ -658,7 +658,12 @@ class TavilySearchCollector:
                 "parser_version": _SEARCH_PARSER_VERSION,
             }
             board = detect_ats_board(result.url)
-            if board is not None and board not in self._known_ats_boards:
+            known_ats_boards = (
+                request.known_ats_boards
+                if request.known_ats_boards is not None
+                else self._known_ats_boards
+            )
+            if board is not None and board not in known_ats_boards:
                 metadata["source_proposal_candidate"] = True
             yield CollectedItem(
                 source_type=self.source_type,
