@@ -53,7 +53,7 @@ RELATIONSHIP_QUERIES: dict[str, str] = {
     ),
     "stage_history_without_application": (
         "SELECT count(*) FROM crm.stage_history h "
-        "LEFT JOIN crm.application_process a ON a.id = h.application_process_id "
+        "LEFT JOIN crm.application_process a ON a.id = h.application_id "
         "WHERE a.id IS NULL"
     ),
 }

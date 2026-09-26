@@ -368,7 +368,7 @@ def test_cache_get_put_roundtrip_against_real_schema() -> None:
 
     from opportunity_radar.platform.database import create_database_engine
 
-    engine = create_database_engine()
+    engine = create_database_engine(os.environ["DATABASE_URL"])
     with sessionmaker(bind=engine)() as session:
         cache = TavilyExtractionCache(session=session, ttl_seconds=3600)
         cache.put(
@@ -401,7 +401,7 @@ def test_cache_expired_row_reads_as_miss_against_real_schema() -> None:
     from opportunity_radar.acquisition.models import TavilyExtractCacheModel
     from opportunity_radar.platform.database import create_database_engine
 
-    engine = create_database_engine()
+    engine = create_database_engine(os.environ["DATABASE_URL"])
     with sessionmaker(bind=engine)() as session:
         cache = TavilyExtractionCache(session=session, ttl_seconds=1)
         cache.put(
