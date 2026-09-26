@@ -10,6 +10,8 @@ from math import isfinite
 from typing import Any, Mapping
 from uuid import UUID, uuid4
 
+from opportunity_radar.acquisition.scheduling import ConditionalRequestHeaders
+
 
 class AcquisitionErrorCode(StrEnum):
     """Stable error categories exposed across acquisition adapters."""
@@ -154,6 +156,30 @@ class CollectionTelemetry:
     #: Credits charged by the provider during this request. It is copied to the
     #: run by AcquisitionService after collection completes.
     credits_used: int = 0
+    #: The representation's validators from this attempt's response, when the collector
+    #: read and reported them (F20-38). `None` means the collector did not report one, not
+    #: that the response lacked it — a collector without HTTP-conditional support simply
+    #: never calls `record_conditional_response`.
+    response_etag: str | None = None
+    response_last_modified: str | None = None
+    #: Whether this attempt's response was a bare 304. A 304 revalidates the checkpoint's
+    #: representation; it never proves the board is fully read (SPEC 39 §7 — only F20-39's
+    #: manifest check may do that), so `AcquisitionService` must not read this as coverage.
+    not_modified: bool = False
+
+    def record_conditional_response(
+        self,
+        *,
+        etag: str | None = None,
+        last_modified: str | None = None,
+        not_modified: bool = False,
+    ) -> None:
+        if etag is not None:
+            self.response_etag = etag
+        if last_modified is not None:
+            self.response_last_modified = last_modified
+        if not_modified:
+            self.not_modified = True
 
     def record_items_announced(self, total: int) -> None:
         if total < 0:
@@ -240,6 +266,12 @@ class CollectionRequest:
     known_ats_boards: frozenset[tuple[str, str]] | None = field(
         default=None, compare=False, repr=False
     )
+    #: `If-None-Match`/`If-Modified-Since` for this request's representation, built by
+    #: `AcquisitionService` from the checkpoint's stored validators (F20-38). `None` when
+    #: there is no checkpoint yet, or the checkpoint belongs to a different scope. A
+    #: collector that supports HTTP-conditional requests (`CollectorCapabilities.etag`/
+    #: `last_modified`) reads this to send the headers; one that does not simply ignores it.
+    conditional_headers: ConditionalRequestHeaders | None = None
 
     def __post_init__(self) -> None:
         if self.max_items is not None and self.max_items < 1:

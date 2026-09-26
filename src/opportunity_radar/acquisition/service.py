@@ -8,7 +8,7 @@ import json
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from math import ceil, isfinite
 from typing import Any, Literal
 from uuid import UUID
@@ -58,6 +58,9 @@ from opportunity_radar.acquisition.proposals import (
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.repository import AcquisitionRepository
 from opportunity_radar.acquisition.scheduling import (
+    DEFAULT_HOST_REQUESTS_CEILING,
+    ConditionalRequestHeaders,
+    HostBudgetState,
     SourceSchedulingState,
     default_schedule_for_priority,
 )
@@ -76,6 +79,44 @@ from opportunity_radar.platform.logging import get_logger
 COLLECTED_ITEM_V1_KEY = "collected_item_v1"
 
 logger = get_logger("opportunity_radar.acquisition.service")
+
+# The host/provider each source_type shares its request budget with (F20-38). A
+# source_type not listed here (including a collector added after this mapping was
+# written) still gets an isolated budget bucket keyed by its own source_type — see
+# `_host_for_source_type` — rather than being silently left out of budgeting.
+_PROVIDER_HOST_BY_SOURCE_TYPE: dict[str, str] = {
+    "greenhouse": "boards.greenhouse.io",
+    "ashby": "api.ashbyhq.com",
+    "lever": "api.lever.co",
+    "remotive": "remotive.com",
+    "tavily_search": "api.tavily.com",
+}
+
+
+def _host_for_source_type(source_type: str) -> str:
+    return _PROVIDER_HOST_BY_SOURCE_TYPE.get(source_type, source_type)
+
+
+def _conditional_headers_for(
+    source: SourceDefinitionModel,
+) -> ConditionalRequestHeaders | None:
+    """Validators for the next request, only when the checkpoint is the same scope.
+
+    A checkpoint promoted while rotating keywords (`checkpoint_type == "keyword_rotation"`)
+    describes a different representation than a plain incremental cursor, so its etag/
+    last-modified — if it ever had any — must never condition a request for that other
+    scope (SPEC 39 §7). `None` here means "send an unconditional request", not "the
+    representation is unchanged".
+    """
+    checkpoint = source.checkpoint
+    if checkpoint is None or checkpoint.checkpoint_type != "cursor":
+        return None
+    if checkpoint.etag is None and checkpoint.last_modified is None:
+        return None
+    return ConditionalRequestHeaders(
+        if_none_match=checkpoint.etag,
+        if_modified_since=checkpoint.last_modified,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -774,12 +815,34 @@ class AcquisitionService:
         reader, and cannot disagree.
         """
         policy = _network_policy(source.rate_limit_policy or {})
+        host = _host_for_source_type(source.source_type)
+        host_budget_row = self.repository.get_host_budget(host)
+        host_budget = (
+            HostBudgetState(
+                host=host_budget_row.host,
+                window_start=host_budget_row.window_start,
+                requests_used=host_budget_row.requests_used,
+                requests_ceiling=host_budget_row.requests_ceiling,
+                cooldown_until=host_budget_row.cooldown_until,
+                exploration_reserve_ratio=host_budget_row.exploration_reserve_ratio,
+            )
+            if host_budget_row is not None
+            else None
+        )
+        history = self.repository.run_history(source.id)
         return SourceSchedulingState(
             schedule=source.schedule,
             timezone=timezone,
-            history=self.repository.run_history(source.id),
+            history=history,
             last_http_attempt_at=source.last_http_attempt_at,
             minimum_run_interval_seconds=policy.minimum_run_interval_seconds,
+            host=host,
+            host_budget=host_budget,
+            # A source that has never completed a run is exactly the "fonte nova/pouco
+            # observada" the exploration reserve exists for (SPEC 39 §7): without this it
+            # would compete for the same 90% slice as every well-observed source on its
+            # host and could be crowded out indefinitely (acceptance criterion 2).
+            is_low_yield=history.last_started_at is None,
         )
 
     def get_run(self, run_id: UUID) -> SourceRunModel | None:
@@ -928,6 +991,11 @@ class AcquisitionService:
                 api_region=api_region or request.api_region,
                 telemetry=run_telemetry,
                 network_policy=network_policy,
+                conditional_headers=(
+                    request.conditional_headers
+                    if request.conditional_headers is not None
+                    else _conditional_headers_for(source)
+                ),
                 known_ats_boards=(
                     self.repository.enabled_ats_boards()
                     if source.source_type == "tavily_search"
@@ -1034,20 +1102,60 @@ class AcquisitionService:
             items_seen=run.items_seen,
             items_announced=run.items_announced,
         )
+        # A bare 304 would otherwise read as a complete, empty board to
+        # `evaluate_completeness` (no announced total, no items seen, status SUCCEEDED):
+        # exactly the false "vaga fechada" SPEC 39 §7 forbids until F20-39's manifest check
+        # exists. Revalidation proves the representation is unchanged, not that it was read.
+        if run_telemetry.not_modified:
+            run.complete = False
         self._copy_run(run, persisted_run)
         if run_telemetry.last_http_attempt_at is not None:
             source.last_http_attempt_at = run_telemetry.last_http_attempt_at
 
         # The checkpoint is part of this same transaction, so it cannot advance before raw evidence.
-        if final_status is SourceRunStatus.SUCCEEDED and last_cursor is not None:
+        # A bare 304 (`run_telemetry.not_modified`) yields no cursor but still revalidates
+        # the representation's own etag/last-modified — SPEC 39 §7: that revalidation must
+        # never be read as proof the board is fully read (`run.complete` above is untouched
+        # by it, and stays governed by `evaluate_completeness` until F20-39's manifest
+        # check exists).
+        if final_status is SourceRunStatus.SUCCEEDED and (
+            last_cursor is not None
+            or run_telemetry.response_etag is not None
+            or run_telemetry.response_last_modified is not None
+        ):
             checkpoint = source.checkpoint or SourceCheckpointModel(
                 source_definition_id=source.id
             )
-            checkpoint.cursor = last_cursor
-            checkpoint.checkpoint_type = "cursor"
+            if last_cursor is not None:
+                checkpoint.cursor = last_cursor
+                checkpoint.checkpoint_type = "cursor"
+            if run_telemetry.response_etag is not None:
+                checkpoint.etag = run_telemetry.response_etag
+            if run_telemetry.response_last_modified is not None:
+                checkpoint.last_modified = run_telemetry.response_last_modified
             checkpoint.promoted_by_run_id = run.id
             checkpoint.promoted_at = datetime.now(UTC)
             self.session.add(checkpoint)
+
+        # Shared host/provider budget (F20-38): every request this run made counts against
+        # its host regardless of outcome, and a SOURCE_RATE_LIMITED error's own Retry-After
+        # becomes a cooldown the *next* evaluation of any source on this host must respect
+        # — persisted here so it survives a worker restart (acceptance criterion 3).
+        cooldown_until = (
+            datetime.now(UTC) + timedelta(seconds=error.retry_after_seconds)
+            if error is not None
+            and error.code is AcquisitionErrorCode.SOURCE_RATE_LIMITED
+            and error.retry_after_seconds is not None
+            else None
+        )
+        if run_telemetry.http_requests or cooldown_until is not None:
+            self.repository.record_host_budget_usage(
+                _host_for_source_type(source.source_type),
+                now=datetime.now(UTC),
+                requests=run_telemetry.http_requests,
+                default_ceiling=DEFAULT_HOST_REQUESTS_CEILING,
+                cooldown_until=cooldown_until,
+            )
         self.session.commit()
         self.session.refresh(persisted_run)
         self._announce(source, persisted_run, max_items=request.max_items)

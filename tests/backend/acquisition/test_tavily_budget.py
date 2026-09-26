@@ -198,6 +198,21 @@ class _Repository:
         self.hashes.add(key)
         return False
 
+    def get_host_budget(self, host: str) -> None:
+        del host
+        return None
+
+    def record_host_budget_usage(
+        self,
+        host: str,
+        *,
+        now: object,
+        requests: int,
+        default_ceiling: int,
+        cooldown_until: object = None,
+    ) -> None:
+        del host, now, requests, default_ceiling, cooldown_until
+
 
 class _Alerts:
     def record_run_outcome(self, *args: object, **kwargs: object) -> None:
