@@ -155,6 +155,14 @@ class _NormalizationSession:
     def refresh(self, _value) -> None:
         pass
 
+    def execute(self, _statement):
+        class _Result:
+            @staticmethod
+            def one_or_none():
+                return None
+
+        return _Result()
+
 
 class _MergedOpportunityRepository:
     def __init__(self, opportunity: OpportunityModel, raw_item) -> None:
@@ -189,6 +197,8 @@ def _normalize_merged(
         id=uuid4(),
         source_definition_id=uuid4(),
         item_metadata={},
+        semantic_hash=None,
+        semantic_hash_version=None,
         fetched_at=datetime.now(timezone.utc),
         source_run_id=uuid4(),
     )

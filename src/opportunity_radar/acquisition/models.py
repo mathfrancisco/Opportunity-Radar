@@ -40,9 +40,7 @@ class SourceDefinitionModel(Base):
         {"schema": "acquisition"},
     )
 
-    id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     company_source_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("company_radar.company_source.id", ondelete="SET NULL"),
@@ -62,28 +60,18 @@ class SourceDefinitionModel(Base):
         nullable=False,
         default=dict,
     )
-    evidence_status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="unverified"
-    )
+    evidence_status: Mapped[str] = mapped_column(String(32), nullable=False, default="unverified")
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     terms_reviewed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    collector_local_tested: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    collector_local_tested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_health_status: Mapped[str | None] = mapped_column(String(32))
-    last_http_attempt_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True)
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    last_http_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    runs: Mapped[list["SourceRunModel"]] = relationship(
-        back_populates="source_definition"
-    )
+    runs: Mapped[list["SourceRunModel"]] = relationship(back_populates="source_definition")
     checkpoint: Mapped["SourceCheckpointModel | None"] = relationship(
         back_populates="source_definition", uselist=False, cascade="all, delete-orphan"
     )
@@ -93,8 +81,7 @@ class SourceRunModel(Base):
     __tablename__ = "source_run"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'PARTIAL', "
-            "'FAILED', 'CANCELLED')",
+            "status IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'PARTIAL', 'FAILED', 'CANCELLED')",
             name="ck_source_run_status",
         ),
         CheckConstraint(
@@ -121,9 +108,7 @@ class SourceRunModel(Base):
         {"schema": "acquisition"},
     )
 
-    id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     source_definition_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("acquisition.source_definition.id", ondelete="RESTRICT"),
@@ -144,9 +129,7 @@ class SourceRunModel(Base):
     items_invalid: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     http_requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    rate_limit_events: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
+    rate_limit_events: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     #: Provider credits spent by this run (e.g. Tavily's usage.credits). A different unit
     #: from http_requests/retry_count, which count HTTP calls regardless of what a source
     #: charges per call (F20-43).
@@ -166,9 +149,7 @@ class SourceRunModel(Base):
         Boolean, nullable=False, default=False, server_default=text("false")
     )
     source_definition: Mapped[SourceDefinitionModel] = relationship(back_populates="runs")
-    raw_items: Mapped[list["RawItemModel"]] = relationship(
-        back_populates="source_run"
-    )
+    raw_items: Mapped[list["RawItemModel"]] = relationship(back_populates="source_run")
 
 
 class TavilyExtractCacheModel(Base):
@@ -216,9 +197,7 @@ class RawItemModel(Base):
         {"schema": "acquisition"},
     )
 
-    id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     source_run_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("acquisition.source_run.id", ondelete="RESTRICT"),
@@ -233,10 +212,10 @@ class RawItemModel(Base):
     canonical_url: Mapped[str | None] = mapped_column(String(2048))
     identity_key: Mapped[str] = mapped_column(String(2048), nullable=False)
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    semantic_hash: Mapped[str | None] = mapped_column(String(64))
+    semantic_hash_version: Mapped[str | None] = mapped_column(String(32))
     content_type: Mapped[str | None] = mapped_column(String(255))
-    fetched_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     parser_version: Mapped[str | None] = mapped_column(String(128))
     item_metadata: Mapped[dict[str, Any]] = mapped_column(
         "metadata",
@@ -315,9 +294,7 @@ class PayloadRetentionEventModel(Base):
         {"schema": "acquisition"},
     )
 
-    id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     raw_item_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("acquisition.raw_item.id", ondelete="CASCADE"),
@@ -350,13 +327,10 @@ class SourceAlertIncidentModel(Base):
             name="ck_source_alert_incident_delivery",
         ),
         CheckConstraint(
-            "recovery_delivery IS NULL OR recovery_delivery IN "
-            "('WEBHOOK', 'LOG_ONLY', 'FAILED')",
+            "recovery_delivery IS NULL OR recovery_delivery IN ('WEBHOOK', 'LOG_ONLY', 'FAILED')",
             name="ck_source_alert_incident_recovery_delivery",
         ),
-        CheckConstraint(
-            "consecutive_failures > 0", name="ck_source_alert_incident_failures"
-        ),
+        CheckConstraint("consecutive_failures > 0", name="ck_source_alert_incident_failures"),
         Index(
             "uq_source_alert_incident_open",
             "source_definition_id",
@@ -367,9 +341,7 @@ class SourceAlertIncidentModel(Base):
         {"schema": "acquisition"},
     )
 
-    id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     source_definition_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("acquisition.source_definition.id", ondelete="CASCADE"),
@@ -406,9 +378,7 @@ class SourceCheckpointModel(Base):
         ForeignKey("acquisition.source_definition.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    checkpoint_type: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="cursor"
-    )
+    checkpoint_type: Mapped[str] = mapped_column(String(32), nullable=False, default="cursor")
     cursor: Mapped[str | None] = mapped_column(Text)
     updated_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     etag: Mapped[str | None] = mapped_column(Text)
@@ -420,9 +390,7 @@ class SourceCheckpointModel(Base):
     promoted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    source_definition: Mapped[SourceDefinitionModel] = relationship(
-        back_populates="checkpoint"
-    )
+    source_definition: Mapped[SourceDefinitionModel] = relationship(back_populates="checkpoint")
 
 
 @event.listens_for(RawItemModel, "before_update")
@@ -454,9 +422,7 @@ class SourceProbeModel(Base):
         {"schema": "acquisition"},
     )
 
-    id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     source_definition_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("acquisition.source_definition.id", ondelete="CASCADE"),
@@ -489,9 +455,7 @@ class HostBudgetStateModel(Base):
     __tablename__ = "host_budget_state"
     __table_args__ = (
         CheckConstraint("requests_used >= 0", name="ck_host_budget_state_requests_used"),
-        CheckConstraint(
-            "requests_ceiling >= 0", name="ck_host_budget_state_requests_ceiling"
-        ),
+        CheckConstraint("requests_ceiling >= 0", name="ck_host_budget_state_requests_ceiling"),
         CheckConstraint(
             "exploration_reserve_ratio >= 0 AND exploration_reserve_ratio < 1",
             name="ck_host_budget_state_exploration_reserve_ratio",

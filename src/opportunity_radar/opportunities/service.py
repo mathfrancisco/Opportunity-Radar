@@ -34,6 +34,7 @@ from opportunity_radar.opportunities.models import (
     OpportunitySkillModel,
     RelevanceMarkModel,
     SourceOccurrenceModel,
+    SourceOccurrenceObservationModel,
 )
 from opportunity_radar.opportunities.repository import (
     OpportunityRepository,
@@ -92,9 +93,7 @@ class OpportunityService:
         self.repository = repository or OpportunityRepository(session)
 
     def normalize(self, raw_item_id: UUID) -> NormalizationResultModel:
-        existing = self.repository.normalization_result(
-            raw_item_id, NORMALIZER_VERSION
-        )
+        existing = self.repository.normalization_result(raw_item_id, NORMALIZER_VERSION)
         if existing is not None:
             return existing
 
@@ -116,11 +115,13 @@ class OpportunityService:
             self.session.commit()
             self.session.refresh(result)
             return result
-        existing = self.repository.normalization_result(
-            raw_item_id, NORMALIZER_VERSION
-        )
+        existing = self.repository.normalization_result(raw_item_id, NORMALIZER_VERSION)
         if existing is not None:
             return existing
+
+        cosmetic_result = self._short_circuit_cosmetic_change(evidence.raw_item)
+        if cosmetic_result is not None:
+            return cosmetic_result
         try:
             normalization_input = _normalization_input(evidence)
             candidate = build_candidate(normalization_input)
@@ -158,24 +159,16 @@ class OpportunityService:
 
         raw_item = evidence.raw_item
         external_id = _clean_optional(normalization_input.external_id)
-        identity_locks = {
-            f"fingerprint:{candidate.fingerprint_version}:{candidate.fingerprint}"
-        }
+        identity_locks = {f"fingerprint:{candidate.fingerprint_version}:{candidate.fingerprint}"}
         if external_id:
-            identity_locks.add(
-                f"external:{raw_item.source_definition_id}:{external_id}"
-            )
+            identity_locks.add(f"external:{raw_item.source_definition_id}:{external_id}")
         if candidate.normalized_url:
             identity_locks.add(f"url:{candidate.normalized_url}")
         company_key = (
-            str(candidate.company_id)
-            if candidate.company_id
-            else candidate.normalized_company_name
+            str(candidate.company_id) if candidate.company_id else candidate.normalized_company_name
         )
         if company_key:
-            identity_locks.add(
-                f"review:{company_key}:{candidate.normalized_title}"
-            )
+            identity_locks.add(f"review:{company_key}:{candidate.normalized_title}")
         self.repository.lock_candidate_identities(identity_locks)
         refresh_changed = False
         occurrence = self.repository.occurrence_by_external_identity(
@@ -183,35 +176,37 @@ class OpportunityService:
             external_id=external_id,
             normalized_url=candidate.normalized_url,
         )
+        content_is_current = True
         if occurrence is not None:
             opportunity = occurrence.opportunity
+            current_raw_item = self.session.get(RawItemModel, occurrence.raw_item_id)
+            content_is_current = (
+                current_raw_item is None
+                or raw_item.fetched_at >= current_raw_item.fetched_at
+            )
             if (
                 opportunity.fingerprint == candidate.fingerprint
                 and opportunity.fingerprint_version == candidate.fingerprint_version
             ):
                 decision = "REFRESHED"
                 result_status = "SUCCEEDED"
-                reasons: list[dict[str, Any]] = [
-                    {"code": "SAME_SOURCE_EXTERNAL_IDENTITY"}
-                ]
-                refresh_changed = _refresh_opportunity(opportunity, candidate)
+                reasons: list[dict[str, Any]] = [{"code": "SAME_SOURCE_EXTERNAL_IDENTITY"}]
+                if content_is_current:
+                    refresh_changed = _refresh_opportunity(opportunity, candidate)
             else:
                 decision = "REVIEW"
                 result_status = "REVIEW_REQUIRED"
-                reasons = [
-                    {"code": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED"}
-                ]
-            occurrence.raw_item_id = raw_item.id
-            occurrence.source_url = candidate.source_url
-            occurrence.normalized_source_url = candidate.normalized_url
-            occurrence.last_seen_at = raw_item.fetched_at
-            occurrence.last_seen_run_id = raw_item.source_run_id
-            occurrence.source_published_at = candidate.published_at
-            occurrence.source_updated_at = candidate.source_updated_at
+                reasons = [{"code": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED"}]
+            if content_is_current:
+                occurrence.raw_item_id = raw_item.id
+                occurrence.source_url = candidate.source_url
+                occurrence.normalized_source_url = candidate.normalized_url
+                occurrence.last_seen_at = raw_item.fetched_at
+                occurrence.last_seen_run_id = raw_item.source_run_id
+                occurrence.source_published_at = candidate.published_at
+                occurrence.source_updated_at = candidate.source_updated_at
         else:
-            url_match = self.repository.opportunity_by_normalized_url(
-                candidate.normalized_url
-            )
+            url_match = self.repository.opportunity_by_normalized_url(candidate.normalized_url)
             if url_match is not None:
                 opportunity = url_match
                 decision = "MERGED"
@@ -228,9 +223,7 @@ class OpportunityService:
                     result_status = "SUCCEEDED"
                     reasons = [{"code": "EXACT_VERSIONED_FINGERPRINT"}]
                 else:
-                    review_candidates = self.repository.identity_review_candidates(
-                        candidate
-                    )
+                    review_candidates = self.repository.identity_review_candidates(candidate)
                     opportunity = _new_opportunity(candidate)
                     self.session.add(opportunity)
                     if review_candidates:
@@ -265,11 +258,15 @@ class OpportunityService:
 
         self.session.flush()
         enrichment_before = _enrichment_state(opportunity)
-        enrichment_reasons = _reconcile_enrichment(
-            opportunity=opportunity,
-            occurrence=occurrence,
-            candidate=candidate,
-            raw_item_id=raw_item.id,
+        enrichment_reasons = (
+            _reconcile_enrichment(
+                opportunity=opportunity,
+                occurrence=occurrence,
+                candidate=candidate,
+                raw_item_id=raw_item.id,
+            )
+            if content_is_current
+            else []
         )
         enrichment_changed = enrichment_before != _enrichment_state(opportunity)
         if enrichment_reasons:
@@ -303,9 +300,87 @@ class OpportunityService:
             reasons=[*reasons, seniority_reason],
         )
         self.session.add(result)
+        self.session.execute(
+            update(SourceOccurrenceObservationModel)
+            .where(
+                SourceOccurrenceObservationModel.raw_item_id == raw_item.id,
+                SourceOccurrenceObservationModel.source_occurrence_id.is_(None),
+            )
+            .values(source_occurrence_id=occurrence.id)
+        )
+        self._advance_occurrence_presence_from_observations(occurrence)
         self.session.commit()
         self.session.refresh(result)
         return result
+
+    def _short_circuit_cosmetic_change(
+        self, raw_item: RawItemModel
+    ) -> NormalizationResultModel | None:
+        """Record a cosmetic republish without re-running derived analysis."""
+        if raw_item.semantic_hash is None or raw_item.semantic_hash_version is None:
+            return None
+        occurrence = self.repository.occurrence_by_external_identity(
+            source_definition_id=raw_item.source_definition_id,
+            external_id=raw_item.external_id,
+            normalized_url=raw_item.canonical_url,
+        )
+        if occurrence is None or occurrence.raw_item_id == raw_item.id:
+            return None
+        previous = self.session.get(RawItemModel, occurrence.raw_item_id)
+        if previous is None:
+            return None
+        previous_result = self.repository.normalization_result(previous.id, NORMALIZER_VERSION)
+        if (
+            previous.semantic_hash != raw_item.semantic_hash
+            or previous.semantic_hash_version != raw_item.semantic_hash_version
+            or previous.item_metadata.get("parser_version")
+            != raw_item.item_metadata.get("parser_version")
+            or previous_result is None
+            or previous_result.status != "SUCCEEDED"
+        ):
+            return None
+        # Replays can arrive after a newer fetch. Do not replace its current evidence.
+        if raw_item.fetched_at is not None and raw_item.fetched_at > previous.fetched_at:
+            occurrence.raw_item_id = raw_item.id
+        result = NormalizationResultModel(
+            raw_item_id=raw_item.id,
+            opportunity=occurrence.opportunity,
+            source_occurrence=occurrence,
+            status="SUCCEEDED",
+            normalizer_version=NORMALIZER_VERSION,
+            identity_decision="REFRESHED",
+            reasons=[{"code": "COSMETIC_CHANGE_SEMANTIC_HASH_UNCHANGED"}],
+        )
+        self.session.add(result)
+        self.session.execute(
+            update(SourceOccurrenceObservationModel)
+            .where(
+                SourceOccurrenceObservationModel.raw_item_id == raw_item.id,
+                SourceOccurrenceObservationModel.source_occurrence_id.is_(None),
+            )
+            .values(source_occurrence_id=occurrence.id)
+        )
+        self._advance_occurrence_presence_from_observations(occurrence)
+        self.session.commit()
+        self.session.refresh(result)
+        return result
+
+    def _advance_occurrence_presence_from_observations(
+        self, occurrence: SourceOccurrenceModel
+    ) -> None:
+        """Keep presence separate from whichever raw item currently supplies content."""
+        latest = self.session.execute(
+            select(
+                SourceOccurrenceObservationModel.observed_at,
+                SourceOccurrenceObservationModel.source_run_id,
+            )
+            .where(SourceOccurrenceObservationModel.source_occurrence_id == occurrence.id)
+            .order_by(SourceOccurrenceObservationModel.observed_at.desc())
+            .limit(1)
+        ).one_or_none()
+        if latest is not None and latest.observed_at > occurrence.last_seen_at:
+            occurrence.last_seen_at = latest.observed_at
+            occurrence.last_seen_run_id = latest.source_run_id
 
     def normalize_run(
         self, source_run_id: UUID
@@ -329,16 +404,12 @@ class OpportunityService:
             raise ValueError("normalization batch limit must be between 1 and 500")
         results = [
             self.normalize(raw_item_id)
-            for raw_item_id in self.repository.pending_raw_item_ids(
-                limit, NORMALIZER_VERSION
-            )
+            for raw_item_id in self.repository.pending_raw_item_ids(limit, NORMALIZER_VERSION)
         ]
         return NormalizationBatch(
             processed=len(results),
             succeeded=sum(item.status == "SUCCEEDED" for item in results),
-            review_required=sum(
-                item.status == "REVIEW_REQUIRED" for item in results
-            ),
+            review_required=sum(item.status == "REVIEW_REQUIRED" for item in results),
             failed=sum(item.status == "FAILED" for item in results),
         )
 
@@ -460,20 +531,14 @@ def _reconcile_enrichment(
     reasons: list[dict[str, Any]] = []
     compensation = candidate.compensation
     current_compensation = next(
-        (
-            item
-            for item in opportunity.compensations
-            if item.source_occurrence_id == occurrence.id
-        ),
+        (item for item in opportunity.compensations if item.source_occurrence_id == occurrence.id),
         None,
     )
     if compensation is None:
         if current_compensation is not None:
             opportunity.compensations.remove(current_compensation)
     else:
-        candidate_period = (
-            compensation.period or CompensationPeriod.UNKNOWN
-        ).value
+        candidate_period = (compensation.period or CompensationPeriod.UNKNOWN).value
         candidate_gross_net = (compensation.gross_net or GrossNet.UNKNOWN).value
         if current_compensation is None:
             current_compensation = OpportunityCompensationModel(
@@ -524,8 +589,7 @@ def _reconcile_enrichment(
             item
             for item in skill.evidence
             if not (
-                isinstance(item, Mapping)
-                and item.get("source_occurrence_id") == occurrence_key
+                isinstance(item, Mapping) and item.get("source_occurrence_id") == occurrence_key
             )
         ]
         skill_key = (skill.canonical_name, skill.taxonomy_version)
@@ -533,10 +597,7 @@ def _reconcile_enrichment(
             opportunity.skills.remove(skill)
         else:
             _refresh_skill_requirement(skill)
-    by_key = {
-        (skill.canonical_name, skill.taxonomy_version): skill
-        for skill in opportunity.skills
-    }
+    by_key = {(skill.canonical_name, skill.taxonomy_version): skill for skill in opportunity.skills}
     for extracted in candidate.skills:
         evidence = {
             "raw_item_id": str(raw_item_id),
@@ -615,11 +676,7 @@ def _compensation_conflicts(
     merged_max = left.amount_max if left.amount_max is not None else right.amount_max
     if merged_min is not None and merged_max is not None and merged_min > merged_max:
         return True
-    if (
-        left.currency is not None
-        and right.currency is not None
-        and left.currency != right.currency
-    ):
+    if left.currency is not None and right.currency is not None and left.currency != right.currency:
         return True
     if (
         left.period != CompensationPeriod.UNKNOWN.value
@@ -639,13 +696,10 @@ def _refresh_skill_requirement(skill: OpportunitySkillModel) -> None:
         str(item.get("requirement"))
         for item in skill.evidence
         if isinstance(item, Mapping)
-        and item.get("requirement")
-        not in {None, SkillClassification.UNKNOWN.value}
+        and item.get("requirement") not in {None, SkillClassification.UNKNOWN.value}
     }
     skill.requirement = (
-        classifications.pop()
-        if len(classifications) == 1
-        else SkillClassification.UNKNOWN.value
+        classifications.pop() if len(classifications) == 1 else SkillClassification.UNKNOWN.value
     )
 
 
@@ -675,10 +729,7 @@ def _normalization_input(evidence: RawItemEvidence) -> NormalizationInput:
         raise NormalizationError("collected_item_v1 metadata must be an object")
     external_id = _optional_string(snapshot, "external_id")
     url = _optional_string(snapshot, "url")
-    if (
-        external_id != evidence.raw_item.external_id
-        or url != evidence.raw_item.canonical_url
-    ):
+    if external_id != evidence.raw_item.external_id or url != evidence.raw_item.canonical_url:
         raise NormalizationError("collected_item_v1 identity does not match RawItem")
     return NormalizationInput(
         raw_item_id=evidence.raw_item.id,
@@ -757,13 +808,9 @@ def _legacy_collected_item_v1(evidence: RawItemEvidence) -> dict[str, Any]:
                     "utf-8", errors="replace"
                 )
             except (Base64Error, ValueError) as error:
-                raise NormalizationError(
-                    "legacy manual file content_base64 is invalid"
-                ) from error
+                raise NormalizationError("legacy manual file content_base64 is invalid") from error
     else:
-        raise NormalizationError(
-            f"raw item from {evidence.source_type} requires collected_item_v1"
-        )
+        raise NormalizationError(f"raw item from {evidence.source_type} requires collected_item_v1")
 
     return {
         "version": 1,
@@ -801,9 +848,7 @@ def _optional_datetime(value: Mapping[str, Any], key: str) -> datetime | None:
     try:
         parsed = datetime.fromisoformat(item.replace("Z", "+00:00"))
     except ValueError as error:
-        raise NormalizationError(
-            f"collected_item_v1 {key} must be an ISO datetime"
-        ) from error
+        raise NormalizationError(f"collected_item_v1 {key} must be an ISO datetime") from error
     if parsed.tzinfo is None:
         raise NormalizationError(f"collected_item_v1 {key} must include a timezone")
     return parsed
@@ -816,9 +861,7 @@ def _clean_optional(value: str | None) -> str | None:
     return cleaned or None
 
 
-def _latest_occurrence_departments(
-    session: Session, opportunity_id: UUID
-) -> tuple[str, ...]:
+def _latest_occurrence_departments(session: Session, opportunity_id: UUID) -> tuple[str, ...]:
     """Departments from the raw item of the occurrence last seen, per the card's notes."""
     occurrence = session.execute(
         select(SourceOccurrenceModel)
@@ -924,9 +967,7 @@ def _set_if_changed(opportunity: OpportunityModel, field: str, value: Any) -> bo
     return True
 
 
-def _apply_rule_fields(
-    opportunity: OpportunityModel, candidate: CanonicalCandidate
-) -> bool:
+def _apply_rule_fields(opportunity: OpportunityModel, candidate: CanonicalCandidate) -> bool:
     """Recompute every rule-derived field, independent of source freshness.
 
     Card F17-06: "Reprocessar pela nova regra mesmo quando a fonte não fornece
@@ -953,15 +994,11 @@ def _apply_rule_fields(
         "role_family_evidence",
         dict(candidate.role_family_evidence) or None,
     )
-    changed |= _set_if_changed(
-        opportunity, "role_family_version", candidate.role_family_version
-    )
+    changed |= _set_if_changed(opportunity, "role_family_version", candidate.role_family_version)
     return changed
 
 
-def _apply_evidence_fields(
-    opportunity: OpportunityModel, candidate: CanonicalCandidate
-) -> bool:
+def _apply_evidence_fields(opportunity: OpportunityModel, candidate: CanonicalCandidate) -> bool:
     """Apply the evidence-based fields (title, company, location, description,
     `published_at`/`source_updated_at`, fingerprint), gated by source freshness.
 
@@ -987,24 +1024,16 @@ def _apply_evidence_fields(
         opportunity, "normalized_company_name", candidate.normalized_company_name
     )
     changed |= _set_if_changed(opportunity, "location_text", candidate.location_text)
-    changed |= _set_if_changed(
-        opportunity, "normalized_location", candidate.normalized_location
-    )
+    changed |= _set_if_changed(opportunity, "normalized_location", candidate.normalized_location)
     changed |= _set_if_changed(opportunity, "description", candidate.description)
     changed |= _set_if_changed(opportunity, "published_at", candidate.published_at)
-    changed |= _set_if_changed(
-        opportunity, "source_updated_at", candidate.source_updated_at
-    )
+    changed |= _set_if_changed(opportunity, "source_updated_at", candidate.source_updated_at)
     changed |= _set_if_changed(opportunity, "fingerprint", candidate.fingerprint)
-    changed |= _set_if_changed(
-        opportunity, "fingerprint_version", candidate.fingerprint_version
-    )
+    changed |= _set_if_changed(opportunity, "fingerprint_version", candidate.fingerprint_version)
     return changed
 
 
-def _refresh_opportunity(
-    opportunity: OpportunityModel, candidate: CanonicalCandidate
-) -> bool:
+def _refresh_opportunity(opportunity: OpportunityModel, candidate: CanonicalCandidate) -> bool:
     """Reprocess one opportunity from a raw item's evidence.
 
     Two independent decisions, per the card's "Reprocessamento e limites semânticos":

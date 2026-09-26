@@ -65,10 +65,12 @@ Endpoints candidatos, **a confirmar na revisão de termos** (não são fato até
 
 ## Critérios de aceite (por sub-card)
 
-- [ ] Termos revisados e registrados antes do código.
-- [ ] Coletor com teste contra board falso, incluindo paginação e erro.
-- [ ] Sonda, proposta, cadastro e formulário reconhecem o ATS.
-- [ ] Pelo menos uma empresa real do catálogo homologada e coletando.
+- [x] Termos revisados e registrados antes do código.
+- [x] Coletor com teste contra board falso, incluindo paginação e erro.
+- [x] Sonda, proposta, cadastro e formulário reconhecem o ATS.
+- [ ] Pelo menos uma empresa real do catálogo homologada e coletando. **Pendente** — precisa da
+      fila de homologação rodando contra a stack real (fora do CI); não simulado. Ver
+      "Pendências" abaixo.
 
 ## Verificação
 
@@ -192,6 +194,58 @@ docker compose -p f20-31 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```
 
 Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
+
+## Evidências F20-31
+
+- **Revisão de termos:** `docs/pesquisas/termos-factorial.md`. Conclusão: viável, com
+  correção de forma. Achado que corrige a hipótese da tabela deste card e da tabela do
+  F17-10: **não existe endpoint JSON público** — a única API pública documentada
+  (`api.factorialhr.com`) é a API de administração de RH, autenticada por Bearer token por
+  empresa, fora de escopo ("fonte que exige login"). A forma real é uma página HTML
+  server-renderizada por empresa (`https://<slug>.factorialhr.com/`), com todas as vagas já
+  embutidas na resposta inicial, uma `<li class="job-offer-item">` por vaga, com os fatos
+  estruturados em atributos `data-*` (`data-job-postings-url`, `data-team-id`,
+  `data-location-id`, `data-is-remote`, `data-contract-type`) e o título/time/local em três
+  `<div>` de texto em ordem fixa — verificado ao vivo contra três boards reais de tamanhos
+  bem diferentes (`agentero.factorialhr.com`, 2 vagas; `careers.factorialhr.com`, 70+ vagas;
+  `currency-solutions.factorialhr.com`). `robots.txt` (idêntico nos três) permite tudo
+  (`Allow: /`). Sem paginação real (nenhum parâmro de página nem "carregar mais", nem no
+  board de 70+ vagas). Sem campo estruturado de senioridade nem descrição na listagem —
+  a descrição completa exigiria uma requisição extra por vaga à página de detalhe, que este
+  coletor não faz (YAGNI); nenhum mapeamento F20-02 foi aplicado (nada para mapear). O nome
+  do time (F20-03) é a única agregação estruturada exposta e vai em `metadata.team_name`
+  para um mapeamento downstream usar.
+- **Parser:** lê só os atributos `data-*` documentados e o texto dos três `<div>` de rótulo,
+  via `html.parser.HTMLParser` da biblioteca padrão — nenhuma dependência nova adicionada.
+  Uma resposta 200 que não é uma página de listagem (falta o marcador `data-controller=
+  'job-filters'`) nunca é lida como board vazio; é `PARSER_SCHEMA_CHANGED`.
+- **Identificador:** ao contrário de Teamtailor (hostname inteiro, per-domínio), não há
+  evidência de que o Factorial suporte domínio customizado para o board público; o
+  `company_identifier` é o slug do subdomínio (ex.: `acme` em `acme.factorialhr.com`),
+  mesmo formato que Ashby/Lever/Greenhouse, validado por
+  `FactorialCollector.validate_company_identifier`.
+- **Capacidades:** `CollectorCapabilities(company_jobs=True, pagination=False)` —
+  `pagination=False` reflete o achado da revisão de termos, não a hipótese original da
+  interface do card (`pagination=True`).
+
+| Critério | Evidência |
+| --- | --- |
+| Termos revisados e registrados antes do código | `docs/pesquisas/termos-factorial.md` |
+| Coletor com teste contra board falso, incluindo paginação e erro | `tests/backend/acquisition/test_factorial_collector.py` (9 testes: item válido, ausência real de paginação — `test_does_not_attempt_a_second_page` —, retentativa com `Retry-After`, 401/403/404/500, timeout/erro de transporte, identificador/schema inválidos, item malformado ignorado e reportado, `max_items`); `tests/e2e/fake_factorial_board.py` (board falso HTTP real, HTML no formato do Factorial, com `?fail=404/429/500/schema`) |
+| Sonda, proposta, cadastro e formulário reconhecem o ATS | `probing.py` (`PROBE_TYPES`, `PUBLIC_ENDPOINT_REFERENCES`, ramo `factorial` em `probe_request`) + `tests/backend/acquisition/test_service.py::test_probe_recognizes_factorial_source_type`; `proposals.py` (`IDENTIFIER_KEYS["factorial"]`); `registration.py` (`SUPPORTED_ATS`, validador) + `tests/backend/companies/test_registration.py::test_registration_accepts_factorial_source_type`/`test_registration_rejects_invalid_factorial_identifier`; `apps/web/src/components/SourceCreateForm.tsx` (`configFields.factorial`, `typeLabels.factorial`) e `apps/web/src/features/sources/api.ts` (`sourceTypes`) |
+| Pelo menos uma empresa real do catálogo homologada e coletando | **Pendente**, ver "Pendências" |
+
+## Pendências
+
+- Homologação de uma empresa real (critério 4) não foi feita: exige a fila de homologação
+  (F20-25) rodando contra a stack real e uma chamada de rede de verdade a um board real, o
+  que este worker não faz fora do CI por instrução explícita do card ("nunca fazer chamada
+  real a boards... no CI"; a máquina de referência é medida fora do CI). Candidatos do
+  catálogo já citados em `docs/pesquisas/auditoria-186-empresas.md`: Agentero
+  (`agentero.factorialhr.com`, `company_identifier=agentero`) e a própria Factorial
+  (`careers.factorialhr.com`, `company_identifier=careers`). Próximo passo: rodar a fila de
+  homologação apontando `company_identifier` para um desses slugs e colar o resultado real
+  no PR.
 
 ## Pronto quando
 

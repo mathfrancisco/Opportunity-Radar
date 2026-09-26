@@ -29,6 +29,7 @@ PROBE_TYPES = (
     "workday",
     "teamtailor",
     "workable",
+    "factorial",
 )
 PUBLIC_ENDPOINT_REFERENCES = {
     "ashby": "https://developers.ashbyhq.com/docs/public-job-posting-api",
@@ -42,6 +43,9 @@ PUBLIC_ENDPOINT_REFERENCES = {
     # No official documentation for the widget either: reviewed in
     # docs/pesquisas/termos-workable.md.
     "workable": "docs/pesquisas/termos-workable.md",
+    # No public API either: this is the server-rendered careers page every Factorial
+    # tenant gets, reviewed in docs/pesquisas/termos-factorial.md.
+    "factorial": "docs/pesquisas/termos-factorial.md",
 }
 
 
@@ -86,6 +90,9 @@ def probe_request(
         common["company_name"] = configuration.get("company_name")
     elif source_type == "workable":
         common["company_reference"] = _required(configuration, "account_identifier")
+        common["company_name"] = configuration.get("company_name")
+    elif source_type == "factorial":
+        common["company_reference"] = _required(configuration, "company_identifier")
         common["company_name"] = configuration.get("company_name")
     return CollectionRequest(**common)
 

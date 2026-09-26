@@ -1,6 +1,6 @@
 # CARD F20-39 — Delta, presença e retomada
 
-- **Status:** Backlog
+- **Status:** Em andamento
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** D — Varredura produtiva
 - **Depende de:** F20-38
@@ -195,3 +195,21 @@ Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
 ## Pronto quando
 
 Todos os critérios de aceite estão marcados com evidência, o comando de verificação passa e o CI está verde.
+
+## Estado local de implementação
+
+- A migração `20260926_0041` adiciona hash semântico versionado e observações por
+  `RawItem`/run; visitas antes da normalização também ficam registradas e são ligadas à
+  ocorrência quando ela é criada.
+- A revalidação HTTP 304 sem manifesto completo continua incompleta; não autoriza
+  encerramento de oportunidades.
+- Ainda pendente: retomada da mesma execução com prefixo persistido, manifesto completo
+  por representação para reaproveitar 304, armazenamento de variantes quando o payload
+  bruto é idêntico mas o parser muda, e medição operacional de bytes/inferências evitadas.
+
+### Evidência local
+
+- `tests/backend/acquisition/test_delta_presence_resume.py`: 9 testes Postgres passaram.
+- `tests/backend/opportunities/test_delta_normalization.py`: 5 regressões de replay e
+  atualização de presença passaram.
+- Suíte completa com `RUN_DATABASE_INTEGRATION=1`: 847 passaram, 10 ignorados.

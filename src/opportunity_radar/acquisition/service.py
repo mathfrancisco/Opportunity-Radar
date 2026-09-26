@@ -33,6 +33,7 @@ from opportunity_radar.acquisition.domain import (
     CollectionTelemetry,
     SourceRun,
     SourceRunStatus,
+    content_hashes,
     evaluate_completeness,
 )
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
@@ -122,9 +123,7 @@ def _conditional_headers_for(
 @dataclass(frozen=True, slots=True)
 class TavilyProposalOutcome:
     url: str
-    outcome: Literal[
-        "created", "already_proposed", "unmatched_pattern", "company_not_found"
-    ]
+    outcome: Literal["created", "already_proposed", "unmatched_pattern", "company_not_found"]
     proposal_id: UUID | None = None
 
 
@@ -247,9 +246,7 @@ class AcquisitionService:
         with _refusing_field("rate_limit_policy"):
             resolved_network_policy = _network_policy(source_rate_limit_policy)
         if schedule is None and company_source_id is not None:
-            schedule = self._default_schedule(
-                company_source_id, resolved_network_policy
-            )
+            schedule = self._default_schedule(company_source_id, resolved_network_policy)
         if normalized_type == "ashby":
             with _refusing_field("configuration.board_identifier"):
                 AshbyCollector.validate_board_identifier(
@@ -271,11 +268,15 @@ class AcquisitionService:
                 GreenhouseCollector.validate_board_token(
                     _required_string(source_configuration, "board_token")
                 )
-        if enabled and normalized_type != "manual" and (
-            evidence_status != "confirmed"
-            or reviewed_at is None
-            or not terms_reviewed
-            or not collector_local_tested
+        if (
+            enabled
+            and normalized_type != "manual"
+            and (
+                evidence_status != "confirmed"
+                or reviewed_at is None
+                or not terms_reviewed
+                or not collector_local_tested
+            )
         ):
             raise AcquisitionError(
                 AcquisitionErrorCode.INVALID_CONFIGURATION,
@@ -333,17 +334,13 @@ class AcquisitionService:
             minimum_run_interval_seconds=network_policy.minimum_run_interval_seconds,
         )
 
-    def list_sources(
-        self, *, offset: int, limit: int
-    ) -> tuple[list[SourceDefinitionModel], int]:
+    def list_sources(self, *, offset: int, limit: int) -> tuple[list[SourceDefinitionModel], int]:
         return self.repository.list_sources(offset=offset, limit=limit)
 
     def get_source(self, source_id: UUID) -> SourceDefinitionModel | None:
         return self.repository.get_source(source_id)
 
-    def propose_company_source(
-        self, company_id: UUID
-    ) -> tuple[SourceDefinitionModel | None, str]:
+    def propose_company_source(self, company_id: UUID) -> tuple[SourceDefinitionModel | None, str]:
         """Turn one researched ATS record into an inert, auditable proposal.
 
         Discovery records evidence; it never crosses the terms/test/enable gate.
@@ -404,9 +401,7 @@ class AcquisitionService:
             source_type, board_key = detected
             companies = (
                 self.session.scalars(
-                    select(Company)
-                    .where(Company.canonical_name == item.company_name)
-                    .limit(2)
+                    select(Company).where(Company.canonical_name == item.company_name).limit(2)
                 ).all()
                 if item.company_name
                 else []
@@ -430,9 +425,7 @@ class AcquisitionService:
                 outcomes.append(TavilyProposalOutcome(url, "company_not_found"))
                 continue
             company = companies[0]
-            company_source_id = (
-                catalog_sources[0].id if len(catalog_sources) == 1 else None
-            )
+            company_source_id = catalog_sources[0].id if len(catalog_sources) == 1 else None
             configuration = _tavily_proposal_configuration(
                 company=company,
                 source_type=source_type,
@@ -444,8 +437,7 @@ class AcquisitionService:
             by_board = self.session.scalar(
                 select(SourceDefinitionModel).where(
                     SourceDefinitionModel.source_type == source_type,
-                    SourceDefinitionModel.configuration[identifier_key].as_string()
-                    == board_key,
+                    SourceDefinitionModel.configuration[identifier_key].as_string() == board_key,
                 )
             )
             if by_board is not None:
@@ -458,9 +450,7 @@ class AcquisitionService:
                         discovery_evidence=url,
                         configuration_updates=configuration,
                     )
-                outcomes.append(
-                    TavilyProposalOutcome(url, "already_proposed", by_board.id)
-                )
+                outcomes.append(TavilyProposalOutcome(url, "already_proposed", by_board.id))
                 continue
 
             by_company = self.session.scalar(
@@ -536,11 +526,15 @@ class AcquisitionService:
         if source.version != expected_version:
             raise SourceVersionConflictError(source_id)
         effective_reviewed_at = reviewed_at or source.reviewed_at
-        if enabled and source.source_type != "manual" and (
-            source.evidence_status != "confirmed"
-            or effective_reviewed_at is None
-            or not terms_reviewed
-            or not collector_local_tested
+        if (
+            enabled
+            and source.source_type != "manual"
+            and (
+                source.evidence_status != "confirmed"
+                or effective_reviewed_at is None
+                or not terms_reviewed
+                or not collector_local_tested
+            )
         ):
             raise AcquisitionError(
                 AcquisitionErrorCode.INVALID_CONFIGURATION,
@@ -706,9 +700,7 @@ class AcquisitionService:
         )
         return recorded_probe, recorded_source, outcome
 
-    def _probe_wait(
-        self, source: SourceDefinitionModel, policy: CollectionNetworkPolicy
-    ) -> int:
+    def _probe_wait(self, source: SourceDefinitionModel, policy: CollectionNetworkPolicy) -> int:
         """Seconds until this source may be asked again, by probe or by the run spacing."""
         now = datetime.now(UTC)
         waits = [0.0]
@@ -864,10 +856,7 @@ class AcquisitionService:
             raise SourceNotFoundError(source_id)
         if not source.enabled:
             raise SourceDisabledError(source_id)
-        if (
-            source.source_type == "manual"
-            and request.mode is not CollectionMode.MANUAL
-        ):
+        if source.source_type == "manual" and request.mode is not CollectionMode.MANUAL:
             raise AcquisitionError(
                 AcquisitionErrorCode.MANUAL_INPUT_INVALID,
                 "manual sources require at least one input",
@@ -900,7 +889,9 @@ class AcquisitionService:
         network_policy = _network_policy(source.rate_limit_policy or {})
         run_telemetry = CollectionTelemetry()
 
-        checkpoint_before = source.checkpoint.cursor if source.checkpoint else None
+        # A new collection starts at the beginning. Resumption is explicit through the
+        # request cursor; a prior run's checkpoint is evidence, not an implicit cursor.
+        checkpoint_before = request.cursor
         run = SourceRun(
             source_definition_id=source.id,
             execution_trigger=request.execution_trigger,
@@ -937,10 +928,7 @@ class AcquisitionService:
             else network_policy.minimum_interval_seconds
         )
         throttle_error: AcquisitionError | None = None
-        if (
-            last_http_attempt_at is not None
-            and minimum_run_interval
-        ):
+        if last_http_attempt_at is not None and minimum_run_interval:
             elapsed = (datetime.now(UTC) - last_http_attempt_at).total_seconds()
             delay = minimum_run_interval - elapsed
             if delay > 0:
@@ -948,8 +936,7 @@ class AcquisitionService:
                     run_telemetry.record_rate_limit()
                     throttle_error = AcquisitionError(
                         AcquisitionErrorCode.SOURCE_RATE_LIMITED,
-                        "source run interval has not elapsed; "
-                        f"retry in {ceil(delay)} seconds",
+                        f"source run interval has not elapsed; retry in {ceil(delay)} seconds",
                         retryable=True,
                     )
                 else:
@@ -981,11 +968,7 @@ class AcquisitionService:
             collector_request = replace(
                 request,
                 source_definition_id=source.id,
-                cursor=(
-                    checkpoint_before
-                    if request.cursor is None and checkpoint_before is not None
-                    else request.cursor
-                ),
+                cursor=request.cursor,
                 company_reference=company_reference or request.company_reference,
                 company_name=company_name or request.company_name,
                 api_region=api_region or request.api_region,
@@ -1018,6 +1001,7 @@ class AcquisitionService:
                         run.id,
                         source.source_type,
                         item,
+                        observed_at=run.started_at or datetime.now(UTC),
                     )
                 except (TypeError, ValueError) as item_error:
                     run.record_items(invalid=1)
@@ -1039,9 +1023,7 @@ class AcquisitionService:
             if tavily_proposal_items:
                 try:
                     with self.session.begin_nested():
-                        self.propose_from_tavily_evidence(
-                            tavily_proposal_items, commit=False
-                        )
+                        self.propose_from_tavily_evidence(tavily_proposal_items, commit=False)
                 except Exception as proposal_error:
                     error = AcquisitionError(
                         AcquisitionErrorCode.INVALID_CONFIGURATION,
@@ -1075,9 +1057,7 @@ class AcquisitionService:
 
         if error is None:
             final_status = (
-                SourceRunStatus.PARTIAL
-                if run.items_invalid
-                else SourceRunStatus.SUCCEEDED
+                SourceRunStatus.PARTIAL if run.items_invalid else SourceRunStatus.SUCCEEDED
             )
         elif error.code in {
             AcquisitionErrorCode.INVALID_ITEM,
@@ -1091,9 +1071,7 @@ class AcquisitionService:
         run.finish(
             final_status,
             error=error if final_status is not SourceRunStatus.SUCCEEDED else None,
-            checkpoint_after=(
-                last_cursor if final_status is SourceRunStatus.SUCCEEDED else None
-            ),
+            checkpoint_after=(last_cursor if final_status is SourceRunStatus.SUCCEEDED else None),
         )
         run.items_announced = run_telemetry.items_announced
         run.complete = evaluate_completeness(
@@ -1102,6 +1080,10 @@ class AcquisitionService:
             items_seen=run.items_seen,
             items_announced=run.items_announced,
         )
+        # A supplied cursor is a suffix/retry request. Without persisted proof that its
+        # preceding pages belong to this same run, it cannot authorize absence/closure.
+        if request.cursor is not None:
+            run.complete = False
         # A bare 304 would otherwise read as a complete, empty board to
         # `evaluate_completeness` (no announced total, no items seen, status SUCCEEDED):
         # exactly the false "vaga fechada" SPEC 39 §7 forbids until F20-39's manifest check
@@ -1123,9 +1105,7 @@ class AcquisitionService:
             or run_telemetry.response_etag is not None
             or run_telemetry.response_last_modified is not None
         ):
-            checkpoint = source.checkpoint or SourceCheckpointModel(
-                source_definition_id=source.id
-            )
+            checkpoint = source.checkpoint or SourceCheckpointModel(source_definition_id=source.id)
             if last_cursor is not None:
                 checkpoint.cursor = last_cursor
                 checkpoint.checkpoint_type = "cursor"
@@ -1177,9 +1157,7 @@ class AcquisitionService:
             self.alerts.record_run_outcome(
                 source,
                 run,
-                consecutive_failures=self.repository.run_history(
-                    source.id
-                ).consecutive_failures,
+                consecutive_failures=self.repository.run_history(source.id).consecutive_failures,
             )
         except Exception:
             logger.exception(
@@ -1236,12 +1214,7 @@ class AcquisitionService:
         preserves). A cache hit costs no network call regardless, so this only turns into
         one `/extract` call per still-uncached URL rather than one call per run.
         """
-        if (
-            self._tavily_extraction is None
-            or client is None
-            or budget is None
-            or item.url is None
-        ):
+        if self._tavily_extraction is None or client is None or budget is None or item.url is None:
             return item
         if (item.description or "").strip():
             return item
@@ -1270,6 +1243,8 @@ class AcquisitionService:
         run_id: UUID,
         source_type: str,
         item: CollectedItem,
+        *,
+        observed_at: datetime,
     ) -> bool:
         if item.source_type.strip().casefold() != source_type:
             raise ValueError("collected item source type does not match its source")
@@ -1280,14 +1255,26 @@ class AcquisitionService:
             payload_hash,
             allow_payload_identity=source_type == "manual",
         )
-        if self.repository.identical_raw_item_exists(
+        existing = self.repository.identical_raw_item_exists(
             source_id=source_id,
             identity_key=identity_key,
             payload_hash=payload_hash,
-        ):
+        )
+        if existing:
+            # Old in-memory adapters returned a boolean; only a real row can receive
+            # an observation. Production repository returns that row since F20-39.
+            if isinstance(existing, RawItemModel):
+                self.repository.record_presence_observation(
+                    raw_item=existing,
+                    source_run_id=run_id,
+                    observed_at=observed_at,
+                    content_hash_matched=True,
+                )
             return False
         metadata = _json_object(item.metadata)
         metadata[COLLECTED_ITEM_V1_KEY] = collected_item_v1(item, metadata)
+        semantic_payload = collected_item_v1(item, metadata)
+        hashes = content_hashes(semantic_payload, raw_hash=payload_hash)
         try:
             with self.session.begin_nested():
                 raw_item = RawItemModel(
@@ -1297,6 +1284,8 @@ class AcquisitionService:
                     canonical_url=item.url,
                     identity_key=identity_key,
                     payload_hash=payload_hash,
+                    semantic_hash=hashes.semantic_hash,
+                    semantic_hash_version=hashes.semantic_hash_version,
                     content_type=_string_or_none(metadata.get("content_type")),
                     parser_version=_string_or_none(metadata.get("parser_version")),
                     item_metadata=metadata,
@@ -1306,6 +1295,14 @@ class AcquisitionService:
                 raw_item.payload_record = RawItemPayloadModel(payload=payload)
                 self.session.add(raw_item)
                 self.session.flush()
+                record_observation = getattr(self.repository, "record_presence_observation", None)
+                if record_observation is not None:
+                    record_observation(
+                        raw_item=raw_item,
+                        source_run_id=run_id,
+                        observed_at=observed_at,
+                        content_hash_matched=False,
+                    )
         except IntegrityError:
             return False
         return True
@@ -1529,9 +1526,7 @@ def _network_policy(policy: Mapping[str, Any]) -> CollectionNetworkPolicy:
             ),
         )
     except ValueError as error:
-        raise AcquisitionError(
-            AcquisitionErrorCode.INVALID_CONFIGURATION, str(error)
-        ) from error
+        raise AcquisitionError(AcquisitionErrorCode.INVALID_CONFIGURATION, str(error)) from error
 
 
 def _reject_secret_configuration(configuration: Mapping[str, Any]) -> None:

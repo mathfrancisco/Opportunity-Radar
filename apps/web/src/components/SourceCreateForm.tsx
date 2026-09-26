@@ -87,6 +87,15 @@ const configFields: Record<SourceType, ConfigField[]> = {
     },
     { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
   ],
+  factorial: [
+    {
+      key: 'company_identifier',
+      label: 'Identificador da empresa',
+      required: true,
+      hint: 'O slug em <identificador>.factorialhr.com (sem https:// nem caminho).',
+    },
+    { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
+  ],
   manual: [],
 }
 
@@ -98,6 +107,7 @@ const typeLabels: Record<SourceType, string> = {
   workable: 'Workable',
   remotive: 'Remotive',
   teamtailor: 'Teamtailor',
+  factorial: 'Factorial',
   manual: 'Manual (entrada avulsa de vaga)',
 }
 

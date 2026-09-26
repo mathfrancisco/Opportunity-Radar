@@ -4,6 +4,7 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from opportunity_radar.acquisition.models import (
@@ -18,6 +19,10 @@ from opportunity_radar.acquisition.scheduling import (
     SourceRunHistory,
 )
 from opportunity_radar.companies.models import CompanySource
+from opportunity_radar.opportunities.models import (
+    SourceOccurrenceModel,
+    SourceOccurrenceObservationModel,
+)
 
 _UNFINISHED_RUN_STATUSES = ("PENDING", "RUNNING")
 
@@ -47,14 +52,10 @@ class AcquisitionRepository:
             )
         )
         return frozenset(
-            (source_type, external_key)
-            for source_type, external_key in rows
-            if external_key
+            (source_type, external_key) for source_type, external_key in rows if external_key
         )
 
-    def list_sources(
-        self, *, offset: int, limit: int
-    ) -> tuple[list[SourceDefinitionModel], int]:
+    def list_sources(self, *, offset: int, limit: int) -> tuple[list[SourceDefinitionModel], int]:
         statement = select(SourceDefinitionModel).order_by(SourceDefinitionModel.name)
         sources = list(self.session.scalars(statement.offset(offset).limit(limit)))
         total = self.session.scalar(select(func.count(SourceDefinitionModel.id))) or 0
@@ -70,11 +71,7 @@ class AcquisitionRepository:
     def list_runs(
         self, *, offset: int, limit: int, source_id: UUID | None = None
     ) -> tuple[list[SourceRunModel], int]:
-        filters = (
-            []
-            if source_id is None
-            else [SourceRunModel.source_definition_id == source_id]
-        )
+        filters = [] if source_id is None else [SourceRunModel.source_definition_id == source_id]
         statement = (
             select(SourceRunModel)
             .where(*filters)
@@ -82,10 +79,7 @@ class AcquisitionRepository:
             .order_by(SourceRunModel.started_at.desc(), SourceRunModel.id.desc())
         )
         runs = list(self.session.scalars(statement.offset(offset).limit(limit)))
-        total = (
-            self.session.scalar(select(func.count(SourceRunModel.id)).where(*filters))
-            or 0
-        )
+        total = self.session.scalar(select(func.count(SourceRunModel.id)).where(*filters)) or 0
         return runs, total
 
     def run_history(self, source_id: UUID, *, sample: int = 32) -> SourceRunHistory:
@@ -126,14 +120,57 @@ class AcquisitionRepository:
 
     def identical_raw_item_exists(
         self, *, source_id: UUID, identity_key: str, payload_hash: str
-    ) -> bool:
+    ) -> RawItemModel | None:
         return self.session.scalar(
-            select(RawItemModel.id).where(
+            select(RawItemModel).where(
                 RawItemModel.source_definition_id == source_id,
                 RawItemModel.identity_key == identity_key,
                 RawItemModel.payload_hash == payload_hash,
             )
-        ) is not None
+        )
+
+    def record_presence_observation(
+        self,
+        *,
+        raw_item: RawItemModel,
+        source_run_id: UUID,
+        observed_at: datetime,
+        content_hash_matched: bool,
+    ) -> None:
+        occurrence = self.session.scalar(
+            select(SourceOccurrenceModel).where(SourceOccurrenceModel.raw_item_id == raw_item.id)
+        )
+        if occurrence is None and raw_item.external_id:
+            occurrence = self.session.scalar(
+                select(SourceOccurrenceModel).where(
+                    SourceOccurrenceModel.source_definition_id == raw_item.source_definition_id,
+                    SourceOccurrenceModel.external_id == raw_item.external_id,
+                )
+            )
+        if occurrence is None and raw_item.canonical_url:
+            occurrence = self.session.scalar(
+                select(SourceOccurrenceModel).where(
+                    SourceOccurrenceModel.source_definition_id == raw_item.source_definition_id,
+                    SourceOccurrenceModel.source_url == raw_item.canonical_url,
+                )
+            )
+        if occurrence is not None and observed_at > occurrence.last_seen_at:
+            occurrence.last_seen_at = observed_at
+            occurrence.last_seen_run_id = source_run_id
+        try:
+            with self.session.begin_nested():
+                self.session.add(
+                    SourceOccurrenceObservationModel(
+                        source_occurrence_id=occurrence.id if occurrence is not None else None,
+                        source_run_id=source_run_id,
+                        raw_item_id=raw_item.id,
+                        observed_at=observed_at,
+                        content_hash_matched=content_hash_matched,
+                    )
+                )
+                self.session.flush()
+        except IntegrityError:
+            pass
 
     def checkpoint(self, source_id: UUID) -> SourceCheckpointModel | None:
         return self.session.get(SourceCheckpointModel, source_id)

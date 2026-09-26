@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -230,16 +232,10 @@ class CollectionNetworkPolicy:
         if self.minimum_interval_seconds > 60:
             raise ValueError("minimum_interval_seconds cannot exceed 60")
         if self.max_retry_delay_seconds < self.minimum_interval_seconds:
-            raise ValueError(
-                "max_retry_delay_seconds cannot be below minimum_interval_seconds"
-            )
+            raise ValueError("max_retry_delay_seconds cannot be below minimum_interval_seconds")
         run_interval = self.minimum_run_interval_seconds
-        if run_interval is not None and (
-            not isfinite(run_interval) or run_interval < 0
-        ):
-            raise ValueError(
-                "minimum_run_interval_seconds must be finite and non-negative"
-            )
+        if run_interval is not None and (not isfinite(run_interval) or run_interval < 0):
+            raise ValueError("minimum_run_interval_seconds must be finite and non-negative")
         if run_interval is not None and run_interval > 604_800:
             raise ValueError("minimum_run_interval_seconds cannot exceed 604800")
 
@@ -277,9 +273,7 @@ class CollectionRequest:
         if self.max_items is not None and self.max_items < 1:
             raise ValueError("max_items must be positive")
         if len(self.keywords) > 10 or any(
-            not isinstance(keyword, str)
-            or not keyword.strip()
-            or len(keyword) > 100
+            not isinstance(keyword, str) or not keyword.strip() or len(keyword) > 100
             for keyword in self.keywords
         ):
             raise ValueError(
@@ -413,12 +407,7 @@ class SourceRun:
         self, *, requests: int, retries: int, rate_limit_events: int = 0
     ) -> None:
         self._require_running()
-        if (
-            requests < 0
-            or retries < 0
-            or retries > requests
-            or rate_limit_events < 0
-        ):
+        if requests < 0 or retries < 0 or retries > requests or rate_limit_events < 0:
             raise ValueError("invalid HTTP activity counters")
         self.http_requests += requests
         self.retry_count += retries
@@ -482,3 +471,44 @@ def evaluate_completeness(
     if items_announced is None:
         return True
     return items_seen >= items_announced
+
+
+SEMANTIC_HASH_VERSION = "semantic-hash-v1"
+# Only volatile collector bookkeeping is ignored. Posting timestamps remain material.
+SEMANTIC_HASH_NOISE_KEYS_V1 = frozenset(
+    {"scraped_at", "fetched_at", "accessed_at", "retrieved_at", "crawled_at", "views", "view_count"}
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ContentHashes:
+    raw_hash: str
+    semantic_hash: str
+    semantic_hash_version: str
+
+
+def semantic_hash(payload: Mapping[str, Any], *, version: str = SEMANTIC_HASH_VERSION) -> str:
+    if version != SEMANTIC_HASH_VERSION:
+        raise ValueError(f"unknown semantic hash version: {version}")
+
+    def clean(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            return {
+                key: clean(item)
+                for key, item in value.items()
+                if key not in SEMANTIC_HASH_NOISE_KEYS_V1
+            }
+        if isinstance(value, list):
+            return [clean(item) for item in value]
+        if isinstance(value, str):
+            return " ".join(value.split())
+        return value
+
+    serialized = json.dumps(
+        clean(dict(payload)), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(f"{version}:{serialized}".encode("utf-8")).hexdigest()
+
+
+def content_hashes(payload: Mapping[str, Any], *, raw_hash: str) -> ContentHashes:
+    return ContentHashes(raw_hash, semantic_hash(payload), SEMANTIC_HASH_VERSION)

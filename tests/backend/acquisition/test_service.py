@@ -20,6 +20,7 @@ from opportunity_radar.acquisition.domain import (
     ExecutionTrigger,
     HealthResult,
 )
+from opportunity_radar.acquisition.factorial import FactorialCollector
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.models import (
@@ -629,6 +630,41 @@ def test_probe_recognizes_teamtailor_source_type() -> None:
                     "company_identifier": "jobs.acme-careers.test",
                     "company_name": "Acme",
                 },
+                registry,
+                max_items=5,
+            )
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert outcome.ok is True
+    assert outcome.items_seen == 1
+    assert outcome.http_requests == 1
+
+
+def test_probe_recognizes_factorial_source_type() -> None:
+    """F20-31: the sonda (probe) must resolve `factorial` from a source's own
+    `company_identifier` configuration, the same way it already does for the other ATS
+    types, so homologation can test a Factorial board before it is enabled."""
+    page = """<html><body><div data-controller='job-filters'><ul>
+    <li class='job-offer-item' data-is-remote='true' data-contract-type='indefinite'
+    data-job-postings-url='https://acme.factorialhr.com/job_posting/job-1'
+    data-team-id='1' data-location-id='1'>
+    <div><span><div class="factorial__headingFontFamily">Backend Engineer</div></span>
+    <div><div class="text-gray-350">Engineering</div></div>
+    <div><div class="text-gray-350">Remote</div></div></div></li>
+    </ul></div></body></html>"""
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, text=page, headers={"Content-Type": "text/html"})
+        )
+    )
+    registry = CollectorRegistry((FactorialCollector(client=client),))
+    try:
+        outcome = asyncio.run(
+            run_probe(
+                "factorial",
+                {"company_identifier": "acme", "company_name": "Acme"},
                 registry,
                 max_items=5,
             )

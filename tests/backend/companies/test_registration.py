@@ -104,3 +104,27 @@ def test_workable_validator_raises_acquisition_error_for_bad_identifier() -> Non
 
     with pytest.raises(AcquisitionError):
         WorkableCollector.validate_account_identifier("-not valid-")
+
+
+def test_registration_accepts_factorial_source_type() -> None:
+    assert "factorial" in SUPPORTED_ATS
+    values = _source_values(
+        "factorial",
+        "https://acme.factorialhr.com/",
+        "acme",
+        "found in careers footer",
+    )
+    assert values["source_type"] == "factorial"
+    assert values["external_key"] == "acme"
+    assert values["endpoint"] == "https://acme.factorialhr.com/"
+
+
+def test_registration_rejects_invalid_factorial_identifier() -> None:
+    with pytest.raises(CompanyRegistrationError) as error:
+        _source_values(
+            "factorial",
+            "https://acme.factorialhr.com/",
+            "https://acme.factorialhr.com/",
+            "found in careers footer",
+        )
+    assert error.value.field == "external_key"

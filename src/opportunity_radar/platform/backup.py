@@ -34,6 +34,9 @@ MANIFEST_QUERIES: dict[str, str] = {
     "raw_items": "SELECT count(*) FROM acquisition.raw_item",
     "opportunities": "SELECT count(*) FROM opportunities.opportunity",
     "source_occurrences": "SELECT count(*) FROM opportunities.source_occurrence",
+    "source_occurrence_observations": (
+        "SELECT count(*) FROM opportunities.source_occurrence_observation"
+    ),
     "match_assessments": "SELECT count(*) FROM matching.match_assessment",
     "match_analyses": "SELECT count(*) FROM matching.match_analysis",
     "applications": "SELECT count(*) FROM crm.application_process",

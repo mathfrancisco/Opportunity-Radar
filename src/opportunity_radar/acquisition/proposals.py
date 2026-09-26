@@ -26,6 +26,7 @@ IDENTIFIER_KEYS = {
     "workday": "tenant_identifier",
     "teamtailor": "company_identifier",
     "workable": "account_identifier",
+    "factorial": "company_identifier",
 }
 
 ProposalOutcome = Literal["none", "updated", "outdated"]
