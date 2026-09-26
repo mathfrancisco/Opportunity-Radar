@@ -387,6 +387,12 @@ class AcquisitionService:
             company_source_id = (
                 catalog_sources[0].id if len(catalog_sources) == 1 else None
             )
+            configuration = _tavily_proposal_configuration(
+                company=company,
+                source_type=source_type,
+                board_key=board_key,
+                item=item,
+            )
 
             identifier_key = IDENTIFIER_KEYS[source_type]
             by_board = self.session.scalar(
@@ -397,6 +403,15 @@ class AcquisitionService:
                 )
             )
             if by_board is not None:
+                if by_board.configuration.get("discovery_via") == "tavily_search":
+                    follow_inert_correction(
+                        self.session,
+                        by_board,
+                        source_type=source_type,
+                        board_key=board_key,
+                        discovery_evidence=url,
+                        configuration_updates=configuration,
+                    )
                 outcomes.append(
                     TavilyProposalOutcome(url, "already_proposed", by_board.id)
                 )
@@ -412,12 +427,6 @@ class AcquisitionService:
                     == "tavily_search",
                 )
                 .order_by(SourceDefinitionModel.created_at)
-            )
-            configuration = _tavily_proposal_configuration(
-                company=company,
-                source_type=source_type,
-                board_key=board_key,
-                item=item,
             )
             if by_company is not None:
                 follow_up = follow_inert_correction(

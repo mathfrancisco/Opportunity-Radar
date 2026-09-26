@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import AsyncIterator, Iterator
+from dataclasses import replace
 from uuid import uuid4
 
 import pytest
@@ -161,6 +162,19 @@ def test_rerun_over_same_result_does_not_duplicate_proposal() -> None:
                 == company.canonical_name
             )
         ).all().__len__() == 1
+
+
+def test_inert_proposal_receives_fresh_tavily_evidence_for_same_board() -> None:
+    with Session(_engine()) as session:
+        company = _company(session)
+        first = _candidate(company, "https://jobs.lever.co/acme/123")
+        service = AcquisitionService(session)
+        created = service.propose_from_tavily_evidence((first,))
+        fresh = replace(first, metadata={**first.metadata, "score": 0.91})
+        service.propose_from_tavily_evidence((fresh,))
+        proposal = session.get(SourceDefinitionModel, created.outcomes[0].proposal_id)
+        assert proposal is not None
+        assert proposal.configuration["discovery_score"] == 0.91
 
 
 def test_url_outside_known_pattern_becomes_pending_not_malformed_proposal() -> None:
