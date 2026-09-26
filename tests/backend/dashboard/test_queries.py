@@ -24,7 +24,7 @@ from opportunity_radar.dashboard.queries import (
 )
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
 from opportunity_radar.opportunities.domain import SKILL_TAXONOMY_VERSION
-from opportunity_radar.opportunities.models import OpportunityModel
+from opportunity_radar.opportunities.models import DuplicateCandidateModel, OpportunityModel
 from opportunity_radar.pipeline.domain import ApplicationStage
 from opportunity_radar.pipeline.service import PipelineService
 from opportunity_radar.platform.database import create_database_engine
@@ -470,6 +470,55 @@ def test_inbox_knows_whether_an_opportunity_was_already_applied_to() -> None:
             applied_to.id,
             untouched.id,
         }
+
+
+def test_inbox_flags_opportunities_with_a_pending_duplicate_candidate() -> None:
+    """F20-26: the Inbox badge reads a `PENDING` `duplicate_candidate` row naming the
+    opportunity on either side of the pair; `CONFIRMED`/`REJECTED` rows never flag it."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company = _company(session, "normal")
+        older = _opportunity(session, company, title="Backend role", published_at=NOW)
+        newer = _opportunity(
+            session, company, title="Backend role again", published_at=NOW
+        )
+        untouched = _opportunity(
+            session, company, title="Unrelated role", published_at=NOW
+        )
+        resolved_a = _opportunity(
+            session, company, title="Resolved role a", published_at=NOW
+        )
+        resolved_b = _opportunity(
+            session, company, title="Resolved role b", published_at=NOW
+        )
+        session.add(
+            DuplicateCandidateModel(
+                opportunity_id=min(older.id, newer.id),
+                duplicate_opportunity_id=max(older.id, newer.id),
+                rule="title_location_window",
+                status="PENDING",
+            )
+        )
+        session.add(
+            DuplicateCandidateModel(
+                opportunity_id=min(resolved_a.id, resolved_b.id),
+                duplicate_opportunity_id=max(resolved_a.id, resolved_b.id),
+                rule="title_location_window",
+                status="REJECTED",
+                decided_by="operator@example.com",
+                decided_at=NOW,
+            )
+        )
+        session.commit()
+
+        page = list_opportunity_inbox(session, InboxQuery(company_id=company.id))
+
+        by_id = {item.opportunity_id: item for item in page.items}
+        assert by_id[older.id].has_pending_duplicate is True
+        assert by_id[newer.id].has_pending_duplicate is True
+        assert by_id[untouched.id].has_pending_duplicate is False
+        assert by_id[resolved_a.id].has_pending_duplicate is False
+        assert by_id[resolved_b.id].has_pending_duplicate is False
 
 
 def test_source_health_reports_the_last_run_and_keeps_never_run_sources() -> None:

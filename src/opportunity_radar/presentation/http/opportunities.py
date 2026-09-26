@@ -151,6 +151,10 @@ class OpportunityResponse(BaseModel):
     role_family_version: str | None
     published_at: datetime | None
     source_updated_at: datetime | None
+    #: When this opportunity was first persisted. Exposed so the duplicate-candidate
+    #: comparison UI (F20-26) can tell which side of a pair `confirm_duplicate` will
+    #: treat as the survivor (the older `created_at`) before it calls confirm.
+    created_at: datetime
     version: int
     compensations: list[CompensationResponse]
     skills: list[OpportunitySkillResponse]
@@ -551,6 +555,7 @@ def _opportunity_response(
         role_family_version=opportunity.role_family_version,
         published_at=opportunity.published_at,
         source_updated_at=opportunity.source_updated_at,
+        created_at=opportunity.created_at,
         version=opportunity.version,
         compensations=[
             _compensation_response(item)

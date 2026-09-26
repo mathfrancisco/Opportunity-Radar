@@ -110,6 +110,26 @@ describe('getInbox', () => {
     respond({ total: 0 })
     await expect(getInbox({ page: 1, pageSize: 25 })).rejects.toThrow('inbox inválida')
   })
+
+  it('expõe o selo de possível duplicata (F20-26)', async () => {
+    respond({
+      items: [
+        { opportunity_id: 'opportunity-1', has_pending_duplicate: true },
+        { opportunity_id: 'opportunity-2', has_pending_duplicate: false },
+        { opportunity_id: 'opportunity-3' },
+      ],
+      total: 3,
+      offset: 0,
+      limit: 25,
+    })
+
+    const page = await getInbox({ page: 1, pageSize: 25 })
+
+    expect(page.items[0].hasPendingDuplicate).toBe(true)
+    expect(page.items[1].hasPendingDuplicate).toBe(false)
+    // Absent field never becomes an implicit "has a duplicate" claim.
+    expect(page.items[2].hasPendingDuplicate).toBe(false)
+  })
 })
 
 describe('getOverview', () => {

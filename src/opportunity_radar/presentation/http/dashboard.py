@@ -83,6 +83,7 @@ class InboxItemResponse(BaseModel):
     application_id: UUID | None
     application_stage: str | None
     application_next_action_at: datetime | None
+    has_pending_duplicate: bool
 
 
 class InboxPageResponse(BaseModel):
@@ -588,6 +589,7 @@ def _inbox_item_response(item: InboxItem) -> InboxItemResponse:
         application_id=item.application_id,
         application_stage=item.application_stage,
         application_next_action_at=item.application_next_action_at,
+        has_pending_duplicate=item.has_pending_duplicate,
     )
 
 

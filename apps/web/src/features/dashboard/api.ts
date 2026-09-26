@@ -35,6 +35,8 @@ export interface InboxItem {
   applicationId: string | null
   applicationStage: string | null
   applicationNextActionAt: string | null
+  /** A `PENDING` duplicate_candidate row names this opportunity (F20-26). */
+  hasPendingDuplicate: boolean
 }
 
 export interface InboxPage {
@@ -271,6 +273,7 @@ function parseInboxItem(value: unknown): InboxItem | null {
     applicationId: text(value.application_id),
     applicationStage: text(value.application_stage),
     applicationNextActionAt: text(value.application_next_action_at),
+    hasPendingDuplicate: value.has_pending_duplicate === true,
   }
 }
 

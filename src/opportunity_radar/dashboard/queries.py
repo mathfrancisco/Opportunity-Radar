@@ -33,6 +33,7 @@ from opportunity_radar.matching import currency
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
 from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.models import (
+    DuplicateCandidateModel,
     NormalizationResultModel,
     OpportunityCompensationModel,
     OpportunityModel,
@@ -88,6 +89,10 @@ class InboxItem:
     application_id: UUID | None = None
     application_stage: str | None = None
     application_next_action_at: datetime | None = None
+    #: Whether a `PENDING` `duplicate_candidate` row names this opportunity, on either
+    #: side of the pair (F20-26). Never `True` for a `CONFIRMED`/`REJECTED` row — the
+    #: badge is for a decision still owed, not a settled one.
+    has_pending_duplicate: bool = False
 
     @property
     def applied(self) -> bool:
@@ -401,6 +406,14 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
             applications.c.application_id,
             applications.c.current_stage,
             applications.c.next_action_at,
+            select(DuplicateCandidateModel.id)
+            .where(
+                DuplicateCandidateModel.status == "PENDING",
+                (DuplicateCandidateModel.opportunity_id == OpportunityModel.id)
+                | (DuplicateCandidateModel.duplicate_opportunity_id == OpportunityModel.id),
+            )
+            .exists()
+            .label("has_pending_duplicate"),
         )
         .select_from(OpportunityModel)
         .outerjoin(assessments, assessments.c.opportunity_id == OpportunityModel.id)
@@ -585,6 +598,7 @@ def _inbox_item(row: Any) -> InboxItem:
         application_id=row[27],
         application_stage=row[28],
         application_next_action_at=row[29],
+        has_pending_duplicate=bool(row[30]),
     )
 
 

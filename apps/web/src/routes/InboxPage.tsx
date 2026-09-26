@@ -112,6 +112,11 @@ function ItemCard({ item }: { item: InboxItem }) {
         </div>
         <div className="flex flex-col items-end gap-2">
           <VerdictBadge verdict={item.verdict} />
+          {item.hasPendingDuplicate && (
+            <span className="inline-flex rounded-full border border-warning-line bg-warning-surface px-3 py-1 text-xs font-medium text-warning-ink">
+              Possível duplicata
+            </span>
+          )}
           {item.applied && (
             <span className="inline-flex rounded-full border border-success-line bg-success-surface px-3 py-1 text-xs font-medium text-success-ink">
               Candidatura: {stageLabels[item.applicationStage as ApplicationStage] ??

@@ -17,9 +17,19 @@ import {
   useEvaluateOpportunity,
   useLatestAssessment,
 } from '../features/matching/useAssessment'
-import { type OpportunityDetail } from '../features/opportunities/api'
+import { type DuplicateCandidate, type OpportunityDetail } from '../features/opportunities/api'
 import { verdictLabels } from '../features/matching/verdicts'
-import { useMarkRelevance, useOpportunity } from '../features/opportunities/useOpportunity'
+import {
+  useConfirmDuplicate,
+  useDuplicateCandidates,
+  useMarkRelevance,
+  useOpportunity,
+  useRejectDuplicate,
+} from '../features/opportunities/useOpportunity'
+
+/** Single-operator MVP (SPEC 43): no login, so duplicate decisions are attributed to a
+ * fixed operator identity rather than a per-user one. */
+const DUPLICATE_DECIDED_BY = 'web-operator'
 
 const resultLabels: Record<string, string> = {
   TRUE: 'Atende',
@@ -245,6 +255,161 @@ function RelevanceMark({ opportunity }: { opportunity: OpportunityDetail }) {
   )
 }
 
+const DUPLICATE_COMPARISON_FIELDS: {
+  label: string
+  read: (opportunity: OpportunityDetail) => string
+}[] = [
+  { label: 'Título', read: (o) => o.title },
+  { label: 'Empresa', read: (o) => display(o.companyName) },
+  { label: 'Localização', read: (o) => display(o.location) },
+  { label: 'Modalidade', read: (o) => o.workMode },
+  { label: 'Senioridade', read: (o) => o.seniority },
+  { label: 'Contrato', read: (o) => o.contractType },
+  { label: 'Publicada', read: (o) => formatDate(o.publishedAt) },
+]
+
+/** One `PENDING` candidate, the two opportunities side by side with differences
+ * highlighted, and the confirm/reject actions (F20-26 "Escopo"). Fetches the other side
+ * of the pair itself so `OpportunityDetailPage` only has to know the candidate row. */
+function DuplicateCandidateCard({
+  candidate,
+  opportunity,
+}: {
+  candidate: DuplicateCandidate
+  opportunity: OpportunityDetail
+}) {
+  const otherId =
+    candidate.opportunityId === opportunity.id
+      ? candidate.duplicateOpportunityId
+      : candidate.opportunityId
+  const other = useOpportunity(otherId)
+  const confirm = useConfirmDuplicate(opportunity.id, otherId)
+  const reject = useRejectDuplicate(opportunity.id, otherId)
+  const busy = confirm.isPending || reject.isPending
+
+  if (other.isPending) return <LoadingState>Carregando a outra vaga do par…</LoadingState>
+  if (other.isError || !other.data) {
+    return <ErrorState onRetry={() => void other.refetch()}>Não foi possível carregar a outra vaga.</ErrorState>
+  }
+
+  const otherOpportunity = other.data
+  // `confirm_duplicate` always keeps the older `created_at` as the survivor — shown here
+  // so the operator sees which side "É a mesma vaga" would keep before confirming.
+  const survivorIsCurrent = opportunity.createdAt <= otherOpportunity.createdAt
+  const survivor = survivorIsCurrent ? opportunity : otherOpportunity
+  const absorbed = survivorIsCurrent ? otherOpportunity : opportunity
+
+  return (
+    <Card as="article" className="text-sm">
+      <p className="text-xs text-muted">
+        Regra: {candidate.rule}
+        {candidate.score !== null ? ` · score ${candidate.score}` : ''}
+      </p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        {[opportunity, otherOpportunity].map((side) => (
+          <div className="rounded-2xl border border-line bg-surface p-4" key={side.id}>
+            <p className="font-semibold">
+              {side.id === survivor.id ? (
+                <Link
+                  className="underline decoration-accent decoration-2 underline-offset-4"
+                  to={`/opportunities/${side.id}`}
+                >
+                  {side.title}
+                </Link>
+              ) : (
+                <Link to={`/opportunities/${side.id}`}>{side.title}</Link>
+              )}
+            </p>
+            <p className="mt-1 text-xs font-medium text-muted">
+              {side.id === survivor.id ? 'Ficaria como sobrevivente' : 'Seria absorvida'}
+            </p>
+            <dl className="mt-3 grid gap-2">
+              {DUPLICATE_COMPARISON_FIELDS.map((field) => {
+                const value = field.read(side)
+                const differs = field.read(opportunity) !== field.read(otherOpportunity)
+                return (
+                  <div key={field.label}>
+                    <dt className="text-muted">{field.label}</dt>
+                    <dd
+                      className={
+                        differs
+                          ? 'mt-0.5 rounded bg-warning-surface px-1 font-medium text-warning-ink'
+                          : 'mt-0.5 font-medium'
+                      }
+                    >
+                      {value}
+                    </dd>
+                  </div>
+                )
+              })}
+            </dl>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button
+          disabled={busy}
+          onClick={() =>
+            confirm.mutate({
+              candidateId: candidate.id,
+              expectedVersionSurvivor: survivor.version,
+              expectedVersionAbsorbed: absorbed.version,
+              decidedBy: DUPLICATE_DECIDED_BY,
+            })
+          }
+        >
+          É a mesma vaga
+        </Button>
+        <Button
+          disabled={busy}
+          onClick={() =>
+            reject.mutate({ candidateId: candidate.id, decidedBy: DUPLICATE_DECIDED_BY })
+          }
+          variant="secondary"
+        >
+          São vagas diferentes
+        </Button>
+      </div>
+      {(confirm.isError || reject.isError) && (
+        <p className="mt-2 text-sm text-danger-ink">
+          {(confirm.error ?? reject.error)?.message ?? 'Não foi possível registrar a decisão.'}
+        </p>
+      )}
+    </Card>
+  )
+}
+
+/** Section "Possível duplicata": every `PENDING` candidate naming this opportunity, each
+ * with its own side-by-side comparison and confirm/reject actions. */
+export function DuplicateCandidates({ opportunity }: { opportunity: OpportunityDetail }) {
+  const candidates = useDuplicateCandidates(opportunity.id)
+
+  if (candidates.isPending) return <LoadingState>Carregando candidatos a duplicata…</LoadingState>
+  if (candidates.isError) {
+    return (
+      <ErrorState onRetry={() => void candidates.refetch()}>
+        Não foi possível carregar os candidatos a duplicata.
+      </ErrorState>
+    )
+  }
+  const pending = candidates.data.filter((candidate) => candidate.status === 'PENDING')
+  if (pending.length === 0) {
+    return <EmptyState>Nenhum candidato a duplicata pendente para esta oportunidade.</EmptyState>
+  }
+  return (
+    <div className="grid gap-4">
+      {pending.map((candidate) => (
+        <DuplicateCandidateCard
+          candidate={candidate}
+          key={candidate.id}
+          opportunity={opportunity}
+        />
+      ))}
+    </div>
+  )
+}
+
 function Eligibility({ details }: { details: EligibilityDetail[] }) {
   if (details.length === 0) return <p className="text-subtle">Nenhum filtro avaliado.</p>
   return (
@@ -399,6 +564,10 @@ export function OpportunityDetailPage() {
 
             <Section title="Relevância">
               <RelevanceMark opportunity={opportunity.data} />
+            </Section>
+
+            <Section title="Possível duplicata">
+              <DuplicateCandidates opportunity={opportunity.data} />
             </Section>
 
             {opportunity.data.description && (

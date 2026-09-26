@@ -1,14 +1,23 @@
 # CARD F20-26 — Candidato a duplicata (sem sinal vetorial)
 
-- **Status:** Feito no backend — regra `title_location_window` (sem sinal vetorial,
-  conforme "Ajustes da Fase 20"), tabela `duplicate_candidate`, `duplicate_of`,
-  confirmar/recusar e as três rotas HTTP implementados; todos os critérios de aceite
-  cobertos por `tests/backend/opportunities/test_duplicates.py` (10 testes) e
+- **Status:** Feito — regra `title_location_window` (sem sinal vetorial, conforme
+  "Ajustes da Fase 20"), tabela `duplicate_candidate`, `duplicate_of`, confirmar/recusar
+  e as três rotas HTTP implementados; todos os critérios de aceite cobertos por
+  `tests/backend/opportunities/test_duplicates.py` (10 testes) e
   `tests/backend/dashboard/test_metrics.py::test_duplicate_rate_reported_before_and_after`.
-  **Pendente:** o selo "possível duplicata" na Inbox e a comparação lado a lado no
-  detalhe (seção "Escopo", não é critério de aceite) — o endpoint
-  `GET /opportunities/{id}/duplicate-candidates` já existe para essa tela, mas a Inbox
-  ainda não expõe se uma oportunidade tem candidato pendente; ficou fora por tempo.
+  Seção "Escopo" (não é critério de aceite) também completa: o selo "possível duplicata"
+  na Inbox lê um `EXISTS` correlacionado contra `duplicate_candidate` (status `PENDING`)
+  em `dashboard/queries.py::_inbox_statement`, exposto em `GET /inbox` como
+  `has_pending_duplicate` e renderizado em `InboxPage.tsx`; o detalhe
+  (`OpportunityDetailPage.tsx`, componente `DuplicateCandidates`) busca os candidatos
+  pendentes via `GET /opportunities/{id}/duplicate-candidates`, mostra as duas vagas lado
+  a lado com os campos divergentes destacados e os botões "É a mesma vaga" / "São vagas
+  diferentes", chamando confirmar/recusar. `OpportunityResponse` ganhou `created_at` para
+  a UI saber, antes de confirmar, qual lado `confirm_duplicate` mantém como sobrevivente.
+  Coberto por `tests/backend/dashboard/test_queries.py::test_inbox_flags_opportunities_with_a_pending_duplicate_candidate`,
+  `tests/backend/test_duplicate_candidates_http_integration.py` (rotas HTTP + selo) e
+  `apps/web/src/routes/OpportunityDetailPage.test.tsx` /
+  `apps/web/src/features/dashboard/api.test.ts` no frontend.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-01
