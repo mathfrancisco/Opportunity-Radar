@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -30,6 +31,9 @@ from opportunity_radar.matching.evaluation import (
     summarize,
 )
 from opportunity_radar.matching.prompts import prompts_root
+from opportunity_radar.platform.ai.tasks import AITask
+from opportunity_radar.platform.config import Settings
+from scripts.eval_analysis import _analyze_with_quota_retry, resolve_routes
 
 _CASE = {
     "kinds": ["strong_match", "missing_compensation"],
@@ -212,6 +216,76 @@ def test_a_failed_case_keeps_its_failure_and_no_quality_score() -> None:
     assert score.coverage is None and score.inventions is None
     assert score.total_ms == 9000
     assert summarize([score])["completed_rate"] == 0.0
+
+
+def test_the_model_flag_overrides_only_the_job_match_chain_and_drops_fallback() -> None:
+    settings = Settings(database_url="postgresql+psycopg://u:p@localhost/db")
+
+    default = resolve_routes(settings, None)
+    overridden = resolve_routes(settings, "openai/gpt-oss-120b")
+
+    assert default[AITask.JOB_MATCH].chain[0] == settings.groq_reasoning_model
+    assert overridden[AITask.JOB_MATCH].chain == ("openai/gpt-oss-120b",)
+    # Every other route is untouched by the override.
+    assert overridden[AITask.JOB_CLASSIFICATION] == default[AITask.JOB_CLASSIFICATION]
+    assert overridden[AITask.JOB_EXTRACTION] == default[AITask.JOB_EXTRACTION]
+
+
+def test_a_quota_exhausted_case_is_retried_then_gives_up() -> None:
+    quota_exhausted = AnalysisOutcome(
+        status=AnalysisStatus.AI_FAILED, failure_code=AnalysisFailureCode.QUOTA_EXHAUSTED
+    )
+    outcomes = [
+        quota_exhausted,
+        quota_exhausted,
+        AnalysisOutcome(status=AnalysisStatus.AI_COMPLETED, analysis=_analysis()),
+    ]
+
+    class _FakeAdapter:
+        async def analyze(
+            self, request: object, *, prepared: object, use_cache: bool
+        ) -> AnalysisOutcome:
+            del request, prepared, use_cache
+            return outcomes.pop(0)
+
+    waited: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        waited.append(seconds)
+
+    result = asyncio.run(
+        _analyze_with_quota_retry(
+            _FakeAdapter(), object(), object(), wait_seconds=5.0, sleeper=fake_sleep
+        )
+    )
+
+    assert result.status == AnalysisStatus.AI_COMPLETED
+    assert waited == [5.0, 5.0]
+
+
+def test_a_quota_exhausted_case_gives_up_after_the_retry_budget() -> None:
+    class _FakeAdapter:
+        async def analyze(
+            self, request: object, *, prepared: object, use_cache: bool
+        ) -> AnalysisOutcome:
+            del request, prepared, use_cache
+            return AnalysisOutcome(
+                status=AnalysisStatus.AI_FAILED, failure_code=AnalysisFailureCode.QUOTA_EXHAUSTED
+            )
+
+    waited: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        waited.append(seconds)
+
+    result = asyncio.run(
+        _analyze_with_quota_retry(
+            _FakeAdapter(), object(), object(), wait_seconds=1.0, sleeper=fake_sleep
+        )
+    )
+
+    assert result.status == AnalysisStatus.AI_FAILED
+    assert len(waited) == 3  # _QUOTA_RETRY_ATTEMPTS, never a fourth wait
 
 
 def test_the_comparison_reads_each_criterion_in_its_own_direction() -> None:
