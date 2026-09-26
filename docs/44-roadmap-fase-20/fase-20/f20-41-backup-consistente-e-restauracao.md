@@ -1,6 +1,6 @@
 # CARD F20-41 — Backup consistente e restauração verificável
 
-- **Status:** Feito — snapshot compartilhado, gate estrito, sha256, relacionamentos e extensões implementados em `scripts/backup.py`/`scripts/restore_check.py`/`src/opportunity_radar/platform/backup.py`; `tests/backend/test_backup.py` cobre a lógica sem Postgres e o round-trip real; `tests/backend/test_backup_restore_integration.py` (novo) prova com Postgres real que uma escrita concorrente durante o dump não causa divergência de contagem; round-trip real (`pg_dump`/`pg_restore`) e RTO/RPO medidos contra Postgres via `docker compose -p f20-pt`, números em `docs/30-runbook.md` §5. As tabelas de IA citadas em "Ajustes da Fase 20" (`ai_quota_usage`, F20-19, F20-16) ainda não existem no código; entram em `MANIFEST_QUERIES` quando esses cards forem feitos.
+- **Status:** Feito — snapshot compartilhado, gate estrito, sha256, relacionamentos e extensões implementados em `scripts/backup.py`/`scripts/restore_check.py`/`src/opportunity_radar/platform/backup.py`; `tests/backend/test_backup.py` cobre a lógica sem Postgres e o round-trip real; `tests/backend/test_backup_restore_integration.py` (novo) prova com Postgres real que uma escrita concorrente durante o dump não causa divergência de contagem; round-trip real (`pg_dump`/`pg_restore`) e RTO/RPO medidos contra Postgres via `docker compose -p f20-pt`, números em `docs/30-runbook.md` §5. F20-12/F20-19 aterraram desde a primeira passada deste card e as tabelas `platform.ai_quota_usage`/`platform.ai_call_record` estavam faltando em `MANIFEST_QUERIES` (gap fechado agora); `MANIFEST_EXCLUDED_TABLES` documenta a única exclusão intencional do schema `platform` (`worker_job_state`, estado de retomada do worker); `test_manifest_covers_every_platform_schema_table` (`tests/backend/test_backup.py`, `RUN_DATABASE_INTEGRATION=1`) prova que toda tabela do schema `platform` está em `MANIFEST_QUERIES` ou em `MANIFEST_EXCLUDED_TABLES`, para que uma tabela futura nunca falte em silêncio. `opportunities.field_suggestion` (F20-23) e `saved_search` continuam sem existir nesta árvore; entram quando esses cards aterrarem.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** D — Varredura produtiva
 - **Depende de:** Nenhum
@@ -50,6 +50,7 @@ Backup durante coleta ativa restaura o mesmo estado descrito no manifesto e pres
 | Sem manifesto/hash válido o gate estrito falha | `tests/backend/test_backup.py::test_load_manifest_missing_file_fails_strict`, `::test_load_manifest_incompatible_format_version_fails_strict`, `::test_verify_checksum_rejects_a_mismatch`, `::test_restore_check_main_fails_on_a_tampered_dump` (round-trip real contra Postgres, `RUN_DATABASE_INTEGRATION=1`) |
 | Restauração confere dados e relações, inclusive features já instaladas | `tests/backend/test_backup.py::test_compare_flags_a_broken_relationship`, `::test_compare_flags_a_missing_extension`, `::test_backup_and_restore_round_trip_matches_the_manifest` (round-trip real: dump→restore→`compare()==[]`, inclusive extensão `vector`) |
 | Procedimento de recuperação tem evidência e limitações registradas | `docs/30-runbook.md` §5: periodicidade (24 h), RPO alvo (24 h), RTO medido (`scripts/backup.py` ≈1.6 s, `scripts/restore_check.py` ≈2.2 s, ciclo completo ≈3.8 s contra o banco de teste local; ≈6–6.5 s por invocação `make` isolada incluindo subida de container), e a limitação explícita de que o número escala com o volume de dados e não substitui medição contra um dump de produção |
+| Tabelas novas da IA (`ai_quota_usage`, `ai_call_record`) entram no manifesto e nenhuma tabela futura do schema `platform` pode faltar em silêncio | `tests/backend/test_backup.py::test_manifest_includes_the_ai_quota_and_call_record_tables` (sem Postgres, pino direto contra `MANIFEST_QUERIES`); `::test_manifest_covers_every_platform_schema_table` (`RUN_DATABASE_INTEGRATION=1`): compara `pg_tables` do schema `platform` contra `MANIFEST_QUERIES` ∪ `MANIFEST_EXCLUDED_TABLES` |
 
 Medição de RTO/RPO rodada em 2026-09-26 contra `docker compose -p f20-pt -f compose.yaml
 -f compose.dev.yaml`, banco de teste local (13 tabelas do fluxo vertical, dump de
@@ -64,14 +65,15 @@ Medição de RTO/RPO rodada em 2026-09-26 contra `docker compose -p f20-pt -f co
 `platform/backup.py`, `scripts/backup.py` e `scripts/restore_check.py` já existem e já
 implementam a maior parte do fluxo, mas com lacunas concretas encontradas na leitura:
 
-- `MANIFEST_QUERIES` (`platform/backup.py:14-26`) tem uma contagem por tabela do fluxo
+- `MANIFEST_QUERIES` (`platform/backup.py`) tinha uma contagem por tabela do fluxo
   vertical (`company`, `company_source`, `profile_version`, `source_definition`,
   `source_run`, `raw_item`, `opportunity`, `source_occurrence`, `match_assessment`,
-  `match_analysis`, `application_process`, `stage_history`) — **não** inclui
-  `platform.ai_quota_usage`, `platform.ai_call_record` (F20-19) nem
-  `opportunities.field_suggestion` (F20-23). Nenhuma das três tabelas existe ainda nesta
-  árvore (criadas por F20-12/F20-19/F20-23); se este card rodar antes delas, registrar
-  no PR quais entram como "a confirmar" até a migração correspondente aterrar.
+  `match_analysis`, `application_process`, `stage_history`) mas **não** incluía
+  `platform.ai_quota_usage` (F20-12) nem `platform.ai_call_record` (F20-19), que já
+  aterraram — gap fechado nesta passada: as duas entradas foram adicionadas e
+  `test_manifest_covers_every_platform_schema_table` prova que nenhuma tabela do schema
+  `platform` falta em silêncio. `opportunities.field_suggestion` (F20-23) continua "a
+  confirmar": a tabela não existe ainda nesta árvore, entra quando o card aterrar.
 - `scripts/backup.py:collect_manifest` (linhas 36-50) roda sua própria consulta de
   contagem numa conexão separada da que `run_pg_dump` (linhas 53-70) usa para o
   `pg_dump` — **não há snapshot transacional compartilhado ou exportado entre os dois**.

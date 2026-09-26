@@ -3,10 +3,13 @@
 Both scripts have to agree on what a good backup contains, so the manifest queries live
 here rather than in either one of them.
 
-Card F20-41 (old F18-08): the tables a future Groq call log, quota guard (`ai_quota_usage`,
-F20-12/F20-19) and cache-identity change (F20-16) add are not in `MANIFEST_QUERIES` yet —
-those cards have not landed, so the tables do not exist. Add them here once they do; this
-module is the single place both scripts read the list from.
+Card F20-41 (old F18-08): the Groq quota guard (`platform.ai_quota_usage`, F20-12) and
+per-call trail (`platform.ai_call_record`, F20-19) landed after this card's first pass and
+were missing from `MANIFEST_QUERIES` — a backup taken since would have silently skipped
+them. `test_manifest_covers_every_platform_schema_table`
+(`tests/backend/test_backup.py`) guards against that recurring: any future table added to
+the `platform` schema must be added to `MANIFEST_QUERIES` or to
+`MANIFEST_EXCLUDED_TABLES` with a reason, or that test fails.
 """
 
 from __future__ import annotations
@@ -35,6 +38,21 @@ MANIFEST_QUERIES: dict[str, str] = {
     "match_analyses": "SELECT count(*) FROM matching.match_analysis",
     "applications": "SELECT count(*) FROM crm.application_process",
     "stage_history": "SELECT count(*) FROM crm.stage_history",
+    "ai_quota_usage": "SELECT count(*) FROM platform.ai_quota_usage",
+    "ai_call_record": "SELECT count(*) FROM platform.ai_call_record",
+}
+
+#: Tables that live in a schema `MANIFEST_QUERIES` otherwise fully covers but are
+#: deliberately left out of the backup, with the reason on record. A table missing from
+#: both this and `MANIFEST_QUERIES` is a bug (see the completeness test in
+#: `tests/backend/test_backup.py`); a table missing from `MANIFEST_QUERIES` but listed
+#: here is a decision.
+MANIFEST_EXCLUDED_TABLES: dict[str, str] = {
+    "platform.worker_job_state": (
+        "Scheduler heartbeat/resume state (job_name, next_run_at, last_correlation_id). "
+        "Losing it after a restore makes the next run act as if it had never run before; "
+        "it is operational bookkeeping the worker rebuilds, not durable operator data."
+    ),
 }
 
 #: Never allowed to appear in a manifest's serialized JSON. The Groq API key never enters
@@ -111,6 +129,7 @@ __all__ = [
     "EXTENSIONS_QUERY",
     "FORBIDDEN_MANIFEST_STRINGS",
     "FORMAT_VERSION",
+    "MANIFEST_EXCLUDED_TABLES",
     "MANIFEST_QUERIES",
     "RELATIONSHIP_QUERIES",
     "database_name",
