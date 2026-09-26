@@ -45,7 +45,13 @@ class DuplicateConflictError(Exception):
 
 
 class DuplicateCycleError(ValueError):
-    """Confirming this pair would make `duplicate_of` point back on itself."""
+    """Confirming this pair would create or extend a `duplicate_of` cycle.
+
+    Covers a direct two-node cycle (A absorbed into B, then B into A), a longer chain
+    that would loop back, and confirming a pair where either side is already merged
+    into a different opportunity — `duplicate_of` is permanent once set, so only two
+    still-root opportunities can ever be merged by `confirm_duplicate`.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +110,8 @@ def find_title_location_window_candidates(
     created: list[DuplicateCandidateModel] = []
     for match in matches:
         pair = _ordered_pair(opportunity.id, match.id)
+        lower_opportunity = opportunity if opportunity.id == pair.lower_id else match
+        higher_opportunity = match if lower_opportunity is opportunity else opportunity
         existing = session.scalar(
             select(DuplicateCandidateModel).where(
                 DuplicateCandidateModel.opportunity_id == pair.lower_id,
@@ -111,6 +119,21 @@ def find_title_location_window_candidates(
             )
         )
         if existing is not None:
+            if existing.status == "REJECTED" and (
+                existing.rejected_version_opportunity != lower_opportunity.version
+                or existing.rejected_version_duplicate_opportunity
+                != higher_opportunity.version
+            ):
+                # A material change (either side's `version` moved) on a previously
+                # rejected pair: the rejection was contextualized by those versions, so
+                # it no longer suppresses this pair. Resurrect the same row instead of
+                # inserting a duplicate, so history (who rejected it, when) is kept.
+                existing.status = "PENDING"
+                existing.decided_by = None
+                existing.decided_at = None
+                existing.rejected_version_opportunity = None
+                existing.rejected_version_duplicate_opportunity = None
+                created.append(existing)
             continue
         candidate = DuplicateCandidateModel(
             opportunity_id=pair.lower_id,
@@ -175,8 +198,22 @@ def confirm_duplicate(
             "opportunity version is stale for confirm_duplicate"
         )
 
-    if survivor.duplicate_of == absorbed.id or absorbed.id == survivor.id:
-        raise DuplicateCycleError("confirming this pair would create a duplicate_of cycle")
+    if absorbed.id == survivor.id:
+        raise DuplicateCycleError("cannot merge an opportunity into itself")
+    # `duplicate_of` is permanent once set (F20-26's merge contract): an opportunity is
+    # merged at most once. Requiring both sides to still be roots here is what blocks
+    # every multi-hop shape — A absorbed into B then B into A, a longer chain that would
+    # loop back, and re-merging a side that was already absorbed by a *different* pair
+    # in the meantime — without needing to walk the `duplicate_of` chain by hand.
+    if survivor.duplicate_of is not None:
+        raise DuplicateCycleError(
+            "survivor is already absorbed into another opportunity; "
+            "resolve against its current root instead"
+        )
+    if absorbed.duplicate_of is not None:
+        raise DuplicateCycleError(
+            "the opportunity to absorb is already merged into another opportunity"
+        )
 
     survivor_active = _has_active_application(session, survivor.id)
     absorbed_active = _has_active_application(session, absorbed.id)
@@ -192,7 +229,7 @@ def confirm_duplicate(
                 update(ApplicationProcessModel)
                 .where(
                     ApplicationProcessModel.opportunity_id == absorbed.id,
-                ApplicationProcessModel.status == "ACTIVE",
+                    ApplicationProcessModel.status == "ACTIVE",
                 )
                 .values(opportunity_id=survivor.id)
             ),
@@ -224,7 +261,13 @@ def confirm_duplicate(
 def reject_duplicate(
     session: Session, candidate_id: UUID, *, decided_by: str
 ) -> DuplicateCandidateModel:
-    """Record the pair as `REJECTED`. Idempotent on repeat rejection."""
+    """Record the pair as `REJECTED`, contextualized by both opportunities' `version`.
+
+    Idempotent on repeat rejection. The pair stays suppressed only while neither
+    opportunity's `version` changes afterwards — `find_title_location_window_candidates`
+    compares the current versions against what is stored here and resurfaces the pair
+    once either side has a material change, instead of suppressing it forever.
+    """
     candidate = session.get(DuplicateCandidateModel, candidate_id)
     if candidate is None:
         raise DuplicateCandidateNotFoundError(str(candidate_id))
@@ -232,9 +275,15 @@ def reject_duplicate(
         return candidate
     if candidate.status == "CONFIRMED":
         raise ValueError("cannot reject an already-confirmed duplicate candidate")
+    lower = session.get(OpportunityModel, candidate.opportunity_id)
+    higher = session.get(OpportunityModel, candidate.duplicate_opportunity_id)
+    if lower is None or higher is None:
+        raise DuplicateCandidateNotFoundError(str(candidate_id))
     candidate.status = "REJECTED"
     candidate.decided_by = decided_by
     candidate.decided_at = datetime.now(UTC)
+    candidate.rejected_version_opportunity = lower.version
+    candidate.rejected_version_duplicate_opportunity = higher.version
     session.commit()
     session.refresh(candidate)
     return candidate
