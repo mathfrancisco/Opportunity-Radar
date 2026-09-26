@@ -262,8 +262,13 @@ class AcquisitionService:
             else:
                 self.session.flush()
         except IntegrityError as error:
-            if commit:
-                self.session.rollback()
+            # Always roll back, even when `commit=False`: a failed flush leaves the
+            # session's transaction unusable until something rolls it back (to the
+            # active SAVEPOINT when the caller is inside `begin_nested()`, otherwise
+            # to the outer transaction). Skipping this when `commit` is False left the
+            # session poisoned for whoever called us with `commit=False` directly
+            # (card F20-46 flush-failure regression test).
+            self.session.rollback()
             raise AcquisitionError(
                 AcquisitionErrorCode.INVALID_CONFIGURATION,
                 "source definition conflicts with an existing record",

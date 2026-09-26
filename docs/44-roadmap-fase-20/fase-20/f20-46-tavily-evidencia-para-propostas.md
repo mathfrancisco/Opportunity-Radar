@@ -1,6 +1,13 @@
 # CARD F20-46 — Evidência da Tavily para propostas de fonte
 
-- **Status:** Backlog
+- **Status:** Feito — `propose_from_tavily_evidence` implementado em
+  `src/opportunity_radar/acquisition/service.py`; `tests/backend/acquisition/test_tavily_proposals.py`
+  cobre os critérios de aceite e, nesta passada, um caso de falha real de flush
+  (`IntegrityError` de verdade, não mockada): `create_source` deixava a sessão sem
+  rollback quando chamado com `commit=False` (caminho usado por
+  `propose_from_tavily_evidence`), o que envenenava a sessão para quem chamasse o método
+  fora do `begin_nested()` de `execute()` — corrigido para sempre chamar
+  `self.session.rollback()` no `except IntegrityError`.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** E — Tavily
 - **Depende de:** F20-44, F20-25
@@ -62,13 +69,24 @@ a evidência se perde ao fim da execução.
 
 ## Critérios de aceite
 
-- [ ] Resultado marcado `source_proposal_candidate` vira proposta inerte com evidência
+- [x] Resultado marcado `source_proposal_candidate` vira proposta inerte com evidência
       auditável (URL, ATS, método, trecho).
-- [ ] Proposta nasce com `terms_reviewed=false` e `collector_local_tested=false`.
-- [ ] Reexecução sobre o mesmo resultado não duplica proposta.
-- [ ] URL fora do padrão de chave conhecido vira pendência registrada, não proposta
+- [x] Proposta nasce com `terms_reviewed=false` e `collector_local_tested=false`.
+- [x] Reexecução sobre o mesmo resultado não duplica proposta.
+- [x] URL fora do padrão de chave conhecido vira pendência registrada, não proposta
       malformada.
-- [ ] A via de origem (Tavily) fica registrada na proposta, distinta de F20-27 (antigo F17-09)/F20-36 (antigo F18-02).
+- [x] A via de origem (Tavily) fica registrada na proposta, distinta de F20-27 (antigo F17-09)/F20-36 (antigo F18-02).
+
+## Critério → evidência
+
+| Critério | Evidência |
+| --- | --- |
+| Resultado marcado `source_proposal_candidate` vira proposta inerte com evidência auditável | `tests/backend/acquisition/test_tavily_proposals.py::test_known_board_url_becomes_inert_proposal_with_auditable_evidence` |
+| Proposta nasce com `terms_reviewed=false` e `collector_local_tested=false` | `::test_new_proposal_starts_terms_unreviewed_and_untested` |
+| Reexecução sobre o mesmo resultado não duplica proposta | `::test_rerun_over_same_result_does_not_duplicate_proposal` |
+| URL fora do padrão de chave conhecido vira pendência registrada | `::test_url_outside_known_pattern_becomes_pending_not_malformed_proposal` |
+| Via de origem (Tavily) registrada, distinta de F20-27/F20-36 | `::test_proposal_records_tavily_as_origin_distinct_from_html_and_sitemap_discovery` |
+| Falha real de flush (não mockada) durante a persistência da proposta faz rollback, não deixa estado parcial e reporta `AcquisitionError` | `::test_flush_integrity_error_during_tavily_proposal_rolls_back_and_reports_error` (novo, `RUN_DATABASE_INTEGRATION=1`): colisão real de `uq_source_definition_type_name` no flush; prova que não sobra linha parcial, que a sessão continua utilizável depois (sem `PendingRollbackError`) e que o erro chega como `AcquisitionError`. Expôs e corrigiu um bug: `create_source` só fazia rollback quando `commit=True`; com `commit=False` (caminho de `propose_from_tavily_evidence`) a sessão ficava envenenada. |
 
 ## Verificação
 

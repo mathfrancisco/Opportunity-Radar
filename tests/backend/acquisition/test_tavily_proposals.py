@@ -10,11 +10,12 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.domain import (
+    AcquisitionError,
     CollectedItem,
     CollectionRequest,
     CollectorCapabilities,
@@ -356,6 +357,68 @@ def test_execute_creates_proposal_after_persisting_tavily_raw_evidence() -> None
             )
         )
         assert proposal is not None
+
+
+def test_flush_integrity_error_during_tavily_proposal_rolls_back_and_reports_error() -> None:
+    """A real DB constraint violation on flush (not a mocked exception) must roll
+    back cleanly, leave no partial row, and surface as AcquisitionError instead of
+    a raw IntegrityError or a session left in a broken/pending-rollback state.
+
+    Triggered by a name collision the pre-create dedup checks cannot see: an
+    existing proposal for the same company/source_type created through a
+    non-Tavily path (no `discovery_via=tavily_search`), so `by_board`/`by_company`
+    both miss it and `create_source` hits the real
+    `uq_source_definition_type_name` unique constraint on flush.
+    """
+    with Session(_engine()) as session:
+        company = _company(session)
+        colliding_name = f"Proposed {company.canonical_name} greenhouse"
+        session.add(
+            SourceDefinitionModel(
+                source_type="greenhouse",
+                name=colliding_name,
+                configuration={
+                    "company_name": company.canonical_name,
+                    "board_token": "existing-board",
+                },
+                evidence_status="ats_identified",
+            )
+        )
+        session.commit()
+
+        item = _candidate(company, "https://boards.greenhouse.io/newboard/jobs/1")
+        service = AcquisitionService(session)
+
+        with pytest.raises(AcquisitionError):
+            service.propose_from_tavily_evidence((item,), commit=False)
+
+        # No partial row from the failed attempt: only the pre-existing proposal remains.
+        count = session.scalar(
+            select(func.count())
+            .select_from(SourceDefinitionModel)
+            .where(
+                SourceDefinitionModel.configuration["company_name"].as_string()
+                == company.canonical_name
+            )
+        )
+        assert count == 1
+        assert (
+            session.scalar(
+                select(SourceDefinitionModel.name).where(
+                    SourceDefinitionModel.name == colliding_name
+                )
+            )
+            == colliding_name
+        )
+        # The session must be left in a usable state (no PendingRollbackError):
+        # the failed flush must not poison later work in the same session/transaction.
+        session.add(
+            Company(
+                canonical_name=f"{_PREFIX}post-failure {uuid4().hex}",
+                normalized_name=f"f20-46-post-failure-{uuid4().hex}",
+            )
+        )
+        session.commit()
 
 
 def test_proposal_failure_keeps_raw_evidence_and_records_partial_run(

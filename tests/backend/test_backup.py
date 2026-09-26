@@ -17,12 +17,16 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from sqlalchemy import text
 
 from opportunity_radar.platform.backup import (
     FORBIDDEN_MANIFEST_STRINGS,
     FORMAT_VERSION,
+    MANIFEST_EXCLUDED_TABLES,
+    MANIFEST_QUERIES,
     sha256_file,
 )
+from opportunity_radar.platform.database import create_database_engine
 from scripts import backup, restore_check
 
 
@@ -223,6 +227,18 @@ def test_prune_removes_dumps_and_manifests_past_the_retention(tmp_path: Path) ->
     assert new_dump.exists()
 
 
+def test_manifest_includes_the_ai_quota_and_call_record_tables() -> None:
+    """F20-41 evidence: these two tables landed after this card's first pass and were
+    missing from the manifest until now. Pin them here (no DB needed) so a future
+    revert of the entry cannot slip through unnoticed."""
+    tables = {
+        query.split("FROM", 1)[1].strip() for query in MANIFEST_QUERIES.values()
+    }
+
+    assert "platform.ai_quota_usage" in tables
+    assert "platform.ai_call_record" in tables
+
+
 def test_manifest_never_contains_groq_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """Defense in depth: even if a future field carried the key by accident, the
     manifest's serialized JSON must never contain it or the forbidden marker string."""
@@ -234,6 +250,41 @@ def test_manifest_never_contains_groq_api_key(monkeypatch: pytest.MonkeyPatch) -
     for forbidden in FORBIDDEN_MANIFEST_STRINGS:
         assert forbidden not in serialized
     assert os.environ["GROQ_API_KEY"] not in serialized
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("RUN_DATABASE_INTEGRATION") != "1",
+    reason="database integration is enabled only in the isolated CI database",
+)
+def test_manifest_covers_every_platform_schema_table() -> None:
+    """`platform` is where F20's new AI tables (`ai_quota_usage`, `ai_call_record`)
+    landed, and exactly where they were once missing from `MANIFEST_QUERIES` (card
+    F20-41 evidence). Every table under that schema must be counted by the manifest
+    or listed in `MANIFEST_EXCLUDED_TABLES` with a reason, so a future migration
+    cannot add a table that the backup silently never covers."""
+    url = os.environ["DATABASE_URL"]
+    engine = create_database_engine(url)
+    with engine.connect() as connection:
+        tables = {
+            f"platform.{row[0]}"
+            for row in connection.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname = 'platform'")
+            )
+        }
+
+    manifest_tables = {
+        query.split("FROM", 1)[1].strip()
+        for query in MANIFEST_QUERIES.values()
+        if query.split("FROM", 1)[1].strip().startswith("platform.")
+    }
+    excluded = {name for name in MANIFEST_EXCLUDED_TABLES if name.startswith("platform.")}
+
+    missing = tables - manifest_tables - excluded
+    assert not missing, (
+        f"platform schema table(s) missing from MANIFEST_QUERIES and "
+        f"MANIFEST_EXCLUDED_TABLES: {sorted(missing)}"
+    )
 
 
 def test_prune_does_nothing_when_retention_is_not_positive(tmp_path: Path) -> None:
