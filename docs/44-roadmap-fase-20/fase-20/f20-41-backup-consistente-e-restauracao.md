@@ -1,6 +1,6 @@
 # CARD F20-41 — Backup consistente e restauração verificável
 
-- **Status:** Parcial — snapshot compartilhado, gate estrito, sha256, relacionamentos e extensões implementados em `scripts/backup.py`/`scripts/restore_check.py`/`src/opportunity_radar/platform/backup.py`, com `tests/backend/test_backup.py` cobrindo a lógica sem Postgres; falta rodar o round-trip real (`pg_dump`/`pg_restore` contra Postgres) e medir RTO/RPO na máquina de referência — sem Docker neste ambiente. As tabelas de IA citadas em "Ajustes da Fase 20" (`ai_quota_usage`, F20-19, F20-16) ainda não existem no código; entram em `MANIFEST_QUERIES` quando esses cards forem feitos.
+- **Status:** Feito — snapshot compartilhado, gate estrito, sha256, relacionamentos e extensões implementados em `scripts/backup.py`/`scripts/restore_check.py`/`src/opportunity_radar/platform/backup.py`; `tests/backend/test_backup.py` cobre a lógica sem Postgres e o round-trip real; `tests/backend/test_backup_restore_integration.py` (novo) prova com Postgres real que uma escrita concorrente durante o dump não causa divergência de contagem; round-trip real (`pg_dump`/`pg_restore`) e RTO/RPO medidos contra Postgres via `docker compose -p f20-pt`, números em `docs/30-runbook.md` §5. As tabelas de IA citadas em "Ajustes da Fase 20" (`ai_quota_usage`, F20-19, F20-16) ainda não existem no código; entram em `MANIFEST_QUERIES` quando esses cards forem feitos.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** D — Varredura produtiva
 - **Depende de:** Nenhum
@@ -31,16 +31,29 @@ Backup durante coleta ativa restaura o mesmo estado descrito no manifesto e pres
 
 ## Critérios de aceite
 
-- [ ] Escrita concorrente não causa divergência artificial de contagens.
-- [ ] Sem manifesto/hash válido o gate estrito falha.
-- [ ] Restauração confere dados e relações, inclusive features já instaladas.
-- [ ] Procedimento de recuperação tem evidência e limitações registradas.
+- [x] Escrita concorrente não causa divergência artificial de contagens.
+- [x] Sem manifesto/hash válido o gate estrito falha.
+- [x] Restauração confere dados e relações, inclusive features já instaladas.
+- [x] Procedimento de recuperação tem evidência e limitações registradas.
 
 ## Verificação
 
 - **CI:** Backup sob escritor controlado, corrupção/ausência de manifesto, restauração de banco populado e extensão quando aplicável.
 - **Máquina de referência:** Restore medido em banco descartável; execução futura somente com autorização explícita.
 - Conforme o `AGENTS.md`, a validação repetível vive no `.github/workflows/pipeline.yml`.
+
+## Critério → evidência
+
+| Critério | Evidência |
+| --- | --- |
+| Escrita concorrente não causa divergência artificial de contagens | `tests/backend/test_backup_restore_integration.py::test_concurrent_writer_does_not_cause_artificial_count_divergence` (novo, `RUN_DATABASE_INTEGRATION=1`): insere uma empresa numa conexão separada entre o `pg_export_snapshot()` e o `pg_dump`, e prova que a linha concorrente fica fora tanto do manifesto quanto do dump — `compare(...) == []` |
+| Sem manifesto/hash válido o gate estrito falha | `tests/backend/test_backup.py::test_load_manifest_missing_file_fails_strict`, `::test_load_manifest_incompatible_format_version_fails_strict`, `::test_verify_checksum_rejects_a_mismatch`, `::test_restore_check_main_fails_on_a_tampered_dump` (round-trip real contra Postgres, `RUN_DATABASE_INTEGRATION=1`) |
+| Restauração confere dados e relações, inclusive features já instaladas | `tests/backend/test_backup.py::test_compare_flags_a_broken_relationship`, `::test_compare_flags_a_missing_extension`, `::test_backup_and_restore_round_trip_matches_the_manifest` (round-trip real: dump→restore→`compare()==[]`, inclusive extensão `vector`) |
+| Procedimento de recuperação tem evidência e limitações registradas | `docs/30-runbook.md` §5: periodicidade (24 h), RPO alvo (24 h), RTO medido (`scripts/backup.py` ≈1.6 s, `scripts/restore_check.py` ≈2.2 s, ciclo completo ≈3.8 s contra o banco de teste local; ≈6–6.5 s por invocação `make` isolada incluindo subida de container), e a limitação explícita de que o número escala com o volume de dados e não substitui medição contra um dump de produção |
+
+Medição de RTO/RPO rodada em 2026-09-26 contra `docker compose -p f20-pt -f compose.yaml
+-f compose.dev.yaml`, banco de teste local (13 tabelas do fluxo vertical, dump de
+157 KB). Ver `docs/30-runbook.md` §5 para os números completos e a limitação de escala.
 
 ## Arquivos prováveis
 
@@ -213,10 +226,15 @@ def strict_gate(manifest: dict, restored: dict, *, dump_hash: str) -> list[str]:
 ## Comando de verificação
 
 ```bash
-docker compose -p f20-41 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q tests/backend/platform/test_backup_manifest.py tests/backend/test_backup_restore_integration.py
+docker compose -p f20-41 -f compose.yaml -f compose.dev.yaml run --rm -e RUN_DATABASE_INTEGRATION=1 api pytest -q tests/backend/test_backup.py tests/backend/test_backup_restore_integration.py
 docker compose -p f20-41 -f compose.yaml -f compose.dev.yaml run --rm api ruff check .
 docker compose -p f20-41 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```
+
+Nota: os testes de manifesto (hash, `format_version`, ausência de `GROQ_API_KEY`) foram
+adicionados a `tests/backend/test_backup.py` (arquivo já existente que cobre o mesmo
+módulo) em vez de um `tests/backend/platform/test_backup_manifest.py` novo, para não
+duplicar a infraestrutura de teste do mesmo assunto.
 
 Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
 

@@ -37,6 +37,14 @@ MANIFEST_QUERIES: dict[str, str] = {
     "stage_history": "SELECT count(*) FROM crm.stage_history",
 }
 
+#: Never allowed to appear in a manifest's serialized JSON. The Groq API key never enters
+#: `pg_dump`'s output (it only ever dumps the Postgres database, never the filesystem or
+#: environment), but the manifest is built from plain Python values this process also
+#: has `GROQ_API_KEY` in its environment for, so this is defense in depth, not the only
+#: guard: a future field (an AI call record's request/response body, once F20-19 lands)
+#: must never carry the key by accident either.
+FORBIDDEN_MANIFEST_STRINGS: tuple[str, ...] = ("GROQ_API_KEY",)
+
 #: A count alone can agree by coincidence; these must always be zero, in the manifest and
 #: after a restore, or a relationship a table count cannot see (a dangling foreign key
 #: the schema itself no longer enforces, a row a migration was supposed to backfill) broke.
@@ -101,6 +109,7 @@ def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
 __all__ = [
     "ALEMBIC_REVISION_QUERY",
     "EXTENSIONS_QUERY",
+    "FORBIDDEN_MANIFEST_STRINGS",
     "FORMAT_VERSION",
     "MANIFEST_QUERIES",
     "RELATIONSHIP_QUERIES",

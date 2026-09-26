@@ -1,6 +1,6 @@
 # CARD F20-05 — Remover os embeddings locais e a busca por significado
 
-- **Status:** Parcial — alembic upgrade/downgrade não executado (sem Postgres/Docker nesta máquina); demais critérios feitos
+- **Status:** Feito — `alembic downgrade base` e `alembic upgrade head` executados contra Postgres real (docker compose -p f20-pt); todos os critérios cumpridos
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** Nenhum
@@ -56,7 +56,7 @@ O F16-09 (`0ddd0de`) gera embedding com `qwen3-embedding:0.6b` no Ollama. O Groq
 
 - [x] O worker roda um ciclo completo sem log de embedding.
 - [x] `GET /search/semantic` responde 404 (rota removida).
-- [ ] `alembic upgrade head` e `alembic downgrade base` continuam funcionando — não executado (sem Postgres/Docker disponível nesta máquina; nenhuma migração foi criada ou alterada).
+- [x] `alembic upgrade head` e `alembic downgrade base` continuam funcionando — executado contra Postgres real (`docker compose -p f20-pt -f compose.yaml -f compose.dev.yaml run --rm api alembic downgrade base` seguido de `alembic upgrade head`); downgrade percorreu todas as 30 revisões até a base vazia e o upgrade voltou a `20260925_0051 (head)` sem erro. Nenhuma migração foi criada ou alterada.
 
 ## Testes
 
@@ -72,7 +72,7 @@ O F16-09 (`0ddd0de`) gera embedding com `qwen3-embedding:0.6b` no Ollama. O Groq
 | O worker não agenda embeddings e o ciclo não emite log de embedding | `test_worker_scheduler_has_no_embedding_job`; `test_the_window_holds_and_reports_what_it_proved` (teste de integração, pulado localmente sem `RUN_DATABASE_INTEGRATION=1`) |
 | `GET /search/semantic` responde 404 | `tests/backend/test_semantic_search_removed.py::test_semantic_search_route_is_removed` |
 | Doctor não verifica cobertura de embedding | `tests/backend/test_doctor.py::test_doctor_has_no_embedding_coverage_check` |
-| `alembic upgrade head` e `alembic downgrade base` continuam funcionando | Não executado: requer PostgreSQL/Docker. Nenhuma migração foi criada ou alterada. |
+| `alembic upgrade head` e `alembic downgrade base` continuam funcionando | Executado contra Postgres real via `docker compose -p f20-pt`: downgrade até a base e upgrade de volta a `20260925_0051 (head)`, sem erro. Nenhuma migração foi criada ou alterada. |
 
 ## Comando de verificação
 
