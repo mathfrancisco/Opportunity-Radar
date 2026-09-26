@@ -36,6 +36,7 @@ from opportunity_radar.acquisition.service import (
     canonical_payload_hash,
 )
 from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
+from opportunity_radar.acquisition.workday import WorkdayCollector
 
 
 class _MemorySession:
@@ -832,3 +833,47 @@ def test_run_interval_fails_fast_without_holding_the_request() -> None:
     assert run.rate_limit_events == 1
     assert sleeper_delays == []
     assert network_called is False
+
+
+def test_probe_recognizes_workday_source_type() -> None:
+    """F20-28: the sonda knows how to build a Workday request from its configuration."""
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "total": 1,
+                "jobPostings": [
+                    {
+                        "title": "Backend Engineer",
+                        "externalPath": "/job/Remote/Backend-Engineer_R1",
+                        "locationsText": "Remote",
+                        "bulletFields": ["R1"],
+                    }
+                ],
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    registry = CollectorRegistry((WorkdayCollector(client=client),))
+    try:
+        outcome = asyncio.run(
+            run_probe(
+                "workday",
+                {
+                    "tenant_identifier": "acme/ExternalCareerSite",
+                    "api_region": "wd5",
+                    "company_name": "Acme",
+                },
+                registry,
+                max_items=5,
+            )
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert outcome.ok is True
+    assert outcome.items_seen == 1
+    assert calls[0].url.host == "acme.wd5.myworkdayjobs.com"

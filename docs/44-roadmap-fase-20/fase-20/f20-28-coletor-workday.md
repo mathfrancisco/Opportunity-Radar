@@ -1,6 +1,17 @@
 # CARD F20-28 — Coletor Workday
 
-- **Status:** Backlog
+- **Status:** Feito no código — termos revisados (`docs/pesquisas/termos-workday.md`,
+  viável), `WorkdayCollector` (`source_type`, `capabilities`, `healthcheck`, `discover`
+  com paginação offset/limit e retentativa `Retry-After`, `validate_tenant_identifier`,
+  `validate_pod`), registrado em `build_collector_registry`; sonda (`PROBE_TYPES`,
+  `PUBLIC_ENDPOINT_REFERENCES`, `probe_request`), `IDENTIFIER_KEYS`, `SUPPORTED_ATS` e o
+  validador em `registration.py`, e o formulário web (`SourceCreateForm.tsx`,
+  `sourceTypes`) reconhecem `"workday"`. Testes contra board falso
+  (`tests/backend/acquisition/test_workday_collector.py`, 8 testes) e integração da sonda
+  (`test_service.py::test_probe_recognizes_workday_source_type`) e do cadastro
+  (`tests/backend/companies/test_registration.py`) passam. **Pendente:** critério "pelo
+  menos uma empresa real homologada e coletando" — exige a fila de homologação (F20-25) e
+  a máquina de referência, fora deste ambiente; não marcado, não fabricado.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-27, F20-03
@@ -65,10 +76,17 @@ Endpoints candidatos, **a confirmar na revisão de termos** (não são fato até
 
 ## Critérios de aceite (por sub-card)
 
-- [ ] Termos revisados e registrados antes do código.
-- [ ] Coletor com teste contra board falso, incluindo paginação e erro.
-- [ ] Sonda, proposta, cadastro e formulário reconhecem o ATS.
-- [ ] Pelo menos uma empresa real do catálogo homologada e coletando.
+- [x] Termos revisados e registrados antes do código
+      (`docs/pesquisas/termos-workday.md`).
+- [x] Coletor com teste contra board falso, incluindo paginação e erro
+      (`tests/backend/acquisition/test_workday_collector.py`, 8 testes;
+      `tests/e2e/fake_workday_board.py`).
+- [x] Sonda, proposta, cadastro e formulário reconhecem o ATS (`probing.py`,
+      `proposals.py`, `registration.py`, `SourceCreateForm.tsx`/`api.ts`, com teste de
+      integração em `test_service.py` e `tests/backend/companies/test_registration.py`).
+- [ ] Pelo menos uma empresa real do catálogo homologada e coletando — pendente: exige a
+      fila de homologação (F20-25) rodando contra um tenant Workday real do catálogo, na
+      máquina de referência. Não executado neste ambiente; não fabricado.
 
 ## Verificação
 
@@ -194,6 +212,46 @@ docker compose -p f20-28 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ```
 
 Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
+
+## Evidências F20-28
+
+- `docker compose -p f20-28 -f compose.yaml -f compose.dev.yaml run --rm api pytest -q
+  tests/backend/acquisition`: 167 passed, 28 skipped (sem `RUN_DATABASE_INTEGRATION`); com
+  `-e RUN_DATABASE_INTEGRATION=1`: 187 passed, 8 skipped. Inclui os 8 testes de
+  `test_workday_collector.py` e `test_service.py::test_probe_recognizes_workday_source_type`.
+- `docker compose -p f20-28 -f compose.yaml -f compose.dev.yaml run --rm api ruff check .`:
+  All checks passed.
+- `docker compose -p f20-28 -f compose.yaml -f compose.dev.yaml run --rm api mypy`:
+  Success: no issues found in 110 source files.
+- `tests/backend/companies/test_registration.py` (novo, 3 testes) exercita `SUPPORTED_ATS`
+  e o validador de `"workday"` em `_source_values` sem precisar de sessão de banco —
+  nenhum teste anterior cobria `registration.py::_source_values`.
+- `cd apps/web && npm run check` (lint + typecheck + vitest + build): 24 arquivos de teste,
+  132 testes, build ok.
+- `docker compose -p f20-28 down` executado ao final.
+- Decisão de identificador registrada na revisão de termos: `tenant_identifier` codifica
+  `"<tenant>/<site>"`; o pod (`wd1`, `wd5`, …) vai em `api_region`, reaproveitando o campo
+  que o Lever já usa para escolher qual host chamar.
+- O coletor não busca a descrição completa da vaga (endpoint de detalhe por vaga,
+  `GET .../wday/cxs/<tenant>/<site><externalPath>`): a listagem paginada não expõe esse
+  campo, e buscar por item introduziria N+1 chamadas por página sem um critério de aceite
+  que peça isso. `CollectedItem.description` fica `None` para Workday, documentado no
+  módulo; não é um campo inventado.
+- Mapeamento de departamento (F20-03) e senioridade (F20-02) não foi feito: a listagem
+  paginada do Workday (`title`, `externalPath`, `locationsText`, `postedOn`,
+  `bulletFields`) não expõe departamento nem nível de forma confiável sem o endpoint de
+  detalhe por vaga, que este sub-card não chama (ver item acima) — nenhuma correspondência
+  foi inventada para um campo ausente, conforme "Notas de implementação".
+- `tests/e2e/fake_workday_board.py` foi criado no formato de `fake_job_board.py`
+  (paginação, 404, 429 com `Retry-After`, 500), mas **não foi ligado a
+  `compose.ci.yaml`**: `WorkdayCollector` monta a URL fixa
+  `https://<tenant>.<pod>.myworkdayjobs.com/...` (mesma forma do card e de
+  `LeverCollector`, sem parâmetro de `base_url`), então apontar para o board falso local
+  exigiria um mecanismo de override que o card não pediu. Registrado como item em aberto.
+- **Pendente, fora deste ambiente:** homologar uma empresa real do catálogo com Workday e
+  colar a primeira coleta real no PR (exige F20-25 e a máquina de referência); e o
+  relatório de descoberta do F20-27 por tipo de ATS, que ordenaria os sub-cards seguintes,
+  também segue pendente (ver F20-27).
 
 ## Pronto quando
 
