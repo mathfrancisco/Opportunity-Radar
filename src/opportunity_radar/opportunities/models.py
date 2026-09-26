@@ -250,6 +250,12 @@ class DuplicateCandidateModel(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="PENDING")
     decided_by: Mapped[str | None] = mapped_column(String(255))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: `opportunity.version`/`duplicate_opportunity.version` at the moment this pair was
+    #: last rejected (F20-26 merge contract). `None` unless `status == "REJECTED"`. The
+    #: rejection only suppresses this pair while both versions still match; a material
+    #: change on either side makes it suggestible again.
+    rejected_version_opportunity: Mapped[int | None] = mapped_column(Integer)
+    rejected_version_duplicate_opportunity: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

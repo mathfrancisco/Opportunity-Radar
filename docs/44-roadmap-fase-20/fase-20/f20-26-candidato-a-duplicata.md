@@ -21,6 +21,31 @@
   Correções P2 registradas: empate em `created_at` resolve por UUID menor; a sobrevivente
   recebe bump de versão quando a junção move dados, e normalização reutilizada recebe bump
   quando muda enriquecimento relevante.
+- **P2 do contrato de junção (F20-26-P2), fechados:**
+  1. **Recusa contextualizada por versão:** `duplicate_candidate` ganhou
+     `rejected_version_opportunity`/`rejected_version_duplicate_opportunity`
+     (migração `20260926_0034_duplicate_candidate_rejected_versions.py`).
+     `reject_duplicate` (`opportunities/duplicates.py`) grava a `version` corrente de
+     ambas as oportunidades no momento da recusa; `find_title_location_window_candidates`
+     compara essas versões contra as atuais e só mantém o par suprimido enquanto nenhum
+     lado mudou — uma mudança material (qualquer bump de `version`) ressuscita a mesma
+     linha para `PENDING`, sem duplicar registro. Testado por
+     `tests/backend/opportunities/test_duplicates.py::test_reject_duplicate_resurfaces_after_a_material_version_change`
+     (o teste `test_reject_duplicate_does_not_resuggest_unchanged_pair` já existente
+     cobre o caso sem mudança).
+  2. **Bloqueio de ciclos multi-hop em `confirm_duplicate`:** como `duplicate_of` é
+     permanente uma vez definido, `confirm_duplicate` agora exige que sobrevivente e
+     absorvida ainda sejam raízes (`duplicate_of IS NULL`) antes de mesclar — isso cobre
+     o ciclo direto A→B→A, cadeias mais longas que fechariam um ciclo, e reabsorver um
+     lado que já foi mesclado por outro par nesse meio-tempo, todos como
+     `DuplicateCycleError` (já mapeado para HTTP 409 em `confirm_duplicate_candidate`).
+     Testado por `test_duplicate_of_cycle_is_rejected` (existente, ciclo direto),
+     `test_confirm_duplicate_rejects_survivor_already_absorbed_elsewhere` e
+     `test_confirm_duplicate_rejects_absorbing_an_opportunity_already_merged_elsewhere`.
+  Verificação: `docker compose -p f20-26p2 -f compose.yaml -f compose.dev.yaml run --rm
+  -e RUN_DATABASE_INTEGRATION=1 api pytest -q tests/backend/opportunities
+  tests/backend/dashboard` → 105 passed; `ruff check .` → All checks passed; `mypy` →
+  Success: no issues found in 108 source files.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-01

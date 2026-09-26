@@ -389,6 +389,47 @@ def test_reject_duplicate_does_not_resuggest_unchanged_pair() -> None:
             _cleanup(session, [older.id, newer.id])
 
 
+def test_reject_duplicate_resurfaces_after_a_material_version_change() -> None:
+    """Rejection is contextualized by both opportunities' `version` (merge contract):
+    the pair is suppressed only while neither side changed since the rejection."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        older = _opportunity(created_at=NOW - timedelta(days=2), published_at=NOW)
+        newer = _opportunity(created_at=NOW, published_at=NOW + timedelta(days=1))
+        session.add_all([older, newer])
+        session.commit()
+        try:
+            [candidate] = find_title_location_window_candidates(session, newer)
+            session.commit()
+
+            rejected = reject_duplicate(
+                session, candidate.id, decided_by="operator@example.com"
+            )
+            # Both opportunities start at version 1, and `rejected_version_*` mirrors
+            # the ordered pair (`opportunity_id` is always the smaller id).
+            assert rejected.rejected_version_opportunity == 1
+            assert rejected.rejected_version_duplicate_opportunity == 1
+
+            # Unchanged: still suppressed.
+            re_detected = find_title_location_window_candidates(session, newer)
+            session.commit()
+            assert re_detected == []
+
+            # A material change (a version bump) on either side: suggestible again.
+            newer.version += 1
+            session.commit()
+
+            resurfaced = find_title_location_window_candidates(session, newer)
+            session.commit()
+            assert len(resurfaced) == 1
+            assert resurfaced[0].id == candidate.id
+            assert resurfaced[0].status == "PENDING"
+            assert resurfaced[0].decided_by is None
+            assert resurfaced[0].rejected_version_opportunity is None
+        finally:
+            _cleanup(session, [older.id, newer.id])
+
+
 def test_confirm_duplicate_is_idempotent_on_retry() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
@@ -529,6 +570,86 @@ def test_duplicate_of_cycle_is_rejected() -> None:
                 )
         finally:
             _cleanup(session, [a.id, b.id])
+
+
+def test_confirm_duplicate_rejects_survivor_already_absorbed_elsewhere() -> None:
+    """A absorbed into B already (A.duplicate_of = B); a later pair (A, C) must not be
+    able to make A a survivor — that would silently extend a chain past a merged node."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        a = _opportunity(created_at=NOW - timedelta(days=5), published_at=NOW, title="a")
+        b = _opportunity(
+            created_at=NOW - timedelta(days=1), published_at=NOW, title="b"
+        )
+        c = _opportunity(created_at=NOW, published_at=NOW + timedelta(days=1), title="c")
+        session.add_all([a, b, c])
+        session.commit()
+        try:
+            a.duplicate_of = b.id
+            session.commit()
+
+            candidate = DuplicateCandidateModel(
+                id=uuid4(),
+                opportunity_id=min(a.id, c.id),
+                duplicate_opportunity_id=max(a.id, c.id),
+                rule="title_location_window",
+                status="PENDING",
+            )
+            session.add(candidate)
+            session.commit()
+
+            with pytest.raises(DuplicateCycleError):
+                confirm_duplicate(
+                    session,
+                    candidate.id,
+                    expected_version_survivor=a.version,
+                    expected_version_absorbed=c.version,
+                    decided_by="operator@example.com",
+                )
+        finally:
+            _cleanup(session, [a.id, b.id, c.id])
+
+
+def test_confirm_duplicate_rejects_absorbing_an_opportunity_already_merged_elsewhere() -> (
+    None
+):
+    """B already absorbed into A (B.duplicate_of = A); a later pair (B, C) must not be
+    able to re-merge B into C — B's occurrences already moved to A. C is made the older
+    one so `confirm_duplicate` would otherwise pick it as the survivor and B (already
+    merged) as the one to absorb."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        a = _opportunity(created_at=NOW - timedelta(days=5), published_at=NOW, title="a")
+        c = _opportunity(
+            created_at=NOW - timedelta(days=1), published_at=NOW, title="c"
+        )
+        b = _opportunity(created_at=NOW, published_at=NOW + timedelta(days=1), title="b")
+        session.add_all([a, b, c])
+        session.commit()
+        try:
+            b.duplicate_of = a.id
+            session.commit()
+
+            candidate = DuplicateCandidateModel(
+                id=uuid4(),
+                opportunity_id=min(b.id, c.id),
+                duplicate_opportunity_id=max(b.id, c.id),
+                rule="title_location_window",
+                status="PENDING",
+            )
+            session.add(candidate)
+            session.commit()
+
+            with pytest.raises(DuplicateCycleError):
+                confirm_duplicate(
+                    session,
+                    candidate.id,
+                    expected_version_survivor=c.version,
+                    expected_version_absorbed=b.version,
+                    decided_by="operator@example.com",
+                )
+        finally:
+            _cleanup(session, [a.id, b.id, c.id])
 
 
 def test_confirm_duplicate_keeps_marks_on_the_absorbed_opportunity_without_promoting_them() -> (
