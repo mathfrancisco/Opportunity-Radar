@@ -65,7 +65,12 @@ O F17-06 entregou `seniority-v2`, `regions-v1`, reprocessamento e o script de la
       nova). Prova também por construção:
       `tests/backend/opportunities/test_domain.py::test_skills_v2_never_removes_or_narrows_a_skills_v1_entry`
       (a `skills-v2` só adiciona entradas, nunca remove/estreita uma da `skills-v1`). Ver
-      `docs/pesquisas/curadoria-skills-v2.md`.
+      `docs/pesquisas/curadoria-skills-v2.md`. Reprocessamento seguinte
+      (`NORMALIZER_VERSION` v4 → v5, remoção do alias `ci`) também rodado e verificado
+      contra o acervo real — ver
+      `docs/44-roadmap-fase-20/evidencias/reprocessamento-skills-v3-2026-09-27.md`: 648
+      oportunidades antes e depois, zero linha `opportunity_skill` órfã em `skills-v2`, 22
+      falhas idênticas (mesmo `raw_item_id`) antes/depois.
 - [ ] F17-06 marcado como Done com link para `curadoria-skills-v2.md`. **Não marcado:**
       a curadoria e o reprocessamento de `skills-v2` fecham, mas o reprocessamento real
       revelou que o critério de `seniority-v2` do F17-06 (`UNKNOWN` à metade do baseline)
@@ -87,10 +92,24 @@ em `.github/workflows/pipeline.yml`, foram atualizados para `"skills-v3"`. Novo 
 do acervo, que "CI&T, we help large enterprises..." não gera `cicd` e que "CI/CD pipeline"
 continua gerando. Suíte completa roda verde (860 passed, 1 falha pré-existente e não
 relacionada em `test_delta_presence_resume.py`, confirmada flaky/isolada — ver evidência no
-handback da sessão). **Pendência nova:** o reprocessamento oficial (`POST
-/opportunities/normalizations/pending`) não foi rodado contra o acervo real desta vez — a
-base ainda tem `opportunity_skill` rows em `skills-v2`; a mudança só está provada por teste
-unitário/integração, não por remedição do acervo real.
+handback da sessão).
+
+**Reprocessamento oficial (2026-09-27, sessão de fechamento da pendência):** rodado contra
+o acervo real (projeto compose `opportunity-radar`) via
+`POST /opportunities/normalizations/pending?limit=500` até `processed=0`, depois de um
+backup verificado (`data/backups/f20-02-pre-skills-v3-2026-09-27.dump`, `restore check
+passed`) e de reconstruir as imagens `migrate`/`api`/`worker` (estavam anteriores ao
+arquivo de migração `20260926_0043`, que já estava aplicado no banco — nenhuma migração de
+schema nova nesta branch). Ver
+`docs/44-roadmap-fase-20/evidencias/reprocessamento-skills-v3-2026-09-27.md` para os
+comandos completos e a medição linha a linha. Resumo: 648 oportunidades antes e depois
+(nenhuma perdida/duplicada), `opportunity_skill` 1844 linhas `skills-v2` → 1735 linhas
+`skills-v3` (zero linha `skills-v2` órfã), hits de `cicd` 221 → 112 (queda de exatamente
+109, igual à queda de linhas — só o alias `ci` foi afetado), cobertura de skill 90,74% →
+90,59% (queda esperada: a oportunidade cuja única evidência era o falso positivo "CI&T"
+perdeu a linha), 22 falhas `INVALID_COLLECTED_ITEM_V1` sob `v5`, **mesmo conjunto** de
+`raw_item_id` das falhas sob `v4` (nenhuma falha nova). A base real não tem mais nenhuma
+linha `opportunity_skill` em `skills-v2`.
 
 ## Testes
 

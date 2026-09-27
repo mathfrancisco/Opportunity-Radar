@@ -9,7 +9,7 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 | Card | Feito e evidência | Restante |
 | --- | --- | --- |
 | F20-01 | Baseline e relatórios da busca; 86 casos rotulados `aceito`; medição real refeita (like recall@10=1,0, fulltext=0,817) reconfirma o viés conhecido. | F17-03 continua "Em revisão": falta gabarito com candidatos de full-text/descrição (não só título) para `kubernetes`/`frontend`. |
-| F20-02 | `skills-v2` em `e46b755`; UNKNOWN 50,62%; curadoria humana concluída (11 decisões `aceito`); alias `ci` removido, `SKILL_TAXONOMY_VERSION`→`skills-v3`, `NORMALIZER_VERSION`→`v5`. | Rodar o reprocessamento oficial no acervo real (a versão só foi bumped no código; a base ainda tem `skills-v2`). |
+| F20-02 | `skills-v2` em `e46b755`; UNKNOWN 50,62%; curadoria humana concluída (11 decisões `aceito`); alias `ci` removido, `SKILL_TAXONOMY_VERSION`→`skills-v3`, `NORMALIZER_VERSION`→`v5`; reprocessamento oficial rodado e verificado no acervo real em 2026-09-27 (`docs/44-roadmap-fase-20/evidencias/reprocessamento-skills-v3-2026-09-27.md`) — 648 oportunidades antes/depois, zero linha `skills-v2` órfã, 22 falhas idênticas. | F17-06 ainda não fecha: `seniority-v2` (`UNKNOWN` à metade do baseline) não atingido no acervo real (328/648 = 50,62%), achado fora do escopo deste card. |
 | F20-03 | Critérios herdados mapeados para evidência. | Sem pendência de implementação identificada. |
 | F20-04 | Ollama removido em `0e541aa`. | Sem pendência de implementação identificada. |
 | F20-05 | Embeddings locais removidos em `82022dd`; migração passou nos gates registrados. | Sem pendência de implementação identificada. |
