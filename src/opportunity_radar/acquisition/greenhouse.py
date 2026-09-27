@@ -24,6 +24,11 @@ from opportunity_radar.acquisition.domain import (
     HealthResult,
     parse_retry_after_seconds,
 )
+from opportunity_radar.acquisition.http_conditional import (
+    NotModifiedResponse,
+    conditional_request_headers,
+    record_conditional_response,
+)
 
 _BOARD_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 _PARSER_VERSION = "greenhouse-job-board-v1"
@@ -34,7 +39,7 @@ class GreenhouseCollector:
     """Reads jobs from Greenhouse's unauthenticated public board API."""
 
     source_type = "greenhouse"
-    capabilities = CollectorCapabilities(company_jobs=True)
+    capabilities = CollectorCapabilities(company_jobs=True, etag=True, last_modified=True)
 
     def __init__(
         self,
@@ -81,7 +86,10 @@ class GreenhouseCollector:
         self, request: CollectionRequest
     ) -> AsyncIterator[CollectedItem]:
         board = self.validate_board_token(request.company_reference)
-        jobs, total = await self._fetch_jobs(board, request)
+        try:
+            jobs, total = await self._fetch_jobs(board, request)
+        except NotModifiedResponse:
+            return
         request.telemetry.record_items_announced(total)
         emitted = 0
         for job in jobs:
@@ -140,9 +148,17 @@ class GreenhouseCollector:
             error: AcquisitionError | None = None
             try:
                 request.telemetry.record_http_attempt(retry=attempt > 0)
-                response = await client.get(url, params={"content": "true"})
+                response = await client.get(
+                    url,
+                    params={"content": "true"},
+                    headers=conditional_request_headers(request) or None,
+                )
                 if response.status_code == 429:
                     request.telemetry.record_rate_limit()
+                if response.status_code == 304:
+                    record_conditional_response(request, response)
+                    raise NotModifiedResponse()
+                record_conditional_response(request, response)
                 error = self._response_error(response)
                 if error is None:
                     return self._jobs(response)

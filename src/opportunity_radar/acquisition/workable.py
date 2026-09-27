@@ -39,6 +39,11 @@ from opportunity_radar.acquisition.domain import (
     HealthResult,
     parse_retry_after_seconds,
 )
+from opportunity_radar.acquisition.http_conditional import (
+    NotModifiedResponse,
+    conditional_request_headers,
+    record_conditional_response,
+)
 
 _ACCOUNT_SLUG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 _PARSER_VERSION = "workable-widget-v1"
@@ -48,7 +53,9 @@ class WorkableCollector:
     """Reads public postings from a Workable account's careers widget."""
 
     source_type = "workable"
-    capabilities = CollectorCapabilities(company_jobs=True, pagination=False)
+    capabilities = CollectorCapabilities(
+        company_jobs=True, pagination=False, etag=True, last_modified=True
+    )
 
     def __init__(
         self,
@@ -104,7 +111,10 @@ class WorkableCollector:
         account: str,
         request: CollectionRequest,
     ) -> AsyncIterator[CollectedItem]:
-        jobs = await self._fetch_jobs(client, account, request)
+        try:
+            jobs = await self._fetch_jobs(client, account, request)
+        except NotModifiedResponse:
+            return
         emitted = 0
         for job in jobs:
             if request.max_items is not None and emitted >= request.max_items:
@@ -163,9 +173,17 @@ class WorkableCollector:
             error: AcquisitionError | None = None
             try:
                 request.telemetry.record_http_attempt(retry=attempt > 0)
-                response = await client.get(url, params={"details": "true"})
+                response = await client.get(
+                    url,
+                    params={"details": "true"},
+                    headers=conditional_request_headers(request) or None,
+                )
                 if response.status_code == 429:
                     request.telemetry.record_rate_limit()
+                if response.status_code == 304:
+                    record_conditional_response(request, response)
+                    raise NotModifiedResponse()
+                record_conditional_response(request, response)
                 error = self._response_error(response)
                 if error is None:
                     return self._jobs(response)

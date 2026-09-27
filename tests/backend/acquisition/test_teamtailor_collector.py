@@ -11,6 +11,7 @@ from opportunity_radar.acquisition.domain import (
     CollectionNetworkPolicy,
     CollectionRequest,
 )
+from opportunity_radar.acquisition.scheduling import ConditionalRequestHeaders
 from opportunity_radar.acquisition.teamtailor import TeamtailorCollector
 
 _FIXTURE = Path(__file__).parents[2] / "fixtures" / "teamtailor_jobs.json"
@@ -253,3 +254,44 @@ def test_stops_at_max_items_and_does_not_announce_total() -> None:
         asyncio.run(client.aclose())
     assert len(items) == 1
     assert collection_request.telemetry.items_announced is None
+
+
+def test_sends_conditional_headers_when_checkpoint_has_validators() -> None:
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json={"items": []})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    request = CollectionRequest(
+        company_reference=_DOMAIN,
+        conditional_headers=ConditionalRequestHeaders(if_none_match='"abc123"'),
+    )
+    try:
+        asyncio.run(_collect(TeamtailorCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert calls[0].headers["If-None-Match"] == '"abc123"'
+
+
+def test_bare_304_yields_no_items_and_records_not_modified_without_a_total() -> None:
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(304, headers={"ETag": '"abc123"'})
+        )
+    )
+    request = CollectionRequest(
+        company_reference=_DOMAIN,
+        conditional_headers=ConditionalRequestHeaders(if_none_match='"abc123"'),
+    )
+    try:
+        items = asyncio.run(_collect(TeamtailorCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert items == []
+    assert request.telemetry.not_modified is True
+    assert request.telemetry.response_etag == '"abc123"'
+    assert request.telemetry.items_announced is None

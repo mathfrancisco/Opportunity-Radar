@@ -35,10 +35,20 @@ Revisitar confirma presença sem duplicar conteúdo ou IA; queda de execução r
       `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md` §2.2/§4.
 - [x] 304 não fecha vaga nem mascara inventário incompleto.
 - [x] Quedas antes/depois do commit retomam idempotentemente. Mecanismo coberto por CI
-      com coletores fake; **não exercido com um coletor de produção real** — nenhum dos 4
-      coletores novos (workday/teamtailor/workable/factorial) preenche
-      `CollectedItem.cursor`, e 3 dos 4 não paginam (o board inteiro é uma resposta só),
-      então não há um "meio de página" real para retomar hoje. Ver evidência §4.
+      com coletores fake. **Atualizado em 2026-09-27:** Workday agora lê `request.cursor`
+      como offset e preenche `CollectedItem.cursor` por item (`acquisition/workday.py`);
+      confirmado com dado real contra Adobe/Workday na pilha isolada `f20cond` — uma
+      coleta real capturou 10 itens (checkpoint `cursor=10`), e uma segunda chamada com
+      `cursor="10"` buscou 5 itens genuinamente novos (offset 10-14, sem repetição, 15
+      vagas reais distintas ao todo). O caminho de retomada explícita
+      (`resume_of_run_id`, exigindo um run `PARTIAL`/`FAILED`) não foi exercido com uma
+      queda real do processo nesta sessão — reproduzir uma queda de rede genuína contra o
+      board real da Adobe de forma não fabricada ficou fora do tempo desta tarefa; o que
+      foi provado é a leitura/escrita real do cursor em si, que é o mecanismo que
+      `resume_of_run_id` consome. Os outros 3 coletores (teamtailor/workable/factorial)
+      continuam sem paginação real (o board inteiro é uma resposta só), então não há
+      "meio de página" para eles. Ver
+      `docs/44-roadmap-fase-20/evidencias/http-condicional-2026-09-27.md`.
 - [x] Mudança material reprocessa; alteração cosmética não gera onda de análise.
 
 ## Verificação
@@ -228,8 +238,19 @@ Todos os critérios de aceite estão marcados com evidência, o comando de verif
   existia, ou seja, presença confirmada sem normalização nem IA — exposta em
   `GET /api/source-metrics`. Bytes evitados continuam fora do CI (nenhum coletor real ainda
   envia condicionais), conforme "Fora de escopo".
-- Armazenamento de variantes de parser (migração `20260926_0042`) permanece implementação
-  local sem aceite até validação no banco compartilhado; não altera o estado deste card.
+- **Aceito em 2026-09-27:** armazenamento de variantes de parser (migração
+  `20260926_0042`) foi validado contra um banco Postgres real (pilha isolada `f20cond`,
+  não a suíte mockada de `test_parser_variants.py` já existente) por
+  `test_a_real_parser_upgrade_appends_a_variant_instead_of_colliding`
+  (`tests/backend/acquisition/test_parser_variants.py`): três execuções reais de
+  `AcquisitionService.execute` sobre o mesmo payload bruto — parser v1, parser v2 (uma
+  mudança real de interpretação sobre os mesmos bytes) e v2 de novo (uma revisita simples)
+  — confirmam que a chave ampliada aceita as duas primeiras como evidência distinta
+  (`items_persisted == 1` cada, dois `RawItem` com `payload_hash` igual e `semantic_hash`
+  diferente) e ainda deduplica a terceira (`items_persisted == 0`, presença confirmada).
+  A restrição `uq_raw_item_source_identity_hash` ampliada não colidiu nem perdeu evidência
+  em nenhum dos três casos. Critério de aceite considerado cumprido; não há mais pendência
+  de "validação no banco compartilhado" para esta migração.
 
 ### Evidência local
 
@@ -251,3 +272,25 @@ Todos os critérios de aceite estão marcados com evidência, o comando de verif
   `opportunity-radar`; corrigidos os dois literais em `.github/workflows/pipeline.yml`
   (linhas do fluxo de aquisição manual e de matching). Este card não depende dessa
   correção para seus critérios, mas ela desbloqueia o gate de CI da branch.
+
+### Evidência local — 2026-09-27 (cursor real do Workday, condicionais HTTP, migração 0042)
+
+- Workday (`acquisition/workday.py`) agora lê `request.cursor` como offset e preenche
+  `CollectedItem.cursor`; os 8 coletores HTTP (ashby/greenhouse/lever/remotive/workday/
+  teamtailor/workable/factorial) enviam `If-None-Match`/`If-Modified-Since` e reportam
+  304/`ETag`/`Last-Modified` via `acquisition/http_conditional.py` (helper compartilhado).
+- `tests/backend/acquisition/test_{ashby,greenhouse,lever,remotive,teamtailor,workable,
+  factorial,workday}_collector.py`: 123 testes verdes na pilha isolada `f20cond`,
+  incluindo os novos casos de cabeçalho condicional, 304 e (Workday) cursor/resume.
+- `tests/backend/acquisition/test_parser_variants.py::test_a_real_parser_upgrade_appends_a_variant_instead_of_colliding`:
+  novo teste de integração com Postgres real, decide o item pendente da migração `0042`
+  (ver "Estado local de implementação" acima).
+- Suíte completa (`RUN_DATABASE_INTEGRATION=1`, pilha `f20cond`, banco recriado do zero
+  pelas migrations): 878 passaram, 10 ignorados, 0 falharam. `ruff check .` e `mypy`
+  limpos.
+- Medição com dado real (boards públicos, sem tocar `opportunity-radar`): ver
+  `docs/44-roadmap-fase-20/evidencias/http-condicional-2026-09-27.md` — 304 real
+  confirmado no Greenhouse (Lokalise) e Teamtailor (Seedtag), bytes evitados medidos por
+  `curl` direto (19.820 e 345.111 bytes), e cursor real de retomada no Workday (Adobe: 10
+  itens + 5 itens novos via `cursor="10"`, 15 vagas reais distintas ao todo, sem
+  repetição).

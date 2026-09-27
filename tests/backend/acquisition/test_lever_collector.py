@@ -12,6 +12,7 @@ from opportunity_radar.acquisition.domain import (
     CollectionRequest,
 )
 from opportunity_radar.acquisition.lever import LeverCollector
+from opportunity_radar.acquisition.scheduling import ConditionalRequestHeaders
 
 _FIXTURE = Path(__file__).parents[2] / "fixtures" / "lever_postings.json"
 
@@ -274,3 +275,45 @@ def test_rejects_invalid_configuration_and_schema_and_skips_bad_item() -> None:
         asyncio.run(client.aclose())
     assert [item.external_id for item in items] == ["valid"]
     assert request.telemetry.invalid_items == 1
+
+
+def test_sends_conditional_headers_only_on_first_page() -> None:
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json=[])
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    request = CollectionRequest(
+        company_reference="acme",
+        conditional_headers=ConditionalRequestHeaders(if_none_match='"abc123"'),
+    )
+    try:
+        asyncio.run(_collect(LeverCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert calls[0].headers["If-None-Match"] == '"abc123"'
+
+
+def test_bare_304_yields_no_items_and_records_not_modified_without_a_total() -> None:
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(304, headers={"ETag": '"abc123"'})
+        )
+    )
+    request = CollectionRequest(
+        company_reference="acme",
+        conditional_headers=ConditionalRequestHeaders(if_none_match='"abc123"'),
+    )
+    try:
+        items = asyncio.run(_collect(LeverCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert items == []
+    assert request.telemetry.not_modified is True
+    assert request.telemetry.not_modified_count == 1
+    assert request.telemetry.response_etag == '"abc123"'
+    assert request.telemetry.items_announced is None

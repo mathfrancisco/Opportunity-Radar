@@ -15,6 +15,7 @@ from opportunity_radar.acquisition.domain import (
     CollectionRequest,
 )
 from opportunity_radar.acquisition.remotive import RemotiveCollector
+from opportunity_radar.acquisition.scheduling import ConditionalRequestHeaders
 from opportunity_radar.profile.domain import (
     EmploymentPreference,
     ProfileSnapshot,
@@ -250,3 +251,42 @@ def test_skips_invalid_job_without_losing_valid_jobs() -> None:
 
     assert [item.external_id for item in items] == ["2"]
     assert request.telemetry.invalid_items == 1
+
+
+def test_sends_conditional_headers_when_checkpoint_has_validators() -> None:
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json={"job-count": 0, "jobs": []})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    request = CollectionRequest(
+        conditional_headers=ConditionalRequestHeaders(if_none_match='"abc123"'),
+    )
+    try:
+        asyncio.run(_collect(RemotiveCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert calls[0].headers["If-None-Match"] == '"abc123"'
+
+
+def test_bare_304_yields_no_items_and_records_not_modified_without_a_total() -> None:
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(304, headers={"ETag": '"abc123"'})
+        )
+    )
+    request = CollectionRequest(
+        conditional_headers=ConditionalRequestHeaders(if_none_match='"abc123"'),
+    )
+    try:
+        items = asyncio.run(_collect(RemotiveCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert items == []
+    assert request.telemetry.not_modified is True
+    assert request.telemetry.response_etag == '"abc123"'
+    assert request.telemetry.items_announced is None

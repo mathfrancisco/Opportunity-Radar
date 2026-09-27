@@ -24,6 +24,11 @@ from opportunity_radar.acquisition.domain import (
     HealthResult,
     parse_retry_after_seconds,
 )
+from opportunity_radar.acquisition.http_conditional import (
+    NotModifiedResponse,
+    conditional_request_headers,
+    record_conditional_response,
+)
 
 _SITE_SLUG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 _PAGE_SIZE = 100
@@ -34,7 +39,9 @@ class LeverCollector:
     """Reads public postings from Lever's global or EU API instance."""
 
     source_type = "lever"
-    capabilities = CollectorCapabilities(company_jobs=True, pagination=True)
+    capabilities = CollectorCapabilities(
+        company_jobs=True, pagination=True, etag=True, last_modified=True
+    )
 
     def __init__(
         self,
@@ -110,9 +117,12 @@ class LeverCollector:
                 None if request.max_items is None else request.max_items - emitted
             )
             limit = min(_PAGE_SIZE, remaining) if remaining is not None else _PAGE_SIZE
-            postings = await self._fetch_page(
-                client, site, instance, skip, limit, request
-            )
+            try:
+                postings = await self._fetch_page(
+                    client, site, instance, skip, limit, request
+                )
+            except NotModifiedResponse:
+                return
             page_signature = tuple(
                 (str(posting.get("id")), str(posting.get("hostedUrl")))
                 for posting in postings
@@ -194,11 +204,22 @@ class LeverCollector:
             error: AcquisitionError | None = None
             try:
                 request.telemetry.record_http_attempt(retry=attempt > 0)
+                # Validators only ever describe page one of the whole board (the checkpoint
+                # `AcquisitionService` builds them from), so only the first page's request
+                # conditions on them — a later page is a different resource, not a scope a
+                # 304 for page one could ever speak for.
+                headers = conditional_request_headers(request) if skip == 0 else {}
                 response = await client.get(
-                    url, params={"mode": "json", "skip": skip, "limit": limit}
+                    url,
+                    params={"mode": "json", "skip": skip, "limit": limit},
+                    headers=headers or None,
                 )
                 if response.status_code == 429:
                     request.telemetry.record_rate_limit()
+                if response.status_code == 304:
+                    record_conditional_response(request, response)
+                    raise NotModifiedResponse()
+                record_conditional_response(request, response)
                 error = self._response_error(response)
                 if error is None:
                     return self._postings(response)
