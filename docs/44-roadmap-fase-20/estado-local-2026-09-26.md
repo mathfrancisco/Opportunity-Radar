@@ -54,7 +54,7 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 | F20-44 | Collector Tavily de descoberta implementado. | Sem pendência de implementação identificada. |
 | F20-45 | Extração com cache em `2330f35`. | Sem pendência de implementação identificada. |
 | F20-46 | Evidência e rollback de flush em `41a3ecf`, `fa93d15`, `c9c291e`. | Sem pendência de implementação identificada. |
-| F20-47 | Não iniciado. | F20-17, F20-39, F20-40 e F20-25. |
+| F20-47 | Percurso E2E no navegador (Playwright) e falhas injetadas (Groq 429/500/inválido, paginação parcial, 304, restart do worker) em `feature/f20-47-e2e`; 7/7 verde na pilha isolada `-p f20e2e47` (`docs/44-roadmap-fase-20/evidencias/e2e-falhas-injetadas-2026-09-27.md`). | Confirmação em CI real depende do push do coordenador; `opportunity-radar` não foi tocada. |
 | F20-48 | Critérios provados em CI e contra o dump real (`f20up`); ver `docs/44-roadmap-fase-20/evidencias/upgrade-banco-populado-2026-09-27.md`. | Sem pendência de implementação identificada. |
 | F20-49 | Não iniciado. | F20-47 e F20-48. |
 | F20-50 | Não iniciado. | Aceitar F20-01 a F20-49 com evidência. |

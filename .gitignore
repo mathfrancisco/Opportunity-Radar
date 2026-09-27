@@ -28,6 +28,10 @@ local_backups/
 # Browser automation traces from a local render check
 .playwright-mcp/
 
+# F20-47 browser E2E: Playwright's own run output, not a build artifact
+tests/e2e/browser/test-results/
+tests/e2e/browser/report/
+
 # Editors and operating systems
 .idea/
 .vscode/
