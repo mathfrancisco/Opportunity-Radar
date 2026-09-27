@@ -1,0 +1,97 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "51.7500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": "YEAR",
+        "maximum": "152300.00",
+        "minimum": "89700.00",
+        "currency": "EUR"
+      },
+      "published_at": "2026-08-03T16:55:20.581000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "YEAR",
+          "maximum": "152300.00",
+          "minimum": "89700.00",
+          "currency": "EUR",
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "{\"compensationType\": \"Salary\", \"currencyCode\": \"EUR\", \"interval\": \"1 YEAR\", \"maxValue\": 152300, \"minValue\": 89700}",
+          "evidence_source": "ashby.compensation.summaryComponents.Salary",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Senior Product Manager - Core Platform (Engine, Scale & Reliability)",
+    "company_name": "Empresa X",
+    "location_text": "Berlin Office",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nYour main goal will be to make Empresa X's Core Platform ready for the company's next stage of growth: more scalable, reliable, secure, and flexible as customer usage and technical complexity increase. You'll own the foundations that everything else, including our AI and agent capabilities, is built on.\n\nTo do so, here are your responsibilities:\n\nOWN THE CORE PLATFORM STRATEGY & ROADMAP\n\n- Define and communicate the product strategy and roadmap for the Core Platform in partnership with Engineering and Product leadership.\n\n- Prioritize foundational investments based on customer impact, enterprise needs, technical risk, and engineering effort, and make trade-offs between near-term customer needs, technical debt, and long-term architecture explicit.\n\n- Lead product discovery for technically complex problems, engaging directly with enterprise customers and internal customer-facing teams.\n\nSCALABILITY, RELIABILITY & EXECUTION ENGINE\n\n- Drive work on the scalability and reliability of Empresa X's execution engine, including areas like worker pools and distributed execution.\n\n- Improve the reliability of triggers and execution behaviour across complex deployment setups, from multi-main Cloud environments to self-hosted enterprise installations.\n\n- Shape a more secure and flexible approach to executing code within Empresa X.\n\nMAJOR RELEASES & CROSS-ORG ALIGNMENT\n\n- Drive the planning and release of major or breaking platform versions, including migration strategy, stakeholder communication, and risk management.\n\n- Establish clear success measures and keep the squad accountable for outcomes, not only delivery.\n\n- Act as the bridge between the Core team and the wider org: Product, Sales, Solutions Engineering, Customer Success, and Support, making platform trade-offs legible without oversimplifying them.\n\n- Treat internal product teams as customers of the platform: proactively mine their roadmaps for implicit platform requirements and turn cross-cutting needs into explicit Core Platform work before they become blockers.\n\nREQUIREMENTS\n\nMust-haves\n\n- Platform product experience: You have 5+ years in Product, with at least 2 to 3 years on platform, infrastructure, developer-facing, or backend/API products.\n\n- Technical depth: You're credible with senior engineers. You can reason about distributed systems, execution models, and reliability/scalability trade-offs, and hold your own in an architecture discussion. You're at home with non-functional requirements, where the details are the product.\n\n- Complex delivery track record: You've led cross-team technical initiatives with real delivery risk, ideally including a migration or breaking change.\n\n- Prioritization under ambiguity: You make trade-offs explicit and connect foundational or technical-debt work to customer and commercial outcomes.\n\n- Ownership and autonomy: You grab problems without being asked, fix what you see broken, and drive outcomes without waiting for direction.\n\n- Exceptional communication: You make complex platform topics understandable for technical and non-technical audiences alike.\n\n- Enterprise platform reality: You understand what running software in customer-controlled environments means, including self-hosted, air-gapped, and restricted deployments\n\nNice-to-haves\n\n- Hands-on ability: You can read code or prototype, even if you're not shipping it.\n\n- Enterprise exposure: You've worked with B2B SaaS requirements like security, compliance, or deployment complexity.\n\n- Security partnership: You're comfortable working with security teams on code execution, isolation, or compliance topics.\n\n- Domain familiarity: You know workflow automation, orchestration, or open-source / developer-community products.\n\n- Writing culture: You default to writing things down to create clarity and alignment.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

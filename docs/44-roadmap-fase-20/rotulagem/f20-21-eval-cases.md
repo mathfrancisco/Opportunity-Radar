@@ -52,20 +52,20 @@ e registrar no card por que a composição não seguiu o plano original.
 
 | Caso | Título da vaga | Bucket do arquivo | Recomendação | Justificativa | Confiança | Decisão do usuário |
 | --- | --- | --- | --- | --- | --- | --- |
-| 01-backend-03 | Forward Deployed Engineer - US East Coast | backend | **Reclassificar** | Papel de deployment/customer-facing, não engenharia backend; não tem o risco "fora da área" que casos equivalentes (13–31) têm. | Alta | |
-| 02-backend-04 | Senior Product Manager - Core Platform | backend | **Reclassificar** | É Product Manager — mesmo tipo de papel do caso 26 (`fora_de_area`), mas aqui sem o risco de área. Inconsistência clara entre dois casos quase idênticos. | Alta | |
-| 03-backend-08 | Senior Support Engineer \| Remote \| North America | backend | **Reclassificar** | Suporte técnico, não engenharia backend. | Alta | |
-| 04-backend-24 | Forward Deployed Engineer - EMEA | backend | **Reclassificar** | Mesmo caso do 01, duplica o tipo de papel. | Alta | |
-| 05-backend-28 | Staff Core Platform Engineer | backend | Aceitar | "Core Platform Engineer" é plausivelmente uma vaga de engenharia (infra/plataforma); mais defensável que os outros do bucket. | Média | |
-| 06-backend-31 | Technical Account Manager (US) | backend | **Reclassificar** | Papel comercial/pós-venda técnico, não engenharia backend — mesmo padrão do caso 21 (`fora_de_area`, Account Executive). | Alta | |
-| 07-backend-38 | Backend Engineer (Security) | backend | Aceitar | Título é literalmente "Backend Engineer"; único caso do bucket sem ambiguidade. | Alta | |
-| 08-backend-40 | Technical Recruiter (3 month FTC) | backend | **Reclassificar** | Recrutamento, não engenharia backend. | Alta | |
-| 09-fullstack-07 | Senior Product Engineer (TS/NodeJS/Vue) | fullstack | Aceitar | Vaga técnica fullstack real. | Alta | |
-| 10-fullstack-18 | Sr Growth Engineer (Fullstack TS/Vue/NodeJS) | fullstack | Aceitar | Idem. | Alta | |
-| 11-fullstack-37 | Design Engineer | fullstack | Revisar | "Design Engineer" é ambíguo (pode ser UX/produto, não fullstack de verdade); recomendo abrir a descrição completa antes de aceitar o bucket. | Média | |
-| 12-ai-11 | Agentic Engineering Platform Engineer | ai | Aceitar | Papel de plataforma de IA/agentes, coerente com o bucket. | Alta | |
-| 13 a 31 (19 casos) | Sales/Marketing/CS/PM/People/Design etc. (ver lista completa no JSON) | fora_de_area | Aceitar (lote) | Risco "não é desenvolvimento de software" aplicado de forma consistente nos 19; nenhuma inconsistência interna encontrada. Excede a meta (10), o que é aceitável — sobra não é problema. | Alta | |
-| 32 a 41 (10 casos) | Treasury/Lead SWE Hybrid/Data Analytics/Reliability/Controllership/AML/Infra/Data Center/Compliance/Communications | ineligible | Aceitar (lote) | Todos `ONSITE`/`HYBRID`, risco "incompatível com trabalho remoto" consistente, veredito `INELIGIBLE` coerente com a regra de elegibilidade do perfil (só aceita remoto). | Alta | |
+| 01-backend-03 | Forward Deployed Engineer - US East Coast | backend | **Reclassificar** | Papel de deployment/customer-facing, não engenharia backend; não tem o risco "fora da área" que casos equivalentes (13–31) têm. | Alta | aceito |
+| 02-backend-04 | Senior Product Manager - Core Platform | backend | **Reclassificar** | É Product Manager — mesmo tipo de papel do caso 26 (`fora_de_area`), mas aqui sem o risco de área. Inconsistência clara entre dois casos quase idênticos. | Alta | aceito |
+| 03-backend-08 | Senior Support Engineer \| Remote \| North America | backend | **Reclassificar** | Suporte técnico, não engenharia backend. | Alta | aceito |
+| 04-backend-24 | Forward Deployed Engineer - EMEA | backend | **Reclassificar** | Mesmo caso do 01, duplica o tipo de papel. | Alta | aceito |
+| 05-backend-28 | Staff Core Platform Engineer | backend | Aceitar | "Core Platform Engineer" é plausivelmente uma vaga de engenharia (infra/plataforma); mais defensável que os outros do bucket. | Média | aceito |
+| 06-backend-31 | Technical Account Manager (US) | backend | **Reclassificar** | Papel comercial/pós-venda técnico, não engenharia backend — mesmo padrão do caso 21 (`fora_de_area`, Account Executive). | Alta | aceito |
+| 07-backend-38 | Backend Engineer (Security) | backend | Aceitar | Título é literalmente "Backend Engineer"; único caso do bucket sem ambiguidade. | Alta | aceito |
+| 08-backend-40 | Technical Recruiter (3 month FTC) | backend | **Reclassificar** | Recrutamento, não engenharia backend. | Alta | aceito |
+| 09-fullstack-07 | Senior Product Engineer (TS/NodeJS/Vue) | fullstack | Aceitar | Vaga técnica fullstack real. | Alta | aceito |
+| 10-fullstack-18 | Sr Growth Engineer (Fullstack TS/Vue/NodeJS) | fullstack | Aceitar | Idem. | Alta | aceito |
+| 11-fullstack-37 | Design Engineer | fullstack | Revisar | "Design Engineer" é ambíguo (pode ser UX/produto, não fullstack de verdade); recomendo abrir a descrição completa antes de aceitar o bucket. | Média | aceito |
+| 12-ai-11 | Agentic Engineering Platform Engineer | ai | Aceitar | Papel de plataforma de IA/agentes, coerente com o bucket. | Alta | aceito |
+| 13 a 31 (19 casos) | Sales/Marketing/CS/PM/People/Design etc. (ver lista completa no JSON) | fora_de_area | Aceitar (lote) | Risco "não é desenvolvimento de software" aplicado de forma consistente nos 19; nenhuma inconsistência interna encontrada. Excede a meta (10), o que é aceitável — sobra não é problema. | Alta | aceito |
+| 32 a 41 (10 casos) | Treasury/Lead SWE Hybrid/Data Analytics/Reliability/Controllership/AML/Infra/Data Center/Compliance/Communications | ineligible | Aceitar (lote) | Todos `ONSITE`/`HYBRID`, risco "incompatível com trabalho remoto" consistente, veredito `INELIGIBLE` coerente com a regra de elegibilidade do perfil (só aceita remoto). | Alta | aceito |
 
 *(A lista completa dos 19 casos `fora_de_area` e dos 10 `ineligible`, com título e arquivo,
 está em `f20-21-eval-cases.json`, campo `casos`, para não repetir aqui uma tabela de 31

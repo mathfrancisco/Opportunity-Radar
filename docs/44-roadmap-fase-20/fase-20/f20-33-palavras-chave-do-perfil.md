@@ -66,7 +66,15 @@ O perfil não tem campo de cargos-alvo.
       Remote OK e Arbeitnow.
 - [x] Nenhuma fonte ampla é habilitada antes do filtro de área. Verificação manual, não
       teste: esta mudança não cria nem habilita fontes; o filtro F20-03 existe e o gate de
-      homologação não foi alterado.
+      homologação não foi alterado. **Confirmado com evidência real (2026-09-27):** roteiro
+      reprodutível de 4 passos em
+      `docs/44-roadmap-fase-20/rotulagem/f20-33-verificacao-criterio-4.md` — `role_family`
+      ativo (76/648 = 11,7% `UNKNOWN`), nenhum `source_type` amplo novo no banco (21 linhas,
+      só `ashby`/`greenhouse`/`lever`/`manual`/`remotive`), Remotive é a única fonte
+      `enabled=true` com busca por termo, e
+      `git diff --stat b7f432e~1..e9be146 -- scripts/enable_sources.py` retorna vazio
+      (confirmado nesta sessão): o gate de homologação não foi tocado no intervalo de
+      commits do card.
 
 ## Verificação
 

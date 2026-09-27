@@ -1,0 +1,97 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "54.2500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "5.20",
+        "currency": null
+      },
+      "published_at": "2026-09-15T15:21:50.158000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "5.20",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "$5.2",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Forward Deployed Engineer - US East Coast",
+    "company_name": "Empresa X",
+    "location_text": "Boston",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\n🎯 Your main goal will be to turn Empresa X’s most strategic enterprise deployments into production-ready success stories by embedding on-site, solving real customer problems, and building reusable automation patterns that shape our product.\n\nTo do so, you’ll work directly with customers, Deployment Strategists, and Product to make every engagement high-impact, scalable, and repeatable:\n\nDrive high-impact enterprise deployments\n\nEmbed on-site with enterprise customers for focused 5-day deployment engagements, arriving with a hypothesis and leaving with production workflows in place.\n\nPartner closely with Deployment Strategists to align technical execution with customer priorities, stakeholder needs, and adoption goals.\n\nBuild trust with technical and non-technical stakeholders by turning complex customer environments into clear, actionable solutions.\n\nBuild production-grade automation solutions\n\nDesign and build workflows, integrations, and custom nodes tailored to each customer’s environment and scalable beyond the initial use case.\n\nExtend existing Empresa X nodes or add missing functionality where needed to unlock high-value enterprise use cases.\n\nTranslate ambiguous business problems into concrete automation designs that prioritize real customer value over technical complexity.\n\nWork across industries and tech stacks, getting productive quickly in new environments.\n\nBridge customer needs with Product and Engineering\n\nIdentify when a bespoke customer requirement should become a reusable node improvement, product feature, or platform capability.\n\nCreate a clear feedback loop with Product and Engineering by documenting technical gaps, customer context, implementation learnings, and prioritization signals.\n\nContribute reusable learnings, workflows, custom nodes, and integration patterns to an internal playbook library.\n\nTurn customer learnings into product and playbooks\n\nIdentify when a bespoke customer requirement should become a core product feature and document it clearly for Product.\n\nContribute reusable learnings, workflows, and patterns to an internal playbook library.\n\nHelp ensure every engagement makes the next one faster, stronger, and more productized.\n\nKeep engagements focused and scalable\n\nDeliver time-boxed customer engagements with clear outcomes, rather than open-ended professional services work.\n\nBuild solutions that customers can own and operate themselves.\n\nKnow when to build, when to simplify, and when to push back to avoid unnecessary complexity.\n\nREQUIREMENTS\n\nMust-haves\n\n🧑‍💻 Strong engineering background: You have solid full-stack or backend engineering experience and have built integrations, APIs, or automation pipelines in production environments.\n\n🧩 Integration-building expertise: You can create custom nodes, extend existing integrations, and work confidently with APIs, authentication patterns, data models, and event-driven systems.\n\n🔧 Product-minded technical execution: You can distinguish between a one-off customer workaround, a reusable node improvement, and a product feature worth escalating.\n\n🤝 Customer-facing confidence: You’re comfortable working directly in customer environments and can build trust with engineers, operators, and non-technical stakeholders.\n\n🗺️ Solution design skills: You can take a messy operational problem and turn it into a clean, practical technical design.\n\n⚖️ Strong technical judgment: You know when to build, when to push back, and how to avoid gold-plating solutions that should stay simple.\n\n✈️ Willingness to travel: You’re open to travelling roughly 30-50% of the time for on-site engagements.\n\n⚡ Speed to productive: You can quickly understand new industries, tech stacks, and customer environments without needing everything to be neatly defined.\n\nNice-to-haves\n\n🔁 Workflow automation experience: You have familiarity with Empresa X or similar workflow automation tools.\n\n🏢 Enterprise deployment experience: You’ve worked with strategic enterprise accounts in complex technical environments.\n\n🧱 Node or connector development: You’ve built custom nodes, connectors, plugins, SDKs, or reusable integration frameworks.\n\n🚀 Forward deployed experience: You’ve worked in a forward deployed, solutions engineering, or similar role at a product-led technical organization.\n\n📣 Product feedback experience: You’ve helped turn customer learnings into clear product feedback, roadmap input, or engineering specifications.\n\nWhy join us?\n\nAt Empresa X, you’ll be the founding Forward Deployed Engineer, helping define how we turn our largest enterprise deployments into long-term, referenceable success stories. Your work won’t sit in a demo environment — you’ll build production workflows with real users, influence our product roadmap, and create the playbooks that shape how this function scales.\n\nYou’ll join one of Europe’s fastest-growing startups at a moment of huge momentum, working with a remote-first team that values autonomy, speed, experimentation, and direct customer impact.\n\nSound like a challenge you’re excited to take on?\n\nApply now — and help us build the future of automation.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

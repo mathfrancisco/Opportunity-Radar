@@ -1,0 +1,102 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "51.7500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "SENIOR",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": "YEAR",
+        "maximum": "148100.00",
+        "minimum": "121100.00",
+        "currency": "USD"
+      },
+      "published_at": "2026-08-19T09:21:30.566000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:docker:sha256:ecbdbc06deece380a769f72ad43b32f4a7d06fef6ae04c462cd796cbb00fce43",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:javascript:sha256:eba7823d4b05e73eb3208814b700b0a3373fb5aff4f1e53bb7debdf6a25a2be9",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:kubernetes:sha256:ef8a8f9497864a508c5476d43ced250467c5140954905f2b9bc9333c31cf6e7e",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:nodejs:sha256:4c735c9e2a67138fb2bb05aef46a2f840a86e71a046fe9ef4d09e727d9563aaf"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "YEAR",
+          "maximum": "148100.00",
+          "minimum": "121100.00",
+          "currency": "USD",
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "{\"compensationType\": \"Salary\", \"currencyCode\": \"USD\", \"interval\": \"1 YEAR\", \"maxValue\": 148100, \"minValue\": 121100}",
+          "evidence_source": "ashby.compensation.summaryComponents.Salary",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Senior Support Engineer | Remote | North America",
+    "company_name": "Empresa X",
+    "location_text": "United States",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nOur support team keeps expanding, and we’re looking for a Senior Support Engineer to help us raise the technical depth and quality of support as Empresa X grows across increasingly complex enterprise use cases.\n\nYour main goal will be to solve Empresa X’s toughest customer challenges and help us deliver a world-class technical support experience at scale.\n\nYou’ll combine deep technical troubleshooting with customer empathy, product insight, and a builder mindset — resolving difficult problems while making our product, processes, and team better along the way.\n\nOWN COMPLEX TECHNICAL & ENTERPRISE SUPPORT\n\n- Take ownership of complex technical issues across tickets, chat, and community channels, driving them from first investigation through to resolution.\n\n- Diagnose issues across workflow execution, APIs, integrations, networking, self-hosted environments, and performance using logs, reproduction environments, and systematic debugging.\n\n- Support enterprise customers through high-impact or business-critical issues with clear communication, strong judgement, and a focus on restoring value quickly.\n\nPARTNER WITH ENGINEERING TO SOLVE ROOT CAUSES\n\n- Collaborate closely with Engineering and Product to investigate bugs, identify root causes, and provide high-quality technical context for escalations.\n\n- Distinguish between configuration issues, product defects, integration behaviour, and infrastructure problems so issues reach the right owners quickly.\n\n- Identify recurring patterns in customer issues and turn them into actionable product, reliability, and usability improvements.\n\nSCALE HOW WE SUPPORT CUSTOMERS\n\n- Create and improve documentation, troubleshooting guides, FAQs, internal runbooks, and knowledge-base content that enable customers and teammates to solve problems faster.\n\n- Help evolve support processes, tooling, and automation as our customer base and technical complexity continue to scale.\n\n- Contribute to our paid on-call rotation, helping provide reliable support for urgent customer issues outside standard business hours.\n\nRAISE THE BAR FOR TECHNICAL SUPPORT\n\n- Share technical knowledge, debugging approaches, and best practices with other Support Engineers and help teammates tackle increasingly complex cases.\n\n- Represent the voice of the customer with Product and Engineering, bringing evidence and context from real-world implementations into product discussions.\n\n- Contribute to the Empresa X community by answering technical questions, sharing best practices, and helping builders get more value from the platform.\n\nREQUIREMENTS\n\n- Senior technical support experience: You have 5+ years of experience in technical support, support engineering, or another customer-facing engineering role and are comfortable owning complex problems end to end.\n\n- Enterprise customer experience: You have experience supporting technically sophisticated customers where reliability, urgency, clear communication, and stakeholder management matter.\n\n- APIs & integrations: You have a strong understanding of APIs, webhooks, authentication, data flows, and integrations and can systematically troubleshoot where things are breaking.\n\n- Networking fundamentals: You have strong knowledge of concepts including DNS, HTTP/HTTPS, TCP/IP, proxies, certificates, and common connectivity issues.\n\n- Kubernetes: You have hands-on experience troubleshooting applications running in Kubernetes environments.\n\n- Technical fluency: You are comfortable working with JavaScript, Node.js, Docker, logs, and developer tools to investigate and reproduce technical problems.\n\n- Structured problem solving: You can take an ambiguous technical problem, form hypotheses, gather evidence, isolate the root cause, and clearly explain what you found.\n\n- Customer communication: You can translate complex technical concepts into clear, empathetic communication for audiences with different levels of technical expertise.\n\n- Ownership mindset: You don’t stop at resolving the individual ticket — you look for ways to prevent the problem recurring and leave the product, documentation, or process better than you found it.\n\n- North America & Eastern Time: You are based in one of the US states where Empresa X can currently hire — Texas, Virginia, Florida, New York, Massachusetts, or New Jersey — and can work Eastern Time business hours.\n\n- On-call participation: You’re comfortable participating in a paid on-call rotation to help support urgent customer issues outside standard working hours.\n\nNICE-TO-HAVES\n\n- Empresa X experience: You’ve used Empresa X hands-on and understand core concepts such as workflows, nodes, credentials, executions, and common integration patterns.\n\n- Self-hosted infrastructure: You have experience supporting containerised or self-hosted software across Linux, cloud, or customer-managed infrastructure.\n\n- AI & automation: You have experience with workflow automation, AI tooling, LLM APIs, or other developer-focused automation platforms.\n\n- Observability: You’re familiar with logs, metrics, tracing, or observability tooling and know how to use evidence to narrow down production issues.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

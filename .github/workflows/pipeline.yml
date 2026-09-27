@@ -192,7 +192,7 @@ jobs:
           curl --fail --silent --request POST \
             "http://127.0.0.1:3000/api/opportunities/normalizations/pending?limit=10"
           curl --fail --silent http://127.0.0.1:3000/api/opportunities | \
-            python -c "import json,sys; from decimal import Decimal; data=json.load(sys.stdin); assert data['total'] == 1; item=data['items'][0]; assert item['fingerprint_version'] == 'v1'; assert item['work_mode'] == 'REMOTE'; assert item['seniority'] == 'SENIOR'; assert item['contract_type'] == 'FULL_TIME'; assert len(item['compensations']) == 2; assert all(Decimal(value['minimum']) == Decimal('100000') and value['currency'] == 'USD' for value in item['compensations']); assert {skill['canonical_name'] for skill in item['skills']} == {'python', 'react'}; assert all(skill['taxonomy_version'] == 'skills-v2' for skill in item['skills']); assert len(item['occurrences']) == 2"
+            python -c "import json,sys; from decimal import Decimal; data=json.load(sys.stdin); assert data['total'] == 1; item=data['items'][0]; assert item['fingerprint_version'] == 'v1'; assert item['work_mode'] == 'REMOTE'; assert item['seniority'] == 'SENIOR'; assert item['contract_type'] == 'FULL_TIME'; assert len(item['compensations']) == 2; assert all(Decimal(value['minimum']) == Decimal('100000') and value['currency'] == 'USD' for value in item['compensations']); assert {skill['canonical_name'] for skill in item['skills']} == {'python', 'react'}; assert all(skill['taxonomy_version'] == 'skills-v3' for skill in item['skills']); assert len(item['occurrences']) == 2"
       - name: Verify deterministic matching through the public API
         run: |
           profile_payload='{"expected_profile_version":0,"skills":[{"canonical_name":"python"},{"canonical_name":"react"}],"preferences":{"work_modes":["REMOTE"],"contracts":["FULL_TIME"],"countries":["BR"],"compensation_min":100000,"compensation_currency":"USD","compensation_period":"YEAR"}}'
@@ -206,7 +206,7 @@ jobs:
           opportunity_id="$(curl --fail --silent http://127.0.0.1:3000/api/opportunities | python -c "import json,sys; print(json.load(sys.stdin)['items'][0]['id'])")"
           match_payload="{\"opportunity_id\":\"$opportunity_id\"}"
           first_match="$(curl --fail --silent --json "$match_payload" http://127.0.0.1:3000/api/matches/evaluate)"
-          first_match_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['rules_version'] == 'matching-v1'; assert data['taxonomy_version'] == 'skills-v2'; assert data['eligibility'] == 'UNKNOWN'; assert data['verdict'] == 'REVIEW_REQUIRED'; assert len(data['input_hash']) == 64; assert len(data['eligibility_details']) == 7; assert len(data['factors']) == 8; print(data['id'])" <<< "$first_match")"
+          first_match_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['rules_version'] == 'matching-v1'; assert data['taxonomy_version'] == 'skills-v3'; assert data['eligibility'] == 'UNKNOWN'; assert data['verdict'] == 'REVIEW_REQUIRED'; assert len(data['input_hash']) == 64; assert len(data['eligibility_details']) == 7; assert len(data['factors']) == 8; print(data['id'])" <<< "$first_match")"
           second_match_id="$(curl --fail --silent --json "$match_payload" http://127.0.0.1:3000/api/matches/evaluate | python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
           test "$first_match_id" = "$second_match_id"
           curl --fail --silent "http://127.0.0.1:3000/api/matches?opportunity_id=$opportunity_id" | \

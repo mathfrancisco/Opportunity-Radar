@@ -1,0 +1,97 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "51.7500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "5.20",
+        "currency": null
+      },
+      "published_at": "2026-02-06T14:21:44.550000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "5.20",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "$5.2",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Account Executive Talent Pool US",
+    "company_name": "Empresa X",
+    "location_text": "New York",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nAre you a Mid Market or Enterprise Account Executive with a passion for technical sales and customer success in the SaaS world?\nWe’re always looking to connect with driven people who love helping customers solve real problems through automation.\n\nThis isn’t a live opening — it’s an invitation to join our Account Exectutive Talent Pool at Empresa X, where we keep in touch with talented individuals for future roles in our Account Executive team.\n\n🚀 WHY JOIN?\n\nAt Empresa X, we’re building an open, powerful automation platform that enables anyone to connect tools and automate workflows — with or without code. Our commercial teams play a key role in helping customers understand how Empresa X can transform their operations, whether that’s through product demos, solution design, or long-term customer success.\n\n🌍 WHAT THIS COULD LEAD TO\n\nBy joining the talent pool, you’ll stay in touch for potential future opportunities such as:\n\n- Mid Market Account Executive – you’ll run the full sales cycle end-to-end (average 2–3 months), from discovery to negotiation and close. No hand-offs or silos, just clear ownership and impact.\n\n- Enterprise Account Executive – you’ll own the full sales cycle (5-7 months on average) from opportunity detection to drafting compelling offers to companies with over 2500 employees.\n\n🤝 WHAT TO EXPECT\n\nThis is not an active job opening.\nIf a future opportunity aligns with your background and interests, our team will reach out directly.\n\nIn the meantime, you can:\n\n- Follow us on LinkedIn [link] to stay updated\n\n- Explore our product and community at Empresa X.io [link]\n\nIf you’re excited about automation, SaaS, and building meaningful relationships with customers, we’d love to stay connected.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "a vaga está alinhada com a área de atuação do perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "54.2500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "5.20",
+        "currency": null
+      },
+      "published_at": "2026-09-15T14:47:28.784000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:python:sha256:03af6e79172d36621f7d7f57df0d85146c1d02ccd65c0da093a3312e0e8b6056",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:sql:sha256:aafa4101dea85e9cbd93f28bb11f9dbf60da2ec41de7b701b2a8864cb1c71c8f"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "5.20",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "$5.2",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Sales Data Analyst",
+    "company_name": "Empresa X",
+    "location_text": "Germany",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nBe the first dedicated analyst behind Empresa X's go-to-market motion.\n\nOur commercial motion has two engines running at once: a self-serve product that thousands of developers adopt on their own, and an enterprise sales team closing the accounts that grow out of it. We've moved to usage-based pricing, migrated to Salesforce, and built a serious data foundation. What we don't have yet is someone whose entire job is making sense of the sales side of it.\n\nThat's this role. You'll own the analytics behind pipeline, funnel conversion and GTM planning, and partner with RevOps on the forecast - sitting inside the data team, embedded with RevOps and Sales, and in the room when the plan gets made.\n\nYOUR MISSION: MAKE OUR SALES ORG MEASURABLY BETTER AT FORECASTING, PRIORITISING AND CONVERTING\n\nOWN PIPELINE ANALYTICS, SUPPORT FORECASTING\n\n- Build the models and views that tell us where pipeline actually stands - coverage, stage conversion, velocity, slippage.\n\n- Support RevOps on forecasting: supply the analysis and accuracy tracking behind it, and be the person leadership trusts to explain the number when it's uncomfortable.\n\n- Run win/loss analysis that goes past \"price\" and \"timing\" to something we can act on.\n\nCONNECT PRODUCT-LED GROWTH TO SALES\n\n- We have thousands of self-serve users and a sales team that can only talk to a fraction of them. Your job is to work out which fraction.\n\n- Build account and lead scoring on product usage and firmographic signal, with RevOps and the product/customer analysts.\n\n- Sharpen PQL and MQL definitions until reps trust what lands in their queue.\n\nSHAPE HOW WE PLAN\n\n- Model territories, quota and capacity for annual planning - and make the trade-offs visible.\n\n- Segment the base: which accounts, which motions, which segments actually pay back the effort.\n\n- Answer the questions that decide where the next euro of GTM spend goes.\n\nBUILD FOUNDATIONS PEOPLE TRUST\n\n- Partner with Analytics Engineering on Salesforce and product data models in dbt/BigQuery.\n\n- Standardise metric definitions so \"win rate\" means one thing across sales, marketing and finance.\n\n- Ship dashboards GTM managers genuinely run their week on - not decks that get opened once.\n\nBRING A POINT OF VIEW\n\n- Sit in pipeline reviews and planning as a peer, not a reporting function.\n\n- Push back constructively, including on the numbers people are attached to.\n\n- Turn analysis into crisp, written recommendations that move decisions.\n\nMUST-HAVES\n\n- Senior GTM analytics chops: 5+ years in sales, revenue or GTM analytics at B2B SaaS, with real ownership of the sales funnel.\n\n- Sales metrics fluency: pipeline coverage, stage conversion, velocity, win rate, ACV, quota attainment, ramp, ARR/NRR - you think in these natively.\n\n- CRM depth: experience with Salesforce (or equivalent) - its structure, its quirks, and the hygiene problems that quietly ruin analyses.\n\n- Forecasting experience: you've built or contributed to forecast models and know what makes them defensible - here you'll support RevOps on the build.\n\n- Technical toolkit: expert SQL; comfortable in a modern warehouse stack (BigQuery, dbt, Metabase/Hex or equivalent).\n\n- Planning experience: territory, quota or capacity modelling for a real sales org.\n\n- Business partner mindset: credible with sales leaders and reps, and able to tell a VP they're reading the data wrong.\n\n- Opinionated and high-agency: you spot what's worth analysing, you do it, and you arrive with a recommendation.\n\n- Communication that lands: memos and readouts that change what people do next.\n\nNICE-TO-HAVES\n\n- PLG experience, especially the self-serve to sales-assisted handoff.\n\n- Usage-based or credit-based pricing: you've analysed consumption revenue before.\n\n- Scoring and propensity models: lead or account scoring, statistical or ML-based.\n\n- Python for analysis: pandas, statsmodels, scikit-learn when SQL isn't enough.\n\n- Devtool, open-source or technical product experience.\n\n- Wider GTM stack: Gong, Clay, enrichment and intent data, marketing attribution.\n\n- dbt modelling: you can ship your own models rather than only file requests.\n\nWHY JOIN US?\n\nYou'd be the first person here whose whole job is the sales data - which means you get to define the function rather than inherit someone else's version of it. The commercial problem is interesting: a product-led motion and an enterprise motion feeding each other, on usage-based pricing, in a category that's moving very fast.\n\nThe foundations are already there. A real data team maintains the stack (BigQuery, dbt, Dagster, Metabase, Salesforce), so you spend your time on analysis rather than firefighting pipelines. And you'll work directly with GTM leadership in a company that values autonomy, directness and impact over process.\n\nSound like a challenge you're ready to take on? Apply now - and help us build the future of automation.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "a vaga está alinhada com a área de atuação do perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "kinds": [
+    "no_description",
+    "weak_match"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "WATCHLIST",
+    "score": "40.0",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": null,
+        "currency": null
+      },
+      "published_at": "2026-09-20T12:00:00+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Analista de Operações",
+    "company_name": "Empresa X",
+    "location_text": "Remoto",
+    "description": ""
+  },
+  "split": "tuning",
+  "group": "synthetic-02-no-description",
+  "critical": false,
+  "expected": {
+    "verdict": "WATCHLIST",
+    "must_mention_risks": [
+      "A vaga não tem descrição; não há evidência para avaliar aderência ao perfil."
+    ],
+    "must_not_claim": [
+      "o perfil atende aos requisitos técnicos da vaga"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "51.7500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "MANAGER",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "5.20",
+        "currency": null
+      },
+      "published_at": "2026-08-25T09:17:32.317000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:docker:sha256:78d13787ed32b8b790669fdffa31ea8ccd3a54861f8b5f72a3d164bd8098ba15",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:kubernetes:sha256:78d13787ed32b8b790669fdffa31ea8ccd3a54861f8b5f72a3d164bd8098ba15"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "5.20",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "$5.2",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Technical Account Manager (US)",
+    "company_name": "Empresa X",
+    "location_text": "United States",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nYour main goal will be to own the technical success of Empresa X’s strategic top tier customers, helping them run healthy, scalable, and high-performing environments while maximizing long-term platform adoption.\n\nAs a trusted technical advisor, you’ll partner closely with customers and internal teams to make sure top tier accounts get the guidance, support, and operational excellence they need to succeed:\n\nOWN THE TECHNICAL SUCCESS OF TOP TIER CUSTOMERS\n\n- Act as the dedicated technical point of contact for a portfolio of strategic top tier customers.\n\n- Lead the technical handoff from Sales Engineering to ensure continuity from implementation into ongoing operations.\n\n- Build deep relationships with technical stakeholders, architects, platform owners, and engineering leaders.\n\nDRIVE PLATFORM HEALTH, SCALABILITY, AND PERFORMANCE\n\n- Continuously assess customer deployments to identify risks around scalability, reliability, performance, and maintainability.\n\n- Provide strategic recommendations for platform improvements, upgrades, optimizations, and architectural changes.\n\n- Guide customers on automation and workflow best practices when they impact platform performance, reliability, or scalability.\n\nMANAGE ESCALATIONS AND OPERATIONAL EXCELLENCE\n\n- Oversee technical support intake, issue management, critical incidents, and high-severity support cases.\n\n- Coordinate cross-functional responses with Support, Product, Engineering, and Customer Success teams.\n\n- Keep customers informed with timely communication, clear resolution plans, and proactive risk management.\n\nTURN CUSTOMER INSIGHTS INTO CONTINUOUS IMPROVEMENT\n\n- Analyze support activity, recurring issues, usage patterns, and operational risks to drive preventative action plans.\n\n- Triage technical product issues, bugs, and feature requests, ensuring feedback is accurately captured internally, and tracking through to completion with product & engineering.\n\n- Share structured customer insights with Product and Engineering to improve platform outcomes at scale.\n\n- Identify and address technical product gaps surfaced by enterprise customers, from triaging bugs and feature requests to contributing lightweight fixes, workflow improvements, or pull requests where appropriate, partnering with Product and Engineering to get high-impact improvements adopted.\n\nREQUIREMENTS\n\nMUST-HAVES\n\n- 🧭 Technical account leadership: You have strong experience in Technical Account Management, Solutions Architecture, Customer Engineering, Site Reliability Engineering, or a similar customer-facing technical role.\n\n- ☁️ Infrastructure and platform expertise: You deeply understand cloud infrastructure, distributed systems, APIs, integrations, and platform operations.\n\n- 🔎 Production troubleshooting: You have diagnosed performance, reliability, and scalability challenges in production environments.\n\n- 💬 Clear technical communication: You can translate complex technical topics into actionable recommendations for both technical and business stakeholders.\n\n- 🤝 Stakeholder management: You’re confident building trust with senior technical stakeholders and aligning internal teams around customer outcomes.\n\n- 🔁 Cross-functional collaboration: You have worked closely with Support, Product, Engineering, and Customer Success teams to solve customer challenges.\n\n- 🛠️ Strong DevOps and infrastructure experience, including hands-on exposure to Docker, Kubernetes, self-hosted deployments, cloud environments, and the operational considerations needed to run scalable, reliable production systems.\n\nNICE-TO-HAVES\n\n- 🔧 At least 6 months experience with Empresa X or similar workflow automation / iPaaS platforms such as Zapier, Make, Node-RED or similar.\n\n- 🤖 Familiarity with AI / LLM integrations, agentic workflows, or automation use cases involving AI-enabled business processes.\n\n- 🏢 Experience supporting both self-hosted and SaaS enterprise customers, especially in complex or highly regulated environments.\n\n- 🧑‍💻 Background working with open-source, developer-first, or technical platform products.\n\n- 📈 Previous exposure to scaling customer success or TAM motions in a high-growth SaaS or infrastructure company.\n\n- 🤝 Proactive and consultative in approach, with the ability to understand the business impact of technical issues, anticipate upcoming challenges, and stay organised across multiple customer priorities.\n\nWhy join us?\n\nAt Empresa X, you’ll play a key role in shaping how our most strategic customers scale their automation infrastructure with confidence. You’ll be the technical owner for long-term top tier partnerships, working closely with customers and internal teams to improve platform health, reduce operational risk, and turn real-world customer insights into better product outcomes.\n\nYou’ll join one of Europe’s fastest-growing startups at an exciting stage of growth, with the autonomy to build trusted relationships, influence how we deliver top tier support, and help define what exceptional technical success looks like for enterprise customers.\n\nSound like a challenge you’re excited to take on?\n\nApply now — and help us build the future of automation.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

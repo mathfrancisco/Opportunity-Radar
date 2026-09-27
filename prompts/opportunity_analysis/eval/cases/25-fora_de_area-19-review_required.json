@@ -1,0 +1,97 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "55.5000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "UNKNOWN",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "5.20",
+        "currency": null
+      },
+      "published_at": "2026-09-23T15:30:45.047000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "5.20",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "$5.2",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Enterprise Sales Development Representative US (Hybrid)",
+    "company_name": "Empresa X",
+    "location_text": "Boston",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nHybrid - 3 days per week in our Boston office\n\nBUILD YOUR ENTERPRISE SALES CAREER AT Empresa X\n\nEmpresa X is growing rapidly at the intersection of AI, automation and enterprise software. More than 1.7 million active builders use Empresa X each month, and we’re scaling our enterprise business as more organizations look for ways to connect AI with the systems, data and workflows that run their businesses.\n\nAs we grow our US business, we’re building our SDR team in Boston and looking for an Enterprise Sales Development Representative to join us.\n\nYou’ll partner closely with Enterprise Account Executives to break into some of the largest organizations in the US. This isn’t about maximizing email volume. You’ll take a thoughtful, account-based approach: researching strategic companies, identifying the right stakeholders, understanding their priorities, and creating relevant conversations around automation and AI.\n\nIf you’re succeeding in an SDR/BDR role and want greater exposure to enterprise selling, strategic account planning, technical buyers and a genuine path towards AE, this could be a great next step.\n\nWHY Empresa X?\n\n🚀 Serious momentum. Empresa X has grown rapidly into a major player in workflow automation and AI, with more than $100M in ARR, 1,400+ enterprise customers, and a $5.2B valuation following strategic investment from SAP.\n\n📈 Build towards AE. We want the SDR role to be a platform for your next step. High-performing SDRs can develop through our structured SDR → AE programme, with live deal exposure, discovery and MEDDPICC coaching, call reviews, and opportunities to take greater ownership of real opportunities alongside experienced AEs.\n\n✏️ Learn enterprise selling. Work alongside Enterprise AEs on account strategy, stakeholder mapping, messaging, discovery and opportunity creation - gaining exposure to how complex enterprise deals are built from the start.\n\n🤖 Sell where the market is going. You’ll engage technical and executive buyers around AI, automation and some of the most important technology challenges businesses are tackling today.\n\n⚡Use AI to sell smarter. Experiment with AI, Empresa X and modern sales technology to research accounts, understand buyers, personalize outreach and improve how you work. You don’t need to be an engineer- but you should be curious about technology and excited to learn.\n\nWHAT YOU’LL DO\n\n- Build enterprise pipeline: Prospect into a focused set of strategic US accounts and create qualified opportunities.\n\n- Develop account strategies: Partner with Enterprise AEs to identify priority companies, stakeholders, challenges, use cases and engagement strategies.\n\n- Research your prospects: Understand the business and technical priorities of stakeholders across IT, DevOps, SecOps, Engineering and related teams.\n\n- Create outreach that gets attention: Develop thoughtful, personalized messaging tied to real account priorities rather than generic sequences.\n\n- Prospect across channels: Engage prospects through email, phone, LinkedIn and other relevant channels.\n\n- Lead early-stage discovery: Understand business needs, technical environments, priorities, urgency and potential fit with Empresa X.\n\n- Continuously improve: Use Salesforce, Outreach, Apollo, AI tools, coaching and performance data to sharpen your approach.\n\nWHAT WE’RE LOOKING FOR\n\nWe’re looking for someone with a strong SDR foundation who wants to develop into an excellent enterprise seller.\n\nYou’ll likely be a good fit if you have:\n\n- SDR or BDR experience in B2B SaaS, software or technology\n\n- Experience generating pipeline through outbound prospecting into mid- market or enterprise accounts\n\n- Strong sales track record against your targets\n\n- Confidence engaging senior business and technical stakeholders\n\n- A thoughtful approach to account research, personalization and qualification\n\n- Curiosity about technical products, automation and AI\n\n- Resilience, consistency and ownership of your results\n\n- The ability to work from our Boston office three days per week\n\nBonus points if you have: experience prospecting into technical audiences; familiarity with buying committees, Salesforce, Outreach, Apollo or MEDDPICC; experience using AI or automation in your own sales workflow.\n\nWHAT SUCCESS LOOKS LIKE\n\nSuccess here is about quality, not just activity.\n\nYou’ll build a deep understanding of your accounts, identify the right stakeholders, create messaging that earns attention and generate qualified enterprise opportunities that can turn into meaningful revenue.\n\nAlong the way, you’ll build experience in enterprise account strategy, technical selling, discovery, AI and automation, and complex B2B sales- giving you a strong foundation for the next stage of your career.\n\nINTERESTED?\n\nYou don’t need to meet every requirement to apply.\n\nIf you have a strong foundation in outbound sales, you’re curious about technology, and you’re excited by the opportunity to help build Empresa X’s US enterprise business while developing towards your next step in sales, we’d love to hear from you.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "a vaga está alinhada com a área de atuação do perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

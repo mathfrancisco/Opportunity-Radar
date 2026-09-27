@@ -8,8 +8,8 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 
 | Card | Feito e evidência | Restante |
 | --- | --- | --- |
-| F20-01 | Baseline e relatórios da busca. | Marcar relevância humana em acervo real. |
-| F20-02 | `skills-v2` em `e46b755`; UNKNOWN 50,62%. | Curar o acervo real. |
+| F20-01 | Baseline e relatórios da busca; 86 casos rotulados `aceito`; medição real refeita (like recall@10=1,0, fulltext=0,817) reconfirma o viés conhecido. | F17-03 continua "Em revisão": falta gabarito com candidatos de full-text/descrição (não só título) para `kubernetes`/`frontend`. |
+| F20-02 | `skills-v2` em `e46b755`; UNKNOWN 50,62%; curadoria humana concluída (11 decisões `aceito`); alias `ci` removido, `SKILL_TAXONOMY_VERSION`→`skills-v3`, `NORMALIZER_VERSION`→`v5`. | Rodar o reprocessamento oficial no acervo real (a versão só foi bumped no código; a base ainda tem `skills-v2`). |
 | F20-03 | Critérios herdados mapeados para evidência. | Sem pendência de implementação identificada. |
 | F20-04 | Ollama removido em `0e541aa`. | Sem pendência de implementação identificada. |
 | F20-05 | Embeddings locais removidos em `82022dd`; migração passou nos gates registrados. | Sem pendência de implementação identificada. |
@@ -28,7 +28,7 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 | F20-18 | Não iniciado. | Baseline de F20-21. |
 | F20-19 | Telemetria sem PII em `c3e7606`. | Sem pendência de implementação identificada. |
 | F20-20 | Métricas API, Overview e doctor em `b45ff84`. | Sem pendência de implementação identificada. |
-| F20-21 | Harness em `2f5defd` e `94edd57`. | Rotular casos, revisar 41 descrições e executar baseline Groq. |
+| F20-21 | Harness em `2f5defd` e `94edd57`; 41 casos revisados (`aceito`); 6 reclassificados `backend`→`fora_de_area` com risco de área adicionado; 26 candidatos reais novos (Java/fullstack/IA) exportados como drafts em `eval/drafts/gap-*`. | Revisar riscos dos 26 drafts, mover para `eval/cases/`, versionar (`eval/cases` já sai do `.git/info/exclude`) e executar baseline real no Groq. |
 | F20-22 | Não iniciado. | F20-21. |
 | F20-23 | Não iniciado. | F20-22, F20-02 e F20-03. |
 | F20-24 | Não iniciado. | F20-39, F20-17, F20-16 e F20-12. |
@@ -40,7 +40,7 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 | F20-30 | Coletor Workable em `ae1ee79`; validado com dados reais (Workable, Wantable) e homologado/coletando (Wantable) em 2026-09-26; fix de integração `f51fa77`/`676339c`. | Sem pendência de implementação identificada. |
 | F20-31 | `factorial.py` e testes de fixture em `8be7e4c`; validado com dados reais (Factorial, Agentero) e homologado/coletando (Agentero) em 2026-09-26; bug de parser corrigido em `cbe206b`; fix de integração `f51fa77`/`676339c`. | Sem pendência de implementação identificada. |
 | F20-32 | Não iniciado. | Implementar coletor Gupy. |
-| F20-33 | Palavras-chave do perfil em `b7f432e` e `e9be146`. | Fazer verificação manual do critério 4. |
+| F20-33 | Palavras-chave do perfil em `b7f432e` e `e9be146`; critério 4 confirmado (`git diff --stat b7f432e~1..e9be146 -- scripts/enable_sources.py` vazio; roteiro em `docs/44-roadmap-fase-20/rotulagem/f20-33-verificacao-criterio-4.md`). | Sem pendência de implementação identificada. |
 | F20-34 | Buscas salvas em `5088e6`. | Cobrir componente Inbox/Overview. |
 | F20-35 | Funil e rendimento em `102a53d`; janela de baseline de 7 dias iniciada em 2026-09-26 (T0 real salvo em `f20-search-metrics-baseline-2026-09-26.json`), termina 2026-10-04. | Medir a janela de 7 dias completa na máquina de referência (não pode terminar antes de 2026-10-04). |
 | F20-36 | Não iniciado; dependências F20-27 e F20-35 implementadas. | Implementar descoberta limitada. |

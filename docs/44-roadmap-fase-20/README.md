@@ -18,8 +18,8 @@ evidência de aceite ou correção.
 
 | Card | Depende de | Status |
 | --- | --- | --- |
-| [F20-01 — Baselines e relatórios da busca](fase-20/f20-01-baselines-e-relatorios-da-busca.md) | Nenhum | Parcial — baseline enviesado; falta marcação humana de relevância no acervo real |
-| [F20-02 — Curadoria manual de `skills-v2`](fase-20/f20-02-curadoria-skills-v2.md) | Nenhum | Parcial — `skills-v2` em `e46b755`; UNKNOWN 50,62%, curadoria no acervo real pendente |
+| [F20-01 — Baselines e relatórios da busca](fase-20/f20-01-baselines-e-relatorios-da-busca.md) | Nenhum | Parcial — rotulagem humana aplicada (86 casos `aceito`, `docs/44-roadmap-fase-20/rotulagem/f20-01-relevancia-busca.md`); medição real com o gabarito confirmado reconfirma o viés (like recall@10=1,0 vs fulltext=0,817), não o resolve — F17-03 continua "Em revisão" |
+| [F20-02 — Curadoria manual de `skills-v2`](fase-20/f20-02-curadoria-skills-v2.md) | Nenhum | Parcial — curadoria humana concluída (11 decisões `aceito`, `docs/44-roadmap-fase-20/rotulagem/f20-02-curadoria-skills-v2.md`); alias `ci` removido, `SKILL_TAXONOMY_VERSION`→`skills-v3`, `NORMALIZER_VERSION`→`v5`, teste de regressão novo (`test_removes_the_bare_ci_alias_that_false_matched_the_company_name`); reprocessamento oficial no acervo real ainda pendente |
 | [F20-03 — Conferência de aceite de F17-02, F17-04 e F17-07](fase-20/f20-03-conferencia-de-aceite-da-busca.md) | Nenhum | Done — tabela critério → evidência nos três cards |
 
 ### Bloco B — IA cloud no Groq
@@ -43,7 +43,7 @@ evidência de aceite ou correção.
 | [F20-18 — Prompt `v2`: vaga e experiências no payload, pt-BR com evidência](fase-20/f20-18-prompt-v2-com-a-vaga.md) | F20-17, F20-21 | Backlog — depende do baseline de F20-21 |
 | [F20-19 — Telemetria de chamadas sem PII](fase-20/f20-19-telemetria-de-chamadas.md) | F20-17 | Implementado — `c3e7606` |
 | [F20-20 — Métricas da IA na API, no Overview e no `doctor`](fase-20/f20-20-metricas-na-api-overview-e-doctor.md) | F20-19, F20-11, F20-12 | Implementado — `b45ff84` |
-| [F20-21 — Conjunto de avaliação completo e baseline no Groq](fase-20/f20-21-conjunto-de-avaliacao-no-groq.md) | F20-17 | Parcial — harness `2f5defd`/`94edd57`; faltam rótulos das famílias curtas, revisão de 41 descrições e baseline real |
+| [F20-21 — Conjunto de avaliação completo e baseline no Groq](fase-20/f20-21-conjunto-de-avaliacao-no-groq.md) | F20-17 | Parcial — 41 casos revisados (`aceito`), 6 reclassificados de `backend` para `fora_de_area`; 26 candidatos reais novos (10 Java, 7 fullstack, 9 IA) gerados como drafts pendentes de revisão humana em `eval/drafts/gap-*`; falta revisar riscos desses drafts, versionar em `eval/cases/` e rodar o baseline real no Groq |
 | [F20-22 — Benchmark 120B × 20B × Qwen e escolha por tarefa](fase-20/f20-22-benchmark-de-modelos.md) | F20-21 | Backlog |
 | [F20-23 — Classificação e extração assistidas para campos ambíguos](fase-20/f20-23-classificacao-assistida.md) | F20-22, F20-02, F20-03 | Backlog |
 | [F20-24 — Análise útil sob orçamento de quota](fase-20/f20-24-analise-util-sob-orcamento.md) | F20-39, F20-17, F20-16, F20-12 | Backlog |
@@ -60,7 +60,7 @@ evidência de aceite ou correção.
 | [F20-30 — Coletor Workable](fase-20/f20-30-coletor-workable.md) | F20-27, F20-03 | Done — `ae1ee79`, `f51fa77`, `676339c`; validado com dados reais em 2026-09-26 (Workable, Wantable), homologado e coletando (Wantable) |
 | [F20-31 — Coletor Factorial](fase-20/f20-31-coletor-factorial.md) | F20-27, F20-03 | Done — `8be7e4c`, `cbe206b`, `f51fa77`, `676339c`; validado com dados reais em 2026-09-26 (Factorial, Agentero), homologado e coletando (Agentero) |
 | [F20-32 — Coletor Gupy](fase-20/f20-32-coletor-gupy.md) | F20-27, F20-03 | Backlog |
-| [F20-33 — Palavras-chave do perfil](fase-20/f20-33-palavras-chave-do-perfil.md) | F20-03, F20-40 | Implementado — `b7f432e`, `e9be146`; critério 4 com verificação manual |
+| [F20-33 — Palavras-chave do perfil](fase-20/f20-33-palavras-chave-do-perfil.md) | F20-03, F20-40 | Implementado — `b7f432e`, `e9be146`; critério 4 confirmado com roteiro reprodutível (`docs/44-roadmap-fase-20/rotulagem/f20-33-verificacao-criterio-4.md`) e `git diff --stat b7f432e~1..e9be146 -- scripts/enable_sources.py` vazio |
 | [F20-34 — Buscas salvas](fase-20/f20-34-buscas-salvas.md) | F20-01 | Implementado — `5088e6f`; sem teste de componente da Inbox/Overview |
 ### Bloco D — Varredura produtiva
 

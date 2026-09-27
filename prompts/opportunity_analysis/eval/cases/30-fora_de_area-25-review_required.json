@@ -1,0 +1,97 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "55.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "5.20",
+        "currency": null
+      },
+      "published_at": "2026-09-21T17:27:56.796000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "5.20",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "$5.2",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Head of People Operations & Tech",
+    "company_name": "Empresa X",
+    "location_text": "Berlin Office",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nHEAD OF PEOPLE OPS & TECH\n\n🎯 You'll own and rebuild the operating system behind Empresa X's People function: hygiene, analytics, systems, and automation. This isn't a maintenance job. You'll have a real mandate to design it your way, and since Empresa X builds workflow automation for a living, you'll get to use our own product to do it. If you've ever wanted to turn your own function into your best case study, this is that job.\n\nYou're inheriting a People Ops team that's kept things moving through real growth, and you'll have real license to design how it evolves next.\n\nHere's what you'll own:\n\nOWN THE HYGIENE FACTORS OF EMPLOYMENT\n\n- Own employment contracts, payroll coordination, visas, and employee policies end to end.\n\n- Keep Empresa X's SOC 2-related compliance processes accurate and audit-ready.\n\n- Bring clear, centralized ownership to freelancer and contractor engagement approvals, an area with no consistent oversight today.\n\n- Personally step in on hands-on hygiene work whenever it's the highest-impact use of your time.\n\nBUILD PEOPLE ANALYTICS IN-HOUSE\n\n- Stand up Empresa X's own people analytics capability rather than relying on the central data team, given the sensitivity of the data.\n\n- Turn People data into decisions leadership can act on, from attrition trends to org health.\n\n- Report on the health of the People function to the VP People and wider leadership.\n\nOWN PEOPLE SYSTEMS AND DRIVE AUTOMATION\n\n- Own and evolve People systems like HiBob and Mahana, keeping data clean and workflows scalable.\n\n- Automate repetitive People Ops work, partnering with workflow automation engineers on the most complex builds. You'll be doing it with Empresa X's own product, so you get to dogfood the exact tool your company sells, on your own function.\n\n- Get the underlying process and data right before you automate it. Solid documentation and a consistent process come first here, not as an afterthought.\n\n- Reduce manual load so the function scales without headcount growing in lockstep.\n\nWELCOME NEW HIRES AND GROW THE TEAM\n\n- Act as the onboarding liaison, making sure new hires feel welcomed and set up to succeed from day one.\n\n- Build out a small, high-trust team, hiring 2–3 specialists in analytics, automation, and systems over the next 12–24 months.\n\n- Partner closely with the VP People, Talent Acquisition, People Partners, and Finance/Legal to keep People Operations reliable as we scale.\n\nREQUIREMENTS\n\nMUST-HAVES\n\n- 📈 Proven scaling experience: You've scaled or matured an existing People Operations function, not necessarily built one from zero, through a comparable growth range such as 500 to 1,000 employees.\n\n- 📝 Hands-on hygiene ownership: You've personally owned contracts, payroll coordination, visas, employee policies, and SOC 2-adjacent compliance, not just directed others who do.\n\n- ⚖️ Strategic and hands-on: You're comfortable setting vision and prioritizing, and just as comfortable rolling up your sleeves on execution.\n\n- 📊 People analytics fluency: You have real experience with people analytics and data, and you're willing to build that capability in-house.\n\n- ⚙️ Systems and automation: You've worked hands-on with HRIS platforms like HiBob and have driven process automation in a People function.\n\n- 🌍 Europe-based: You're based in Europe.\n\n- 🔁 Track record: You've run or built this kind of function at least once before; twice is a plus.\n\n- 🧭 Sequencing judgment: You know automation is only as good as the process and data behind it, and you don't force AI onto a process that isn't documented or consistent yet.\n\nNICE-TO-HAVES\n\n- 🔄 Hybrid background: You've come up through analytics into people ops, or the other way around.\n\n- 🤖 Automation partnership: You've partnered with or managed workflow-automation or AI tooling specialists.\n\n- 💰 Comp benchmarking exposure: You've worked with compensation benchmarking or market-data analysis before.\n\n- 🌐 Remote-first scaling: You've scaled a People function specifically inside a remote-first, distributed organization.\n\nWhy join us?\n\nYou'll take real ownership of the systems that let Empresa X's People function scale. This is a genuine mandate to design them, not inherit someone else's finished blueprint, and you'll get a built-in audit period so you can diagnose before anyone asks you to prescribe. You'll report directly to our VP People, with real visibility and sponsorship, and you'll shape the next 2 to 3 hires on your own team as it grows.\n\nSince Empresa X builds workflow automation for a living, you'll get to use our own product to automate your own function. That's a genuinely rare setup, and honestly, the best advertisement for what we build. You're joining at around 400 people, heading past 500 by year-end, which is exactly the stage where the calls you make on hygiene, analytics, systems, and automation define how the company scales, rather than just keeping the lights on.\n\nEmpresa X is remote-first, fair-code, and riding the AI and automation wave as one of the most starred projects on GitHub. You'll work with the same autonomy and talent density that defines how we build our own product. Apply now, and help us build the People operating system that gets Empresa X to its next 1,000 people.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "a vaga está alinhada com a área de atuação do perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "55.5000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "MANAGER",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "5.20",
+        "currency": null
+      },
+      "published_at": "2026-09-25T11:12:49.619000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "5.20",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "$5.2",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Sales Enablement Manager (US East Coast)",
+    "company_name": "Empresa X",
+    "location_text": "New York",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nThis role is fully remote from the states of Massachusetts, Virginia, NY, NJ or Florida.\n\nWe’re now looking for a Sales Enablement Manager to make sure our GTM team scales just as fast - and just as effectively.\n\n🎯 Your main goal will be to enable GTM teams to close more deals faster by providing the knowledge, resources, and training they need to succeed at every stage of the buyer journey.\n\nYou’ll be helping us build on early-stage existing foundations (onboarding, certifications, tooling) and take it to the next level as we scale. This is a high-impact, hands-on role with a direct line to revenue outcomes.\n\n🚀 BUILD ONBOARDING THAT SHORTENS RAMP TIME AND BOOSTS IMPACT\n\n- Design and deliver world-class onboarding for new GTM team members across Sales, Customer Success, and Solutions Engineering.\n\n- Track and continuously improve ramp time through tailored strategies and performance feedback loops.\n\n- Collaborate with leadership to define what “great” looks like across roles and build onboarding paths accordingly.\n\n📚 CREATE SCALABLE ENABLEMENT PROGRAMS THAT DRIVE REVENUE\n\n- Translate product updates, GTM strategies, and technical concepts into clear, actionable content.\n\n- Identify knowledge gaps and build role-specific enablement initiatives to address them.\n\n- Design certifications and training frameworks (e.g. demo, discovery, technical proficiency) to ensure consistency and quality across the field.\n\n🎤 RUN HIGH-IMPACT ENABLEMENT EVENTS AND INTERNAL COMMS\n\n- Support the planning and execution of team-wide enablement moments like SKOs, regional kickoffs, and quarterly readiness sessions, partnering closely with sales and revenue leadership on strategy and messaging.\n\n- Act as the voice of enablement for GTM teams, making sure they have the right information at the right time, through the right channels.\n\n- Partner closely with Product, Product Marketing, and RevOps to sync launches, messaging, and process changes.\n\n📊 MEASURE WHAT MATTERS AND MAKE ENABLEMENT A GROWTH DRIVER\n\n- Define and track KPIs to demonstrate enablement’s impact on sales productivity, pipeline velocity, and deal size.\n\n- Build a competency scorecard with GTM managers to support coaching and performance management.\n\n- Use insights from sales calls, Gong data, and product usage to continuously refine your programs.\n\nREQUIREMENTS\n\nMUST-HAVES\n\n- 📍 Based in the states where we can currently hire: you are currently located on the East Coast in one of the states where we can hire (Massachusetts, Virginia, New York, New Jersey or Florida).\n\n- 🧠 Sales enablement experience in PLG SaaS: You have 4+ years of enablement experience at fast-growing SaaS companies, ideally building enablement from scratch in a PLG environment.\n\n- 💼 Deal complexity experience: You've enabled teams selling mid-market to enterprise deals (6 to low-7 figures).\n\n- 🧑‍💻 Technical buyer fluency: You understand how to sell to technical personas (CTOs, engineering managers) and can translate that into training that resonates with a technical AE audience.\n\n- 📚 Learning program design: You’ve built high-quality, scalable training programs tailored to different GTM roles and seniority levels.\n\n- 🗣️ Strong communicator: You excel at turning complex technical concepts into clear, compelling, and actionable content for sales teams.\n\n- 🧘 Organized and proactive: You’re structured, self-directed, and take ownership without needing hand-holding.\n\n- 🤝 Customer-first mindset: You focus on enabling the team to better articulate our value and deliver better buyer experiences.\n\nNICE-TO-HAVES\n\n- 🤖 Passion for automation and AI: You’re excited by the space we’re building in — and it shows.\n\n- 🔧 Familiarity with Empresa X: You’ve used the product (or are eager to start).\n\nWHY JOIN US?\n\nThis is your chance to build something from the ground up: a high-leverage enablement function in a high-growth company, with a direct line to revenue impact. You'll be joining a supportive, fast-moving, and collaborative team where enablement is viewed as a strategic lever, not a support function. Help us scale our product, our message, and our people.\n\nApply now and help us turn our GTM teams into a world-class sales engine.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "a vaga está alinhada com a área de atuação do perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

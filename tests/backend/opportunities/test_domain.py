@@ -280,7 +280,7 @@ def test_extracts_versioned_canonical_skills_with_conservative_classification() 
     assert set(by_id) == {"react", "python", "postgresql", "docker"}
     assert by_id["react"].classification is SkillClassification.REQUIRED
     assert by_id["docker"].classification is SkillClassification.PREFERRED
-    assert by_id["react"].taxonomy_version == "skills-v2"
+    assert by_id["react"].taxonomy_version == "skills-v3"
     assert "Required: React.js" in by_id["react"].evidence_text
 
 
@@ -391,6 +391,29 @@ def test_extracts_skills_added_by_f20_02_curation() -> None:
 
     agentic_alias = extract_skills(None, "Required: experience with agentic AI systems.", {})
     assert {skill.canonical_id for skill in agentic_alias} == {"ai"}
+
+
+def test_removes_the_bare_ci_alias_that_false_matched_the_company_name() -> None:
+    """Regression for the F20-02 rotulagem follow-up (rotulagem/f20-02-curadoria-skills-v2.md).
+
+    82% of the real-corpus occurrences of the bare token `ci` came from the company
+    name "CI&T", not from CI/CD content (the tokenizer splits on `&`). The alias was
+    removed; only the multi-word forms remain.
+    """
+    ci_and_t_only = extract_skills(
+        None,
+        "CI&T, we help large enterprises reinvent through technology, "
+        "consulting and design, always with the potential of AI.",
+        {},
+    )
+    assert "cicd" not in {skill.canonical_id for skill in ci_and_t_only}
+
+    ci_slash_cd = extract_skills(
+        None,
+        "You will own our CI/CD pipeline and developer environments.",
+        {},
+    )
+    assert "cicd" in {skill.canonical_id for skill in ci_slash_cd}
 
 
 def test_candidate_enrichment_does_not_change_fingerprint() -> None:

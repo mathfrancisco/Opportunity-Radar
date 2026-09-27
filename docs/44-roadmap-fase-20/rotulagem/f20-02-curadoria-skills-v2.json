@@ -11,7 +11,7 @@
       "recomendacao": "manter",
       "confianca": "alta",
       "justificativa": "Termo tecnico inequivoco, altissima frequencia, sem alias curto arriscado.",
-      "aceito": null
+      "aceito": true
     },
     {
       "canonical_id": "ai",
@@ -20,7 +20,7 @@
       "recomendacao": "manter",
       "confianca": "alta",
       "justificativa": "Sinonimos/variacoes reais observadas no corpus.",
-      "aceito": null
+      "aceito": true
     },
     {
       "canonical_id": "cicd",
@@ -29,7 +29,7 @@
       "recomendacao": "manter",
       "confianca": "alta",
       "justificativa": "Termos multi-palavra, nao colidem com nomes de empresa.",
-      "aceito": null
+      "aceito": true
     },
     {
       "canonical_id": "cicd",
@@ -38,7 +38,7 @@
       "recomendacao": "remover_alias",
       "confianca": "alta",
       "justificativa": "82% das ocorrencias (179/218) vem de 'CI&T' (nome da empresa que posta a maioria das vagas), nao de CI/CD real.",
-      "aceito": null
+      "aceito": true
     },
     {
       "canonical_id": "observability",
@@ -47,7 +47,7 @@
       "recomendacao": "manter",
       "confianca": "alta",
       "justificativa": "Termo tecnico inequivoco, sem ambiguidade observada.",
-      "aceito": null
+      "aceito": true
     },
     {
       "canonical_id": null,
@@ -56,7 +56,7 @@
       "recomendacao": "descartado",
       "confianca": "alta",
       "justificativa": "Generico demais; nao identifica protocolo/skill discreta.",
-      "aceito": null
+      "aceito": true
     },
     {
       "canonical_id": null,
@@ -65,7 +65,7 @@
       "recomendacao": "descartado",
       "confianca": "alta",
       "justificativa": "Provedores especificos (aws/azure/gcp) ja cobertos; termo generico arrisca falso positivo.",
-      "aceito": null
+      "aceito": true
     },
     {
       "canonical_id": null,
@@ -74,7 +74,7 @@
       "recomendacao": "descartado",
       "confianca": "media",
       "justificativa": "Sigla de processo/metodologia, nao tecnologia nomeada.",
-      "aceito": null
+      "aceito": true
     },
     {
       "canonical_id": null,
@@ -83,7 +83,7 @@
       "recomendacao": "descartado",
       "confianca": "alta",
       "justificativa": "Categoria de produto/marketing, fora da area do perfil.",
-      "aceito": null
+      "aceito": true
     },
     {
       "canonical_id": null,
@@ -92,7 +92,7 @@
       "recomendacao": "descartado",
       "confianca": "alta",
       "justificativa": "Palavras-guarda-chuva sem tecnologia nomeada.",
-      "aceito": null
+      "aceito": true
     },
     {
       "canonical_id": "ai",
@@ -101,7 +101,7 @@
       "recomendacao": "manter_como_alias",
       "confianca": "media",
       "justificativa": "Variacao de 'agentic AI', ja coberta pelo alias 'agentic ai' da entrada ai.",
-      "aceito": null
+      "aceito": true
     }
   ],
   "achado_quantitativo": {

@@ -1,0 +1,80 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "55.5000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "UNKNOWN",
+      "compensation": null,
+      "published_at": "2026-09-23T12:18:27.919000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Technical Recruiter (3 month FTC, Temp to Perm)",
+    "company_name": "Empresa X",
+    "location_text": "London",
+    "description": "ABOUT THE POSITION\n\nWe're looking for a Recruiter to work closely with our founders & Chief of Staff to fill open roles - primarily technical (engineering) hiring, with some generalist roles in the mix too. This is a 3-month fixed-term contract with the possibility of moving to a permanent role, depending on how the first few months go and where our hiring needs land.\n\nWe need a strong individual contributor who can take on the hands-on parts of hiring - sourcing, screening, interviewing, and managing agency relationships, giving time back to our leadership team and unlocking them for other priority projects without any drop in the quality of hire. We'd also love to see agency fees come down as you build out more of our own pipeline directly.\n\nWHAT YOU'LL BE DOING\n\nExecuting hiring. Running sourcing, screening, and interviewing for our priority roles - you make hiring happen, they set the direction.\n\nTechnical hiring, primarily. Most of your time will go on engineering roles - backend, infra, and similar - but you'll also pick up generalist roles as they come up.\n\nHeadhunting and proactive sourcing. Building pipelines directly rather than waiting on inbound, including reaching out to passive candidates and using your network.\n\nScreening and interviewing. Running first-round screens and structured interviews, and generating shortlists of genuinely qualified candidates - not a raw pile of applicants to sift through.\n\nManaging agency relationships. Owning day-to-day contact with any recruitment agencies we use, and looking for ways to reduce our reliance on (and spend with) them over time.\n\nGiving time back to the team. Taking on recruiting coordination and admin as much as possible to unlock the team.\n\nCandidate experience. Making sure every candidate, hired or not, has a fast, clear, well-communicated process.\n\nRunning our applicant tracking system. Keeping our Ashby pipeline accurate and up to date so the team always knows where things stand.\n\nREQUIREMENTS\n\nProven recruiting experience, technical-leaning. You've run full-cycle hiring for engineering roles at a startup or scale-up, and are comfortable picking up generalist roles too.\n\nFluency with engineering roles and stacks. You can hold a credible conversation about backend, infrastructure, or security roles well enough to screen and sell candidates on the role.\n\nStrong sourcing and headhunting skills. You're comfortable building pipelines directly rather than waiting on inbound.\n\nExperience managing agency relationships. You know how to get good work out of external recruiters and where it makes sense to bring hiring in-house instead.\n\nGreat written and verbal communication. Candidates and hiring managers alike get clarity and a fast response.\n\nYou'll be an amazing fit if you have:\n\n- Experience recruiting for developer tools, open source, or infrastructure companies.\n\n- Experience with Ashby or a similar modern ATS.\n\n- A track record of reducing agency spend by building direct pipelines.\n\n- Previous in-house (not just agency-side) recruiting experience.\n\n- An interest in staying on longer-term - this role has a genuine path to permanent.\n\nABOUT THE TEAM\n\n- We are a small team with a flat hierarchy.\n\n- We encourage continuous learning and personal development.\n\n- Everyone operates autonomously; we trust you to get the job done, but to also quickly raise your hand if you need help.\n\n- We care about our customers and the open-source community.\n\n- Being a start-up, the work is challenging and fast-paced, but we also understand the importance of taking time off to recharge.\n\nCONTRACT TERMS\n\n3-month fixed-term contract, full time, with a genuine possibility of converting to a permanent role based on performance and ongoing hiring needs.\n\nGenerous, transparent compensation - we hire the best talent and pay to reflect that.\nSick leave and time off - even on a fixed-term contract, we make sure you can take the time you need."
+  },
+  "split": "reserved",
+  "group": "1ae2aab0c111",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

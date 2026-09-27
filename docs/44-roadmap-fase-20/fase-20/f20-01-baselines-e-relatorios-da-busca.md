@@ -41,6 +41,21 @@ O código do F17-01 (`f2fca7a`) e do F17-03 (`2e5fa5c`, `48bf252`) está integra
 5. Nos dois cards antigos, trocar o status para `Done` e adicionar o link para o relatório.
 6. Se algum número ficou inconclusivo (amostra pequena), escrever isso no relatório em vez de omitir.
 
+## Addendum — rotulagem humana aplicada, sem resolver F17-03 (2026-09-27)
+
+O revisor confirmou (`aceito`) as 98 recomendações de
+`docs/44-roadmap-fase-20/rotulagem/f20-01-relevancia-busca.md` como estão, inclusive os 9
+casos `ambíguo` (mantidos ambíguos, não promovidos). `data/search-reference/queries.json`
+foi reconstruído localmente (fora do git) com as 86 linhas `relevante` — 14 consultas.
+`docker compose -p opportunity-radar exec` (só leitura) + `eval_search.py --mode both`:
+`like` recall@10 médio = 1,0000, `fulltext` = 0,8170. **Isso reconfirma o viés já
+documentado, não o resolve**: os candidatos vieram de correspondência por título/empresa
+(mesmo critério do `like`), então quase todo item confirmado como relevante já era um match
+de `like` por construção. As duas consultas sem candidato por título (`kubernetes`,
+`frontend` — as únicas que dariam ao full-text uma chance real) continuam sem gabarito,
+pois exigem leitura de descrição completa fora do escopo desta sessão. **F17-03/F20-01
+seguem "Em revisão"**, não `Done`.
+
 ## Não fazer
 
 - Não alterar código; este card só mede e documenta.

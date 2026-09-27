@@ -73,6 +73,25 @@ O F17-06 entregou `seniority-v2`, `regions-v1`, reprocessamento e o script de la
       exige investigação fora do escopo deste card, fica registrado no F17-06 como
       pendência que bloqueia o `Done` do card inteiro.
 
+**Follow-up de rotulagem humana (2026-09-27):** as 11 decisões de
+`docs/44-roadmap-fase-20/rotulagem/f20-02-curadoria-skills-v2.md` foram confirmadas
+(`aceito`). A única mudança de conteúdo (remover o alias solto `ci` de `cicd`, porque 82%
+das 218 ocorrências reais vinham de "CI&T", nome da empresa, não de CI/CD) foi aplicada em
+`src/opportunity_radar/opportunities/domain.py`. Por mudar o conjunto de aliases,
+`SKILL_TAXONOMY_VERSION` subiu de `"skills-v2"` para `"skills-v3"` e `NORMALIZER_VERSION`
+subiu de `"v4"` para `"v5"` (`service.py`), seguindo a mesma convenção do bump v1→v2; os
+literais de "versão atual" em `tests/backend/opportunities/test_domain.py` e
+`tests/backend/test_opportunities_integration.py`, e os dois literais `taxonomy_version`
+em `.github/workflows/pipeline.yml`, foram atualizados para `"skills-v3"`. Novo teste
+`test_removes_the_bare_ci_alias_that_false_matched_the_company_name` prova, com texto real
+do acervo, que "CI&T, we help large enterprises..." não gera `cicd` e que "CI/CD pipeline"
+continua gerando. Suíte completa roda verde (860 passed, 1 falha pré-existente e não
+relacionada em `test_delta_presence_resume.py`, confirmada flaky/isolada — ver evidência no
+handback da sessão). **Pendência nova:** o reprocessamento oficial (`POST
+/opportunities/normalizations/pending`) não foi rodado contra o acervo real desta vez — a
+base ainda tem `opportunity_skill` rows em `skills-v2`; a mudança só está provada por teste
+unitário/integração, não por remedição do acervo real.
+
 ## Testes
 
 - Um caso por alias e por regra de desambiguação no arquivo de teste da taxonomia.

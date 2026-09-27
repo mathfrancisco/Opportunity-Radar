@@ -54,7 +54,7 @@
       "recomendacao": "reclassificar",
       "confianca": "alta",
       "justificativa": "Bucket 'backend' nao corresponde ao conteudo (papel nao-engenharia); inconsistente com casos equivalentes do bucket fora_de_area.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "02-backend-04-review_required.json",
@@ -81,7 +81,7 @@
       "recomendacao": "reclassificar",
       "confianca": "alta",
       "justificativa": "Bucket 'backend' nao corresponde ao conteudo (papel nao-engenharia); inconsistente com casos equivalentes do bucket fora_de_area.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "03-backend-08-review_required.json",
@@ -108,7 +108,7 @@
       "recomendacao": "reclassificar",
       "confianca": "alta",
       "justificativa": "Bucket 'backend' nao corresponde ao conteudo (papel nao-engenharia); inconsistente com casos equivalentes do bucket fora_de_area.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "04-backend-24-review_required.json",
@@ -135,7 +135,7 @@
       "recomendacao": "reclassificar",
       "confianca": "alta",
       "justificativa": "Bucket 'backend' nao corresponde ao conteudo (papel nao-engenharia); inconsistente com casos equivalentes do bucket fora_de_area.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "05-backend-28-review_required.json",
@@ -162,7 +162,7 @@
       "recomendacao": "aceitar",
       "confianca": "media",
       "justificativa": "Titulo e conteudo coerentes com engenharia backend/plataforma.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "06-backend-31-review_required.json",
@@ -189,7 +189,7 @@
       "recomendacao": "reclassificar",
       "confianca": "alta",
       "justificativa": "Bucket 'backend' nao corresponde ao conteudo (papel nao-engenharia); inconsistente com casos equivalentes do bucket fora_de_area.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "07-backend-38-review_required.json",
@@ -219,7 +219,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Titulo e conteudo coerentes com engenharia backend/plataforma.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "08-backend-40-review_required.json",
@@ -248,7 +248,7 @@
       "recomendacao": "reclassificar",
       "confianca": "alta",
       "justificativa": "Bucket 'backend' nao corresponde ao conteudo (papel nao-engenharia); inconsistente com casos equivalentes do bucket fora_de_area.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "09-fullstack-07-review_required.json",
@@ -274,7 +274,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "10-fullstack-18-review_required.json",
@@ -300,7 +300,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "11-fullstack-37-review_required.json",
@@ -329,7 +329,7 @@
       "recomendacao": "revisar",
       "confianca": "media",
       "justificativa": "Titulo ambiguo ('Design Engineer'); conferir descricao completa antes de aceitar o bucket fullstack.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "12-ai-11-review_required.json",
@@ -356,7 +356,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "13-fora_de_area-01-review_required.json",
@@ -384,7 +384,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "14-fora_de_area-02-review_required.json",
@@ -412,7 +412,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "15-fora_de_area-05-review_required.json",
@@ -440,7 +440,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "16-fora_de_area-06-review_required.json",
@@ -468,7 +468,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "17-fora_de_area-09-review_required.json",
@@ -496,7 +496,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "18-fora_de_area-10-review_required.json",
@@ -524,7 +524,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "19-fora_de_area-12-review_required.json",
@@ -552,7 +552,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "20-fora_de_area-13-review_required.json",
@@ -580,7 +580,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "21-fora_de_area-14-review_required.json",
@@ -608,7 +608,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "22-fora_de_area-15-review_required.json",
@@ -636,7 +636,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "23-fora_de_area-16-review_required.json",
@@ -664,7 +664,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "24-fora_de_area-17-review_required.json",
@@ -692,7 +692,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "25-fora_de_area-19-review_required.json",
@@ -720,7 +720,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "26-fora_de_area-20-review_required.json",
@@ -748,7 +748,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "27-fora_de_area-21-review_required.json",
@@ -776,7 +776,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "28-fora_de_area-22-review_required.json",
@@ -804,7 +804,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "29-fora_de_area-23-review_required.json",
@@ -832,7 +832,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "30-fora_de_area-25-review_required.json",
@@ -860,7 +860,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "31-fora_de_area-26-review_required.json",
@@ -888,7 +888,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "32-ineligible-ineligible-01.json",
@@ -915,7 +915,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "33-ineligible-ineligible-02.json",
@@ -946,7 +946,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "34-ineligible-ineligible-03.json",
@@ -974,7 +974,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "35-ineligible-ineligible-04.json",
@@ -1002,7 +1002,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "36-ineligible-ineligible-05.json",
@@ -1029,7 +1029,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "37-ineligible-ineligible-06.json",
@@ -1056,7 +1056,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "38-ineligible-ineligible-07.json",
@@ -1084,7 +1084,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "39-ineligible-ineligible-08.json",
@@ -1112,7 +1112,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "40-ineligible-ineligible-09.json",
@@ -1140,7 +1140,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     },
     {
       "file": "41-ineligible-ineligible-10.json",
@@ -1168,7 +1168,7 @@
       "recomendacao": "aceitar",
       "confianca": "alta",
       "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
-      "aceito": null
+      "aceito": true
     }
   ]
 }

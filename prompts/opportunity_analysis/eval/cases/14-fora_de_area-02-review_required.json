@@ -1,0 +1,97 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "51.7500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": "YEAR",
+        "maximum": "228500.00",
+        "minimum": "177500.00",
+        "currency": "USD"
+      },
+      "published_at": "2026-07-31T15:59:31.154000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "YEAR",
+          "maximum": "228500.00",
+          "minimum": "177500.00",
+          "currency": "USD",
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "{\"compensationType\": \"Salary\", \"currencyCode\": \"USD\", \"interval\": \"1 YEAR\", \"maxValue\": 228500, \"minValue\": 177500}",
+          "evidence_source": "ashby.compensation.summaryComponents.Salary",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Enterprise Sales Leader West Coast",
+    "company_name": "Empresa X",
+    "location_text": "California",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nABOUT THE ROLE\n\nYour goal will be to build and scale a world-class Enterprise Sales organisation across the West Coast - coaching a team of high-performing Enterprise AEs to win complex, multi-stakeholder deals while building a repeatable, predictable engine in one of the most strategically important regions for Empresa X.\n\nTo make that happen, you'll be hands-on in deal strategy, customer exec engagement, and day-to-day coaching—raising the bar on how we qualify, forecast, and win.\n\nWHAT YOU’LL BE DOING\n\nSETTING THE STRATEGY FOR THE WEST COAST TERRITORY\n\n- Prioritize and run the West Coast Enterprise territory with focus – balancing new logo pursuits with expansion plays where community signals are strong\n\n- Drive deal strategy and execution across complex enterprise cycles, from discovery to close, including rigorous pipeline inspection and forecast reviews\n\n- Elevate sales methodology adoption (MEDDIC/MEDDPICC), ensuring meticulous qualification, mutual action plans, and disciplined inspection of technical + business wins\n\nBUILDING A STRATEGIC, MULTI-THREADED SELLING MOTION\n\n- Build a strategic selling culture that shifts the team from “running opportunities” to multi-threaded, value-led enterprise execution\n\n- Orchestrate executive engagement across West Coast accounts – aligning economic buyers, champions, and technical evaluators to keep momentum and unblock deals\n\n- Run high-quality deal reviews and QBRs that sharpen strategy, elevate coaching moments, and improve win rates, cycle time, and forecast accuracy\n\nDEVELOPING A HIGH-PERFORMING WEST COAST TEAM\n\n- Lead and develop a West Coast Enterprise team with hands-on coaching that improves performance and career growth\n\n- Hire, onboard, and scale the team over time, establishing operating rhythms that create leverage as we grow\n\nPARTNERING ACROSS THE BUSINESS\n\n- Collaborate cross-functionally (Solutions Engineering, Customer Success, Marketing, RevOps, Product) to refine messaging for technical buyers, strengthen the enterprise playbook, and remove friction in the sales process\n\nREQUIREMENTS\n\nMUST HAVES\n\n- 🏆 Enterprise sales leadership: 5+ years in frontline sales management, leading ICs through complex, multi-threaded enterprise deals\n\n- 🔎 MEDDIC/MEDDPICC mastery: Deep, practical command of MEDDIC/MEDDPICC and a track record coaching teams to adopt it with real inspection\n\n- 🧠 Strategic deal management: You’re fluent in qualification, mutual action plans, champion building, and executive alignment in longer-cycle deals\n\n- 🎙️ Executive presence: You confidently engage senior stakeholders, run tight meetings, and set a high bar for clarity, urgency, and outcomes\n\n- 🧑‍🏫 Coaching & talent development: You level up AEs through structured coaching, field observation, and actionable feedback\n\n- 🧩 Multi-stakeholder navigation: You’re skilled at aligning technical and economic buyers, de-escalating conflict, and maintaining deal momentum\n\n- 📍 West Coast/Texas location: You’re based on the West Coast and happy being on-site with customers – especially in the Bay Area (we're also open to those based in Texas/Colorado/Washington and willing to travel)\n\n- 🔧 Technical-buyer credibility: Experience selling into technical stakeholders and navigating evaluation-heavy sales motions\n\nNICE-TO-HAVES\n\n- 🖥️ Open-source / PLG experience: You understand how community and bottoms-up adoption influence enterprise outcomes and how to partner with that motion\n\n- 🌉 Developer / infra SaaS background: Experience in DevOps, SecOps, IT Ops, data, infrastructure, or adjacent categories\n\n- 💡 Scrappy startup mindset: You’ve scaled in environments where playbooks are evolving and you enjoy building structure without slowing teams down\n\n- 📊 Operational excellence: Strong instincts for clean forecasting, pipeline hygiene, and turning data into coaching and better execution\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "a vaga está alinhada com a área de atuação do perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "39.2500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "SENIOR",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": "YEAR",
+        "maximum": "171700.00",
+        "minimum": "91400.00",
+        "currency": "EUR"
+      },
+      "published_at": "2026-05-20T10:03:53.253000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [
+        "javascript",
+        "nodejs",
+        "react",
+        "typescript"
+      ],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:javascript:sha256:ca1d684df3cd9f6947ed58aa030b6adc2714dd9baf7158c54f2da846a31273c9",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:nodejs:sha256:8e4e6a9d42d3735db56d8ca1747d73021c24a5e88a6bff61087e92f26380b785",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:react:sha256:b229498813ae9e9dee30ddd8863b448dba8a9da2e79dd62a77fc3775612ccafd",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:typescript:sha256:ca1d684df3cd9f6947ed58aa030b6adc2714dd9baf7158c54f2da846a31273c9"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "YEAR",
+          "maximum": "171700.00",
+          "minimum": "91400.00",
+          "currency": "EUR",
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "{\"compensationType\": \"Salary\", \"currencyCode\": \"EUR\", \"interval\": \"1 YEAR\", \"maxValue\": 171700, \"minValue\": 91400}",
+          "evidence_source": "ashby.compensation.summaryComponents.Salary",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Sr Growth Engineer (Fullstack TS/Vue/NodeJS)",
+    "company_name": "Empresa X",
+    "location_text": "Berlin Office",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nMISSIONS\n\nAs a Senior Engineer in our Growth team, you’ll ideate, build and iterate on the product experiences that turn users into successful, long-term customers. You’ll own high-impact parts of the Cloud journey — from signup and onboarding to billing, upgrade flows, and in-product experience — using experimentation, product intuition, and data to improve activation, retention, and monetization.\n\nThis is a hands-on engineering role on a high-leverage growth team, working closely with product, design, data, marketing, and engineering to accelerate Empresa X’s self-serve growth engine.\n\nWHAT YOU’LL DO\n\n🚀 Ship high-impact experiments – You’ll design, build, and A/B test new features to increase conversion and retention — think upgrade flows, contextual prompts, or new pricing nudges\n\n📈 Drive measurable business outcomes - Your work will directly contribute to Empresa X’s ARR, user retention, and growth KPIs. You'll track performance, identify areas to improve, and ship iteratively to increase activation and retention\n\n🧠 Scale our growth systems – You’ll help build and optimize services to enable user growth at scale, like in-app messaging platforms, billing systems, and email orchestration tools\n\n🔧 Improve and maintain growth-critical features – You’ll take ownership of flows like signup, onboarding, and the admin dashboard to ensure a smooth, performant experience for every new user\n\nPROJECTS YOU MIGHT TACKLE\n\nPersonalizing onboarding based on initial interactions to get more users to first success\n\nTesting AI credit metering and the UI around it: usage limits, paywalls, and upgrade nudges\n\nBuilding experimentation infrastructure\n\nREQUIREMENTS\n\n🧑‍💻 5+ years of full-stack engineering experience with TypeScript/JavaScript, Node.js, and Vue or React (plus HTML/CSS/UI libraries).\n\n📈 You've owned growth metrics: product activation, retention, or revenue, on a growth or PLG team at a SaaS company\n\n🧪 You've shipped experiments yourself, from hypothesis to ship/kill decision\n\n🧠 Product mindedness: You can ship without a PM and make the right call most of the time. You can talk to users when you need the signal.\n\n📊 Data fluency: You can query data yourself and make decisions from user behaviour and experiments\n\n🧭 Comfort with ambiguity: You don't wait for perfect specs or designs. You move forward and iterate.\n\n⚡ Speed + ownership mindset: You move fast but responsibly, understanding that experimentation and velocity are core to unlocking growth.\n\nNICE-TO-HAVE\n\n💸 Exposure to pricing strategy, funnel optimization, or revenue KPIs\n\n🏁 Past experience as a founder or early-stage startup engineer\n\nInterested in learning more about our engineering teams?\nCheck out our different teams to get a better understanding of what they do: Discover Engineering at Empresa X [link] Please check all our engineering openings and apply to the team that feels like the best fit for you.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

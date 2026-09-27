@@ -1,0 +1,100 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "51.7500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "5.20",
+        "currency": null
+      },
+      "published_at": "2026-04-03T17:23:00.611000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:javascript:sha256:3d0303ec51ce787e88e45948a592f7dc85f84ff58cdb60b131258678b87b9ea9",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:sql:sha256:f50cd9c8729c1973fd4852e4b850f9acd74f3e666dce4f3106c1be1225c8e17c"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "5.20",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "$5.2",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Senior/Staff Product Designer",
+    "company_name": "Empresa X",
+    "location_text": "Germany",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nWe're looking for seasoned Product Designers who thrive in ambiguity and challenging problem spaces.\n\nEmpresa X is a powerful, flexible technical tool, which means the problems you tackle as a designer are complex. Your design decisions must account for diverse user workflows, technical constraints, and how changes impact the entire platform. To thrive here, you will need to love talking to users, understanding technology, and reducing complexity and scope.\n\nYou'll be embedded in a product squad alongside a product manager and around three to five engineers, owning the user experience for your area end to end. Our design team is small but growing, so you'll shape the craft bar and the culture, not inherit them.\n\nWe're hiring designers across the following teams:\n\n- Enterprise (two roles - Governance & Observability, and Licence & Billing): You've worked on technical B2B platforms. You've designed for scale, governance, and collaboration across teams, including permissions, environments, observability, and failure modes included and you're comfortable making deeply complex systems feel coherent and simple.\n\n- Adore - Adoption & Retention: You have exceptional product sense and can connect disparate elements into a coherent whole. You'll take something complex, with many moving parts, and make it make sense - shaping what the visual layer of Empresa X becomes next. Experience with data visualisation is welcome; deep technical expertise isn't required.\n\n- Empresa X Labs: As a Product Designer, you'll own discovery end-to-end, spotting the riskiest assumptions, running the research, and turning findings into decisions without waiting on a brief. You move fast, cut scope without losing what matters, and you're hands-on enough to build and ship your own prototypes, including using AI tools to get there quicker. You've got product and business judgment, not just craft; you can spot an opportunity and make the case for it. Founder or co-founder experience is a helpful signal but not a requirement.\n\nTeam assignment is confirmed at the offer stage and may be subject to change as the team structure evolves.\n\n🎯 Regardless of the team, your main goal will be to lead end-to-end product design on complex workflows that elevate Empresa X's user experience, ship measurable outcomes, and raise the quality bar across our platform. To do so, here are your responsibilities:\n\nEnd-to-end product design\n\n- Lead the full design process for your team, from discovery to polished delivery, collaborating closely with PMs and engineers.\n\n- Consistently ship high-quality, visually cohesive designs that improve the overall UX at every release.\n\n- Work effectively on complex features and understand the underlying technology.\n\n- Take ownership of complex, multi-faceted problems and drive them to completion with initiative and autonomy.\n\nResearch, feedback, and UX quality\n\n- Own the direction of research for your team, decide when it's needed, choose the right methodology, and take the initiative without waiting to be told.\n\n- Champion the user by running interviews, usability tests, and research to inform critical product and business decisions.\n\n- Master the feedback loop by gathering, synthesizing, and acting on input while giving actionable critique to elevate teammates' work.\n\n- Balance speed and quality in an MVP-driven environment, navigating ambiguity while maintaining a high bar.\n\nSystems thinking and platform coherence\n\n- Design in systems, integrating solutions into the broader Empresa X platform and safeguarding the product's big picture.\n\n- Account for edge cases, constraints, and interaction details so users never end up in impossible states.\n\n- Collaborate across teams and designers to ensure consistency and quality across shared patterns and components.\n\nStrategy, impact, and innovation\n\n- Shape team strategy by influencing planning, prioritization, and scope with a strong design perspective tied to KPIs.\n\n- Explore and adopt AI and automation tools to push the boundaries of design practice and AI-powered workflows.\n\nSenior or Staff?\n\nWe're open at both levels, and we'll calibrate with you during the process. At Senior, you own your squad's design end-to-end and ship work that raises the bar for your area. At Staff, you do that, and your influence reaches beyond your own squad - you shape patterns other designers build on, and you take on the problems that span teams. Both are hands-on: this is not a step away from the craft.\n\nREQUIREMENTS\n\nMust-haves\n\n- 🎨 Product design excellence: You're proficient across product design, UX, UI, and qualitative research, delivering polished, detail-oriented work.\n\n- 🧠 Technical mindset: You collaborate effectively with engineers and understand how software is built, including common web technologies. You don't need to write code, but you do need genuine curiosity about what's happening underneath - APIs, webhooks, data structures and how workflows actually execute.\n\n- 🧭 Ownership & delivery: You've shipped end-to-end features in smaller teams or startups and can drive complex problems to measurable outcomes.\n\n- ⚡ Fast, focused execution: You operate at high speed in an MVP-driven environment, balancing quality and velocity amid ambiguity.\n\n- 📈 Outcome orientation: You use research and metrics to inform decisions and consistently deliver solutions that enable team KPIs.\n\n- 🤝 Feedback & collaboration: You're open and non-defensive in critique and provide actionable feedback that raises the team's bar.\n\n- 🧪 Curiosity for AI: You're enthusiastic about AI and innovation, actively exploring new tools and approaches to advance the craft.\n\n- 📅 Experience level: You have 5+ years in product design with demonstrable impact on shipped products.\n\nNice-to-haves\n\n- 💻 Front-end fluency: You can prototype using HTML/CSS/JavaScript, with or without AI coding tools, and can collaborate effectively with engineers on the result.\n\n- 🧩 AI & automation domain: You've designed AI or automation products; familiarity with Empresa X is a plus.\n\n- 🔁 Process improvement: You proactively refine team rituals and workflows to increase effectiveness.\n\n- 📚 Continuous growth: You invest in your craft and are motivated by creating tangible product and company impact.\n\n- 🔎 Discovery frameworks: You know methodologies like Continuous Discovery or Shape Up.\n\n- 📊 Data-informed design: You're comfortable with metrics, A/B testing, or SQL to guide decisions.\n\n- 🚀 Entrepreneurial drive: You've built startups or side projects that show initiative and creative problem-solving.\n\nWhy join us?\n\nAt Empresa X, your work won't disappear into a slide deck. You'll lead high-impact design across core product surfaces, shaping AI-powered workflows, enterprise governance and billing, and how people discover and adopt Empresa X, from discovery to delivery. You'll join a fast-growing, Europe remote-first company where autonomy, experimentation, and craft matter, partnering closely with PMs and engineers to ship real outcomes to a passionate global community.\n\nSound like a challenge you're excited to take on?\n\nApply now and help us build the future of automation.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "a vaga está alinhada com a área de atuação do perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

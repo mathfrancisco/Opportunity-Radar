@@ -16,7 +16,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "python",
@@ -30,7 +30,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "python",
@@ -44,7 +44,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "python",
@@ -58,7 +58,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "python",
@@ -72,7 +72,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "python",
@@ -86,7 +86,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "python",
@@ -100,7 +100,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "backend",
@@ -114,7 +114,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "backend",
@@ -128,7 +128,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "backend",
@@ -142,7 +142,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "backend",
@@ -156,7 +156,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "backend",
@@ -170,7 +170,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "backend",
@@ -184,7 +184,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "backend",
@@ -198,7 +198,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "backend",
@@ -212,7 +212,7 @@
       "recomendacao": "ambiguo",
       "confianca": "media",
       "justificativa": "Titulo contem o termo mas o papel real diverge da intencao tipica da consulta; revisor decide.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "devops",
@@ -226,7 +226,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "devops",
@@ -240,7 +240,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "devops",
@@ -254,7 +254,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "devops",
@@ -268,7 +268,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "devops",
@@ -282,7 +282,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "devops",
@@ -296,7 +296,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "java",
@@ -310,7 +310,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "java",
@@ -324,7 +324,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "java",
@@ -338,7 +338,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "java",
@@ -352,7 +352,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "java",
@@ -366,7 +366,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "java",
@@ -380,7 +380,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "java",
@@ -394,7 +394,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "java",
@@ -408,7 +408,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "react",
@@ -422,7 +422,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "react",
@@ -436,7 +436,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "react",
@@ -450,7 +450,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "react",
@@ -464,7 +464,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "react",
@@ -478,7 +478,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "react",
@@ -492,7 +492,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "react",
@@ -506,7 +506,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "react",
@@ -520,7 +520,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "sales",
@@ -534,7 +534,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "sales",
@@ -548,7 +548,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "sales",
@@ -562,7 +562,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "sales",
@@ -576,7 +576,7 @@
       "recomendacao": "ambiguo",
       "confianca": "media",
       "justificativa": "Titulo contem o termo mas o papel real diverge da intencao tipica da consulta; revisor decide.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "sales",
@@ -590,7 +590,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "sales",
@@ -604,7 +604,7 @@
       "recomendacao": "ambiguo",
       "confianca": "media",
       "justificativa": "Titulo contem o termo mas o papel real diverge da intencao tipica da consulta; revisor decide.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "sales",
@@ -618,7 +618,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "sales",
@@ -632,7 +632,7 @@
       "recomendacao": "ambiguo",
       "confianca": "media",
       "justificativa": "Titulo contem o termo mas o papel real diverge da intencao tipica da consulta; revisor decide.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "marketing",
@@ -646,7 +646,7 @@
       "recomendacao": "ambiguo",
       "confianca": "media",
       "justificativa": "Titulo contem o termo mas o papel real diverge da intencao tipica da consulta; revisor decide.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "marketing",
@@ -660,7 +660,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "marketing",
@@ -674,7 +674,7 @@
       "recomendacao": "ambiguo",
       "confianca": "media",
       "justificativa": "Titulo contem o termo mas o papel real diverge da intencao tipica da consulta; revisor decide.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "marketing",
@@ -688,7 +688,7 @@
       "recomendacao": "ambiguo",
       "confianca": "media",
       "justificativa": "Titulo contem o termo mas o papel real diverge da intencao tipica da consulta; revisor decide.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "marketing",
@@ -702,7 +702,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "marketing",
@@ -716,7 +716,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "marketing",
@@ -730,7 +730,7 @@
       "recomendacao": "nao_relevante",
       "confianca": "alta",
       "justificativa": "Vaga de engenharia de software que constroi plataformas para marketing, nao um papel de marketing.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "marketing",
@@ -744,7 +744,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "node",
@@ -758,7 +758,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "node",
@@ -772,7 +772,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "node",
@@ -786,7 +786,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "node",
@@ -800,7 +800,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "node",
@@ -814,7 +814,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "aws",
@@ -828,7 +828,7 @@
       "recomendacao": "ambiguo",
       "confianca": "media",
       "justificativa": "Titulo contem o termo mas o papel real diverge da intencao tipica da consulta; revisor decide.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "aws",
@@ -842,7 +842,7 @@
       "recomendacao": "nao_relevante",
       "confianca": "alta",
       "justificativa": "Papel comercial/GTM sobre a parceria com AWS, nao vaga tecnica de AWS.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "aws",
@@ -856,7 +856,7 @@
       "recomendacao": "nao_relevante",
       "confianca": "alta",
       "justificativa": "Mesmo caso: papel comercial/GTM, nao vaga tecnica de AWS.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "aws",
@@ -870,7 +870,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "aws",
@@ -884,7 +884,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "aws",
@@ -898,7 +898,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "aws",
@@ -912,7 +912,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "aws",
@@ -926,7 +926,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "fullstack",
@@ -940,7 +940,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "fullstack",
@@ -954,7 +954,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "fullstack",
@@ -968,7 +968,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "fullstack",
@@ -982,7 +982,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "fullstack",
@@ -996,7 +996,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "fullstack",
@@ -1010,7 +1010,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "fullstack",
@@ -1024,7 +1024,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "fullstack",
@@ -1038,7 +1038,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "machine learning",
@@ -1052,7 +1052,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "machine learning",
@@ -1066,7 +1066,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "machine learning",
@@ -1080,7 +1080,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "machine learning",
@@ -1094,7 +1094,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "machine learning",
@@ -1108,7 +1108,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "machine learning",
@@ -1122,7 +1122,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "machine learning",
@@ -1136,7 +1136,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "machine learning",
@@ -1150,7 +1150,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "product manager",
@@ -1164,7 +1164,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "product manager",
@@ -1178,7 +1178,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "product manager",
@@ -1192,7 +1192,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "product manager",
@@ -1206,7 +1206,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "product manager",
@@ -1220,7 +1220,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "product manager",
@@ -1234,7 +1234,7 @@
       "recomendacao": "ambiguo",
       "confianca": "media",
       "justificativa": "Titulo contem o termo mas o papel real diverge da intencao tipica da consulta; revisor decide.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "product manager",
@@ -1248,7 +1248,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "product manager",
@@ -1262,7 +1262,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "accounting",
@@ -1276,7 +1276,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "accounting",
@@ -1290,7 +1290,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "qa",
@@ -1304,7 +1304,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "qa",
@@ -1318,7 +1318,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "qa",
@@ -1332,7 +1332,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "qa",
@@ -1346,7 +1346,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "qa",
@@ -1360,7 +1360,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     },
     {
       "query": "qa",
@@ -1374,7 +1374,7 @@
       "recomendacao": "relevante",
       "confianca": "alta",
       "justificativa": "Titulo contem o termo da consulta em contexto tecnico/de papel coerente com a intencao da busca.",
-      "decisao_usuario": null
+      "decisao_usuario": "aceito"
     }
   ]
 }

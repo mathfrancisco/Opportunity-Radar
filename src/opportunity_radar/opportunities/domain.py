@@ -119,7 +119,7 @@ class NormalizationError(ValueError):
     """Raised when a collected item cannot form a canonical candidate."""
 
 
-SKILL_TAXONOMY_VERSION = "skills-v2"
+SKILL_TAXONOMY_VERSION = "skills-v3"
 _MAX_DATABASE_AMOUNT = Decimal("999999999999.99")
 _AMBIGUOUS_SKILL_ALIASES = frozenset({"go", "react"})
 
@@ -223,9 +223,12 @@ SKILL_TAXONOMY: tuple[SkillTaxonomyEntry, ...] = (
         "ai",
         ("ai", "artificial intelligence", "machine learning", "ml", "agentic ai"),
     ),
+    # F20-02 follow-up (rotulagem humana): the bare "ci" alias was removed because
+    # 82% of its real-corpus occurrences come from the company name "CI&T", not
+    # from CI/CD content (docs/44-roadmap-fase-20/rotulagem/f20-02-curadoria-skills-v2.md).
     SkillTaxonomyEntry(
         "cicd",
-        ("ci/cd", "ci", "continuous integration", "continuous deployment"),
+        ("ci/cd", "continuous integration", "continuous deployment"),
     ),
     SkillTaxonomyEntry("observability", ("observability",)),
 )

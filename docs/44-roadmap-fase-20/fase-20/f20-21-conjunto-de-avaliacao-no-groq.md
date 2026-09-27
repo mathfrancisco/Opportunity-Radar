@@ -42,8 +42,21 @@ O harness está em `scripts/eval_analysis.py` e `matching/evaluation.py` (funç�
 
 ## Critérios de aceite
 
-- [ ] 50 casos rotulados versionados.
-- [ ] Baseline versionada com validade de JSON, claims conferidos, acerto de rótulo, latência p50/p95 e tokens.
+- [ ] 50 casos rotulados versionados. **Parcial (2026-09-27):** os 41 casos reais foram
+      revisados (`docs/44-roadmap-fase-20/rotulagem/f20-21-eval-cases.md`, todas as linhas
+      `aceito`); os 6 casos do bucket `backend` marcados **Reclassificar** foram renomeados
+      para `fora_de_area` (`01/02/03/04/06/08-fora_de_area-*`) com o risco de área
+      adicionado a `must_mention_risks`; os 2 (`05`, `07`) marcados **Aceitar** ficaram como
+      `backend`. `prompts/opportunity_analysis/eval/cases/` (50 arquivos, `git ls-files`
+      confirma que não está mais ignorado) ainda não foi commitado nesta sessão — ver
+      handback. Lacuna de composição (0 Java, 3 fullstack, 1 IA) fechada com 26 candidatos
+      reais do acervo (10 Java, 7 fullstack, 9 IA, todos `role_family=SOFTWARE_ENGINEERING`,
+      `work_mode=REMOTE`, com `match_assessment` real), exportados com a mesma
+      anonimização de `export_eval_cases.py` para
+      `prompts/opportunity_analysis/eval/drafts/gap-{java,fullstack,ai}-NN-review_required.json`
+      — são recomendações, não casos: `must_mention_risks`/`must_not_claim` ficam vazios
+      até um humano ler a vaga e decidir, como todo draft.
+- [ ] Baseline versionada com validade de JSON, claims conferidos, acerto de rótulo, latência p50/p95 e tokens. **Não feito** — sem chamada real ao Groq nesta sessão (fora do escopo/orçamento), como o "Não fazer" exige.
 
 ## Testes
 

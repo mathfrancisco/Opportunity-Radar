@@ -43,17 +43,17 @@ da skill `cicd` inteira.
 
 | Skill canônica | Termo(s)/alias | Recomendação | Justificativa | Confiança | Decisão do usuário |
 | --- | --- | --- | --- | --- | --- |
-| `ai` (já aplicada) | `ai` (462 desc.) | Manter | Termo técnico inequívoco, altíssima frequência, sem alias curto arriscado. | Alta | |
-| `ai` (já aplicada) | `artificial intelligence`, `machine learning`, `ml`, `agentic ai` | Manter | Sinônimos/variações reais observadas no corpus (ex.: "agentic AI systems"). | Alta | |
-| `cicd` (já aplicada) | `ci/cd`, `continuous integration`, `continuous deployment` | Manter | Termos multi-palavra, não colidem com nomes de empresa. | Alta | |
-| `cicd` (já aplicada) | `ci` (alias isolado, 218 desc.) | **Remover o alias** (revisar) | 82% das ocorrências de `ci` isolado no corpus real vêm de "CI&T" (nome da empresa), não de CI/CD — ver seção acima. | Alta | |
-| `observability` (já aplicada) | `observability` (124 desc.) | Manter | Termo técnico inequívoco, sem ambiguidade observada. | Alta | |
-| — | `apis` (146, fora do top 60) | Manter descartado | Genérico; qualquer vaga backend cita "APIs" sem nomear um protocolo específico. | Alta | |
-| — | `cloud` (193) | Manter descartado | A taxonomia já cobre provedores específicos (`aws`, `azure`, `gcp`); `cloud` genérico duplicaria sinal e arrisca falso positivo em uso não técnico. | Alta | |
-| — | `sdlc` (183) | Manter descartado | Sigla de processo/metodologia, não uma tecnologia nomeada — fora do padrão das 30 entradas atuais. | Média | |
-| — | `martech` (178) | Manter descartado | Categoria de produto/marketing, fora da área do perfil e do tipo de entrada da taxonomia. | Alta | |
-| — | `architecture`/`systems`/`platform`/`frameworks`/`tools`/`stack` | Manter descartado | Palavras-guarda-chuva sem tecnologia nomeada; marcar geraria ruído massivo. | Alta | |
-| `ai` (já aplicada, como alias) | `agentic` (140) | Manter como alias de `ai` | Variação de "agentic AI", já coberta por `agentic ai` na entrada `ai`. | Média | |
+| `ai` (já aplicada) | `ai` (462 desc.) | Manter | Termo técnico inequívoco, altíssima frequência, sem alias curto arriscado. | Alta | aceito |
+| `ai` (já aplicada) | `artificial intelligence`, `machine learning`, `ml`, `agentic ai` | Manter | Sinônimos/variações reais observadas no corpus (ex.: "agentic AI systems"). | Alta | aceito |
+| `cicd` (já aplicada) | `ci/cd`, `continuous integration`, `continuous deployment` | Manter | Termos multi-palavra, não colidem com nomes de empresa. | Alta | aceito |
+| `cicd` (já aplicada) | `ci` (alias isolado, 218 desc.) | **Remover o alias** (revisar) | 82% das ocorrências de `ci` isolado no corpus real vêm de "CI&T" (nome da empresa), não de CI/CD — ver seção acima. | Alta | aceito |
+| `observability` (já aplicada) | `observability` (124 desc.) | Manter | Termo técnico inequívoco, sem ambiguidade observada. | Alta | aceito |
+| — | `apis` (146, fora do top 60) | Manter descartado | Genérico; qualquer vaga backend cita "APIs" sem nomear um protocolo específico. | Alta | aceito |
+| — | `cloud` (193) | Manter descartado | A taxonomia já cobre provedores específicos (`aws`, `azure`, `gcp`); `cloud` genérico duplicaria sinal e arrisca falso positivo em uso não técnico. | Alta | aceito |
+| — | `sdlc` (183) | Manter descartado | Sigla de processo/metodologia, não uma tecnologia nomeada — fora do padrão das 30 entradas atuais. | Média | aceito |
+| — | `martech` (178) | Manter descartado | Categoria de produto/marketing, fora da área do perfil e do tipo de entrada da taxonomia. | Alta | aceito |
+| — | `architecture`/`systems`/`platform`/`frameworks`/`tools`/`stack` | Manter descartado | Palavras-guarda-chuva sem tecnologia nomeada; marcar geraria ruído massivo. | Alta | aceito |
+| `ai` (já aplicada, como alias) | `agentic` (140) | Manter como alias de `ai` | Variação de "agentic AI", já coberta por `agentic ai` na entrada `ai`. | Média | aceito |
 
 ## Cobertura sobre count>=2: nenhum termo tecnológico novo além do já decidido
 

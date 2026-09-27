@@ -1,0 +1,97 @@
+{
+  "kinds": [
+    "english_description",
+    "long_description",
+    "missing_country",
+    "weak_match"
+  ],
+  "payload": {
+    "eligibility": "INELIGIBLE",
+    "verdict": "INELIGIBLE",
+    "score": "43.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "LEAD",
+      "work_mode": "ONSITE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "30.00",
+        "currency": null
+      },
+      "published_at": "2026-09-03T23:25:54.251000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "30.00",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "30",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Lead Infrastructure Engineer — Global Office IT Physical Infra",
+    "company_name": "Empresa X",
+    "location_text": "Ciudad de México",
+    "description": "ABOUT NU\n\nNu serves more than 140 million customers, guided by a mission to fight complexity and empower people. The company has been leading an industry transformation through innovative products and human-centered services.\n\nProprietary technology and data at scale power Nu’s digital platform, built to promote financial access, advancement, and transparency. Its business model thrives on customer love and lower costs, feeding a flywheel of growth and profitability.\n\nVisit our Institutional Page [link]\n\nABOUT THE ROLE\n\nEvery Empresa X office runs on an IT Room that most people never see. Power distribution, cooling, structured cabling and fiber are the layer that keeps thousands of Empresa Xers connected and working — and when that layer fails, entire sites stop.\n\nEmpresa X's office portfolio is growing across countries, and today each site has been built to its own standard. The ETS team owns the physical layer of these environments — structured cabling, optical fiber and, in partnership with other teams, power distribution, HVAC, fire protection and physical security systems. This role exists to bring one engineering standard to all of them.\n\nAs Lead Infrastructure Engineer for Global Office IT Physical Infra, you are the technical reference for IT Room infrastructure across Empresa X's global office portfolio. You assess and size environments, define the technical specifications new sites and expansions must meet, and coordinate the vendors and construction teams who build them — so that an IT Room in Mexico City, São Paulo or Miami is built, documented and operated the same way.\n\nThis is a senior individual contributor role with technical authority rather than direct reports. You set the standard, you review the projects against it, and you catch the gaps before they become outages.\n\nYOU'LL BE RESPONSIBLE FOR\n\n- Assessing and sizing IT Rooms for expansion and improvement projects, defining the technical and physical specifications that meet real capacity needs, optimize resource use, and hold to operational standards.\n\n- Executing deployment projects for new environments and expansions in compliance with established technical specifications, and coordinating deployment logistics end to end while ensuring quality standards throughout.\n\n- Acting as the interface between internal teams and external vendors — translating business needs into infrastructure requirements, work orders and technical specifications — and managing those vendors and service providers to quality, deadline and compliance with Empresa X's standards.\n\n- Coordinating with construction and engineering teams during the build-out of new offices, ensuring IT Room specifications are met from the earliest project phases rather than retrofitted later.\n\n- Creating and maintaining clear, current technical documentation — standards, procedures, capacity plans, topology diagrams, bayfaces — so that every site is aligned and auditable.\n\n- Ensuring alignment between physical infrastructure and IT operations, including cabling changes, equipment installation, capacity planning and structured cabling terminations.\n\n- Driving continuous improvement in the availability, resilience and efficiency of IT Room physical infrastructure: HVAC, structured cabling, optical fiber, power distribution, generators, UPS units and fire protection.\n\n- Supporting the assessment of the global IT Room portfolio across corporate offices, identifying gaps and standardization opportunities across multiple sites and countries.\n\nWE ARE LOOKING FOR A PERSON WHO HAS\n\n- Solid experience with mission-critical environment infrastructure, including the deployment and operation of physical infrastructure in corporate offices or data center facilities.\n\n- Strong hands-on command of mission-critical infrastructure systems: HVAC and air conditioning, structured cabling, optical fiber, low-voltage power distribution, UPS units, generators, and fire detection and suppression.\n\n- Proven experience coordinating deployment projects that run structured cabling, electrical, mechanical and civil scopes simultaneously.\n\n- Experience managing vendors and service providers on infrastructure projects — from technical specification through execution and acceptance.\n\n- A consistent track record of creating and maintaining clear technical documentation for infrastructure standards, procedures and projects.\n\n- A completed degree in Electrical, Electronic or Mechanical Engineering\n\n- Advanced English enough to work with international vendors, standards and distributed teams.\n\n- Proficiency in AutoCAD.\n\n- Availability to work in a hybrid model and to travel to Empresa X office locations for site assessments and deployments.\n\nLocation for this opportunity (City, Country)\n\nMexico City, Mexico\n\nOUR BENEFITS\n\n- Chance of earning equity at Nu\n\n- Extended maternity and paternity leaves\n\n- Health and life insurance\n\n- Dental and Vision Insurance\n\n- NuCare — Our mental health and wellness assistance program\n\n- Nucleo — Our learning platform of courses\n\n- NuLanguage — Our language learning program\n\n- Holiday Bonus (\"Aguinaldo\") of 30 days of pay per year\n\n- 17 days of paid vacation with 25% vacation bonus\n\n- Gym partnership\n\n- Food card\n\n- Work-from-home Allowance\n\n- Parental Consultancy\n\n- Relocation Assistance Package, if applicable\n\nWORK MODEL FOR THIS ROLE\n\nHybrid 2-3 times/week: Our hybrid work model brings us to the office at least twice a week, on strategic days designed to maximize team connection and collaboration. For more details, visit [link]\n\nExplore how we build technology at Empresa X:\n\n🌐 building.Empresa X.com.br [link]\n\n📺 youtube.com/@building.Empresa X [link]\n\n🎧 Listen to our stories on Spotify\n\nOur recruitment process may involve the use of artificial intelligence–enabled tools, such as automated interview transcription and analysis, to support the evaluation process. Artificial intelligence is not used to make final hiring decisions; all decisions are made by human reviewers.\n\nTo maintain a consistent and fair process for every candidate, Nu does not provide individualized technical feedback. See how our policy works here [link]"
+  },
+  "split": "tuning",
+  "group": "ineligible-007",
+  "critical": false,
+  "expected": {
+    "verdict": "INELIGIBLE",
+    "must_mention_risks": [
+      "Vaga é presencial (ONSITE), incompatível com o modo de trabalho aceito no perfil (remoto).",
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "a vaga é compatível com trabalho remoto"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}
