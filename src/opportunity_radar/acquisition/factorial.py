@@ -140,8 +140,12 @@ class _FactorialJobsParser(HTMLParser):
         if tag == "div" and self._label_depth == self._job_depth:
             assert self._current is not None
             text = " ".join(self._label_parts)
-            if text:
-                self._current.texts.append(text)
+            # Append unconditionally, even when empty: a job with no team assigned
+            # (`data-team-id=""`) still renders this label `<div>`, just with no text
+            # inside (confirmed live against careers.factorialhr.com, where 9 of 140 real
+            # postings have this exact shape). Dropping the empty label would shift the
+            # location text into the team slot and make a real job look schema-changed.
+            self._current.texts.append(text)
             self._label_depth = None
             self._label_parts = []
         self._job_depth -= 1

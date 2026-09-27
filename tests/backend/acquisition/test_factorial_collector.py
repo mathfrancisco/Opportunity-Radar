@@ -48,6 +48,7 @@ def test_parses_listed_jobs_and_preserves_payload() -> None:
     assert [item.external_id for item in items] == [
         "software-engineer-go-open-talent-pool-263236",
         "hr-analyst-69351",
+        "partner-service-manager-323792",
     ]
     assert items[0].url == (
         "https://acme.factorialhr.com/job_posting/software-engineer-go-open-talent-pool-263236"
@@ -62,8 +63,18 @@ def test_parses_listed_jobs_and_preserves_payload() -> None:
     assert items[0].metadata["parser_version"] == "factorial-careers-page-v1"
     assert items[1].location_text == "Barcelona, Spain"
     assert items[1].metadata["is_remote"] is False
+    # A job with no team assigned (data-team-id="") still renders its team `<div>` label,
+    # just with no text inside — confirmed live against careers.factorialhr.com, where 9 of
+    # 140 real postings have this exact shape. The empty label must still occupy its
+    # positional slot (title, team, location) rather than being dropped, or the location
+    # text shifts into the team slot and the job is wrongly rejected as schema-changed.
+    assert items[2].title == "Partner Service Manager"
+    assert items[2].location_text == "Hybrid"
+    assert items[2].metadata["team_name"] is None
+    assert items[2].metadata["team_id"] == ""
     assert collection_request.telemetry.http_requests == 1
-    assert collection_request.telemetry.items_announced == 2
+    assert collection_request.telemetry.items_announced == 3
+    assert collection_request.telemetry.invalid_items == 0
 
 
 def test_does_not_attempt_a_second_page() -> None:
