@@ -39,7 +39,7 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 | F20-29 | Coletor Teamtailor em `919c4b5`; validado com dados reais (Seedtag, Lingokids) e homologado/coletando 2x (Seedtag) em 2026-09-26; fix de integração `f51fa77`/`676339c`. | Sem pendência de implementação identificada. |
 | F20-30 | Coletor Workable em `ae1ee79`; validado com dados reais (Workable, Wantable) e homologado/coletando (Wantable) em 2026-09-26; fix de integração `f51fa77`/`676339c`. | Sem pendência de implementação identificada. |
 | F20-31 | `factorial.py` e testes de fixture em `8be7e4c`; validado com dados reais (Factorial, Agentero) e homologado/coletando (Agentero) em 2026-09-26; bug de parser corrigido em `cbe206b`; fix de integração `f51fa77`/`676339c`. | Sem pendência de implementação identificada. |
-| F20-32 | Não iniciado. | Implementar coletor Gupy. |
+| F20-32 | Fechado — não viável em 2026-09-27. Termos de Uso da Gupy proíbem nominalmente agregar/copiar/duplicar vagas (`docs/pesquisas/termos-gupy.md`); nenhum código de coletor foi escrito. | Sem pendência de implementação — card encerrado pela revisão de termos. |
 | F20-33 | Palavras-chave do perfil em `b7f432e` e `e9be146`. | Fazer verificação manual do critério 4. |
 | F20-34 | Buscas salvas em `5088e6`. | Cobrir componente Inbox/Overview. |
 | F20-35 | Funil e rendimento em `102a53d`; janela de baseline de 7 dias iniciada em 2026-09-26 (T0 real salvo em `f20-search-metrics-baseline-2026-09-26.json`), termina 2026-10-04. | Medir a janela de 7 dias completa na máquina de referência (não pode terminar antes de 2026-10-04). |
@@ -86,7 +86,9 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 1. Abrir PR/empurrar a branch e confirmar o Compose E2E verde na CI real com a correção
    de `taxonomy_version` e o trabalho de F20-39 (retomada, manifesto 304, métrica).
 2. F20-28 a F20-31 homologados com dados reais em 2026-09-26 (ver
-   `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md`); implementar
-   F20-32.
+   `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md`); F20-32 fechado
+   como não viável em 2026-09-27 pela revisão de termos (ver
+   `docs/44-roadmap-fase-20/evidencias/homologacao-gupy-2026-09-27.md` e
+   `docs/pesquisas/termos-gupy.md`) — nenhuma implementação pendente para este card.
 3. Produzir F20-21 antes de F20-18, F20-22, F20-23 e F20-24.
 4. Implementar F20-36 e F20-37, depois F20-47 a F20-50.

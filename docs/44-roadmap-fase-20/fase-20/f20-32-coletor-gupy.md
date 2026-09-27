@@ -1,6 +1,14 @@
 # CARD F20-32 — Coletor Gupy
 
-- **Status:** Backlog
+- **Status:** Fechado — não viável. Revisão de termos em
+  [`docs/pesquisas/termos-gupy.md`](../../pesquisas/termos-gupy.md) (2026-09-27): os Termos
+  de Uso da Gupy (Recrutamento e Seleção — Candidatos) proíbem nominalmente, na seção de
+  diretrizes gerais, "agregar, copiar ou duplicar partes do Gupy Recrutamento e Seleção,
+  incluindo oportunidades de trabalho expiradas" para "Usuários em geral" — a descrição
+  exata da operação de um coletor. Diferente de Workday/Teamtailor/Workable/Factorial (só
+  cláusula genérica de "não prejudicar o serviço"), aqui há proibição específica e nomeada.
+  Nenhum código foi escrito: `gupy.py`, testes, `registry.py`, `probing.py`,
+  `proposals.py`, `registration.py` e `apps/web` permanecem sem alteração para este ATS.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-27, F20-03
@@ -65,10 +73,12 @@ Endpoints candidatos, **a confirmar na revisão de termos** (não são fato até
 
 ## Critérios de aceite (por sub-card)
 
-- [ ] Termos revisados e registrados antes do código.
-- [ ] Coletor com teste contra board falso, incluindo paginação e erro.
-- [ ] Sonda, proposta, cadastro e formulário reconhecem o ATS.
-- [ ] Pelo menos uma empresa real do catálogo homologada e coletando.
+- [x] Termos revisados e registrados antes do código — `docs/pesquisas/termos-gupy.md`,
+      decisão: não viável. Os critérios seguintes não se aplicam: o sub-card fecha aqui,
+      conforme a regra "endpoint que proíbe acesso automatizado encerra o sub-card".
+- [ ] Coletor com teste contra board falso, incluindo paginação e erro. — N/A (não viável)
+- [ ] Sonda, proposta, cadastro e formulário reconhecem o ATS. — N/A (não viável)
+- [ ] Pelo menos uma empresa real do catálogo homologada e coletando. — N/A (não viável)
 
 ## Verificação
 
