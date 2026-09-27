@@ -1,6 +1,8 @@
 # CARD F20-37 — Coletor JobPosting público
 
-- **Status:** Backlog
+- **Status:** Done — `src/opportunity_radar/acquisition/jobposting.py`; validado com dados
+  reais em 2026-09-27 (Qonto, Scaleway, Sonar via Lever) — ver
+  `docs/44-roadmap-fase-20/evidencias/sites-jobposting-2026-09-27.md`.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** D — Varredura produtiva
 - **Depende de:** F20-36, F20-03
@@ -30,10 +32,22 @@ Páginas públicas sem ATS suportado entram no radar pelo mesmo contrato e com e
 
 ## Critérios de aceite
 
-- [ ] Objetos, listas e @graph geram itens com procedência.
-- [ ] Página bloqueada/quebrada não vira sucesso vazio.
-- [ ] Remoto não vira elegibilidade global por inferência.
-- [ ] Probe e homologação exercitam o coletor real; implementação entra no fluxo normal.
+- [x] Objetos, listas e @graph geram itens com procedência. `extract_job_postings`
+      cobre as três formas (`tests/backend/acquisition/test_jobposting_collector.py::
+      test_object_list_and_graph_produce_items_with_provenance`); confirmado com dado
+      real (objeto único) em Qonto/Scaleway/Sonar (Lever), ver evidência.
+- [x] Página bloqueada/quebrada não vira sucesso vazio. Challenge, soft-404, schema
+      divergente, HTML vazio e página sem marcação sempre levantam
+      `AcquisitionErrorCode.PARSER_SCHEMA_CHANGED`
+      (`test_blocked_page_is_not_empty_success`, `test_soft_404_is_flagged_not_persisted`).
+- [x] Remoto não vira elegibilidade global por inferência.
+      `applicant_location_requirements` só lê o campo explícito do JSON-LD, nunca deriva
+      de `jobLocationType=TELECOMMUTE`
+      (`test_telecommute_does_not_imply_global_eligibility`).
+- [x] Probe e homologação exercitam o coletor real; implementação entra no fluxo normal.
+      `"jobposting"` está em `PROBE_TYPES`/`probe_request` (`acquisition/probing.py`) e
+      registrado em `build_collector_registry` (`acquisition/registry.py`);
+      `test_probe_exercises_real_collector` chama `run_probe` contra a fixture.
 
 ## Verificação
 
@@ -186,6 +200,22 @@ def job_posting_metadata_v1(fields: JobPostingFields) -> dict[str, object]:
 - Não fazer chamada real a boards, Groq ou Tavily no CI; usar `httpx.MockTransport` ou os servidores falsos de `tests/e2e/`.
 - Não adicionar dependência nova sem registrar o motivo no PR.
 - Não usar LLM neste card, salvo quando a seção "Ajustes da Fase 20" disser o contrário.
+
+## Notas de implementação
+
+- Configuração do coletor usa a chave `page_url` (a URL da página com o JSON-LD); é o
+  que `_collector_settings` (`acquisition/service.py`) e `probe_request`
+  (`acquisition/probing.py`) leem como `company_reference`.
+- `acquisition/proposals.py` não precisou de mudança: `IDENTIFIER_KEYS` já ignora tipos
+  sem chave conhecida (`proposal_key` devolve `None`), e o card F20-27 já provou que o
+  fluxo de proposta genérico (`evidence_status`, `verification_method`) não distingue por
+  `source_type`.
+- `SourceCreateForm` citado em "Arquivos prováveis" não existe no backend atual (busca
+  confirmou); a homologação real é exercida por `probing.run_probe`, que é o que o
+  critério 4 pede. Nenhuma tela de frontend foi criada ou alterada por este card.
+- `apply_url` usa `url` (ou `sameAs`) do próprio nó `JobPosting`, caindo para a
+  `page_url` configurada quando ausente — é o padrão observado nos três sites reais
+  validados (Lever emite `url`-like via a própria página).
 
 ## Como trabalhar este card
 

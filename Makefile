@@ -61,6 +61,11 @@ enable-sources:
 discover-ats:
 	@docker compose run --rm --build api python scripts/discover_ats.py
 
+# Off by default (F20-36). One click deeper than discover-ats: robots.txt, sitemap(s),
+# and a handful of same-allowlist pages per eligible company, always inside budget.
+discover-sites:
+	@docker compose run --rm --build api python scripts/discover_sites.py $(if $(LIMIT),--limit "$(LIMIT)",) $(if $(DRY_RUN),--dry-run,)
+
 backup:
 	@docker compose run --rm -v "$(CURDIR)/data/backups:/app/data/backups" api python scripts/backup.py $(if $(LABEL),--label "$(LABEL)",)
 

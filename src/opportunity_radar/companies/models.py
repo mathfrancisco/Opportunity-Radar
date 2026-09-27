@@ -183,6 +183,14 @@ class DiscoveryAttemptModel(Base):
     attempted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    #: Multi-page discovery's own verdict (F20-36); `None` for a single-request F20-27
+    #: attempt, which never set this column.
+    stop_reason: Mapped[str | None] = mapped_column(String(32))
+    urls_examined: Mapped[int | None] = mapped_column(Integer)
+    http_requests: Mapped[int | None] = mapped_column(Integer)
+    #: When `eligible_companies` (and the equivalent multi-page revisit check) may retry
+    #: this company again. `None` falls back to `DEFAULT_REVISIT_INTERVAL_DAYS`.
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class CompanyImportBatch(Base):
