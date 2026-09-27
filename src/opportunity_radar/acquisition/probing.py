@@ -30,6 +30,7 @@ PROBE_TYPES = (
     "teamtailor",
     "workable",
     "factorial",
+    "jobposting",
 )
 PUBLIC_ENDPOINT_REFERENCES = {
     "ashby": "https://developers.ashbyhq.com/docs/public-job-posting-api",
@@ -46,6 +47,9 @@ PUBLIC_ENDPOINT_REFERENCES = {
     # No public API either: this is the server-rendered careers page every Factorial
     # tenant gets, reviewed in docs/pesquisas/termos-factorial.md.
     "factorial": "docs/pesquisas/termos-factorial.md",
+    # No API at all: the collector reads the schema.org JobPosting JSON-LD the company's
+    # own page embeds (F20-37), per https://schema.org/JobPosting.
+    "jobposting": "https://schema.org/JobPosting",
 }
 
 
@@ -93,6 +97,9 @@ def probe_request(
         common["company_name"] = configuration.get("company_name")
     elif source_type == "factorial":
         common["company_reference"] = _required(configuration, "company_identifier")
+        common["company_name"] = configuration.get("company_name")
+    elif source_type == "jobposting":
+        common["company_reference"] = _required(configuration, "page_url")
         common["company_name"] = configuration.get("company_name")
     return CollectionRequest(**common)
 

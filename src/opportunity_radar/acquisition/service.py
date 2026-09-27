@@ -1526,6 +1526,12 @@ def _collector_settings(
             _optional_string(source.configuration, "company_name"),
             None,
         )
+    if source.source_type == "jobposting":
+        return (
+            _required_string(source.configuration, "page_url"),
+            _optional_string(source.configuration, "company_name"),
+            None,
+        )
     return None, None, None
 
 

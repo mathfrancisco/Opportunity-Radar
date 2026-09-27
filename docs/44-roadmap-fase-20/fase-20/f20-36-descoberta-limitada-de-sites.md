@@ -29,10 +29,22 @@ Empresas cuja página não revela ATS ganham pesquisa limitada de links/sitemaps
 
 ## Critérios de aceite
 
-- [ ] Loops, sitemaps grandes e múltiplos redirects param dentro do orçamento.
-- [ ] Nenhum destino privado ou fora da allowlist é acessado.
-- [ ] Limite/erro não significa empresa sem vagas.
-- [ ] Proposta existente é reutilizada com histórico da descoberta.
+- [x] Loops, sitemaps grandes e múltiplos redirects param dentro do orçamento.
+      `test_sitemap_loop_stops_within_budget` (sitemapindex que referencia a si mesmo) e
+      `DiscoveryLimits`/`_CrawlState` limitam profundidade, respostas HTML, arquivos de
+      sitemap, bytes descomprimidos e URLs examinadas; confirmado com sites reais (ver
+      evidência).
+- [x] Nenhum destino privado ou fora da allowlist é acessado.
+      `is_public_destination` (ipaddress) roda antes de cada conexão e de cada redirect;
+      `test_redirect_to_private_ip_is_refused` prova que o destino nunca é contactado.
+- [x] Limite/erro não significa empresa sem vagas.
+      `test_limit_or_error_does_not_mean_no_jobs` prova que `POLICY`/`ERROR` nunca grava
+      `CompanySource`; a persistência só escreve evidência quando um endpoint é
+      efetivamente encontrado.
+- [x] Proposta existente é reutilizada com histórico da descoberta.
+      `upsert_ats_identified_source` atualiza o `CompanySource` existente (mesmo `id`) e
+      concatena o histórico em vez de duplicar
+      (`test_existing_proposal_is_reused_with_discovery_history`).
 
 ## Verificação
 
@@ -188,6 +200,29 @@ async def run_limited_discovery(
 - Não fazer chamada real a boards, Groq ou Tavily no CI; usar `httpx.MockTransport` ou os servidores falsos de `tests/e2e/`.
 - Não adicionar dependência nova sem registrar o motivo no PR.
 - Não usar LLM neste card, salvo quando a seção "Ajustes da Fase 20" disser o contrário.
+
+## Notas de implementação
+
+- `scripts/discover_sources.py` já existe na árvore (propõe `SourceDefinition` a partir
+  de `CompanySource` já catalogado — outro fluxo). Para não colidir, o script deste card
+  chama-se `scripts/discover_sites.py`, com o target `make discover-sites`; o nome do
+  target no card original (`discover-sites`) foi preservado, só o nome do script mudou.
+- Coluna nova em `company_radar.discovery_attempt` (`stop_reason`, `urls_examined`,
+  `http_requests`, `next_attempt_at`) via `migrations/versions/
+  20260926_0044_discovery_attempt_multi_page.py` — a cabeça real no momento da
+  implementação era `20260926_0043` (0040 já tinha sido tomado por F20-38); ver nota de
+  renumeração no cabeçalho da própria migração.
+- `acquisition/proposals.py` não precisou de mudança: o `CompanySource` que a descoberta
+  grava (`verification_method="discovery"`, `verification_status="ats_identified"`) é o
+  mesmo formato que F20-27 já produz, e o fluxo de proposta genérico não distingue a
+  origem.
+- Reaproveitamento de F20-38: `scripts/discover_sites.py` usa `HostBudgetState` (do
+  próprio módulo `acquisition/scheduling.py`) para limitar requisições por host ao longo
+  de todo o lote, além (não em vez) do orçamento por tentativa do `DiscoveryLimits`.
+- Reaproveitamento de F20-35: nenhuma mudança de código foi necessária — o funil de
+  cobertura (`company_coverage_funnel`) já conta qualquer `CompanySource`, então um
+  endpoint descoberto por este card aparece automaticamente no estágio "descoberta" do
+  funil assim que é gravado.
 
 ## Como trabalhar este card
 

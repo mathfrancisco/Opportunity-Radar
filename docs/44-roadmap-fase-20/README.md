@@ -67,8 +67,8 @@ evidência de aceite ou correção.
 | Card | Depende de | Status |
 | --- | --- | --- |
 | [F20-35 — Mapa de cobertura e rendimento](fase-20/f20-35-mapa-de-cobertura-e-rendimento.md) | F20-01, F20-03 | Implementado — `102a53d`; janela de baseline de 7 dias iniciada em 2026-09-26 (T0 real registrado), termina 2026-10-04 — critério 4 continua pendente |
-| [F20-36 — Descoberta limitada de sites e sitemaps](fase-20/f20-36-descoberta-limitada-de-sites.md) | F20-27, F20-35 | Backlog — dependências de código implementadas; falta executar o card |
-| [F20-37 — Coletor JobPosting público](fase-20/f20-37-coletor-jobposting-publico.md) | F20-36, F20-03 | Backlog |
+| [F20-36 — Descoberta limitada de sites e sitemaps](fase-20/f20-36-descoberta-limitada-de-sites.md) | F20-27, F20-35 | Done — `acquisition/limited_discovery.py`, migração `20260926_0044`; validado com dados reais em 2026-09-27 (ver `docs/44-roadmap-fase-20/evidencias/sites-jobposting-2026-09-27.md`) |
+| [F20-37 — Coletor JobPosting público](fase-20/f20-37-coletor-jobposting-publico.md) | F20-36, F20-03 | Done — `acquisition/jobposting.py`; validado com dados reais em 2026-09-27 (Qonto, Scaleway, Sonar via Lever) |
 | [F20-38 — Agenda por rendimento e orçamento de rede](fase-20/f20-38-agenda-adaptativa-e-http-condicional.md) | F20-35 | Implementado — `f14bc6e`; validado em 2026-09-26 que os 4 coletores novos também não enviam ETag/If-Modified-Since ainda; comparação real de 7 dias e orçamento por host compartilhado continuam pendentes |
 | [F20-39 — Delta, presença e retomada](fase-20/f20-39-delta-presenca-e-retomada.md) | F20-38 | Implementado localmente — presença, hashes, retomada explícita, manifesto 304 declarado e métrica operacional; 858 testes verdes com `RUN_DATABASE_INTEGRATION=1`; presença sem duplicação confirmada com dado real em 2026-09-26 (Seedtag, `make collect` 2x); retomada por cursor real ainda não aplicável (nenhum coletor novo emite cursor); falta confirmar CI verde |
 | [F20-40 — Preservação integral do perfil](fase-20/f20-40-preservacao-do-perfil.md) | Nenhum | Done — `794b519`; os três critérios conferidos com teste |

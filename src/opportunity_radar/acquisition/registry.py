@@ -6,6 +6,7 @@ from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.collectors import CollectorRegistry, ManualCollector
 from opportunity_radar.acquisition.factorial import FactorialCollector
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
+from opportunity_radar.acquisition.jobposting import JobPostingCollector
 from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.tavily import TavilyClient, TavilySearchCollector
@@ -42,6 +43,7 @@ def build_collector_registry(
             TeamtailorCollector(),
             WorkableCollector(),
             FactorialCollector(),
+            JobPostingCollector(),
             TavilySearchCollector(
                 client_factory=lambda: TavilyClient(
                     api_key=tavily_api_key,
