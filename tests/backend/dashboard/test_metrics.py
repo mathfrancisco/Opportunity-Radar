@@ -28,6 +28,7 @@ from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
     OpportunityModel,
     SourceOccurrenceModel,
+    SourceOccurrenceObservationModel,
 )
 from opportunity_radar.platform.database import create_database_engine
 
@@ -273,6 +274,51 @@ def test_errors_are_segmented_by_code_and_rates_are_computed() -> None:
             "SOURCE_RATE_LIMITED": 1,
         }
         assert metrics.coverage_state == "FAILED"
+
+
+def test_presence_confirmed_without_reprocessing_counts_matched_revisits() -> None:
+    """F20-39: a revisit whose raw evidence matched is operational work avoided — no
+    normalization, no AI — and must be visible in the window's metrics, not just as an
+    unlabeled share of `items_skipped`."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        source = _source(session)
+        run = _run(
+            session,
+            source,
+            status="SUCCEEDED",
+            started_at=NOW - timedelta(minutes=5),
+            items_seen=2,
+            items_persisted=0,
+            items_skipped=2,
+        )
+        raw_item = RawItemModel(
+            id=uuid4(),
+            source_run_id=run.id,
+            source_definition_id=source.id,
+            external_id=uuid4().hex,
+            identity_key=f"external:{uuid4().hex}",
+            payload_hash=uuid4().hex + uuid4().hex,
+            item_metadata={},
+        )
+        session.add(raw_item)
+        session.flush()
+        session.add_all(
+            [
+                SourceOccurrenceObservationModel(
+                    source_occurrence_id=None,
+                    source_run_id=run.id,
+                    raw_item_id=raw_item.id,
+                    observed_at=run.started_at,
+                    content_hash_matched=True,
+                ),
+            ]
+        )
+        session.commit()
+
+        metrics = _metrics_for(session, source.id, "24h")
+
+        assert metrics.presence_confirmed_without_reprocessing == 1
 
 
 def test_the_window_excludes_older_runs() -> None:

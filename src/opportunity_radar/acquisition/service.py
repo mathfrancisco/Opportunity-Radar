@@ -892,6 +892,16 @@ class AcquisitionService:
         # A new collection starts at the beginning. Resumption is explicit through the
         # request cursor; a prior run's checkpoint is evidence, not an implicit cursor.
         checkpoint_before = request.cursor
+        if request.resume_of_run_id is not None and (
+            self.repository.resumable_run(request.resume_of_run_id, source_id=source.id)
+            is None
+        ):
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                "resume_of_run_id does not name a partial or failed run of this source "
+                "with persisted evidence",
+                field="resume_of_run_id",
+            )
         run = SourceRun(
             source_definition_id=source.id,
             execution_trigger=request.execution_trigger,
@@ -906,6 +916,7 @@ class AcquisitionService:
             started_at=run.started_at,
             checkpoint_before=checkpoint_before,
             correlation_id=request.correlation_id,
+            resumed_from_run_id=request.resume_of_run_id,
         )
         self.session.add(persisted_run)
         try:
@@ -1086,10 +1097,23 @@ class AcquisitionService:
             run.complete = False
         # A bare 304 would otherwise read as a complete, empty board to
         # `evaluate_completeness` (no announced total, no items seen, status SUCCEEDED):
-        # exactly the false "vaga fechada" SPEC 39 §7 forbids until F20-39's manifest check
-        # exists. Revalidation proves the representation is unchanged, not that it was read.
+        # exactly the false "vaga fechada" SPEC 39 §7 forbids. Revalidation proves the
+        # representation is unchanged, not that it was read — unless the collector declared
+        # a manifest of representations and every one of them revalidated as 304 in this
+        # same run, and some earlier run already proved the board's inventory complete.
+        # That combination is the only thing SPEC 39 §7 lets a 304 reuse (F20-39).
         if run_telemetry.not_modified:
-            run.complete = False
+            manifest_fully_revalidated = (
+                run_telemetry.manifest_size is not None
+                and run_telemetry.not_modified_count >= run_telemetry.manifest_size
+                and request.cursor is None
+                and run.items_seen == 0
+            )
+            run.complete = (
+                manifest_fully_revalidated
+                and final_status is SourceRunStatus.SUCCEEDED
+                and self.repository.has_completed_run(source.id, exclude_run_id=run.id)
+            )
         self._copy_run(run, persisted_run)
         if run_telemetry.last_http_attempt_at is not None:
             source.last_http_attempt_at = run_telemetry.last_http_attempt_at
@@ -1098,8 +1122,7 @@ class AcquisitionService:
         # A bare 304 (`run_telemetry.not_modified`) yields no cursor but still revalidates
         # the representation's own etag/last-modified — SPEC 39 §7: that revalidation must
         # never be read as proof the board is fully read (`run.complete` above is untouched
-        # by it, and stays governed by `evaluate_completeness` until F20-39's manifest
-        # check exists).
+        # by it, and stays governed by `evaluate_completeness`/the manifest check above).
         if final_status is SourceRunStatus.SUCCEEDED and (
             last_cursor is not None
             or run_telemetry.response_etag is not None
@@ -1255,10 +1278,24 @@ class AcquisitionService:
             payload_hash,
             allow_payload_identity=source_type == "manual",
         )
-        existing = self.repository.identical_raw_item_exists(
-            source_id=source_id,
-            identity_key=identity_key,
-            payload_hash=payload_hash,
+        metadata = _json_object(item.metadata)
+        semantic_payload = collected_item_v1(item, metadata)
+        hashes = content_hashes(semantic_payload, raw_hash=payload_hash)
+        envelope_lookup = getattr(self.repository, "raw_item_by_envelope", None)
+        existing = (
+            envelope_lookup(
+                source_id=source_id,
+                identity_key=identity_key,
+                payload_hash=payload_hash,
+                semantic_hash=hashes.semantic_hash,
+                semantic_hash_version=hashes.semantic_hash_version,
+            )
+            if envelope_lookup is not None
+            else self.repository.identical_raw_item_exists(
+                source_id=source_id,
+                identity_key=identity_key,
+                payload_hash=payload_hash,
+            )
         )
         if existing:
             # Old in-memory adapters returned a boolean; only a real row can receive
@@ -1271,10 +1308,7 @@ class AcquisitionService:
                     content_hash_matched=True,
                 )
             return False
-        metadata = _json_object(item.metadata)
         metadata[COLLECTED_ITEM_V1_KEY] = collected_item_v1(item, metadata)
-        semantic_payload = collected_item_v1(item, metadata)
-        hashes = content_hashes(semantic_payload, raw_hash=payload_hash)
         try:
             with self.session.begin_nested():
                 raw_item = RawItemModel(
@@ -1355,6 +1389,10 @@ def collected_item_v1(
         "description": item.description,
         "published_at": item.published_at.isoformat() if item.published_at else None,
         "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+        # This is part of the interpretation boundary even for legacy/custom collectors
+        # that did not supply parser metadata.  Keep the received metadata untouched;
+        # the canonical `None` only makes the semantic identity explicit.
+        "parser_version": _string_or_none(source_metadata.get("parser_version")),
         "metadata": source_metadata,
     }
 

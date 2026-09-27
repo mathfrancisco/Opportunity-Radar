@@ -168,6 +168,16 @@ class CollectionTelemetry:
     #: representation; it never proves the board is fully read (SPEC 39 §7 — only F20-39's
     #: manifest check may do that), so `AcquisitionService` must not read this as coverage.
     not_modified: bool = False
+    #: How many 304 responses this run received across every representation it revalidated
+    #: (F20-39). Counted separately from `not_modified` (which only says "at least one")
+    #: so `AcquisitionService` can tell a single bare 304 apart from every page of a
+    #: declared manifest revalidating together.
+    not_modified_count: int = 0
+    #: How many representations (pages/categories) this run's collector declared it would
+    #: check, when it declared one at all (F20-39). `None` means no manifest was declared —
+    #: a bare 304 with no manifest can never prove full coverage, only that the one
+    #: representation it touched is unchanged.
+    manifest_size: int | None = None
 
     def record_conditional_response(
         self,
@@ -182,6 +192,18 @@ class CollectionTelemetry:
             self.response_last_modified = last_modified
         if not_modified:
             self.not_modified = True
+            self.not_modified_count += 1
+
+    def record_manifest(self, total_representations: int) -> None:
+        """A collector declares how many representations make up this run's manifest.
+
+        Only a declared manifest, fully revalidated (every representation's own 304),
+        can let a later run reuse a previously persisted complete inventory — a bare 304
+        with no declared manifest stays incomplete (SPEC 39 §7).
+        """
+        if total_representations < 1:
+            raise ValueError("manifest_size must be positive")
+        self.manifest_size = total_representations
 
     def record_items_announced(self, total: int) -> None:
         if total < 0:
@@ -268,6 +290,11 @@ class CollectionRequest:
     #: collector that supports HTTP-conditional requests (`CollectorCapabilities.etag`/
     #: `last_modified`) reads this to send the headers; one that does not simply ignores it.
     conditional_headers: ConditionalRequestHeaders | None = None
+    #: An interrupted run this collection continues (F20-39 "retomada da mesma execução").
+    #: Purely a provenance link recorded on the new run — it never derives `cursor`
+    #: automatically. The caller supplies both together: the id of the persisted prefix it
+    #: is resuming, and the explicit cursor to resume it from.
+    resume_of_run_id: UUID | None = None
 
     def __post_init__(self) -> None:
         if self.max_items is not None and self.max_items < 1:
@@ -283,6 +310,8 @@ class CollectionRequest:
             raise ValueError("manual collection requires at least one manual input")
         if self.mode is not CollectionMode.MANUAL and self.manual_inputs:
             raise ValueError("manual inputs require manual collection mode")
+        if self.resume_of_run_id is not None and self.cursor is None:
+            raise ValueError("resuming a run requires an explicit cursor")
 
 
 @dataclass(frozen=True, slots=True)

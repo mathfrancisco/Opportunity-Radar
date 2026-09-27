@@ -216,6 +216,9 @@ class SourceMetricsResponse(BaseModel):
     errors_by_code: dict[str, int]
     seniority: SeniorityDistributionResponse
     incident_open: bool
+    #: F20-39: revisits in this window that confirmed presence without re-normalizing or
+    #: re-running AI, because the raw evidence matched what was already held.
+    presence_confirmed_without_reprocessing: int
 
 
 class SourceMetricsWindowResponse(BaseModel):
@@ -791,6 +794,7 @@ def _source_metrics_response(source: SourceWindowMetrics) -> SourceMetricsRespon
             evidence=source.seniority.evidence,
         ),
         incident_open=source.incident_open,
+        presence_confirmed_without_reprocessing=source.presence_confirmed_without_reprocessing,
     )
 
 

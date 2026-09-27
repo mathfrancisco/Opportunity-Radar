@@ -22,6 +22,8 @@ from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.domain import (
+    AcquisitionError,
+    AcquisitionErrorCode,
     CollectedItem,
     CollectionMode,
     CollectionRequest,
@@ -116,6 +118,65 @@ class _ConditionalCollector:
             )
 
 
+class _ManifestConditionalCollector:
+    """Revalidates a fixed number of declared representations (F20-39 manifest).
+
+    Each entry of `pages` is `True` for a representation that comes back 304, `False`
+    for one that comes back with a new item. `manifest_size` lets a test declare more
+    representations than actually get revalidated in the run, to model a manifest whose
+    pagination stopped early.
+    """
+
+    capabilities = CollectorCapabilities(incremental_cursor=True, etag=True, last_modified=True)
+
+    def __init__(
+        self, source_type: str, pages: list[bool], *, manifest_size: int | None = None
+    ) -> None:
+        self.source_type = source_type
+        self._pages = pages
+        self._manifest_size = manifest_size if manifest_size is not None else len(pages)
+
+    async def healthcheck(self, context: object = None) -> HealthResult:
+        del context
+        return HealthResult(healthy=True)
+
+    async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        request.telemetry.record_manifest(self._manifest_size)
+        for index, revalidated in enumerate(self._pages):
+            request.telemetry.record_http_attempt()
+            if revalidated:
+                request.telemetry.record_conditional_response(not_modified=True)
+                continue
+            request.telemetry.record_conditional_response(etag=f'"page-{index}"')
+            yield CollectedItem(
+                source_type=self.source_type,
+                external_id=f"job-new-{index}",
+                title="New Role",
+                raw_payload={"id": f"job-new-{index}"},
+                cursor=f"job-new-{index}",
+            )
+
+
+class _FailingAfterOneItemCollector:
+    """Yields one item, then raises — a run that persists a real prefix before stopping
+    short (`PARTIAL`), leaving something F20-39's explicit resume can point back at."""
+
+    capabilities = CollectorCapabilities(incremental_cursor=True, etag=True, last_modified=True)
+
+    def __init__(self, source_type: str, item: CollectedItem) -> None:
+        self.source_type = source_type
+        self._item = item
+
+    async def healthcheck(self, context: object = None) -> HealthResult:
+        del context
+        return HealthResult(healthy=True)
+
+    async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        del request
+        yield self._item
+        raise AcquisitionError(AcquisitionErrorCode.INVALID_ITEM, "boom")
+
+
 class _CrashingSession:
     """Wraps a real `Session` and raises once on `commit`, to simulate a crash between
     the last write and the durable commit — the transaction rolls back exactly as it
@@ -207,7 +268,12 @@ class _Fixture:
         )
         self.session.execute(
             delete(SourceOccurrenceObservationModel).where(
-                SourceOccurrenceObservationModel.source_occurrence_id.in_(occurrence_ids)
+                # `source_occurrence_id` alone misses observations recorded before an
+                # occurrence exists (F20-39's before-normalization revisit) — those still
+                # point at one of this fixture's raw items and must not leak into another
+                # test's unfiltered query of the same table.
+                SourceOccurrenceObservationModel.raw_item_id.in_(raw_item_ids)
+                | SourceOccurrenceObservationModel.source_occurrence_id.in_(occurrence_ids)
             )
         )
         self.session.execute(
@@ -695,5 +761,156 @@ def test_revisits_before_normalization_keep_per_run_observations() -> None:
                 second_run.id,
             }
             assert all(observation.source_occurrence_id is None for observation in observations)
+        finally:
+            fixture.cleanup()
+
+
+def test_manifest_fully_revalidated_304_reuses_prior_complete_inventory() -> None:
+    """Every declared representation revalidating 304, after a prior complete read,
+    is the one thing SPEC 39 §7 lets a 304 reuse (F20-39 manifest check)."""
+    import asyncio
+
+    engine = _engine()
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        try:
+            item = _item(fixture.source_type, external_id="job-1", title="Backend Engineer")
+            first_run = asyncio.run(
+                fixture.service(_StaticCollector(fixture.source_type, [[item]])).execute(
+                    fixture.source.id, CollectionRequest(mode=CollectionMode.DISCOVERY)
+                )
+            )
+            assert first_run.complete is True
+
+            collector = _ManifestConditionalCollector(fixture.source_type, [True, True])
+            second_run = asyncio.run(
+                fixture.service(collector).execute(
+                    fixture.source.id, CollectionRequest(mode=CollectionMode.DISCOVERY)
+                )
+            )
+            assert second_run.items_persisted == 0
+            assert second_run.status == "SUCCEEDED"
+            assert second_run.complete is True
+        finally:
+            fixture.cleanup()
+
+
+def test_manifest_partially_revalidated_304_stays_incomplete() -> None:
+    """A manifest that declares more representations than this run actually revalidated
+    must not be read as coverage of the whole board (F20-39 manifest check)."""
+    import asyncio
+
+    engine = _engine()
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        try:
+            item = _item(fixture.source_type, external_id="job-1", title="Backend Engineer")
+            first_run = asyncio.run(
+                fixture.service(_StaticCollector(fixture.source_type, [[item]])).execute(
+                    fixture.source.id, CollectionRequest(mode=CollectionMode.DISCOVERY)
+                )
+            )
+            assert first_run.complete is True
+
+            # Declares 2 representations but this run only revalidated 1 before stopping.
+            collector = _ManifestConditionalCollector(
+                fixture.source_type, [True], manifest_size=2
+            )
+            second_run = asyncio.run(
+                fixture.service(collector).execute(
+                    fixture.source.id, CollectionRequest(mode=CollectionMode.DISCOVERY)
+                )
+            )
+            assert second_run.complete is False
+        finally:
+            fixture.cleanup()
+
+
+def test_manifest_revalidation_without_a_prior_complete_run_stays_incomplete() -> None:
+    """A fully-revalidated manifest still cannot manufacture completeness the board
+    never had (F20-39 manifest check requires a prior complete run to reuse)."""
+    import asyncio
+
+    engine = _engine()
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        try:
+            collector = _ManifestConditionalCollector(fixture.source_type, [True, True])
+            run = asyncio.run(
+                fixture.service(collector).execute(
+                    fixture.source.id, CollectionRequest(mode=CollectionMode.DISCOVERY)
+                )
+            )
+            assert run.complete is False
+        finally:
+            fixture.cleanup()
+
+
+def test_resume_of_run_links_the_new_run_to_its_persisted_prefix() -> None:
+    """An explicit resume names the interrupted run it continues; the prefix it already
+    persisted is not duplicated (F20-39 "retomada da mesma execução")."""
+    import asyncio
+
+    engine = _engine()
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        try:
+            first_item = _item(fixture.source_type, external_id="job-1", title="Backend Engineer")
+            interrupted = asyncio.run(
+                fixture.service(_FailingAfterOneItemCollector(fixture.source_type, first_item))
+                .execute(fixture.source.id, CollectionRequest(mode=CollectionMode.DISCOVERY))
+            )
+            assert interrupted.status == "PARTIAL"
+            assert interrupted.items_persisted == 1
+
+            second_item = _item(fixture.source_type, external_id="job-2", title="Data Engineer")
+            resumed = asyncio.run(
+                fixture.service(_StaticCollector(fixture.source_type, [[first_item, second_item]]))
+                .execute(
+                    fixture.source.id,
+                    CollectionRequest(
+                        mode=CollectionMode.DISCOVERY,
+                        cursor="job-1",
+                        resume_of_run_id=interrupted.id,
+                    ),
+                )
+            )
+            assert resumed.resumed_from_run_id == interrupted.id
+            # The prefix already committed by `interrupted` dedupes; only the genuinely new
+            # item from this attempt is persisted.
+            assert resumed.items_persisted == 1
+            assert resumed.items_skipped == 1
+            assert len(fixture.raw_items()) == 2
+        finally:
+            fixture.cleanup()
+
+
+def test_resume_of_run_rejects_a_run_that_is_not_a_resumable_prefix() -> None:
+    import asyncio
+
+    engine = _engine()
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        try:
+            item = _item(fixture.source_type, external_id="job-1", title="Backend Engineer")
+            succeeded = asyncio.run(
+                fixture.service(_StaticCollector(fixture.source_type, [[item]])).execute(
+                    fixture.source.id, CollectionRequest(mode=CollectionMode.DISCOVERY)
+                )
+            )
+            assert succeeded.status == "SUCCEEDED"
+
+            with pytest.raises(AcquisitionError) as excinfo:
+                asyncio.run(
+                    fixture.service(_StaticCollector(fixture.source_type, [[item]])).execute(
+                        fixture.source.id,
+                        CollectionRequest(
+                            mode=CollectionMode.DISCOVERY,
+                            cursor="job-1",
+                            resume_of_run_id=succeeded.id,
+                        ),
+                    )
+                )
+            assert excinfo.value.code == AcquisitionErrorCode.INVALID_CONFIGURATION
         finally:
             fixture.cleanup()

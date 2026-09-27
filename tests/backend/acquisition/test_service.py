@@ -82,7 +82,7 @@ class _MemorySession:
 class _MemoryRepository:
     def __init__(self, source: SourceDefinitionModel) -> None:
         self.source = source
-        self.hashes: set[tuple[str, str]] = set()
+        self.hashes: set[tuple[object, str, str, str, str]] = set()
 
     def run_history(self, source_id: object, *, sample: int = 32) -> SourceRunHistory:
         del source_id, sample
@@ -94,7 +94,24 @@ class _MemoryRepository:
     def identical_raw_item_exists(
         self, *, source_id: object, identity_key: str, payload_hash: str
     ) -> bool:
-        key = (identity_key, payload_hash)
+        # Compatibility seam for older test adapters. Production uses the envelope-aware
+        # lookup below, which also keeps parser interpretation in the dedupe key.
+        key = (source_id, identity_key, payload_hash, "", "")
+        if key in self.hashes:
+            return True
+        self.hashes.add(key)
+        return False
+
+    def raw_item_by_envelope(
+        self,
+        *,
+        source_id: object,
+        identity_key: str,
+        payload_hash: str,
+        semantic_hash: str,
+        semantic_hash_version: str,
+    ) -> bool:
+        key = (source_id, identity_key, payload_hash, semantic_hash, semantic_hash_version)
         if key in self.hashes:
             return True
         self.hashes.add(key)
@@ -276,6 +293,62 @@ def test_payload_hash_is_canonical_for_mapping_order() -> None:
     second_hash = canonical_payload_hash({"b": 2, "a": 1})
 
     assert first_hash == second_hash
+
+
+def test_parser_or_parsed_boundary_variant_creates_fresh_raw_evidence() -> None:
+    service, session = _service(_Collector())
+    raw_payload = {"id": "job-1", "body": "unchanged bytes"}
+    parser_v1 = CollectedItem(
+        source_type="example",
+        external_id="job-1",
+        title="Backend Engineer",
+        description="Build APIs.",
+        raw_payload=raw_payload,
+        metadata={"parser_version": "example-v1"},
+    )
+    parser_v2 = CollectedItem(
+        source_type="example",
+        external_id="job-1",
+        title="Backend Engineer",
+        description="Build APIs.",
+        raw_payload=raw_payload,
+        metadata={"parser_version": "example-v2"},
+    )
+    corrected_fields = CollectedItem(
+        source_type="example",
+        external_id="job-1",
+        title="Backend Engineer",
+        description="Build APIs with Python.",
+        raw_payload=raw_payload,
+        metadata={"parser_version": "example-v2"},
+    )
+
+    assert service._persist_item(  # noqa: SLF001 - verifies the persistence boundary.
+        service.repository.source.id, uuid4(), "example", parser_v1, observed_at=datetime.now(UTC)
+    )
+    assert not service._persist_item(  # noqa: SLF001
+        service.repository.source.id, uuid4(), "example", parser_v1, observed_at=datetime.now(UTC)
+    )
+    assert service._persist_item(  # noqa: SLF001
+        service.repository.source.id, uuid4(), "example", parser_v2, observed_at=datetime.now(UTC)
+    )
+    assert service._persist_item(  # noqa: SLF001
+        service.repository.source.id,
+        uuid4(),
+        "example",
+        corrected_fields,
+        observed_at=datetime.now(UTC),
+    )
+
+    raw_items = [item for item in session.added if isinstance(item, RawItemModel)]
+    assert len(raw_items) == 3
+    assert {item.payload_hash for item in raw_items} == {canonical_payload_hash(raw_payload)}
+    assert [item.item_metadata["parser_version"] for item in raw_items] == [
+        "example-v1",
+        "example-v2",
+        "example-v2",
+    ]
+    assert len({item.semantic_hash for item in raw_items}) == 3
 
 
 def test_run_deduplicates_identical_identity_but_preserves_changed_payload() -> None:

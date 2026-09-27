@@ -33,6 +33,7 @@ from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
     OpportunityModel,
     SourceOccurrenceModel,
+    SourceOccurrenceObservationModel,
 )
 
 #: The two windows the Overview and the API both answer for.
@@ -90,6 +91,10 @@ class SourceWindowMetrics:
     errors_by_code: dict[str, int] = field(default_factory=dict)
     seniority: SeniorityDistribution = field(default_factory=SeniorityDistribution)
     incident_open: bool = False
+    #: Revisits in this window whose raw evidence matched what was already held (F20-39):
+    #: presence was confirmed and `last_seen_at` advanced without re-normalizing or
+    #: re-running AI on content that had not changed. A count of avoided work, not of rows.
+    presence_confirmed_without_reprocessing: int = 0
 
     @property
     def has_runs(self) -> bool:
@@ -161,6 +166,7 @@ def _window(
     errors = _errors_by_code(session, since)
     latest = _latest_run_in_window(session, since)
     seniority = _seniority_by_source(session, since)
+    confirmed_presence = _presence_confirmed_without_reprocessing(session, since)
     return SourceMetricsWindow(
         window=label,
         since=since,
@@ -173,6 +179,7 @@ def _window(
                 latest.get(source.id),
                 seniority.get(source.id, SeniorityDistribution()),
                 source.id in open_incidents,
+                confirmed_presence.get(source.id, 0),
             )
             for source in sources
         ),
@@ -186,6 +193,7 @@ def _source_metrics(
     latest: Any,
     seniority: SeniorityDistribution,
     incident_open: bool,
+    presence_confirmed_without_reprocessing: int,
 ) -> SourceWindowMetrics:
     return SourceWindowMetrics(
         source_definition_id=source.id,
@@ -210,6 +218,7 @@ def _source_metrics(
         errors_by_code=errors,
         seniority=seniority,
         incident_open=incident_open,
+        presence_confirmed_without_reprocessing=presence_confirmed_without_reprocessing,
     )
 
 
@@ -271,6 +280,30 @@ def _run_aggregates(session: Session, since: datetime) -> dict[UUID, Any]:
         .group_by(SourceRunModel.source_definition_id)
     ).all()
     return {row.source_definition_id: row for row in rows}
+
+
+def _presence_confirmed_without_reprocessing(session: Session, since: datetime) -> dict[UUID, int]:
+    """F20-39: revisits whose raw evidence matched, counted by the run that observed them.
+
+    `content_hash_matched=True` is the operational signal — a revisit that confirmed
+    presence without a byte of new content and therefore without normalization or AI.
+    """
+    rows = session.execute(
+        select(
+            SourceRunModel.source_definition_id,
+            func.count().label("confirmed"),
+        )
+        .join(
+            SourceOccurrenceObservationModel,
+            SourceOccurrenceObservationModel.source_run_id == SourceRunModel.id,
+        )
+        .where(
+            SourceRunModel.started_at >= since,
+            SourceOccurrenceObservationModel.content_hash_matched.is_(True),
+        )
+        .group_by(SourceRunModel.source_definition_id)
+    ).all()
+    return {source_id: int(confirmed) for source_id, confirmed in rows}
 
 
 def _errors_by_code(session: Session, since: datetime) -> dict[UUID, dict[str, int]]:

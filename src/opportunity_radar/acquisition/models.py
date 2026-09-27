@@ -148,6 +148,14 @@ class SourceRunModel(Base):
     complete: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
+    #: The interrupted run this one explicitly continues (F20-39 "retomada da mesma
+    #: execução"). A provenance link only — it never changes dedupe or completeness by
+    #: itself; the resumed run's own persisted evidence is what a caller's explicit
+    #: `cursor` picks up from. `SET NULL` so deleting an old run never blocks on this.
+    resumed_from_run_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("acquisition.source_run.id", ondelete="SET NULL"),
+    )
     source_definition: Mapped[SourceDefinitionModel] = relationship(back_populates="runs")
     raw_items: Mapped[list["RawItemModel"]] = relationship(back_populates="source_run")
 
@@ -191,7 +199,10 @@ class RawItemModel(Base):
             "source_definition_id",
             "identity_key",
             "payload_hash",
+            "semantic_hash",
+            "semantic_hash_version",
             name="uq_raw_item_source_identity_hash",
+            postgresql_nulls_not_distinct=True,
         ),
         Index("ix_raw_item_source_run", "source_run_id"),
         {"schema": "acquisition"},

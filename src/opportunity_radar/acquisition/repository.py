@@ -129,6 +129,26 @@ class AcquisitionRepository:
             )
         )
 
+    def raw_item_by_envelope(
+        self,
+        *,
+        source_id: UUID,
+        identity_key: str,
+        payload_hash: str,
+        semantic_hash: str,
+        semantic_hash_version: str,
+    ) -> RawItemModel | None:
+        """Return only evidence with the same immutable parser interpretation."""
+        return self.session.scalar(
+            select(RawItemModel).where(
+                RawItemModel.source_definition_id == source_id,
+                RawItemModel.identity_key == identity_key,
+                RawItemModel.payload_hash == payload_hash,
+                RawItemModel.semantic_hash == semantic_hash,
+                RawItemModel.semantic_hash_version == semantic_hash_version,
+            )
+        )
+
     def record_presence_observation(
         self,
         *,
@@ -171,6 +191,42 @@ class AcquisitionRepository:
                 self.session.flush()
         except IntegrityError:
             pass
+
+    def resumable_run(self, run_id: UUID, *, source_id: UUID) -> SourceRunModel | None:
+        """A named run of this source whose persisted prefix a caller may resume.
+
+        Only a run that stopped short (`PARTIAL`/`FAILED`) while still persisting some
+        evidence qualifies (F20-39 "retomada da mesma execução"); a `SUCCEEDED` run has
+        nothing left to continue, and a run with no persisted items has no prefix at all.
+        """
+        return self.session.scalar(
+            select(SourceRunModel).where(
+                SourceRunModel.id == run_id,
+                SourceRunModel.source_definition_id == source_id,
+                SourceRunModel.status.in_(("PARTIAL", "FAILED")),
+                SourceRunModel.items_persisted > 0,
+            )
+        )
+
+    def has_completed_run(self, source_id: UUID, *, exclude_run_id: UUID) -> bool:
+        """Whether some other run for this source ever proved the board fully read.
+
+        Used only to let a fully-revalidated 304 manifest (F20-39) reuse that persisted
+        complete inventory; `exclude_run_id` keeps the current in-flight run (already
+        flushed, not yet committed) from counting as its own prior proof.
+        """
+        return (
+            self.session.scalar(
+                select(SourceRunModel.id)
+                .where(
+                    SourceRunModel.source_definition_id == source_id,
+                    SourceRunModel.id != exclude_run_id,
+                    SourceRunModel.complete.is_(True),
+                )
+                .limit(1)
+            )
+            is not None
+        )
 
     def checkpoint(self, source_id: UUID) -> SourceCheckpointModel | None:
         return self.session.get(SourceCheckpointModel, source_id)
