@@ -141,13 +141,20 @@ class GroqAnalysisAdapter:
         truncated = False
 
         profile = sanitize_for_llm(dict(request.profile_snapshot))
+        # `profile_history` is merged into `profile` so its text stays quotable as
+        # evidence (`CLAIM_SOURCES` only knows "posting" and "profile", card F16-07); a
+        # prompt that also declares its own `{{ profile_history }}` placeholder (card
+        # F20-18's v2) additionally gets the same sanitized block rendered on its own,
+        # for a dedicated "recent experience" section in the payload.
+        profile_history: Mapping[str, Any] = {}
         if self._prompt.reads_profile_history:
-            profile.update(sanitize_for_llm(dict(request.profile_history or {})))
+            profile_history = sanitize_for_llm(dict(request.profile_history or {}))
+            profile.update(profile_history)
         opportunity = sanitize_for_llm(dict(request.opportunity_snapshot))
 
         def render(text: str, cut: bool, context: Sequence[Mapping[str, Any]]) -> str:
             return self._user_content(
-                request, posting, profile, opportunity, text, cut, context
+                request, posting, profile, opportunity, profile_history, text, cut, context
             )
 
         def estimate(content: str) -> int:
@@ -375,14 +382,15 @@ class GroqAnalysisAdapter:
         posting: Mapping[str, Any] | None,
         profile: Mapping[str, Any],
         opportunity: Mapping[str, Any],
+        profile_history: Mapping[str, Any],
         description: str,
         truncated: bool,
         decisions: Sequence[Mapping[str, Any]],
     ) -> str:
         """Render the versioned template. Values arrive JSON-encoded, so the result parses.
 
-        `posting`, `profile`, `opportunity` and `decisions` are already sanitized by the
-        caller (card F20-15): nothing here needs to strip PII again.
+        `posting`, `profile`, `opportunity`, `profile_history` and `decisions` are already
+        sanitized by the caller (card F20-15): nothing here needs to strip PII again.
         """
         deterministic_result = {
             "eligibility": request.eligibility.value,
@@ -397,6 +405,7 @@ class GroqAnalysisAdapter:
             "deterministic_result": _encode(deterministic_result),
             "opportunity": _encode(dict(opportunity)),
             "profile": _encode(dict(profile)),
+            "profile_history": _encode(dict(profile_history)),
             "posting": _encode(
                 {
                     "title": (posting or {}).get("title"),

@@ -55,8 +55,8 @@ def _settings(**overrides: object) -> Settings:
     return Settings(_env_file=None, database_url="postgresql+psycopg://u@h/db", **overrides)  # type: ignore[call-arg,arg-type]
 
 
-def _prompt():
-    return load_prompt("v1")
+def _prompt(name: str = "v1"):
+    return load_prompt(name)
 
 
 def _request(
@@ -65,6 +65,8 @@ def _request(
     verdict: Verdict = Verdict.RECOMMENDED,
     score: Decimal = Decimal("72.5"),
     profile_snapshot: dict | None = None,
+    posting: dict | None = None,
+    profile_history: dict | None = None,
 ) -> AnalysisRequest:
     default_profile = {"skills": ["python"]}
     return AnalysisRequest(
@@ -80,6 +82,8 @@ def _request(
         profile_snapshot=(
             profile_snapshot if profile_snapshot is not None else default_profile
         ),
+        posting=posting,
+        profile_history=profile_history,
     )
 
 
@@ -141,8 +145,10 @@ def _router(provider, **overrides: object) -> AIRouter:
     )
 
 
-def _adapter(router: AIRouter, *, policy: AnalysisPolicy | None = None) -> GroqAnalysisAdapter:
-    return GroqAnalysisAdapter(router=router, prompt=_prompt(), policy=policy)
+def _adapter(
+    router: AIRouter, *, policy: AnalysisPolicy | None = None, prompt_name: str = "v1"
+) -> GroqAnalysisAdapter:
+    return GroqAnalysisAdapter(router=router, prompt=_prompt(prompt_name), policy=policy)
 
 
 def _analyze(adapter: GroqAnalysisAdapter, request: AnalysisRequest) -> AnalysisOutcome:
@@ -396,3 +402,74 @@ def test_key_changes_with_reasoning_effort() -> None:
     changed_key = changed_adapter.prepare(request).cache_key
 
     assert default_key != changed_key
+
+
+# --- F20-18: prompt v2 reads the posting and the profile history --------------------
+
+
+def test_v2_requires_posting_and_profile_history() -> None:
+    adapter = _adapter(_router(_FakeProvider({})), prompt_name="v2")
+
+    assert adapter.requires == frozenset({"posting", "profile_history"})
+
+
+def test_v1_requires_stays_empty() -> None:
+    """v1 declares neither `posting` nor `profile_history`: no regression from F20-18."""
+    adapter = _adapter(_router(_FakeProvider({})), prompt_name="v1")
+
+    assert adapter.requires == frozenset()
+
+
+def test_v2_payload_carries_posting_and_profile_history_separately() -> None:
+    adapter = _adapter(_router(_FakeProvider({})), prompt_name="v2")
+    request = _request(
+        posting={
+            "title": "Backend Sr",
+            "company_name": "Acme",
+            "description": "Vaga para desenvolvedor Python sênior remoto.",
+        },
+        profile_history={"experiences": [{"role": "Dev", "company": "Acme"}]},
+    )
+
+    prepared = adapter.prepare(request)
+
+    assert prepared.payload["posting"]["title"] == "Backend Sr"
+    assert prepared.payload["profile_history"] == {
+        "experiences": [{"role": "Dev", "company": "Acme"}]
+    }
+    # Merged into `profile` too, so the experience text stays quotable as evidence
+    # (`CLAIM_SOURCES` only knows "posting" and "profile", card F16-07).
+    assert prepared.payload["profile"]["experiences"] == [
+        {"role": "Dev", "company": "Acme"}
+    ]
+    assert "Dev" in prepared.evidence_sources["profile"]
+
+
+def test_v2_profile_history_sanitized_before_render() -> None:
+    """Card F20-15's PII minimisation stays intact for the new placeholder."""
+    adapter = _adapter(_router(_FakeProvider({})), prompt_name="v2")
+    request = _request(
+        posting={"title": "Backend Sr"},
+        profile_history={
+            "experiences": [
+                {"role": "Dev", "email": "dev@example.com", "note": "reach me at dev@example.com"}
+            ]
+        },
+    )
+
+    prepared = adapter.prepare(request)
+
+    rendered = json.dumps(prepared.payload, ensure_ascii=False)
+    assert "email" not in prepared.payload["profile_history"]["experiences"][0]
+    assert "dev@example.com" not in rendered
+    assert "[email]" in rendered
+
+
+def test_v1_profile_history_stays_none_when_prompt_does_not_read_it() -> None:
+    adapter = _adapter(_router(_FakeProvider({})), prompt_name="v1")
+    request = _request(profile_history={"experiences": [{"role": "Dev"}]})
+
+    prepared = adapter.prepare(request)
+
+    assert "profile_history" not in prepared.payload
+    assert "experiences" not in prepared.payload["profile"]

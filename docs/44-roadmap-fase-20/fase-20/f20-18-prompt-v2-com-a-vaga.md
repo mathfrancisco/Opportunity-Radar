@@ -1,6 +1,8 @@
 # CARD F20-18 — Prompt `v2`: vaga e experiências no payload, pt-BR com evidência
 
-- **Status:** Backlog
+- **Status:** Em andamento — artefato `v2` implementado e validado offline
+  (2026-09-27); falta a comparação real no Groq (teto diário de tokens esgotado hoje,
+  ver `docs/pesquisas/prompt-v2-vs-v1.md`).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-17, F20-21
@@ -48,9 +50,13 @@ A infraestrutura do F16-07 já está no código: `AnalysisRequest.posting` e `pr
 
 ## Critérios de aceite
 
-- [ ] `load_prompt("v2")` carrega sem erro e `--check` passa.
-- [ ] Relatório `prompt-v2-vs-v1.md` versionado com a decisão.
-- [ ] Claim com trecho inexistente é descartado e contado (comportamento atual de `parse_analysis`).
+- [x] `load_prompt("v2")` carrega sem erro e `--check` passa.
+- [ ] Relatório `prompt-v2-vs-v1.md` versionado com a decisão. **Parcial:** relatório
+      versionado (`docs/pesquisas/prompt-v2-vs-v1.md`) documentando o que foi feito
+      offline hoje e o comando exato de amanhã; a decisão (trocar padrão para `v2` ou
+      manter `v1`) só pode ser tomada depois da rodada real, que não aconteceu nesta
+      sessão (quota do Groq esgotada).
+- [x] Claim com trecho inexistente é descartado e contado (comportamento atual de `parse_analysis`).
 
 ## Testes
 
@@ -68,3 +74,23 @@ docker compose -p f20-18 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 ## Pronto quando
 
 Todos os critérios de aceite estão marcados, o comando de verificação passa e o CI está verde.
+
+## Próximo (2026-09-27)
+
+Implementação e testes ficaram prontos hoje, todos offline (sem chamada real ao Groq: a
+quota diária de tokens já estava esgotada pela rodada do baseline F20-21 no mesmo dia
+UTC). Falta rodar a comparação real de amanhã:
+
+```bash
+docker compose -p f20v2eval -f compose.yaml -f compose.dev.yaml run --rm \
+  -v "$(pwd):/workspace" api python scripts/eval_analysis.py \
+  --cases /workspace/prompts/opportunity_analysis/eval/cases \
+  --output /workspace/data/evals --prompt v2 \
+  --model openai/gpt-oss-120b --label v2-vs-v1-baseline \
+  --baseline /workspace/docs/44-roadmap-fase-20/evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json \
+  --quota-wait-seconds 65
+```
+
+Depois de rodar: colar a tabela em `docs/pesquisas/prompt-v2-vs-v1.md`, decidir (passo 7)
+se `ai_analysis_prompt` vira `"v2"` em `Settings`/`.env.example` ou se `v1` continua o
+padrão, e marcar o critério de aceite pendente.
