@@ -25,7 +25,7 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 | F20-15 | Sanitização PII e perfil mínimo em `0ad7b34`. | Sem pendência de implementação identificada. |
 | F20-16 | Chave de cache por provedor em `e8c1600`. | Sem pendência de implementação identificada. |
 | F20-17 | Adaptador Groq em `e8c1600`. | Sem pendência de implementação identificada. |
-| F20-18 | Não iniciado. | Baseline de F20-21 pronta (2026-09-27) — desbloqueado, falta implementar. |
+| F20-18 | Artefato `prompts/opportunity_analysis/v2/` (pt-BR, evidência conferida, `posting`/`profile_history` no payload), testes e validação offline em 2026-09-27 (branch `feature/f20-18-prompt-v2`); `v1` intocado, `Settings.ai_analysis_prompt` continua `"v1"`. | Comparação real `v1`×`v2` no Groq (comando em `docs/pesquisas/prompt-v2-vs-v1.md`) e decisão do padrão — não rodada nesta sessão (quota diária de tokens esgotada). |
 | F20-19 | Telemetria sem PII em `c3e7606`. | Sem pendência de implementação identificada. |
 | F20-20 | Métricas API, Overview e doctor em `b45ff84`. | Sem pendência de implementação identificada. |
 | F20-21 | Harness em `2f5defd` e `94edd57`; os 26 drafts de lacuna (Java/fullstack/IA) revisados e promovidos para `eval/cases/`; `eval/cases/` tem 50 arquivos, exatamente 10 Java/10 fullstack/10 IA/10 fora de área/10 inelegíveis, versionados; `test_eval_scoring.py` verde (22 passed); baseline real no Groq rodada em 2026-09-27 (`openai/gpt-oss-120b` pinado, 50/50 `AI_COMPLETED`, `inventions = 0`, latência e tokens registrados) — ver `docs/44-roadmap-fase-20/evidencias/baseline-groq-f20-21-2026-09-27.md`. | Sem pendência de implementação identificada. |

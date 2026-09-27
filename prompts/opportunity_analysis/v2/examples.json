@@ -1,0 +1,51 @@
+[
+  {
+    "name": "evidenced_strength_and_risk",
+    "note": "Both items quote a passage that literally appears in the block their source names (card F20-18's acceptance rule).",
+    "output": {
+      "summary": "Vaga backend sênior cujo requisito de stack bate com a experiência recente do perfil; a remuneração não é informada, então o ajuste financeiro não pode ser avaliado a partir desta vaga.",
+      "strengths": [
+        {
+          "claim": "Experiência recente em Python e PostgreSQL compatível com o requisito da vaga",
+          "evidence": "3 anos como desenvolvedor Python e PostgreSQL",
+          "source": "profile"
+        }
+      ],
+      "risks": [
+        {
+          "claim": "A vaga não informa faixa salarial",
+          "evidence": "Não informamos a faixa salarial nesta etapa",
+          "source": "posting"
+        }
+      ],
+      "inferences": [],
+      "unknowns": [
+        "Faixa de remuneração",
+        "Sobreposição de fuso horário exigida"
+      ],
+      "recommended_review": false
+    }
+  },
+  {
+    "name": "claim_without_literal_excerpt_becomes_an_inference",
+    "note": "No literal passage supports the seniority mismatch, so it is an inference, not a risk with fabricated evidence.",
+    "output": {
+      "summary": "O título da vaga diz Sênior, mas as responsabilidades descritas soam como um papel de liderança; sem um trecho literal que sustente essa leitura, isso fica registrado como inferência.",
+      "strengths": [
+        {
+          "claim": "Empresa é marcada como alta prioridade no catálogo",
+          "evidence": null,
+          "source": null
+        }
+      ],
+      "risks": [],
+      "inferences": [
+        "O escopo descrito na vaga parece exceder o nível sênior anunciado, mas nenhum trecho literal confirma isso"
+      ],
+      "unknowns": [
+        "Tamanho do time e linha de reporte"
+      ],
+      "recommended_review": true
+    }
+  }
+]
