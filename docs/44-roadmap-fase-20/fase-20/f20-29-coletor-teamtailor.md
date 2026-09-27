@@ -1,6 +1,11 @@
 # CARD F20-29 — Coletor Teamtailor
 
-- **Status:** Backlog
+- **Status:** Feito. Validado com dados reais em 2026-09-26 contra dois boards
+  Teamtailor reais (jobs.seedtag.com, jobs.lingokids.com) e homologado/coletando de fato
+  via `make collect` real, executado duas vezes seguidas contra Seedtag: 19 vagas reais
+  persistidas na 1ª execução, 0 novas (19 revistas) na 2ª — presença sem duplicação
+  comprovada com dado real. Ver
+  `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md` §2.2 e §4.1.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-27, F20-03
@@ -68,9 +73,9 @@ Endpoints candidatos, **a confirmar na revisão de termos** (não são fato até
 - [x] Termos revisados e registrados antes do código.
 - [x] Coletor com teste contra board falso, incluindo paginação e erro.
 - [x] Sonda, proposta, cadastro e formulário reconhecem o ATS.
-- [ ] Pelo menos uma empresa real do catálogo homologada e coletando. **Pendente** — precisa da
-      fila de homologação rodando contra a stack real (fora do CI); não simulado. Ver
-      "Pendências" abaixo.
+- [x] Pelo menos uma empresa real do catálogo homologada e coletando. Seedtag
+      (jobs.seedtag.com), 2026-09-26, `run_id a39a9bfb-...`, 19 vagas reais persistidas
+      via `make collect`. Ver evidência §4.1.
 
 ## Verificação
 
@@ -216,18 +221,18 @@ Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
 | Termos revisados e registrados antes do código | `docs/pesquisas/termos-teamtailor.md` |
 | Coletor com teste contra board falso, incluindo paginação e erro | `tests/backend/acquisition/test_teamtailor_collector.py` (9 testes: item válido, ausência real de paginação — `test_does_not_attempt_a_second_page` —, retentativa com `Retry-After`, 401/403/404/500, timeout/erro de transporte, identificador/schema inválidos, item malformado ignorado e reportado, `max_items`); `tests/e2e/fake_teamtailor_board.py` (board falso HTTP real, com `?fail=404/429/500`) |
 | Sonda, proposta, cadastro e formulário reconhecem o ATS | `probing.py` (`PROBE_TYPES`, `PUBLIC_ENDPOINT_REFERENCES`, ramo `teamtailor` em `probe_request`) + `tests/backend/acquisition/test_service.py::test_probe_recognizes_teamtailor_source_type`; `proposals.py` (`IDENTIFIER_KEYS["teamtailor"]`); `registration.py` (`SUPPORTED_ATS`, validador) + `tests/backend/companies/test_registration.py`; `apps/web/src/components/SourceCreateForm.tsx` (`configFields.teamtailor`, `typeLabels.teamtailor`) e `apps/web/src/features/sources/api.ts` (`sourceTypes`) |
-| Pelo menos uma empresa real do catálogo homologada e coletando | **Pendente**, ver "Pendências" |
+| Pelo menos uma empresa real do catálogo homologada e coletando | Seedtag real, 2026-09-26 — `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md` §4.1 |
 
 ## Pendências
 
-- Homologação de uma empresa real (critério 4) não foi feita: exige a fila de homologação
-  (F20-25) rodando contra a stack real e uma chamada de rede de verdade a um board real, o
-  que este worker não faz fora do CI por instrução explícita do card ("nunca fazer chamada
-  real a boards... no CI"; a máquina de referência é medida fora do CI). Candidatos do
-  catálogo já citados em `docs/pesquisas/auditoria-186-empresas.md`: Lingokids
-  (`jobs.lingokids.com`), Seedtag (`jobs.seedtag.com`), Spendesk. Próximo passo: rodar a fila
-  de homologação apontando `company_identifier` para um desses domínios e colar o resultado
-  real no PR.
+- **Resolvido em 2026-09-26.** Homologação de uma empresa real (critério 4): executada
+  fora do CI, na pilha isolada `f20real`, contra Seedtag (`jobs.seedtag.com`) e Lingokids
+  (`jobs.lingokids.com`), ambos já citados em `docs/pesquisas/auditoria-186-empresas.md`.
+  `make collect` real rodou duas vezes contra Seedtag: 19 vagas persistidas na 1ª, 0 novas
+  na 2ª. Durante essa validação foi encontrado e corrigido um gap real:
+  `AcquisitionService.execute` não montava a requisição para este ATS (só a sonda o
+  fazia), então uma fonte homologada falhava em toda coleta real — corrigido em `f51fa77`
+  e `676339c`. Ver `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md`.
 
 ## Pronto quando
 

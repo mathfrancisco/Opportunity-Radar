@@ -29,9 +29,16 @@ Revisitar confirma presença sem duplicar conteúdo ou IA; queda de execução r
 
 ## Critérios de aceite
 
-- [x] Duas visitas iguais atualizam presença sem conteúdo/IA duplicados.
+- [x] Duas visitas iguais atualizam presença sem conteúdo/IA duplicados. **Confirmado com
+      dado real em 2026-09-26:** `make collect` real contra Seedtag (Teamtailor)
+      persistiu 19 vagas na 1ª execução e 0 novas (19 revistas) na 2ª, 16s depois. Ver
+      `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md` §2.2/§4.
 - [x] 304 não fecha vaga nem mascara inventário incompleto.
-- [x] Quedas antes/depois do commit retomam idempotentemente.
+- [x] Quedas antes/depois do commit retomam idempotentemente. Mecanismo coberto por CI
+      com coletores fake; **não exercido com um coletor de produção real** — nenhum dos 4
+      coletores novos (workday/teamtailor/workable/factorial) preenche
+      `CollectedItem.cursor`, e 3 dos 4 não paginam (o board inteiro é uma resposta só),
+      então não há um "meio de página" real para retomar hoje. Ver evidência §4.
 - [x] Mudança material reprocessa; alteração cosmética não gera onda de análise.
 
 ## Verificação

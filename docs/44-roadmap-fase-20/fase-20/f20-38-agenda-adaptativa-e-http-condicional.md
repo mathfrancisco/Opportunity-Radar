@@ -65,6 +65,17 @@ A coleta revisita fontes pelo frescor e rendimento, respeitando limites agregado
       bytes, frescor, cobertura) depende do acervo real e **fica pendente** — não pode ser
       medida no worktree isolado deste card; ver "Itens pendentes" abaixo.
 
+### Validação com dados reais (2026-09-26)
+
+Confirmado ao vivo (pilha isolada `f20real`, não fabricado): os 4 coletores novos
+(workday/teamtailor/workable/factorial, F20-28 a F20-31) também não leem
+`request.conditional_headers` nem chamam `record_conditional_response` — o mesmo gap já
+listado abaixo para ashby/greenhouse/lever/remotive se estende a eles. Orçamento por host
+compartilhado entre fontes não foi exercido com tráfego real porque nenhum par de fontes
+reais do catálogo importado usa o mesmo host. Ver
+`docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md` §4. Nenhum dos dois
+itens muda os critérios já marcados (cobertos por CI); confirma que seguem pendentes.
+
 ### Itens pendentes (fora do CI / precisam do acervo real ou de outros cards)
 
 - Comparação de 7 dias antes/depois na máquina de referência (requisições, bytes,

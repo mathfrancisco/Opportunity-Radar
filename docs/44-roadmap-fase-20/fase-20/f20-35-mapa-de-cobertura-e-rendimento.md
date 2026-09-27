@@ -34,6 +34,13 @@ Cada empresa mostra se está coberta, por que não está e qual é a próxima a�
 - [x] Cada métrica expõe janela, denominador, suporte e null quando indisponível — `test_metrics_expose_window_denominator_support_and_null`, `test_mark_after_now_does_not_change_historical_report`, `test_occurrence_after_window_gets_no_contribution_credit`, `test_untrustworthy_source_mix_is_omitted_and_valid_delays_interpolate`, `test_one_negative_mark_reports_zero_judgement_rate`, `test_zero_requests_leave_useful_yield_null`.
 - [ ] Relatório registra baseline, lacunas acionáveis e plano de comparação.
   - Pendente na máquina de referência: medir sete dias de operação registrada, fixar metas e tetos de recursos antes da mudança, e medir janela equivalente subsequente de sete dias ou replay controlado de snapshots. Fixtures não substituem essa medição.
+  - **Janela iniciada em 2026-09-26.** Snapshot T0 real (`/search-metrics` na pilha
+    isolada `f20real`, gerado em `2026-09-27T00:52:16Z`) salvo em
+    `docs/44-roadmap-fase-20/evidencias/f20-search-metrics-baseline-2026-09-26.json`.
+    Fim previsto: `2026-10-04`. Continua pendente porque exige o worker de coleta (ou
+    execuções periódicas de `make collect`) operando por 7 dias reais depois deste
+    ponto — não pode terminar nesta sessão. Ver
+    `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md` §3.
 
 ## Verificação
 

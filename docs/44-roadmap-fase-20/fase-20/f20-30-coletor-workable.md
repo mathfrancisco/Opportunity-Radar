@@ -1,6 +1,9 @@
 # CARD F20-30 — Coletor Workable
 
-- **Status:** Backlog
+- **Status:** Feito. Validado com dados reais em 2026-09-26 contra duas contas Workable
+  reais (`careers`, a própria Workable; `wantable-careers`) e homologado/coletando de
+  fato via `make collect` real contra Wantable (4 vagas reais persistidas). Ver
+  `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md` §2.3 e §4.1.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-27, F20-03
@@ -76,9 +79,9 @@ Endpoints candidatos, **a confirmar na revisão de termos** (não são fato até
       `proposals.py`, `registration.py`, `SourceCreateForm.tsx`/`api.ts`, com teste de
       integração em `test_service.py::test_probe_recognizes_workable_source_type` e
       `tests/backend/companies/test_registration.py`).
-- [ ] Pelo menos uma empresa real do catálogo homologada e coletando — pendente: exige a
-      fila de homologação (F20-25) rodando contra uma conta Workable real do catálogo, na
-      máquina de referência. Não executado neste ambiente; não fabricado.
+- [x] Pelo menos uma empresa real do catálogo homologada e coletando — Wantable
+      (`wantable-careers`), 2026-09-26, `run_id 38d3b5f3-...`, 4 vagas reais persistidas
+      via `make collect`. Ver evidência §4.1.
 
 ## Verificação
 
@@ -248,9 +251,9 @@ Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
   ligado a `compose.ci.yaml`**, pela mesma razão registrada em F20-28: `WorkableCollector`
   monta a URL fixa `https://apply.workable.com/...`, sem parâmetro de `base_url`.
   Registrado como item em aberto, consistente com o precedente do Workday.
-- **Pendente, fora deste ambiente:** homologar uma empresa real do catálogo com Workable e
-  colar a primeira coleta real no PR (exige F20-25 e a máquina de referência); e o
-  relatório de descoberta do F20-27 por tipo de ATS segue pendente (ver F20-27).
+- **Resolvido em 2026-09-26:** homologada e coletada uma empresa real (Wantable) — ver
+  evidência §4.1; e o relatório de descoberta do F20-27 por tipo de ATS também foi
+  executado com dados reais nesta mesma sessão (ver F20-27).
 - **Coordenação com o sub-card irmão (Teamtailor, F20-29):** este branch foi rebaseado
   sobre `feature/f20-groq-e-consolidacao` (`f02d6a4`, que já inclui o Teamtailor) para
   resolver os conflitos aditivos esperados em `registry.py`, `probing.py`, `proposals.py`,

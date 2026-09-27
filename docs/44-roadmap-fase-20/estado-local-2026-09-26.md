@@ -34,19 +34,19 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 | F20-24 | Não iniciado. | F20-39, F20-17, F20-16 e F20-12. |
 | F20-25 | Fila de homologação em `99d2067`. | Sem pendência de implementação identificada. |
 | F20-26 | Recusa por versão e bloqueio de ciclo em `c9be16e`. | Sem pendência de implementação identificada. |
-| F20-27 | Descoberta e modelos de ATS implementados. | Produzir relatório em fontes reais. |
-| F20-28 | Coletor Workday em `7516acb`. | Homologar board Workday real. |
-| F20-29 | Coletor Teamtailor em `919c4b5`. | Homologar board Teamtailor real. |
-| F20-30 | Coletor Workable em `ae1ee79`. | Homologar board Workable real. |
-| F20-31 | `factorial.py` e testes de fixture em `8be7e4c`. | Homologar board Factorial real. |
+| F20-27 | Descoberta e modelos de ATS implementados; relatório real executado em 2026-09-26 (115 empresas, 4 ATS revelados: `homologacao-real-2026-09-26.md` §1). | Sem pendência de implementação identificada. |
+| F20-28 | Coletor Workday em `7516acb`; validado com dados reais (Adobe, Workday) e homologado/coletando (Adobe) em 2026-09-26; fix de integração `f51fa77`/`676339c`. | Sem pendência de implementação identificada. |
+| F20-29 | Coletor Teamtailor em `919c4b5`; validado com dados reais (Seedtag, Lingokids) e homologado/coletando 2x (Seedtag) em 2026-09-26; fix de integração `f51fa77`/`676339c`. | Sem pendência de implementação identificada. |
+| F20-30 | Coletor Workable em `ae1ee79`; validado com dados reais (Workable, Wantable) e homologado/coletando (Wantable) em 2026-09-26; fix de integração `f51fa77`/`676339c`. | Sem pendência de implementação identificada. |
+| F20-31 | `factorial.py` e testes de fixture em `8be7e4c`; validado com dados reais (Factorial, Agentero) e homologado/coletando (Agentero) em 2026-09-26; bug de parser corrigido em `cbe206b`; fix de integração `f51fa77`/`676339c`. | Sem pendência de implementação identificada. |
 | F20-32 | Não iniciado. | Implementar coletor Gupy. |
 | F20-33 | Palavras-chave do perfil em `b7f432e` e `e9be146`. | Fazer verificação manual do critério 4. |
 | F20-34 | Buscas salvas em `5088e6`. | Cobrir componente Inbox/Overview. |
-| F20-35 | Funil e rendimento em `102a53d`. | Medir baseline de sete dias na máquina de referência. |
+| F20-35 | Funil e rendimento em `102a53d`; janela de baseline de 7 dias iniciada em 2026-09-26 (T0 real salvo em `f20-search-metrics-baseline-2026-09-26.json`), termina 2026-10-04. | Medir a janela de 7 dias completa na máquina de referência (não pode terminar antes de 2026-10-04). |
 | F20-36 | Não iniciado; dependências F20-27 e F20-35 implementadas. | Implementar descoberta limitada. |
 | F20-37 | Não iniciado. | F20-36 e F20-03. |
-| F20-38 | Agenda adaptativa e HTTP condicional em `f14bc6e`. | Medir operação real. |
-| F20-39 | Hashes, presença por run e migração `0041` em `8be7e4c`; variantes de parser com migração `0042` (local, sem aceite); retomada explícita (`resume_of_run_id`, migração `0043`), manifesto 304 declarado (`CollectionTelemetry.record_manifest`) e métrica operacional (`presence_confirmed_without_reprocessing` em `/api/source-metrics`) implementados e testados. | Confirmar CI verde na branch; medição de bytes evitados fica fora do CI (depende de coletor real com condicionais). |
+| F20-38 | Agenda adaptativa e HTTP condicional em `f14bc6e`; confirmado em 2026-09-26 que os 4 coletores novos (F20-28 a F20-31) também não enviam ETag/If-Modified-Since ainda. | Medir operação real (comparação de 7 dias) e cabear condicionais HTTP nos coletores de produção (card futuro). |
+| F20-39 | Hashes, presença por run e migração `0041` em `8be7e4c`; variantes de parser com migração `0042` (local, sem aceite); retomada explícita (`resume_of_run_id`, migração `0043`), manifesto 304 declarado (`CollectionTelemetry.record_manifest`) e métrica operacional (`presence_confirmed_without_reprocessing` em `/api/source-metrics`) implementados e testados; presença sem duplicação confirmada com dado real em 2026-09-26 (`make collect` 2x contra Seedtag). | Confirmar CI verde na branch; retomada real por cursor exige um coletor de produção que emita `CollectedItem.cursor` (nenhum dos 4 novos faz isso hoje); medição de bytes evitados fica fora do CI (depende de coletor real com condicionais). |
 | F20-40 | Critérios aceitos com testes em `794b519`. | Sem pendência de implementação identificada. |
 | F20-41 | Backup e manifesto AI em `a15d3b8` e `c9c291e`. | Sem pendência de implementação identificada. |
 | F20-42 | Cliente e configuração Tavily implementados. | Sem pendência de implementação identificada. |
@@ -85,6 +85,8 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 
 1. Abrir PR/empurrar a branch e confirmar o Compose E2E verde na CI real com a correção
    de `taxonomy_version` e o trabalho de F20-39 (retomada, manifesto 304, métrica).
-2. Homologar F20-28 a F20-31 e implementar F20-32.
+2. F20-28 a F20-31 homologados com dados reais em 2026-09-26 (ver
+   `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md`); implementar
+   F20-32.
 3. Produzir F20-21 antes de F20-18, F20-22, F20-23 e F20-24.
 4. Implementar F20-36 e F20-37, depois F20-47 a F20-50.

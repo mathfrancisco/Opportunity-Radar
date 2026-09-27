@@ -1,12 +1,14 @@
 # CARD F20-27 — Descoberta de ATS
 
-- **Status:** Feito no código — `detect_ats`, `eligible_companies`, `discover_one`
-  (respeita `robots.txt` e uma req/s), `record_discovery_attempt`/`record_ats_identified`,
-  a tabela `company_radar.discovery_attempt`, `scripts/discover_ats.py` e o alvo `make
+- **Status:** Feito. `detect_ats`, `eligible_companies`, `discover_one` (respeita
+  `robots.txt` e uma req/s), `record_discovery_attempt`/`record_ats_identified`, a tabela
+  `company_radar.discovery_attempt`, `scripts/discover_ats.py` e o alvo `make
   discover-ats` implementados; critérios 1–3 cobertos por
-  `tests/backend/companies/test_discovery.py` (15 testes). **Pendente:** critério 4 (o
-  relatório por tipo de ATS em `docs/pesquisas/`) exige a execução real na máquina de
-  referência, fora deste ambiente — não marcado, não fabricado.
+  `tests/backend/companies/test_discovery.py` (15 testes). Critério 4 executado com dados
+  reais em 2026-09-26 na pilha isolada `f20real` (115 empresas do catálogo real
+  verificadas, 1 req/s, `robots.txt` respeitado): 4 revelaram ATS (3 Ashby, 1 Greenhouse),
+  111 sem ATS estruturado detectável. Ver
+  `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md` §1.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-03
@@ -70,8 +72,9 @@ negativo não significa empresa sem vagas; guardar motivo e próxima pesquisa.
       `robots.txt` e o ritmo.
 - [x] ATS encontrado vira `CompanySource` com evidência e método `discovery`.
 - [x] Tentativas ficam registradas e não se repetem antes do intervalo.
-- [ ] O relatório por tipo de ATS está em `docs/pesquisas/`. (exige execução real na
-      máquina de referência, fora deste ambiente)
+- [x] O relatório por tipo de ATS está em `docs/pesquisas/`. Execução real em
+      2026-09-26 (115 empresas, 4 ATS revelados: 3 Ashby, 1 Greenhouse) registrada em
+      `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md`.
 
 ## Verificação
 

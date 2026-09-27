@@ -1,6 +1,12 @@
 # CARD F20-31 — Coletor Factorial
 
-- **Status:** Backlog
+- **Status:** Feito. Validado com dados reais em 2026-09-26 contra dois boards Factorial
+  reais (careers.factorialhr.com, agentero.factorialhr.com) e homologado/coletando de
+  fato via `make collect` real contra Agentero (2 vagas reais persistidas). Durante essa
+  validação foi encontrado e corrigido um bug real de parser: 9 das 140 vagas do board
+  real da própria Factorial eram rejeitadas por engano quando a vaga não tinha time
+  atribuído (`fix cbe206b`). Ver
+  `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md` §2.4 e §4.1.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-27, F20-03
@@ -68,9 +74,9 @@ Endpoints candidatos, **a confirmar na revisão de termos** (não são fato até
 - [x] Termos revisados e registrados antes do código.
 - [x] Coletor com teste contra board falso, incluindo paginação e erro.
 - [x] Sonda, proposta, cadastro e formulário reconhecem o ATS.
-- [ ] Pelo menos uma empresa real do catálogo homologada e coletando. **Pendente** — precisa da
-      fila de homologação rodando contra a stack real (fora do CI); não simulado. Ver
-      "Pendências" abaixo.
+- [x] Pelo menos uma empresa real do catálogo homologada e coletando. Agentero
+      (`agentero.factorialhr.com`), 2026-09-26, `run_id 17b68596-...`, 2 vagas reais
+      persistidas via `make collect`. Ver evidência §4.1.
 
 ## Verificação
 
@@ -233,19 +239,18 @@ Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
 | Termos revisados e registrados antes do código | `docs/pesquisas/termos-factorial.md` |
 | Coletor com teste contra board falso, incluindo paginação e erro | `tests/backend/acquisition/test_factorial_collector.py` (9 testes: item válido, ausência real de paginação — `test_does_not_attempt_a_second_page` —, retentativa com `Retry-After`, 401/403/404/500, timeout/erro de transporte, identificador/schema inválidos, item malformado ignorado e reportado, `max_items`); `tests/e2e/fake_factorial_board.py` (board falso HTTP real, HTML no formato do Factorial, com `?fail=404/429/500/schema`) |
 | Sonda, proposta, cadastro e formulário reconhecem o ATS | `probing.py` (`PROBE_TYPES`, `PUBLIC_ENDPOINT_REFERENCES`, ramo `factorial` em `probe_request`) + `tests/backend/acquisition/test_service.py::test_probe_recognizes_factorial_source_type`; `proposals.py` (`IDENTIFIER_KEYS["factorial"]`); `registration.py` (`SUPPORTED_ATS`, validador) + `tests/backend/companies/test_registration.py::test_registration_accepts_factorial_source_type`/`test_registration_rejects_invalid_factorial_identifier`; `apps/web/src/components/SourceCreateForm.tsx` (`configFields.factorial`, `typeLabels.factorial`) e `apps/web/src/features/sources/api.ts` (`sourceTypes`) |
-| Pelo menos uma empresa real do catálogo homologada e coletando | **Pendente**, ver "Pendências" |
+| Pelo menos uma empresa real do catálogo homologada e coletando | Agentero real, 2026-09-26 — `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md` §4.1 |
 
 ## Pendências
 
-- Homologação de uma empresa real (critério 4) não foi feita: exige a fila de homologação
-  (F20-25) rodando contra a stack real e uma chamada de rede de verdade a um board real, o
-  que este worker não faz fora do CI por instrução explícita do card ("nunca fazer chamada
-  real a boards... no CI"; a máquina de referência é medida fora do CI). Candidatos do
-  catálogo já citados em `docs/pesquisas/auditoria-186-empresas.md`: Agentero
-  (`agentero.factorialhr.com`, `company_identifier=agentero`) e a própria Factorial
-  (`careers.factorialhr.com`, `company_identifier=careers`). Próximo passo: rodar a fila de
-  homologação apontando `company_identifier` para um desses slugs e colar o resultado real
-  no PR.
+- **Resolvido em 2026-09-26.** Homologação de uma empresa real (critério 4): executada
+  fora do CI, na pilha isolada `f20real`, contra Agentero (`agentero.factorialhr.com`) e a
+  própria Factorial (`careers.factorialhr.com`), ambos já citados em
+  `docs/pesquisas/auditoria-186-empresas.md`. `make collect` real rodou contra Agentero:
+  2 vagas persistidas. Contra `careers.factorialhr.com` (140 vagas reais), a chamada
+  direta ao coletor revelou e permitiu corrigir um bug real de parser: 9 vagas sem time
+  atribuído eram rejeitadas por engano como mudança de schema (fix `cbe206b`). Ver
+  `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md`.
 
 ## Pronto quando
 

@@ -9,9 +9,14 @@
   `sourceTypes`) reconhecem `"workday"`. Testes contra board falso
   (`tests/backend/acquisition/test_workday_collector.py`, 8 testes) e integração da sonda
   (`test_service.py::test_probe_recognizes_workday_source_type`) e do cadastro
-  (`tests/backend/companies/test_registration.py`) passam. **Pendente:** critério "pelo
-  menos uma empresa real homologada e coletando" — exige a fila de homologação (F20-25) e
-  a máquina de referência, fora deste ambiente; não marcado, não fabricado.
+  (`tests/backend/companies/test_registration.py`) passam. Validado em 2026-09-26 contra
+  dois boards Workday reais (Adobe, a própria Workday) e homologado/coletando de fato via
+  `make collect` real contra Adobe (10 vagas reais persistidas). Durante essa validação
+  foi encontrado e corrigido um gap real de integração: `AcquisitionService.execute` não
+  sabia montar a requisição para este ATS (nem para Teamtailor/Workable/Factorial), então
+  uma fonte homologada falhava em toda coleta real — corrigido em `f51fa77` e `676339c`,
+  com teste de regressão. Ver
+  `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md` §2.1 e §4.1.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-27, F20-03
@@ -84,9 +89,9 @@ Endpoints candidatos, **a confirmar na revisão de termos** (não são fato até
 - [x] Sonda, proposta, cadastro e formulário reconhecem o ATS (`probing.py`,
       `proposals.py`, `registration.py`, `SourceCreateForm.tsx`/`api.ts`, com teste de
       integração em `test_service.py` e `tests/backend/companies/test_registration.py`).
-- [ ] Pelo menos uma empresa real do catálogo homologada e coletando — pendente: exige a
-      fila de homologação (F20-25) rodando contra um tenant Workday real do catálogo, na
-      máquina de referência. Não executado neste ambiente; não fabricado.
+- [x] Pelo menos uma empresa real do catálogo homologada e coletando — Adobe
+      (`adobe/external_experienced`, `wd5`), 2026-09-26, `run_id a1ea9b5b-...`,
+      10 vagas reais persistidas via `make collect`. Ver evidência §4.1.
 
 ## Verificação
 
@@ -248,10 +253,9 @@ Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
   `https://<tenant>.<pod>.myworkdayjobs.com/...` (mesma forma do card e de
   `LeverCollector`, sem parâmetro de `base_url`), então apontar para o board falso local
   exigiria um mecanismo de override que o card não pediu. Registrado como item em aberto.
-- **Pendente, fora deste ambiente:** homologar uma empresa real do catálogo com Workday e
-  colar a primeira coleta real no PR (exige F20-25 e a máquina de referência); e o
-  relatório de descoberta do F20-27 por tipo de ATS, que ordenaria os sub-cards seguintes,
-  também segue pendente (ver F20-27).
+- **Resolvido em 2026-09-26:** homologada e coletada uma empresa real (Adobe) — ver
+  evidência §4.1; e o relatório de descoberta do F20-27 por tipo de ATS também foi
+  executado com dados reais nesta mesma sessão (ver F20-27 e a evidência §1).
 
 ## Pronto quando
 
