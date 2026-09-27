@@ -1,6 +1,6 @@
 # CARD F20-34 — Buscas salvas
 
-- **Status:** Implementado
+- **Status:** Done
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-01
@@ -48,13 +48,18 @@ atrito, e não há como saber o que é novo desde a última visita.
 
 - [x] Buscas são salvas, listadas, abertas, renomeadas e removidas. Evidência:
       `test_create_list_rename_delete_saved_search`, `test_open_saved_search_updates_last_opened_at`,
-      `apps/web/src/features/saved-searches/api.test.ts`; UI em `InboxPage.tsx`.
+      `apps/web/src/features/saved-searches/api.test.ts`; UI em `InboxPage.tsx`, com
+      `apps/web/src/routes/InboxPage.test.tsx` cobrindo `SaveSearchForm` (botão desabilitado até
+      digitar nome, payload de nome/termo/filtros, limpeza do campo, nome só com espaços não
+      envia) e `SavedSearches` (lista vazia, listar, aplicar filtros ao abrir, renomear, remover).
 - [x] A contagem de novidades usa a mesma consulta da Inbox. Evidência:
       `test_new_count_uses_same_query_as_inbox`,
       `test_new_count_counts_only_opportunities_created_after_last_opened`,
       `test_unknown_filter_key_is_ignored_with_warning`.
 - [x] A Visão geral mostra as buscas com novidade. Evidência: `SavedSearchesWithNews` em
-      `OverviewPage.tsx` (bloco "Decisão de hoje"); sem teste de componente, ver Evidências.
+      `OverviewPage.tsx` (bloco "Decisão de hoje"); `apps/web/src/routes/OverviewPage.test.tsx`
+      (`mostra só as buscas com novidade, com nome, contagem e link para a Inbox filtrada`,
+      `clicar na busca com novidade marca last_opened_at`, mais os dois casos vazios).
 
 ## Verificação
 
@@ -209,14 +214,25 @@ Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
   abre uma busca`).
 - `InboxPage.tsx`: "Salvar esta busca" (formulário com nome, filtros e termo atuais dos
   `URLSearchParams` já lidos ali) e a lista de buscas salvas (abrir aplica os filtros salvos
-  e marca `last_opened_at`; renomear e remover inline). Sem teste de componente dedicado
-  para `InboxPage` — a lógica de conversão filtros↔query string está coberta indiretamente
-  pelos parsers já testados em `api.test.ts`; ficou como nota de PR, não bloqueia o card.
+  e marca `last_opened_at`; renomear e remover inline). `SaveSearchForm` e `SavedSearches`
+  exportados (mesmo padrão de `DuplicateCandidates` em `OpportunityDetailPage.tsx`) e cobertos
+  por `apps/web/src/routes/InboxPage.test.tsx` (7 casos): botão de salvar desabilitado até
+  haver nome, payload correto (nome/termo/filtros), campo limpo após salvar, nome só com
+  espaços não dispara `fetch`, lista vazia não renderiza nada, listar e aplicar filtros ao
+  clicar no nome (com o open marcando `last_opened_at`), renomear e remover.
 - `OverviewPage.tsx`: bloco "Buscas salvas com novidade" dentro de `PendingDecisions`,
   usando `useQueries` para consultar a contagem de cada busca salva e só listar as que têm
-  novidade (`> 0`); abrir marca `last_opened_at`. Não existe `OverviewPage.test.tsx` no
-  repositório — por isso não há teste automatizado deste bloco, conforme a ressalva do card
-  ("caso contrário, nota no PR").
+  novidade (`> 0`); abrir marca `last_opened_at`. `SavedSearchesWithNews` exportado e coberto
+  por `apps/web/src/routes/OverviewPage.test.tsx` (4 casos): nada sem busca salva, nada quando
+  nenhuma tem novidade, só as com novidade aparecem com nome/contagem/link para a Inbox com os
+  filtros salvos, e clicar marca `last_opened_at`.
+- Follow-up (`70a0a40`, branch `feature/f20-34-componentes`): fechou a lacuna de teste de
+  componente registrada acima. Nenhum bug de produção foi encontrado — os únicos ajustes
+  foram no harness de teste (setter nativo de `<input>` para disparar o `onChange` do React,
+  e o roteamento dos `fetch` stub, que precisava tratar `GET` explícito, não só `method`
+  ausente, porque `saved-searches/api.ts` sempre define `method` na chamada). Comandos:
+  `npx vitest run src/routes/InboxPage.test.tsx src/routes/OverviewPage.test.tsx` (11 passed);
+  `npm run check` (lint, typecheck, 28 arquivos/145 testes, build — todos verdes).
 - Achado corrigido durante a verificação: `tests/backend/dashboard/test_queries.py::test_inbox_query_filters_by_created_after`
   e três testes de `test_saved_searches.py` usavam um relógio fixo de 2040-01-01, o mesmo
   usado pelas fixtures absolutas de `test_coverage_funnel.py` (F20-35). Como

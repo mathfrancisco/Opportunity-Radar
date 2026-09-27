@@ -61,7 +61,7 @@ evidência de aceite ou correção.
 | [F20-31 — Coletor Factorial](fase-20/f20-31-coletor-factorial.md) | F20-27, F20-03 | Done — `8be7e4c`, `cbe206b`, `f51fa77`, `676339c`; validado com dados reais em 2026-09-26 (Factorial, Agentero), homologado e coletando (Agentero) |
 | [F20-32 — Coletor Gupy](fase-20/f20-32-coletor-gupy.md) | F20-27, F20-03 | Fechado — não viável; revisão de termos em 2026-09-27 (`docs/pesquisas/termos-gupy.md`): Termos de Uso da Gupy proíbem nominalmente agregar/copiar/duplicar vagas — nenhum código escrito |
 | [F20-33 — Palavras-chave do perfil](fase-20/f20-33-palavras-chave-do-perfil.md) | F20-03, F20-40 | Implementado — `b7f432e`, `e9be146`; critério 4 confirmado com roteiro reprodutível (`docs/44-roadmap-fase-20/rotulagem/f20-33-verificacao-criterio-4.md`) e `git diff --stat b7f432e~1..e9be146 -- scripts/enable_sources.py` vazio |
-| [F20-34 — Buscas salvas](fase-20/f20-34-buscas-salvas.md) | F20-01 | Implementado — `5088e6f`; sem teste de componente da Inbox/Overview |
+| [F20-34 — Buscas salvas](fase-20/f20-34-buscas-salvas.md) | F20-01 | Done — `5088e6f`, `70a0a40` (testes de componente da Inbox/Overview); `npm run check` verde (28 arquivos, 145 testes) |
 ### Bloco D — Varredura produtiva
 
 | Card | Depende de | Status |
