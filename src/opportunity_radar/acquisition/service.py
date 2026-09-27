@@ -1502,6 +1502,30 @@ def _collector_settings(
             _optional_string(source.configuration, "company_name"),
             None,
         )
+    if source.source_type == "workday":
+        return (
+            _required_string(source.configuration, "tenant_identifier"),
+            _optional_string(source.configuration, "company_name"),
+            _required_string(source.configuration, "api_region"),
+        )
+    if source.source_type == "teamtailor":
+        return (
+            _required_string(source.configuration, "company_identifier"),
+            _optional_string(source.configuration, "company_name"),
+            None,
+        )
+    if source.source_type == "workable":
+        return (
+            _required_string(source.configuration, "account_identifier"),
+            _optional_string(source.configuration, "company_name"),
+            None,
+        )
+    if source.source_type == "factorial":
+        return (
+            _required_string(source.configuration, "company_identifier"),
+            _optional_string(source.configuration, "company_name"),
+            None,
+        )
     return None, None, None
 
 

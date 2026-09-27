@@ -629,6 +629,62 @@ def test_ashby_source_configuration_reaches_collector_and_records_http_metrics()
     assert 0 < throttling_delays[0] <= 5
 
 
+def test_workday_source_configuration_reaches_collector_via_execute() -> None:
+    """F20-28/F20-38: `_collector_settings` must build a Workday `CollectionRequest` from
+    `SourceDefinitionModel.configuration` the same way `probe_request` already does — a
+    real homologated Workday source ran through `service.execute` with `company_reference`
+    left as `None` (only the probe path built it), so every scheduled run raised
+    INVALID_CONFIGURATION before this fix. `tenant_identifier`/`api_region` are the keys
+    `IDENTIFIER_KEYS`/`probe_request` already use for this ATS."""
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="workday",
+        name="Acme jobs",
+        enabled=True,
+        configuration={
+            "tenant_identifier": "acme/ExternalCareerSite",
+            "api_region": "wd5",
+            "company_name": "Acme",
+        },
+        last_http_attempt_at=datetime.now(UTC),
+    )
+    session = _MemorySession()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "acme.wd5.myworkdayjobs.com"
+        return httpx.Response(
+            200,
+            json={
+                "total": 1,
+                "jobPostings": [
+                    {
+                        "title": "Backend Engineer",
+                        "externalPath": "/job/Remote/Backend-Engineer_R1",
+                        "locationsText": "Remote",
+                        "bulletFields": ["R1"],
+                    }
+                ],
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((WorkdayCollector(client=client),)),
+        repository=_MemoryRepository(source),  # type: ignore[arg-type]
+    )
+    try:
+        run = asyncio.run(service.execute(source.id, CollectionRequest()))
+    finally:
+        asyncio.run(client.aclose())
+
+    raw_items = [item for item in session.added if isinstance(item, RawItemModel)]
+    assert run.status == "SUCCEEDED"
+    assert run.items_seen == 1
+    assert run.items_persisted == 1
+    assert raw_items[0].payload["title"] == "Backend Engineer"
+
+
 def test_probe_reports_retry_after_on_rate_limit() -> None:
     """F20-25: a probe against a rate-limited endpoint surfaces `Retry-After` so the
     homologation queue's batch mode knows how long to wait before the next probe."""
