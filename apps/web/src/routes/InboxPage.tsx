@@ -205,7 +205,7 @@ function paramsFromFilters(filters: SavedSearchFilters): URLSearchParams {
 }
 
 /** Card F20-34: nome e filtros/termo atuais viram uma busca salva reaberta depois. */
-function SaveSearchForm({ filters, term }: { filters: SavedSearchFilters; term: string }) {
+export function SaveSearchForm({ filters, term }: { filters: SavedSearchFilters; term: string }) {
   const [name, setName] = useState('')
   const create = useCreateSavedSearch()
 
@@ -301,7 +301,7 @@ function SavedSearchRow({
   )
 }
 
-function SavedSearches({ onApply }: { onApply: (filters: SavedSearchFilters) => void }) {
+export function SavedSearches({ onApply }: { onApply: (filters: SavedSearchFilters) => void }) {
   const searches = useSavedSearches()
   if (!searches.data || searches.data.length === 0) return null
   return (

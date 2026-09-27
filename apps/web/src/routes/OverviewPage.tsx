@@ -516,7 +516,7 @@ function Block({
  * parar de ler a página, e a tela precisa deixar isso claro sem que ele desça até o fim.
  */
 /** Card F20-34: só as buscas salvas com vaga nova desde a última abertura aparecem aqui. */
-function SavedSearchesWithNews() {
+export function SavedSearchesWithNews() {
   const searches = useSavedSearches()
   const open = useOpenSavedSearch()
   const counts = useQueries({
