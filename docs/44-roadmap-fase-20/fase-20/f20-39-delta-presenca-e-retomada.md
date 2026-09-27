@@ -1,6 +1,6 @@
 # CARD F20-39 — Delta, presença e retomada
 
-- **Status:** Em andamento
+- **Status:** Implementado localmente — critérios de aceite cumpridos e evidenciados; falta confirmar CI verde na branch (ver "Evidência local")
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** D — Varredura produtiva
 - **Depende de:** F20-38
@@ -29,10 +29,10 @@ Revisitar confirma presença sem duplicar conteúdo ou IA; queda de execução r
 
 ## Critérios de aceite
 
-- [ ] Duas visitas iguais atualizam presença sem conteúdo/IA duplicados.
-- [ ] 304 não fecha vaga nem mascara inventário incompleto.
-- [ ] Quedas antes/depois do commit retomam idempotentemente.
-- [ ] Mudança material reprocessa; alteração cosmética não gera onda de análise.
+- [x] Duas visitas iguais atualizam presença sem conteúdo/IA duplicados.
+- [x] 304 não fecha vaga nem mascara inventário incompleto.
+- [x] Quedas antes/depois do commit retomam idempotentemente.
+- [x] Mudança material reprocessa; alteração cosmética não gera onda de análise.
 
 ## Verificação
 
@@ -202,14 +202,45 @@ Todos os critérios de aceite estão marcados com evidência, o comando de verif
   `RawItem`/run; visitas antes da normalização também ficam registradas e são ligadas à
   ocorrência quando ela é criada.
 - A revalidação HTTP 304 sem manifesto completo continua incompleta; não autoriza
-  encerramento de oportunidades.
-- Ainda pendente: retomada da mesma execução com prefixo persistido, manifesto completo
-  por representação para reaproveitar 304, armazenamento de variantes quando o payload
-  bruto é idêntico mas o parser muda, e medição operacional de bytes/inferências evitadas.
+  encerramento de oportunidades. A migração `20260926_0043` acrescenta o manifesto
+  declarado: `CollectionTelemetry.record_manifest`/`record_conditional_response` contam
+  quantas representações um coletor declarou e quantas revalidaram 304 na mesma execução;
+  `AcquisitionService.execute` só reaproveita a completude de uma execução anterior
+  (`repository.has_completed_run`) quando **todas** as representações declaradas
+  revalidaram 304 nesta execução, sem cursor de sufixo e sem item novo — uma 304 nua
+  (sem manifesto declarado) permanece incompleta como antes.
+- Retomada da mesma execução: a mesma migração adiciona `source_run.resumed_from_run_id`.
+  Uma execução `PARTIAL`/`FAILED` com evidência persistida (`items_persisted > 0`) pode ser
+  nomeada por uma execução seguinte via `CollectionRequest.resume_of_run_id` — sempre junto
+  de um `cursor` explícito, nunca derivado automaticamente. É só proveniência: o checkpoint
+  do próprio run interrompido continua sem promoção automática
+  (`test_partial_run_does_not_promote_checkpoint` permanece intacto e verde), e o prefixo já
+  persistido continua protegido pelo dedupe existente, não por uma nova regra.
+- Medição operacional: `dashboard/metrics.py` conta, por fonte e por janela,
+  `presence_confirmed_without_reprocessing` — revisitas cujo hash bruto bateu com o que já
+  existia, ou seja, presença confirmada sem normalização nem IA — exposta em
+  `GET /api/source-metrics`. Bytes evitados continuam fora do CI (nenhum coletor real ainda
+  envia condicionais), conforme "Fora de escopo".
+- Armazenamento de variantes de parser (migração `20260926_0042`) permanece implementação
+  local sem aceite até validação no banco compartilhado; não altera o estado deste card.
 
 ### Evidência local
 
-- `tests/backend/acquisition/test_delta_presence_resume.py`: 9 testes Postgres passaram.
+- `tests/backend/acquisition/test_delta_presence_resume.py`: 16 testes Postgres passaram
+  (9 anteriores + 3 de manifesto declarado + 2 de retomada explícita + a correção do
+  `_Fixture.cleanup()` que também remove observações sem ocorrência vinculada).
+- `tests/backend/dashboard/test_metrics.py`: 9 testes Postgres passaram, incluindo
+  `test_presence_confirmed_without_reprocessing_counts_matched_revisits`.
 - `tests/backend/opportunities/test_delta_normalization.py`: 5 regressões de replay e
   atualização de presença passaram.
-- Suíte completa com `RUN_DATABASE_INTEGRATION=1`: 847 passaram, 10 ignorados.
+- Suíte completa com `RUN_DATABASE_INTEGRATION=1` contra banco Postgres recriado do zero
+  (`docker compose -p f20w down --volumes` seguido de `pytest -q`): 858 passaram,
+  10 ignorados, 0 falharam. `ruff check .` e `mypy` limpos.
+- CI `36279883936`: aprovou backend lint, backend tests, migrations e frontend após
+  `973b648`, mas falhou no Compose E2E na asserção de `taxonomy_version` (esperava o
+  literal desatualizado `"skills-v1"`; o normalizador usa `"skills-v2"` desde F20-02,
+  `docs/pesquisas/curadoria-skills-v2.md`). Reproduzido localmente com
+  `docker compose -p f20e2e -f compose.yaml -f compose.ci.yaml` isolado do projeto
+  `opportunity-radar`; corrigidos os dois literais em `.github/workflows/pipeline.yml`
+  (linhas do fluxo de aquisição manual e de matching). Este card não depende dessa
+  correção para seus critérios, mas ela desbloqueia o gate de CI da branch.

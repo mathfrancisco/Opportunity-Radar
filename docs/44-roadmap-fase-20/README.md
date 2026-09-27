@@ -58,7 +58,7 @@ evidência de aceite ou correção.
 | [F20-28 — Coletor Workday](fase-20/f20-28-coletor-workday.md) | F20-27, F20-03 | Implementado — `7516acb`; validação em board real pendente |
 | [F20-29 — Coletor Teamtailor](fase-20/f20-29-coletor-teamtailor.md) | F20-27, F20-03 | Implementado — `919c4b5`; validação em board real pendente |
 | [F20-30 — Coletor Workable](fase-20/f20-30-coletor-workable.md) | F20-27, F20-03 | Implementado — `ae1ee79`; validação em board real pendente |
-| [F20-31 — Coletor Factorial](fase-20/f20-31-coletor-factorial.md) | F20-27, F20-03 | Em andamento — recuperação local; testes de fixture validados |
+| [F20-31 — Coletor Factorial](fase-20/f20-31-coletor-factorial.md) | F20-27, F20-03 | Implementado — `8be7e4c`; homologação em board real pendente |
 | [F20-32 — Coletor Gupy](fase-20/f20-32-coletor-gupy.md) | F20-27, F20-03 | Backlog |
 | [F20-33 — Palavras-chave do perfil](fase-20/f20-33-palavras-chave-do-perfil.md) | F20-03, F20-40 | Implementado — `b7f432e`, `e9be146`; critério 4 com verificação manual |
 | [F20-34 — Buscas salvas](fase-20/f20-34-buscas-salvas.md) | F20-01 | Implementado — `5088e6f`; sem teste de componente da Inbox/Overview |
@@ -67,10 +67,10 @@ evidência de aceite ou correção.
 | Card | Depende de | Status |
 | --- | --- | --- |
 | [F20-35 — Mapa de cobertura e rendimento](fase-20/f20-35-mapa-de-cobertura-e-rendimento.md) | F20-01, F20-03 | Implementado — `102a53d`; critério 4 (baseline de sete dias) depende da máquina de referência |
-| [F20-36 — Descoberta limitada de sites e sitemaps](fase-20/f20-36-descoberta-limitada-de-sites.md) | F20-27, F20-35 | Backlog |
+| [F20-36 — Descoberta limitada de sites e sitemaps](fase-20/f20-36-descoberta-limitada-de-sites.md) | F20-27, F20-35 | Backlog — dependências de código implementadas; falta executar o card |
 | [F20-37 — Coletor JobPosting público](fase-20/f20-37-coletor-jobposting-publico.md) | F20-36, F20-03 | Backlog |
 | [F20-38 — Agenda por rendimento e orçamento de rede](fase-20/f20-38-agenda-adaptativa-e-http-condicional.md) | F20-35 | Implementado — `f14bc6e`; validação de operação pendente |
-| [F20-39 — Delta, presença e retomada](fase-20/f20-39-delta-presenca-e-retomada.md) | F20-38 | Em andamento — presença e hashes em validação; retomada da mesma execução pendente |
+| [F20-39 — Delta, presença e retomada](fase-20/f20-39-delta-presenca-e-retomada.md) | F20-38 | Implementado localmente — presença, hashes, retomada explícita, manifesto 304 declarado e métrica operacional; 858 testes verdes com `RUN_DATABASE_INTEGRATION=1`; falta confirmar CI verde |
 | [F20-40 — Preservação integral do perfil](fase-20/f20-40-preservacao-do-perfil.md) | Nenhum | Done — `794b519`; os três critérios conferidos com teste |
 | [F20-41 — Backup consistente e restauração verificável](fase-20/f20-41-backup-consistente-e-restauracao.md) | Nenhum | Implementado — `a15d3b8`, `c9c291e` (tabelas AI no manifesto e guarda de cobertura) |
 ### Bloco E — Tavily
