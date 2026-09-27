@@ -87,7 +87,7 @@ evidência de aceite ou correção.
 | Card | Depende de | Status |
 | --- | --- | --- |
 | [F20-47 — Percurso E2E no navegador com falhas injetadas](fase-20/f20-47-percurso-e2e-e-falhas-injetadas.md) | F20-17, F20-39, F20-40, F20-25 | Backlog |
-| [F20-48 — Upgrade de banco populado e retomada de backfill](fase-20/f20-48-upgrade-de-banco-populado.md) | F20-41, F20-12, F20-19 | Backlog |
+| [F20-48 — Upgrade de banco populado e retomada de backfill](fase-20/f20-48-upgrade-de-banco-populado.md) | F20-41, F20-12, F20-19 | Feito |
 | [F20-49 — Relatório de produtividade e custo](fase-20/f20-49-relatorio-de-produtividade.md) | F20-47, F20-48 | Backlog |
 | [F20-50 — Definition of Done da fase e documentação final](fase-20/f20-50-definition-of-done-e-docs.md) | F20-01 a F20-49 | Backlog |
 

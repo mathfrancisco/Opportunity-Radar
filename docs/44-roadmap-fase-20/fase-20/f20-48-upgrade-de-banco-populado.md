@@ -1,6 +1,17 @@
 # CARD F20-48 — Upgrade de banco populado e retomada de backfill
 
-- **Status:** Backlog
+- **Status:** Feito — `tests/backend/fixtures/pre_f20_dump.sql` (dump sintético na
+  revisão `20260925_0029`, gerado pelo fluxo HTTP real e depois rebaixado com `alembic
+  downgrade`) e `tests/backend/test_upgrade_populated_integration.py` provam os três
+  critérios em CI (`RUN_DATABASE_INTEGRATION=1`, 3 passed); reaproveita F20-41
+  (`scripts.restore_check`), as tabelas F20-12/F20-19 e a retomada de F17-06
+  (`OpportunityService.normalize_pending`), sem reimplementar nenhum dos três. Prova
+  adicional contra o dump real verificado `data/backups/f20-02-pre-skills-v3-2026-09-27.dump`
+  restaurado no projeto isolado `-p f20up` (nunca `opportunity-radar`): upgrade de
+  `20260926_0043` para `head`, contagens idênticas, análises antigas legíveis, e um
+  backfill real de 670 `raw_item` em 7 lotes retomados sem duplicar nenhuma das 648
+  oportunidades. Ver `docs/44-roadmap-fase-20/evidencias/upgrade-banco-populado-2026-09-27.md`.
+  Suíte completa (911 passed, 10 skipped), `ruff check .` e `mypy` limpos.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** F — Encerramento
 - **Depende de:** F20-41, F20-12, F20-19
@@ -38,9 +49,9 @@ O CI roda `alembic upgrade head` e `downgrade base` em banco vazio (job `backend
 
 ## Critérios de aceite
 
-- [ ] Contagens iguais antes e depois do upgrade.
-- [ ] Análises antigas legíveis.
-- [ ] Backfill retomado sem duplicar.
+- [x] Contagens iguais antes e depois do upgrade.
+- [x] Análises antigas legíveis.
+- [x] Backfill retomado sem duplicar.
 
 ## Testes
 
