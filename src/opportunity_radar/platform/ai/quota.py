@@ -301,10 +301,14 @@ class QuotaGuard:
             day_row, self._limits.day_requests, self._limits.day_tokens
         ):
             return day_start + timedelta(days=1)
-        # Neither window looked exhausted from here; a concurrent reservation likely
-        # filled it between the check and this read. The day boundary is the safer of
-        # the two guesses to wait for.
-        return day_start + timedelta(days=1)
+        # Neither window's stored total has *reached* its ceiling yet, so a failed
+        # reserve() here almost always means the rejected call's own estimate would have
+        # pushed the minute window over (`_window_exhausted` only compares what is
+        # already stored, not what the failed attempt asked for). That headroom clears
+        # on the next minute boundary, at most 60s away, so guess that rather than the
+        # day boundary: a day-long guess turns a transient minute-level near-miss into a
+        # multi-hour stall, and the caller still checks quota again after waiting.
+        return minute_start + timedelta(minutes=1)
 
     def _window_exhausted(
         self, row: Any, requests_limit: int, tokens_limit: int

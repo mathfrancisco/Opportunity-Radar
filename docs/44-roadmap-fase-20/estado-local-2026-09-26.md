@@ -19,18 +19,18 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 | F20-09 | `AITask` e roteamento implementados. | Sem pendência de implementação identificada. |
 | F20-10 | Retry e fallback em `1c90af6`. | Sem pendência de implementação identificada. |
 | F20-11 | Circuit breaker em `1c90af6`. | Sem pendência de implementação identificada. |
-| F20-12 | Quota Guard persistente em `b5072fd`. | Executar baseline Groq de F20-21. |
+| F20-12 | Quota Guard persistente em `b5072fd`; correção mínima em 2026-09-27 no chute de `next_available_at` (um quase-esgotamento de janela de minuto chutava 10h de espera em vez de 60s — achado ao rodar o baseline real de F20-21). | Sem pendência de implementação identificada. |
 | F20-13 | Token Guard em `1c90af6`. | Sem pendência de implementação identificada. |
 | F20-14 | Saída estruturada em `0ad7b34`. | Sem pendência de implementação identificada. |
 | F20-15 | Sanitização PII e perfil mínimo em `0ad7b34`. | Sem pendência de implementação identificada. |
 | F20-16 | Chave de cache por provedor em `e8c1600`. | Sem pendência de implementação identificada. |
 | F20-17 | Adaptador Groq em `e8c1600`. | Sem pendência de implementação identificada. |
-| F20-18 | Não iniciado. | Baseline de F20-21. |
+| F20-18 | Não iniciado. | Baseline de F20-21 pronta (2026-09-27) — desbloqueado, falta implementar. |
 | F20-19 | Telemetria sem PII em `c3e7606`. | Sem pendência de implementação identificada. |
 | F20-20 | Métricas API, Overview e doctor em `b45ff84`. | Sem pendência de implementação identificada. |
-| F20-21 | Harness em `2f5defd` e `94edd57`; os 26 drafts de lacuna (Java/fullstack/IA) revisados e promovidos para `eval/cases/`; `eval/cases/` tem 50 arquivos, exatamente 10 Java/10 fullstack/10 IA/10 fora de área/10 inelegíveis, versionados; excedente (2 backend + 15 fora_de_area + 9 synthetic) preservado em `eval/cases-secondary/`; `test_eval_scoring.py` verde (22 passed). | Executar baseline real no Groq (ainda não feito nesta sessão, fora do escopo/orçamento). |
-| F20-22 | Não iniciado. | F20-21. |
-| F20-23 | Não iniciado. | F20-22, F20-02 e F20-03. |
+| F20-21 | Harness em `2f5defd` e `94edd57`; os 26 drafts de lacuna (Java/fullstack/IA) revisados e promovidos para `eval/cases/`; `eval/cases/` tem 50 arquivos, exatamente 10 Java/10 fullstack/10 IA/10 fora de área/10 inelegíveis, versionados; `test_eval_scoring.py` verde (22 passed); baseline real no Groq rodada em 2026-09-27 (`openai/gpt-oss-120b` pinado, 50/50 `AI_COMPLETED`, `inventions = 0`, latência e tokens registrados) — ver `docs/44-roadmap-fase-20/evidencias/baseline-groq-f20-21-2026-09-27.md`. | Sem pendência de implementação identificada. |
+| F20-22 | Não iniciado. | Baseline de F20-21 pronta (2026-09-27) — desbloqueado, falta implementar. |
+| F20-23 | Não iniciado. | F20-22 (ainda não feito) e F20-02 e F20-03 — não desbloqueado só pelo baseline de F20-21. |
 | F20-24 | Não iniciado. | F20-39, F20-17, F20-16 e F20-12. |
 | F20-25 | Fila de homologação em `99d2067`. | Sem pendência de implementação identificada. |
 | F20-26 | Recusa por versão e bloqueio de ciclo em `c9be16e`. | Sem pendência de implementação identificada. |
@@ -90,6 +90,14 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
    como não viável em 2026-09-27 pela revisão de termos (ver
    `docs/44-roadmap-fase-20/evidencias/homologacao-gupy-2026-09-27.md` e
    `docs/pesquisas/termos-gupy.md`) — nenhuma implementação pendente para este card.
-3. Produzir F20-21 antes de F20-18, F20-22, F20-23 e F20-24.
+3. F20-21 concluído em 2026-09-27 (baseline real no Groq, ver
+   `docs/44-roadmap-fase-20/evidencias/baseline-groq-f20-21-2026-09-27.md`). Dos cards
+   que citavam F20-21 como dependência, apenas **F20-18** e **F20-22** estavam
+   bloqueados só por este baseline — ambos desbloqueados, nenhum implementado nesta
+   sessão. F20-23 continua bloqueado (depende de F20-22, ainda não feito, além de
+   F20-02/F20-03). F20-24 e F20-12 não dependiam deste baseline (F20-12 já estava
+   "Implementado"; F20-24 depende de F20-39/F20-17/F20-16/F20-12, sem F20-21 na lista) —
+   F20-12 recebeu apenas uma correção pontual em `QuotaGuard.next_available_at` achada
+   ao rodar o baseline, não relacionada a esta dependência.
 4. F20-36 e F20-37 implementados e validados com dados reais em 2026-09-27
    (`feature/f20-36-37-sites`); seguir com F20-47 a F20-50.

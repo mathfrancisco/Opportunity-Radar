@@ -1,0 +1,1078 @@
+{
+  "ran_at": "2026-09-27T14:36:24.802683+00:00",
+  "prompt": "v1",
+  "model": "openai/gpt-oss-120b",
+  "label": "baseline-pinned",
+  "cases_digest": "1afa75cd3102a0d572fae7625cb3ae722815e9db5913df19508b077625bc2ba2",
+  "server": {
+    "provider": "groq",
+    "chain": [
+      "openai/gpt-oss-120b"
+    ]
+  },
+  "inference": {
+    "model": "openai/gpt-oss-120b",
+    "prompt_version": "opportunity_analysis/v1",
+    "prompt_digest": "264e6f770284a58e882dc03e459a9de2b96be6525c503e2d7f66874fa2c971f2",
+    "schema_version": "analysis-v1",
+    "options": {
+      "provider": "groq",
+      "chain": [
+        "openai/gpt-oss-120b"
+      ],
+      "reasoning_effort": "low",
+      "max_completion_tokens": 900,
+      "temperature": 0,
+      "seed": 42
+    },
+    "tokens_per_char": 0.35,
+    "calibration": {
+      "state": "uncalibrated",
+      "samples": 0,
+      "ratio": 0.35
+    },
+    "prompt_budget": 3600
+  },
+  "loaded_models": [],
+  "summary": {
+    "all": {
+      "completed_rate": 1.0,
+      "fidelity": null,
+      "grounded": null,
+      "coverage": 0.0,
+      "inventions": 0.0,
+      "portuguese": 0.11349868433404792,
+      "prompt_tokens": 1030.82,
+      "output_tokens": 460.08,
+      "total_ms": 1723.08
+    },
+    "tuning": {
+      "completed_rate": 1.0,
+      "fidelity": null,
+      "grounded": null,
+      "coverage": 0.0,
+      "inventions": 0.0,
+      "portuguese": 0.11247699827393623,
+      "prompt_tokens": 1046.4222222222222,
+      "output_tokens": 461.0888888888889,
+      "total_ms": 1729.7333333333333
+    },
+    "reserved": {
+      "completed_rate": 1.0,
+      "fidelity": null,
+      "grounded": null,
+      "coverage": 0.0,
+      "inventions": 0.0,
+      "portuguese": 0.1226938588750531,
+      "prompt_tokens": 890.4,
+      "output_tokens": 451.0,
+      "total_ms": 1663.2
+    }
+  },
+  "cases": [
+    {
+      "case_id": "01-fora_de_area-27-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.125,
+      "prompt_tokens": 907,
+      "output_tokens": 442,
+      "total_ms": 1647
+    },
+    {
+      "case_id": "02-fora_de_area-28-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.08620689655172414,
+      "prompt_tokens": 960,
+      "output_tokens": 460,
+      "total_ms": 1613
+    },
+    {
+      "case_id": "03-fora_de_area-29-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.1375,
+      "prompt_tokens": 1201,
+      "output_tokens": 545,
+      "total_ms": 1531
+    },
+    {
+      "case_id": "04-fora_de_area-30-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.1,
+      "prompt_tokens": 907,
+      "output_tokens": 437,
+      "total_ms": 1453
+    },
+    {
+      "case_id": "06-fora_de_area-31-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.05555555555555555,
+      "prompt_tokens": 1023,
+      "output_tokens": 481,
+      "total_ms": 1828
+    },
+    {
+      "case_id": "08-fora_de_area-32-review_required",
+      "split": "reserved",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.23809523809523808,
+      "prompt_tokens": 800,
+      "output_tokens": 504,
+      "total_ms": 1446
+    },
+    {
+      "case_id": "09-fullstack-07-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.10344827586206896,
+      "prompt_tokens": 1140,
+      "output_tokens": 466,
+      "total_ms": 1385
+    },
+    {
+      "case_id": "10-fullstack-18-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.07692307692307693,
+      "prompt_tokens": 1210,
+      "output_tokens": 480,
+      "total_ms": 1412
+    },
+    {
+      "case_id": "11-fullstack-37-review_required",
+      "split": "reserved",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.06,
+      "prompt_tokens": 864,
+      "output_tokens": 419,
+      "total_ms": 1801
+    },
+    {
+      "case_id": "12-ai-11-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.09803921568627451,
+      "prompt_tokens": 1087,
+      "output_tokens": 450,
+      "total_ms": 1494
+    },
+    {
+      "case_id": "13-fora_de_area-01-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.14545454545454545,
+      "prompt_tokens": 967,
+      "output_tokens": 445,
+      "total_ms": 1342
+    },
+    {
+      "case_id": "14-fora_de_area-02-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.1,
+      "prompt_tokens": 960,
+      "output_tokens": 429,
+      "total_ms": 1903
+    },
+    {
+      "case_id": "15-fora_de_area-05-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.07017543859649122,
+      "prompt_tokens": 965,
+      "output_tokens": 420,
+      "total_ms": 1372
+    },
+    {
+      "case_id": "16-fora_de_area-06-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.1388888888888889,
+      "prompt_tokens": 961,
+      "output_tokens": 484,
+      "total_ms": 3613
+    },
+    {
+      "case_id": "32-ineligible-ineligible-01",
+      "split": "reserved",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.0851063829787234,
+      "prompt_tokens": 966,
+      "output_tokens": 438,
+      "total_ms": 1890
+    },
+    {
+      "case_id": "33-ineligible-ineligible-02",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.06779661016949153,
+      "prompt_tokens": 810,
+      "output_tokens": 462,
+      "total_ms": 1512
+    },
+    {
+      "case_id": "34-ineligible-ineligible-03",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.11594202898550725,
+      "prompt_tokens": 1027,
+      "output_tokens": 478,
+      "total_ms": 1436
+    },
+    {
+      "case_id": "35-ineligible-ineligible-04",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.10526315789473684,
+      "prompt_tokens": 1090,
+      "output_tokens": 420,
+      "total_ms": 1435
+    },
+    {
+      "case_id": "36-ineligible-ineligible-05",
+      "split": "reserved",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.14516129032258066,
+      "prompt_tokens": 912,
+      "output_tokens": 440,
+      "total_ms": 1469
+    },
+    {
+      "case_id": "37-ineligible-ineligible-06",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.12903225806451613,
+      "prompt_tokens": 910,
+      "output_tokens": 492,
+      "total_ms": 1511
+    },
+    {
+      "case_id": "38-ineligible-ineligible-07",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.13114754098360656,
+      "prompt_tokens": 911,
+      "output_tokens": 553,
+      "total_ms": 1966
+    },
+    {
+      "case_id": "39-ineligible-ineligible-08",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.17307692307692307,
+      "prompt_tokens": 912,
+      "output_tokens": 528,
+      "total_ms": 2333
+    },
+    {
+      "case_id": "40-ineligible-ineligible-09",
+      "split": "reserved",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.0851063829787234,
+      "prompt_tokens": 910,
+      "output_tokens": 454,
+      "total_ms": 1710
+    },
+    {
+      "case_id": "41-ineligible-ineligible-10",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.12345679012345678,
+      "prompt_tokens": 912,
+      "output_tokens": 628,
+      "total_ms": 2362
+    },
+    {
+      "case_id": "42-java-01-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.078125,
+      "prompt_tokens": 1085,
+      "output_tokens": 409,
+      "total_ms": 1309
+    },
+    {
+      "case_id": "43-java-02-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.10256410256410256,
+      "prompt_tokens": 1326,
+      "output_tokens": 419,
+      "total_ms": 1548
+    },
+    {
+      "case_id": "44-java-03-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.06382978723404255,
+      "prompt_tokens": 1123,
+      "output_tokens": 476,
+      "total_ms": 1726
+    },
+    {
+      "case_id": "45-java-04-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.11764705882352941,
+      "prompt_tokens": 1126,
+      "output_tokens": 453,
+      "total_ms": 1705
+    },
+    {
+      "case_id": "46-java-05-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.10714285714285714,
+      "prompt_tokens": 1193,
+      "output_tokens": 393,
+      "total_ms": 1202
+    },
+    {
+      "case_id": "47-java-06-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.06451612903225806,
+      "prompt_tokens": 1555,
+      "output_tokens": 455,
+      "total_ms": 1821
+    },
+    {
+      "case_id": "48-java-07-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.057692307692307696,
+      "prompt_tokens": 1006,
+      "output_tokens": 451,
+      "total_ms": 1580
+    },
+    {
+      "case_id": "49-java-08-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.1951219512195122,
+      "prompt_tokens": 974,
+      "output_tokens": 388,
+      "total_ms": 1644
+    },
+    {
+      "case_id": "50-java-09-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.14285714285714285,
+      "prompt_tokens": 965,
+      "output_tokens": 455,
+      "total_ms": 2580
+    },
+    {
+      "case_id": "51-java-10-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.1267605633802817,
+      "prompt_tokens": 1244,
+      "output_tokens": 506,
+      "total_ms": 2107
+    },
+    {
+      "case_id": "52-fullstack-01-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.1206896551724138,
+      "prompt_tokens": 783,
+      "output_tokens": 441,
+      "total_ms": 1883
+    },
+    {
+      "case_id": "53-fullstack-02-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.18,
+      "prompt_tokens": 1165,
+      "output_tokens": 444,
+      "total_ms": 1357
+    },
+    {
+      "case_id": "54-fullstack-03-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.11940298507462686,
+      "prompt_tokens": 1246,
+      "output_tokens": 615,
+      "total_ms": 1745
+    },
+    {
+      "case_id": "55-fullstack-04-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.1,
+      "prompt_tokens": 1250,
+      "output_tokens": 454,
+      "total_ms": 2384
+    },
+    {
+      "case_id": "56-fullstack-05-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.15,
+      "prompt_tokens": 1045,
+      "output_tokens": 557,
+      "total_ms": 3070
+    },
+    {
+      "case_id": "57-fullstack-06-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.15625,
+      "prompt_tokens": 1105,
+      "output_tokens": 377,
+      "total_ms": 1179
+    },
+    {
+      "case_id": "58-fullstack-07-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.14285714285714285,
+      "prompt_tokens": 958,
+      "output_tokens": 416,
+      "total_ms": 1733
+    },
+    {
+      "case_id": "59-ai-01-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.12698412698412698,
+      "prompt_tokens": 1075,
+      "output_tokens": 486,
+      "total_ms": 1580
+    },
+    {
+      "case_id": "60-ai-02-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.0784313725490196,
+      "prompt_tokens": 839,
+      "output_tokens": 392,
+      "total_ms": 1214
+    },
+    {
+      "case_id": "61-ai-03-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.0851063829787234,
+      "prompt_tokens": 835,
+      "output_tokens": 404,
+      "total_ms": 1999
+    },
+    {
+      "case_id": "62-ai-04-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.05555555555555555,
+      "prompt_tokens": 840,
+      "output_tokens": 384,
+      "total_ms": 1283
+    },
+    {
+      "case_id": "63-ai-05-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.10526315789473684,
+      "prompt_tokens": 782,
+      "output_tokens": 437,
+      "total_ms": 1809
+    },
+    {
+      "case_id": "64-ai-06-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.1,
+      "prompt_tokens": 1354,
+      "output_tokens": 495,
+      "total_ms": 1544
+    },
+    {
+      "case_id": "65-ai-07-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.12195121951219512,
+      "prompt_tokens": 1088,
+      "output_tokens": 414,
+      "total_ms": 1220
+    },
+    {
+      "case_id": "66-ai-08-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.11764705882352941,
+      "prompt_tokens": 1138,
+      "output_tokens": 466,
+      "total_ms": 1917
+    },
+    {
+      "case_id": "67-ai-09-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.16216216216216217,
+      "prompt_tokens": 1129,
+      "output_tokens": 462,
+      "total_ms": 1551
+    }
+  ],
+  "variation": {},
+  "quota_blocked_case": null,
+  "human_review": {
+    "01-fora_de_area-27-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "02-fora_de_area-28-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "03-fora_de_area-29-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "04-fora_de_area-30-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "06-fora_de_area-31-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "08-fora_de_area-32-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "09-fullstack-07-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "10-fullstack-18-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "11-fullstack-37-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "12-ai-11-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "13-fora_de_area-01-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "14-fora_de_area-02-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "15-fora_de_area-05-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "16-fora_de_area-06-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "32-ineligible-ineligible-01": {
+      "adherence": null,
+      "support": null
+    },
+    "33-ineligible-ineligible-02": {
+      "adherence": null,
+      "support": null
+    },
+    "34-ineligible-ineligible-03": {
+      "adherence": null,
+      "support": null
+    },
+    "35-ineligible-ineligible-04": {
+      "adherence": null,
+      "support": null
+    },
+    "36-ineligible-ineligible-05": {
+      "adherence": null,
+      "support": null
+    },
+    "37-ineligible-ineligible-06": {
+      "adherence": null,
+      "support": null
+    },
+    "38-ineligible-ineligible-07": {
+      "adherence": null,
+      "support": null
+    },
+    "39-ineligible-ineligible-08": {
+      "adherence": null,
+      "support": null
+    },
+    "40-ineligible-ineligible-09": {
+      "adherence": null,
+      "support": null
+    },
+    "41-ineligible-ineligible-10": {
+      "adherence": null,
+      "support": null
+    },
+    "42-java-01-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "43-java-02-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "44-java-03-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "45-java-04-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "46-java-05-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "47-java-06-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "48-java-07-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "49-java-08-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "50-java-09-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "51-java-10-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "52-fullstack-01-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "53-fullstack-02-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "54-fullstack-03-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "55-fullstack-04-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "56-fullstack-05-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "57-fullstack-06-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "58-fullstack-07-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "59-ai-01-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "60-ai-02-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "61-ai-03-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "62-ai-04-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "63-ai-05-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "64-ai-06-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "65-ai-07-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "66-ai-08-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "67-ai-09-review_required": {
+      "adherence": null,
+      "support": null
+    }
+  }
+}

@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from opportunity_radar.platform.ai.providers.base import RateLimit
-from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits
+from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits, minute_window
 from opportunity_radar.platform.database import create_database_engine
 
 pytestmark = [
@@ -91,6 +91,24 @@ def test_minute_rollover_frees_the_minute_reservation_but_not_the_day() -> None:
     )
     # Still the same UTC day, and the day limit (1) is already spent.
     assert guard_next_minute.reserve(_MODEL, estimated_tokens=1) is None
+
+
+def test_next_available_at_guesses_the_minute_boundary_on_a_token_near_miss() -> None:
+    """A reserve() failure from the estimate overshooting minute tokens (F20-21 baseline:
+
+    observed live against Groq, where the stored total never reaches the ceiling because
+    `_window_exhausted` only compares what is already stored) must not be reported as a
+    day-long wait — that turns a 60s-away rollover into a multi-hour stall.
+    """
+    engine = _engine()
+    _reset(engine)
+    now = datetime(2026, 9, 26, 12, 0, 30, tzinfo=UTC)
+    guard = QuotaGuard(engine, _limits(minute_tokens=10), now=lambda: now)
+    assert guard.reserve(_MODEL, estimated_tokens=8) is not None
+    assert guard.reserve(_MODEL, estimated_tokens=5) is None  # 8 + 5 > 10, but 8 < 10
+
+    expected = minute_window(now) + timedelta(minutes=1)
+    assert guard.next_available_at(_MODEL) == expected
 
 
 def test_day_rollover_frees_the_day_reservation() -> None:

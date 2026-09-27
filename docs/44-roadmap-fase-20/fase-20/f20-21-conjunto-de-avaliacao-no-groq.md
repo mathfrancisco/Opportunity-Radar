@@ -1,6 +1,6 @@
 # CARD F20-21 — Conjunto de avaliação completo e baseline no Groq
 
-- **Status:** Backlog
+- **Status:** Feito
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-17
@@ -20,7 +20,7 @@ O harness está em `scripts/eval_analysis.py` e `matching/evaluation.py` (funç�
 | --- | --- | --- |
 | Alterar | `arquivo de casos usado por `scripts/eval_analysis.py` (ver o argumento padrão do script)` | completar até 50 casos |
 | Alterar | `scripts/eval_analysis.py` | flag `--model` para sobrescrever `groq_reasoning_model`; respeitar o Quota Guard |
-| Criar | `docs/pesquisas/eval-analysis-groq-baseline.md` | baseline |
+| Criar | `docs/44-roadmap-fase-20/evidencias/baseline-groq-f20-21-2026-09-27.md` (evidência real; caminho decidido na execução, não `docs/pesquisas/`) | baseline |
 
 ## Passos
 
@@ -59,7 +59,25 @@ O harness está em `scripts/eval_analysis.py` e `matching/evaluation.py` (funç�
       fullstack, 10 IA, 10 fora de área, 10 inelegíveis.
       `tests/backend/matching/test_eval_scoring.py` verde (22 passed) com o novo
       conjunto.
-- [ ] Baseline versionada com validade de JSON, claims conferidos, acerto de rótulo, latência p50/p95 e tokens. **Não feito** — sem chamada real ao Groq nesta sessão (fora do escopo/orçamento), como o "Não fazer" exige.
+- [x] Baseline versionada com validade de JSON, claims conferidos, acerto de rótulo, latência p50/p95 e tokens. **Feito (2026-09-27):** rodada real no Groq sobre os 50 casos
+      versionados, `--model openai/gpt-oss-120b` (fallback desligado, pinado a um único
+      modelo, como o docstring do harness pede), Quota Guard e backoff (F20-12/F20-13)
+      respeitados, projeto Compose isolado `-p f20groq`. Resultado: 50/50
+      `AI_COMPLETED`, 0 falhas, `inventions = 0` (nenhuma claim proibida), `coverage = 0`
+      em todos os casos (achado registrado, não corrigido — não é o objetivo desta
+      baseline mudar critério de pontuação nem o matching), latência p50 1.613 ms / p95
+      2.580 ms, 74.545 tokens no total (51.541 entrada + 23.004 saída). Acerto de rótulo
+      (aderência/sustentação) fica em branco por design — rubrica humana, não
+      automática. Evidência completa, inclusive o achado sobre a primeira tentativa sem
+      `--model` (fallback silencioso para `qwen/qwen3.8-27b` em ~29% das chamadas,
+      descartada) e a correção mínima aplicada a
+      `QuotaGuard.next_available_at` (`src/opportunity_radar/platform/ai/quota.py`, um
+      quase-esgotamento de janela de minuto chutava 10h de espera em vez de 60s), em
+      [`docs/44-roadmap-fase-20/evidencias/baseline-groq-f20-21-2026-09-27.md`](../evidencias/baseline-groq-f20-21-2026-09-27.md).
+      JSON/`.md` brutos do harness copiados para o mesmo diretório de evidências (sem
+      segredos, conferido). Teste novo
+      `tests/backend/test_ai_quota_integration.py::test_next_available_at_guesses_the_minute_boundary_on_a_token_near_miss`;
+      41 testes relevantes verdes, `ruff` e `mypy` sem apontamentos.
 
 ## Testes
 
