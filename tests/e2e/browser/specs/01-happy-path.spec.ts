@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { seedEnabledGreenhouseSource, waitForInboxTotal } from '../support/api'
 
-const SEARCH_TERM = 'Senior Python Engineer'
 const SOURCE_NAME = 'F20-47 happy path board'
 
 /**
@@ -30,7 +29,11 @@ test.describe('happy path', () => {
     await page.getByRole('button', { name: 'Salvar como nova versão e ativar' }).click()
     await expect(page.getByText(/Versão \d+ ativa\./)).toBeVisible()
 
-    // 3. Collection: trigger it from the Sources page against the local fake job board.
+    // 3. Collection: trigger it from the Sources page against the local fake job board. The
+    // seeded source gets its own one-off board (a unique token per call), so this run's
+    // opportunity title cannot collide with one an earlier pipeline.yml step already
+    // created against a fixed board (that collision is exactly what broke CI run
+    // 36342824454: two "Senior Python Engineer" links on the same Inbox page).
     const source = await seedEnabledGreenhouseSource(SOURCE_NAME)
     await page.goto('/sources')
     const sourceCard = page.locator('article', { hasText: source.name })
@@ -40,16 +43,16 @@ test.describe('happy path', () => {
 
     // Normalisation, matching and analysis happen on the worker's own schedule; give it
     // room, the same way pipeline.yml's autonomous-cycle step does.
-    await waitForInboxTotal(SEARCH_TERM, (total) => total >= 1)
+    await waitForInboxTotal(source.searchTerm, (total) => total >= 1)
 
     // 4. Search: find it from the Inbox.
-    await page.goto(`/inbox?search=${encodeURIComponent(SEARCH_TERM)}`)
-    const itemLink = page.getByRole('link', { name: SEARCH_TERM })
+    await page.goto(`/inbox?search=${encodeURIComponent(source.searchTerm)}`)
+    const itemLink = page.getByRole('link', { name: source.searchTerm })
     await expect(itemLink).toBeVisible({ timeout: 30_000 })
 
     // 5. Open the opportunity.
     await itemLink.click()
-    await expect(page.getByRole('heading', { name: SEARCH_TERM })).toBeVisible()
+    await expect(page.getByRole('heading', { name: source.searchTerm })).toBeVisible()
 
     // 6. Evaluate (deterministic) then analyse (semantic) it.
     await page.getByRole('button', { name: 'Avaliar agora' }).click()
@@ -57,10 +60,9 @@ test.describe('happy path', () => {
       timeout: 30_000,
     })
 
-    // The board's one fixed job also backs the failure-scenarios spec's opportunity (same
-    // content, deduplicated to the same row), so the worker's own `analyze_pending` job can
-    // be mid-analysis when this click lands — the API answers a concurrent claim with 409,
-    // which is "retry", not a failure (see `analyzeAssessment` in `features/matching/api.ts`).
+    // The worker's own `analyze_pending` job can be mid-analysis on this same assessment
+    // when this click lands - the API answers a concurrent claim with 409, which is
+    // "retry", not a failure (see `analyzeAssessment` in `features/matching/api.ts`).
     const analysisSummary = page
       .getByText('Remote senior Python role that matches the active profile stack.')
       .or(page.getByText('Vaga sênior remota em Python compatível com o perfil ativo.'))

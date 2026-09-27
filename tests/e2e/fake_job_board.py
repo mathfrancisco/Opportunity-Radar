@@ -5,8 +5,16 @@ actually reach. Pointing it at a real board would make the gate depend on a thir
 uptime and on that company's postings staying the same, so the board is served locally and
 returns a fixed payload.
 
-Two boards are served:
-  * `radar-ci` answers a single posting that matches the CI profile.
+Three kinds of board are served:
+  * `radar-ci` answers a single, fixed posting that matches the CI profile - used by the
+    autonomous-cycle gate and unchanged since F20-17/F20-39, because other steps in
+    `pipeline.yml` assert on its exact title and company.
+  * `e2e-<anything>` answers a single posting too, but with the board token folded into the
+    title (`Senior Python Engineer (e2e-<anything>)`) and the URL, so a browser test that
+    generates a fresh token per run gets a title no other step in the same CI job could
+    ever have created - see F20-47's own regression (a fixed title collided with the
+    "Senior Python Engineer" / "Example" opportunity `pipeline.yml`'s manual-acquisition
+    step already creates earlier in the same job).
   * anything else answers 404, so a failing source can be exercised alongside a healthy
     one and the pass can be shown to survive it.
 
@@ -20,9 +28,12 @@ runtime control file as `fake_groq.py`'s `FAKE_GROQ_MODE`, flipped with
 
 import json
 import os
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HEALTHY_BOARD = "radar-ci"
+#: A browser test's own board, one per run (F20-47's fix for the title collision above).
+DYNAMIC_BOARD_PREFIX = "e2e-"
 ETAG = '"radar-ci-v1"'
 
 MODE_FILE = os.environ.get("FAKE_BOARD_MODE_FILE", "/tmp/fake_board_mode")
@@ -49,6 +60,29 @@ JOBS = [
 _UNDELIVERED_JOB_COUNT = 1
 
 
+def _jobs_for(board: str) -> list[dict[str, object]] | None:
+    """The fixed `radar-ci` job list, a one-off job for an `e2e-*` board, or `None`."""
+    if board == HEALTHY_BOARD:
+        return JOBS
+    if board.startswith(DYNAMIC_BOARD_PREFIX):
+        return [
+            {
+                "id": abs(hash(board)) % 10_000_000,
+                "internal_job_id": 9100,
+                "title": f"Senior Python Engineer ({board})",
+                "absolute_url": f"https://jobs.example.test/{board}/1",
+                "updated_at": "2026-09-20T12:00:00-04:00",
+                "requisition_id": f"{board.upper()}-1",
+                "location": {"name": "Remote"},
+                "content": "Required: Python and ReactJS. Full-time remote position.",
+                "departments": [{"id": 1, "name": "Engineering"}],
+                "offices": [{"id": 1, "name": "Remote"}],
+                "metadata": [],
+            }
+        ]
+    return None
+
+
 def current_mode() -> str:
     """`ok`, `partial` (meta.total overstates the returned jobs) or `304`."""
     try:
@@ -61,10 +95,15 @@ def current_mode() -> str:
     return os.environ.get("FAKE_BOARD_MODE", "ok")
 
 
+_BOARD_PATH = re.compile(r"^/v1/boards/([^/]+)/jobs$")
+
+
 class JobBoardStubHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
-        if path != f"/v1/boards/{HEALTHY_BOARD}/jobs":
+        match = _BOARD_PATH.fullmatch(path)
+        jobs = _jobs_for(match.group(1)) if match else None
+        if jobs is None:
             # Greenhouse answers 404 for an unknown board, which the collector classifies
             # as SOURCE_NOT_FOUND. That is the failure the gate needs: real, not a timeout.
             self.send_error(404)
@@ -77,8 +116,8 @@ class JobBoardStubHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        total = len(JOBS) + (_UNDELIVERED_JOB_COUNT if mode == "partial" else 0)
-        self._respond({"jobs": JOBS, "meta": {"total": total}}, headers={"ETag": ETAG})
+        total = len(jobs) + (_UNDELIVERED_JOB_COUNT if mode == "partial" else 0)
+        self._respond({"jobs": jobs, "meta": {"total": total}}, headers={"ETag": ETAG})
 
     def _respond(self, payload: object, *, headers: dict[str, str] | None = None) -> None:
         body = json.dumps(payload).encode("utf-8")

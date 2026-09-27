@@ -124,9 +124,44 @@ arquivo de `src/opportunity_radar` foi alterado por este card, então nenhum tes
 (`pytest`) precisou rodar — a mudança inteira é: dois servidores falsos de teste, um projeto
 Node novo em `tests/e2e/browser/`, e o workflow de CI.
 
-## 6. Limitações conhecidas
+## 6. Falha real em CI (run 36342824454) e correcao
 
-- O board falso serve sempre o mesmo posto fixo (`Senior Python Engineer`, id 4242); os
+A primeira corrida em CI real (job e2e, run 36342824454, commit 4fbd6dc, apos o merge de
+feature/f20-47-e2e em feature/f20-groq-e-consolidacao) falhou nos dois specs:
+
+- 01-happy-path.spec.ts: getByRole link name Senior Python Engineer resolveu
+  2 elementos (violacao de strict mode).
+- 02-failure-scenarios.spec.ts (Groq 429): 1 oportunidade encontrada. nao encontrado.
+
+Causa raiz: em CI, o job e2e roda as etapas do pipeline.yml antes da suite de
+navegador, e duas delas ja criam uma oportunidade titulada exatamente
+Senior Python Engineer: a etapa Verify manual acquisition through the public API
+(empresa Example) e a etapa Verify the autonomous cycle without a terminal (fonte
+Greenhouse board_token radar-ci, empresa Radar CI). Localmente eu tinha rodado a
+suite contra uma pilha recem-criada, sem essas duas etapas antes - por isso nao vi a
+colisao.
+
+Reproduzido localmente rodando as etapas reais do pipeline (aquisicao manual, perfil,
+ciclo autonomo, kill switches, restauracao do worker) contra a pilha isolada -p f20e2e47
+antes de npx playwright test - confirmado: 2 oportunidades Senior Python Engineer antes
+mesmo da suite abrir o navegador, reproduzindo a falha do CI byte a byte.
+
+Correcao (sem afrouxar nenhuma assercao): fake_job_board.py passou a responder a qualquer
+board com prefixo e2e- com um posto cujo titulo incorpora o proprio token
+(Senior Python Engineer (e2e-token)), alem do board fixo radar-ci que os outros passos
+do pipeline continuam usando sem mudanca. support/api.ts seedEnabledGreenhouseSource
+agora gera um board_token unico por chamada (e2e-timestamp-random) e devolve searchTerm
+ja com o titulo unico; os dois specs buscam por esse termo em vez de um texto fixo. Cada
+corrida - e cada spec - passa a criar uma oportunidade com titulo garantidamente unico,
+que nenhuma outra etapa do mesmo job de CI poderia ter criado.
+
+Revalidado localmente com o repro completo da ordem do CI (aquisicao manual + ciclo
+autonomo + kill switches + restauracao do worker, todos antes da suite): 7/7 verde, duas
+corridas consecutivas.
+
+## 7. Limitações conhecidas
+
+- O board `radar-ci` continua servindo sempre o mesmo posto fixo (`Senior Python Engineer`, id 4242); o board dinamico `e2e-*` (secao 6) resolve a colisao de titulo, nao este ponto. Os
   cenários de "paginação parcial" e "304" são verificados pela forma da resposta HTTP
   (`meta.total` inflado, `304` condicional), não por um board com múltiplas páginas reais.
 - "Restart do worker no meio da coleta" reinicia o container enquanto o clique de "Executar

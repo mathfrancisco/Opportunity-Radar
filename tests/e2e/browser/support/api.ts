@@ -1,7 +1,7 @@
 /**
  * Setup and polling helpers that talk to the API directly (the same public API the UI
  * calls), so the browser journey itself starts from a known state instead of first
- * clicking through homologation — a separate, already-covered flow — for a source that
+ * clicking through homologation - a separate, already-covered flow - for a source that
  * only needs to exist and be enabled before the test opens the browser.
  */
 
@@ -24,17 +24,33 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
 }
 
 /**
- * Creates an already-homologated, enabled Greenhouse source pointed at the local
- * `fake_job_board.py` stub (`board_token: radar-ci`, wired through `GREENHOUSE_BASE_URL` in
- * `compose.ci.yaml`). Mirrors how `pipeline.yml`'s "Verify the autonomous cycle" step seeds
- * a source in one call.
+ * Creates an already-homologated, enabled Greenhouse source pointed at a fresh, one-off
+ * board on the local `fake_job_board.py` stub (`board_token: e2e-<random>`, wired through
+ * `GREENHOUSE_BASE_URL` in `compose.ci.yaml`). Mirrors how `pipeline.yml`'s "Verify the
+ * autonomous cycle" step seeds a source in one call.
+ *
+ * The board token is unique per call, not just the source name: `pipeline.yml`'s earlier
+ * steps (manual acquisition, the autonomous-cycle gate) already create their own
+ * opportunities titled "Senior Python Engineer" against fixed boards before this suite ever
+ * runs. A fixed board token here would dedupe into, or collide on title with, one of those -
+ * which is exactly the regression this fixed: two "Senior Python Engineer" links on the
+ * same Inbox page, `getByRole('link', ...)` matching either one. `fake_job_board.py` answers
+ * any `e2e-*` board with a job titled after that token, so the search term this returns is
+ * guaranteed to match this call's own opportunity and nothing another step created.
  */
-export async function seedEnabledGreenhouseSource(
-  namePrefix: string,
-): Promise<{ id: string; name: string }> {
+export async function seedEnabledGreenhouseSource(namePrefix: string): Promise<{
+  id: string
+  name: string
+  boardToken: string
+  searchTerm: string
+}> {
   // Unique per run: a re-run against the same stack (a retried CI job, a local rerun while
-  // debugging) must not collide with a source the previous run already created.
-  const name = `${namePrefix} ${Date.now()}`
+  // debugging, another spec file in the same CI job) must not collide with a source or an
+  // opportunity title a previous run already created.
+  const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const name = `${namePrefix} ${unique}`
+  const boardToken = `e2e-${unique}`
+  const searchTerm = `Senior Python Engineer (${boardToken})`
   const source = (await request('/sources', {
     method: 'POST',
     body: JSON.stringify({
@@ -45,10 +61,10 @@ export async function seedEnabledGreenhouseSource(
       terms_reviewed: true,
       collector_local_tested: true,
       reviewed_at: '2026-09-01T00:00:00Z',
-      configuration: { board_token: 'radar-ci', company_name: 'Radar CI' },
+      configuration: { board_token: boardToken, company_name: 'Radar CI' },
     }),
   })) as { id: string }
-  return { id: source.id, name }
+  return { id: source.id, name, boardToken, searchTerm }
 }
 
 interface InboxTotal {
@@ -94,8 +110,8 @@ export async function runSource(sourceId: string): Promise<Record<string, unknow
 /**
  * Ensures an active profile exists with the skills and preferences the seeded job matches,
  * the same way `pipeline.yml`'s own steps do (draft -> publish -> activate). The failure
- * scenarios need a profile to evaluate against but do not exercise editing one — that is
- * `happy-path.spec.ts`'s job, and the two spec files run independently of each other.
+ * scenarios need a profile to evaluate against but do not exercise editing one - that is
+ * `01-happy-path.spec.ts`'s job, and the two spec files run independently of each other.
  */
 export async function ensureActiveProfile(): Promise<void> {
   const profile = (await request('/profile').catch(() => null)) as { status: string } | null
@@ -129,4 +145,3 @@ export async function evaluateOpportunity(opportunityId: string): Promise<{ id: 
     body: JSON.stringify({ opportunity_id: opportunityId }),
   })) as { id: string }
 }
-

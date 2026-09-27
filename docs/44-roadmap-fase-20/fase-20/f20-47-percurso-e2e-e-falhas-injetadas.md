@@ -70,3 +70,16 @@ Job `e2e` verde no CI com os cenários e artefatos. Local: verde na pilha isolad
 - `.gitignore`: duas linhas para `tests/e2e/browser/test-results/` e `tests/e2e/browser/report/`
   (saída do Playwright, não um artefato do build). Sem isso o `git status` do novo projeto
   Node ficaria sujo depois de qualquer corrida local.
+
+## Follow-up (correção de CI, run 36342824454)
+
+A primeira corrida real em CI (após o merge em `feature/f20-groq-e-consolidacao`, commit
+4fbd6dc) quebrou em dois pontos: um `getByRole('link', ...)` resolveu 2 elementos e uma
+asserção de "1 oportunidade encontrada." falhou. Causa: `pipeline.yml` já cria, em passos
+anteriores do mesmo job, duas outras oportunidades tituladas "Senior Python Engineer"
+(aquisição manual e o ciclo autônomo com o board fixo `radar-ci`) antes da suite de
+navegador rodar — colisão de título, não um bug de UI. Corrigido tornando o board de cada
+`seedEnabledGreenhouseSource` único por chamada (`e2e-<token>`, título embutido), então o
+termo de busca de cada teste é garantidamente único. Reproduzido localmente rodando as
+etapas reais do pipeline antes da suite (repro de 2 oportunidades "Senior Python Engineer"
+confirmado) e revalidado 7/7 verde duas vezes depois da correção. Ver §6 da evidência.
