@@ -34,6 +34,11 @@ from opportunity_radar.acquisition.domain import (
     HealthResult,
     parse_retry_after_seconds,
 )
+from opportunity_radar.acquisition.http_conditional import (
+    NotModifiedResponse,
+    conditional_request_headers,
+    record_conditional_response,
+)
 
 _SLUG = r"[A-Za-z0-9][A-Za-z0-9_-]*"
 _TENANT_SITE = re.compile(rf"^({_SLUG})/({_SLUG})$")
@@ -46,7 +51,13 @@ class WorkdayCollector:
     """Reads public postings from a Workday tenant's career site (CXS backend)."""
 
     source_type = "workday"
-    capabilities = CollectorCapabilities(company_jobs=True, pagination=True)
+    capabilities = CollectorCapabilities(
+        company_jobs=True,
+        pagination=True,
+        incremental_cursor=True,
+        etag=True,
+        last_modified=True,
+    )
 
     def __init__(
         self,
@@ -114,15 +125,21 @@ class WorkdayCollector:
     ) -> AsyncIterator[CollectedItem]:
         seen_pages: set[tuple[str, ...]] = set()
         total_fetched = 0
-        offset = 0
+        # A resumed run (F20-39 `resume_of_run_id`) supplies an explicit cursor: the offset
+        # to pick up from, never derived automatically. A fresh run has no cursor and
+        # starts at 0, same as before this card.
+        offset = self._parse_cursor(request.cursor)
         while request.max_items is None or emitted < request.max_items:
             remaining = (
                 None if request.max_items is None else request.max_items - emitted
             )
             limit = min(_PAGE_SIZE, remaining) if remaining is not None else _PAGE_SIZE
-            postings = await self._fetch_page(
-                client, tenant, site, pod, offset, limit, request
-            )
+            try:
+                postings = await self._fetch_page(
+                    client, tenant, site, pod, offset, limit, request
+                )
+            except NotModifiedResponse:
+                return
             page_signature = tuple(str(posting.get("externalPath")) for posting in postings)
             if postings and page_signature in seen_pages:
                 raise AcquisitionError(
@@ -131,7 +148,7 @@ class WorkdayCollector:
                 )
             seen_pages.add(page_signature)
             total_fetched += len(postings)
-            for posting in postings:
+            for index, posting in enumerate(postings):
                 try:
                     item = self._item(
                         posting,
@@ -139,6 +156,9 @@ class WorkdayCollector:
                         site=site,
                         pod=pod,
                         company_name=request.company_name,
+                        # The offset a resume should pick up from if this run is
+                        # interrupted right after this item (F20-39 "retomada").
+                        cursor=str(offset + index + 1),
                     )
                 except AcquisitionError as error:
                     if error.code is not AcquisitionErrorCode.PARSER_SCHEMA_CHANGED:
@@ -156,6 +176,26 @@ class WorkdayCollector:
                 request.telemetry.record_items_announced(total_fetched)
                 return
             offset += len(postings)
+
+    @staticmethod
+    def _parse_cursor(cursor: str | None) -> int:
+        if cursor is None:
+            return 0
+        try:
+            offset = int(cursor)
+        except ValueError as error:
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                "Workday cursor must be a non-negative integer offset",
+                field="cursor",
+            ) from error
+        if offset < 0:
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                "Workday cursor must be a non-negative integer offset",
+                field="cursor",
+            )
+        return offset
 
     @staticmethod
     def validate_tenant_identifier(company_reference: str | None) -> tuple[str, str]:
@@ -213,12 +253,25 @@ class WorkdayCollector:
             error: AcquisitionError | None = None
             try:
                 request.telemetry.record_http_attempt(retry=attempt > 0)
+                # Validators only ever describe a fresh, full read from offset 0; a
+                # resumed run's cursor picks up mid-board, a different scope a 304 for
+                # offset 0 could never speak for.
+                headers = (
+                    conditional_request_headers(request)
+                    if offset == 0 and request.cursor is None
+                    else {}
+                )
                 response = await client.post(
                     url,
                     json={"limit": limit, "offset": offset, "searchText": ""},
+                    headers=headers or None,
                 )
                 if response.status_code == 429:
                     request.telemetry.record_rate_limit()
+                if response.status_code == 304:
+                    record_conditional_response(request, response)
+                    raise NotModifiedResponse()
+                record_conditional_response(request, response)
                 error = self._response_error(response)
                 if error is None:
                     return self._postings(response)
@@ -339,6 +392,7 @@ class WorkdayCollector:
         site: str,
         pod: str,
         company_name: str | None,
+        cursor: str | None = None,
     ) -> CollectedItem:
         title = posting.get("title")
         external_path = posting.get("externalPath")
@@ -373,6 +427,7 @@ class WorkdayCollector:
             # The listing endpoint never carries the full description; only the per-job
             # detail page does, and this collector does not fetch it (see module docstring).
             description=None,
+            cursor=cursor,
             raw_payload=posting,
             metadata={
                 "posted_on": posting.get("postedOn"),

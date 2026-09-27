@@ -11,6 +11,7 @@ from opportunity_radar.acquisition.domain import (
     CollectionNetworkPolicy,
     CollectionRequest,
 )
+from opportunity_radar.acquisition.scheduling import ConditionalRequestHeaders
 from opportunity_radar.acquisition.workday import WorkdayCollector
 
 _FIXTURE = Path(__file__).parents[2] / "fixtures" / "workday_jobs.json"
@@ -65,6 +66,10 @@ def test_parses_listed_jobs_and_preserves_payload() -> None:
     assert items[0].metadata["posted_on"] == "Posted 3 Days Ago"
     assert items[0].metadata["parser_version"] == "workday-cxs-v1"
     assert collection_request.telemetry.http_requests == 1
+    # Each item carries the offset a resume should pick up from if this run is
+    # interrupted right after it (F20-39 "retomada da mesma execução").
+    assert items[0].cursor == "1"
+    assert items[1].cursor == "2"
 
 
 def test_paginates_until_short_page() -> None:
@@ -273,3 +278,107 @@ def test_skips_malformed_listed_job_and_reports_it() -> None:
         asyncio.run(client.aclose())
     assert [item.external_id for item in items] == ["/job/Remote/Valid-Job_R1"]
     assert request.telemetry.invalid_items == 1
+
+
+def test_sends_conditional_headers_only_for_a_fresh_full_run() -> None:
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json={"total": 0, "jobPostings": []})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    request = CollectionRequest(
+        company_reference="acme/ExternalCareerSite",
+        api_region="wd5",
+        conditional_headers=ConditionalRequestHeaders(if_none_match='"abc123"'),
+    )
+    try:
+        asyncio.run(_collect(WorkdayCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert calls[0].headers["If-None-Match"] == '"abc123"'
+
+
+def test_bare_304_yields_no_items_and_records_not_modified_without_a_total() -> None:
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(304, headers={"ETag": '"abc123"'})
+        )
+    )
+    request = CollectionRequest(
+        company_reference="acme/ExternalCareerSite",
+        api_region="wd5",
+        conditional_headers=ConditionalRequestHeaders(if_none_match='"abc123"'),
+    )
+    try:
+        items = asyncio.run(_collect(WorkdayCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert items == []
+    assert request.telemetry.not_modified is True
+    assert request.telemetry.response_etag == '"abc123"'
+    assert request.telemetry.items_announced is None
+
+
+def test_resumes_from_an_explicit_cursor_offset_without_conditional_headers() -> None:
+    calls: list[httpx.Request] = []
+    page = {
+        "total": 1,
+        "jobPostings": [
+            {
+                "title": "Resumed Engineer",
+                "externalPath": "/job/Remote/Resumed-Engineer_R42",
+                "locationsText": "Remote",
+                "bulletFields": ["R42"],
+            }
+        ],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json=page)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    # A resumed run supplies both an explicit cursor and the run it continues
+    # (`resume_of_run_id`); here we only exercise the collector's own read of `cursor`.
+    request = CollectionRequest(
+        company_reference="acme/ExternalCareerSite",
+        api_region="wd5",
+        cursor="20",
+        conditional_headers=ConditionalRequestHeaders(if_none_match='"stale-etag"'),
+    )
+    try:
+        items = asyncio.run(_collect(WorkdayCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert json.loads(calls[0].content)["offset"] == 20
+    assert items[0].cursor == "21"
+    # A resumed run's request is a different scope (mid-board) than whatever the
+    # checkpoint's validators described (a fresh, full read), so it must never send
+    # them (SPEC 39 §7 — validators never cross scopes).
+    assert "If-None-Match" not in calls[0].headers
+
+
+def test_rejects_a_malformed_cursor() -> None:
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json={"jobPostings": []}))
+    )
+    try:
+        with pytest.raises(AcquisitionError) as error:
+            asyncio.run(
+                _collect(
+                    WorkdayCollector(client=client),
+                    CollectionRequest(
+                        company_reference="acme/ExternalCareerSite",
+                        api_region="wd5",
+                        cursor="not-a-number",
+                    ),
+                )
+            )
+    finally:
+        asyncio.run(client.aclose())
+    assert error.value.code is AcquisitionErrorCode.INVALID_CONFIGURATION

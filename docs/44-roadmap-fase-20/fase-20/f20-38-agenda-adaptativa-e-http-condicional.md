@@ -76,25 +76,43 @@ reais do catálogo importado usa o mesmo host. Ver
 `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md` §4. Nenhum dos dois
 itens muda os critérios já marcados (cobertos por CI); confirma que seguem pendentes.
 
+### HTTP condicional cabeado nos 8 coletores, validado com dado real (2026-09-27)
+
+O item "envio real de `If-None-Match`/`If-Modified-Since`" abaixo está resolvido: os 8
+coletores HTTP (ashby, greenhouse, lever, remotive, workday, teamtailor, workable,
+factorial) agora leem `request.conditional_headers`, enviam os cabeçalhos quando
+presentes e reportam `ETag`/`Last-Modified`/304 via um helper compartilhado
+(`acquisition/http_conditional.py`), evitando duplicar a mesma lógica 8 vezes. Workday
+também passou a ler `request.cursor` como offset e a preencher `CollectedItem.cursor`
+por item (consumido pelo F20-39, ver aquele card).
+
+Confirmado ao vivo na pilha isolada `f20cond` (não fabricado, boards reais, sem tocar
+`opportunity-radar`): Greenhouse (Lokalise) e Teamtailor (Seedtag) devolveram um `ETag`
+real na primeira coleta e um 304 real na segunda, sem enviar corpo (confirmado também via
+`curl` direto contra os dois boards: 19.820 bytes evitados no Greenhouse, 345.111 bytes
+evitados no Teamtailor). Ver
+`docs/44-roadmap-fase-20/evidencias/http-condicional-2026-09-27.md` para a evidência
+completa (comandos, `run_id`s, valores de `ETag`, e o teste real de retomada por cursor no
+Workday/Adobe). Workday (Adobe) não devolveu `ETag`/`Last-Modified` no endpoint CXS usado
+por este coletor — confirmado, não um bug do lado do coletor: o cabeçalho simplesmente não
+veio na resposta.
+
 ### Itens pendentes (fora do CI / precisam do acervo real ou de outros cards)
 
 - Comparação de 7 dias antes/depois na máquina de referência (requisições, bytes,
-  frescor, cobertura sob os mesmos tetos) — não medida aqui.
-- Envio real de `If-None-Match`/`If-Modified-Since` pelos coletores de produção
-  (ashby/greenhouse/lever/remotive): a infraestrutura (`CollectionRequest.conditional_headers`,
-  `CollectorCapabilities.etag`/`last_modified`, `CollectionTelemetry.record_conditional_response`)
-  está pronta e testada com um coletor fake + `httpx.MockTransport`
-  (`test_304_revalidates_without_asserting_full_coverage`,
-  `test_conditional_headers_are_not_reused_across_a_different_checkpoint_scope`), mas os
-  arquivos de coletor em si não foram tocados neste card (evitados de propósito: dois
-  workers-irmãos alteravam Workday/Teamtailor em paralelo). Cada coletor precisa, em um
-  card seguinte, ler `request.conditional_headers` e chamar
-  `request.telemetry.record_conditional_response` — sem isso, o checkpoint nunca ganha
-  `etag`/`last_modified` reais em produção.
+  frescor, cobertura sob os mesmos tetos) — não medida aqui; depende da janela de 7 dias
+  do F20-35 (iniciada em 2026-09-26, termina 2026-10-04) mais operação contínua depois
+  desta sessão.
+- ~~Envio real de `If-None-Match`/`If-Modified-Since` pelos coletores de produção~~ —
+  **resolvido em 2026-09-27**, ver seção acima e
+  `docs/44-roadmap-fase-20/evidencias/http-condicional-2026-09-27.md`.
 - Orçamento por host para sondas (`probing.py`) e descoberta (F20-36, ainda não
   implementada): a tabela e o método de repositório já existem
   (`HostBudgetStateModel`/`record_host_budget_usage`), mas nada nesses módulos os chama
   ainda.
+- Orçamento por host compartilhado entre duas fontes reais do mesmo host: ainda não
+  exercido com tráfego real — os 3 boards usados nesta sessão (Greenhouse/Lokalise,
+  Teamtailor/Seedtag, Workday/Adobe) são, cada um, o único host testado do seu tipo.
 - `is_low_yield` usa "nunca rodou com sucesso" como proxy; integrar com as métricas de
   coverage/yield do dashboard (F20-35, `dashboard/queries.py::SourceCoverageMetric`/
   `useful_yield_metrics`) é um refinamento futuro, não feito aqui para não acoplar o
