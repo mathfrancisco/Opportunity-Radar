@@ -1,0 +1,88 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "53.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "LEAD",
+      "work_mode": "REMOTE",
+      "compensation": null,
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:4120baf085c73f9eb80a4ba29a12997e077139d0043bdb8e357df69c0b0fa805",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:azure:sha256:eff585f7d2b2d2f28e200ee98f67074be7acaedee17f326567da7313fb89e426",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:cicd:sha256:a3ea6fc71153a7c3c1c6a679b5f9785a04992a06cc7e8645568083fb0678bd03",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:csharp:sha256:6e3f1fedade8926f5e32fd06df8c776a599998c23821a81cd12825172101a2ed",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:dotnet:sha256:b7c38f2619098e66bacfa97e618a5ff442fb4e9e45ac3614f2cef848b2c31073",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:mongodb:sha256:dfb1fd0d62a4efa1f42c3c8984e90c73354f1e8fe762be3d0b55e77275477263",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:postgresql:sha256:6d0159b42814af0f44c33743a33595d17041c92866afd9abcaec7dadff00976d",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:react:sha256:0484afba51d21608375a08fdf0041ec66330fc9b5469562ab6184f9c1b5f990a"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "[Job-31651] Tech Lead FullStack (.Net/React), Brazil",
+    "company_name": "Empresa X",
+    "location_text": "Brazil",
+    "description": "At Empresa X, we help large enterprises transform the potential of AI into real business impact with AI Deployment, AI-native execution, and tech-integrated business solutions.\nWith 30 years of experience in technological transformation, we accelerate innovation with expertise in Agentic SDLC, Application modernization, Data & AI, Martech and Business strategy.\nWe are 8,000 Empresa Xers across more than 25 countries, collaborating to build solutions with real impact. AI is already part of how we work, evolve, and innovate every day.\n\nWe are looking for a Tech LeadFullstack Developer to join our team!\nThis role will be primarily focused on Frontend development (70%), with 30% Backend, working in a modern, collaborative environment focused on software engineering best practices.\nTech Stack\nFrontend — 70%\nReact\nBackend — 30%\n.NET 8\nC#\nDatabases\nPostgreSQL\nMongoDB\nEntity Framework Core (EF Core)\nTesting\nxUnit\nBogus (Faker)\nNSubstitute\nFrameworks & Tools\nMediatR\nAutoMapper\nRebus\nGit\nGitFlow\nCloud, Messaging & CI/CD\nMicrosoft Azure\nAzure DevOps\nAzure Pipelines\nAzure Service Bus\nYAML-based CI/CD pipelines\nWhat you’ll be working on\nDeveloping Fullstack applications, with a stronger focus on Frontend;\nDeveloping and maintaining APIs and services using .NET/C#;\nBuilding user interfaces with React;\nWorking with relational and NoSQL databases;\nDeveloping automated tests and applying software quality practices;\nWorking with messaging and event-driven architectures using Azure Service Bus/Rebus;\nContributing to CI/CD processes using Azure DevOps and Azure Pipelines;\nWorking with Git and branching strategies such as GitFlow.\nIf you have experience with React + .NET/C# and are excited about this opportunity, we’d love to hear from you!\n#LI-AM5"
+  },
+  "split": "tuning",
+  "group": "be102fe8dfb1",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

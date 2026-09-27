@@ -1,0 +1,87 @@
+{
+  "kinds": [
+    "ambiguous",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "53.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "SENIOR",
+      "work_mode": "REMOTE",
+      "compensation": null,
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:a9832c3b16e392e9d91a6a46e33b9339124745309a27201914424e5489c91bbe",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:aws:sha256:882eca6ecd6f010b1cbb2afd295069fbc55440802f467e1ea53f158d253942ce",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:cicd:sha256:9a8dc0ec0a58636f4d4fbc7d8441aedb7be1ba61cd451a0750698997971d72ab",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:java:sha256:28312a504c0f96836ab4ff1785eccabee6730c8696683ac8d855cb7c33ed0fe2",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:kotlin:sha256:7e20b6e90757e2675d2e0287e4135e8a9bfaf739c58f2fdee4b32c17bf13e3c6",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:nextjs:sha256:567394d3428bb55fffd1f79ae4674c95910ece0c0c175e9d2103357102cb02e6",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:react:sha256:ccb17d4e8ffc913ffe3b6f2775756fd7621be178508bd5afab425d89b2cf4e2a",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:typescript:sha256:ccb17d4e8ffc913ffe3b6f2775756fd7621be178508bd5afab425d89b2cf4e2a"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "[Job-31524] Senior Software Developer Fullstack - Kotlin/Next.js (React/TypeScript), Brazil",
+    "company_name": "Empresa X",
+    "location_text": "Brazil",
+    "description": "Na Empresa X , ajudamos grandes empresas a transformar o potencial da AI em impacto real nos negócios com AI Deployment, execução AI-native e tech-integrated business solutions.\nCom 30 anos de experiência em transformação tecnológica, aceleramos inovação com expertise em agentic SDLC, application modernization, Data & AI, martech e business strategy.\nSomos 8.000 Empresa Xers em mais de 25 países, colaborando para construir soluções com impacto real. AI já faz parte da forma como trabalhamos, evoluímos e inovamos todos os dias.\nImportante: se você reside na Região Metropolitana de Campinas, sua presença nos escritórios da cidade será obrigatória, conforme a política de frequencia vigente.\n\nBuscamos uma pessoa Sênior Fullstack com sólida base técnica e paixão por construir sistemas de alta escala. Você será protagonista na evolução da nossa arquitetura, garantindo que nossas soluções sejam resilientes, seguras e prontas para o futuro.\nNesta função, esperamos que você não apenas escreva código de excelência, mas que atue como referência técnica, utilizando Inteligência Artificial para otimizar o ciclo de desenvolvimento e elevando a barra de qualidade do time.\nResponsabilidades:\nProjetar, construir e evoluir serviços backend em Kotlin (Spring), APIs REST/gRPC e integrações via Kafka/SQS.\nConstruir e manter interfaces web em Next.js + React + TypeScript, seguindo as boas práticas do chapter frontend.\nAtuar de ponta a ponta: da descoberta com produto ao deploy em produção, passando por revisão de código, testes e monitoramento.\nGarantir qualidade com testes (unitários e de integração), CI/CD e cobertura.\nInstrumentar e observar as entregas (métricas, logs, tracing) — nada vai para produção sem telemetria.\nColaborar cross-squad, realizar code reviews com rigor e elevar o nível técnico do time com mentoria de pessoas pleno/junior.\nRequisitos para este desafio:\nExperiência sólida como pessoa desenvolvedora fullstack com perfil sênior.\nBackend: domínio de Kotlin (ou Java com forte vontade de migrar para Kotlin) — APIs, modelagem e boas práticas de arquitetura (Clean/Hexagonal, DDD).\nFrontend: experiência com Next.js + React + TypeScript (SSR/SSG, data fetching, estilos, acessibilidade).\nCloud e infra: vivência com AWS (ou equivalente), contêineres e CI/CD.\nFluência em testes automatizados e cultura de qualidade.\n[Opcional] Diferenciais:\nExperiência prévia com foodtech, pagamentos ou fintech.\nKotlin + Spring Boot (ou Ktor) em produção.\nNext.js App Router, Server Components e edge rendering.\nObservabilidade (Datadog), SLOs e on-call.\nArquitetura orientada a eventos (Kafka) e sistemas de alta escala.\nModelagem relacional/NoSQL e/ou mensageria (Kafka/SQS).\n\n#LI-DJ1\n#LI-midsenior"
+  },
+  "split": "tuning",
+  "group": "be102fe8dfb1",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "57.5000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "SENIOR",
+      "work_mode": "REMOTE",
+      "compensation": null,
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "HIGH",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:ff436864b7cb9ef66dd3f849921617eb8972fa7c4170468f6ff829a55b6a4114"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Senior Machine Learning Engineer, Personalization, Muse",
+    "company_name": "Empresa X",
+    "location_text": "New York, NY",
+    "description": "The Personalization team makes deciding what to play next easier and more enjoyable for every listener. From Blend to Discover Weekly, we’re behind some of Empresa X’s most-loved features. We built them by understanding the world of music and podcasts better than anyone else. Join us and you’ll keep millions of users listening by making great recommendations to each and every one of them.\nYou’ll join a team working at the intersection of machine learning, music understanding, and user experience. We focus on generating music sessions powering experiences like systems that power conversational playlist generation to give users more adaptive and intuitive control over what they listen to.\nThis team collaborates closely with product, design, user research, and data science to build personalized, high-impact features used by hundreds of millions of listeners worldwide."
+  },
+  "split": "tuning",
+  "group": "7005c0064bda",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

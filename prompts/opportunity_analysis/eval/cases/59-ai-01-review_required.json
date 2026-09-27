@@ -1,0 +1,99 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "56.2500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": "YEAR",
+        "maximum": "275000.00",
+        "minimum": "175000.00",
+        "currency": "USD"
+      },
+      "published_at": "2026-02-27T19:05:40.009000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "HIGH",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:e46423a0f77eaade2a8c66d975e24c0467ec35e26138bee70cf5b19f3e9085df",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:observability:sha256:94f78fc0ec54ef305a82546c97549fba6db2c7750e545836454cd19eec532af9"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "YEAR",
+          "maximum": "275000.00",
+          "minimum": "175000.00",
+          "currency": "USD",
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "{\"compensationType\": \"Salary\", \"currencyCode\": \"USD\", \"interval\": \"1 YEAR\", \"maxValue\": 275000, \"minValue\": 175000}",
+          "evidence_source": "ashby.compensation.summaryComponents.Salary",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Applied AI Engineer",
+    "company_name": "Empresa X",
+    "location_text": "United States & Canada",
+    "description": "About Empresa X 🚀\n\nEmpresa X builds modern developer tools and APIs that make it easy for companies to become Enterprise Ready. Our platform powers authentication, identity, authorization, and other critical infrastructure that developers need to securely scale their products to large organizations.\n\nWe recently raised a $100M Series C, valuing the company at $2B, led by Meritech and Sapphire with participation from Greenoaks, Craft, Abstract, and Audacious. Empresa X powers enterprise features for many of the fastest-growing AI companies, including OpenAI, Cursor, and Perplexity, Sierra, and Plaid.\n\nAs AI reshapes software, Empresa X is at the frontier of Human and Agent Authentication, Identity, and Access Control helping companies answer a new critical question: who are your agents, and what are they allowed to do? Our fast-growing customer base includes hundreds of modern software companies building the next generation of enterprise-ready products.\n\nABOUT THE ROLE\n\nWe're growing our Applied AI team to dramatically increase productivity across Engineering, Sales, Support, and Operations, and to ship AI-powered products that customers rely on directly.\n\nAs an Applied AI Engineer, you'll design and ship production AI systems that change how Empresa X builds, sells, supports, and scales. You’ll also be building things that Empresa X customers use, and systems that the entire company depends on daily.\n\nYou'll work on a small, high-ownership team that:\n\n- Chooses problems based on measurable impact\n\n- Moves from idea → prototype → production in days or weeks\n\n- Ships at both layers: internal leverage and customer-facing product\n\n- Adapts quickly as models, tools, and best practices evolve\n\nThis is a 0→1 role with company-wide visibility.\n\nWhat you'll do\n\n- Design and ship customer-facing AI products like ask.Empresa X.com [link] AI support bots embedded in customer Slack channels, and new surfaces we haven't built yet\n\n- Build internal tools that become part of people's daily work: agents, automations, and workflows that are stable, observable, and easy to maintain\n\n- Work on big bets: a unified bot framework, a sandboxed coding harness agent, and infrastructure that lets the entire company ship\n\n- Use LLMs, embeddings, retrieval, and tool-calling to plug into docs, Slack, GitHub, CRM, analytics, support systems, and internal services\n\n- Replace repetitive, multi-step manual processes with orchestrated, AI-driven flows that span multiple apps and data sources\n\n- Stay current on new models and tooling, run focused experiments, and help the team converge on patterns, libraries, and infrastructure that compound over time\n\nExample problems you might work on\n\n- A sandboxed coding harness that can safely take a bug report or feature spec all the way to a deployed change\n\n- A unified bot framework that powers every AI touchpoint, internal and customer-facing from a single, observable backbone\n\n- A GTM intelligence layer that gives reps live account context, meeting prep, and follow-up from CRM, product usage, and conversation history\n\n- Turning noisy, cross-tool workflows (tickets, Slack threads, docs) into a single agent that handles triage, routing, and suggested actions\n\n- Infrastructure that lets any Empresa X team ship a reliable internal AI app without reinventing the stack\n\nWhat we're looking for\n\n- You've taken AI-powered systems from idea to production and through at least one iteration cycle with real users\n\n- Strong engineering fundamentals. You're comfortable owning services, data flows, and integrations end-to-end\n\n- Experience building with LLM APIs\n\n- You think about failure modes, observability, and ownership, not just whether the demo works\n\n- Bias toward action. You care less about the model and more about removing real bottlenecks, saving hours, or unlocking workflows the company couldn't do before\n\n- Comfort with ambiguity and fast change. The problem, the tools, and the \"right\" patterns are all evolving, you're excited to help define them\n\nNice to have\n\n- Prior work on customer-facing AI products\n\n- Experience with embeddings, retrieval/RAG architectures, and structured tool-calling or agents\n\n- Exposure to MCP or similar protocols for connecting AI agents to real systems\n\nBenefits and Perks (US Only) 💖\n\nAt Empresa X, we offer resources that emphasize personal and familial well-being. We offer healthcare coverage for you and your family, including medical, dental, and vision. We offer parental leave, paid-time off and fully remote working arrangements.\n\n- 401k matching\n\n- Competitive Equity\n\n- Healthcare, dental and vision coverage\n\n- FSA, ST/LT Disability, Voluntary Life\n\n- Carrot fertility benefits\n\n- 20 days paid vacation + 10 holidays + unlimited sick leave\n\n- 12 weeks fully paid parental leave\n\n- Fitness: Monthly stipend for gyms, yoga classes, race registrations or whatever keeps you active\n\n- Wellness: Monthly stipend for a massage, meditations class, therapy, or activities that enhance your well-being\n\n- Commuter benefits for hybrid employees in SF/NYC\n\n- Unlimited token usage!\n\nPlease inquire directly with our recruiting team for benefits available to those working outside the US."
+  },
+  "split": "tuning",
+  "group": "f14cf6a60ce1",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

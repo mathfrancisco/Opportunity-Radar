@@ -1,0 +1,81 @@
+{
+  "kinds": [
+    "ambiguous",
+    "missing_compensation",
+    "missing_country",
+    "no_description"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "57.5000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "STAFF",
+      "work_mode": "REMOTE",
+      "compensation": null,
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "HIGH",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:3c005e94d8d939a04ecf18cb30d72d9065536ff3866d1b271ba6be44b19029da"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Staff Machine Learning Engineer, Home Surfaces",
+    "company_name": "Empresa X",
+    "location_text": "New York, NY",
+    "description": ""
+  },
+  "split": "tuning",
+  "group": "7005c0064bda",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

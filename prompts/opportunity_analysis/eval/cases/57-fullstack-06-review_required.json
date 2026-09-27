@@ -1,0 +1,85 @@
+{
+  "kinds": [
+    "ambiguous",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "53.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": null,
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:7e2b3518aad69f02bf7f3f5fd5b08ba56ab071393af568b859d6cca0beb777eb",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:java:sha256:7e2b3518aad69f02bf7f3f5fd5b08ba56ab071393af568b859d6cca0beb777eb",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:mongodb:sha256:c81e5e2125f3c315b2765470efcabadcf5573774158c28cb9cd75c0299226051",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:mysql:sha256:c81e5e2125f3c315b2765470efcabadcf5573774158c28cb9cd75c0299226051",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:postgresql:sha256:c81e5e2125f3c315b2765470efcabadcf5573774158c28cb9cd75c0299226051",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:redis:sha256:c81e5e2125f3c315b2765470efcabadcf5573774158c28cb9cd75c0299226051"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "[31868]  AI Fullstack Java/Angular Desenvolvedor",
+    "company_name": "Empresa X",
+    "location_text": "Brazil",
+    "description": "Junte-se a nós em um ambiente de inovação real, onde suas habilidades técnicas serão fundamentais para transformar sistemas legados em arquiteturas modernas, utilizando Inteligência Artificial como seu superpoder.\nSobre o Perfil\nEstamos em busca de um desenvolvedor pleno que será responsável por mapear, diagnosticar e modernizar sistemas legados, garantindo a performance e confiabilidade das aplicações.\nO Desafio\nVocê atuará na modernização de sistemas legados (EJB, JSP, WebSphere, Java 8), transformando-os em microsserviços modernos com Java 25 e Angular. Este trabalho envolve não apenas a migração, mas uma reinvenção inteligente, onde você utilizará IA para:\nAnalisar e documentar partes de sistemas legados\nImplementar padrões e práticas de desenvolvimento que melhorem a eficiência\nRequisitos Obrigatórios\nStack Técnico Essencial\nIA Tools em Produção: Experiência com Claude Code e GitHub (uso diário)\nFrontend Moderno: Experiência sólida em Angular (aplicações enterprise)\nBackend Robusto: Conhecimento em Spring Boot (microsserviços, APIs REST, segurança, Java 25)\nModernização com IA\nCapacidade de trabalhar na transformação de monólitos em microsserviços\nArquitetura e Qualidade\nConhecimento em Princípios SOLID\nExperiência com TDD (Test-Driven Development) e DDD (Domain-Driven Design)\nFamiliaridade com bancos relacionais (Oracle, PostgreSQL, MySQL) e NoSQL (MongoDB, Redis, etc.)\nPerformance e Observabilidade\nFamiliaridade com Dynatrace e Grafana para monitoramento e APM\nMindset de otimização contínua e troubleshooting de performance, com foco em métricas e logs estruturados\nMindset Ágil\nVivência em metodologias ágeis (Scrum, Kanban)\nCapacidade de trabalhar em sprints com entregas incrementais\nVocê é o Match Perfeito Se:\n- Acorda pensando em como IA pode resolver problemas complexos\n- Já criou seus próprios prompts/agentes para acelerar o trabalho\n- Enfrenta código legado como um desafio, não um problema\n- Consegue explicar conceitos complexos de forma simples para o time\n- Fica animado(a) com POCs e novas tecnologias\n- Acredita que código limpo e testes são investimentos, não custos\n- Vê DevOps e observabilidade como parte essencial do desenvolvimento\nVenha transformar sistemas legados em arquiteturas modernas, usando IA como seu superpoder!\n#LI-APS1"
+  },
+  "split": "tuning",
+  "group": "be102fe8dfb1",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

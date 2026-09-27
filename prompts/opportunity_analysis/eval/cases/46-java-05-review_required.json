@@ -1,0 +1,86 @@
+{
+  "kinds": [
+    "ambiguous",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "53.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "SENIOR",
+      "work_mode": "REMOTE",
+      "compensation": null,
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:740cda88b4a4f387b6d81cd44bf37431fec50680b1f277bcbab87e52e511edf9",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:azure:sha256:978659022b2b1c69885244d489da6f30b0141101ddc8105365885827447cb1ee",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:cicd:sha256:978659022b2b1c69885244d489da6f30b0141101ddc8105365885827447cb1ee",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:dotnet:sha256:ee6ab2f9dd4a4b803d9d828bde4638a20357adc9df0f0e1f5aaa3c27b5ae945f",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:java:sha256:9013a86e384f9287bf6af0fb9bf3f4e11bca03776aadaea25053fa7aa5683805",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:nodejs:sha256:1956e73b0cd5d1b4b00cee316ac75d4b147e599b774c3bee3c1e59a7d56e6df9",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:python:sha256:9013a86e384f9287bf6af0fb9bf3f4e11bca03776aadaea25053fa7aa5683805"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "[Job-31932] Senior Java /Python Developer Back End, Brazil",
+    "company_name": "Empresa X",
+    "location_text": "Brazil",
+    "description": "Na Empresa X , ajudamos grandes empresas a transformar o potencial da AI em impacto real nos negócios com AI Deployment, execução AI-native e tech-integrated business solutions.\nCom 30 anos de experiência em transformação tecnológica, aceleramos inovação com expertise em agentic SDLC, application modernization, Data & AI, martech e business strategy.\nSomos 8.000 Empresa Xers em mais de 25 países, colaborando para construir soluções com impacto real. AI já faz parte da forma como trabalhamos, evoluímos e inovamos todos os dias.\nImportante: se você reside na Região Metropolitana de Campinas, sua presença nos escritórios da cidade será obrigatória, conforme a política de frequencia vigente.\n\nBuscamos uma pessoa desenvolvedora Sênior com perfil de AI Engineer para atuar na vanguarda do ciclo de desenvolvimento agêntico dentro do time Empresa X + cliente. Você será o principal executor e guardião da qualidade técnica no fluxo SDD (Spec-Driven Development), responsável por garantir que o código gerado — com ou sem auxílio de agentes de IA — atenda aos mais altos padrões de arquitetura, testabilidade e manutenibilidade. Atuará no desenvolvimento dos componentes transversais do programa de modernização de uma empresa do segmento de logística: as fundações que desbloqueiam todos os demais domínios do programa.\nSe você domina engenharia de software, tem experiência prática com IA aplicada ao desenvolvimento e quer multiplicar sua capacidade de entrega em até 5x com desenvolvimento agêntico em um dos programas mais relevantes do setor logístico no Brasil, esta oportunidade é para você!\n\nResponsabilidades:\n\nDesenvolver APIs, eventos e integrações para os componentes transversais do programa de modernização (Node.js e/ou .NET), seguindo padrões de DDD, microsserviços e arquitetura orientada a eventos com Apache Kafka;\nAtuar como executor principal do ciclo de desenvolvimento agêntico (Agentic SDLC), aplicando SDD para guiar agentes de IA na implementação de histórias com contexto técnico rico e bem estruturado;\nGarantir a governança de engenharia e a qualidade do código gerado por IA, realizando code reviews rigorosos, definindo guardrails e evitando alucinações técnicas;\nExplorar, estruturar e evoluir o uso de ferramentas agênticas como Claude Code, Skills e MCPs (Model Context Protocol) no contexto do projeto;\nImplementar e manter testes unitários e de integração, contribuindo para a automação da esteira de qualidade;\nColaborar com o Arquiteto de Soluções nas decisões técnicas e participar ativamente do refinamento de histórias de usuário;\nApoiar na leitura técnica dos sistemas legados com auxílio de IA para identificar regras de negócio críticas sem importar limitações dos sistemas antigos.\n\nRequisitos:\n\nSólida experiência em desenvolvimento backend com .NET, incluindo design de APIs RESTful e comunicação assíncrona via eventos;\nVivência prática com Apache Kafka ou sistemas equivalentes de mensageria e event streaming;\nExperiência com arquitetura de microsserviços e Domain-Driven Design (DDD);\nVivência com plataformas cloud (preferencialmente Azure), CI/CD pipelines, containers e práticas de observabilidade;\nExperiência prática com IA aplicada à engenharia de software: SDD, engenharia de contexto, orquestração de prompts e uso de agentes;\nDomínio de Claude Code, MCPs e ferramentas de desenvolvimento assistido por IA;\n\nDiferenciais:\n\nExperiência com desenvolvimento frontend em ambientes de microfrontends e module federation;\nConhecimento em API Gateway, autenticação unificada e design de plataformas multi-produto;\nFamiliaridade com arquiteturas de contexto para IA (RAG, bases de conhecimento locais, arquivos de especificação como agents.md);\nExperiência em programas de modernização de plataforma legada com múltiplos domínios;\nConhecimento no setor de logística, transporte ou supply chain.\n\n#LI-RR2"
+  },
+  "split": "tuning",
+  "group": "be102fe8dfb1",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

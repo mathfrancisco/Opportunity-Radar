@@ -1,0 +1,98 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "53.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "MID",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": "MONTH",
+        "maximum": "2.00",
+        "minimum": "1.00",
+        "currency": "BRL"
+      },
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:2cf5f9a4b377859c144ccf8c8e532e554c53f6202d3f37bbf3a58bfd686187d6",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:cicd:sha256:2cf5f9a4b377859c144ccf8c8e532e554c53f6202d3f37bbf3a58bfd686187d6",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:dotnet:sha256:d6f3bd69154fffdcdac4cc13a07b9e6e779544b8907f0f13bb34df316eda8f8c",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:react:sha256:8337ce0dc628a41bbf99d0782733a7230ed16d50e99dbd71e116a1543f8e8915"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "MONTH",
+          "maximum": "2.00",
+          "minimum": "1.00",
+          "currency": "BRL",
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "{\"currency\": \"BRL\", \"interval\": \"per-month-salary\", \"max\": 2, \"min\": 1}",
+          "evidence_source": "lever.salaryRange",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "[Job - 31638] Mid Level  FullStack Developer (.NET/React)",
+    "company_name": "Empresa X",
+    "location_text": "Brazil",
+    "description": "At Empresa X, we help large enterprises transform the potential of AI into real business impact with AI Deployment, AI-native execution, and tech-integrated business solutions.\nWith 30 years of experience in technological transformation, we accelerate innovation with expertise in Agentic SDLC, Application modernization, Data & AI, Martech and Business strategy.\nWe are 8,000 Empresa Xers across more than 25 countries, collaborating to build solutions with real impact. AI is already part of how we work, evolve, and innovate every day."
+  },
+  "split": "tuning",
+  "group": "be102fe8dfb1",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

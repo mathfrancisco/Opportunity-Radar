@@ -42,20 +42,23 @@ O harness está em `scripts/eval_analysis.py` e `matching/evaluation.py` (funç�
 
 ## Critérios de aceite
 
-- [ ] 50 casos rotulados versionados. **Parcial (2026-09-27):** os 41 casos reais foram
-      revisados (`docs/44-roadmap-fase-20/rotulagem/f20-21-eval-cases.md`, todas as linhas
-      `aceito`); os 6 casos do bucket `backend` marcados **Reclassificar** foram renomeados
-      para `fora_de_area` (`01/02/03/04/06/08-fora_de_area-*`) com o risco de área
-      adicionado a `must_mention_risks`; os 2 (`05`, `07`) marcados **Aceitar** ficaram como
-      `backend`. `prompts/opportunity_analysis/eval/cases/` (50 arquivos, `git ls-files`
-      confirma que não está mais ignorado) ainda não foi commitado nesta sessão — ver
-      handback. Lacuna de composição (0 Java, 3 fullstack, 1 IA) fechada com 26 candidatos
-      reais do acervo (10 Java, 7 fullstack, 9 IA, todos `role_family=SOFTWARE_ENGINEERING`,
-      `work_mode=REMOTE`, com `match_assessment` real), exportados com a mesma
-      anonimização de `export_eval_cases.py` para
-      `prompts/opportunity_analysis/eval/drafts/gap-{java,fullstack,ai}-NN-review_required.json`
-      — são recomendações, não casos: `must_mention_risks`/`must_not_claim` ficam vazios
-      até um humano ler a vaga e decidir, como todo draft.
+- [x] 50 casos rotulados versionados. **Feito (2026-09-27):** os 26 drafts de lacuna
+      (`gap-{java,fullstack,ai}-NN-review_required.json`, 10 Java + 7 fullstack + 9 IA)
+      foram revisados — `must_mention_risks`/`must_not_claim` preenchidos seguindo a
+      convenção dos 50 casos já rotulados (risco de remuneração ausente, países ausentes,
+      skill exigida fora do perfil ou skills não extraídas) — e promovidos para
+      `prompts/opportunity_analysis/eval/cases/` (decisão do usuário: aceito
+      pré-autorizado; tabela completa em
+      `docs/44-roadmap-fase-20/rotulagem/f20-21-eval-cases.md` e `.json`). 1 PII
+      encontrado e corrigido (primeiro nome da recrutadora em `gap-java-01`). Para caber
+      exatamente em 50 na composição pedida (10/10/10/10/10), os 2 casos `backend`
+      (`05`, `07`), o excedente de `fora_de_area` (`17`–`31`, 15 arquivos) e os 9 casos
+      `synthetic-*` foram movidos (`git mv`, preservando histórico, não deletados) para
+      `prompts/opportunity_analysis/eval/cases-secondary/` — ver justificativa na seção
+      "Rebalanceamento" da rotulagem. `eval/cases/` tem 50 arquivos: 10 Java, 10
+      fullstack, 10 IA, 10 fora de área, 10 inelegíveis.
+      `tests/backend/matching/test_eval_scoring.py` verde (22 passed) com o novo
+      conjunto.
 - [ ] Baseline versionada com validade de JSON, claims conferidos, acerto de rótulo, latência p50/p95 e tokens. **Não feito** — sem chamada real ao Groq nesta sessão (fora do escopo/orçamento), como o "Não fazer" exige.
 
 ## Testes

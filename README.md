@@ -323,6 +323,13 @@ com `AI_SKIPPED`.
 
 O detalhe e a listagem de assessments trazem `analysis` com o estado corrente.
 
+O harness de avaliação (`scripts/eval_analysis.py`, funções puras em
+`matching/evaluation.py`) tem o conjunto de 50 casos rotulados versionado em
+`prompts/opportunity_analysis/eval/cases/` (10 Java, 10 fullstack, 10 IA, 10 fora de
+área, 10 inelegíveis, conforme F20-21); o excedente rotulado fica em
+`eval/cases-secondary/`. A baseline real no Groq (`make eval-analysis` com
+`GROQ_API_KEY`) ainda não foi executada — pendente, fora do orçamento desta sessão.
+
 ### 7.9 Estado do dashboard
 
 As telas leem por read models em `src/opportunity_radar/dashboard/`: SQL otimizado

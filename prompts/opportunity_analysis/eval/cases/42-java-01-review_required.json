@@ -1,0 +1,86 @@
+{
+  "kinds": [
+    "ambiguous",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "40.5000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "MID",
+      "work_mode": "REMOTE",
+      "compensation": null,
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [
+        "java"
+      ],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:94755524f358e50d1868d27bd3983f9466778e2507c3114e9c682e969e90befb",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:aws:sha256:e39e6e4f8c3e0f2e55fe0d6bd4865f2b7e9d9257ef76049132a74d2e4c63b00c",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:cicd:sha256:94755524f358e50d1868d27bd3983f9466778e2507c3114e9c682e969e90befb",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:docker:sha256:d8b821ea381b22f04a985ac4301fd685d8541d22a3caa60e8efe095b78a3b811",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:java:sha256:638e47ad996a7f7236d01f89e18cf328f4b6380a14193cfc14ae8b3c89cda3e7"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "[Job-30904] Mid level Java Developer, Brazil",
+    "company_name": "Empresa X",
+    "location_text": "Brazil",
+    "description": "Na Empresa X , ajudamos grandes empresas a transformar o potencial da AI em impacto real nos negócios com AI Deployment, execução AI-native e tech-integrated business solutions.\nCom 30 anos de experiência em transformação tecnológica, aceleramos inovação com expertise em agentic SDLC, application modernization, Data & AI, martech e business strategy.\nSomos 8.000 Empresa Xers em mais de 25 países, colaborando para construir soluções com impacto real. AI já faz parte da forma como trabalhamos, evoluímos e inovamos todos os dias.\nImportante: se você reside na Região Metropolitana de Campinas, sua presença nos escritórios da cidade será obrigatória, conforme a política de frequencia vigente.\n\nOlá, eu sou a Recrutadora, recruiter da Empresa X e estamos buscamos uma pessoa Developer nível Pleno para atuar com Java na maior empresa de beneficios do Brasil.\nSua missão:\nAtender junto com a Empresa X um cliente do mercado de benefícios;\nGarantir que essa aplicação ofereça uma excelente experiência e facilite a execução das atividades do nosso usuários final;\nAjudar o time e o cliente a elevar a maturidade do processo.\nVocê precisa ter práticas com:\nDesenvolvimento JAVA com Spring Boot;\nDesenvolver testes unitários, bem como gostar de práticas de code review;\nCódigo limpo, simples e fáceis de manter (Clean Code);\nBanco de dados Oracle e Mongo;\nAWS\nConceitos de agilidade SCRUM, KANBAN. Dailies, sprints, reviews.\n\nConhecimentos diferenciais:\nOCP, VSTS, AWS, pipelines, lambdas, sonar, arquitetura de microserviços.\nFamiliaridade:\nJava legado (Servlets, JSP, JAX-WS/JAX-RS)\nDocker\n#LI-BA1"
+  },
+  "split": "tuning",
+  "group": "be102fe8dfb1",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga exige Java, que não está no perfil.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

@@ -28,7 +28,7 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 | F20-18 | Não iniciado. | Baseline de F20-21. |
 | F20-19 | Telemetria sem PII em `c3e7606`. | Sem pendência de implementação identificada. |
 | F20-20 | Métricas API, Overview e doctor em `b45ff84`. | Sem pendência de implementação identificada. |
-| F20-21 | Harness em `2f5defd` e `94edd57`; 41 casos revisados (`aceito`); 6 reclassificados `backend`→`fora_de_area` com risco de área adicionado; 26 candidatos reais novos (Java/fullstack/IA) exportados como drafts em `eval/drafts/gap-*`. | Revisar riscos dos 26 drafts, mover para `eval/cases/`, versionar (`eval/cases` já sai do `.git/info/exclude`) e executar baseline real no Groq. |
+| F20-21 | Harness em `2f5defd` e `94edd57`; os 26 drafts de lacuna (Java/fullstack/IA) revisados e promovidos para `eval/cases/`; `eval/cases/` tem 50 arquivos, exatamente 10 Java/10 fullstack/10 IA/10 fora de área/10 inelegíveis, versionados; excedente (2 backend + 15 fora_de_area + 9 synthetic) preservado em `eval/cases-secondary/`; `test_eval_scoring.py` verde (22 passed). | Executar baseline real no Groq (ainda não feito nesta sessão, fora do escopo/orçamento). |
 | F20-22 | Não iniciado. | F20-21. |
 | F20-23 | Não iniciado. | F20-22, F20-02 e F20-03. |
 | F20-24 | Não iniciado. | F20-39, F20-17, F20-16 e F20-12. |

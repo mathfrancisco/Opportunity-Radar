@@ -1,0 +1,92 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "53.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "SENIOR",
+      "work_mode": "REMOTE",
+      "compensation": null,
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:b95224d2bddf24c701e94ef4a10dabfb3b79fa4e2b218da1e8e0733605c80b19",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:aws:sha256:b0e77662f0402273318f013861f230ffe66df0dcabe562b6e448570f4d7716c6",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:azure:sha256:b0e77662f0402273318f013861f230ffe66df0dcabe562b6e448570f4d7716c6",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:cicd:sha256:a005f5ada4ffea727e3f1bb9de2def4b4ad4bb5056ea03b94ee79470f3b68355",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:csharp:sha256:26364f8b24560b8ef5cabef2a6eef1ae1c218838087317deb4dbcdb9fca34330",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:docker:sha256:02f5cb06199285b50a99432cb624685c4790d9671b75616c1f9dc1b1bc61f718",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:java:sha256:26364f8b24560b8ef5cabef2a6eef1ae1c218838087317deb4dbcdb9fca34330",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:kubernetes:sha256:02f5cb06199285b50a99432cb624685c4790d9671b75616c1f9dc1b1bc61f718",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:python:sha256:26364f8b24560b8ef5cabef2a6eef1ae1c218838087317deb4dbcdb9fca34330",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:sql:sha256:05ab651d7087caef0c0b3138ecb3e03e6f280316b1e525ae9e3883184579f4a2"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "[30118] - Senior AI Engineer",
+    "company_name": "Empresa X",
+    "location_text": "Brazil",
+    "description": "At Empresa X, we help large enterprises transform the potential of AI into real business impact with AI Deployment, AI-native execution, and tech-integrated business solutions.\nWith 30 years of experience in technological transformation, we accelerate innovation with expertise in Agentic SDLC, Application modernization, Data & AI, Martech and Business strategy.\nWe are 8,000 Empresa Xers across more than 25 countries, collaborating to build solutions with real impact. AI is already part of how we work, evolve, and innovate every day.\n\nWe are seeking a highly skilled Master Software Developer with a strong background in backend architecture and experience in integrating generative AI tools into client products. The ideal candidate will have proficiency in Python, C# or Java, thrive in a complex work environment with multiple stakeholders, and possess excellent communication skills to effectively collaborate with both team members and clients. Fluency in English is essential for daily interactions and intensive discussions.\n\nKey Responsibilities:\nBackend Development: Design, implement, and maintain robust and scalable backend architecture using Python.\nGenerative AI Integration: Leverage generative AI technologies to enhance client products, providing innovative solutions and tools.\nKnowledge on Generative AI technical stacks and strategies (LLMs, RAG, Fine Tunning, Chain of Thought, etc.) and how to embed them into client’s products.\nClient Communication: Engage with clients to understand their requirements, provide regular updates, and gather feedback to refine product features.\nCode Quality and Best Practices: Ensure code maintainability, readability, and performance by adhering to best practices and conducting code reviews.\nDocumentation: Create and maintain comprehensive documentation for backend services and generative AI integrations.\n\nQualifications:\nEducation:\nBachelor’s degree in Computer Science, Software Engineering, or a related field.\nMinimum of 5 years of experience in development using Python, C# or Java.\nProven experience in backend architecture design and implementation.\nFamiliarity with generative AI technologies and their application in product development.\n\nTechnical Skills:\nProficient in Python\nStrong understanding of RESTful APIs, microservices architecture, and database management (SQL and NoSQL).\nExperience with cloud services (e.g., AWS, Azure, Google Cloud) and containerization tools (e.g., Docker, Kubernetes).\nKnowledge of machine learning concepts and libraries (e.g., TensorFlow, PyTorch) is a plus.\n\nSoft Skills:\nExcellent communication skills in Portuguese and English (both written and verbal). -"
+  },
+  "split": "tuning",
+  "group": "be102fe8dfb1",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}
