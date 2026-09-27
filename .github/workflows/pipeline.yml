@@ -508,6 +508,43 @@ jobs:
             python -c "import json,sys; assert json.load(sys.stdin)['enabled'] is True"
           curl --fail --silent --json '{"correlation_id":"ci-probed-board"}' "$api/sources/$probe_source_id/runs" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'SUCCEEDED', data; assert data['items_seen'] >= 1"
+      - name: Restore the worker's normal schedule
+        # The kill-switch step above force-recreated the worker with every job disabled.
+        # Recreating it again with no override envs restores compose.ci.yaml's normal,
+        # fully-scheduled worker — the browser journey below needs collection,
+        # normalization, evaluation and analysis all running on their own schedule.
+        run: |
+          docker compose -f compose.yaml -f compose.ci.yaml up --detach --force-recreate worker
+          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
+      - name: Set up Node.js for the browser journey
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: tests/e2e/browser/package-lock.json
+      - name: Install the browser journey's own dependencies
+        working-directory: tests/e2e/browser
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run the F20-47 browser journey (happy path and injected failures)
+        # Runs last, after every count-sensitive assertion above: the journey below seeds
+        # its own profile, source and opportunity, and an earlier step's fixed-count
+        # assertions (e.g. "opportunities_total == 1") would break if it ran before them.
+        working-directory: tests/e2e/browser
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3000
+        run: npx playwright test
+      - name: Upload the browser journey's screenshots and traces
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: f20-47-browser-e2e-evidence
+          path: |
+            tests/e2e/browser/test-results/
+            tests/e2e/browser/report/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Collect logs on failure
         if: failure()
         run: docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --tail=300
