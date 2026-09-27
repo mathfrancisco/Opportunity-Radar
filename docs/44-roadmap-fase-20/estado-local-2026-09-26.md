@@ -55,7 +55,7 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 | F20-45 | Extração com cache em `2330f35`. | Sem pendência de implementação identificada. |
 | F20-46 | Evidência e rollback de flush em `41a3ecf`, `fa93d15`, `c9c291e`. | Sem pendência de implementação identificada. |
 | F20-47 | Não iniciado. | F20-17, F20-39, F20-40 e F20-25. |
-| F20-48 | Não iniciado. | F20-41, F20-12 e F20-19. |
+| F20-48 | Critérios provados em CI e contra o dump real (`f20up`); ver `docs/44-roadmap-fase-20/evidencias/upgrade-banco-populado-2026-09-27.md`. | Sem pendência de implementação identificada. |
 | F20-49 | Não iniciado. | F20-47 e F20-48. |
 | F20-50 | Não iniciado. | Aceitar F20-01 a F20-49 com evidência. |
 
