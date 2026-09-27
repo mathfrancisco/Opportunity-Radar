@@ -1,0 +1,160 @@
+{
+  "queries": [
+    {
+      "query": "accounting",
+      "relevant_urls": [
+        "https://jobs.ashbyhq.com/nubank/aee700cd-4eca-454e-8b7d-1a8efc16757f",
+        "https://jobs.ashbyhq.com/nubank/e796c30e-ef69-470c-9d23-353dd7cbce74"
+      ]
+    },
+    {
+      "query": "aws",
+      "relevant_urls": [
+        "https://jobs.lever.co/ciandt/aed3de59-4f41-4ec6-8622-38835fdcf21f",
+        "https://jobs.lever.co/ciandt/bc8da112-2924-430f-ac6e-514cc9775e12",
+        "https://jobs.lever.co/ciandt/ea29f93f-3c65-44db-8e50-33deb21ba6a1",
+        "https://jobs.lever.co/ciandt/c78866f3-6345-4eab-a1a2-7636df5a3d36",
+        "https://jobs.lever.co/ciandt/c2b84e4b-9a00-4ae1-9431-4851d47a1c1c"
+      ]
+    },
+    {
+      "query": "backend",
+      "relevant_urls": [
+        "https://jobs.ashbyhq.com/triggerdev/cf7e7521-b323-41b8-917b-2972685c7791",
+        "https://jobs.ashbyhq.com/triggerdev/6f0f1783-fb08-4ec6-97d1-3f2c26005faf",
+        "https://jobs.ashbyhq.com/revenuecat/c6d43e21-b75b-485b-b7c2-bd7df5909ef3",
+        "https://jobs.ashbyhq.com/firecrawl/6840bbee-aae5-4846-97a2-ec2e764ee75b",
+        "https://jobs.lever.co/ciandt/e41894d3-625f-44df-b3cf-2d8be808529e",
+        "https://jobs.lever.co/spotify/faffd837-edbc-42f8-b4bf-14e1658c18e6",
+        "https://jobs.lever.co/ciandt/a5e35a8a-daa2-4edb-8a6e-830ad92e00e0"
+      ]
+    },
+    {
+      "query": "devops",
+      "relevant_urls": [
+        "https://jobs.ashbyhq.com/firecrawl/fe538f2b-7dd5-4d8d-941e-f8014a911652",
+        "https://jobs.lever.co/ciandt/aed3de59-4f41-4ec6-8622-38835fdcf21f",
+        "https://jobs.lever.co/ciandt/8afc856c-736e-49bd-bb65-6424faba8992",
+        "https://jobs.lever.co/ciandt/4ed02d1a-38bf-4165-ae6c-db398e2d0023",
+        "https://jobs.lever.co/ciandt/9cb52013-844e-432c-9b6f-68cb477f95e0",
+        "https://jobs.lever.co/ciandt/9724fe0e-d741-4158-bbc9-c69b3fef6ef7"
+      ]
+    },
+    {
+      "query": "fullstack",
+      "relevant_urls": [
+        "https://jobs.ashbyhq.com/n8n/6a370ff8-e069-48ed-bffa-5716a3dbd9d5",
+        "https://jobs.lever.co/spotify/d1df9e53-27a1-4399-aa8b-7144cf634360",
+        "https://jobs.lever.co/ciandt/caf8b7a3-0655-46d9-9059-444db13f58e1",
+        "https://jobs.lever.co/ciandt/5beba890-0c20-4eee-b1e1-6a4694be93e5",
+        "https://jobs.lever.co/ciandt/22de5505-5f46-494d-9813-4b8d951a779e",
+        "https://jobs.lever.co/spotify/1692fccc-29f4-4525-a683-b004c2ec62b9",
+        "https://jobs.lever.co/ciandt/e9ed4e29-5c00-4db5-8fc6-e9a72af3c54e",
+        "https://jobs.lever.co/ciandt/78d2ff0d-0a55-4f7c-a27e-2b6fe74792bb"
+      ]
+    },
+    {
+      "query": "java",
+      "relevant_urls": [
+        "https://jobs.lever.co/ciandt/26598b53-3ea0-4ac1-bf07-b1132ae59b1f",
+        "https://jobs.lever.co/ciandt/caf8b7a3-0655-46d9-9059-444db13f58e1",
+        "https://jobs.lever.co/ciandt/387f1f26-b175-4da6-993f-7ed83d597bb0",
+        "https://jobs.lever.co/ciandt/8b072ca5-df06-40a8-ae69-793cd47dd9d3",
+        "https://jobs.lever.co/ciandt/2b60a63a-653f-444e-8ad7-a496ac81c18c",
+        "https://jobs.lever.co/ciandt/5beba890-0c20-4eee-b1e1-6a4694be93e5",
+        "https://jobs.lever.co/ciandt/22de5505-5f46-494d-9813-4b8d951a779e",
+        "https://jobs.lever.co/ciandt/e41894d3-625f-44df-b3cf-2d8be808529e"
+      ]
+    },
+    {
+      "query": "machine learning",
+      "relevant_urls": [
+        "https://jobs.ashbyhq.com/nubank/ecd4ec39-1f0a-4f65-b27a-f537c895a233",
+        "https://jobs.ashbyhq.com/firecrawl/72f9dc1d-65db-48c9-b3d9-c6ccdb997006",
+        "https://jobs.ashbyhq.com/nubank/da518919-9017-488b-9c05-9b50f8df8401",
+        "https://jobs.ashbyhq.com/nubank/ac003ba3-087b-4649-b5ee-c44109b29cc5",
+        "https://jobs.ashbyhq.com/nubank/8902fe4e-6379-400a-98f5-e8f4b5f63659",
+        "https://jobs.lever.co/spotify/499543e3-78e7-473a-8a1d-a82ce9ce9030",
+        "https://jobs.lever.co/spotify/c322d068-5b59-4658-b618-bb2a032eeb9b",
+        "https://jobs.lever.co/spotify/d7c43743-2240-45b6-bc31-33e50cbaba4a"
+      ]
+    },
+    {
+      "query": "marketing",
+      "relevant_urls": [
+        "https://jobs.ashbyhq.com/triggerdev/4f1365b6-4e58-4c57-9b16-7cb94131c2ab",
+        "https://jobs.ashbyhq.com/render/503569c8-f629-44fa-9d69-72e2c6c532f1",
+        "https://jobs.ashbyhq.com/revenuecat/a528c0d2-ea6a-4254-84b3-6da0ffc0dd00",
+        "https://jobs.ashbyhq.com/firecrawl/252206c1-56a2-4598-abef-d2ed9e2295de"
+      ]
+    },
+    {
+      "query": "node",
+      "relevant_urls": [
+        "https://jobs.ashbyhq.com/n8n/6a370ff8-e069-48ed-bffa-5716a3dbd9d5",
+        "https://jobs.ashbyhq.com/n8n/896c58a8-0388-4037-b265-82b15633a568",
+        "https://jobs.lever.co/ciandt/5d832325-3550-4b41-bf72-f6f4cca34275",
+        "https://jobs.lever.co/ciandt/3d7a05b5-ac38-44f5-84d0-a280e02ede08",
+        "https://jobs.lever.co/ciandt/dabcfdc5-0b67-4216-b8a5-b11e9a3fd81f"
+      ]
+    },
+    {
+      "query": "product manager",
+      "relevant_urls": [
+        "https://jobs.ashbyhq.com/revenuecat/7a64d716-1a66-49d0-910b-a07d36d0b498",
+        "https://jobs.ashbyhq.com/revenuecat/1881e14c-7cc9-45de-ba1e-96a13fabe6df",
+        "https://jobs.ashbyhq.com/n8n/bcf96878-d41a-479d-b506-7753356077c4",
+        "https://jobs.ashbyhq.com/revenuecat/d28235be-172c-40fe-91ae-8453f218f413",
+        "https://jobs.ashbyhq.com/supabase/68a397e7-8a1a-4566-ae41-e8c61dd6ed93",
+        "https://jobs.ashbyhq.com/n8n/d418f8fb-b2f2-405e-8f22-db73dcf4e8b4",
+        "https://jobs.ashbyhq.com/supabase/23c9ce7e-6b7b-4316-8f00-8f318e902441"
+      ]
+    },
+    {
+      "query": "python",
+      "relevant_urls": [
+        "https://jobs.lever.co/ciandt/1965d2b9-efd1-4585-907d-4b2e89b8ed6a",
+        "https://jobs.lever.co/ciandt/ea29f93f-3c65-44db-8e50-33deb21ba6a1",
+        "https://jobs.lever.co/ciandt/07f578ac-b346-4cc5-b268-f0992b0080f1",
+        "https://jobs.lever.co/ciandt/c2b84e4b-9a00-4ae1-9431-4851d47a1c1c",
+        "https://jobs.lever.co/ciandt/0aa1efda-c13c-49d8-b874-c1684b21ba59",
+        "https://jobs.lever.co/ciandt/7eee98e3-c07b-4808-8d37-9b35b823693c",
+        "SOFTWARE_ENGINEERING"
+      ]
+    },
+    {
+      "query": "qa",
+      "relevant_urls": [
+        "https://jobs.lever.co/ciandt/2e704a1d-98c7-44bb-a143-65de8425876e",
+        "https://jobs.lever.co/ciandt/7754c754-1a88-44d7-8a25-ba034cafc07e",
+        "https://jobs.lever.co/ciandt/1220225c-0867-4cb8-ab6d-7522f3c878da",
+        "https://jobs.lever.co/ciandt/be8d321b-d604-4efd-b23b-c795c81d2db1",
+        "https://jobs.lever.co/ciandt/7e9e4886-089e-4980-a86a-bdf988466e3e",
+        "https://jobs.lever.co/ciandt/31bcf07b-38e7-4828-b698-c15346e2062f"
+      ]
+    },
+    {
+      "query": "react",
+      "relevant_urls": [
+        "https://jobs.lever.co/ciandt/22de5505-5f46-494d-9813-4b8d951a779e",
+        "https://jobs.lever.co/ciandt/78d2ff0d-0a55-4f7c-a27e-2b6fe74792bb",
+        "https://jobs.lever.co/ciandt/5d832325-3550-4b41-bf72-f6f4cca34275",
+        "SOFTWARE_ENGINEERING",
+        "REMOTE",
+        "https://jobs.lever.co/ciandt/72e49bc5-561a-452d-b9a0-0241a1055726",
+        "https://jobs.lever.co/ciandt/39be8f9e-c2c0-44df-a20d-946550918c37",
+        "https://jobs.lever.co/ciandt/90c012fd-1e66-4027-b36d-5421db0a8307"
+      ]
+    },
+    {
+      "query": "sales",
+      "relevant_urls": [
+        "https://jobs.ashbyhq.com/n8n/fe60fa54-837e-4b52-b64a-a2e8a3f36bf1",
+        "https://jobs.ashbyhq.com/n8n/bf5c14d9-3371-416b-9832-2d3c38de3796",
+        "https://jobs.ashbyhq.com/n8n/dbc78a40-2efd-43ca-bb33-fb7cb0583cb8",
+        "https://jobs.ashbyhq.com/n8n/da8c6a37-670d-4ad9-b5b3-898c395feee4",
+        "https://jobs.ashbyhq.com/revenuecat/43196e25-6385-4087-a842-39002a4e9cf3"
+      ]
+    }
+  ]
+}
