@@ -18,8 +18,10 @@ from opportunity_radar.acquisition.domain import (
     CollectionRequest,
 )
 from opportunity_radar.acquisition.models import SourceDefinitionModel
+from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.companies.models import CompanySource  # noqa: F401
+from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 
 
@@ -60,8 +62,24 @@ async def _collect(
     keywords: tuple[str, ...],
     max_items: int | None,
     correlation_id: str | None,
+    settings: Settings,
 ) -> list[dict[str, Any]]:
-    service = AcquisitionService(session)
+    # AcquisitionService's own default registry only knows the five original collectors
+    # (manual/ashby/lever/greenhouse/remotive) — every collector added since (workday,
+    # teamtailor, workable, factorial, tavily_search) is registered by
+    # `build_collector_registry`, the same one the worker uses (worker.py's
+    # `collection_service_factory`). Without this, `make collect` could resolve a
+    # homologated Workday/Teamtailor/Workable/Factorial source's own collector code
+    # correctly in a probe but fail every real run here with "collector is not
+    # registered" (found live against a real Teamtailor source during F20 homologation).
+    registry = build_collector_registry(
+        greenhouse_base_url=settings.greenhouse_base_url,
+        tavily_api_key=settings.tavily_api_key,
+        tavily_base_url=settings.tavily_base_url,
+        tavily_search_depth=settings.tavily_search_depth,
+        tavily_credit_budget_per_run=settings.tavily_credit_budget_per_run,
+    )
+    service = AcquisitionService(session, registry=registry)
     report: list[dict[str, Any]] = []
     for source in sources:
         try:
@@ -151,6 +169,7 @@ def main() -> int:
                 )
             )
             return 2
+        settings = Settings()  # type: ignore[call-arg]  # values come from the environment
         report = asyncio.run(
             _collect(
                 session,
@@ -159,6 +178,7 @@ def main() -> int:
                 keywords=_split(args.keywords),
                 max_items=args.max_items,
                 correlation_id=args.correlation_id,
+                settings=settings,
             )
         )
     failures = [
