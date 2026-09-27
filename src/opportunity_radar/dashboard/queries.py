@@ -238,7 +238,15 @@ class OverviewSummary:
 
 #: Source types with a collector registered (`registry.py`), i.e. an ATS the radar can
 #: actually collect from. "Empresas com ATS identificado" per the SPEC notes.
-ATS_COLLECTOR_SOURCE_TYPES = ("ashby", "greenhouse", "lever")
+ATS_COLLECTOR_SOURCE_TYPES = (
+    "ashby",
+    "greenhouse",
+    "lever",
+    "workday",
+    "teamtailor",
+    "workable",
+    "factorial",
+)
 #: Number of top Inbox rows, in the default order, that the precision report samples.
 PRECISION_SAMPLE_SIZE = 50
 

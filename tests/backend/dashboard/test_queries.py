@@ -824,3 +824,10 @@ def test_search_metrics_reports_coverage_numeric_fields() -> None:
         assert report.coverage.companies_with_ats >= 1
         assert report.coverage.seniority_unknown_rate is not None
         assert report.coverage.seniority_unknown_rate > 0
+
+
+def test_ats_coverage_counts_every_ats_with_a_collector() -> None:
+    from opportunity_radar.dashboard.queries import ATS_COLLECTOR_SOURCE_TYPES
+
+    ats_types = {"ashby", "greenhouse", "lever", "workday", "teamtailor", "workable", "factorial"}
+    assert set(ATS_COLLECTOR_SOURCE_TYPES) == ats_types
