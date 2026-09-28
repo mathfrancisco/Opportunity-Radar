@@ -101,3 +101,12 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
    ao rodar o baseline, não relacionada a esta dependência.
 4. F20-36 e F20-37 implementados e validados com dados reais em 2026-09-27
    (`feature/f20-36-37-sites`); seguir com F20-47 a F20-50.
+5. F20-49 (relatório de produtividade e custo) iniciado em 2026-09-27
+   (`feature/f20-49-relatorio`): metas pré-registradas e baseline T0 (busca/cobertura do
+   F20-35, custo de IA do F20-21) preenchidos com dados reais em
+   `docs/pesquisas/produtividade-fase-20.md`; nenhuma chamada ao Groq feita nesta sessão
+   (quota diária já esgotada pela rodada F20-21). A janela de 7 dias aberta pelo F20-35
+   em `2026-09-27T00:52:16Z` só fecha em 2026-10-04 — todas as células de resultado (T7)
+   ficam marcadas "pendente"/"inconclusivo" até lá, com o comando exato para preenchê-las
+   documentado na §4 do relatório. Nenhum teste novo (card não muda comportamento de
+   sistema).

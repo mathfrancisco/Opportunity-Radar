@@ -1,6 +1,10 @@
 # CARD F20-49 — Relatório de produtividade e custo
 
-- **Status:** Backlog
+- **Status:** Metas e baseline (T0) registrados —
+  `docs/pesquisas/produtividade-fase-20.md`. Resultado (T7) fica inconclusivo até a
+  janela de 7 dias aberta pelo F20-35 (`2026-09-27T00:52:16Z`) fechar em 2026-10-04; o
+  comando exato para preencher T7 está na §4 do relatório. Nenhuma chamada ao Groq
+  (quota diária já esgotada pela rodada F20-21); nenhum dado sintético.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** F — Encerramento
 - **Depende de:** F20-47, F20-48
