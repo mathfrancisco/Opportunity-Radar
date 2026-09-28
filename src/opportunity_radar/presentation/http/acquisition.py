@@ -170,10 +170,14 @@ class SourceRunPageResponse(BaseModel):
     status_code=status.HTTP_201_CREATED,
 )
 def create_source(
-    body: SourceDefinitionBody, session: Session = Depends(get_session)
+    body: SourceDefinitionBody,
+    session: Session = Depends(get_session),
+    registry: CollectorRegistry = Depends(get_collector_registry),
 ) -> SourceDefinitionResponse:
     try:
-        source = AcquisitionService(session).create_source(**body.model_dump())
+        source = AcquisitionService(session, registry=registry).create_source(
+            **body.model_dump()
+        )
     except AcquisitionError as error:
         _raise_acquisition_error(error)
     return _source_response(source)

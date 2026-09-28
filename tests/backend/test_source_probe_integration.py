@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, func, select, update
 
-from opportunity_radar.acquisition.collectors import CollectorRegistry
+from opportunity_radar.acquisition.collectors import CollectorRegistry, ManualCollector
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
     AcquisitionErrorCode,
@@ -76,7 +76,9 @@ def board() -> _Board:
 @pytest.fixture()
 def client(board: _Board) -> Iterator[TestClient]:
     app = create_app(Settings(database_url=os.environ["DATABASE_URL"]))
-    app.dependency_overrides[get_collector_registry] = lambda: CollectorRegistry((board,))
+    app.dependency_overrides[get_collector_registry] = lambda: CollectorRegistry(
+        (board, ManualCollector())
+    )
     yield TestClient(app)
 
 
@@ -258,3 +260,44 @@ def test_probe_refuses_stale_enabled_and_manual_sources(
     assert no_endpoint.status_code == 422
     assert no_endpoint.json()["detail"]["field"] == "source_type"
     assert board.calls == 0
+
+
+def test_create_source_uses_the_apps_full_collector_registry(
+    board: _Board,
+) -> None:
+    """A collector outside AcquisitionService's own hardcoded default must still be
+    creatable through the HTTP endpoint, the same way probing and execution already
+    resolve it through the app's registry (`get_collector_registry`) rather than the
+    service's fallback of manual/ashby/lever/greenhouse/remotive only.
+    """
+
+    class _WorkdayBoard(_Board):
+        source_type = "workday"
+
+    workday_board = _WorkdayBoard()
+    app = create_app(Settings(database_url=os.environ["DATABASE_URL"]))
+    app.dependency_overrides[get_collector_registry] = lambda: CollectorRegistry(
+        (board, workday_board)
+    )
+    with TestClient(app) as client:
+        created = client.post(
+            "/sources",
+            json={
+                "source_type": "workday",
+                "name": f"Workday probe {uuid4().hex[:8]}",
+                "configuration": {
+                    "tenant_identifier": "acme/careers",
+                    "api_region": "wd5",
+                },
+            },
+        )
+    assert created.status_code == 201, created.json()
+    assert created.json()["source_type"] == "workday"
+
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with engine.begin() as connection:
+        connection.execute(
+            delete(SourceDefinitionModel).where(
+                SourceDefinitionModel.id == created.json()["id"]
+            )
+        )
