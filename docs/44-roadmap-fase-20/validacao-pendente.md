@@ -77,12 +77,12 @@ reais).
 | --- | --- |
 | Testes instáveis por banco de teste compartilhado | Resolvido (`79d45c0`): 6 causas de vazamento entre testes corrigidas; 8 rodadas completas (ordem padrão + 7 sementes via `RANDOM_ORDER_SEED`) com 981 aprovados e 0 falhas |
 | `alembic check` e head única (F20-05) | Resolvido (`79d45c0`): `env.py` sem `include_schemas=True` nunca comparava os schemas reais; corrigido, modelos alinhados ao banco (índices declarados, `ondelete` do modelo corrigido), head única `20260926_0052`, sem migração nova |
-| F20-38: orçamento compartilhado entre duas fontes do mesmo host | Sem par real no catálogo; incluir um antes de medir |
-| F20-36: board da Airbyte | `404` real; nova rodada de descoberta |
+| F20-38: orçamento compartilhado entre duas fontes do mesmo host | Resolvido — par real achado (Airbyte + Temporal, ambas `ashby`, host físico `api.ashbyhq.com`); execução real de cada uma incrementou a mesma linha `host_budget_state` (19 → 20 → 21). Evidência: `evidencias/orcamento-host-compartilhado-2026-09-28.md` |
+| F20-36: board da Airbyte | Resolvido — `greenhouse` continua `404` real, mas o board atual é `ashby` (`board_identifier=airbyte`, 200, 12 vagas reais). Mesmo achado para Temporal (`ashby`, `temporal`, 62 vagas) e ClickHouse (`ashby`, `clickhouse`, 186 vagas), citados no mesmo item. Todas as três probadas (`PASSED`), ativadas e com execução real `SUCCEEDED` na `f20manual`. Evidência: `evidencias/ativacao-fontes-2026-09-28.md` §2.3/§6 (atualizado) |
 | API sem endpoint para editar `schedule` de fonte | Lacuna registrada |
 | Fixture `pre_f20_dump.sql` com `normalizer_version` escrito à mão | Quebra a cada troca de versão; derivar da constante |
 | Overview e Sources com ATS novos sem teste visual | Aberto |
-| GitGuardian no PR #25 | Causa não confirmada |
+| GitGuardian no PR #25 | Resolvido como falso positivo — 1 achado (`Bearer Token`, commit `17962c84e2074f58eb38544ed0869ae5d89554f7`, `tests/backend/platform/ai/test_sanitizer.py:96`): fixture de teste do sanitizador (`test_bearer_token_masked`), valor sintético (`abc123.def456.ghi789`), não é uma credencial real. Nenhuma rotação necessária. Repositório não tem convenção `.gitguardian.yaml`; nenhuma criada (fora do pedido) |
 | Rotacionar a chave Groq usada nas rodadas | Com o usuário |
 
 ## 6. Último card

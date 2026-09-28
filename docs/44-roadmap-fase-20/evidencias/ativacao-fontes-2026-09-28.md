@@ -14,8 +14,9 @@ escrita em nenhum momento desta sessão.
 | `scripts/discover_sites.py` (código antigo, 115 empresas) | 19 boards reais encontrados; 11 novas fontes ativadas, 6 já ativas re-confirmadas, 2 boards reais mas mortos (§2). |
 | Melhoria da descoberta (commit `f7df932`) | Probe direto por slug antes de rastrear o site, passe raso (`careers` primeiro, sitemap só em caso de falha), concorrência entre hosts, normalização de endpoint canônico e upsert idempotente. Testes novos + suíte completa verdes (§3). |
 | Comparação real antes/depois (10 empresas reais, mesma rede) | Antigo: 58,32 s, achou ATS em 6/10. Novo: 18,11 s, achou ATS em 10/10 — ~3,2× mais rápido e achou 3 boards reais que o antigo perdeu (Linear, Vercel, Stripe), todos ativados (§3.2). |
-| Tavily (F20-43, teto 100 créditos/execução) | 43 buscas reais (~43 créditos, dentro do teto); 20 boards reais confirmados e ativados, 1 candidato não viável, 21 sem achado utilizável (§4). |
-| Fontes habilitadas na `f20manual` | 30 → 64 (34 novas); 7 continuam desativadas (mesmas de antes, nenhuma viável). |
+| Tavily (F20-43, teto 100 créditos/execução) | 43 buscas reais (~43 créditos, dentro do teto); 20 boards reais confirmados e ativados, 1 candidato resolvido numa rodada seguinte, 21 sem achado utilizável (§4). |
+| Airbyte, Temporal, ClickHouse (F20-36, `validacao-pendente.md` §5) | `greenhouse` 404 real confirmado para as três; todas migraram para `ashby` — probadas, ativadas e com execução real `SUCCEEDED` (§2.3, §4.2). |
+| Fontes habilitadas na `f20manual` | 30 → 67 (37 novas); 7 continuam desativadas (mesmas de antes, nenhuma viável). |
 
 ## 1. As 7 fontes desativadas herdadas — nenhuma viável
 
@@ -81,12 +82,40 @@ Cada uma seguiu o mesmo caminho da interface: `POST /sources` (proposta inerte) 
 `terms_reviewed=true`, `collector_local_tested=true`) → `POST /sources/{id}/runs` →
 `SourceRun.status=SUCCEEDED`.
 
-### 2.3 Boards reais, mas mortos — não ativados
+### 2.3 Boards `greenhouse` mortos — resolvidos numa rodada seguinte via `ashby` (2026-09-28, mesmo dia)
 
-| Empresa | ATS | slug testado | Probe real | Observação |
+| Empresa | ATS testado | slug testado | Probe real | Observação |
 | --- | --- | --- | --- | --- |
-| Airbyte | greenhouse | `airbyte` | 404 real (`boards-api.greenhouse.io` e `job-boards.greenhouse.io`) | Mesmo achado de `retomada-real-e-endpoints-2026-09-28.md` §6: o board parece ter sido desativado ou a empresa migrou de ATS. Não homologar agora. |
-| Temporal | greenhouse | `temporaltechnologies` | 404 real; a página do link (`job-boards.greenhouse.io/temporaltechnologies/jobs/5019997007`) redireciona para `?error=true` | Vaga indexada ainda existe, mas o board raiz não resolve mais — mesmo padrão do Airbyte. Não homologar agora. |
+| Airbyte | greenhouse | `airbyte` | 404 real (`boards-api.greenhouse.io` e `job-boards.greenhouse.io`) | Board `greenhouse` desativado ou empresa migrou de ATS — ver rodada de descoberta abaixo. |
+| Temporal | greenhouse | `temporaltechnologies` | 404 real; a página do link (`job-boards.greenhouse.io/temporaltechnologies/jobs/5019997007`) redireciona para `?error=true` | Vaga indexada ainda existe, mas o board raiz não resolve mais — mesmo padrão do Airbyte. |
+
+**Rodada de descoberta seguinte (item 1 de `validacao-pendente.md` §5):** as duas empresas
+migraram para `ashby`, não para nenhum outro ATS com coletor. Probe real e polido
+(sequencial, ~1 req/s, ashby/lever/workable/teamtailor — nunca Gupy) contra
+`api.ashbyhq.com/posting-api/job-board/<slug>`:
+
+| Empresa | ATS achado | `board_identifier` | Probe real | Vagas reais no board | Ativada? |
+| --- | --- | --- | --- | --- | --- |
+| Airbyte | ashby | `airbyte` | 200 | 12 | Sim — `POST /sources` → probe `PASSED` → `PATCH` habilitando → `POST .../runs` → `SUCCEEDED` (3 vagas persistidas) |
+| Temporal | ashby | `temporal` | 200 | 62 | Sim — mesmo caminho, `SUCCEEDED` (3 vagas persistidas) |
+
+`lever`, `workable` e `teamtailor` também foram testados para as duas (para descartar
+outro ATS antes de fechar em `ashby`): `lever` 404 real para ambas; `workable` 404 real
+para Temporal, 200 real mas com 0 vagas ativas para Airbyte (`apply.workable.com/api/v1/
+widget/accounts/airbyte?details=true` → `{"name":"Airbyte","jobs":[]}` — board real da
+empresa, mas vazio, não usado como fonte); `teamtailor` rejeitado pela validação de
+configuração antes de qualquer requisição (`company_identifier` exige hostname puro, não
+testado com um slug plausível nesta rodada). `ashby` foi o achado real e populado para as
+duas, então a checagem parou ali (mesma regra de parada antecipada do `discover_sites.py`
+melhorado, §3).
+
+ClickHouse (candidato não viável em `greenhouse`, §4.2 abaixo) seguiu o mesmo caminho e
+também resolveu em `ashby`, `board_identifier=clickhouse`, 200 real, 186 vagas — ativada e
+com execução `SUCCEEDED` (3 vagas persistidas). Ver §4.2 atualizado.
+
+Como bônus não planejado: Airbyte, Temporal e ClickHouse são todas `ashby`, o que deu ao
+F20-38 (orçamento por host compartilhado) o par real que faltava — ver
+`orcamento-host-compartilhado-2026-09-28.md`.
 
 ## 3. Melhoria da descoberta de sites (commit `f7df932`)
 
@@ -229,11 +258,15 @@ Mesmo caminho de ativação: `POST /sources` (`discovery_via=tavily_search` na
 `configuration`) → probe real `PASSED` → `PATCH` habilitando → `POST .../runs`
 → `SUCCEEDED`.
 
-### 4.2 Candidato não viável (1)
+### 4.2 `greenhouse` não viável — resolvido em `ashby` na rodada seguinte (ver §2.3)
 
-| Empresa | ATS | slug sugerido pela busca | Probe real | Motivo |
+| Empresa | ATS testado | slug testado | Probe real | Motivo |
 | --- | --- | --- | --- | --- |
-| ClickHouse | greenhouse | `clickhouse` | 404 real (e variantes `clickhouseinc`, `clickhouse-inc`, `clickhousedb`, `clickhousecorp`, todas 404) | A busca só achou URLs de vaga individual (`boards.greenhouse.io/clickhouse/jobs/...`); o board raiz não resolve com nenhum token plausível testado. Não ativado. |
+| ClickHouse | greenhouse | `clickhouse` | 404 real (e variantes `clickhouseinc`, `clickhouse-inc`, `clickhousedb`, `clickhousecorp`, todas 404) | A busca só achou URLs de vaga individual (`boards.greenhouse.io/clickhouse/jobs/...`); o board raiz não resolve com nenhum token plausível testado em `greenhouse`. |
+
+Resolvido: `ashby`, `board_identifier=clickhouse`, 200 real, 186 vagas no board completo.
+Mesmo caminho de ativação (`POST /sources` → probe `PASSED` → `PATCH` → `POST .../runs`
+→ `SUCCEEDED`, 3 vagas persistidas). Ver §2.3.
 
 ### 4.3 Sem achado utilizável (21)
 
@@ -249,19 +282,19 @@ Windmill, dbt Labs.
 
 | Métrica | Antes desta sessão | Depois |
 | --- | --- | --- |
-| `source_definition` habilitadas | 30 | 64 |
+| `source_definition` habilitadas | 30 | 67 |
 | `source_definition` desativadas | 7 | 7 (mesmas, nenhuma viável) |
-| Novas fontes ativadas nesta sessão | — | 34 (11 descoberta antiga + 3 probe direto novo + 20 Tavily) |
+| Novas fontes ativadas nesta sessão | — | 37 (11 descoberta antiga + 3 probe direto novo + 20 Tavily + 3 Airbyte/Temporal/ClickHouse via `ashby`) |
 | Créditos Tavily gastos | — | ~43 de um teto de 100/execução |
 
 ## 6. O que fica pendente
 
-- As 34 fontes novas ativadas aqui existem apenas na `f20manual` (pilha manual de
+- As 37 fontes novas ativadas aqui existem apenas na `f20manual` (pilha manual de
   verificação). Ativá-las na pilha real `opportunity-radar` fica para depois da janela
   de sete dias (`2026-10-05T12:02Z`) — item já apontado em
   `docs/44-roadmap-fase-20/validacao-pendente.md` §4.
-- ClickHouse (greenhouse, §4.2) e Airbyte/Temporal (greenhouse, §2.3): sem endpoint real
-  confirmável nesta sessão; revisitar numa próxima rodada de descoberta.
+- Airbyte, Temporal e ClickHouse (`greenhouse`, §2.3/§4.2): resolvidos nesta mesma sessão
+  via `ashby` — sem pendência.
 - As 21 empresas sem achado (§4.3) podem não usar nenhum dos 8 ATS com coletor, ou usar
   um deles sob um slug não descoberto pela busca — não investigado além do orçamento
   desta tarefa.
