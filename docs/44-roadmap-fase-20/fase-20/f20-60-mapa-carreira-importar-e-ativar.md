@@ -1,6 +1,10 @@
 # CARD F20-60 — Importar empresas do mapa de carreira e ativar fontes já identificadas
 
-- **Status:** Backlog.
+- **Status:** Feito na `f20manual` (pilha manual). Ativação na pilha real
+  `opportunity-radar` pendente da janela de sete dias — ver
+  [`docs/44-roadmap-fase-20/validacao-pendente.md`](../validacao-pendente.md) §4.6 e
+  [`docs/44-roadmap-fase-20/evidencias/mapa-carreira-vs-catalogo-2026-09-28.md`](../evidencias/mapa-carreira-vs-catalogo-2026-09-28.md)
+  ("Resultados da execução").
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-03, F20-27
@@ -52,15 +56,33 @@ ativos e populados.
 
 ## Critérios de aceite
 
-- [ ] As 5 fontes da classe (c) revisadas por termos; as que passarem, com
-      `enabled=true` e pelo menos uma coleta real registrada.
-- [ ] As 5 empresas com ATS confirmado por sondagem (Loadsmart, Zup, EBANX, Devsu,
+- [x] As 5 fontes da classe (c) revisadas por termos; as que passarem, com
+      `enabled=true` e pelo menos uma coleta real registrada. Todas as 5 passaram
+      (termos já revisados em nível de coletor: Greenhouse/Ashby/Workday); todas
+      habilitadas na `f20manual` com coleta real (`SUCCEEDED`, exceto Accenture
+      `PARTIAL` com 1997 itens reais — ver evidência).
+- [x] As 5 empresas com ATS confirmado por sondagem (Loadsmart, Zup, EBANX, Devsu,
       Azumo) importadas via `CompanyService.reconcile` (não inserção manual), com
       `company_source` e, após revisão de termos, `source_definition` habilitada.
-- [ ] Para cada fonte habilitada neste card, pelo menos um item real coletado e
-      visível na API/Overview.
-- [ ] Nenhuma fonte Gupy tocada; Red Hat e CESAR permanecem fora deste card (ou
+      Todas com coleta real `SUCCEEDED`.
+- [x] Para cada fonte habilitada neste card, pelo menos um item real coletado e
+      visível na API/Overview. 19 de 20 fontes `SUCCEEDED`; Accenture `PARTIAL` com
+      1997 itens (evidência real, board grande demais para a paginação atual do
+      coletor Workday — fora do escopo deste card).
+- [x] Nenhuma fonte Gupy tocada; Red Hat e CESAR permanecem fora deste card (ou
       viram sub-cards próprios, se alguém pesquisar o tenant/endpoint deles depois).
+      Red Hat teve o tenant Workday achado nesta sessão e foi importado/habilitado
+      como extensão explícita do escopo (pedido do usuário); CESAR permanece fora,
+      DB/FCamara/Minsait (Gupy) nunca sondados.
+
+### Extensão de escopo executada nesta sessão (fora do card original)
+
+Além do escopo original (5 + 5), a sessão também importou as ~42 empresas classe (d)
+restantes (excluídas Gupy/CESAR/Red Hat) e rodou `discover_ats.py`/`discover_sites.py`
+sobre elas, ativando 9 boards adicionais achados (Andela, Bluelight Consulting,
+Braintrust, LiteLLM, Percona, Roboflow, Rollstack, Turing, VTEX) + Red Hat — 10 fontes
+novas além das 10 originais. Ver evidência para a lista completa, contagens e
+incertezas (URLs de careers page chutadas para várias das 42 empresas).
 
 ## Não fazer
 
