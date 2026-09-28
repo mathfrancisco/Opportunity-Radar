@@ -67,6 +67,9 @@ reais).
 3. Aplicar os endpoints de Anthropic e Apollo GraphQL e ativar as fontes.
 4. Adicionar `restart: unless-stopped` ao compose.
 5. Medir de novo o UNKNOWN de senioridade (meta do F17-06/F20-02: metade de 50,62%) com a `v6` e, se aprovado, as sugestões do F20-23.
+6. Ativar na pilha real, depois da janela, as 34 fontes já homologadas e ativadas na
+   `f20manual` (30 → 64 fontes habilitadas): lista completa, ATS, slug, probe e execução
+   real por fonte em `evidencias/ativacao-fontes-2026-09-28.md`.
 
 ## 5. Falta — sanidade e pendências menores
 
