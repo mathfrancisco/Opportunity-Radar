@@ -84,6 +84,7 @@ reais).
 | Overview e Sources com ATS novos sem teste visual | Aberto |
 | GitGuardian no PR #25 | Resolvido como falso positivo — 1 achado (`Bearer Token`, commit `17962c84e2074f58eb38544ed0869ae5d89554f7`, `tests/backend/platform/ai/test_sanitizer.py:96`): fixture de teste do sanitizador (`test_bearer_token_masked`), valor sintético (`abc123.def456.ghi789`), não é uma credencial real. Nenhuma rotação necessária. Repositório não tem convenção `.gitguardian.yaml`; nenhuma criada (fora do pedido) |
 | Rotacionar a chave Groq usada nas rodadas | Com o usuário |
+| [F20-61 — Filtro de recência (14 dias) com exceção para estágio/programas com prazo](fase-20/f20-61-filtro-de-recencia-14-dias.md) | Backlog — pendente de implementação; interação com o volume baixo de vaga junior/estágio no acervo real ainda não foi medida |
 
 ## 6. Último card
 
