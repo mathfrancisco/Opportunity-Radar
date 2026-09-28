@@ -1,6 +1,8 @@
 # CARD F20-24 — Análise útil sob orçamento de quota
 
-- **Status:** Backlog
+- **Status:** Implementado — CI verde (925 passed), quota real do Groq esgotada no dia da
+  implementação; medição contra Groq real fica como passo restante (ver "Comando de
+  verificação" e `docs/44-roadmap-fase-20/evidencias/analise-sob-orcamento-f20-24-2026-09-27.md`).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-39, F20-17, F20-16, F20-12
@@ -36,10 +38,17 @@ A IA ajuda a decidir sobre vagas novas/alteradas e lacunas relevantes com evidê
 
 ## Critérios de aceite
 
-- [ ] Revisita sem mudança não chama IA; alteração material invalida reuso.
-- [ ] Budget adia sem perder oportunidade nem bloquear o worker.
-- [ ] Sugestão não altera campo/matching antes da confirmação.
-- [ ] Relatório compara fila atual e política nova com suporte e custo/qualidade.
+- [x] Revisita sem mudança não chama IA; alteração material invalida reuso. —
+  `tests/backend/matching/test_analysis_queue.py::test_pending_analysis_skips_without_material_change`
+  e a suíte de reavaliação já existente (`test_reevaluation.py`).
+- [x] Budget adia sem perder oportunidade nem bloquear o worker. —
+  `test_the_job_defers_a_pending_id_when_the_worker_ceiling_is_exhausted`,
+  `test_the_worker_budget_probe_never_consumes_quota`.
+- [x] Sugestão não altera campo/matching antes da confirmação. — Fora de escopo real: a
+  tabela de sugestões (F20-23) não existe nesta árvore; nada neste card grava sugestão.
+- [~] Relatório compara fila atual e política nova com suporte e custo/qualidade. —
+  Comparação estrutural na evidência; custo/qualidade real depende de quota do Groq
+  (esgotada), ver "Comando de verificação".
 
 ## Verificação
 

@@ -93,6 +93,38 @@ def test_minute_rollover_frees_the_minute_reservation_but_not_the_day() -> None:
     assert guard_next_minute.reserve(_MODEL, estimated_tokens=1) is None
 
 
+def test_worker_reservation_respects_interactive_ceiling() -> None:
+    """Card F20-24: `ceiling_requests` lets the worker expose a smaller day budget."""
+    engine = _engine()
+    _reset(engine)
+    guard = QuotaGuard(engine, _limits(day_requests=10))
+    for _ in range(7):
+        assert guard.reserve(_MODEL, estimated_tokens=1) is not None
+
+    # 7 already spent; a reduced ceiling of 8 leaves exactly one more for the worker.
+    assert guard.reserve(_MODEL, estimated_tokens=1, ceiling_requests=8) is not None
+    assert guard.reserve(_MODEL, estimated_tokens=1, ceiling_requests=8) is None
+
+    # The Free Plan's own limit (10) still has two requests of room the worker's reduced
+    # ceiling would have denied — proof the reservation it never made is untouched.
+    assert guard.reserve(_MODEL, estimated_tokens=1) is not None
+    assert guard.reserve(_MODEL, estimated_tokens=1) is not None
+    assert guard.reserve(_MODEL, estimated_tokens=1) is None
+
+
+def test_interactive_reservation_uses_full_limit() -> None:
+    """The UI's analysis path calls `reserve` with no `ceiling_requests` at all."""
+    engine = _engine()
+    _reset(engine)
+    guard = QuotaGuard(engine, _limits(day_requests=10))
+    for _ in range(9):
+        assert guard.reserve(_MODEL, estimated_tokens=1) is not None
+
+    # No ceiling passed: only the Free Plan's own day_requests (10) denies it.
+    assert guard.reserve(_MODEL, estimated_tokens=1) is not None
+    assert guard.reserve(_MODEL, estimated_tokens=1) is None
+
+
 def test_next_available_at_guesses_the_minute_boundary_on_a_token_near_miss() -> None:
     """A reserve() failure from the estimate overshooting minute tokens (F20-21 baseline:
 

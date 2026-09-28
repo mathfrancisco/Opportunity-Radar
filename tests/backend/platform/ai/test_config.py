@@ -68,6 +68,33 @@ def test_negative_retries_fail_at_start() -> None:
         _settings(ai_max_retries=-1)
 
 
+def test_interactive_reserve_defaults_below_the_daily_limit() -> None:
+    settings = _settings()
+
+    assert settings.ai_interactive_reserve_requests == 100
+    assert settings.ai_interactive_reserve_requests < settings.ai_daily_requests_soft_limit
+
+
+def test_interactive_reserve_at_or_above_the_daily_limit_fails_at_start() -> None:
+    with pytest.raises(ValidationError, match="AI_INTERACTIVE_RESERVE_REQUESTS"):
+        _settings(ai_interactive_reserve_requests=850)
+
+
+def test_interactive_reserve_cannot_be_negative() -> None:
+    with pytest.raises(ValidationError, match="AI_INTERACTIVE_RESERVE_REQUESTS"):
+        _settings(ai_interactive_reserve_requests=-1)
+
+
+def test_aging_sample_ratio_default() -> None:
+    assert _settings().worker_analyze_aging_sample_ratio == 0.10
+
+
+@pytest.mark.parametrize("ratio", [-0.1, 1.1])
+def test_aging_sample_ratio_outside_zero_to_one_fails_at_start(ratio: float) -> None:
+    with pytest.raises(ValidationError, match="WORKER_ANALYZE_AGING_SAMPLE_RATIO"):
+        _settings(worker_analyze_aging_sample_ratio=ratio)
+
+
 def test_key_never_appears_in_repr() -> None:
     settings = _settings(ai_enabled=True, groq_api_key="gsk-top-secret")
 

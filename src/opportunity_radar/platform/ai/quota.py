@@ -194,11 +194,29 @@ class QuotaGuard:
         )
         return result.first() is not None
 
-    def reserve(self, model: str, estimated_tokens: int) -> Reservation | None:
-        """`None` = no balance in the minute or the day window. Atomic across both."""
+    def reserve(
+        self,
+        model: str,
+        estimated_tokens: int,
+        *,
+        ceiling_requests: int | None = None,
+    ) -> Reservation | None:
+        """`None` = no balance in the minute or the day window. Atomic across both.
+
+        `ceiling_requests`, when given, is combined with the configured day-window limit
+        through `min()`: a caller can expose a smaller day budget than the Free Plan's,
+        never a larger one. The worker passes `day_requests - ai_interactive_reserve_requests`
+        so a deep backlog never spends what the UI's own analysis needs; the UI path calls
+        `reserve` without it and gets the full day limit (SPEC 43 section 7; card F20-24).
+        """
         now = self._now()
         minute_start = minute_window(now)
         day_start = day_window(now)
+        day_requests_limit = (
+            self._limits.day_requests
+            if ceiling_requests is None
+            else min(self._limits.day_requests, ceiling_requests)
+        )
         try:
             with self._engine.begin() as connection:
                 if not self._reserve_window(
@@ -217,7 +235,7 @@ class QuotaGuard:
                     "day",
                     day_start,
                     estimated_tokens,
-                    self._limits.day_requests,
+                    day_requests_limit,
                     self._limits.day_tokens,
                 ):
                     raise _WindowExhausted

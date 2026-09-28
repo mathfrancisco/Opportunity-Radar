@@ -420,6 +420,7 @@ class MatchingService:
         attempt_window: timedelta = DEFAULT_ANALYSIS_ATTEMPT_WINDOW,
         max_attempts: int = DEFAULT_ANALYSIS_MAX_ATTEMPTS,
         now: datetime | None = None,
+        aging_sample_ratio: float = 0.0,
     ) -> list[UUID]:
         """Current assessments whose semantic layer is eligible and off cooldown."""
         return list(
@@ -430,6 +431,7 @@ class MatchingService:
                 cooldown=cooldown,
                 attempt_window=attempt_window,
                 max_attempts=max_attempts,
+                aging_sample_ratio=aging_sample_ratio,
             )
         )
 

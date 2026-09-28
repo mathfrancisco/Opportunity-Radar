@@ -13,6 +13,7 @@ from sqlalchemy import Select, case, delete, func, literal, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.orm import Session, aliased, selectinload
 
+from opportunity_radar.companies.models import Company
 from opportunity_radar.matching.analysis import ANALYSIS_KEY_VERSION, Claim
 from opportunity_radar.matching.models import (
     MatchAnalysisClaimModel,
@@ -31,9 +32,21 @@ ANALYSIS_ATTEMPT_STATUSES = ("AI_FAILED", "AI_SKIPPED")
 # read first. A verdict outside this list still queues, after all of these.
 ANALYSIS_VERDICT_PRIORITY = ("HIGH_PRIORITY", "RECOMMENDED", "REVIEW_REQUIRED", "WATCHLIST")
 
+# Ordering only, within a verdict. The catalogue stores priority in lower case
+# (`companies/models.py`); matching's own `CompanyPriority` enum uppercases it.
+_COMPANY_PRIORITY_RANK = {"high": 3, "normal": 2, "low": 1, "blocked": 0}
+
 
 def _stored_item(item: Any) -> Any:
     return item.as_dict() if isinstance(item, Claim) else item
+
+
+def _company_priority_rank() -> Any:
+    return case(
+        _COMPANY_PRIORITY_RANK,
+        value=func.lower(func.coalesce(Company.priority, literal("normal"))),
+        else_=2,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,6 +316,7 @@ class SqlAlchemyMatchingRepository:
         cooldown: timedelta,
         attempt_window: timedelta,
         max_attempts: int,
+        aging_sample_ratio: float = 0.0,
         # `Sequence` rather than `list`: the class already binds `list` to a method above,
         # which shadows the builtin for every annotation declared after it.
     ) -> Sequence[UUID]:
@@ -311,6 +325,11 @@ class SqlAlchemyMatchingRepository:
         Four independent reasons to stay out of the queue, and none of them deletes
         history: the verdict is not worth the model's time, the analysis already
         completed, a newer assessment superseded this one, or the retry budget says wait.
+
+        `aging_sample_ratio` reserves a fraction of `limit` for eligible ids the value
+        ranking below would never reach on its own (SPEC 39 section 9): those slots are
+        filled from outside the top-ranked window, ordered by `id` instead of by value so
+        the sample rotates through the backlog rather than favoring the same tail forever.
         """
         if not eligible_verdicts or limit <= 0 or max_attempts <= 0:
             return []
@@ -319,32 +338,46 @@ class SqlAlchemyMatchingRepository:
             value=MatchAssessmentModel.verdict,
             else_=len(ANALYSIS_VERDICT_PRIORITY),
         )
-        # Value first, then the freshest posting; `id` last keeps every batch deterministic.
-        return list(
-            self.session.scalars(
-                select(MatchAssessmentModel.id)
-                .join(
-                    OpportunityModel,
-                    OpportunityModel.id == MatchAssessmentModel.opportunity_id,
+        base_query = (
+            select(MatchAssessmentModel.id)
+            .join(
+                OpportunityModel,
+                OpportunityModel.id == MatchAssessmentModel.opportunity_id,
+            )
+            .outerjoin(Company, Company.id == OpportunityModel.canonical_company_id)
+            .where(
+                *self._pending_analysis_conditions(
+                    eligible_verdicts=eligible_verdicts,
+                    now=now,
+                    cooldown=cooldown,
+                    attempt_window=attempt_window,
+                    max_attempts=max_attempts,
                 )
-                .where(
-                    *self._pending_analysis_conditions(
-                        eligible_verdicts=eligible_verdicts,
-                        now=now,
-                        cooldown=cooldown,
-                        attempt_window=attempt_window,
-                        max_attempts=max_attempts,
-                    )
-                )
-                .order_by(
-                    verdict_rank,
-                    OpportunityModel.published_at.desc().nulls_last(),
-                    MatchAssessmentModel.assessed_at.desc(),
-                    MatchAssessmentModel.id,
-                )
-                .limit(limit)
             )
         )
+        # Value first (verdict, then company priority, then score), then the freshest
+        # posting; `id` last keeps every batch deterministic.
+        ordered = base_query.order_by(
+            verdict_rank,
+            _company_priority_rank().desc(),
+            MatchAssessmentModel.score.desc(),
+            OpportunityModel.published_at.desc().nulls_last(),
+            MatchAssessmentModel.assessed_at.desc(),
+            MatchAssessmentModel.id,
+        )
+        top_ids = list(self.session.scalars(ordered.limit(limit)))
+        sample_size = min(limit, int(limit * aging_sample_ratio)) if aging_sample_ratio > 0 else 0
+        if sample_size <= 0 or not top_ids:
+            return top_ids
+        core_ids = top_ids[: limit - sample_size]
+        aging_ids = list(
+            self.session.scalars(
+                base_query.where(MatchAssessmentModel.id.notin_(top_ids))
+                .order_by(MatchAssessmentModel.id)
+                .limit(sample_size)
+            )
+        )
+        return core_ids + aging_ids
 
     def count_pending_analysis(
         self,

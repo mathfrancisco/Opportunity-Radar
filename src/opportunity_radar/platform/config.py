@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # rules.
     worker_analyze_batch_size: int = 10
     worker_analyze_verdicts: str = "HIGH_PRIORITY,RECOMMENDED,WATCHLIST,REVIEW_REQUIRED"
+    # Fraction of the worker's batch reserved for eligible assessments the value ranking
+    # (score, company priority, freshness) would otherwise never reach, to measure funnel
+    # losses instead of only ever spending the model on what already ranks highest (SPEC
+    # 39 section 9; card F20-24).
+    worker_analyze_aging_sample_ratio: float = 0.10
     analysis_retry_cooldown_seconds: int = 3600
     analysis_retry_attempt_window_seconds: int = 86400
     analysis_retry_max_attempts: int = 3
@@ -60,6 +65,10 @@ class Settings(BaseSettings):
     ai_analysis_prompt: str = "v1"
     ai_daily_requests_soft_limit: int = 850
     ai_daily_tokens_soft_limit: int = 170_000
+    # Part of the day's Groq request quota the worker's own batch never spends, so
+    # analysis requested from the UI always has room even on a day the backlog is deep
+    # (SPEC 43; card F20-12's `QuotaGuard.reserve(ceiling_requests=...)`).
+    ai_interactive_reserve_requests: int = 100
     ai_minute_tokens_soft_limit: int = 7_000
     ai_minute_requests_soft_limit: int = 25
     ai_breaker_failures: int = 5
@@ -121,6 +130,17 @@ class Settings(BaseSettings):
                 raise ValueError(f"{name} must be positive, got {value!r}")
         if self.ai_max_retries < 0:
             raise ValueError(f"AI_MAX_RETRIES cannot be negative, got {self.ai_max_retries!r}")
+        if not 0 <= self.ai_interactive_reserve_requests < self.ai_daily_requests_soft_limit:
+            raise ValueError(
+                "AI_INTERACTIVE_RESERVE_REQUESTS must be between 0 and "
+                f"AI_DAILY_REQUESTS_SOFT_LIMIT ({self.ai_daily_requests_soft_limit}), "
+                f"got {self.ai_interactive_reserve_requests!r}"
+            )
+        if not 0 <= self.worker_analyze_aging_sample_ratio <= 1:
+            raise ValueError(
+                "WORKER_ANALYZE_AGING_SAMPLE_RATIO must be between 0 and 1, got "
+                f"{self.worker_analyze_aging_sample_ratio!r}"
+            )
         return self
 
 

@@ -31,7 +31,7 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 | F20-21 | Harness em `2f5defd` e `94edd57`; os 26 drafts de lacuna (Java/fullstack/IA) revisados e promovidos para `eval/cases/`; `eval/cases/` tem 50 arquivos, exatamente 10 Java/10 fullstack/10 IA/10 fora de área/10 inelegíveis, versionados; `test_eval_scoring.py` verde (22 passed); baseline real no Groq rodada em 2026-09-27 (`openai/gpt-oss-120b` pinado, 50/50 `AI_COMPLETED`, `inventions = 0`, latência e tokens registrados) — ver `docs/44-roadmap-fase-20/evidencias/baseline-groq-f20-21-2026-09-27.md`. | Sem pendência de implementação identificada. |
 | F20-22 | Não iniciado. | Baseline de F20-21 pronta (2026-09-27) — desbloqueado, falta implementar. |
 | F20-23 | Não iniciado. | F20-22 (ainda não feito) e F20-02 e F20-03 — não desbloqueado só pelo baseline de F20-21. |
-| F20-24 | Não iniciado. | F20-39, F20-17, F20-16 e F20-12. |
+| F20-24 | Fila por valor (score, prioridade da empresa, amostra de aging) e reserva interativa de quota (`QuotaGuard.reserve(ceiling_requests=...)`) implementadas em `feature/f20-24-orcamento`; CI local verde (925 passed, ruff/mypy limpos). | Medição real de custo/qualidade contra o Groq (quota esgotada no dia da implementação) — ver `docs/44-roadmap-fase-20/evidencias/analise-sob-orcamento-f20-24-2026-09-27.md`. |
 | F20-25 | Fila de homologação em `99d2067`. | Sem pendência de implementação identificada. |
 | F20-26 | Recusa por versão e bloqueio de ciclo em `c9be16e`. | Sem pendência de implementação identificada. |
 | F20-27 | Descoberta e modelos de ATS implementados; relatório real executado em 2026-09-26 (115 empresas, 4 ATS revelados: `homologacao-real-2026-09-26.md` §1). | Sem pendência de implementação identificada. |

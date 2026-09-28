@@ -158,12 +158,22 @@ def analyze_pending(
     attempt_window_seconds: int = 86400,
     max_attempts: int = 3,
     lease_seconds: int = 900,
+    aging_sample_ratio: float = 0.0,
+    worker_requests_ceiling: int | None = None,
 ) -> None:
     """Attach the semantic layer to current assessments, one claim at a time.
 
     The adapter classifies its own failures instead of raising, so a provider that is
     down degrades this job alone: evaluation keeps running and the failure is persisted
     as the history entry that the cooldown then reads.
+
+    `worker_requests_ceiling`, when given, is a day-request budget lower than the
+    adapter's own `QuotaGuard` limit (`settings.ai_daily_requests_soft_limit -
+    ai_interactive_reserve_requests`, card F20-24): before each call, a zero-token probe
+    reservation checks the day counter against it and is released immediately either way,
+    so the check never itself consumes quota. An assessment that fails the probe is
+    skipped with no attempt recorded — the retry budget never counts a budget defer, and
+    the opportunity is back in the next pass, not lost.
     """
     with observe_job(
         engine, job_name="analyze_pending", interval=timedelta(seconds=120)
@@ -176,6 +186,7 @@ def analyze_pending(
                 cooldown=timedelta(seconds=cooldown_seconds),
                 attempt_window=timedelta(seconds=attempt_window_seconds),
                 max_attempts=max_attempts,
+                aging_sample_ratio=aging_sample_ratio,
             )
             if pending:
                 # After an idle stretch the provider connection may need re-warming
@@ -187,8 +198,17 @@ def analyze_pending(
                         "analysis model warmed up",
                         extra={"job": "warm-up", "reason": "idle", "load_ms": metrics.load_ms},
                     )
-            completed = reused = degraded = claimed_elsewhere = failed = 0
+            quota_guard = getattr(adapter, "quota_guard", None)
+            completed = reused = degraded = claimed_elsewhere = failed = skipped_budget = 0
             for assessment_id in pending:
+                if worker_requests_ceiling is not None and quota_guard is not None:
+                    probe = quota_guard.reserve(
+                        adapter.model, 0, ceiling_requests=worker_requests_ceiling
+                    )
+                    if probe is None:
+                        skipped_budget += 1
+                        continue
+                    quota_guard.release(probe)
                 try:
                     analysis = run_async(
                         service.analyze(
@@ -225,6 +245,7 @@ def analyze_pending(
                         "reused": reused,
                         "degraded": degraded,
                         "claimed_elsewhere": claimed_elsewhere,
+                        "skipped_budget": skipped_budget,
                         "failed": failed,
                     },
                 )
@@ -617,6 +638,11 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
                 "attempt_window_seconds": settings.analysis_retry_attempt_window_seconds,
                 "max_attempts": settings.analysis_retry_max_attempts,
                 "lease_seconds": settings.analysis_claim_lease_seconds,
+                "aging_sample_ratio": settings.worker_analyze_aging_sample_ratio,
+                "worker_requests_ceiling": (
+                    settings.ai_daily_requests_soft_limit
+                    - settings.ai_interactive_reserve_requests
+                ),
             },
             id="analyze-pending",
             replace_existing=True,
