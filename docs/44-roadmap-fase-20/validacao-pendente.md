@@ -21,10 +21,10 @@ Todas usam a stack isolada, nunca `opportunity-radar`.
 
 | Card | O que ainda não foi provado | Teste que fecha | Critério de aceite |
 | --- | --- | --- | --- |
-| F20-18 | O prompt `v2` melhora a análise sem piorar nada | Rodar `eval_analysis.py --prompt v2 --model openai/gpt-oss-120b --baseline evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json` (comando completo em `docs/pesquisas/prompt-v2-vs-v1.md`) | `coverage` sobe de 0; português sobe de ≈0,11; `inventions` continua 0; nenhum critério da divisão `reserved` piora. Só então `ai_analysis_prompt=v2` vira padrão. |
+| F20-18 | **Resolvido (2026-09-28).** Rodada real feita, parou em 10/50 casos (quota diária compartilhada com F20-22/F20-23; `v2` custa ~2-3× mais tokens que o assumido). No `reserved`, `v2` já piora `completed_rate` e custo de token — decisão: manter `v1`. Ver `docs/pesquisas/prompt-v2-vs-v1.md`. Rodada completa dos 50 casos fica para uma janela sem concorrência de quota. | Rodar `eval_analysis.py --prompt v2 --model openai/gpt-oss-120b --baseline evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json` (comando completo em `docs/pesquisas/prompt-v2-vs-v1.md`) | `coverage` sobe de 0; português sobe de ≈0,11; `inventions` continua 0; nenhum critério da divisão `reserved` piora. Só então `ai_analysis_prompt=v2` vira padrão. |
 | F20-22 | Qual modelo usar por tarefa | Rodar os mesmos 50 casos em 20B e Qwen (120B já tem baseline), um modelo por dia; plano no card F20-22 | Tabela de qualidade × latência × tokens por tarefa; decisão registrada e roteamento configurado. |
 | F20-23 | A IA reduz UNKNOWN sem sobrescrever valores determinísticos | Rodar a classificação assistida no acervo anonimizado e depois no real | UNKNOWN de senioridade cai de 50,62% (328/648) rumo à metade (meta do F17-06); nenhum valor determinístico alterado. |
-| F20-24 | A reserva interativa protege a UI quando o worker esgota o teto | Worker com `AI_INTERACTIVE_RESERVE_REQUESTS=100` até `skipped_budget` aparecer; nesse momento, pedir uma análise pela UI | Análise pela UI conclui; `platform.ai_quota_usage` mostra o worker parado no teto e a fila por valor processando primeiro os itens de maior veredito/prioridade. |
+| F20-24 | **Resolvido (2026-09-28)** para a reserva interativa: teto reduzido do worker (`ceiling_requests=3`) gerou `skipped_budget=6` real, e a análise pedida pela UI (`MatchingService.analyze`, sem `ceiling_requests`) concluiu `AI_COMPLETED` no mesmo momento. Ver `docs/44-roadmap-fase-20/evidencias/analise-sob-orcamento-f20-24-2026-09-27.md` §5. Ainda em aberto: amostra de aging (`worker_analyze_aging_sample_ratio`) sob Groq real. | Worker com `AI_INTERACTIVE_RESERVE_REQUESTS=100` até `skipped_budget` aparecer; nesse momento, pedir uma análise pela UI | Análise pela UI conclui; `platform.ai_quota_usage` mostra o worker parado no teto e a fila por valor processando primeiro os itens de maior veredito/prioridade. |
 | F20-12/13 | Guardas de cota e tokens sob uso real prolongado | Coberto pelas rodadas acima | Nenhuma espera maior que a virada da janela (bug de ~10h corrigido em `21c5ec8`); 429 < 2%. |
 
 ## 3. Validações que dependem da janela de sete dias
@@ -68,8 +68,8 @@ Depois da medição: reconstruir a stack real com o código atual (inclui F20-24
 
 ## 7. Ordem recomendada
 
-1. Hoje e amanhã (cota Groq): F20-18 (v2 × v1) e F20-22 (20B), depois F20-22 (Qwen) e decisão.
-2. F20-23 no acervo real, com o modelo escolhido; medição de F20-24.
+1. ~~F20-18 (v2 × v1)~~ — resolvido em 2026-09-28 (manter `v1`; ver §2). F20-22 (20B), depois F20-22 (Qwen) e decisão seguem pendentes.
+2. F20-23 no acervo real, com o modelo escolhido; ~~medição de F20-24~~ — reserva interativa resolvida em 2026-09-28, amostra de aging ainda pendente (ver §2).
 3. Sanidade da seção 5 (testes instáveis, `alembic check`).
 4. F20-39: queda real e retomada.
 5. Depois de `2026-10-05T00:45Z`: T7 de F20-35/38/49, reconstrução da stack real.

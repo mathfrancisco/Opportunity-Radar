@@ -1,8 +1,10 @@
 # CARD F20-24 — Análise útil sob orçamento de quota
 
-- **Status:** Implementado — CI verde (925 passed), quota real do Groq esgotada no dia da
-  implementação; medição contra Groq real fica como passo restante (ver "Comando de
-  verificação" e `docs/44-roadmap-fase-20/evidencias/analise-sob-orcamento-f20-24-2026-09-27.md`).
+- **Status:** Implementado e medido contra o Groq real (2026-09-28) — CI verde (925
+  passed); reserva interativa provada com quota real (`skipped_budget=6` no worker,
+  análise interativa `AI_COMPLETED` mesmo com o teto do worker esgotado). Ver
+  `docs/44-roadmap-fase-20/evidencias/analise-sob-orcamento-f20-24-2026-09-27.md` (§5,
+  atualizado com o resultado real).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-39, F20-17, F20-16, F20-12
@@ -46,9 +48,12 @@ A IA ajuda a decidir sobre vagas novas/alteradas e lacunas relevantes com evidê
   `test_the_worker_budget_probe_never_consumes_quota`.
 - [x] Sugestão não altera campo/matching antes da confirmação. — Fora de escopo real: a
   tabela de sugestões (F20-23) não existe nesta árvore; nada neste card grava sugestão.
-- [~] Relatório compara fila atual e política nova com suporte e custo/qualidade. —
-  Comparação estrutural na evidência; custo/qualidade real depende de quota do Groq
-  (esgotada), ver "Comando de verificação".
+- [x] Relatório compara fila atual e política nova com suporte e custo/qualidade. —
+  Comparação estrutural na evidência (§4) mais medição real (§5, 2026-09-28): teto
+  reduzido do worker (`ceiling_requests=3` numa quota diária isolada) produz
+  `skipped_budget=6` quando o lote (6 pendentes) excede o teto já gasto, e a análise
+  pedida na UI (`MatchingService.analyze`, sem `ceiling_requests`) continua
+  `AI_COMPLETED` no mesmo momento — 4 chamadas reais ao Groq, ~3.5k tokens no total.
 
 ## Verificação
 

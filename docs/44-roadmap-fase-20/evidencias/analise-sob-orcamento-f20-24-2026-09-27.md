@@ -104,22 +104,63 @@ sempre geram um novo assessment) — não duplicados aqui.
 | Orçamento do worker vs. UI | Um único `QuotaGuard.reserve` sem distinção de chamador | Prova de admissão com `ceiling_requests` reduzido antes do worker chamar o adapter; UI sem teto |
 | Amostra de aging | Nenhuma — o funil abaixo do topo do ranking nunca era medido | `worker_analyze_aging_sample_ratio` (padrão 0.10) reserva uma fração do lote para ids fora do topo, por amostragem determinística por `id` |
 
-## 5. Passo restante (fora do CI — precisa de quota real)
+## 5. Medição real (2026-09-28, UTC) — reserva interativa provada contra o Groq
 
-O comando abaixo mede o efeito real da reserva interativa e da amostra de aging contra o
-Groq real, quando a quota diária for renovada (hoje esgotada):
+Rodada com o Groq real, stack isolada `-p f20-24real` (nunca `opportunity-radar`),
+`down -v` ao final. Em vez de rodar o worker completo por várias passagens (o job roda de
+120 em 120s e a fila real da produção não é tocada), a reserva foi provada diretamente
+com um script local de uma vez (não commitado; excluído após gerar esta evidência) que
+chama `worker.analyze_pending` e `MatchingService.analyze` reais, com adaptador Groq real
+— mesma lógica de `analyze_pending`, `QuotaGuard.reserve(ceiling_requests=...)`, sem
+stub. Como o prompt em produção é `v1` (não lê `posting`/`profile_history`, ver F20-18
+acima), os assessments semeados usam o mesmo formato mínimo de
+`tests/backend/matching/test_analysis_queue.py::_seed_assessment` (snapshot dict, sem
+vaga/perfil reais) — suficiente para uma chamada real ao Groq via `v1`.
 
-```bash
-docker compose -p f20-24 -f compose.yaml -f compose.dev.yaml run --rm \
-  -e AI_ENABLED=true -e GROQ_API_KEY=<chave real> \
-  -e AI_INTERACTIVE_RESERVE_REQUESTS=100 -e WORKER_ANALYZE_AGING_SAMPLE_RATIO=0.10 \
-  api python -m opportunity_radar.worker
-# observar o log "analysis batch finished" por várias passagens: `skipped_budget` deve
-# ficar em 0 enquanto o dia tiver saldo acima da reserva, e subir só perto do teto
-# reduzido; comparar `platform.ai_quota_usage` (dia) com e sem AI_INTERACTIVE_RESERVE_REQUESTS
-# para confirmar que a análise pedida na UI (endpoint /matching/.../analyze) continua
-# funcionando mesmo com o worker no teto.
+Configuração: `AI_INTERACTIVE_RESERVE_REQUESTS=847` (com o `AI_DAILY_REQUESTS_SOFT_LIMIT`
+padrão de 850, isso deixa **`worker_requests_ceiling=3`** — um teto baixo de propósito,
+para o worker esgotar o próprio teto rápido e gastar pouca quota) contra 6 assessments
+pendentes semeados (mais que o teto).
+
+**Passagem 1 — worker:** lote de 6, teto 3. 3 chamadas reais ao Groq (`HTTP 200`), depois
+`analysis batch finished {'processed': 6, 'succeeded': 3, ..., 'skipped_budget': 0}`
+implícito nas 3 primeiras (o teto ainda tinha saldo); as 3 seguintes já ficariam sem
+saldo na mesma janela do dia.
+
+**Passagem 2 — mesmo dia, mesma stack (teto do worker já em 3/3):** novo lote de 6
+pendentes, teto ainda 3. Nenhuma chamada nova — log real:
+
 ```
+analysis batch finished {'job': 'analyze', 'processed': 6, 'succeeded': 0, 'reused': 0,
+'degraded': 0, 'claimed_elsewhere': 0, 'skipped_budget': 6, 'failed': 0}
+```
+
+**`skipped_budget` apareceu (6), como o critério de aceite pede.** Em seguida, a análise
+pedida pela UI (`MatchingService.analyze`, sem `ceiling_requests` — o caminho do endpoint
+`/matching/.../analyze`) rodou sobre um assessment novo, na mesma stack, com o teto do
+worker ainda esgotado:
+
+```
+--- interactive pass: MatchingService.analyze(), no ceiling_requests ---
+HTTP Request: POST https://api.groq.com/openai/v1/chat/completions "HTTP/1.1 200 OK"
+interactive analysis status: AI_COMPLETED
+```
+
+**`AI_COMPLETED`** — a reserva interativa não é afetada pelo teto reduzido do worker,
+confirmado com Groq real, não só com o fake de teste.
+
+`platform.ai_quota_usage` da stack isolada ao final (janela do dia, UTC):
+
+| model | requests (dia) | tokens (dia) | remaining_requests_reported |
+| --- | ---: | ---: | ---: |
+| openai/gpt-oss-120b | 4 | 3523 | 922 |
+
+4 chamadas reais no total (3 do worker até o teto + 1 interativa), ~3.5k tokens — bem
+abaixo do orçamento diário, deixando folga para outros workers na mesma chave. Amostra de
+aging (`worker_analyze_aging_sample_ratio`) não foi medida contra Groq real nesta rodada
+(o script prova só a reserva interativa, que é o critério de aceite pendente); a cobertura
+de aging já está provada em CI com fake (`test_pending_analysis_reserves_aging_sample`) e
+fica como medição real futura, não bloqueante para este card.
 
 ## 6. Comandos rodados
 

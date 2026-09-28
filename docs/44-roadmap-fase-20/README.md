@@ -40,13 +40,13 @@ evidência de aceite ou correção.
 | [F20-15 — PII sanitizer e perfil mínimo](fase-20/f20-15-pii-sanitizer-e-perfil-minimo.md) | F20-07, F20-40 | Implementado — `0ad7b34` |
 | [F20-16 — Identidade de cache com provedor e rota](fase-20/f20-16-identidade-de-cache-com-provedor.md) | F20-17 | Implementado — `e8c1600` |
 | [F20-17 — `GroqAnalysisAdapter` na porta de análise](fase-20/f20-17-groq-analysis-adapter.md) | F20-11, F20-12, F20-13, F20-14, F20-15 | Implementado — `e8c1600` |
-| [F20-18 — Prompt `v2`: vaga e experiências no payload, pt-BR com evidência](fase-20/f20-18-prompt-v2-com-a-vaga.md) | F20-17, F20-21 | Em andamento — artefato `v2` e testes prontos (2026-09-27); falta a comparação real no Groq (quota diária esgotada) |
+| [F20-18 — Prompt `v2`: vaga e experiências no payload, pt-BR com evidência](fase-20/f20-18-prompt-v2-com-a-vaga.md) | F20-17, F20-21 | Decidido (2026-09-28) — manter `v1`: rodada real parou em 10/50 casos (quota diária compartilhada), `v2` já piora `completed_rate` e custo de token no `reserved` — ver `docs/pesquisas/prompt-v2-vs-v1.md` |
 | [F20-19 — Telemetria de chamadas sem PII](fase-20/f20-19-telemetria-de-chamadas.md) | F20-17 | Implementado — `c3e7606` |
 | [F20-20 — Métricas da IA na API, no Overview e no `doctor`](fase-20/f20-20-metricas-na-api-overview-e-doctor.md) | F20-19, F20-11, F20-12 | Implementado — `b45ff84` |
 | [F20-21 — Conjunto de avaliação completo e baseline no Groq](fase-20/f20-21-conjunto-de-avaliacao-no-groq.md) | F20-17 | Implementado — 50 casos versionados (10/10/10/10/10) em `eval/cases/`; baseline real no Groq em 2026-09-27 (`openai/gpt-oss-120b` pinado, 50/50 `AI_COMPLETED`, 0 falhas) — ver `docs/44-roadmap-fase-20/evidencias/baseline-groq-f20-21-2026-09-27.md` |
 | [F20-22 — Benchmark 120B × 20B × Qwen e escolha por tarefa](fase-20/f20-22-benchmark-de-modelos.md) | F20-21 | Backlog |
 | [F20-23 — Classificação e extração assistidas para campos ambíguos](fase-20/f20-23-classificacao-assistida.md) | F20-22, F20-02, F20-03 | Backlog |
-| [F20-24 — Análise útil sob orçamento de quota](fase-20/f20-24-analise-util-sob-orcamento.md) | F20-39, F20-17, F20-16, F20-12 | Implementado — fila por valor (score, prioridade da empresa, amostra de aging) e reserva interativa de quota; medição real contra o Groq é passo restante (quota esgotada) — ver `docs/44-roadmap-fase-20/evidencias/analise-sob-orcamento-f20-24-2026-09-27.md` |
+| [F20-24 — Análise útil sob orçamento de quota](fase-20/f20-24-analise-util-sob-orcamento.md) | F20-39, F20-17, F20-16, F20-12 | Implementado e medido contra o Groq real (2026-09-28) — fila por valor e reserva interativa de quota provadas: teto reduzido do worker gera `skipped_budget`, análise interativa continua `AI_COMPLETED` — ver `docs/44-roadmap-fase-20/evidencias/analise-sob-orcamento-f20-24-2026-09-27.md` |
 
 ### Bloco C — Busca: cobertura e precisão
 

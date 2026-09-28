@@ -84,3 +84,54 @@ segredo logado, impresso ou commitado.
 
 **Esta sessão não decide**: nem o `Settings.ai_analysis_prompt` nem o `.env.example`
 foram alterados. `v1` continua o padrão até a rodada real de amanhã.
+
+## Rodada real (2026-09-28, UTC) — parcial, orçamento estourado
+
+Executado o comando exato acima em stack isolada `-p f20v2eval` (nunca
+`opportunity-radar`). A janela diária (UTC) já tinha virado (baseline de ontem esbarrou
+no teto ainda em 2026-09-27; esta rodada é 2026-09-28 01:5x UTC). Resultado gravado em
+`data/evals/2026-09-28-v2-openai_gpt-oss-120b-v2-vs-v1-baseline.{json,md}`, copiado para
+`docs/44-roadmap-fase-20/evidencias/2026-09-28-v2-openai_gpt-oss-120b-v2-vs-v1-baseline.{json,md}`
+(sem segredo: conferido com `grep` por `gsk_` antes de copiar).
+
+**A rodada não completou os 50 casos.** Parou em 10 processados (12 tentados: 2
+`QUOTA_BLOCKED` descartados da amostra) porque o TPM (tokens por minuto) do modelo
+pinado se mostrou muito mais apertado do que o card assumia: cada chamada de `v2` real
+consumiu **~3.4k tokens** (entrada+saída) contra os ~1.5k que o orçamento do card supunha
+(75k/50 casos) — `v2` inclui `posting` e `profile_history` inteiros no payload, então
+custa 2-3× mais que `v1` por chamada (ver `prompt_tokens`/`output_tokens` na tabela
+abaixo). No caso 12 (`12-ai-11-review_required`) o guard esperou os 65s de
+`--quota-wait-seconds` e ainda assim viu o teto exaurido de novo, e o script para a
+rodada inteira nesse ponto (comportamento esperado do script, não um bug desta sessão).
+Não houve outra tentativa: rodar os 50 casos de novo custaria perto do orçamento diário
+inteiro (~170k) sozinho, sem sobrar nada para F20-24 no mesmo dia, e a chave é
+compartilhada com os workers de F20-22/F20-23 em paralelo — daí os vários "quota
+exhausted; waiting 65s" já nas primeiras chamadas.
+
+| Critério | Reservado | Ajuste | Todos | Baseline (reservado) | Comparação |
+| --- | ---: | ---: | ---: | ---: | --- |
+| completed_rate | 0.500 | 0.500 | 0.500 | 1.000 | piora |
+| fidelity | 0.000 | 0.500 | 0.400 | — | não comparável |
+| grounded | — | 0.667 | 0.667 | — | sem dado |
+| coverage | 0.000 | 0.000 | 0.000 | 0.000 | empate |
+| inventions | 0.000 | 0.000 | 0.000 | 0.000 | empate |
+| portuguese | 1.000 | 0.991 | 0.993 | 0.123 | melhora |
+| prompt_tokens | 2162 | 2749 | 2602 | 890 | piora |
+| output_tokens | 580 | 703 | 673 | 451 | piora |
+| total_ms | 1690 | 1982 | 1909 | 1663 | piora |
+
+Amostra do `reserved` (a que decide) tem só 2 casos (`08-fora_de_area-32`,
+`11-fullstack-37`), um deles `AI_FAILED (SCHEMA_MISMATCH)` — não é estatisticamente
+sólido, mas já mostra `completed_rate` **piorando** (0.500 vs 1.000 no baseline) e custo
+de token bem acima do `v1`, o suficiente para não passar na regra de troca do passo 7.
+
+### Decisão
+
+**Manter `v1` como padrão.** `Settings.ai_analysis_prompt` e `.env.example` não foram
+alterados. Motivo: no `reserved`, `completed_rate` piorou (0.500 vs 1.000) e
+`prompt_tokens`/`output_tokens`/`total_ms` pioraram também; a regra de troca exige que
+`v2` não piore nenhum critério do `reserved`, e aqui piorou vários — mesmo com a amostra
+pequena, isso já basta para não trocar. Além disso, o custo real por chamada (~3.4k
+tokens) inviabiliza rodar os 50 casos completos no orçamento diário compartilhado sem
+sacrificar F20-24 no mesmo dia; uma rodada completa fica pendente para uma janela sem
+concorrência de outros workers no `GROQ_API_KEY`.
