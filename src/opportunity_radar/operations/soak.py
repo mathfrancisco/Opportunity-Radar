@@ -339,7 +339,8 @@ def _verify(
 
 
 def _check_jobs(session: Session) -> SoakCheck:
-    expected = set(worker.FUNCTIONAL_JOB_IDS)
+    # Field suggestions (F20-23) are opt-in and call the model, so the soak never runs them.
+    expected = set(worker.FUNCTIONAL_JOB_IDS) - {"suggest_fields_pending"}
     states = {
         state.job_name: state
         for state in session.scalars(select(WorkerJobStateModel))
