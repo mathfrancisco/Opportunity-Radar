@@ -49,6 +49,20 @@ Revisitar confirma presença sem duplicar conteúdo ou IA; queda de execução r
       continuam sem paginação real (o board inteiro é uma resposta só), então não há
       "meio de página" para eles. Ver
       `docs/44-roadmap-fase-20/evidencias/http-condicional-2026-09-27.md`.
+      **Concluído em 2026-09-28** (pilha isolada `f20resume`, real, não fabricado):
+      um `kill -9` real do processo Python no meio de um `execute()` (max_items=100000,
+      ~28 páginas reais) não deixou **nenhum** vestígio no banco — nem `SourceRun`, nem
+      `RawItem` — confirmando por dado real que o commit é atômico por execução
+      (`service.py:1162`) e que `resume_of_run_id` nunca pode nomear um run morto por
+      `kill -9` puro (ele nunca chega a existir). Para produzir o `PARTIAL` retomável que
+      o critério pede, esta sessão cortou a conexão de verdade (ECONNREFUSED real, TCP,
+      não uma exceção levantada à mão) na 2ª chamada HTTP contra a Adobe real, dentro do
+      mesmo `execute()`: página 1 (20 vagas reais) persistida, página 2 falha de verdade,
+      run `PARTIAL` com `items_persisted=20`. A retomada com `resume_of_run_id` + cursor
+      operacional `"20"` sobre um cliente HTTP normal (sem corte) buscou 15 vagas reais
+      novas (offset 20-34), `items_skipped=0`, `resumed_from_run_id` gravado, 35
+      `RawItem`/35 `external_id` distintos — sem duplicata. Ver
+      `docs/44-roadmap-fase-20/evidencias/retomada-real-e-endpoints-2026-09-28.md`.
 - [x] Mudança material reprocessa; alteração cosmética não gera onda de análise.
 
 ## Verificação
@@ -294,3 +308,19 @@ Todos os critérios de aceite estão marcados com evidência, o comando de verif
   `curl` direto (19.820 e 345.111 bytes), e cursor real de retomada no Workday (Adobe: 10
   itens + 5 itens novos via `cursor="10"`, 15 vagas reais distintas ao todo, sem
   repetição).
+
+### Evidência local — 2026-09-28 (queda real de processo e retomada via `resume_of_run_id`)
+
+- Pilha isolada `f20resume`. `kill -9` real contra o processo Python em execução real
+  (não fabricada) confirmou zero estado persistido para uma morte antes do commit final
+  (nenhum `SourceRun`, nenhum `RawItem`) — coerente com
+  `test_crash_before_commit_leaves_no_partial_state_and_retry_succeeds`, agora também
+  provado fora do CI, com um `kill -9` de verdade, não uma exceção simulada.
+- Um corte real de conexão TCP (`ECONNREFUSED`, não fabricado) na 2ª página de uma coleta
+  real contra Adobe/Workday produziu um run `PARTIAL` com 20 vagas reais persistidas
+  (`d539bab1-84a8-478f-b900-3ce4133467f3`). A retomada via `resume_of_run_id` + cursor
+  operacional `"20"` (`48037fbf-7245-4084-bf1d-e23d9e1e19ce`) buscou 15 vagas reais novas,
+  sem duplicata (35 `RawItem`/35 `external_id` distintos) e sem itens pulados.
+- Nenhuma chamada ao Groq (`AI_ENABLED=false`); nenhuma mutação na pilha real
+  `opportunity-radar`. Ver
+  `docs/44-roadmap-fase-20/evidencias/retomada-real-e-endpoints-2026-09-28.md`.
