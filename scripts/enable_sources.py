@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.collectors import CollectorRegistry
+from opportunity_radar.acquisition.concurrency import HostSerializer, source_host_key
 from opportunity_radar.acquisition.models import SourceDefinitionModel
 from opportunity_radar.acquisition.probing import (
     PROBE_TYPES,
@@ -28,6 +29,10 @@ from opportunity_radar.companies.models import CompanySource  # noqa: F401
 from opportunity_radar.platform.database import create_database_engine
 
 RESEARCHED_TYPES = PROBE_TYPES
+
+#: How many sources may be probed at once. Different providers/tenants run concurrently;
+#: same-host work still serializes at 1 request/second (`HostSerializer`).
+DEFAULT_PROBE_CONCURRENCY = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +132,7 @@ def activate_sources(
     dry_run: bool,
     max_items: int,
     probe_only: bool = False,
+    concurrency: int = DEFAULT_PROBE_CONCURRENCY,
 ) -> dict[str, Any]:
     if not accept_terms and not probe_only:
         raise ValueError(
@@ -156,7 +162,7 @@ def activate_sources(
     registry = _registry()
     probes_started_at = datetime.now(UTC)
     results = asyncio.run(
-        _probe_all(candidates, registry, max_items=max_items)
+        _probe_all(candidates, registry, max_items=max_items, concurrency=concurrency)
     )
     # Every attempt joins the same history the interface writes, passed or failed.
     service = AcquisitionService(session, registry=registry)
@@ -210,11 +216,22 @@ async def _probe_all(
     registry: CollectorRegistry,
     *,
     max_items: int,
+    concurrency: int = DEFAULT_PROBE_CONCURRENCY,
 ) -> list[ProbeResult]:
-    results: list[ProbeResult] = []
-    for source in sources:
-        results.append(await _probe(source, registry, max_items=max_items))
-    return results
+    """Probe every source concurrently, up to `concurrency` at once. Two sources on the
+    same provider host (`source_host_key`) still serialize behind that host's own lock,
+    at 1 request/second — `asyncio.gather` preserves `sources`' order in the result
+    regardless of completion order, so callers may keep zipping it against `sources`."""
+    host_serializer = HostSerializer(min_interval_seconds=1.0)
+    semaphore = asyncio.Semaphore(max(1, concurrency))
+
+    async def run_one(source: SourceDefinitionModel) -> ProbeResult:
+        host = source_host_key(source.source_type, source.configuration)
+        async with semaphore, host_serializer.lock_for(host):
+            await host_serializer.wait_turn(host)
+            return await _probe(source, registry, max_items=max_items)
+
+    return list(await asyncio.gather(*(run_one(source) for source in sources)))
 
 
 def main() -> int:
@@ -236,6 +253,13 @@ def main() -> int:
         help="test public endpoints without recording terms or enabling sources",
     )
     parser.add_argument("--max-items", type=int, default=1, choices=range(1, 11))
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=DEFAULT_PROBE_CONCURRENCY,
+        help="Sources probed at once; same-host work still serializes at 1 "
+        f"request/second (default: {DEFAULT_PROBE_CONCURRENCY}).",
+    )
     args = parser.parse_args()
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
@@ -249,6 +273,7 @@ def main() -> int:
                 dry_run=args.dry_run,
                 max_items=args.max_items,
                 probe_only=args.probe_only,
+                concurrency=args.concurrency,
             )
         except ValueError as error:
             parser.error(str(error))
