@@ -1,6 +1,9 @@
 # CARD F20-36 — Descoberta limitada de sites e sitemaps
 
-- **Status:** Backlog
+- **Status:** Implementado e validado com dados reais em 2026-09-27
+  (`evidencias/sites-jobposting-2026-09-27.md`); homologação humana do endpoint real do
+  board (Airbyte/Anthropic/Apollo GraphQL) concluída em 2026-09-28 — ver "Homologação dos
+  endpoints reais" abaixo.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** D — Varredura produtiva
 - **Depende de:** F20-27, F20-35
@@ -245,3 +248,26 @@ Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
 ## Pronto quando
 
 Todos os critérios de aceite estão marcados com evidência, o comando de verificação passa e o CI está verde.
+
+## Homologação dos endpoints reais — 2026-09-28
+
+`evidencias/sites-jobposting-2026-09-27.md` §2 registrou que o `endpoint` gravado para as
+3 empresas com ATS revelado (Airbyte, Anthropic, Apollo GraphQL) é a página onde a
+assinatura do ATS foi encontrada, não o board em si — pendência explícita de homologação
+humana. Esta sessão (pilha isolada `f20resume`, real, sem tocar `opportunity-radar`)
+determinou e testou o endpoint real de cada board via o caminho de probe do próprio
+projeto (`acquisition/probing.py::run_probe`), a 1 req/s. Usuário pré-autorizou aceitar as
+decisões de homologação recomendadas; elas seguem registradas aqui como decisão aceita,
+não apenas recomendada, e serão aplicadas na pilha real depois da janela de sete dias
+(a pilha real não pode ser tocada até `2026-10-05T00:45Z`).
+
+| Empresa | ATS | `endpoint` atual (página onde o ATS foi achado) | `endpoint` real do board (probe real, `ok=true`) | Decisão |
+| --- | --- | --- | --- | --- |
+| Anthropic | greenhouse | `https://www.anthropic.com/careers/jobs` | `https://job-boards.greenhouse.io/anthropic` (`board_token=anthropic`, `boards-api.greenhouse.io/v1/boards/anthropic/jobs` responde 200 real, 3 vagas lidas pelo probe) | **Aceita.** Corrigir `CompanySource.endpoint` para o board; `configuration.board_token` já está correto. |
+| Apollo GraphQL | ashby | `https://www.apollographql.com/careers/9192511f-...` | `https://jobs.ashbyhq.com/apollo-graphql` (`board_identifier=apollo-graphql`, `api.ashbyhq.com/posting-api/job-board/apollo-graphql` responde 200 real, 3 vagas lidas, incluindo a mesma vaga `9192511f-...` já citada como evidência) | **Aceita.** Corrigir `CompanySource.endpoint` para o board; `configuration.board_identifier` já está correto. |
+| Airbyte | greenhouse | `https://airbyte.com/careers` | **Não confirmado.** `board_token=airbyte` responde `404 Job board not found` real em `boards-api.greenhouse.io`; o board raiz (`job-boards.greenhouse.io/airbyte`, `boards.greenhouse.io/airbyte`) também 404 real; URLs de vaga antigas redirecionam (302 real) para `/airbyte?error=true`. Outros tokens plausíveis testados (todos 404 reais, 1 req/s): `airbytehq`, `airbyte-hq`, `airbyteio`, `airbyte-io`, `air-byte`, `airbyte_com`, `airbyteinc`, `goairbyte`, `airbyte-com`, `getairbyte`. | **Não homologar agora.** Manter `CompanySource` como proposta pendente/inerte; o board Greenhouse da Airbyte parece ter sido desativado ou renomeado para um token não descoberto entre 2026-09-27 e 2026-09-28. A `careers_page` também mudou de `https://airbyte.com/careers` para `https://airbyte.com/company/careers` — registrar para a próxima rodada de descoberta. |
+
+Nenhum robots.txt foi violado (endpoints usados são as APIs públicas documentadas dos
+ATS, não páginas de carreira); nenhuma chamada excedeu 1 req/s. Evidência completa,
+incluindo os comandos reais e a saída do probe, em
+`docs/44-roadmap-fase-20/evidencias/retomada-real-e-endpoints-2026-09-28.md` §6.

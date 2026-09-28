@@ -46,9 +46,9 @@ Depois da medição: reconstruir a stack real com o código atual (inclui F20-24
 | --- | --- | --- |
 | F20-01 / F17-03 | O gabarito veio de busca por título, o que favorece `like`; `kubernetes` e `frontend` não têm gabarito | Montar candidatos por full-text (não por título), rotular e reexecutar `eval_search.py --mode both` |
 | F20-02 | Curadoria e reprocessamento `skills-v3` feitos; a meta de UNKNOWN de senioridade (F17-06) não foi atingida | Depende do F20-23 |
-| F20-39 | A retomada por `resume_of_run_id` depois de uma queda real só está coberta por fakes; o cursor real foi provado só com cursor explícito | Interromper uma coleta Workday real no meio (matar o worker), confirmar a execução `PARTIAL` e retomar com `resume_of_run_id` |
+| F20-39 | **Resolvido (2026-09-28).** `kill -9` real do processo no meio de um `execute()` não deixa nenhum estado (nem `SourceRun`, nem `RawItem`) — confirma o commit atômico por execução com dado real, não só com o coletor fake do CI. Um corte real de conexão TCP (`ECONNREFUSED`, não fabricado) na 2ª página de uma coleta real contra Adobe produziu o `PARTIAL` retomável que o critério pede (20 vagas reais); a retomada via `resume_of_run_id` + cursor operacional buscou 15 vagas reais novas, sem duplicata. Ver `docs/44-roadmap-fase-20/evidencias/retomada-real-e-endpoints-2026-09-28.md`. | ~~Interromper uma coleta Workday real no meio (matar o worker), confirmar a execução `PARTIAL` e retomar com `resume_of_run_id`~~ — feito. |
 | F20-38/39 | Os bytes evitados foram medidos com `curl`, não pelo coletor em operação contínua | Sai da janela de sete dias (checkpoints com ETag em produção) |
-| F20-36 | `CompanySource.endpoint` gravado é a página onde o ATS foi achado, não o board | Homologação humana corrige o endpoint antes de ativar as 3 fontes achadas (Airbyte, Anthropic, Apollo GraphQL) |
+| F20-36 | **Parcialmente resolvido (2026-09-28).** Endpoint real do board homologado e testado via probe real para Anthropic e Apollo GraphQL (aceitos); o board Greenhouse da Airbyte não resolve mais (`404` real, `board_token=airbyte`) e segue pendente/inerte. Ver `docs/44-roadmap-fase-20/evidencias/retomada-real-e-endpoints-2026-09-28.md` §6 e o card F20-36. | Aplicar a correção de `CompanySource.endpoint` (Anthropic, Apollo GraphQL) na pilha real depois da janela de sete dias; reinvestigar o board da Airbyte numa próxima rodada de descoberta. |
 | F20-47 | O E2E no navegador roda com fakes | Opcional: percurso manual na stack real depois da janela |
 
 ## 5. Verificações de sanidade que ninguém rodou
@@ -71,7 +71,7 @@ Depois da medição: reconstruir a stack real com o código atual (inclui F20-24
 1. ~~F20-18 (v2 × v1)~~ — resolvido em 2026-09-28 (manter `v1`; ver §2). F20-22 (20B), depois F20-22 (Qwen) e decisão seguem pendentes.
 2. F20-23 no acervo real, com o modelo escolhido; ~~medição de F20-24~~ — reserva interativa resolvida em 2026-09-28, amostra de aging ainda pendente (ver §2).
 3. Sanidade da seção 5 (testes instáveis, `alembic check`).
-4. F20-39: queda real e retomada.
+4. ~~F20-39: queda real e retomada.~~ — resolvido em 2026-09-28 (ver §4).
 5. Depois de `2026-10-05T00:45Z`: T7 de F20-35/38/49, reconstrução da stack real.
 6. F20-01 com gabarito full-text.
 7. F20-50.
