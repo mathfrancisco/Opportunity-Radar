@@ -70,6 +70,16 @@ reais).
 6. Ativar na pilha real, depois da janela, as 34 fontes já homologadas e ativadas na
    `f20manual` (30 → 64 fontes habilitadas): lista completa, ATS, slug, probe e execução
    real por fonte em `evidencias/ativacao-fontes-2026-09-28.md`.
+7. [F20-60](fase-20/f20-60-mapa-carreira-importar-e-ativar.md): ativar mais 20 fontes
+   (67 → 87 habilitadas na `f20manual`) e importar 48 empresas novas (223 → 271) do mapa
+   de carreira do usuário — 5 classe (c) resolvidas + 5 confirmadas por sondagem + Red Hat
+   + 9 achadas por `discover_ats.py` entre as 42 empresas classe (d) importadas. Lista
+   completa, ATS, chave e execução real por fonte em
+   `evidencias/mapa-carreira-vs-catalogo-2026-09-28.md` ("Resultados da execução").
+   Pendente, não fechado por este card: rodar `discover_sites.py` (antes de
+   `discover_ats.py`, em outro dia — mesmo portão de novidade de 30 dias) sobre as 13
+   empresas sem ATS achado e pesquisar a URL de carreiras real das 20 que ficaram
+   `backlog` por palpite de URL incorreto.
 
 ## 5. Falta — sanidade e pendências menores
 
