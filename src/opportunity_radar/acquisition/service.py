@@ -64,6 +64,7 @@ from opportunity_radar.acquisition.scheduling import (
     HostBudgetState,
     SourceSchedulingState,
     default_schedule_for_priority,
+    validate_cron_schedule,
 )
 from opportunity_radar.acquisition.tavily import (
     TavilyClient,
@@ -552,6 +553,49 @@ class AcquisitionService:
                 terms_reviewed=terms_reviewed,
                 collector_local_tested=collector_local_tested,
                 reviewed_at=effective_reviewed_at,
+                version=SourceDefinitionModel.version + 1,
+            )
+            .returning(SourceDefinitionModel.id)
+        )
+        if updated_id is None:
+            self.session.rollback()
+            raise SourceVersionConflictError(source_id)
+        self.session.commit()
+        self.session.refresh(source)
+        return source
+
+    def update_source_schedule(
+        self,
+        source_id: UUID,
+        *,
+        schedule: str | None,
+        expected_version: int,
+    ) -> SourceDefinitionModel:
+        """Changes when the clock may collect this source. `None` means unscheduled —
+        the source still runs on demand, but the scheduler skips it entirely.
+        """
+        source = self.repository.get_source(source_id)
+        if source is None:
+            raise SourceNotFoundError(source_id)
+        if source.version != expected_version:
+            raise SourceVersionConflictError(source_id)
+        if schedule is not None:
+            try:
+                validate_cron_schedule(schedule)
+            except ValueError as error:
+                raise AcquisitionError(
+                    AcquisitionErrorCode.INVALID_CONFIGURATION,
+                    f"schedule is not a valid cron expression: {error}",
+                    field="schedule",
+                ) from error
+        updated_id = self.session.scalar(
+            update(SourceDefinitionModel)
+            .where(
+                SourceDefinitionModel.id == source_id,
+                SourceDefinitionModel.version == expected_version,
+            )
+            .values(
+                schedule=schedule,
                 version=SourceDefinitionModel.version + 1,
             )
             .returning(SourceDefinitionModel.id)

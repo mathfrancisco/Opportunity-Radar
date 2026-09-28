@@ -4,6 +4,7 @@ import {
   type ManualInput,
   type NewSource,
   type SourceControls,
+  type SourceSchedule,
   createSource,
   getSource,
   getSourceCoverage,
@@ -14,6 +15,7 @@ import {
   runSource,
   submitManualRun,
   updateSourceControls,
+  updateSourceSchedule,
 } from './api'
 
 /** The default wait between probes in a batch when the source did not reply 429. */
@@ -79,6 +81,17 @@ export function useUpdateSourceControls(sourceId: string) {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (controls: SourceControls) => updateSourceControls(sourceId, controls),
+    onSuccess: (source) => {
+      client.setQueryData(['source', sourceId], source)
+      refreshCatalogue(client)
+    },
+  })
+}
+
+export function useUpdateSourceSchedule(sourceId: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: SourceSchedule) => updateSourceSchedule(sourceId, input),
     onSuccess: (source) => {
       client.setQueryData(['source', sourceId], source)
       refreshCatalogue(client)

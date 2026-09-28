@@ -211,6 +211,16 @@ def _cron_interval_seconds(schedule: str) -> float:
     return (second - first).total_seconds()
 
 
+def validate_cron_schedule(schedule: str) -> None:
+    """Raises `ValueError` unless `schedule` is a crontab expression this scheduler
+    can run (the same `CronTrigger.from_crontab` the running scheduler uses below).
+
+    `None`/unscheduled is a caller-level concern, not this function's — a source with no
+    schedule is valid and simply never reaches this check.
+    """
+    CronTrigger.from_crontab(schedule, timezone="UTC")
+
+
 def backoff_delay(
     consecutive_failures: int,
     *,

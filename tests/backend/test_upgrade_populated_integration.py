@@ -45,6 +45,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -73,6 +74,17 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "pre_f20_dump.sql"
 PRE_PHASE_20_REVISION = "20260925_0029"
 
+#: The literal `normalizer_version` this fixture's 20 `normalization_result` rows were
+#: dumped with. A `pg_dump` fixture cannot reference the `NORMALIZER_VERSION` constant
+#: directly, so `_restore_fixture` substitutes this literal for the constant's current
+#: value before handing the SQL to `psql`. Bumping `NORMALIZER_VERSION` in
+#: `opportunities/service.py` used to silently break `test_interrupted_backfill_
+#: resumes_without_duplicating` (every fixture row would look "pending" for the new
+#: version, not only the 5 the test forces back to pending) — this substitution, plus
+#: `test_fixture_carries_the_dumped_normalizer_version_literal` below, keeps that
+#: coupling visible instead of silent.
+FIXTURE_DUMPED_NORMALIZER_VERSION = "v6"
+
 #: Counted before and after the upgrade; acceptance criterion 1 requires every one of
 #: these to come back identical. Mirrors the vertical-flow tables `platform/backup.py`
 #: already tracks, minus the Phase 20 tables that do not exist before the upgrade.
@@ -90,6 +102,27 @@ COUNT_QUERIES: dict[str, str] = {
 }
 
 
+def _fixture_sql_for_current_normalizer_version() -> str:
+    """The fixture's SQL, with its dumped `normalizer_version` literal rewritten to
+    whatever `NORMALIZER_VERSION` is today.
+
+    The literal only ever appears as the `normalizer_version` field of a
+    `normalization_result` COPY row (`\\tSUCCEEDED\\tv6\\tNEW\\t`); nothing else in the
+    dump matches that exact sequence, so this substitution cannot touch an unrelated
+    `v6`/`v1`/`v2` elsewhere in the file (fingerprint_version, role_family_version,
+    mapping_version, …).
+    """
+    marker = f"\tSUCCEEDED\t{FIXTURE_DUMPED_NORMALIZER_VERSION}\tNEW\t"
+    replacement = f"\tSUCCEEDED\t{NORMALIZER_VERSION}\tNEW\t"
+    sql = FIXTURE_PATH.read_text(encoding="utf-8")
+    assert sql.count(marker) == 20, (
+        "expected exactly the fixture's 20 normalization_result rows to carry the "
+        f"dumped normalizer_version literal {FIXTURE_DUMPED_NORMALIZER_VERSION!r}; the "
+        "fixture file changed shape and this substitution needs to be revisited"
+    )
+    return sql.replace(marker, replacement)
+
+
 def _restore_fixture(url: str) -> None:
     """Load the plain-SQL fixture into an empty database with `psql`.
 
@@ -97,20 +130,31 @@ def _restore_fixture(url: str) -> None:
     `20260925_0029` (schema + data), not just data: restoring it into an empty
     database is what proves the upgrade path starts from a database that predates
     every Phase 20 migration, the same way an operator's real, unmigrated database
-    would.
+    would. Its `normalizer_version` literal is rewritten to the current
+    `NORMALIZER_VERSION` before it reaches `psql` — see
+    `_fixture_sql_for_current_normalizer_version`.
     """
-    command_line = [
-        "psql",
-        "-v",
-        "ON_ERROR_STOP=1",
-        "--quiet",
-        postgres_dsn(url),
-        "-f",
-        str(FIXTURE_PATH),
-    ]
-    result = subprocess.run(command_line, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise AssertionError(f"psql failed to restore the fixture: {result.stderr}")
+    sql = _fixture_sql_for_current_normalizer_version()
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".sql", delete=False, encoding="utf-8"
+    ) as handle:
+        handle.write(sql)
+        rewritten_path = handle.name
+    try:
+        command_line = [
+            "psql",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "--quiet",
+            postgres_dsn(url),
+            "-f",
+            rewritten_path,
+        ]
+        result = subprocess.run(command_line, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise AssertionError(f"psql failed to restore the fixture: {result.stderr}")
+    finally:
+        os.unlink(rewritten_path)
 
 
 def _alembic_upgrade_head(url: str) -> None:

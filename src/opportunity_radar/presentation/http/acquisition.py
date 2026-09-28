@@ -96,6 +96,11 @@ class SourceControlsBody(BaseModel):
     expected_version: int = Field(ge=1)
 
 
+class SourceScheduleBody(BaseModel):
+    schedule: str | None = Field(default=None, max_length=255)
+    expected_version: int = Field(ge=1)
+
+
 class SourceProbeBody(BaseModel):
     expected_version: int = Field(ge=1)
 
@@ -226,6 +231,22 @@ def update_source_controls(
     try:
         source = AcquisitionService(session).update_source_controls(
             source_id, **body.model_dump()
+        )
+    except AcquisitionError as error:
+        _raise_acquisition_error(error)
+    return _source_response(source)
+
+
+@router.patch("/sources/{source_id}/schedule", response_model=SourceDefinitionResponse)
+def update_source_schedule(
+    source_id: UUID,
+    body: SourceScheduleBody,
+    session: Session = Depends(get_session),
+) -> SourceDefinitionResponse:
+    """Changes when the scheduler may run this source. `null` leaves it unscheduled."""
+    try:
+        source = AcquisitionService(session).update_source_schedule(
+            source_id, schedule=body.schedule, expected_version=body.expected_version
         )
     except AcquisitionError as error:
         _raise_acquisition_error(error)
