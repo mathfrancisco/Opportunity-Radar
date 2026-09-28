@@ -10,8 +10,11 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.collectors import CollectorRegistry
+from opportunity_radar.acquisition.concurrency import HostSerializer, source_host_key
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
     CollectionMode,
@@ -23,6 +26,10 @@ from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.companies.models import CompanySource  # noqa: F401
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
+
+#: Sources collected at once, default 1 (current sequential behavior unchanged). Same-
+#: host work still serializes at 1 request/second regardless of this setting.
+DEFAULT_COLLECT_CONCURRENCY = 1
 
 
 def _split(value: str | None) -> tuple[str, ...]:
@@ -54,16 +61,7 @@ def _sources(
     return sources
 
 
-async def _collect(
-    session: Session,
-    sources: list[SourceDefinitionModel],
-    *,
-    mode: CollectionMode,
-    keywords: tuple[str, ...],
-    max_items: int | None,
-    correlation_id: str | None,
-    settings: Settings,
-) -> list[dict[str, Any]]:
+def _registry(settings: Settings) -> CollectorRegistry:
     # AcquisitionService's own default registry only knows the five original collectors
     # (manual/ashby/lever/greenhouse/remotive) — every collector added since (workday,
     # teamtailor, workable, factorial, tavily_search) is registered by
@@ -72,21 +70,33 @@ async def _collect(
     # homologated Workday/Teamtailor/Workable/Factorial source's own collector code
     # correctly in a probe but fail every real run here with "collector is not
     # registered" (found live against a real Teamtailor source during F20 homologation).
-    registry = build_collector_registry(
+    return build_collector_registry(
         greenhouse_base_url=settings.greenhouse_base_url,
         tavily_api_key=settings.tavily_api_key,
         tavily_base_url=settings.tavily_base_url,
         tavily_search_depth=settings.tavily_search_depth,
         tavily_credit_budget_per_run=settings.tavily_credit_budget_per_run,
     )
-    service = AcquisitionService(session, registry=registry)
-    report: list[dict[str, Any]] = []
-    for source in sources:
-        try:
+
+
+async def _collect_one(
+    engine: Engine,
+    source: SourceDefinitionModel,
+    *,
+    mode: CollectionMode,
+    keywords: tuple[str, ...],
+    max_items: int | None,
+    correlation_id: str | None,
+    settings: Settings,
+) -> dict[str, Any]:
+    """One source, its own `Session` (never shared across concurrent tasks) and its own
+    registry instance. Any failure — not only `AcquisitionError` — is caught here and
+    reported as `ERROR`, so one bad source never sinks the batch."""
+    try:
+        with Session(engine) as session:
+            service = AcquisitionService(session, registry=_registry(settings))
             collector = service.registry.resolve(source.source_type)
-            supported_keywords = (
-                keywords if collector.capabilities.keyword_search else ()
-            )
+            supported_keywords = keywords if collector.capabilities.keyword_search else ()
             run = await service.execute(
                 source.id,
                 CollectionRequest(
@@ -97,36 +107,76 @@ async def _collect(
                     correlation_id=correlation_id,
                 ),
             )
-            report.append(
-                {
-                    "source_id": str(source.id),
-                    "source_name": source.name,
-                    "source_type": source.source_type,
-                    "run_id": str(run.id),
-                    "status": run.status,
-                    "items_seen": run.items_seen,
-                    "items_persisted": run.items_persisted,
-                    "items_skipped": run.items_skipped,
-                    "items_invalid": run.items_invalid,
-                    "http_requests": run.http_requests,
-                    "retry_count": run.retry_count,
-                    "error_code": run.error_code,
-                    "error_summary": run.error_summary,
-                    "keywords_skipped": bool(keywords and not supported_keywords),
-                }
+            return {
+                "source_id": str(source.id),
+                "source_name": source.name,
+                "source_type": source.source_type,
+                "run_id": str(run.id),
+                "status": run.status,
+                "items_seen": run.items_seen,
+                "items_persisted": run.items_persisted,
+                "items_skipped": run.items_skipped,
+                "items_invalid": run.items_invalid,
+                "http_requests": run.http_requests,
+                "retry_count": run.retry_count,
+                "error_code": run.error_code,
+                "error_summary": run.error_summary,
+                "keywords_skipped": bool(keywords and not supported_keywords),
+            }
+    except AcquisitionError as error:
+        return {
+            "source_id": str(source.id),
+            "source_name": source.name,
+            "source_type": source.source_type,
+            "status": "ERROR",
+            "error_code": error.code.value,
+            "error_summary": error.summary,
+        }
+    except Exception as error:  # noqa: BLE001 - one source's failure never sinks the batch
+        return {
+            "source_id": str(source.id),
+            "source_name": source.name,
+            "source_type": source.source_type,
+            "status": "ERROR",
+            "error_code": "UNKNOWN_ERROR",
+            "error_summary": str(error),
+        }
+
+
+async def _collect(
+    engine: Engine,
+    sources: list[SourceDefinitionModel],
+    *,
+    mode: CollectionMode,
+    keywords: tuple[str, ...],
+    max_items: int | None,
+    correlation_id: str | None,
+    settings: Settings,
+    concurrency: int = DEFAULT_COLLECT_CONCURRENCY,
+) -> list[dict[str, Any]]:
+    """Collect every source concurrently, up to `concurrency` at once (default 1: the
+    original sequential behavior). Two sources on the same provider host
+    (`source_host_key`) still serialize behind that host's own lock at 1 request/second.
+    `asyncio.gather` preserves `sources`' order in the result regardless of completion
+    order, so the report's shape and ordering are unchanged from the sequential run."""
+    host_serializer = HostSerializer(min_interval_seconds=1.0)
+    semaphore = asyncio.Semaphore(max(1, concurrency))
+
+    async def run_one(source: SourceDefinitionModel) -> dict[str, Any]:
+        host = source_host_key(source.source_type, source.configuration)
+        async with semaphore, host_serializer.lock_for(host):
+            await host_serializer.wait_turn(host)
+            return await _collect_one(
+                engine,
+                source,
+                mode=mode,
+                keywords=keywords,
+                max_items=max_items,
+                correlation_id=correlation_id,
+                settings=settings,
             )
-        except AcquisitionError as error:
-            report.append(
-                {
-                    "source_id": str(source.id),
-                    "source_name": source.name,
-                    "source_type": source.source_type,
-                    "status": "ERROR",
-                    "error_code": error.code.value,
-                    "error_summary": error.summary,
-                }
-            )
-    return report
+
+    return list(await asyncio.gather(*(run_one(source) for source in sources)))
 
 
 def main() -> int:
@@ -141,6 +191,13 @@ def main() -> int:
     )
     parser.add_argument("--max-items", type=int, choices=range(1, 10_001))
     parser.add_argument("--correlation-id", default="make-collect")
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=DEFAULT_COLLECT_CONCURRENCY,
+        help="Sources collected at once; same-host work still serializes at 1 "
+        f"request/second (default: {DEFAULT_COLLECT_CONCURRENCY}, current behavior).",
+    )
     args = parser.parse_args()
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
@@ -150,37 +207,39 @@ def main() -> int:
     except ValueError as error:
         parser.error(f"--source-id must contain UUIDs: {error}")
     mode = CollectionMode(args.mode)
-    with Session(create_database_engine(database_url)) as session:
+    engine = create_database_engine(database_url)
+    with Session(engine) as session:
         sources = _sources(
             session,
             source_ids=source_ids,
             source_types=_split(args.source_type),
         )
-        if not sources:
-            print(
-                json.dumps(
-                    {
-                        "status": "no_enabled_sources",
-                        "hint": "run `make enable-sources TERMS_REVIEWED=1` first",
-                        "runs": [],
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
-            )
-            return 2
-        settings = Settings()  # type: ignore[call-arg]  # values come from the environment
-        report = asyncio.run(
-            _collect(
-                session,
-                sources,
-                mode=mode,
-                keywords=_split(args.keywords),
-                max_items=args.max_items,
-                correlation_id=args.correlation_id,
-                settings=settings,
+    if not sources:
+        print(
+            json.dumps(
+                {
+                    "status": "no_enabled_sources",
+                    "hint": "run `make enable-sources TERMS_REVIEWED=1` first",
+                    "runs": [],
+                },
+                ensure_ascii=False,
+                indent=2,
             )
         )
+        return 2
+    settings = Settings()  # type: ignore[call-arg]  # values come from the environment
+    report = asyncio.run(
+        _collect(
+            engine,
+            sources,
+            mode=mode,
+            keywords=_split(args.keywords),
+            max_items=args.max_items,
+            correlation_id=args.correlation_id,
+            settings=settings,
+            concurrency=args.concurrency,
+        )
+    )
     failures = [
         item
         for item in report
