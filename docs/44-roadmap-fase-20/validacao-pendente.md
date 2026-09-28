@@ -63,7 +63,7 @@ Depois da medição: reconstruir a stack real com o código atual (inclui F20-24
 | Card | Estado em 2026-09-28 |
 | --- | --- |
 | F20-22 | Preparação sem Groq em andamento (`feature/f20-22-benchmark`) |
-| F20-23 | Implementação sem Groq em andamento (`feature/f20-23-classificacao`) |
+| F20-23 | Implementação sem Groq concluída (`feature/f20-23-classificacao`); falta a medição de precisão no acervo real (seção 2, linha F20-23, e item 2 da seção 7) |
 | F20-50 | Último card. Só começa depois das seções 2 a 5 |
 
 ## 7. Ordem recomendada

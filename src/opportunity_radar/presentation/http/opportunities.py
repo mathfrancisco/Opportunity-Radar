@@ -44,6 +44,13 @@ from opportunity_radar.opportunities.service import (
     RawItemNotFoundError,
     SourceRunNotFoundError,
 )
+from opportunity_radar.opportunities.suggestions import (
+    OpportunitySuggestionModel,
+    SuggestionAlreadyDecidedError,
+    SuggestionNotFoundError,
+    accept_suggestion,
+    reject_suggestion,
+)
 from opportunity_radar.presentation.http.dependencies import get_session
 
 _RELEVANCE_REASONS = (
@@ -226,6 +233,29 @@ class ConfirmDuplicateBody(BaseModel):
 
 
 class RejectDuplicateBody(BaseModel):
+    decided_by: str = Field(min_length=1, max_length=255)
+
+
+class FieldSuggestionResponse(BaseModel):
+    id: UUID
+    opportunity_id: UUID
+    opportunity_version: int
+    field: str
+    value: str
+    evidence: str
+    model: str
+    prompt_version: str
+    status: str
+    decided_by: str | None
+    decided_at: datetime | None
+    created_at: datetime
+
+
+class FieldSuggestionPageResponse(BaseModel):
+    items: list[FieldSuggestionResponse]
+
+
+class DecideSuggestionBody(BaseModel):
     decided_by: str = Field(min_length=1, max_length=255)
 
 
@@ -503,6 +533,94 @@ def reject_duplicate_candidate(
             detail={"code": "invalid_duplicate_transition", "message": str(error)},
         ) from error
     return _duplicate_candidate_response(session, candidate)
+
+
+@router.get(
+    "/{opportunity_id}/field-suggestions",
+    response_model=FieldSuggestionPageResponse,
+)
+def list_field_suggestions(
+    opportunity_id: UUID,
+    session: Session = Depends(get_session),
+) -> FieldSuggestionPageResponse:
+    rows = session.scalars(
+        select(OpportunitySuggestionModel)
+        .where(OpportunitySuggestionModel.opportunity_id == opportunity_id)
+        .order_by(OpportunitySuggestionModel.created_at)
+    ).all()
+    return FieldSuggestionPageResponse(items=[_field_suggestion_response(row) for row in rows])
+
+
+@router.post(
+    "/field-suggestions/{suggestion_id}/accept",
+    response_model=FieldSuggestionResponse,
+)
+def accept_field_suggestion(
+    suggestion_id: UUID,
+    body: DecideSuggestionBody,
+    session: Session = Depends(get_session),
+) -> FieldSuggestionResponse:
+    try:
+        suggestion = accept_suggestion(session, suggestion_id, decided_by=body.decided_by)
+    except SuggestionNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "field_suggestion_not_found", "message": "Field suggestion not found."},
+        ) from error
+    except OpportunityVersionConflictError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "version_conflict", "message": str(error)},
+        ) from error
+    except SuggestionAlreadyDecidedError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "invalid_suggestion_transition", "message": str(error)},
+        ) from error
+    return _field_suggestion_response(suggestion)
+
+
+@router.post(
+    "/field-suggestions/{suggestion_id}/reject",
+    response_model=FieldSuggestionResponse,
+)
+def reject_field_suggestion(
+    suggestion_id: UUID,
+    body: DecideSuggestionBody,
+    session: Session = Depends(get_session),
+) -> FieldSuggestionResponse:
+    try:
+        suggestion = reject_suggestion(session, suggestion_id, decided_by=body.decided_by)
+    except SuggestionNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "field_suggestion_not_found", "message": "Field suggestion not found."},
+        ) from error
+    except SuggestionAlreadyDecidedError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "invalid_suggestion_transition", "message": str(error)},
+        ) from error
+    return _field_suggestion_response(suggestion)
+
+
+def _field_suggestion_response(
+    suggestion: OpportunitySuggestionModel,
+) -> FieldSuggestionResponse:
+    return FieldSuggestionResponse(
+        id=suggestion.id,
+        opportunity_id=suggestion.opportunity_id,
+        opportunity_version=suggestion.opportunity_version,
+        field=suggestion.field,
+        value=suggestion.value,
+        evidence=suggestion.evidence,
+        model=suggestion.model,
+        prompt_version=suggestion.prompt_version,
+        status=suggestion.status,
+        decided_by=suggestion.decided_by,
+        decided_at=suggestion.decided_at,
+        created_at=suggestion.created_at,
+    )
 
 
 def _duplicate_candidate_response(

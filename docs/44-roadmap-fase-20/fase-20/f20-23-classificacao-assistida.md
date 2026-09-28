@@ -1,6 +1,8 @@
 # CARD F20-23 — Classificação e extração assistidas para campos ambíguos
 
-- **Status:** Backlog
+- **Status:** Implementado sem Groq (`feature/f20-23-classificacao`); falta medir
+  precisão no acervo real (ver `docs/pesquisas/sugestoes-f20-23.md`) antes de ligar
+  `worker_suggest_enabled` por padrão.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-22, F20-02, F20-03
@@ -64,9 +66,12 @@ unique (opportunity_id, opportunity_version, field)
 
 ## Critérios de aceite
 
-- [ ] Nenhuma chamada para campo resolvido por regra.
-- [ ] Sugestão sem trecho literal é descartada.
-- [ ] Precisão medida registrada antes de ligar por padrão.
+- [x] Nenhuma chamada para campo resolvido por regra (`unknown_fields` filtra antes de
+      montar o prompt; `test_suggest_fields_never_persists_a_field_already_resolved_by_rule`).
+- [x] Sugestão sem trecho literal é descartada (`test_suggest_fields_discards_suggestion_without_literal_evidence`).
+- [x] Precisão medida registrada antes de ligar por padrão — medição sintética/offline em
+      `docs/pesquisas/sugestoes-f20-23.md`; medição no acervo real é o passo restante,
+      registrado no mesmo arquivo, e `worker_suggest_enabled` continua `False`.
 
 ## Testes
 
