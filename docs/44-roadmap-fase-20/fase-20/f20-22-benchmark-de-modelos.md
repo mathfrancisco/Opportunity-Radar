@@ -1,6 +1,11 @@
 # CARD F20-22 — Benchmark 120B × 20B × Qwen e escolha por tarefa
 
-- **Status:** Backlog
+- **Status:** Em andamento — critério registrado, ferramental (`matching/benchmark.py`,
+  `scripts/benchmark_report.py`) e ponto de extensão de roteamento por tarefa
+  (`AI_REASONING_EFFORT_JOB_MATCH`/`_JOB_CLASSIFICATION`/`_JOB_EXTRACTION`) prontos e
+  testados sem chamada ao Groq (branch `feature/f20-22-benchmark`, 2026-09-27); faltam
+  5 das 6 rodadas reais e a rubrica humana de acerto de rótulo. Plano dia a dia em
+  `docs/pesquisas/benchmark-modelos-groq.md`.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-21
@@ -20,6 +25,19 @@ Com o harness do F20-21 e a flag `--model`, comparar variantes é rodar o mesmo 
 | --- | --- | --- |
 | Criar | `docs/pesquisas/benchmark-modelos-groq.md` | critério, resultados, decisão |
 | Alterar | `docs/43-spec-llm-cloud-e-consolidacao.md` | §6 com a rota decidida, se mudar |
+
+Fora desta lista, tocados nesta sessão (motivo registrado, sem chamada ao Groq nos
+testes, sem mudar elegibilidade/score/veredito/fatores):
+
+| Ação | Caminho | Motivo |
+| --- | --- | --- |
+| Criar | `src/opportunity_radar/matching/benchmark.py` | funções puras que comparam os JSON de `scripts/eval_analysis.py` (`variant_from_report`, `decide`) — o "gerador de comparação/relatório" pedido pelo passo 3 |
+| Criar | `scripts/benchmark_report.py` | CLI fina sobre `matching/benchmark.py`, para tabular várias rodadas sem reabrir cada JSON à mão |
+| Criar | `tests/backend/matching/test_benchmark.py` | testes das funções puras acima com relatórios fabricados |
+| Alterar | `src/opportunity_radar/platform/config.py` | `AI_REASONING_EFFORT_JOB_MATCH`/`_JOB_CLASSIFICATION`/`_JOB_EXTRACTION`, todos `None` por padrão — o ponto de extensão do passo 5 (F20-09), sem mudar nenhum padrão hoje |
+| Alterar | `src/opportunity_radar/platform/ai/tasks.py` | `default_routes` lê o override por tarefa quando presente, senão `ai_reasoning_effort` — mesmo resultado de antes enquanto nenhum override for setado |
+| Alterar | `tests/backend/platform/ai/test_router.py`, `tests/backend/platform/ai/test_config.py` | cobrem o override acima e sua validação |
+| Alterar | `.env.example` | três variáveis novas, vazias — mantém `test_env_example_lists_every_new_variable` verde |
 
 ## Passos
 
