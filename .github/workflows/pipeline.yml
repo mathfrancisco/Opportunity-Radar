@@ -142,6 +142,15 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
       - name: Validate frontend
         run: npm run check
+      - name: Validate nginx config syntax
+        # Cheap syntax gate for the DNS-resolver fix (F20 §5): a variable-based
+        # proxy_pass has to keep parsing cleanly, since a typo there only shows up
+        # at container start, not at build time.
+        working-directory: ${{ github.workspace }}
+        run: |
+          docker run --rm \
+            -v "$PWD/docker/frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
+            nginx:1.27.4-alpine nginx -t
 
   e2e:
     name: Compose / smoke E2E and persistence

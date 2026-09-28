@@ -3,7 +3,7 @@ import { type ReactElement, act } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render } from '../components/testing'
-import { SavedSearchesWithNews } from './OverviewPage'
+import { OverviewPage, SavedSearchesWithNews } from './OverviewPage'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -125,5 +125,152 @@ describe('SavedSearchesWithNews', () => {
       '/api/saved-searches/saved-1',
       expect.objectContaining({ method: 'PATCH' }),
     )
+  })
+})
+
+/** Minimal `/overview` body; every count defaults through `count()` to 0. */
+function overviewBody(overrides: Record<string, unknown> = {}) {
+  return {
+    opportunities_total: 0,
+    opportunities_active: 0,
+    new_opportunities: 0,
+    new_opportunity_window_days: 7,
+    assessed_opportunities: 0,
+    verdict_counts: {},
+    analyses_degraded: 0,
+    sources_total: 5,
+    sources_enabled: 5,
+    sources_failing: 0,
+    failing_sources: [],
+    pending_normalizations: 0,
+    applications_active: 0,
+    applications_by_stage: {},
+    follow_ups_due: 0,
+    follow_up_window_days: 7,
+    precision_percent: null,
+    precision_marked_count: 0,
+    companies_covered: 0,
+    companies_with_ats: 0,
+    ...overrides,
+  }
+}
+
+function failingSource(sourceType: string) {
+  return {
+    source_definition_id: `source-${sourceType}`,
+    name: `Fonte ${sourceType}`,
+    source_type: sourceType,
+    enabled: true,
+    last_run_status: 'FAILED',
+    last_run_finished_at: '2040-01-01T00:00:00Z',
+    last_run_error: 'timeout',
+  }
+}
+
+/** One `/source-metrics` row per ATS type, all `SUCCEEDED`, no incidents. */
+function sourceMetricsRow(sourceType: string) {
+  return {
+    source_definition_id: `source-${sourceType}`,
+    name: `Fonte ${sourceType}`,
+    source_type: sourceType,
+    enabled: true,
+    schedule: null,
+    coverage_state: 'SUCCEEDED',
+    runs: 1,
+    runs_succeeded: 1,
+    runs_partial: 0,
+    runs_failed: 0,
+    items_seen: 2,
+    items_persisted: 2,
+    items_skipped: 0,
+    items_invalid: 0,
+    latency_p95_seconds: 1.2,
+    error_rate: 0,
+    dedupe_rate: 0,
+    has_runs: true,
+    errors_by_code: {},
+    seniority: {
+      counts: {},
+      percentages: {},
+      known: 0,
+      unknown: 0,
+      total: 0,
+      mapping_versions: {},
+      evidence: {},
+    },
+    incident_open: false,
+  }
+}
+
+const disabledAnalysisMetrics = {
+  generated_at: '2040-01-01T00:00:00Z',
+  current_model: '',
+  pending: 0,
+  windows: [],
+  ai: { state: 'disabled', window_hours: 24, by_model: [], cache_hit_rate: null },
+}
+
+/** Routes /overview, /source-metrics, /analysis-metrics and /saved-searches by URL. */
+function stubOverviewFetch(overview: ReturnType<typeof overviewBody>, sourceTypes: string[]) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: unknown) => {
+      const url = String(input)
+      if (url.endsWith('/saved-searches')) return new Response('[]', { status: 200 })
+      if (url.endsWith('/overview')) return new Response(JSON.stringify(overview), { status: 200 })
+      if (url.endsWith('/analysis-metrics')) {
+        return new Response(JSON.stringify(disabledAnalysisMetrics), { status: 200 })
+      }
+      if (url.endsWith('/source-metrics')) {
+        return new Response(
+          JSON.stringify({
+            generated_at: '2040-01-01T00:00:00Z',
+            windows: [
+              { window: '24h', since: '', until: '', sources: sourceTypes.map(sourceMetricsRow) },
+              { window: '7d', since: '', until: '', sources: [] },
+            ],
+          }),
+          { status: 200 },
+        )
+      }
+      return new Response('{}', { status: 404 })
+    }),
+  )
+}
+
+// F20 §5: the Overview page had no component test covering the ATS types added after
+// the collector work (workday, teamtailor, workable, factorial, jobposting) — this
+// proves the failing-sources list and the per-source metrics table both render them by
+// name instead of dropping to "unknown" or crashing.
+describe('OverviewPage — novos ATS', () => {
+  const newAtsTypes = ['workday', 'teamtailor', 'workable', 'factorial', 'jobposting']
+
+  it('lista fontes com falha dos novos ATS, com nome e tipo', async () => {
+    stubOverviewFetch(
+      overviewBody({
+        sources_failing: newAtsTypes.length,
+        failing_sources: newAtsTypes.map(failingSource),
+      }),
+      [],
+    )
+
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    for (const sourceType of newAtsTypes) {
+      expect(container.textContent).toContain(`(${sourceType})`)
+    }
+  })
+
+  it('mostra a métrica por fonte de cada novo ATS na janela de 24h', async () => {
+    stubOverviewFetch(overviewBody(), newAtsTypes)
+
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    for (const sourceType of newAtsTypes) {
+      expect(container.textContent).toContain(sourceType)
+    }
+    expect(container.textContent).toContain('saudáveis')
   })
 })

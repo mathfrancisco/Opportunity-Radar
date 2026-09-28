@@ -81,7 +81,8 @@ reais).
 | F20-36: board da Airbyte | `404` real; nova rodada de descoberta |
 | API sem endpoint para editar `schedule` de fonte | Lacuna registrada |
 | Fixture `pre_f20_dump.sql` com `normalizer_version` escrito à mão | Quebra a cada troca de versão; derivar da constante |
-| Overview e Sources com ATS novos sem teste visual | Aberto |
+| Frontend nginx cacheia o IP do container `api`; recriar `api` sozinho devolve 502 até reiniciar o frontend | Resolvido (`PENDING_SHA`): `resolver 127.0.0.11 valid=10s ipv6=off;` e `proxy_pass` baseado em variável (`set $upstream_api api:8000;` + `rewrite` preservando o corte de `/api/`) em `docker/frontend/nginx.conf`; provado em projeto Compose isolado (`-p f20ngx`): depois de `up -d --force-recreate api`, `/api/health` respondeu 200 pelo frontend sem reiniciá-lo. Gate barato de sintaxe (`nginx -t`) adicionado ao job `frontend` de `.github/workflows/pipeline.yml` |
+| Overview e Sources com ATS novos sem teste visual | Resolvido (`PENDING_SHA`): testes de componente cobrindo `workday`, `teamtailor`, `workable`, `factorial` e `jobposting` em `apps/web/src/routes/SourcesPage.test.tsx` (novo) e `apps/web/src/routes/OverviewPage.test.tsx` (fontes com falha e métricas por fonte) |
 | GitGuardian no PR #25 | Causa não confirmada |
 | Rotacionar a chave Groq usada nas rodadas | Com o usuário |
 
