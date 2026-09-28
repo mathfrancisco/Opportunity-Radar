@@ -101,7 +101,7 @@ veio na resposta.
 
 - Comparação de 7 dias antes/depois na máquina de referência (requisições, bytes,
   frescor, cobertura sob os mesmos tetos) — não medida aqui; depende da janela de 7 dias
-  do F20-35 (iniciada em 2026-09-26, termina 2026-10-04) mais operação contínua depois
+  do F20-35 (iniciada em 2026-09-26, termina 2026-10-05) mais operação contínua depois
   desta sessão.
 - ~~Envio real de `If-None-Match`/`If-Modified-Since` pelos coletores de produção~~ —
   **resolvido em 2026-09-27**, ver seção acima e
@@ -293,3 +293,6 @@ Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
 ## Pronto quando
 
 Todos os critérios de aceite estão marcados com evidência, o comando de verificação passa e o CI está verde.
+
+
+> **Reinício da janela de sete dias (2026-09-28).** O T0 anterior (`2026-09-27T00:52:16Z`) não valia: a stack real `opportunity-radar` ficou parada depois do reprocessamento `skills-v3` e o Docker Desktop esteve desligado, então não houve operação contínua. A stack real foi religada com o código atual e um novo T0 foi capturado em `2026-09-28T00:45:09Z` (`docs/44-roadmap-fase-20/evidencias/f20-janela-7d-t0-2026-09-28.json`: 20 fontes ativas, 648 oportunidades). A janela termina em `2026-10-05T00:45Z`; a stack precisa ficar ligada sem interrupção até lá.

@@ -1,0 +1,493 @@
+{
+  "captured_at": "2026-09-28T00:45:09Z",
+  "stack": "opportunity-radar (real, continuous)",
+  "search_metrics": {
+    "window_days": 7,
+    "generated_at": "2026-09-28T00:45:10.779467Z",
+    "coverage": {
+      "window_days": 7,
+      "runs": 21,
+      "items_seen": 673,
+      "items_persisted": 670,
+      "items_duplicate": 3,
+      "items_invalid": 0,
+      "new_opportunities": 648,
+      "companies_covered": 15,
+      "companies_with_ats": 55,
+      "seniority_unknown_rate": "0.5061728395061728395061728395",
+      "role_family_unknown_rate": "0.1172839506172839506172839506",
+      "by_source": [
+        {
+          "source_definition_id": "ff1007a4-f1c3-49d1-af84-c2583565e5a4",
+          "name": "AssemblyAI jobs",
+          "runs": 1,
+          "items_seen": 10,
+          "items_persisted": 10,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 10
+        },
+        {
+          "source_definition_id": "514ff08d-ead3-4dc0-90ab-772619d9cd43",
+          "name": "Browserbase jobs",
+          "runs": 1,
+          "items_seen": 9,
+          "items_persisted": 9,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 9
+        },
+        {
+          "source_definition_id": "c8090347-4fe8-4f67-b1ee-068fcccf1b16",
+          "name": "CI Ashby activation",
+          "runs": 1,
+          "items_seen": 0,
+          "items_persisted": 0,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 0
+        },
+        {
+          "source_definition_id": "da73ef0f-34cc-4c6f-aa1d-f2d423ac1f48",
+          "name": "CI&T jobs",
+          "runs": 1,
+          "items_seen": 184,
+          "items_persisted": 184,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 184
+        },
+        {
+          "source_definition_id": "cd30e4ae-151f-4a98-8bc9-c7a002bebcda",
+          "name": "Cartesia jobs",
+          "runs": 1,
+          "items_seen": 30,
+          "items_persisted": 30,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 30
+        },
+        {
+          "source_definition_id": "59ca7429-cc46-403c-bfe3-eb5ea0d6435f",
+          "name": "Clerk jobs",
+          "runs": 1,
+          "items_seen": 2,
+          "items_persisted": 2,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 2
+        },
+        {
+          "source_definition_id": "d1724fd0-72f9-48e2-81a6-ac5cc3c876f5",
+          "name": "Firecrawl jobs",
+          "runs": 1,
+          "items_seen": 31,
+          "items_persisted": 31,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 31
+        },
+        {
+          "source_definition_id": "ce1095cd-3b5f-4eb9-820a-5c9e6fdc4b71",
+          "name": "Inngest jobs",
+          "runs": 1,
+          "items_seen": 1,
+          "items_persisted": 1,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 1
+        },
+        {
+          "source_definition_id": "0a083ab8-5747-4d2d-a2a1-e91179626b19",
+          "name": "Manual MVP intake",
+          "runs": 2,
+          "items_seen": 6,
+          "items_persisted": 3,
+          "items_duplicate": 3,
+          "items_invalid": 0,
+          "new_opportunities": 0
+        },
+        {
+          "source_definition_id": "3c57ed82-9e6b-40fa-bf3c-c21a44a796d5",
+          "name": "Nubank jobs",
+          "runs": 1,
+          "items_seen": 117,
+          "items_persisted": 117,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 117
+        },
+        {
+          "source_definition_id": "0c723809-cf9d-4dd4-a1db-d5ac91d34083",
+          "name": "Probe board 1d850703",
+          "runs": 1,
+          "items_seen": 0,
+          "items_persisted": 0,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 0
+        },
+        {
+          "source_definition_id": "02eb309a-1a92-47af-a538-14736da4ce20",
+          "name": "Probe board 932174b3",
+          "runs": 1,
+          "items_seen": 0,
+          "items_persisted": 0,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 0
+        },
+        {
+          "source_definition_id": "88ea79ab-0a2f-4fb7-ac89-1b2700786633",
+          "name": "Remotive remote jobs",
+          "runs": 1,
+          "items_seen": 19,
+          "items_persisted": 19,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 0
+        },
+        {
+          "source_definition_id": "2c616aba-729d-488a-926f-63a132566f81",
+          "name": "Render jobs",
+          "runs": 1,
+          "items_seen": 40,
+          "items_persisted": 40,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 40
+        },
+        {
+          "source_definition_id": "9a28777e-67bb-4d21-8f24-751022538d4d",
+          "name": "RevenueCat jobs",
+          "runs": 1,
+          "items_seen": 19,
+          "items_persisted": 19,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 19
+        },
+        {
+          "source_definition_id": "054e4e4b-92b7-43ad-a127-699c2be54386",
+          "name": "Spotify jobs",
+          "runs": 1,
+          "items_seen": 79,
+          "items_persisted": 79,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 79
+        },
+        {
+          "source_definition_id": "c12385ea-e1cc-42d6-92c3-afea78c7e9c1",
+          "name": "Supabase jobs",
+          "runs": 1,
+          "items_seen": 56,
+          "items_persisted": 56,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 56
+        },
+        {
+          "source_definition_id": "5b535c50-4961-4347-a1c4-3b3432228052",
+          "name": "Trigger.dev jobs",
+          "runs": 1,
+          "items_seen": 6,
+          "items_persisted": 6,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 6
+        },
+        {
+          "source_definition_id": "ff072423-40e8-44eb-a2c9-1a26623e7b0f",
+          "name": "WorkOS jobs",
+          "runs": 1,
+          "items_seen": 29,
+          "items_persisted": 29,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 29
+        },
+        {
+          "source_definition_id": "f1e16309-c351-461f-9a7b-ff37bd1bea3a",
+          "name": "n8n jobs",
+          "runs": 1,
+          "items_seen": 35,
+          "items_persisted": 35,
+          "items_duplicate": 0,
+          "items_invalid": 0,
+          "new_opportunities": 35
+        }
+      ]
+    },
+    "precision": {
+      "sample_size": 50,
+      "marked_count": 45,
+      "relevant_count": 20,
+      "precision": "0.4444444444444444444444444444"
+    },
+    "company_coverage_funnel": {
+      "window_days": 7,
+      "generated_at": "2026-09-28T00:45:11.004994Z",
+      "canonical_companies_total": 223,
+      "stages": [
+        {
+          "stage": "cataloged",
+          "companies": 223,
+          "of_previous": null
+        },
+        {
+          "stage": "endpoint_discovered",
+          "companies": 222,
+          "of_previous": 223
+        },
+        {
+          "stage": "homologated",
+          "companies": 15,
+          "of_previous": 222
+        },
+        {
+          "stage": "enabled",
+          "companies": 15,
+          "of_previous": 15
+        },
+        {
+          "stage": "collected_recently",
+          "companies": 15,
+          "of_previous": 15
+        }
+      ],
+      "enabled_but_unhealthy": 0
+    },
+    "useful_yield": {
+      "window_days": 7,
+      "requests": 20,
+      "new_unique_opportunities": 648,
+      "judged_opportunities": 141,
+      "judged_relevant": 59,
+      "judgement_rate": "0.4184397163120567375886524823",
+      "yield_per_100_requests": "295",
+      "discovery_delay_p50_seconds": 3936590.029129,
+      "discovery_delay_p95_seconds": 29579699.4972439,
+      "contribution_by_source": {
+        "054e4e4b-92b7-43ad-a127-699c2be54386": 79,
+        "2c616aba-729d-488a-926f-63a132566f81": 40,
+        "3c57ed82-9e6b-40fa-bf3c-c21a44a796d5": 117,
+        "514ff08d-ead3-4dc0-90ab-772619d9cd43": 9,
+        "59ca7429-cc46-403c-bfe3-eb5ea0d6435f": 2,
+        "5b535c50-4961-4347-a1c4-3b3432228052": 6,
+        "9a28777e-67bb-4d21-8f24-751022538d4d": 19,
+        "c12385ea-e1cc-42d6-92c3-afea78c7e9c1": 56,
+        "cd30e4ae-151f-4a98-8bc9-c7a002bebcda": 30,
+        "ce1095cd-3b5f-4eb9-820a-5c9e6fdc4b71": 1,
+        "d1724fd0-72f9-48e2-81a6-ac5cc3c876f5": 31,
+        "da73ef0f-34cc-4c6f-aa1d-f2d423ac1f48": 184,
+        "f1e16309-c351-461f-9a7b-ff37bd1bea3a": 35,
+        "ff072423-40e8-44eb-a2c9-1a26623e7b0f": 29,
+        "ff1007a4-f1c3-49d1-af84-c2583565e5a4": 10
+      }
+    }
+  },
+  "analysis_metrics": {
+    "generated_at": "2026-09-28T00:45:11.060955Z",
+    "current_model": "openai/gpt-oss-120b",
+    "pending": 373,
+    "windows": [
+      {
+        "window": "24h",
+        "since": "2026-09-27T00:45:11.060955Z",
+        "until": "2026-09-28T00:45:11.060955Z",
+        "models": [
+          {
+            "model_id": "openai/gpt-oss-120b",
+            "analyses": 3,
+            "completed": 3,
+            "failed": 0,
+            "total_ms_p50": 1443.0,
+            "total_ms_p95": 1938.9,
+            "total_ms_p99": 1982.98,
+            "prompt_tokens_avg": 1117.0,
+            "output_tokens_avg": 461.0,
+            "load_ms_avg": null,
+            "failure_rate": 0.0,
+            "failure_rates": {},
+            "reuse_rate": 0.0
+          }
+        ]
+      },
+      {
+        "window": "7d",
+        "since": "2026-09-21T00:45:11.060955Z",
+        "until": "2026-09-28T00:45:11.060955Z",
+        "models": [
+          {
+            "model_id": "openai/gpt-oss-120b",
+            "analyses": 529,
+            "completed": 108,
+            "failed": 421,
+            "total_ms_p50": 1633.5,
+            "total_ms_p95": 2600.25,
+            "total_ms_p99": 3095.9999999999986,
+            "prompt_tokens_avg": 1124.4444444444443,
+            "output_tokens_avg": 482.3611111111111,
+            "load_ms_avg": null,
+            "failure_rate": 0.7958412098298677,
+            "failure_rates": {
+              "QUOTA_EXHAUSTED": 0.7939508506616257,
+              "SERVER_ERROR": 0.001890359168241966
+            },
+            "reuse_rate": 0.0
+          },
+          {
+            "model_id": "disabled",
+            "analyses": 144,
+            "completed": 0,
+            "failed": 0,
+            "total_ms_p50": null,
+            "total_ms_p95": null,
+            "total_ms_p99": null,
+            "prompt_tokens_avg": null,
+            "output_tokens_avg": null,
+            "load_ms_avg": null,
+            "failure_rate": 0.0,
+            "failure_rates": {},
+            "reuse_rate": null
+          },
+          {
+            "model_id": "qwen/qwen3.8-27b",
+            "analyses": 44,
+            "completed": 44,
+            "failed": 0,
+            "total_ms_p50": 2078.0,
+            "total_ms_p95": 2580.2,
+            "total_ms_p99": 2812.15,
+            "prompt_tokens_avg": 991.3863636363636,
+            "output_tokens_avg": 803.7272727272727,
+            "load_ms_avg": null,
+            "failure_rate": 0.0,
+            "failure_rates": {},
+            "reuse_rate": 0.0
+          }
+        ]
+      }
+    ],
+    "ai": {
+      "state": "enabled",
+      "window_hours": 24,
+      "by_model": [
+        {
+          "model": "openai/gpt-oss-120b",
+          "requests": 3,
+          "success_rate": 1.0,
+          "rate_limited_rate": 0.0,
+          "fallback_rate": 0.0,
+          "latency_ms_avg": 1607.3333333333333,
+          "latency_ms_p95": 1938.9,
+          "prompt_tokens": 3351,
+          "completion_tokens": 1383,
+          "json_valid_rate": 1.0,
+          "breaker": "closed",
+          "day_requests_used": 3,
+          "day_requests_limit": 850,
+          "day_tokens_used": 4734,
+          "day_tokens_limit": 170000
+        }
+      ],
+      "cache_hit_rate": 0.0
+    }
+  },
+  "overview": {
+    "opportunities_total": 648,
+    "opportunities_active": 0,
+    "new_opportunities": 648,
+    "new_opportunity_window_days": 7,
+    "assessed_opportunities": 648,
+    "verdict_counts": {
+      "INELIGIBLE": 156,
+      "REVIEW_REQUIRED": 492
+    },
+    "analyses_degraded": 166,
+    "sources_total": 24,
+    "sources_enabled": 20,
+    "sources_failing": 3,
+    "failing_sources": [
+      {
+        "source_definition_id": "02eb309a-1a92-47af-a538-14736da4ce20",
+        "name": "Probe board 932174b3",
+        "source_type": "greenhouse",
+        "enabled": true,
+        "evidence_status": "confirmed",
+        "terms_reviewed": true,
+        "collector_local_tested": true,
+        "schedule": null,
+        "version": 1,
+        "last_run_id": "4436b4d2-820d-4c67-9d7a-f6b56f990aea",
+        "last_run_status": "FAILED",
+        "last_run_started_at": "2026-09-26T04:20:30.309568Z",
+        "last_run_finished_at": "2026-09-26T04:20:30.510406Z",
+        "last_run_duration_seconds": 0.200838,
+        "last_run_error_code": "SOURCE_NOT_FOUND",
+        "last_run_error": "Greenhouse returned HTTP 404",
+        "last_run_items_seen": 0,
+        "last_run_items_persisted": 0,
+        "last_run_items_skipped": 0,
+        "last_run_items_invalid": 0,
+        "seniority_counts": {}
+      },
+      {
+        "source_definition_id": "0c723809-cf9d-4dd4-a1db-d5ac91d34083",
+        "name": "Probe board 1d850703",
+        "source_type": "greenhouse",
+        "enabled": true,
+        "evidence_status": "confirmed",
+        "terms_reviewed": true,
+        "collector_local_tested": true,
+        "schedule": null,
+        "version": 3,
+        "last_run_id": "5b980b8a-aac9-4a72-a047-9057f9d0cb0c",
+        "last_run_status": "FAILED",
+        "last_run_started_at": "2026-09-26T04:20:29.979028Z",
+        "last_run_finished_at": "2026-09-26T04:20:30.225166Z",
+        "last_run_duration_seconds": 0.246138,
+        "last_run_error_code": "SOURCE_NOT_FOUND",
+        "last_run_error": "Greenhouse returned HTTP 404",
+        "last_run_items_seen": 0,
+        "last_run_items_persisted": 0,
+        "last_run_items_skipped": 0,
+        "last_run_items_invalid": 0,
+        "seniority_counts": {}
+      },
+      {
+        "source_definition_id": "c8090347-4fe8-4f67-b1ee-068fcccf1b16",
+        "name": "CI Ashby activation",
+        "source_type": "ashby",
+        "enabled": true,
+        "evidence_status": "confirmed",
+        "terms_reviewed": true,
+        "collector_local_tested": true,
+        "schedule": null,
+        "version": 2,
+        "last_run_id": "e373eeed-5004-45b4-8f63-f3718179aa70",
+        "last_run_status": "FAILED",
+        "last_run_started_at": "2026-09-26T04:20:29.623715Z",
+        "last_run_finished_at": "2026-09-26T04:20:29.862508Z",
+        "last_run_duration_seconds": 0.238793,
+        "last_run_error_code": "SOURCE_NOT_FOUND",
+        "last_run_error": "Ashby returned HTTP 404",
+        "last_run_items_seen": 0,
+        "last_run_items_persisted": 0,
+        "last_run_items_skipped": 0,
+        "last_run_items_invalid": 0,
+        "seniority_counts": {}
+      }
+    ],
+    "pending_normalizations": 0,
+    "applications_active": 0,
+    "applications_by_stage": {},
+    "follow_ups_due": 0,
+    "follow_up_window_days": 7,
+    "precision_percent": "44.44444444444444444444444444",
+    "precision_marked_count": 45,
+    "companies_covered": 15,
+    "companies_with_ats": 55
+  }
+}

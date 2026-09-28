@@ -42,7 +42,7 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 | F20-32 | Fechado — não viável em 2026-09-27. Termos de Uso da Gupy proíbem nominalmente agregar/copiar/duplicar vagas (`docs/pesquisas/termos-gupy.md`); nenhum código de coletor foi escrito. | Sem pendência de implementação — card encerrado pela revisão de termos. |
 | F20-33 | Palavras-chave do perfil em `b7f432e` e `e9be146`; critério 4 confirmado (`git diff --stat b7f432e~1..e9be146 -- scripts/enable_sources.py` vazio; roteiro em `docs/44-roadmap-fase-20/rotulagem/f20-33-verificacao-criterio-4.md`). | Sem pendência de implementação identificada. |
 | F20-34 | Buscas salvas em `5088e6`; testes de componente da Inbox (`SaveSearchForm`, `SavedSearches`) e da Overview (`SavedSearchesWithNews`) em `70a0a40` (`apps/web/src/routes/InboxPage.test.tsx`, `OverviewPage.test.tsx`); `npm run check` verde (lint, types, 28 arquivos/145 testes, build). | Sem pendência de implementação identificada. |
-| F20-35 | Funil e rendimento em `102a53d`; janela de baseline de 7 dias iniciada em 2026-09-26 (T0 real salvo em `f20-search-metrics-baseline-2026-09-26.json`), termina 2026-10-04. | Medir a janela de 7 dias completa na máquina de referência (não pode terminar antes de 2026-10-04). |
+| F20-35 | Funil e rendimento em `102a53d`; janela de baseline de 7 dias iniciada em 2026-09-26 (T0 real salvo em `f20-search-metrics-baseline-2026-09-26.json`), termina 2026-10-05. | Medir a janela de 7 dias completa na máquina de referência (não pode terminar antes de 2026-10-05). |
 | F20-36 | Descoberta limitada (`acquisition/limited_discovery.py`) e migração `20260926_0044` em `feature/f20-36-37-sites`; validada com dados reais em 2026-09-27 (ver `evidencias/sites-jobposting-2026-09-27.md`). | Sem pendência de implementação identificada. |
 | F20-37 | Coletor JobPosting (`acquisition/jobposting.py`) em `feature/f20-36-37-sites`; validado com dados reais em 2026-09-27 (Qonto, Scaleway, Sonar via Lever). | Sem pendência de implementação identificada. |
 | F20-38 | Agenda adaptativa e HTTP condicional em `f14bc6e`; em 2026-09-27, os 8 coletores HTTP (ashby/greenhouse/lever/remotive/workday/teamtailor/workable/factorial) passaram a enviar `If-None-Match`/`If-Modified-Since` e reportar 304/`ETag`/`Last-Modified` via `acquisition/http_conditional.py`; 304 real confirmado em Greenhouse (Lokalise) e Teamtailor (Seedtag) na pilha isolada `f20cond`, com bytes evitados medidos (19.820 e 345.111 bytes). | Medir operação real (comparação de 7 dias, depende da janela do F20-35) e orçamento por host compartilhado entre duas fontes reais do mesmo host (nenhum par do catálogo importado compartilha host ainda). |
@@ -106,7 +106,10 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
    F20-35, custo de IA do F20-21) preenchidos com dados reais em
    `docs/pesquisas/produtividade-fase-20.md`; nenhuma chamada ao Groq feita nesta sessão
    (quota diária já esgotada pela rodada F20-21). A janela de 7 dias aberta pelo F20-35
-   em `2026-09-27T00:52:16Z` só fecha em 2026-10-04 — todas as células de resultado (T7)
+   em `2026-09-27T00:52:16Z` só fecha em 2026-10-05 — todas as células de resultado (T7)
    ficam marcadas "pendente"/"inconclusivo" até lá, com o comando exato para preenchê-las
    documentado na §4 do relatório. Nenhum teste novo (card não muda comportamento de
    sistema).
+
+
+> **Reinício da janela de sete dias (2026-09-28).** O T0 anterior (`2026-09-27T00:52:16Z`) não valia: a stack real `opportunity-radar` ficou parada depois do reprocessamento `skills-v3` e o Docker Desktop esteve desligado, então não houve operação contínua. A stack real foi religada com o código atual e um novo T0 foi capturado em `2026-09-28T00:45:09Z` (`docs/44-roadmap-fase-20/evidencias/f20-janela-7d-t0-2026-09-28.json`: 20 fontes ativas, 648 oportunidades). A janela termina em `2026-10-05T00:45Z`; a stack precisa ficar ligada sem interrupção até lá.

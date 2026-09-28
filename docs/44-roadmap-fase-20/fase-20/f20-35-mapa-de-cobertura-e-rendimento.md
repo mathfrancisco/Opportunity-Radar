@@ -37,7 +37,7 @@ Cada empresa mostra se está coberta, por que não está e qual é a próxima a�
   - **Janela iniciada em 2026-09-26.** Snapshot T0 real (`/search-metrics` na pilha
     isolada `f20real`, gerado em `2026-09-27T00:52:16Z`) salvo em
     `docs/44-roadmap-fase-20/evidencias/f20-search-metrics-baseline-2026-09-26.json`.
-    Fim previsto: `2026-10-04`. Continua pendente porque exige o worker de coleta (ou
+    Fim previsto: `2026-10-05`. Continua pendente porque exige o worker de coleta (ou
     execuções periódicas de `make collect`) operando por 7 dias reais depois deste
     ponto — não pode terminar nesta sessão. Ver
     `docs/44-roadmap-fase-20/evidencias/homologacao-real-2026-09-26.md` §3.
@@ -209,3 +209,6 @@ Se o card mexer em `apps/web`, rodar também `cd apps/web && npm run check`.
 ## Pronto quando
 
 Todos os critérios de aceite estão marcados com evidência, o comando de verificação passa e o CI está verde.
+
+
+> **Reinício da janela de sete dias (2026-09-28).** O T0 anterior (`2026-09-27T00:52:16Z`) não valia: a stack real `opportunity-radar` ficou parada depois do reprocessamento `skills-v3` e o Docker Desktop esteve desligado, então não houve operação contínua. A stack real foi religada com o código atual e um novo T0 foi capturado em `2026-09-28T00:45:09Z` (`docs/44-roadmap-fase-20/evidencias/f20-janela-7d-t0-2026-09-28.json`: 20 fontes ativas, 648 oportunidades). A janela termina em `2026-10-05T00:45Z`; a stack precisa ficar ligada sem interrupção até lá.

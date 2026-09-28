@@ -1,7 +1,7 @@
 # Relatório de produtividade e custo — Fase 20 (F20-49)
 
 - **Status:** Metas pré-registradas e baseline (T0) preenchidos com dados reais; janela
-  de 7 dias **em andamento**, fecha em 2026-10-04 — resultado (T7) e veredicto de cada
+  de 7 dias **em andamento**, fecha em 2026-10-05 — resultado (T7) e veredicto de cada
   meta ficam **inconclusivos** até lá (ver "Não fazer" do card: nada de amostra
   insuficiente é declarado como ganho ou perda).
 - **Card:** [F20-49](../44-roadmap-fase-20/fase-20/f20-49-relatorio-de-produtividade.md)
@@ -46,7 +46,7 @@ Snapshot real de `GET /search-metrics?window=7d` (pilha `f20real`, F20-35), salv
 
 Esta janela é a mesma aberta pelo F20-35 (não uma segunda janela concorrente medindo um
 período diferente): início real `2026-09-27T00:52:16.424759Z`, fim previsto
-`2026-10-04`. O T0 é baixo porque as duas execuções da janela até agora foram
+`2026-10-05`. O T0 é baixo porque as duas execuções da janela até agora foram
 verificações pontuais de homologação (F20-28/F20-29), não o scheduler operando em
 regime — isso é esperado no início da janela, não uma medição de regime.
 
@@ -92,7 +92,7 @@ aqui como base de confiança, não como linha da tabela de resultado.
 
 ## 3. Resultado (T0 vs. T7) — preencher ao fim da janela
 
-| Métrica | Meta | T0 (2026-09-27) | T7 (2026-10-04, pendente) | Veredicto |
+| Métrica | Meta | T0 (2026-09-27) | T7 (2026-10-05, pendente) | Veredicto |
 | --- | --- | --- | --- | --- |
 | Vagas úteis novas / dia | ≥ 1/dia | 0 novas em 2 execuções pontuais | **pendente** | inconclusivo — sem T7 |
 | Análises de IA concluídas / dia | ≥ 1/dia | não medido em produção (só avaliação) | **pendente** | inconclusivo — sem T7 |
@@ -105,39 +105,39 @@ aqui como base de confiança, não como linha da tabela de resultado.
 
 Nenhuma célula acima foi preenchida com dado sintético ou extrapolado — cada "pendente"
 é literal: a amostra ainda não existe porque a janela de 7 dias (F20-35) só termina em
-2026-10-04, e não pode ser encurtada sem invalidar a própria medição que o card pede.
+2026-10-05, e não pode ser encurtada sem invalidar a própria medição que o card pede.
 
 ## 4. Como preencher T7 (comando exato, restante do trabalho)
 
-Executar em ou depois de **2026-10-04**, contra o ambiente que acumulou a operação real
+Executar em ou depois de **2026-10-05**, contra o ambiente que acumulou a operação real
 da janela (não uma pilha isolada nova — precisa ser o mesmo Postgres que rodou desde
 2026-09-27):
 
 ```bash
 # 1. Cobertura e rendimento de busca (mesmo endpoint do T0, mesma janela de 7 dias)
 curl -s 'http://localhost:8000/search-metrics?window=7d' | tee \
-  docs/44-roadmap-fase-20/evidencias/f20-search-metrics-t7-2026-10-04.json
+  docs/44-roadmap-fase-20/evidencias/f20-search-metrics-t7-2026-10-05.json
 
 # 2. Métricas de IA (fallback, 429, json_valid_rate, tokens/dia por modelo — bloco `ai`
 #    é uma janela fixa de 24h, então repetir esta chamada uma vez por dia dentro da
 #    janela e somar/mediar os 7 snapshots é o que dá o número de 7 dias; um único
-#    snapshot em 2026-10-04 só cobre as últimas 24h da janela)
+#    snapshot em 2026-10-05 só cobre as últimas 24h da janela)
 curl -s 'http://localhost:8000/analysis-metrics?window=7d' | tee \
-  docs/44-roadmap-fase-20/evidencias/f20-analysis-metrics-t7-2026-10-04.json
+  docs/44-roadmap-fase-20/evidencias/f20-analysis-metrics-t7-2026-10-05.json
 
 # 3. Créditos Tavily gastados na janela (leitura, projeto real permitido apenas para
 #    SELECT — não gravar nada fora deste comando)
 docker compose -p opportunity-radar exec -T postgres psql -U postgres -d opportunity_radar -c \
   "SELECT date_trunc('day', started_at) AS day, sum(credits_used) AS credits \
    FROM acquisition.source_run \
-   WHERE started_at >= '2026-09-27T00:52:16Z' AND started_at < '2026-10-04T00:52:16Z' \
+   WHERE started_at >= '2026-09-27T00:52:16Z' AND started_at < '2026-10-05T00:52:16Z' \
    GROUP BY 1 ORDER BY 1;"
 
 # 4. Erros por tipo na janela (mesma tabela de telemetria do F20-19/F20-20)
 docker compose -p opportunity-radar exec -T postgres psql -U postgres -d opportunity_radar -c \
   "SELECT model, error_kind, count(*) \
    FROM platform.ai_call_record \
-   WHERE created_at >= '2026-09-27T00:52:16Z' AND created_at < '2026-10-04T00:52:16Z' \
+   WHERE created_at >= '2026-09-27T00:52:16Z' AND created_at < '2026-10-05T00:52:16Z' \
    GROUP BY 1, 2 ORDER BY 3 DESC;"
 
 # 5. scripts/doctor.py para o veredito operacional do dia final (breaker aberto,
@@ -164,3 +164,6 @@ atualizar o `Status` no topo deste documento.
   um documento, não código; não há comportamento de sistema para cobrir com teste.
 - **Nenhum arquivo fora da lista "Arquivos" do card** foi alterado além do README e do
   estado-local (atualizações de status do roadmap, registradas no PR).
+
+
+> **Reinício da janela de sete dias (2026-09-28).** O T0 anterior (`2026-09-27T00:52:16Z`) não valia: a stack real `opportunity-radar` ficou parada depois do reprocessamento `skills-v3` e o Docker Desktop esteve desligado, então não houve operação contínua. A stack real foi religada com o código atual e um novo T0 foi capturado em `2026-09-28T00:45:09Z` (`docs/44-roadmap-fase-20/evidencias/f20-janela-7d-t0-2026-09-28.json`: 20 fontes ativas, 648 oportunidades). A janela termina em `2026-10-05T00:45Z`; a stack precisa ficar ligada sem interrupção até lá.
