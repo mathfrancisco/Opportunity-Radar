@@ -56,6 +56,33 @@ de `like` por construção. As duas consultas sem candidato por título (`kubern
 pois exigem leitura de descrição completa fora do escopo desta sessão. **F17-03/F20-01
 seguem "Em revisão"**, não `Done`.
 
+## Addendum — gabarito por full-text sobre `description`, medição bloqueada (2026-09-28)
+
+`docs/44-roadmap-fase-20/rotulagem/f20-01-relevancia-busca-fulltext.md` (branch
+`feature/f20-rotulos-2`) resolve o viés apontado no addendum anterior: os 128 candidatos
+(16 consultas × 8 vagas) agora vêm de `LIKE` sobre `description`, não sobre título/empresa.
+68/128 (53%) recomendados como relevantes, 19 (15%) ambíguos, 41 (32%) não relevantes —
+contra 98% de "relevante" no gabarito por título, porque agora o candidato pode ser um falso
+positivo de verdade (`java`/`javascript`, `aws`/`laws`, `react`/`reactively`, `node`/`nodes`,
+menção negada como `"NOT REQUIRED - machine learning"`, ou o termo descrevendo outra
+equipe/o produto da empresa, não o cargo). `kubernetes` e `frontend` — sem candidato algum
+no gabarito por título — tiveram 8/8 e 3/8 relevantes respectivamente.
+`data/search-reference/queries.json` foi reconstruído localmente com as 68 linhas
+`relevante`. **A rodada de `eval_search.py --mode both` não foi executada**: o Docker Desktop
+da máquina caiu e voltou sozinho entre a cópia do `queries.json` para dentro do container e o
+comando de avaliação (interrupção externa, não uma ação deste worker); os containers do
+projeto `opportunity-radar` ficaram `Exited (255)` e este worker não os reiniciou, por
+instrução explícita de nunca reiniciar o stack real. Comando pendente, documentado em
+`f20-01-relevancia-busca-fulltext.md`:
+
+```bash
+docker cp data/search-reference/queries.json opportunity-radar-api-1:/app/data/search-reference/queries.json
+docker exec opportunity-radar-api-1 python scripts/eval_search.py --mode both
+```
+
+**F17-03/F20-01 seguem "Em revisão"**: o gabarito agora é metodologicamente correto, mas os
+números comparáveis `like` vs `fulltext` com este gabarito ainda faltam.
+
 ## Não fazer
 
 - Não alterar código; este card só mede e documenta.

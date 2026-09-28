@@ -15,6 +15,20 @@ fecha cada lacuna. Nada aqui é trabalho de código novo, exceto onde indicado.
 | Cota diária do Groq ≈ 170k tokens, compartilhada com o worker da stack real (`AI_ENABLED=true`, ~2 chamadas por minuto em 2026-09-28); uma rodada de 50 casos custa ≈ 75k com `v1` e bem mais com `v2` | Na prática, uma rodada por dia, iniciada logo após a virada UTC, e checando o uso do dia antes. |
 | Stack real roda o código de `0d55de6` (sem F20-24) | F20-24 só entra na stack real depois da janela. |
 
+**Incidente 2026-09-28 (fora do controle deste worker):** durante trabalho de rotulagem
+(branch `feature/f20-rotulos-2`), o Docker Desktop da máquina caiu e voltou sozinho
+(reportado pelo coordenador como interrupção por limite de gasto da API). Ao voltar, os
+quatro containers do projeto `opportunity-radar` (`api`, `worker`, `postgres`, `frontend`)
+estavam `Exited (255)` — nenhum tem `restart` configurado no `compose.yaml`, então não
+voltaram sozinhos. Isso caiu **dentro** da janela de sete dias (iniciada
+`2026-09-28T00:45:09Z`). Este worker não deu nenhum comando de escrita, parada ou
+reinicialização — nem para derrubar, nem para subir de volta — porque a instrução deste card
+é explícita: nunca reiniciar o stack real. Os containers seguiam parados ao fim desta sessão
+(`docker ps -a` mostrando `Exited (255)`); alguém com autorização para tocar o stack real
+precisa decidir se sobe de novo (`docker compose -p opportunity-radar up -d`, sem rebuild) e
+registrar o gap na janela de sete dias — o T0 em `evidencias/f20-janela-7d-t0-2026-09-28.json`
+pode não refletir mais um período contínuo de operação.
+
 ## 2. Validações com o Groq real
 
 Todas usam a stack isolada, nunca `opportunity-radar`.
@@ -24,6 +38,7 @@ Todas usam a stack isolada, nunca `opportunity-radar`.
 | F20-18 | **Resolvido (2026-09-28).** Rodada real feita, parou em 10/50 casos (a cota diária da chave é compartilhada com o worker da stack real `opportunity-radar`, que analisa vagas continuamente com `AI_ENABLED=true` durante a janela de sete dias; F20-22 e F20-23 não chamaram o Groq. `v2` custa ~2-3× mais tokens que o assumido). No `reserved` (só 2 casos), `v2` piorou `completed_rate` e custo de token. Decisão provisória: manter `v1`; a amostra é pequena demais para descartar o `v2`. Ver `docs/pesquisas/prompt-v2-vs-v1.md`. Rodada completa dos 50 casos fica para uma janela sem concorrência de quota. | Rodar `eval_analysis.py --prompt v2 --model openai/gpt-oss-120b --baseline evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json` (comando completo em `docs/pesquisas/prompt-v2-vs-v1.md`) | `coverage` sobe de 0; português sobe de ≈0,11; `inventions` continua 0; nenhum critério da divisão `reserved` piora. Só então `ai_analysis_prompt=v2` vira padrão. |
 | F20-22 | Qual modelo usar por tarefa | Rodar os mesmos 50 casos em 20B e Qwen (120B já tem baseline), um modelo por dia; plano no card F20-22 | Tabela de qualidade × latência × tokens por tarefa; decisão registrada e roteamento configurado. |
 | F20-23 | A IA reduz UNKNOWN sem sobrescrever valores determinísticos | Rodar a classificação assistida no acervo anonimizado e depois no real | UNKNOWN de senioridade cai de 50,62% (328/648) rumo à metade (meta do F17-06); nenhum valor determinístico alterado. |
+| F20-23 (sub-etapa) | **Bloqueado em 2026-09-28.** Este worker (branch `feature/f20-rotulos-2`) ia selecionar ~30 vagas reais com `role_family`/`seniority`/`work_mode` `UNKNOWN` e rotular manualmente o valor correto com evidência literal, mas o Docker Desktop caiu antes do `SELECT` de amostragem (ver incidente na §1); nenhuma linha do conjunto de 30 foi produzida. | Assim que o stack real voltar: `docker compose -p opportunity-radar exec -T postgres psql -U opportunity_radar -d opportunity_radar -c "SELECT id, canonical_title, company_name, role_family, seniority, work_mode FROM opportunities.opportunity WHERE role_family='UNKNOWN' OR seniority='UNKNOWN' OR work_mode='UNKNOWN' ORDER BY published_at DESC NULLS LAST LIMIT 30;"` (só leitura), depois seguir o passo restante já descrito em `docs/pesquisas/sugestoes-f20-23.md`. |
 | F20-24 | **Resolvido (2026-09-28)** para a reserva interativa: teto reduzido do worker (`ceiling_requests=3`) gerou `skipped_budget=6` real, e a análise pedida pela UI (`MatchingService.analyze`, sem `ceiling_requests`) concluiu `AI_COMPLETED` no mesmo momento. Ver `docs/44-roadmap-fase-20/evidencias/analise-sob-orcamento-f20-24-2026-09-27.md` §5. Ainda em aberto: amostra de aging (`worker_analyze_aging_sample_ratio`) sob Groq real. | Worker com `AI_INTERACTIVE_RESERVE_REQUESTS=100` até `skipped_budget` aparecer; nesse momento, pedir uma análise pela UI | Análise pela UI conclui; `platform.ai_quota_usage` mostra o worker parado no teto e a fila por valor processando primeiro os itens de maior veredito/prioridade. |
 | F20-12/13 | Guardas de cota e tokens sob uso real prolongado | Coberto pelas rodadas acima | Nenhuma espera maior que a virada da janela (bug de ~10h corrigido em `21c5ec8`); 429 < 2%. |
 
@@ -44,7 +59,7 @@ Depois da medição: reconstruir a stack real com o código atual (inclui F20-24
 
 | Card | Lacuna | Teste que fecha |
 | --- | --- | --- |
-| F20-01 / F17-03 | O gabarito veio de busca por título, o que favorece `like`; `kubernetes` e `frontend` não têm gabarito | Montar candidatos por full-text (não por título), rotular e reexecutar `eval_search.py --mode both` |
+| F20-01 / F17-03 | **Parcial em 2026-09-28** (`feature/f20-rotulos-2`): 128 candidatos por full-text sobre `description` (16 consultas × 8, incluindo `kubernetes`/`frontend`) rotulados — 68 relevantes, 19 ambíguos, 41 não relevantes; `data/search-reference/queries.json` reconstruído. Falta rodar `eval_search.py --mode both` com este gabarito — bloqueado pelo incidente de Docker da §1 (container caiu entre a cópia do arquivo e o comando). Ver `docs/44-roadmap-fase-20/rotulagem/f20-01-relevancia-busca-fulltext.md`. | Assim que o stack voltar: `docker cp data/search-reference/queries.json opportunity-radar-api-1:/app/data/search-reference/queries.json && docker exec opportunity-radar-api-1 python scripts/eval_search.py --mode both` |
 | F20-02 | Curadoria e reprocessamento `skills-v3` feitos; a meta de UNKNOWN de senioridade (F17-06) não foi atingida | Depende do F20-23 |
 | F20-39 | A retomada por `resume_of_run_id` depois de uma queda real só está coberta por fakes; o cursor real foi provado só com cursor explícito | Interromper uma coleta Workday real no meio (matar o worker), confirmar a execução `PARTIAL` e retomar com `resume_of_run_id` |
 | F20-38/39 | Os bytes evitados foram medidos com `curl`, não pelo coletor em operação contínua | Sai da janela de sete dias (checkpoints com ETag em produção) |
