@@ -12,7 +12,7 @@ reais).
 | Restrição | Efeito |
 | --- | --- |
 | Janela de sete dias na stack real `opportunity-radar`, T0 `2026-09-28T12:01:55Z` (`evidencias/f20-janela-7d-t0-2026-09-28b.json`) | F20-35, F20-38 e F20-49 só fecham depois de `2026-10-05T12:02Z`. A stack não pode parar, ser reconstruída nem reiniciada até lá. |
-| A stack real não tem `restart` no compose | Se o Docker cair, a stack para. Conferir uma vez por dia (`docker compose -p opportunity-radar ps`). |
+| A stack real não tem `restart` no compose | Se o Docker cair, a stack para. Conferir uma vez por dia (`docker compose -p opportunity-radar ps`). Incidentes dentro da janela: Docker caiu ~`2026-09-28T16:20Z`, religado com `start` às 16:43Z; a leva agendada das 15Z só rodou às 16Z. |
 | Cota diária do Groq ≈ 170k tokens, compartilhada com o worker da stack real (`AI_ENABLED=true`) | Uma rodada de avaliação por dia, logo após a virada UTC, conferindo o uso do dia antes. |
 | Stack real roda o código de `0d55de6` | F20-23, F20-24 e o `work_mode` v6 só entram nela depois da janela. |
 
