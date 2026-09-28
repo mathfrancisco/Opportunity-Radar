@@ -163,6 +163,26 @@ def test_default_routes_chains_and_budgets() -> None:
     }
 
 
+def test_default_routes_per_task_reasoning_effort_falls_back_to_global() -> None:
+    routes = default_routes(_settings(ai_reasoning_effort="medium"))
+
+    assert routes[AITask.JOB_MATCH].budget.reasoning_effort == "medium"
+    assert routes[AITask.JOB_CLASSIFICATION].budget.reasoning_effort == "medium"
+    assert routes[AITask.JOB_EXTRACTION].budget.reasoning_effort == "medium"
+
+
+def test_default_routes_per_task_reasoning_effort_override() -> None:
+    routes = default_routes(
+        _settings(ai_reasoning_effort="low", ai_reasoning_effort_job_match="high")
+    )
+
+    assert routes[AITask.JOB_MATCH].budget.reasoning_effort == "high"
+    # Untouched tasks keep the global default: an override for one task is not a
+    # side channel that changes the others.
+    assert routes[AITask.JOB_CLASSIFICATION].budget.reasoning_effort == "low"
+    assert routes[AITask.JOB_EXTRACTION].budget.reasoning_effort == "low"
+
+
 def test_unknown_task_raises_keyerror() -> None:
     router = AIRouter(FakeProvider({}), {})
 

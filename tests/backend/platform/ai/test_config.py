@@ -50,6 +50,41 @@ def test_unknown_reasoning_effort_fails_at_start(monkeypatch: pytest.MonkeyPatch
         _settings()
 
 
+def test_per_task_reasoning_effort_defaults_unset() -> None:
+    settings = _settings()
+
+    assert settings.ai_reasoning_effort_job_match is None
+    assert settings.ai_reasoning_effort_job_classification is None
+    assert settings.ai_reasoning_effort_job_extraction is None
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "ai_reasoning_effort_job_match",
+        "ai_reasoning_effort_job_classification",
+        "ai_reasoning_effort_job_extraction",
+    ],
+)
+def test_per_task_reasoning_effort_accepts_supported_value(field: str) -> None:
+    settings = _settings(**{field: "high"})
+
+    assert getattr(settings, field) == "high"
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "ai_reasoning_effort_job_match",
+        "ai_reasoning_effort_job_classification",
+        "ai_reasoning_effort_job_extraction",
+    ],
+)
+def test_per_task_reasoning_effort_unknown_value_fails_at_start(field: str) -> None:
+    with pytest.raises(ValidationError, match=field.upper()):
+        _settings(**{field: "extreme"})
+
+
 def test_other_provider_fails_at_start() -> None:
     with pytest.raises(ValidationError, match="AI_PROVIDER"):
         _settings(ai_provider="openai")

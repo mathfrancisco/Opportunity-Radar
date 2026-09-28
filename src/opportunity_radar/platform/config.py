@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     ai_max_retries: int = 2
     ai_fallback_enabled: bool = True
     ai_reasoning_effort: str = "low"
+    # Per-task override of ai_reasoning_effort (card F20-22): unset keeps every task on
+    # the global value, so this is a no-op until a benchmark decides a task needs a
+    # different effort than the others. See platform/ai/tasks.py default_routes.
+    ai_reasoning_effort_job_match: str | None = None
+    ai_reasoning_effort_job_classification: str | None = None
+    ai_reasoning_effort_job_extraction: str | None = None
     ai_analysis_prompt: str = "v1"
     ai_daily_requests_soft_limit: int = 850
     ai_daily_tokens_soft_limit: int = 170_000
@@ -114,6 +120,20 @@ class Settings(BaseSettings):
                 "AI_REASONING_EFFORT must be one of "
                 f"{sorted(_VALID_REASONING_EFFORTS)}, got {self.ai_reasoning_effort!r}"
             )
+        per_task_efforts = {
+            "AI_REASONING_EFFORT_JOB_MATCH": self.ai_reasoning_effort_job_match,
+            "AI_REASONING_EFFORT_JOB_CLASSIFICATION": self.ai_reasoning_effort_job_classification,
+            "AI_REASONING_EFFORT_JOB_EXTRACTION": self.ai_reasoning_effort_job_extraction,
+        }
+        for effort_name, effort_value in per_task_efforts.items():
+            # An empty string is the same "unset" as None here: a `.env` copied from
+            # .env.example carries `VAR=` for every optional field in this codebase, and
+            # both mean "fall back to AI_REASONING_EFFORT" (see tasks.py `_effort_for`).
+            if effort_value and effort_value not in _VALID_REASONING_EFFORTS:
+                raise ValueError(
+                    f"{effort_name} must be one of {sorted(_VALID_REASONING_EFFORTS)} or "
+                    f"unset, got {effort_value!r}"
+                )
         positive_limits = {
             "AI_TIMEOUT_SECONDS": self.ai_timeout_seconds,
             "AI_CONNECT_TIMEOUT_SECONDS": self.ai_connect_timeout_seconds,

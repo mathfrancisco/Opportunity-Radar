@@ -45,8 +45,21 @@ def _model_for(settings: Settings, role: ModelRole) -> str:
     }[role]
 
 
+def _effort_for(settings: Settings, task: AITask) -> str:
+    """The task's `reasoning_effort`: its own override (card F20-22) or the shared default.
+
+    Every override defaults to `None`, so this returns `settings.ai_reasoning_effort` for
+    every task until a benchmark decision sets one explicitly — a no-op by construction.
+    """
+    override = {
+        AITask.JOB_MATCH: settings.ai_reasoning_effort_job_match,
+        AITask.JOB_CLASSIFICATION: settings.ai_reasoning_effort_job_classification,
+        AITask.JOB_EXTRACTION: settings.ai_reasoning_effort_job_extraction,
+    }[task]
+    return override or settings.ai_reasoning_effort
+
+
 def default_routes(settings: Settings) -> dict[AITask, ModelRoute]:
-    effort = settings.ai_reasoning_effort
     table = {
         AITask.JOB_MATCH: ((ModelRole.REASONING, ModelRole.ALT), 5000, 900),
         AITask.JOB_CLASSIFICATION: ((ModelRole.FAST, ModelRole.ALT), 1500, 300),
@@ -56,7 +69,7 @@ def default_routes(settings: Settings) -> dict[AITask, ModelRoute]:
         task: ModelRoute(
             task=task,
             chain=tuple(_model_for(settings, role) for role in roles),
-            budget=TaskBudget(max_input, max_output, effort),
+            budget=TaskBudget(max_input, max_output, _effort_for(settings, task)),
         )
         for task, (roles, max_input, max_output) in table.items()
     }
