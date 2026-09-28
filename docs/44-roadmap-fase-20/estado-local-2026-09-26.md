@@ -61,6 +61,29 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 
 ## Evidência de validação e CI
 
+- **F20 sanidade (2026-09-28, branch `feature/f20-sanidade`, projeto Docker isolado
+  `f20san`, nunca `opportunity-radar`).** Detalhe completo em
+  `docs/44-roadmap-fase-20/validacao-pendente.md` §5. Resumo:
+  - Testes instáveis: 6 causas raiz de contaminação entre testes num banco Postgres nunca
+    truncado (não "flakiness" genérica) encontradas e corrigidas. Reproduzido com
+    `RANDOM_ORDER_SEED` (nem `pytest-randomly` nem `pytest-random-order` instalados) em 8
+    rodadas completas consecutivas sobre o mesmo banco acumulado (ordem padrão + sementes
+    1, 42, 999, 777, 31415, 2, 5): **981 aprovados, 10 ignorados, 0 falhas em todas as 8**.
+    `pytest -q` isolado (ordem da CI) confirmado igualmente verde.
+  - `alembic check`: nunca tinha rodado de verdade (`include_schemas=True` faltava em
+    `migrations/env.py`, então só via o schema `public`, vazio). Corrigido; revelou três
+    drifts reais de modelo (dois índices GIN e dois índices renomeados por schema, todos
+    já existentes no banco, só não declarados no modelo) e descartou um quarto candidato
+    (achou que era o modelo que estava certo e o banco errado num par de `ondelete`; era o
+    oposto — corrigido no modelo, não no banco). `alembic heads` confirma uma única head,
+    `20260926_0052`; nenhuma migração nova foi necessária.
+  - `ruff check .` e `mypy` (120 arquivos): aprovados sem achados, após um ajuste de
+    formatação no `conftest.py` novo.
+  - **Achado fora de escopo, não corrigido aqui:** durante esta sessão, o Docker Desktop
+    do host caiu e voltou sozinho, derrubando por alguns minutos a stack real
+    `opportunity-radar` (que esta sessão nunca tocou) por volta de `2026-09-28T11:38Z` —
+    ~11h depois do T0 da janela de 7 dias. Ver o alerta logo após o bloco de reinício da
+    janela, acima.
 - A CI `36279883936` para `973b648` aprovou backend lint, backend tests, migrations e
   frontend, mas falhou no Compose E2E ao verificar aquisição manual pela API pública.
   A asserção que falha é a verificação de `/api/opportunities` após normalizar 2 itens
@@ -113,3 +136,16 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 
 
 > **Reinício da janela de sete dias (2026-09-28).** O T0 anterior (`2026-09-27T00:52:16Z`) não valia: a stack real `opportunity-radar` ficou parada depois do reprocessamento `skills-v3` e o Docker Desktop esteve desligado, então não houve operação contínua. A stack real foi religada com o código atual e um novo T0 foi capturado em `2026-09-28T00:45:09Z` (`docs/44-roadmap-fase-20/evidencias/f20-janela-7d-t0-2026-09-28.json`: 20 fontes ativas, 648 oportunidades). A janela termina em `2026-10-05T00:45Z`; a stack precisa ficar ligada sem interrupção até lá.
+
+> **Alerta: possível segunda interrupção da janela (2026-09-28, ~11:38 UTC), exatamente o
+> mesmo padrão do parágrafo acima.** Durante a passada de sanidade do F20 (branch
+> `feature/f20-sanidade`, worktree isolada, nunca tocou o projeto `opportunity-radar`), o
+> Docker Desktop do host caiu e voltou sozinho (evento externo à sessão, não uma ação
+> deste trabalho). `docker inspect` mostrou os três contêineres de `opportunity-radar`
+> (`postgres`, `api`, `worker`) com `FinishedAt=2026-09-28T11:38:23Z` e `StartedAt` nos
+> mesmos ~11:44:23Z–11:44:31Z — ou seja, cerca de 11h depois do T0 de 00:45:09Z, a stack
+> ficou parada por alguns minutos e voltou sozinha (sem intervenção desta sessão, que nunca
+> executa `up`/`down`/`restart`/`build` contra esse projeto). Nada foi feito aqui para
+> corrigir ou avaliar isso — só constatado, porque é exatamente a condição que invalidou a
+> janela anterior. Quem decide se a janela de `2026-10-05T00:45Z` ainda vale, ou se precisa
+> reiniciar de novo, precisa ser quem acompanha a medição de 7 dias, não esta sessão.

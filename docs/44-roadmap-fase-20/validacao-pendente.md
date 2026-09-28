@@ -53,8 +53,93 @@ Depois da medição: reconstruir a stack real com o código atual (inclui F20-24
 
 ## 5. Verificações de sanidade que ninguém rodou
 
-- **Testes instáveis:** `test_revisits_before_normalization_keep_per_run_observations` e um teste Tavily falharam com ordem aleatória e passaram com ordem fixa. Causa provável: banco de teste compartilhado sem limpeza (achado do F20-24). Rodar `pytest -p randomly` três vezes e corrigir o isolamento.
-- **Alembic (F20-05):** o card diz "a conferir na validação final". Conferir `alembic check` na head atual.
+- **Testes instáveis — Resolvido (2026-09-28), branch `feature/f20-sanidade`.** Reproduzido
+  com ordem aleatória (conftest com `RANDOM_ORDER_SEED`, já que nem `pytest-randomly` nem
+  `pytest-random-order` estavam instalados) em oito rodadas completas sobre o mesmo banco
+  nunca truncado (ordem padrão + sementes 1, 42, 999, 777, 31415, 2, 5 — 981 aprovados, 10
+  ignorados, 0 falhas em todas). Causas raiz encontradas (todas por linha de código, não
+  por "instabilidade genérica"):
+  - `tests/backend/dashboard/test_metrics.py`: `_source()` cria por padrão uma fonte
+    `enabled=True`, `schedule="* * * * *"`, `source_type="greenhouse"` já homologada, e
+    seis testes nunca a apagavam — exatamente o que `worker.collect_enabled_sources`
+    (chamado pelo soak) tenta coletar. É a causa direta de `test_soak` falhar com
+    "collector not registered: greenhouse" dias depois, sem nenhuma relação de código com
+    o teste que a criou. Corrigido com um `_cleanup()` que desfaz a fonte e tudo o que ela
+    gerou (run, raw item, ocorrência, observação, resultado de normalização), chamado em
+    `finally` pelos seis testes.
+  - `tests/backend/test_source_probe_integration.py::test_probe_refuses_stale_enabled_and_manual_sources`
+    também deixava uma fonte `greenhouse` `enabled=True`/confirmada permanente pela mesma
+    razão; agora apagada em `finally`.
+  - `tests/backend/acquisition/test_delta_presence_resume.py::test_revisits_before_normalization_keep_per_run_observations`
+    fazia `select(SourceOccurrenceObservationModel)` sem filtro nenhum, assumindo ser dona
+    da tabela inteira — falha com qualquer linha alheia presente. Filtrado por
+    `source_run_id` dos dois runs que o teste realmente criou.
+  - `tests/backend/acquisition/test_tavily_proposals.py::test_catalog_owner_resolves_real_tavily_collector_item_without_company_name`
+    fazia `session.scalar(select(...).where(company_source_id IS NOT NULL AND
+    source_type == "greenhouse"))` sem escopo — `tests/backend/dashboard/test_queries.py`
+    (`test_list_source_health_filters_by_status_proposed` e
+    `test_list_source_health_orders_by_company_priority`) cria permanentemente outras
+    linhas com esse mesmo par, e `session.scalar()` explode com `MultipleResultsFound`
+    dependendo da ordem. Filtrado por `configuration["company_name"]` (único por teste,
+    já como os outros testes do arquivo fazem no `_purge()`).
+  - **F20-24, "leftovers ordenados por valor" (a nota do card): confirmado e mais amplo do
+    que o card registrava.** `tests/backend/matching/test_analysis_queue.py` tinha pelo
+    menos quatro testes que semeavam avaliações `HIGH_PRIORITY`/`score` alto e nunca as
+    concluíam nem as apagavam (`test_pending_analysis_reserves_aging_sample` — o próprio
+    "retiro" nunca commitava, então nunca acontecia de verdade —,
+    `test_the_job_defers_a_pending_id_when_the_worker_ceiling_is_exhausted`, e dois testes
+    de enumeração pura de fila que nunca chamavam `analyze_pending`). Qualquer uma dessas
+    20+ linhas, deixada pendente, permanece no topo da fila (por prioridade/score) pelo
+    resto da execução e rouba uma vaga de lote de um teste posterior — reproduzido contra
+    `test_the_job_analyzes_a_bounded_batch_and_commits_each_result`. Corrigido com uma
+    fixture `autouse` no arquivo que, ao final de cada teste, "aposenta" (marca
+    `AI_COMPLETED`) qualquer avaliação nova que ainda esteja pendente — resolve para
+    qualquer teste futuro do arquivo, não só os quatro encontrados.
+    `tests/backend/dashboard/test_queries.py::test_overview_counts_reflect_the_catalogue_and_flag_the_missing_pipeline`
+    tinha o mesmo problema (empresa `high`, `HIGH_PRIORITY`, nunca concluída) e foi
+    corrigido da mesma forma, no padrão já usado por outro teste do próprio arquivo.
+  - `tests/backend/matching/test_repository.py::test_assessment_persistence_is_idempotent_and_keeps_factors`
+    usava `input_hash="a" * 64` fixo — `SqlAlchemyMatchingRepository.add()` deduplica só
+    por `input_hash`, globalmente, sem escopo por oportunidade, então a segunda vez que
+    este teste específico roda contra o mesmo banco (nunca truncado) ele encontra a
+    própria linha de uma execução anterior e compara contra um snapshot antigo. Trocado
+    por `uuid4().hex + uuid4().hex`, como o resto da suíte já faz.
+  - `tests/backend/dashboard/test_saved_searches.py`: três testes chamavam `new_count()`
+    sem `all_areas`/`area`, e `new_count` cai para o `target_role_families` do *perfil
+    ativo* quando nenhum dos dois vem no filtro — um valor que
+    `tests/backend/profile/test_profile_preservation.py` deixa não-vazio permanentemente
+    neste mesmo banco. Corrigido passando `"all_areas": True`, igualando o comportamento
+    de `list_opportunity_inbox` (que não aplica esse fallback).
+  - Ferramenta: `tests/backend/conftest.py` ganhou um `pytest_collection_modifyitems`
+    opcional, ativado só por `RANDOM_ORDER_SEED=<n>` (nenhum efeito por padrão, `pytest -q`
+    da CI continua determinístico), para reproduzir isolamento sem depender de instalar
+    `pytest-randomly`.
+- **Alembic (F20-05) — Resolvido (2026-09-28).** `alembic check` nunca tinha rodado de
+  verdade: `migrations/env.py` não passava `include_schemas=True` para
+  `context.configure()`, então a comparação só via o schema `public` (vazio) e reportava o
+  banco inteiro como "adicionado" mesmo em head. Corrigido, e isso revelou três drifts
+  reais, todos sem nenhuma migração pendente de fato:
+  - `platform.ai_quota_usage` e `platform.ai_call_record` são `sa.Table` numa `MetaData`
+    própria (deliberadamente fora do ORM — ver seus módulos); excluídos da comparação via
+    `include_object`.
+  - `ix_opportunity_embedding_hnsw` é criado por SQL bruto (`CREATE INDEX ... USING hnsw
+    (embedding vector_cosine_ops)`, sem forma portável em `sa.Index`); excluído da mesma
+    forma.
+  - `Company.normalized_name`, `CompanyAlias.normalized_alias`,
+    `Opportunity.allowed_countries` e `Opportunity.search_document` tinham índices reais no
+    banco (criados por migração) que o modelo nunca declarava — `alembic check` só os viu
+    depois do `include_schemas=True` acima. Declarados explicitamente nos modelos, com o
+    nome exato já existente no banco; nenhuma migração nova foi necessária (banco e modelo
+    já concordam, só faltava o modelo dizer isso).
+  - Um quarto candidato a drift (`raw_item_id` das duas tabelas de ocorrência, `RESTRICT`
+    vs `CASCADE` trocados entre modelo e banco) foi investigado e **descartado**: escrever
+    a migração "corrigindo" o modelo quebrou
+    `tests/backend/acquisition/test_tavily_proposals.py` (seu `_purge()` depende do
+    `CASCADE` que já existe no banco desde a migração `20260926_0041`). O código do
+    modelo, não o banco, estava desatualizado — corrigido nos dois lugares de
+    `opportunities/models.py` para bater com o banco real, sem nova migração.
+  - `alembic heads` confirma uma única head, `20260926_0052` — nenhuma migração nova nesta
+    passada.
 - **Frontend:** o E2E cobre as telas principais; Overview e Sources com os ATS novos não têm teste visual.
 - **Segurança:** falha externa do GitGuardian no PR #25 sem causa confirmada. Rotacionar a chave Groq usada nas rodadas.
 
@@ -70,7 +155,7 @@ Depois da medição: reconstruir a stack real com o código atual (inclui F20-24
 
 1. ~~F20-18 (v2 × v1)~~ — resolvido em 2026-09-28 (manter `v1`; ver §2). F20-22 (20B), depois F20-22 (Qwen) e decisão seguem pendentes.
 2. F20-23 no acervo real, com o modelo escolhido; ~~medição de F20-24~~ — reserva interativa resolvida em 2026-09-28, amostra de aging ainda pendente (ver §2).
-3. Sanidade da seção 5 (testes instáveis, `alembic check`).
+3. ~~Sanidade da seção 5 (testes instáveis, `alembic check`)~~ — resolvido em 2026-09-28 (branch `feature/f20-sanidade`, ver §5).
 4. F20-39: queda real e retomada.
 5. Depois de `2026-10-05T00:45Z`: T7 de F20-35/38/49, reconstrução da stack real.
 6. F20-01 com gabarito full-text.

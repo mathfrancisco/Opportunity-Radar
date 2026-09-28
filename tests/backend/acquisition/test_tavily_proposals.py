@@ -262,9 +262,15 @@ def test_catalog_owner_resolves_real_tavily_collector_item_without_company_name(
             session, registry=CollectorRegistry((collector, GreenhouseCollector()))
         )
         asyncio.run(service.execute(source.id, CollectionRequest(keywords=("backend",))))
+        # Scoped to this test's own company: `company_source_id IS NOT NULL AND
+        # source_type == "greenhouse"` alone also matches proposals other test files
+        # (e.g. tests/backend/dashboard/test_queries.py) commit and never clean up, which
+        # makes `session.scalar()` raise `MultipleResultsFound` depending on run order.
         proposal = session.scalar(select(SourceDefinitionModel).where(
             SourceDefinitionModel.company_source_id.is_not(None),
             SourceDefinitionModel.source_type == "greenhouse",
+            SourceDefinitionModel.configuration["company_name"].as_string()
+            == company.canonical_name,
         ))
         assert proposal is not None
         assert proposal.company_source_id is not None

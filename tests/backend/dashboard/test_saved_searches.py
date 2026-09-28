@@ -134,7 +134,17 @@ def test_new_count_uses_same_query_as_inbox() -> None:
             session,
             name="Remote roles",
             term=None,
-            filters={"company_id": str(company.id), "work_mode": "REMOTE"},
+            # `all_areas: True` is required so `new_count` matches `InboxQuery` below,
+            # which applies no role-family filter at all: without it, `new_count` falls
+            # back to the *active profile's* `target_role_families` (F17-06) — a row this
+            # shared, never-truncated integration database has no fixture for, so whatever
+            # another test (e.g. test_profile_preservation.py) last activated and left
+            # behind silently narrows this query and drops both fixtures (F20 sanity pass).
+            filters={
+                "company_id": str(company.id),
+                "work_mode": "REMOTE",
+                "all_areas": True,
+            },
         )
 
         inbox = list_opportunity_inbox(
@@ -172,7 +182,11 @@ def test_new_count_counts_only_opportunities_created_after_last_opened() -> None
             session,
             name="New roles",
             term=None,
-            filters={"company_id": str(company.id)},
+            # Without `all_areas`, `new_count` falls back to the shared, never-truncated
+            # database's active profile's `target_role_families` (F17-06), which another
+            # test may have left non-empty; these fixtures carry no role_family, so that
+            # silently drops all three (F20 sanity pass).
+            filters={"company_id": str(company.id), "all_areas": True},
         )
         model = session.get(SavedSearchModel, saved.id)
         assert model is not None
@@ -196,9 +210,12 @@ def test_unknown_filter_key_is_ignored_with_warning(caplog: pytest.LogCaptureFix
             session,
             name="Old filters",
             term=None,
+            # `all_areas` keeps this scoped to the unknown-key warning under test, same
+            # reasoning as the other `new_count` tests in this file.
             filters={
                 "company_id": str(company.id),
                 "renamed_filter": "legacy-value",
+                "all_areas": True,
             },
         )
 

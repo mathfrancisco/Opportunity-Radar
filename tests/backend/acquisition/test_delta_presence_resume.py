@@ -755,7 +755,18 @@ def test_revisits_before_normalization_keep_per_run_observations() -> None:
             second_run = asyncio.run(
                 service.execute(fixture.source.id, CollectionRequest(mode=CollectionMode.DISCOVERY))
             )
-            observations = list(session.scalars(select(SourceOccurrenceObservationModel)))
+            # Scoped to this fixture's two runs: the table is shared with every other test
+            # in the suite, so an unfiltered select here would fail on whatever another
+            # test (in whatever order it happened to run) left behind or added concurrently.
+            observations = list(
+                session.scalars(
+                    select(SourceOccurrenceObservationModel).where(
+                        SourceOccurrenceObservationModel.source_run_id.in_(
+                            (first_run.id, second_run.id)
+                        )
+                    )
+                )
+            )
             assert {observation.source_run_id for observation in observations} == {
                 first_run.id,
                 second_run.id,

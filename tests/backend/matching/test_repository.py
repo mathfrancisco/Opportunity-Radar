@@ -70,7 +70,13 @@ def test_assessment_persistence_is_idempotent_and_keeps_factors() -> None:
             opportunity_id=opportunity.id,
             opportunity_version=opportunity.version,
             profile_version_id=profile_version.id,
-            input_hash="a" * 64,
+            # Unique per run, not a fixed literal: `add()` dedups purely on `input_hash`
+            # (see `SqlAlchemyMatchingRepository.get_existing`), globally, with no scope
+            # to this test's own opportunity — a fixed hash collides with this same
+            # test's own row from an earlier run of this shared, never-truncated database
+            # and returns *that* row's stale snapshot instead of creating a new one
+            # (F20 sanity pass, reproduced under randomized order).
+            input_hash=uuid4().hex + uuid4().hex,
             rules_version="matching-rules-v1",
             taxonomy_version="skills-v1",
             opportunity_snapshot={"id": str(opportunity.id), "work_mode": "REMOTE"},
@@ -98,7 +104,7 @@ def test_assessment_persistence_is_idempotent_and_keeps_factors() -> None:
         session.flush()
         repeated = repository.add(record, [factor])
         next_day = repository.add(
-            replace(record, input_hash="b" * 64),
+            replace(record, input_hash=uuid4().hex + uuid4().hex),
             [factor],
         )
         session.commit()
