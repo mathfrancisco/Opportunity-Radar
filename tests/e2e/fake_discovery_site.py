@@ -186,6 +186,37 @@ def identifying_query_site() -> Handler:
     )
 
 
+def sitemap_with_noise_site() -> Handler:
+    """The sitemap lists one relevant URL (`/careers/team`, a Greenhouse embed) and one
+    irrelevant one (`/blog/launch`). The careers page itself has no ATS signature, so a
+    hit here only comes from the sitemap follow-up — proving the stricter sitemap keyword
+    filter (F20-36 follow-up) let the relevant URL through without needing the broader
+    same-page-link hints. `/blog/launch` raises if ever fetched, so a test proves the
+    tighter filter kept it out of the crawl entirely by the absence of that error.
+    """
+
+    def _never(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("the stricter sitemap keyword filter should have excluded this URL")
+
+    return _router(
+        {
+            "/robots.txt": _xml(_ROBOTS_OK),
+            "/sitemap.xml": _xml(
+                """<?xml version="1.0"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://careers.example.test/careers/team</loc></url>
+  <url><loc>https://careers.example.test/blog/launch</loc></url>
+</urlset>"""
+            ),
+            "/careers": _html("<html><body>Careers at Acme.</body></html>"),
+            "/careers/team": _html(
+                '<html><body><iframe src="https://boards.greenhouse.io/acme"></iframe></body></html>'
+            ),
+            "/blog/launch": _never,
+        }
+    )
+
+
 def fake_resolve_ips(host_ips: dict[str, str] | None = None) -> Callable:
     """An injectable `resolve_ips` that never hits real DNS (`*.example.test` never
     resolves in reality). Every host in `host_ips` answers its mapped IP; anything else

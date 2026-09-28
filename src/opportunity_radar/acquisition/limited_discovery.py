@@ -27,6 +27,7 @@ from xml.etree import ElementTree
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from opportunity_radar.companies.discovery import ATS_SIGNATURES, detect_ats
@@ -46,8 +47,33 @@ ROBOTS_UNAVAILABLE_BACKOFF = timedelta(hours=1)
 SUCCESS_BACKOFF = timedelta(days=30)
 _MAX_REDIRECTS = 5
 _RELEVANT_PAGE_HINTS = ("career", "job", "vaga", "emprego", "team", "join", "hiring")
+#: Stricter than `_RELEVANT_PAGE_HINTS`: sitemap URLs are numerous and noisy, so only
+#: these keywords (English + Portuguese) earn a sitemap-discovered URL a crawl slot.
+_SITEMAP_KEYWORDS = re.compile(r"career|jobs?|vagas?|carreiras?", re.IGNORECASE)
 _ATTRIBUTE_URL = re.compile(r"""(?:href|src)\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 _GZIP_MAGIC = b"\x1f\x8b"
+_SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
+
+#: Direct, one-request-per-candidate probes against each ATS's own public API — no
+#: crawling of the company's site at all. Tried in this order, first non-empty match wins
+#: (F20-36 follow-up: most real boards are reachable this way). Only ATS with a collector
+#: (never Gupy, which the project cannot aggregate per F20-32).
+_DIRECT_ATS_ENDPOINTS: tuple[tuple[str, Callable[[str], str]], ...] = (
+    ("ashby", lambda slug: f"https://api.ashbyhq.com/posting-api/job-board/{slug}"),
+    ("greenhouse", lambda slug: f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"),
+    ("lever", lambda slug: f"https://api.lever.co/v0/postings/{slug}?mode=json"),
+    ("workable", lambda slug: f"https://apply.workable.com/api/v1/widget/accounts/{slug}"),
+    ("teamtailor", lambda slug: f"https://{slug}.teamtailor.com/jobs.json"),
+)
+#: Where each ATS's response keeps its job list, for the "is this actually a populated,
+#: real board" check — `None` means the response body itself is the list (Lever).
+_JOBS_LIST_KEYS: dict[str, str | None] = {
+    "ashby": "jobs",
+    "greenhouse": "jobs",
+    "lever": None,
+    "workable": "jobs",
+    "teamtailor": "data",
+}
 
 
 class DiscoveryStopReason(StrEnum):
@@ -114,6 +140,117 @@ def endpoint_ats_name(endpoint: DiscoveredEndpoint) -> str | None:
     if endpoint.confidence_reason.startswith(prefix):
         return endpoint.confidence_reason[len(prefix) :]
     return None
+
+
+def _slugify(name: str) -> str:
+    return _SLUG_PATTERN.sub("-", name.lower()).strip("-")
+
+
+def direct_slug_candidates(company_name: str, seed_url: str) -> tuple[str, ...]:
+    """A handful of plausible board slugs for a company: the hyphenated and compact
+    forms of its name, plus its own site's registrable-domain label — in that order, de-
+    duplicated. No network access; just string shaping."""
+    host = urlsplit(seed_url).hostname or ""
+    bare = host.split(":", 1)[0]
+    parts = bare.split(".")
+    domain_slug = parts[-2] if len(parts) >= 2 else bare
+    hyphenated = _slugify(company_name)
+    compact = hyphenated.replace("-", "")
+    candidates: list[str] = []
+    for slug in (compact, hyphenated, domain_slug):
+        if slug and slug not in candidates:
+            candidates.append(slug)
+    return tuple(candidates)
+
+
+def _has_jobs(ats: str, payload: object) -> bool:
+    if ats == "lever":
+        return isinstance(payload, list) and len(payload) > 0
+    key = _JOBS_LIST_KEYS[ats]
+    if not isinstance(payload, dict) or key is None:
+        return False
+    items = payload.get(key)
+    return isinstance(items, list) and len(items) > 0
+
+
+async def probe_direct_ats(
+    company_id: UUID,
+    company_name: str,
+    seed_url: str,
+    *,
+    client: httpx.AsyncClient,
+    resolve_ips: Callable[[str], Awaitable[tuple[str, ...]]],
+    user_agent: str = DEFAULT_USER_AGENT,
+    min_interval_seconds: float = DEFAULT_MINIMUM_INTERVAL_SECONDS,
+    sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    max_requests: int = 6,
+    now: datetime | None = None,
+) -> tuple[DiscoveredEndpoint | None, int]:
+    """One request per (ATS, slug) candidate against the ATS's own public API — never the
+    company's own site. Stops at the first ATS/slug pair whose board is real and populated
+    (F20-36 follow-up). Skips crawling entirely on a hit, which is most of the time this
+    matters: a guessable slug is common and one request is far cheaper than a crawl.
+    """
+    moment = now or datetime.now(UTC)
+    candidates = direct_slug_candidates(company_name, seed_url)
+    requests_made = 0
+    for slug in candidates:
+        for ats, build_url in _DIRECT_ATS_ENDPOINTS:
+            if requests_made >= max_requests:
+                return None, requests_made
+            url = build_url(slug)
+            host = urlsplit(url).hostname or ""
+            ips = await resolve_ips(host)
+            if not is_public_destination(host, ips):
+                continue
+            if requests_made > 0 and min_interval_seconds:
+                await sleeper(min_interval_seconds)
+            requests_made += 1
+            try:
+                response = await client.get(
+                    url, headers={"User-Agent": user_agent}, timeout=DEFAULT_TIMEOUT_SECONDS
+                )
+            except httpx.HTTPError:
+                continue
+            if response.status_code != 200:
+                continue
+            try:
+                payload = response.json()
+            except ValueError:
+                continue
+            if not _has_jobs(ats, payload):
+                continue
+            endpoint = DiscoveredEndpoint(
+                company_id=company_id,
+                seed_url=seed_url,
+                discovered_url=url,
+                method="direct_slug",
+                fetched_at=moment,
+                evidence_excerpt=f"direct probe slug={slug!r}",
+                confidence_reason=f"ats_signature:{ats}",
+            )
+            return endpoint, requests_made
+    return None, requests_made
+
+
+def canonical_board_url(ats: str, discovered_url: str) -> str:
+    """The board's canonical root URL, independent of which page evidence was found on or
+    which historical hostname was used — so the same real board never creates two
+    `CompanySource` rows under different-looking `endpoint` values (F20-36 dedupe rule).
+    """
+    parts = urlsplit(discovered_url)
+    token = parts.path.strip("/").split("/", 1)[0]
+    if not token:
+        return discovered_url
+    if ats == "greenhouse":
+        # boards.greenhouse.io and job-boards.greenhouse.io serve the same board; the
+        # latter is the current hostname (F20-36 evidence, 2026-09-28).
+        return f"https://job-boards.greenhouse.io/{token}"
+    if ats == "ashby":
+        return f"https://jobs.ashbyhq.com/{token}"
+    if ats == "lever":
+        return f"https://jobs.lever.co/{token}"
+    return discovered_url
 
 
 class _PolicyStop(Exception):
@@ -358,11 +495,13 @@ async def run_limited_discovery(
     limits: DiscoveryLimits,
     allowlist: frozenset[str],
     client: httpx.AsyncClient,
+    company_name: str = "",
     resolve_ips: Callable[[str], Awaitable[tuple[str, ...]]] | None = None,
     now: datetime | None = None,
     user_agent: str = DEFAULT_USER_AGENT,
     min_interval_seconds: float = DEFAULT_MINIMUM_INTERVAL_SECONDS,
     sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    try_direct_slug: bool = True,
 ) -> DiscoveryOutcome:
     moment = now or datetime.now(UTC)
     resolver = resolve_ips or _default_async_resolve_ips
@@ -371,6 +510,28 @@ async def run_limited_discovery(
         return DiscoveryOutcome(
             company_id, DiscoveryStopReason.ERROR, (), 0, 0, _next_attempt(moment, POLICY_BACKOFF)
         )
+
+    if try_direct_slug and company_name:
+        direct_endpoint, direct_requests = await probe_direct_ats(
+            company_id,
+            company_name,
+            seed_url,
+            client=client,
+            resolve_ips=resolver,
+            user_agent=user_agent,
+            min_interval_seconds=min_interval_seconds,
+            sleeper=sleeper,
+            now=moment,
+        )
+        if direct_endpoint is not None:
+            return DiscoveryOutcome(
+                company_id,
+                DiscoveryStopReason.EXHAUSTED,
+                (direct_endpoint,),
+                direct_requests,
+                direct_requests,
+                _next_attempt(moment, SUCCESS_BACKOFF),
+            )
 
     state = _CrawlState(
         client=client,
@@ -418,8 +579,18 @@ async def run_limited_discovery(
     if not sitemap_seeds:
         sitemap_seeds = [f"{origin}/sitemap.xml"]
 
+    # Shallow pass first: the careers page alone. Sitemap and extra pages are only worth
+    # the extra requests when this misses (most real signatures sit right on the seed).
+    visited_pages: set[str] = set()
     try:
-        candidate_pages, sitemap_limited = await state.crawl_sitemaps(sitemap_seeds)
+        endpoints, html_limited, dynamic_seen = await state.crawl_pages(
+            seed_url=normalize_discovery_url(seed_url),
+            extra_candidates=[],
+            company_id=company_id,
+            seed_url_raw=seed_url,
+            fetched_at=moment,
+            visited=visited_pages,
+        )
     except _PolicyStop:
         return DiscoveryOutcome(
             company_id,
@@ -430,23 +601,38 @@ async def run_limited_discovery(
             _next_attempt(moment, POLICY_BACKOFF),
         )
 
-    try:
-        endpoints, html_limited, dynamic_seen = await state.crawl_pages(
-            seed_url=normalize_discovery_url(seed_url),
-            extra_candidates=candidate_pages,
-            company_id=company_id,
-            seed_url_raw=seed_url,
-            fetched_at=moment,
-        )
-    except _PolicyStop:
-        return DiscoveryOutcome(
-            company_id,
-            DiscoveryStopReason.POLICY,
-            (),
-            state.urls_examined,
-            state.http_requests,
-            _next_attempt(moment, POLICY_BACKOFF),
-        )
+    sitemap_limited = False
+    if not endpoints and not dynamic_seen:
+        try:
+            candidate_pages, sitemap_limited = await state.crawl_sitemaps(sitemap_seeds)
+        except _PolicyStop:
+            return DiscoveryOutcome(
+                company_id,
+                DiscoveryStopReason.POLICY,
+                (),
+                state.urls_examined,
+                state.http_requests,
+                _next_attempt(moment, POLICY_BACKOFF),
+            )
+        if candidate_pages:
+            try:
+                endpoints, html_limited, dynamic_seen = await state.crawl_pages(
+                    seed_url=normalize_discovery_url(seed_url),
+                    extra_candidates=candidate_pages,
+                    company_id=company_id,
+                    seed_url_raw=seed_url,
+                    fetched_at=moment,
+                    visited=visited_pages,
+                )
+            except _PolicyStop:
+                return DiscoveryOutcome(
+                    company_id,
+                    DiscoveryStopReason.POLICY,
+                    (),
+                    state.urls_examined,
+                    state.http_requests,
+                    _next_attempt(moment, POLICY_BACKOFF),
+                )
 
     if endpoints:
         stop_reason = DiscoveryStopReason.EXHAUSTED
@@ -592,7 +778,7 @@ class _CrawlState:
                 queue.extend(locs)
             else:
                 for loc in locs:
-                    if _looks_relevant_page(loc):
+                    if _SITEMAP_KEYWORDS.search(loc.lower()):
                         candidates.append(loc)
         return candidates, limited
 
@@ -604,12 +790,13 @@ class _CrawlState:
         company_id: UUID,
         seed_url_raw: str,
         fetched_at: datetime,
+        visited: set[str] | None = None,
     ) -> tuple[list[DiscoveredEndpoint], bool, bool]:
         queue: deque[tuple[str, int, str]] = deque()
         queue.append((seed_url, 0, "seed"))
         for candidate in extra_candidates:
             queue.append((normalize_discovery_url(candidate), 1, "sitemap"))
-        visited: set[str] = set()
+        visited = set() if visited is None else visited
         endpoints: list[DiscoveredEndpoint] = []
         dynamic_seen = False
         limited = False
@@ -696,18 +883,23 @@ def upsert_ats_identified_source(
     ats = endpoint_ats_name(endpoint)
     if ats is None:
         raise ValueError("endpoint has no recognizable ATS signature")
-    existing = session.scalar(
-        select(CompanySource).where(
-            CompanySource.company_id == endpoint.company_id,
-            CompanySource.source_type == ats,
-        )
-    )
+    canonical_endpoint = canonical_board_url(ats, endpoint.discovered_url)
     history_line = (
         f"{endpoint.fetched_at.isoformat()} discovery via {endpoint.method}: "
         f"{endpoint.evidence_excerpt}"
     )
+
+    def _find_existing() -> CompanySource | None:
+        return session.scalar(
+            select(CompanySource).where(
+                CompanySource.company_id == endpoint.company_id,
+                CompanySource.source_type == ats,
+            )
+        )
+
+    existing = _find_existing()
     if existing is not None:
-        existing.endpoint = endpoint.discovered_url
+        existing.endpoint = canonical_endpoint
         existing.last_verified_at = endpoint.fetched_at
         existing.evidence_note = (
             f"{existing.evidence_note}\n{history_line}" if existing.evidence_note else history_line
@@ -718,13 +910,30 @@ def upsert_ats_identified_source(
     source = CompanySource(
         company_id=endpoint.company_id,
         source_type=ats,
-        endpoint=endpoint.discovered_url,
+        endpoint=canonical_endpoint,
         verification_method="discovery",
         verification_status="ats_identified",
         evidence_note=history_line,
         last_verified_at=endpoint.fetched_at,
     )
     session.add(source)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        # A concurrent discovery run (parallel across hosts, F20-36 follow-up) inserted
+        # the same (company, ATS) row first: fall back to updating it instead of failing
+        # this company's whole discovery attempt (`uq_company_source_company_type_endpoint`).
+        session.rollback()
+        existing = _find_existing()
+        if existing is None:
+            raise
+        existing.endpoint = canonical_endpoint
+        existing.last_verified_at = endpoint.fetched_at
+        existing.evidence_note = (
+            f"{existing.evidence_note}\n{history_line}" if existing.evidence_note else history_line
+        )
+        session.commit()
+        session.refresh(existing)
+        return existing
     session.refresh(source)
     return source
