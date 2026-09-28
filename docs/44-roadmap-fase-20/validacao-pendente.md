@@ -79,8 +79,8 @@ reais).
 | `alembic check` e head única (F20-05) | Resolvido (`79d45c0`): `env.py` sem `include_schemas=True` nunca comparava os schemas reais; corrigido, modelos alinhados ao banco (índices declarados, `ondelete` do modelo corrigido), head única `20260926_0052`, sem migração nova |
 | F20-38: orçamento compartilhado entre duas fontes do mesmo host | Sem par real no catálogo; incluir um antes de medir |
 | F20-36: board da Airbyte | `404` real; nova rodada de descoberta |
-| API sem endpoint para editar `schedule` de fonte | Lacuna registrada |
-| Fixture `pre_f20_dump.sql` com `normalizer_version` escrito à mão | Quebra a cada troca de versão; derivar da constante |
+| API sem endpoint para editar `schedule` de fonte | Resolvido (`98161b4`): `PATCH /sources/{id}/schedule`, valida o cron com o mesmo `CronTrigger` do agendador, aceita `null` (sem agenda) e usa `expected_version` como as demais rotas; campo cheap no `SourceControlsPanel` com teste de componente |
+| Fixture `pre_f20_dump.sql` com `normalizer_version` escrito à mão | Resolvido (`98161b4`): `_restore_fixture` reescreve o literal `v6` para `NORMALIZER_VERSION` antes de entregar o SQL ao `psql`; teste novo falha se o literal voltar sem a substituição |
 | Overview e Sources com ATS novos sem teste visual | Aberto |
 | GitGuardian no PR #25 | Causa não confirmada |
 | Rotacionar a chave Groq usada nas rodadas | Com o usuário |
