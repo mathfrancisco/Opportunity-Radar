@@ -65,19 +65,30 @@ para o dia seguinte em vez de arriscar bloquear o worker real.
 
 `openai/gpt-oss-120b` × `low` já está feito (baseline-pinned, 2026-09-27). Faltam 5:
 
+`eval_analysis.py` agora é resumível: cada caso terminado vai para um checkpoint JSONL
+(por padrão derivado de `--output`, sem a data, para sobreviver a um `--resume` no dia
+seguinte) e uma parada por cota não perde o que já rodou. Re-rodar o mesmo comando com
+`--resume` pula os casos já no checkpoint em vez de rodar os 50 de novo — é assim que
+F20-18 (parou em 10/50) volta a andar sem descartar os 10 já feitos. `--max-tokens N`
+para de forma limpa (checkpoint preservado, relatório marcado `partial`) ao atingir N
+tokens acumulados na rodada; o pré-voo lê o consumo de hoje em
+`platform.ai_quota_usage`, estima o custo da rodada e recusa rodar (`--allow-partial`
+ignora essa recusa) se não couber no restante da cota diária.
+
 | Dia (UTC) | Variante | Comando |
 | --- | --- | --- |
-| D+1 | `openai/gpt-oss-120b` × `medium` | `AI_REASONING_EFFORT=medium python scripts/eval_analysis.py --prompt v1 --model openai/gpt-oss-120b --label benchmark-medium --split reserved --baseline docs/44-roadmap-fase-20/evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json` |
-| D+2 | `openai/gpt-oss-20b` × `low` | `AI_REASONING_EFFORT=low python scripts/eval_analysis.py --prompt v1 --model openai/gpt-oss-20b --label benchmark-low --split reserved --baseline docs/44-roadmap-fase-20/evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json` |
-| D+3 | `openai/gpt-oss-20b` × `medium` | `AI_REASONING_EFFORT=medium python scripts/eval_analysis.py --prompt v1 --model openai/gpt-oss-20b --label benchmark-medium --split reserved --baseline docs/44-roadmap-fase-20/evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json` |
-| D+4 | `qwen/qwen3.8-27b` × `low` | `AI_REASONING_EFFORT=low python scripts/eval_analysis.py --prompt v1 --model qwen/qwen3.8-27b --label benchmark-low --split reserved --baseline docs/44-roadmap-fase-20/evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json` |
-| D+5 | `qwen/qwen3.8-27b` × `medium` | `AI_REASONING_EFFORT=medium python scripts/eval_analysis.py --prompt v1 --model qwen/qwen3.8-27b --label benchmark-medium --split reserved --baseline docs/44-roadmap-fase-20/evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json` |
+| D+1 | `openai/gpt-oss-120b` × `medium` | `AI_REASONING_EFFORT=medium python scripts/eval_analysis.py --prompt v1 --model openai/gpt-oss-120b --label benchmark-medium --split reserved --baseline docs/44-roadmap-fase-20/evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json --resume` |
+| D+2 | `openai/gpt-oss-20b` × `low` | `AI_REASONING_EFFORT=low python scripts/eval_analysis.py --prompt v1 --model openai/gpt-oss-20b --label benchmark-low --split reserved --baseline docs/44-roadmap-fase-20/evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json --resume` |
+| D+3 | `openai/gpt-oss-20b` × `medium` | `AI_REASONING_EFFORT=medium python scripts/eval_analysis.py --prompt v1 --model openai/gpt-oss-20b --label benchmark-medium --split reserved --baseline docs/44-roadmap-fase-20/evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json --resume` |
+| D+4 | `qwen/qwen3.8-27b` × `low` | `AI_REASONING_EFFORT=low python scripts/eval_analysis.py --prompt v1 --model qwen/qwen3.8-27b --label benchmark-low --split reserved --baseline docs/44-roadmap-fase-20/evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json --resume` |
+| D+5 | `qwen/qwen3.8-27b` × `medium` | `AI_REASONING_EFFORT=medium python scripts/eval_analysis.py --prompt v1 --model qwen/qwen3.8-27b --label benchmark-medium --split reserved --baseline docs/44-roadmap-fase-20/evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json --resume` |
 
 `--split reserved` runs only the reserved cases; drop the flag to run all 50 in one shot
 if the day's quota headroom allows it (`--split` merely filters `--cases`, the token
 cost of the smaller run is proportionally smaller, not "reserved *and then* all"). Every
 command writes `data/evals/<date>-v1-<model>-benchmark-<effort>.json` and `.md`
-(`scripts/eval_analysis.py` names the file from `--model` and `--label`).
+(`scripts/eval_analysis.py` names the file from `--model` and `--label`); `--resume` is
+a no-op the first time a command runs and picks up where it stopped on any later run.
 
 After D+5, fill each report's `human_review[case_id]` (`adherence`, `support`) by hand —
 that is the "acerto de rótulo" the criterion needs — then compare all six in one table:

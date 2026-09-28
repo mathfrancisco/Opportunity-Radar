@@ -56,8 +56,10 @@ Rodar o conjunto de avaliação de F20-21 (os mesmos 50 casos versionados) com `
 comparando contra o baseline já commitado de `v1`
 (`docs/44-roadmap-fase-20/evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json`).
 Comando exato, com `--model` pinado (mesma lição do baseline de F20-21: sem `--model`, o
-fallback liga e mistura modelos na amostra) e `--quota-wait-seconds` para absorver o
-Quota Guard de minuto sem parar a rodada inteira:
+fallback liga e mistura modelos na amostra), `--quota-wait-seconds` para absorver o
+Quota Guard de minuto sem parar a rodada inteira, e `--resume` para que uma parada por
+cota diária (o pré-voo recusa rodar se a estimativa não couber; `--allow-partial`
+ignora essa recusa) não descarte os casos já terminados no re-run:
 
 ```bash
 docker compose -p f20v2eval -f compose.yaml -f compose.dev.yaml run --rm \
@@ -66,7 +68,7 @@ docker compose -p f20v2eval -f compose.yaml -f compose.dev.yaml run --rm \
   --output /workspace/data/evals --prompt v2 \
   --model openai/gpt-oss-120b --label v2-vs-v1-baseline \
   --baseline /workspace/docs/44-roadmap-fase-20/evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json \
-  --quota-wait-seconds 65
+  --quota-wait-seconds 65 --resume
 ```
 
 Projeto Docker isolado `-p f20v2eval` (nunca `opportunity-radar`); rodar só depois que o

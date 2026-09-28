@@ -35,10 +35,18 @@ from opportunity_radar.matching.evaluation import (
     summarize,
 )
 from opportunity_radar.matching.prompts import prompts_root
+from opportunity_radar.platform.ai.quota import day_window
 from opportunity_radar.platform.ai.tasks import AITask, default_routes
 from opportunity_radar.platform.config import Settings
 from scripts import eval_analysis
-from scripts.eval_analysis import _adapter, _run, resolve_routes
+from scripts.eval_analysis import (
+    _adapter,
+    _run,
+    append_checkpoint,
+    default_checkpoint_path,
+    load_checkpoint,
+    resolve_routes,
+)
 
 _CASE = {
     "kinds": ["strong_match", "missing_compensation"],
@@ -161,9 +169,9 @@ def test_fidelity_counts_quotes_found_verbatim_and_is_absent_without_evidence() 
     assert fidelity([], payload) is None
 
 
-def _case() -> EvalCase:
+def _case(case_id: str = "01-case") -> EvalCase:
     return EvalCase(
-        case_id="01-case",
+        case_id=case_id,
         kinds=frozenset({"strong_match"}),
         payload=_CASE["payload"],  # type: ignore[arg-type]
         expected=Expected(
@@ -180,7 +188,9 @@ class _QuotaAwareFakeAdapter:
         self.outcomes = outcomes
         self.calls = 0
         self.model = "test-model"
-        self.quota_guard = SimpleNamespace(next_available_at=lambda model: available_at)
+        self.quota_guard = SimpleNamespace(
+            next_available_at=lambda model: available_at, snapshot=lambda: []
+        )
 
     async def warm_up(self) -> None:
         return None
@@ -189,7 +199,9 @@ class _QuotaAwareFakeAdapter:
         return {}
 
     def prepare(self, request: object) -> SimpleNamespace:
-        return SimpleNamespace(inference={}, evidence_sources={})
+        return SimpleNamespace(
+            inference={}, evidence_sources={}, size=SimpleNamespace(prompt_tokens_estimate=0)
+        )
 
     async def analyze(
         self, request: object, *, prepared: object, use_cache: bool
@@ -302,7 +314,9 @@ def test_quota_refusal_marks_case_blocked_and_stops_without_retrying() -> None:
         status=AnalysisStatus.AI_FAILED, failure_code=AnalysisFailureCode.QUOTA_EXHAUSTED
     )
     adapter = _QuotaAwareFakeAdapter([quota_exhausted], datetime.now(UTC))
-    scores, repeats, identity, blocked_case = asyncio.run(_run(adapter, [_case(), _case()], 1))
+    scores, repeats, identity, blocked_case, stopped_for_tokens = asyncio.run(
+        _run(adapter, [_case(), _case()], 1)
+    )
 
     assert adapter.calls == 1
     assert blocked_case == "01-case"
@@ -311,6 +325,7 @@ def test_quota_refusal_marks_case_blocked_and_stops_without_retrying() -> None:
     assert scores[0].failure_code == "QUOTA_EXHAUSTED"
     assert repeats == {}
     assert identity == {"server": {}, "inference": {}}
+    assert stopped_for_tokens is False
 
 
 def test_main_writes_the_quota_blocked_case_and_returns_nonzero(
@@ -364,7 +379,7 @@ def test_quota_wait_retries_once_after_the_later_guard_window_and_succeeds() -> 
     async def fake_sleep(seconds: float) -> None:
         slept.append(seconds)
 
-    scores, repeats, identity, blocked_case = asyncio.run(
+    scores, repeats, identity, blocked_case, stopped_for_tokens = asyncio.run(
         _run(
             adapter=adapter,
             cases=[_case()],
@@ -380,6 +395,7 @@ def test_quota_wait_retries_once_after_the_later_guard_window_and_succeeds() -> 
     assert scores[0].status == AnalysisStatus.AI_COMPLETED.value
     assert repeats == {}
     assert identity == {"server": {}, "inference": {}}
+    assert stopped_for_tokens is False
 
 
 def test_positive_quota_wait_still_stops_with_nonzero_after_one_retry(
@@ -418,6 +434,229 @@ def test_positive_quota_wait_still_stops_with_nonzero_after_one_retry(
     assert report["quota_blocked_case"] == "01-case"
     assert report["cases"][0]["status"] == "QUOTA_BLOCKED"
     assert "quota guard blocked case 01-case" in capsys.readouterr().out
+
+
+def test_checkpoint_round_trips_a_finished_case_including_its_repeats(tmp_path: Path) -> None:
+    path = tmp_path / "round.checkpoint.jsonl"
+    score = score_case(
+        _case(),
+        AnalysisOutcome(status=AnalysisStatus.AI_COMPLETED, analysis=_analysis()),
+    )
+    repeat_scores = [score, score]
+
+    append_checkpoint(path, "01-case", score, repeat_scores)
+
+    assert path.read_text(encoding="utf-8").count("\n") == 1  # one line, flushed
+    scores, repeats = load_checkpoint(path)
+    assert scores == {"01-case": score}
+    assert repeats == {"01-case": repeat_scores}
+
+
+def test_default_checkpoint_path_has_no_date_so_a_later_resume_still_finds_it() -> None:
+    path = default_checkpoint_path(Path("data/evals"), "v1", "openai/gpt-oss-120b", None)
+
+    assert path == Path("data/evals/v1-openai_gpt-oss-120b.checkpoint.jsonl")
+
+
+def test_resume_skips_checkpointed_cases_and_merges_into_one_report(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    settings = Settings(database_url="postgresql+psycopg://u:p@localhost/db")
+    checkpoint_path = tmp_path / "round.checkpoint.jsonl"
+    blocked = AnalysisOutcome(
+        status=AnalysisStatus.AI_FAILED, failure_code=AnalysisFailureCode.QUOTA_EXHAUSTED
+    )
+    first_adapter = _QuotaAwareFakeAdapter([_analysis_outcome(), blocked], datetime.now(UTC))
+
+    monkeypatch.setattr(eval_analysis, "Settings", lambda: settings)
+    monkeypatch.setattr(
+        eval_analysis, "load_cases", lambda path: [_case("01-case"), _case("02-case")]
+    )
+    monkeypatch.setattr(eval_analysis, "create_database_engine", lambda url: object())
+    monkeypatch.setattr(eval_analysis, "_adapter", lambda settings, args, engine: first_adapter)
+
+    first_exit = eval_analysis.main(
+        ["--output", str(tmp_path), "--checkpoint", str(checkpoint_path)]
+    )
+
+    assert first_exit == 1
+    assert first_adapter.calls == 2  # 01-case completed, 02-case hit the quota block
+    saved_scores, _ = load_checkpoint(checkpoint_path)
+    assert set(saved_scores) == {"01-case"}  # 02-case never finished, so it is not saved
+
+    second_adapter = _QuotaAwareFakeAdapter([_analysis_outcome()], datetime.now(UTC))
+    monkeypatch.setattr(eval_analysis, "_adapter", lambda settings, args, engine: second_adapter)
+
+    second_exit = eval_analysis.main(
+        [
+            "--output",
+            str(tmp_path),
+            "--checkpoint",
+            str(checkpoint_path),
+            "--resume",
+            "--label",
+            "resumed",
+        ]
+    )
+
+    assert second_exit == 0
+    assert second_adapter.calls == 1  # only the case the checkpoint had not finished
+    reports = list(tmp_path.glob("*-resumed.json"))
+    assert len(reports) == 1
+    report = json.loads(reports[0].read_text(encoding="utf-8"))
+    case_ids = [case["case_id"] for case in report["cases"]]
+    statuses = {case["case_id"]: case["status"] for case in report["cases"]}
+    assert case_ids == ["01-case", "02-case"]
+    assert statuses == {
+        "01-case": "AI_COMPLETED",
+        "02-case": "AI_COMPLETED",
+    }
+    assert report["partial"] is False
+
+
+def test_max_tokens_stops_cleanly_after_the_case_that_crosses_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    settings = Settings(database_url="postgresql+psycopg://u:p@localhost/db")
+    checkpoint_path = tmp_path / "round.checkpoint.jsonl"
+    heavy_outcome = AnalysisOutcome(
+        status=AnalysisStatus.AI_COMPLETED,
+        analysis=_analysis(),
+        metrics=AnalysisMetrics(prompt_tokens=600, output_tokens=400, total_ms=100),
+    )
+    adapter = _QuotaAwareFakeAdapter([heavy_outcome, heavy_outcome], datetime.now(UTC))
+
+    monkeypatch.setattr(eval_analysis, "Settings", lambda: settings)
+    monkeypatch.setattr(
+        eval_analysis, "load_cases", lambda path: [_case("01-case"), _case("02-case")]
+    )
+    monkeypatch.setattr(eval_analysis, "create_database_engine", lambda url: object())
+    monkeypatch.setattr(eval_analysis, "_adapter", lambda settings, args, engine: adapter)
+
+    exit_code = eval_analysis.main(
+        [
+            "--output",
+            str(tmp_path),
+            "--checkpoint",
+            str(checkpoint_path),
+            "--max-tokens",
+            "1000",
+        ]
+    )
+
+    assert exit_code == 1
+    assert adapter.calls == 1  # 02-case was never contacted once the budget was reached
+    saved_scores, _ = load_checkpoint(checkpoint_path)
+    assert set(saved_scores) == {"01-case"}  # the case that crossed the budget is still kept
+    reports = list(tmp_path.glob("*.json"))
+    report = json.loads(reports[0].read_text(encoding="utf-8"))
+    assert report["partial"] is True
+    assert "max-tokens" in capsys.readouterr().out
+
+
+def _analysis_outcome() -> AnalysisOutcome:
+    return AnalysisOutcome(status=AnalysisStatus.AI_COMPLETED, analysis=_analysis())
+
+
+class _PreflightAdapter:
+    """A fixed prompt/output token estimate per case, and a `quota_guard` reporting
+
+    a chosen usage snapshot — for testing the pre-flight gate in isolation from a real
+    `QuotaGuard` or database.
+    """
+
+    model = "test-model"
+
+    def __init__(self, quota_guard: SimpleNamespace, outcome: AnalysisOutcome | None) -> None:
+        self.quota_guard = quota_guard
+        self.outcome = outcome
+        self.calls = 0
+
+    async def warm_up(self) -> None:
+        return None
+
+    async def describe(self) -> dict[str, object]:
+        return {}
+
+    def prepare(self, request: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            inference={"options": {"max_completion_tokens": 200}},
+            evidence_sources={},
+            size=SimpleNamespace(prompt_tokens_estimate=200),
+        )
+
+    async def analyze(
+        self, request: object, *, prepared: object, use_cache: bool
+    ) -> AnalysisOutcome:
+        del request, prepared, use_cache
+        self.calls += 1
+        if self.outcome is None:
+            raise AssertionError("the model must not be called once the round is aborted")
+        return self.outcome
+
+
+def _quota_snapshot_row(model: str, used_tokens: int) -> dict[str, object]:
+    return {
+        "model": model,
+        "window_kind": "day",
+        "window_start": day_window(datetime.now(UTC)),
+        "requests": 1,
+        "tokens": used_tokens,
+        "requests_ceiling": None,
+        "tokens_ceiling": None,
+    }
+
+
+def test_preflight_aborts_when_the_estimate_does_not_fit_the_remaining_budget(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    settings = Settings(
+        database_url="postgresql+psycopg://u:p@localhost/db", ai_daily_tokens_soft_limit=1000
+    )
+    quota_guard = SimpleNamespace(
+        snapshot=lambda: [_quota_snapshot_row("test-model", 900)],
+        next_available_at=lambda model: datetime.now(UTC),
+    )
+    adapter = _PreflightAdapter(quota_guard, outcome=None)
+
+    monkeypatch.setattr(eval_analysis, "Settings", lambda: settings)
+    monkeypatch.setattr(eval_analysis, "load_cases", lambda path: [_case()])
+    monkeypatch.setattr(eval_analysis, "create_database_engine", lambda url: object())
+    monkeypatch.setattr(eval_analysis, "_adapter", lambda settings, args, engine: adapter)
+
+    exit_code = eval_analysis.main(
+        ["--output", str(tmp_path), "--model", "test-model"]
+    )
+
+    assert exit_code == 3
+    assert adapter.calls == 0
+    assert list(tmp_path.glob("*.json")) == []
+    assert "aborting" in capsys.readouterr().out
+
+
+def test_allow_partial_bypasses_the_preflight_abort(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    settings = Settings(
+        database_url="postgresql+psycopg://u:p@localhost/db", ai_daily_tokens_soft_limit=1000
+    )
+    quota_guard = SimpleNamespace(
+        snapshot=lambda: [_quota_snapshot_row("test-model", 900)],
+        next_available_at=lambda model: datetime.now(UTC),
+    )
+    adapter = _PreflightAdapter(quota_guard, outcome=_analysis_outcome())
+
+    monkeypatch.setattr(eval_analysis, "Settings", lambda: settings)
+    monkeypatch.setattr(eval_analysis, "load_cases", lambda path: [_case()])
+    monkeypatch.setattr(eval_analysis, "create_database_engine", lambda url: object())
+    monkeypatch.setattr(eval_analysis, "_adapter", lambda settings, args, engine: adapter)
+
+    exit_code = eval_analysis.main(
+        ["--output", str(tmp_path), "--model", "test-model", "--allow-partial"]
+    )
+
+    assert exit_code == 0
+    assert adapter.calls == 1
 
 
 def test_the_comparison_reads_each_criterion_in_its_own_direction() -> None:
