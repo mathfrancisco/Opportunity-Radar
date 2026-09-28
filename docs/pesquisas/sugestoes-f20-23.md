@@ -1,7 +1,9 @@
 # Precisão das sugestões de classificação (F20-23)
 
-- **Status:** Medido offline com casos sintéticos/anonimizados; medição real no acervo é
-  o próximo passo (worker continua desligado, `worker_suggest_enabled: bool = False`).
+- **Status:** Medido offline com casos sintéticos/anonimizados. Amostra real de 30 vagas
+  `UNKNOWN` com gabarito rotulado em 2026-09-28 (`docs/44-roadmap-fase-20/rotulagem/
+  f20-23-amostra-unknown.md`); falta só a rodada real do Groq contra esse gabarito, fora do
+  escopo deste worker (worker continua desligado, `worker_suggest_enabled: bool = False`).
 - **Card:** [F20-23](../44-roadmap-fase-20/fase-20/f20-23-classificacao-assistida.md)
 - **SPEC:** [43-spec-llm-cloud-e-consolidacao.md](../43-spec-llm-cloud-e-consolidacao.md), §6, §6.1
 - **Contexto:** baseline real do acervo (`opportunity-radar`, medição de 7 dias em
@@ -51,20 +53,21 @@ Todos os 12 casos passam com o comportamento esperado
 5. Só então decidir `worker_suggest_enabled=true` em produção, e atualizar este arquivo
    com o número medido.
 
-## Tentativa de amostragem real — bloqueada por interrupção externa (2026-09-28)
+## Passo 1/2 concluídos com o acervo real (2026-09-28)
 
-O worker da branch `feature/f20-rotulos-2` tentou o passo 1 acima (selecionar ~30 vagas
-reais com campo `UNKNOWN`, só leitura, no projeto `opportunity-radar` em medição de 7 dias).
-Antes do `SELECT` de amostragem, o Docker Desktop da máquina caiu e voltou sozinho
-(interrupção externa relatada pelo coordenador, não uma ação deste worker); ao voltar, os
-containers `opportunity-radar-{api,worker,postgres,frontend}-1` estavam todos
-`Exited (255)` e nenhum tem `restart` configurado no `compose.yaml` para voltar sozinho. Por
-instrução explícita de nunca reiniciar o stack real, este worker não deu `docker compose up`
-nem `docker start` — os containers seguiam parados ao fim desta sessão. **Nenhuma linha do
-conjunto de 30 foi produzida.**
+A primeira tentativa (mesmo dia) foi interrompida por uma queda externa do Docker Desktop
+antes do `SELECT` de amostragem — o worker da branch `feature/f20-rotulos-2` não deu nenhum
+comando de escrita, parada ou reinicialização no stack real, por instrução explícita. Assim
+que o stack voltou saudável (`2026-09-28T11:45Z`, dentro da janela de sete dias reiniciada),
+o mesmo worker completou os passos 1 e 2: uma amostra real de 30 vagas com `role_family`,
+`seniority` ou `work_mode` `UNKNOWN` (39 instâncias de campo no total), cada uma com o valor
+recomendado e a evidência literal da `description` que o sustenta — ou "manter `UNKNOWN`"
+quando nenhuma evidência textual convincente foi encontrada (30/39 corrigidos, 9/39
+mantidos). Ver `docs/44-roadmap-fase-20/rotulagem/f20-23-amostra-unknown.md` e o dataset
+`f20-23-amostra-unknown.json` — nenhum nome de pessoa, e-mail ou telefone aparece nas
+evidências usadas.
 
-Comando de amostragem pronto para quando o stack voltar (só `SELECT`, sem PII nas colunas
-lidas):
+Comando de amostragem usado (só `SELECT`, sem PII nas colunas lidas):
 
 ```bash
 docker compose -p opportunity-radar exec -T postgres psql -U opportunity_radar -d opportunity_radar -c \
@@ -74,9 +77,8 @@ docker compose -p opportunity-radar exec -T postgres psql -U opportunity_radar -
    ORDER BY published_at DESC NULLS LAST LIMIT 30;"
 ```
 
-Comando exato para a rodada de precisão real do passo 3, assim que a amostra de 30 estiver
-rotulada manualmente (fora deste PR, chave real do Groq, nunca no projeto
-`opportunity-radar`):
+Comando exato para a rodada de precisão real do passo 3, contra o gabarito acima (fora
+deste PR, chave real do Groq, nunca no projeto `opportunity-radar`):
 
 ```bash
 docker compose -p f20cls-precisao -f compose.yaml -f compose.dev.yaml run --rm \

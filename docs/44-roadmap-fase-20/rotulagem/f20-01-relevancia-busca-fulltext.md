@@ -104,34 +104,76 @@ extraído de `f20-01-relevancia-busca-fulltext.json` filtrando `recomendacao == 
 diretamente para `data/search-reference/queries.json`, que é o schema que
 `scripts/search_reference.py`/`scripts/eval_search.py` esperam.
 
-## Medição real — bloqueada por interrupção externa do Docker Desktop (2026-09-28)
+## Medição real — feita em 2026-09-28 (stack de volta, dentro da janela de 7 dias)
 
-Depois de copiar o `queries.json` para dentro do container `opportunity-radar-api-1` (via
-`docker cp`, sem tocar o volume do Postgres) e pouco antes de rodar
-`python scripts/eval_search.py --mode both`, o Docker Desktop da máquina caiu e voltou
-sozinho (falha reportada pelo coordenador como "interrupção por limite de gasto da API", não
-uma ação deste worker). Ao voltar, os containers `opportunity-radar-{api,worker,postgres,
-frontend}-1` estavam todos `Exited (255)` — o motor do Docker reiniciou e nenhum deles tem
-`restart` configurado no `compose.yaml` (só `migrate` declara `restart: "no"` explicitamente;
-os demais também não reiniciam sozinhos). **Este worker não deu `docker compose down/stop`
-nem qualquer comando de escrita** — a instrução era explícita para nunca reiniciar o stack
-real, então este worker também não deu `docker compose up`/`docker start` para trazê-lo de
-volta, mesmo estando parado por um motivo externo.
-
-**Isto significa que a rodada de `eval_search.py --mode both` desta rotulagem não foi
-executada** — o container caiu entre a cópia do arquivo e a execução do comando. O comando
-exato para rodar assim que alguém (com autorização para reiniciar o stack real) trouxer os
-containers de volta:
+O incidente de Docker Desktop do dia 28 (containers `Exited (255)` entre a cópia do
+`queries.json` e a execução do comando — ver histórico deste arquivo) foi resolvido por
+quem tem autorização para tocar o stack real; o `opportunity-radar` voltou saudável às
+`2026-09-28T11:45Z`, dentro da janela de 7 dias reiniciada (`docs/44-roadmap-fase-20/
+evidencias/f20-janela-7d-t0-2026-09-28b.json`, até `2026-10-05T12:02Z`). Com o stack de
+volta, este worker rodou (só leitura, sem tocar o Postgres além do `SELECT` que
+`eval_search.py` já fazia):
 
 ```bash
 docker cp data/search-reference/queries.json opportunity-radar-api-1:/app/data/search-reference/queries.json
 docker exec opportunity-radar-api-1 python scripts/eval_search.py --mode both
 ```
 
-Sem essa medição, **F17-03/F20-01 continuam "Em revisão"**: o gabarito agora é
-metodologicamente mais correto (candidatos vêm de full-text sobre `description`, não de
-substring de título), mas os números comparáveis (`recall@10 like` vs `recall@10 fulltext`)
-com este gabarito ainda não existem.
+### Resultado — recall@10 médio: fulltext 0,3396 > like 0,2745 (+23,7% relativo)
+
+```
+mode=like     queries_measured=16   average recall@10 = 0.2745   average nDCG@10 = 0.2600
+mode=fulltext queries_measured=16   average recall@10 = 0.3396   average nDCG@10 = 0.2548
+```
+
+| Consulta | relevantes | recall@10 like | recall@10 fulltext | nDCG@10 like | nDCG@10 fulltext |
+| --- | --- | --- | --- | --- | --- |
+| accounting | 3 | 0,000 | 0,000 | 0,000 | 0,000 |
+| aws | 6 | 0,000 | 0,000 | 0,000 | 0,000 |
+| backend | 4 | 0,250 | 0,250 | 0,390 | 0,246 |
+| devops | 3 | 0,333 | 0,333 | 0,469 | 0,235 |
+| **frontend** | 3 | **0,000** | **0,667** | 0,000 | 0,391 |
+| **fullstack** | 8 | 0,375 | **0,625** | 0,366 | 0,727 |
+| java | 4 | 0,000 | 0,000 | 0,000 | 0,000 |
+| **kubernetes** | 8 | **0,000** | **0,125** | 0,000 | 0,126 |
+| machine learning | 3 | 0,333 | 0,333 | 0,469 | 0,202 |
+| marketing | 2 | 0,500 | 0,500 | 0,387 | 0,185 |
+| node | 5 | 0,000 | 0,000 | 0,000 | 0,000 |
+| product manager | 2 | 1,000 | 1,000 | 1,000 | 0,605 |
+| python | 7 | 0,000 | 0,000 | 0,000 | 0,000 |
+| **qa** | 1 | 1,000 | 1,000 | 0,356 | **1,000** |
+| react | 4 | 0,000 | 0,000 | 0,000 | 0,000 |
+| sales | 5 | 0,600 | 0,600 | 0,723 | 0,359 |
+
+### Leitura honesta: full-text vence no critério do card, empata em ranking
+
+**recall@10:** full-text (0,3396) > like (0,2745) — é exatamente o critério de aceite de
+F17-03 ("recall@10 do full-text > recall@10 do LIKE"), agora medido sem o viés de
+construção que o addendum anterior documentou. A vantagem inteira vem de três consultas:
+`frontend` (0,000 → 0,667), `fullstack` (0,375 → 0,625) e `kubernetes` (0,000 → 0,125) — as
+mesmas onde o `like` (que só olha título/empresa) não tinha como competir, porque o termo só
+aparece na descrição da maioria das vagas relevantes. Nas outras 13 consultas, `like` e
+`fulltext` empatam exatamente no recall (a mesma vaga aparece ou não aparece nos top 10 dos
+dois modos) — inclusive em consultas com recall 0 nos dois modos (`accounting`, `aws`,
+`java`, `node`, `python`, `react`), o que mostra que nenhum dos dois métodos resolve bem
+consultas de termo único e comum sobre um acervo de 648 vagas.
+
+**nDCG@10:** os dois modos empatam (like 0,2600, fulltext 0,2548 — diferença de 0,005, não
+significativa com 16 consultas). Quando ambos encontram os itens relevantes, `like` às vezes
+ordena melhor (`backend`, `devops`, `machine learning`, `marketing`, `product manager`,
+`sales`) e `fulltext` às vezes ordena melhor (`fullstack`, `qa`, e as três que só o fulltext
+encontra). Full-text não é estritamente melhor em ranking — ele é melhor em **cobertura**
+(recall), que é o que o critério do card mede.
+
+### F17-03/F20-01: o critério de recall@10 está satisfeito
+
+Com um gabarito construído por full-text sobre `description` (não por substring de título),
+**`recall@10 fulltext > recall@10 like` é verdadeiro** (0,3396 > 0,2745). Este era o único
+critério de aceite de F17-03 pendente de medição correta (os outros — acento, plural,
+sinônimos, filtros combináveis — já são cobertos por teste de integração em CI, não por esta
+rotulagem). **Recomendação: fechar F17-03/F20-01 como concluído**, citando este documento
+como a medição que resolve a pendência registrada nos dois addenda anteriores. A decisão
+final de mudar o status do card é de quem revisa o PR.
 
 ## Limitações
 

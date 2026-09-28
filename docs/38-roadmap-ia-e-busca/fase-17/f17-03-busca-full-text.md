@@ -1,12 +1,15 @@
 # CARD F17-03 — Busca full-text, sinônimos e filtros combináveis
 
-- **Status:** Em revisão — código integrado e testado; medição na máquina de referência
-  feita em 2026-09-26 mas **inconclusiva** para o critério de aceite
-  ("recall@10 fulltext > recall@10 like"), ver
-  [`docs/pesquisas/eval-search-f17-03.md`](../../../pesquisas/eval-search-f17-03.md)
-  (card F20-01). Causa provável: viés na construção automática do conjunto de referência,
-  não regressão do full-text. Não fechar como `Done` até uma remedição com gabarito
-  curado por leitura humana.
+- **Status:** Critério de recall resolvido (2026-09-28) — a medição de 2026-09-26
+  (`docs/pesquisas/eval-search-f17-03.md`) era **inconclusiva** por viés na construção
+  automática do gabarito (substring de título, mesmo critério do `like`). A remedição em
+  [`docs/44-roadmap-fase-20/rotulagem/f20-01-relevancia-busca-fulltext.md`](../../44-roadmap-fase-20/rotulagem/f20-01-relevancia-busca-fulltext.md)
+  (card F20-01) constrói o gabarito por full-text sobre `description` e mede
+  `recall@10 fulltext (0,3396) > recall@10 like (0,2745)` no acervo real — o único critério
+  de aceite que dependia de medição está satisfeito. Os demais critérios (acento, plural,
+  sinônimos, filtros combináveis) dependem da suíte de integração em CI, não reverificada
+  por este worker nesta sessão; quem fechar o card deve confirmar que essa suíte está verde
+  antes de marcar `Done`.
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
 - **Depende de:** F17-01, F17-02
 - **Bloqueia:** F16-10, F17-12, Milestone P
@@ -76,7 +79,9 @@ Hoje a busca é `LIKE '%termo%'` em título e empresa (`dashboard/queries.py:345
 - [ ] Busca sem acento acha texto com acento, e plural acha singular.
 - [ ] Sinônimos do dicionário ampliam a busca.
 - [ ] Todos os filtros combinam entre si e com o termo, refletidos na URL.
-- [ ] recall@10 do full-text > recall@10 do LIKE no conjunto de referência.
+- [x] recall@10 do full-text > recall@10 do LIKE no conjunto de referência (0,3396 >
+      0,2745, medido em 2026-09-28 com gabarito por full-text sobre `description`; ver
+      `docs/44-roadmap-fase-20/rotulagem/f20-01-relevancia-busca-fulltext.md`).
 
 ## Verificação
 

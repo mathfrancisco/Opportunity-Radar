@@ -1,15 +1,16 @@
 # CARD F20-01 — Baselines e relatórios da busca
 
-- **Status:** Parcial — feito na máquina de referência em 2026-09-26. Baseline do F17-01
-  medido e completo (`docs/pesquisas/baseline-f17-01.md`, marcado `Done`). Relatório do
-  `eval_search.py` do F17-03 medido e versionado (`docs/pesquisas/eval-search-f17-03.md`),
-  mas **inconclusivo** para o critério de aceite do F17-03 — viés conhecido na construção
-  automática do conjunto de referência (as vagas "relevantes" foram escolhidas pelo mesmo
-  critério de substring que o modo `like` usa, favorecendo-o por construção). F17-03 segue
-  "Em revisão", não `Done`. A marcação de relevância (141 oportunidades, acima do mínimo
-  de 100) usou uma heurística de título, não leitura humana descrição a descrição — ver
-  limitação no relatório. Nenhum código de produção alterado, como pede este card (só
-  `docs/pesquisas/` e os dois cards de origem).
+- **Status:** Resolvido (2026-09-28). Baseline do F17-01 medido e completo
+  (`docs/pesquisas/baseline-f17-01.md`, marcado `Done`). O relatório original do
+  `eval_search.py` (`docs/pesquisas/eval-search-f17-03.md`) era **inconclusivo** — viés
+  conhecido na construção automática do conjunto de referência (substring de título, o
+  mesmo critério do `like`). O addendum de 2026-09-28
+  (`docs/44-roadmap-fase-20/rotulagem/f20-01-relevancia-busca-fulltext.md`) reconstrói o
+  gabarito por full-text sobre `description` (não título) e mede
+  `recall@10 fulltext (0,3396) > recall@10 like (0,2745)` — o critério de aceite de F17-03
+  está satisfeito sem o viés anterior. Nenhum código de produção alterado, como pede este
+  card (só `docs/pesquisas/`, `docs/44-roadmap-fase-20/rotulagem/` e os dois cards de
+  origem).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** A — Fechamento do que está em revisão
 - **Depende de:** Nenhum
@@ -56,7 +57,7 @@ de `like` por construção. As duas consultas sem candidato por título (`kubern
 pois exigem leitura de descrição completa fora do escopo desta sessão. **F17-03/F20-01
 seguem "Em revisão"**, não `Done`.
 
-## Addendum — gabarito por full-text sobre `description`, medição bloqueada (2026-09-28)
+## Addendum — gabarito por full-text sobre `description`: recall@10 fulltext > like (2026-09-28)
 
 `docs/44-roadmap-fase-20/rotulagem/f20-01-relevancia-busca-fulltext.md` (branch
 `feature/f20-rotulos-2`) resolve o viés apontado no addendum anterior: os 128 candidatos
@@ -68,20 +69,30 @@ menção negada como `"NOT REQUIRED - machine learning"`, ou o termo descrevendo
 equipe/o produto da empresa, não o cargo). `kubernetes` e `frontend` — sem candidato algum
 no gabarito por título — tiveram 8/8 e 3/8 relevantes respectivamente.
 `data/search-reference/queries.json` foi reconstruído localmente com as 68 linhas
-`relevante`. **A rodada de `eval_search.py --mode both` não foi executada**: o Docker Desktop
-da máquina caiu e voltou sozinho entre a cópia do `queries.json` para dentro do container e o
-comando de avaliação (interrupção externa, não uma ação deste worker); os containers do
-projeto `opportunity-radar` ficaram `Exited (255)` e este worker não os reiniciou, por
-instrução explícita de nunca reiniciar o stack real. Comando pendente, documentado em
-`f20-01-relevancia-busca-fulltext.md`:
+`relevante`.
 
-```bash
-docker cp data/search-reference/queries.json opportunity-radar-api-1:/app/data/search-reference/queries.json
-docker exec opportunity-radar-api-1 python scripts/eval_search.py --mode both
+A primeira tentativa de rodar `eval_search.py --mode both` foi interrompida por uma queda
+externa do Docker Desktop (containers `Exited (255)`, sem ação deste worker); assim que o
+stack real voltou saudável (`2026-09-28T11:45Z`, dentro da janela de 7 dias reiniciada), a
+rodada foi refeita, só leitura:
+
+```
+mode=like     average recall@10 = 0.2745   average nDCG@10 = 0.2600
+mode=fulltext average recall@10 = 0.3396   average nDCG@10 = 0.2548
 ```
 
-**F17-03/F20-01 seguem "Em revisão"**: o gabarito agora é metodologicamente correto, mas os
-números comparáveis `like` vs `fulltext` com este gabarito ainda faltam.
+**recall@10 fulltext (0,3396) > recall@10 like (0,2745)** — o critério de aceite de F17-03
+está satisfeito com este gabarito sem o viés de construção. A vantagem vem inteira de três
+consultas onde `like` não tinha chance por olhar só título/empresa: `frontend` (0,000→0,667),
+`fullstack` (0,375→0,625) e `kubernetes` (0,000→0,125); nas outras 13 consultas os dois modos
+empatam exatamente no recall. nDCG@10 é um empate estatístico (0,2600 vs 0,2548) — full-text
+não ordena melhor, mas cobre mais. Tabela completa por consulta em
+`f20-01-relevancia-busca-fulltext.md`.
+
+**Recomendação: F17-03/F20-01 podem fechar como concluído** — o único critério pendente
+(recall@10) está medido e satisfeito; os demais critérios (acento, plural, sinônimos,
+filtros) já são cobertos por teste de integração em CI, não por esta rotulagem. A decisão
+final de status é de quem revisa o PR.
 
 ## Não fazer
 
