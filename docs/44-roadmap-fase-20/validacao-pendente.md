@@ -72,8 +72,8 @@ reais).
 
 | Item | Estado |
 | --- | --- |
-| Testes instáveis por banco de teste compartilhado | Em andamento (`feature/f20-sanidade`) |
-| `alembic check` e head única (F20-05) | Em andamento (`feature/f20-sanidade`) |
+| Testes instáveis por banco de teste compartilhado | Resolvido (`79d45c0`): 6 causas de vazamento entre testes corrigidas; 8 rodadas completas (ordem padrão + 7 sementes via `RANDOM_ORDER_SEED`) com 981 aprovados e 0 falhas |
+| `alembic check` e head única (F20-05) | Resolvido (`79d45c0`): `env.py` sem `include_schemas=True` nunca comparava os schemas reais; corrigido, modelos alinhados ao banco (índices declarados, `ondelete` do modelo corrigido), head única `20260926_0052`, sem migração nova |
 | F20-38: orçamento compartilhado entre duas fontes do mesmo host | Sem par real no catálogo; incluir um antes de medir |
 | F20-36: board da Airbyte | `404` real; nova rodada de descoberta |
 | API sem endpoint para editar `schedule` de fonte | Lacuna registrada |

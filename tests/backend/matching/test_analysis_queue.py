@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -28,7 +29,11 @@ from opportunity_radar.matching.analysis import (
     SemanticAnalysis,
     analysis_key,
 )
-from opportunity_radar.matching.models import MatchAnalysisClaimModel, MatchAnalysisModel
+from opportunity_radar.matching.models import (
+    MatchAnalysisClaimModel,
+    MatchAnalysisModel,
+    MatchAssessmentModel,
+)
 from opportunity_radar.matching.repository import (
     AnalysisRecord,
     AssessmentRecord,
@@ -56,6 +61,50 @@ pytestmark = [
 
 _MODEL = "llama3.2:3b"
 _PROMPT_VERSION = "opportunity_analysis/v1"
+
+
+@pytest.fixture(autouse=True)
+def _retire_pending_assessments_left_by_this_test() -> Iterator[None]:
+    """Every test in this file that proves a *value ranking* — verdict, company
+    priority, freshness — seeds real, committed `MatchAssessmentModel` rows in this
+    shared, never-truncated integration database, and several never analyze them (that
+    is the point: they assert the row is skipped, deferred or merely enumerable). Left
+    pending, a `score=100.0000`/`HIGH_PRIORITY` default is the highest a later test's own
+    seed can ever tie, and stealing a batch slot from it is exactly the F20-24 note's
+    "value-ordered queue leftovers" (F20 sanity pass: reproduced under randomized order,
+    e.g. by `test_the_queue_serves_the_most_valuable_verdict_first_then_the_newest_posting`
+    against `test_the_job_analyzes_a_bounded_batch_and_commits_each_result`).
+
+    Retiring here, once, after every test — rather than patching each test's seeding
+    helper — is what keeps this fixed regardless of which new test starts seeding
+    assessments next.
+    """
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        before_ids = set(session.scalars(select(MatchAssessmentModel.id)))
+    yield
+    with Session(engine) as session:
+        pending_now = set(
+            MatchingService(session).pending_analysis_ids(limit=1_000_000)
+        )
+        leaked = pending_now - before_ids
+        if not leaked:
+            return
+        repository = SqlAlchemyMatchingRepository(session)
+        for assessment_id in leaked:
+            repository.add_analysis(
+                AnalysisRecord(
+                    assessment_id=assessment_id,
+                    cache_key=uuid4().hex + uuid4().hex,
+                    status=AnalysisStatus.AI_COMPLETED.value,
+                    schema_version="analysis-v1",
+                    analyzed_at=datetime.now(UTC),
+                    summary="retired for test isolation",
+                    model_id=_MODEL,
+                    recommended_review=False,
+                )
+            )
+        session.commit()
 
 
 class _FakeQuotaGuard:
@@ -468,6 +517,13 @@ def test_pending_analysis_reserves_aging_sample() -> None:
                     recommended_review=False,
                 )
             )
+        # `add_analysis` only stages the row (`session.add`); `with _session()` closes on
+        # exit without committing, so without this the retirement above was silently
+        # discarded and all 20 rows stayed pending — the highest-ranked in the whole
+        # database — for the rest of the run (F20 sanity pass, seed 999 of the randomized
+        # order reproduced it as a wrong id in
+        # test_the_job_analyzes_a_bounded_batch_and_commits_each_result).
+        session.commit()
         session.commit()
 
 
@@ -776,6 +832,27 @@ def test_the_job_defers_a_pending_id_when_the_worker_ceiling_is_exhausted() -> N
         )
         # Not discarded, not counted against the retry budget: still queued next pass.
         assert assessment_id in MatchingService(session).pending_analysis_ids(limit=100)
+
+        # This assessment is deliberately left pending above (that's what the test
+        # proves), but at the default `score=100.0000` it would then rank at the very
+        # top of this shared, never-truncated database's queue for the rest of the run —
+        # exactly what wrongly won a slot in
+        # test_the_job_analyzes_a_bounded_batch_and_commits_each_result under a
+        # randomized order (F20 sanity pass). Retire it now that the deferral itself has
+        # been observed.
+        SqlAlchemyMatchingRepository(session).add_analysis(
+            AnalysisRecord(
+                assessment_id=assessment_id,
+                cache_key=uuid4().hex + uuid4().hex,
+                status=AnalysisStatus.AI_COMPLETED.value,
+                schema_version="analysis-v1",
+                analyzed_at=datetime.now(UTC),
+                summary="retired for test isolation",
+                model_id=_MODEL,
+                recommended_review=False,
+            )
+        )
+        session.commit()
 
 
 def test_the_worker_budget_probe_never_consumes_quota() -> None:

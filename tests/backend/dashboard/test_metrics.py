@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import (
@@ -173,6 +173,79 @@ def _normalized_posting(
     session.flush()
 
 
+def _cleanup(session: Session, sources: list[SourceDefinitionModel]) -> None:
+    """Every helper above writes real rows to a single, never-truncated test database.
+
+    Left behind, a `_source()` default is `enabled=True`, `schedule="* * * * *"` and fully
+    homologated `source_type="greenhouse"` — exactly what `worker.collect_enabled_sources`
+    picks up. An earlier test run of this file leaking that row is what made the soak gate
+    (`tests/backend/operations/test_soak.py`) fail with "collector not registered:
+    greenhouse" days later, in a run that never touched this file (F20 sanity pass)."""
+    session.rollback()
+    source_ids = [source.id for source in sources]
+    if not source_ids:
+        return
+    run_ids = list(
+        session.scalars(
+            select(SourceRunModel.id).where(
+                SourceRunModel.source_definition_id.in_(source_ids)
+            )
+        )
+    )
+    raw_item_ids = list(
+        session.scalars(
+            select(RawItemModel.id).where(
+                RawItemModel.source_definition_id.in_(source_ids)
+            )
+        )
+    )
+    occurrence_ids = list(
+        session.scalars(
+            select(SourceOccurrenceModel.id).where(
+                SourceOccurrenceModel.raw_item_id.in_(raw_item_ids)
+            )
+        )
+    )
+    opportunity_ids = list(
+        session.scalars(
+            select(SourceOccurrenceModel.opportunity_id).where(
+                SourceOccurrenceModel.id.in_(occurrence_ids)
+            )
+        )
+    )
+    company_ids = list(
+        session.scalars(
+            select(OpportunityModel.canonical_company_id).where(
+                OpportunityModel.id.in_(opportunity_ids),
+                OpportunityModel.canonical_company_id.is_not(None),
+            )
+        )
+    )
+    session.execute(
+        delete(SourceOccurrenceObservationModel).where(
+            SourceOccurrenceObservationModel.raw_item_id.in_(raw_item_ids)
+            | SourceOccurrenceObservationModel.source_occurrence_id.in_(occurrence_ids)
+        )
+    )
+    session.execute(
+        delete(NormalizationResultModel).where(
+            NormalizationResultModel.raw_item_id.in_(raw_item_ids)
+        )
+    )
+    session.execute(
+        delete(SourceOccurrenceModel).where(SourceOccurrenceModel.id.in_(occurrence_ids))
+    )
+    session.execute(delete(OpportunityModel).where(OpportunityModel.id.in_(opportunity_ids)))
+    session.execute(delete(RawItemModel).where(RawItemModel.id.in_(raw_item_ids)))
+    session.execute(delete(SourceRunModel).where(SourceRunModel.id.in_(run_ids)))
+    session.execute(
+        delete(SourceDefinitionModel).where(SourceDefinitionModel.id.in_(source_ids))
+    )
+    if company_ids:
+        session.execute(delete(Company).where(Company.id.in_(company_ids)))
+    session.commit()
+
+
 def _metrics_for(
     session: Session, source_id: object, window: str
 ) -> SourceWindowMetrics:
@@ -202,78 +275,87 @@ def test_coverage_separates_an_empty_success_from_a_source_that_did_not_run() ->
         blocked = _source(session, homologated=False)
         disabled = _source(session, enabled=False)
         unscheduled = _source(session, schedule=None)
-        _run(session, empty, status="SUCCEEDED", started_at=NOW - timedelta(minutes=5))
-        session.commit()
+        try:
+            _run(session, empty, status="SUCCEEDED", started_at=NOW - timedelta(minutes=5))
+            session.commit()
 
-        assert _metrics_for(session, empty.id, "24h").coverage_state == "SUCCEEDED_ZERO"
-        assert _metrics_for(session, idle.id, "24h").coverage_state == "NOT_RUN"
-        assert (
-            _metrics_for(session, blocked.id, "24h").coverage_state
-            == "CONFIGURATION_BLOCKED"
-        )
-        assert _metrics_for(session, disabled.id, "24h").coverage_state == "NOT_ENABLED"
-        assert (
-            _metrics_for(session, unscheduled.id, "24h").coverage_state
-            == "NOT_SCHEDULED"
-        )
+            assert _metrics_for(session, empty.id, "24h").coverage_state == "SUCCEEDED_ZERO"
+            assert _metrics_for(session, idle.id, "24h").coverage_state == "NOT_RUN"
+            assert (
+                _metrics_for(session, blocked.id, "24h").coverage_state
+                == "CONFIGURATION_BLOCKED"
+            )
+            assert _metrics_for(session, disabled.id, "24h").coverage_state == "NOT_ENABLED"
+            assert (
+                _metrics_for(session, unscheduled.id, "24h").coverage_state
+                == "NOT_SCHEDULED"
+            )
+        finally:
+            _cleanup(session, [empty, idle, blocked, disabled, unscheduled])
 
 
 def test_rates_are_absent_rather_than_zero_without_runs() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         idle = _source(session)
-        session.commit()
+        try:
+            session.commit()
 
-        metrics = _metrics_for(session, idle.id, "24h")
+            metrics = _metrics_for(session, idle.id, "24h")
 
-        assert metrics.has_runs is False
-        assert metrics.error_rate is None
-        assert metrics.dedupe_rate is None
-        assert metrics.latency_p95_seconds is None
+            assert metrics.has_runs is False
+            assert metrics.error_rate is None
+            assert metrics.dedupe_rate is None
+            assert metrics.latency_p95_seconds is None
+        finally:
+            _cleanup(session, [idle])
 
 
 def test_errors_are_segmented_by_code_and_rates_are_computed() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         source = _source(session)
-        _run(
-            session,
-            source,
-            status="SUCCEEDED",
-            started_at=NOW - timedelta(minutes=30),
-            duration_seconds=2,
-            items_seen=10,
-            items_persisted=6,
-            items_skipped=4,
-        )
-        _run(
-            session,
-            source,
-            status="FAILED",
-            started_at=NOW - timedelta(minutes=20),
-            error_code="SOURCE_SERVER_ERROR",
-        )
-        _run(
-            session,
-            source,
-            status="FAILED",
-            started_at=NOW - timedelta(minutes=10),
-            error_code="SOURCE_RATE_LIMITED",
-        )
-        session.commit()
+        try:
+            _run(
+                session,
+                source,
+                status="SUCCEEDED",
+                started_at=NOW - timedelta(minutes=30),
+                duration_seconds=2,
+                items_seen=10,
+                items_persisted=6,
+                items_skipped=4,
+            )
+            _run(
+                session,
+                source,
+                status="FAILED",
+                started_at=NOW - timedelta(minutes=20),
+                error_code="SOURCE_SERVER_ERROR",
+            )
+            _run(
+                session,
+                source,
+                status="FAILED",
+                started_at=NOW - timedelta(minutes=10),
+                error_code="SOURCE_RATE_LIMITED",
+            )
+            session.commit()
 
-        metrics = _metrics_for(session, source.id, "24h")
+            metrics = _metrics_for(session, source.id, "24h")
 
-        assert metrics.runs == 3
-        assert metrics.runs_failed == 2
-        assert metrics.error_rate == pytest.approx(2 / 3)
-        assert metrics.dedupe_rate == pytest.approx(0.4)
-        assert metrics.latency_p95_seconds is not None
-        assert metrics.errors_by_code == {
-            "SOURCE_SERVER_ERROR": 1,
-            "SOURCE_RATE_LIMITED": 1,
-        }
-        assert metrics.coverage_state == "FAILED"
+            assert metrics.runs == 3
+            assert metrics.runs_failed == 2
+            assert metrics.error_rate == pytest.approx(2 / 3)
+            assert metrics.dedupe_rate == pytest.approx(0.4)
+            assert metrics.latency_p95_seconds is not None
+            assert metrics.errors_by_code == {
+                "SOURCE_SERVER_ERROR": 1,
+                "SOURCE_RATE_LIMITED": 1,
+            }
+            assert metrics.coverage_state == "FAILED"
+        finally:
+            _cleanup(session, [source])
 
 
 def test_presence_confirmed_without_reprocessing_counts_matched_revisits() -> None:
@@ -283,91 +365,100 @@ def test_presence_confirmed_without_reprocessing_counts_matched_revisits() -> No
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         source = _source(session)
-        run = _run(
-            session,
-            source,
-            status="SUCCEEDED",
-            started_at=NOW - timedelta(minutes=5),
-            items_seen=2,
-            items_persisted=0,
-            items_skipped=2,
-        )
-        raw_item = RawItemModel(
-            id=uuid4(),
-            source_run_id=run.id,
-            source_definition_id=source.id,
-            external_id=uuid4().hex,
-            identity_key=f"external:{uuid4().hex}",
-            payload_hash=uuid4().hex + uuid4().hex,
-            item_metadata={},
-        )
-        session.add(raw_item)
-        session.flush()
-        session.add_all(
-            [
-                SourceOccurrenceObservationModel(
-                    source_occurrence_id=None,
-                    source_run_id=run.id,
-                    raw_item_id=raw_item.id,
-                    observed_at=run.started_at,
-                    content_hash_matched=True,
-                ),
-            ]
-        )
-        session.commit()
+        try:
+            run = _run(
+                session,
+                source,
+                status="SUCCEEDED",
+                started_at=NOW - timedelta(minutes=5),
+                items_seen=2,
+                items_persisted=0,
+                items_skipped=2,
+            )
+            raw_item = RawItemModel(
+                id=uuid4(),
+                source_run_id=run.id,
+                source_definition_id=source.id,
+                external_id=uuid4().hex,
+                identity_key=f"external:{uuid4().hex}",
+                payload_hash=uuid4().hex + uuid4().hex,
+                item_metadata={},
+            )
+            session.add(raw_item)
+            session.flush()
+            session.add_all(
+                [
+                    SourceOccurrenceObservationModel(
+                        source_occurrence_id=None,
+                        source_run_id=run.id,
+                        raw_item_id=raw_item.id,
+                        observed_at=run.started_at,
+                        content_hash_matched=True,
+                    ),
+                ]
+            )
+            session.commit()
 
-        metrics = _metrics_for(session, source.id, "24h")
+            metrics = _metrics_for(session, source.id, "24h")
 
-        assert metrics.presence_confirmed_without_reprocessing == 1
+            assert metrics.presence_confirmed_without_reprocessing == 1
+        finally:
+            _cleanup(session, [source])
 
 
 def test_the_window_excludes_older_runs() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         source = _source(session)
-        _run(session, source, status="SUCCEEDED", started_at=NOW - timedelta(days=3))
-        session.commit()
+        try:
+            _run(session, source, status="SUCCEEDED", started_at=NOW - timedelta(days=3))
+            session.commit()
 
-        assert _metrics_for(session, source.id, "24h").runs == 0
-        assert _metrics_for(session, source.id, "7d").runs == 1
+            assert _metrics_for(session, source.id, "24h").runs == 0
+            assert _metrics_for(session, source.id, "7d").runs == 1
+        finally:
+            _cleanup(session, [source])
 
 
 def test_unknown_seniority_is_reported_with_its_provenance() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         source = _source(session)
-        run = _run(
-            session,
-            source,
-            status="SUCCEEDED",
-            started_at=NOW - timedelta(minutes=5),
-            items_seen=3,
-            items_persisted=3,
-        )
-        for seniority, evidence in (
-            ("SENIOR", "title"),
-            ("UNKNOWN", "conflict"),
-            ("UNKNOWN", "title"),
-        ):
-            _normalized_posting(
+        try:
+            run = _run(
                 session,
                 source,
-                run,
-                seniority=seniority,
-                evidence=evidence,
-                processed_at=NOW - timedelta(minutes=4),
+                status="SUCCEEDED",
+                started_at=NOW - timedelta(minutes=5),
+                items_seen=3,
+                items_persisted=3,
             )
-        session.commit()
+            for seniority, evidence in (
+                ("SENIOR", "title"),
+                ("UNKNOWN", "conflict"),
+                ("UNKNOWN", "title"),
+            ):
+                _normalized_posting(
+                    session,
+                    source,
+                    run,
+                    seniority=seniority,
+                    evidence=evidence,
+                    processed_at=NOW - timedelta(minutes=4),
+                )
+            session.commit()
 
-        seniority_metrics = _metrics_for(session, source.id, "24h").seniority
+            seniority_metrics = _metrics_for(session, source.id, "24h").seniority
 
-        assert seniority_metrics.total == 3
-        assert seniority_metrics.unknown == 2
-        assert seniority_metrics.known == 1
-        assert seniority_metrics.counts["SENIOR"] == 1
-        assert seniority_metrics.percentages["UNKNOWN"] == pytest.approx(66.67, abs=0.01)
-        assert seniority_metrics.mapping_versions == {SENIORITY_MAPPING_VERSION: 3}
-        assert seniority_metrics.evidence == {"title": 2, "conflict": 1}
+            assert seniority_metrics.total == 3
+            assert seniority_metrics.unknown == 2
+            assert seniority_metrics.known == 1
+            assert seniority_metrics.counts["SENIOR"] == 1
+            assert seniority_metrics.percentages["UNKNOWN"] == pytest.approx(66.67, abs=0.01)
+            assert seniority_metrics.mapping_versions == {SENIORITY_MAPPING_VERSION: 3}
+            assert seniority_metrics.evidence == {"title": 2, "conflict": 1}
+        finally:
+            _cleanup(session, [source])
 
 
 def test_duplicate_rate_reported_before_and_after() -> None:

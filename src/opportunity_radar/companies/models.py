@@ -28,6 +28,7 @@ class Company(Base):
     __tablename__ = "company"
     __table_args__ = (
         UniqueConstraint("normalized_name", name="uq_company_normalized_name"),
+        Index("ix_company_normalized_name", "normalized_name"),
         {"schema": SCHEMA},
     )
 
@@ -35,7 +36,12 @@ class Company(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     canonical_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    normalized_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    # Named explicitly: `index=True`'s auto-generated name depends on whether autogenerate
+    # was run with `include_schemas=True` (unset when this table's migration was authored),
+    # so it must not be left to drift with that setting (F20 sanity pass, alembic check).
+    normalized_name: Mapped[str] = mapped_column(
+        String(255), nullable=False, index=False
+    )
     domain: Mapped[str | None] = mapped_column(String(253), unique=True)
     priority: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
     radar_status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
@@ -65,6 +71,7 @@ class CompanyAlias(Base):
             "normalized_alias",
             name="uq_company_alias_company_normalized",
         ),
+        Index("ix_company_alias_normalized_alias", "normalized_alias"),
         {"schema": SCHEMA},
     )
 
@@ -75,7 +82,9 @@ class CompanyAlias(Base):
         ForeignKey(f"{SCHEMA}.company.id", ondelete="CASCADE"), nullable=False
     )
     alias: Mapped[str] = mapped_column(String(255), nullable=False)
-    normalized_alias: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    normalized_alias: Mapped[str] = mapped_column(
+        String(255), nullable=False, index=False
+    )
     company: Mapped[Company] = relationship(back_populates="aliases")
 
 

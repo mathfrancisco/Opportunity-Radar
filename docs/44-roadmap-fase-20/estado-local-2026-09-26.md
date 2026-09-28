@@ -131,3 +131,6 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 > `RUN_DATABASE_INTEGRATION=1` + `ruff` + `mypy` verdes. Detalhe em
 > `docs/pesquisas/sugestoes-f20-23.md`. Reprocessamento oficial do acervo real fica para
 > depois de `2026-10-05T12:02Z`, fora do escopo deste branch.
+
+
+> **Sanidade (2026-09-28, `feature/f20-sanidade`, `79d45c0`).** Testes instáveis e `alembic check` resolvidos; detalhes em `validacao-pendente.md` §5.

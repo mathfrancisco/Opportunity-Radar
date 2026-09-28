@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 
 from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.domain import (
@@ -22,6 +22,7 @@ from opportunity_radar.acquisition.domain import (
 )
 from opportunity_radar.acquisition.models import (
     RawItemModel,
+    SourceDefinitionModel,
     SourceProbeModel,
     SourceRunModel,
 )
@@ -227,11 +228,26 @@ def test_probe_refuses_stale_enabled_and_manual_sources(
         terms_reviewed=True,
         collector_local_tested=True,
     )
-    refused = client.post(
-        f"/sources/{enabled['id']}/probe", json={"expected_version": enabled["version"]}
-    )
-    assert refused.status_code == 422
-    assert refused.json()["detail"]["field"] == "enabled"
+    try:
+        refused = client.post(
+            f"/sources/{enabled['id']}/probe", json={"expected_version": enabled["version"]}
+        )
+        assert refused.status_code == 422
+        assert refused.json()["detail"]["field"] == "enabled"
+    finally:
+        # This is the only source in the file left `enabled=True` with confirmed evidence,
+        # which is exactly what `worker.collect_enabled_sources` (and the soak gate in
+        # tests/backend/operations/test_soak.py) picks up. Left behind in the shared,
+        # never-truncated test database, it fails a later, unrelated soak run with
+        # "collector not registered: greenhouse" (its registry only knows the scripted
+        # soak probe).
+        engine = create_database_engine(os.environ["DATABASE_URL"])
+        with engine.begin() as connection:
+            connection.execute(
+                delete(SourceDefinitionModel).where(
+                    SourceDefinitionModel.id == enabled["id"]
+                )
+            )
 
     manual = client.post(
         "/sources", json={"source_type": "manual", "name": f"Manual {uuid4().hex[:8]}"}

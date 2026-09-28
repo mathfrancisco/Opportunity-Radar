@@ -732,13 +732,33 @@ def test_overview_counts_reflect_the_catalogue_and_flag_the_missing_pipeline() -
         profile_version = _profile_version(session)
         company = _company(session, "high")
         opportunity = _opportunity(session, company, title="Overview role", published_at=NOW)
-        _assessment(
+        assessment = _assessment(
             session,
             opportunity,
             profile_version.id,
             verdict="HIGH_PRIORITY",
             score="88.0000",
             assessed_at=NOW,
+        )
+        # Completed, not left pending: a HIGH_PRIORITY verdict on a `high`-priority
+        # company outranks every other pending assessment's company priority regardless
+        # of score, so an uncompleted row here permanently stole a batch slot from any
+        # later test's own HIGH_PRIORITY seed in this shared, never-truncated database
+        # (F20 sanity pass — reproduced under randomized order against
+        # tests/backend/matching/test_analysis_queue.py::
+        # test_the_job_analyzes_a_bounded_batch_and_commits_each_result).
+        session.add(
+            MatchAnalysisModel(
+                assessment_id=assessment.id,
+                cache_key=uuid4().hex + uuid4().hex,
+                status="AI_COMPLETED",
+                summary="Retired for test isolation.",
+                recommended_review=False,
+                model_id="llama3.2:3b",
+                prompt_version="opportunity_analysis/v1",
+                schema_version="analysis-v1",
+                analyzed_at=NOW,
+            )
         )
         session.commit()
 

@@ -75,6 +75,19 @@ class OpportunityModel(Base):
         ),
         Index("ix_opportunity_published", "published_at"),
         Index("ix_opportunity_role_family", "role_family"),
+        # Both created by their own migrations (F17-06, F17-03) with a GIN index the ORM
+        # never declared, which made `alembic check` propose dropping them (F20 sanity
+        # pass) even though nothing about either column or index has actually changed.
+        Index(
+            "ix_opportunity_allowed_countries",
+            "allowed_countries",
+            postgresql_using="gin",
+        ),
+        Index(
+            "ix_opportunity_search_document",
+            "search_document",
+            postgresql_using="gin",
+        ),
         {"schema": SCHEMA},
     )
 
@@ -276,9 +289,16 @@ class SourceOccurrenceModel(Base):
         ForeignKey(f"{SCHEMA}.opportunity.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # RESTRICT, matching migration 20260914_0005 and every cleanup helper in the test
+    # suite that deletes an occurrence before its raw item without deleting this row
+    # explicitly (e.g. `tests/backend/acquisition/test_tavily_proposals.py::_purge`,
+    # which assumes this FK, not `SourceOccurrenceObservationModel.raw_item_id` below,
+    # is the one that cascades). Was briefly mismatched with the DB during the F20 sanity
+    # pass (docs/44-roadmap-fase-20/validacao-pendente.md §5) before this was corrected
+    # back rather than migrated, once the test failures it would have caused were traced.
     raw_item_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
-        ForeignKey("acquisition.raw_item.id", ondelete="CASCADE"),
+        ForeignKey("acquisition.raw_item.id", ondelete="RESTRICT"),
         nullable=False,
     )
     source_definition_id: Mapped[UUID] = mapped_column(
@@ -345,9 +365,12 @@ class SourceOccurrenceObservationModel(Base):
         ForeignKey("acquisition.source_run.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # CASCADE, matching migration 20260926_0041 (see the sibling comment on
+    # `SourceOccurrenceModel.raw_item_id` above for why this was checked against the test
+    # suite's cleanup helpers rather than assumed).
     raw_item_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
-        ForeignKey("acquisition.raw_item.id", ondelete="RESTRICT"),
+        ForeignKey("acquisition.raw_item.id", ondelete="CASCADE"),
         nullable=False,
     )
     observed_at: Mapped[datetime] = mapped_column(
