@@ -1,6 +1,20 @@
 # CARD F20-71 — Pesquisar e coletar boards de "early careers"/universidade separados do board principal
 
-- **Status:** Backlog.
+- **Status:** Fechado — não viável nesta rodada. Sondagem real (65 requisições diretas
+  às APIs públicas de Ashby/Greenhouse/Lever/Workday, 1 req/candidato, mesma régua do
+  F20-27/F20-36/F20-60) contra 8 empresas do catálogo (Nubank, Stripe, Datadog, CI&T,
+  Spotify, Adobe, Santander, NVIDIA — nenhuma da lista protegida do F20-60) não
+  confirmou nenhum board de early-careers/university **simultaneamente existente e
+  populado**. Um achado parcial real: Nubank tem um segundo board (Greenhouse,
+  `job-boards.greenhouse.io/nubank`) distinto do Ashby já coletado, mas vazio (0 vagas)
+  no momento da sondagem; Adobe tem um site Workday `external_university` que existe mas
+  responde `403`/erro `S22` "permission denied" (não é um board público de candidato).
+  Nenhum código foi escrito (nenhuma alteração em `src/opportunity_radar/acquisition/`
+  ou `scripts/`), nenhuma `source_definition` nova foi criada, nada foi ativado. Métrica
+  de JUNIOR+INTERN inalterada: 18/2288 (0,79%), igual ao diagnóstico de origem.
+  Evidência completa em
+  [`docs/44-roadmap-fase-20/evidencias/early-careers-2026-09-29.md`](../evidencias/early-careers-2026-09-29.md)
+  (2026-09-29).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-03, F20-27, F20-60
@@ -63,13 +77,16 @@ por candidato, endpoint público do próprio ATS).
 
 ## Critérios de aceite
 
-- [ ] Pelo menos 3 empresas do catálogo pesquisadas quanto a board separado de
+- [x] Pelo menos 3 empresas do catálogo pesquisadas quanto a board separado de
       early-careers/university, com resultado (encontrado/não encontrado) registrado
-      com evidência de sondagem real.
-- [ ] Para cada board confirmado e aprovado na revisão de termos, `source_definition`
-      habilitada e pelo menos uma vaga JUNIOR/INTERN real coletada.
-- [ ] Métrica antes/depois: proporção de JUNIOR+INTERN no acervo real, comparada ao
-      0,79% medido no diagnóstico de origem.
+      com evidência de sondagem real. (8 empresas: Nubank, Stripe, Datadog, CI&T,
+      Spotify, Adobe, Santander, NVIDIA — ver evidência.)
+- [x] Para cada board confirmado e aprovado na revisão de termos, `source_definition`
+      habilitada e pelo menos uma vaga JUNIOR/INTERN real coletada. (N/A — nenhum board
+      encontrado atendeu "confirmado e populado" nesta rodada; nada a habilitar.)
+- [x] Métrica antes/depois: proporção de JUNIOR+INTERN no acervo real, comparada ao
+      0,79% medido no diagnóstico de origem. (Inalterada: 18/2288 = 0,79%, ver evidência
+      §4.)
 
 ## Não fazer
 

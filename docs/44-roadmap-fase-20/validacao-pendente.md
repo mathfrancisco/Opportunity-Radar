@@ -70,6 +70,12 @@ reais).
 6. Ativar na pilha real, depois da janela, as 34 fontes já homologadas e ativadas na
    `f20manual` (30 → 64 fontes habilitadas): lista completa, ATS, slug, probe e execução
    real por fonte em `evidencias/ativacao-fontes-2026-09-28.md`.
+7. F20-71 (boards de early-careers/university separados): fechado "não viável" nesta
+   rodada — sondagem real de 8 empresas (Nubank, Stripe, Datadog, CI&T, Spotify, Adobe,
+   Santander, NVIDIA) não confirmou nenhum board simultaneamente existente e populado.
+   **Nada a ativar na pilha real por este card** — nenhuma `source_definition` nova foi
+   criada na `f20manual`, item 6 acima não ganha fonte adicional por conta do F20-71.
+   Evidência em `evidencias/early-careers-2026-09-29.md`.
 
 ## 5. Falta — sanidade e pendências menores
 
