@@ -765,32 +765,81 @@ def _infer_unique(
     return next(iter(matches)) if len(matches) == 1 else unknown
 
 
+# card F20-XX: real postings from several ATSes (e.g. Nubank/Greenhouse) render work mode
+# only inside the description body, in a standardized "Work Model for this Role" section,
+# never in title/location/metadata. These patterns are intentionally narrow (the labelled
+# section itself, or a "<mode> model" / "fully on-site" phrasing) rather than a bare
+# \bremote\b / \bhybrid\b scan of the whole description, which would false-positive on a
+# colleague's remote status ("partner with senior remote engineers") or generic
+# remote-friendly-company boilerplate unrelated to this specific role.
+_WORK_MODE_DESCRIPTION_SECTION_PATTERNS: dict[WorkMode, tuple[str, ...]] = {
+    WorkMode.REMOTE: (
+        r"\bwork model(?:\s+for\s+this\s+role)?\b[\s:\-]*\s*remote\b",
+        r"\bremote\s+(?:work\s+)?model\b",
+    ),
+    WorkMode.HYBRID: (
+        r"\bwork model(?:\s+for\s+this\s+role)?\b[\s:\-]*\s*hybrid\b",
+        r"\bhybrid\s+(?:work\s+)?model\b",
+    ),
+    WorkMode.ONSITE: (
+        r"\bwork model(?:\s+for\s+this\s+role)?\b[\s:\-]*\s*on[ -]?site\b",
+        r"\bon[ -]?site\s+(?:work\s+)?model\b",
+        r"\bfully\s+on[ -]?site\b",
+        r"\bon[ -]?site\s+(?:role|position)\b",
+        r"\bon[ -]?site\s+(?:\d+|one|two|three|four|five|six|seven)\s+days?\s+a\s+week\b",
+    ),
+}
+
+
+def _work_mode_from_description(description_text: str) -> WorkMode:
+    result = _infer_unique(
+        (description_text,), _WORK_MODE_DESCRIPTION_SECTION_PATTERNS, WorkMode.UNKNOWN
+    )
+    return WorkMode(result)
+
+
 def infer_work_mode(
-    title: str | None, location_text: str | None, metadata: Mapping[str, Any]
+    title: str | None,
+    location_text: str | None,
+    metadata: Mapping[str, Any],
+    description: str | None = None,
 ) -> WorkMode:
     remote_flag = any(
         key.casefold() in {"isremote", "is_remote", "remote"} and value is True
         for key, value in metadata.items()
     )
     explicit_flag = "remote" if remote_flag else None
-    result = _infer_unique(
-        _evidence_texts(
-            title,
-            location_text,
-            explicit_flag,
-            metadata=metadata,
-            metadata_keys=frozenset(
-                {"workplacetype", "workplace_type", "remote_scope", "categories"}
+    general_result = WorkMode(
+        _infer_unique(
+            _evidence_texts(
+                title,
+                location_text,
+                explicit_flag,
+                metadata=metadata,
+                metadata_keys=frozenset(
+                    {"workplacetype", "workplace_type", "remote_scope", "categories"}
+                ),
             ),
-        ),
-        {
-            WorkMode.REMOTE: (r"\bremote\b", r"\bremoto\b", r"\bremota\b"),
-            WorkMode.HYBRID: (r"\bhybrid\b", r"\bh[ií]brid[oa]\b"),
-            WorkMode.ONSITE: (r"\bon[ -]?site\b", r"\bpresencial\b"),
-        },
-        WorkMode.UNKNOWN,
+            {
+                WorkMode.REMOTE: (r"\bremote\b", r"\bremoto\b", r"\bremota\b"),
+                WorkMode.HYBRID: (r"\bhybrid\b", r"\bh[ií]brid[oa]\b"),
+                WorkMode.ONSITE: (r"\bon[ -]?site\b", r"\bpresencial\b"),
+            },
+            WorkMode.UNKNOWN,
+        )
     )
-    return WorkMode(result)
+    description_text = normalize_location(description) or ""
+    description_result = (
+        _work_mode_from_description(description_text) if description_text else WorkMode.UNKNOWN
+    )
+    if general_result is WorkMode.UNKNOWN:
+        return description_result
+    if description_result is WorkMode.UNKNOWN or description_result is general_result:
+        return general_result
+    # Conflicting explicit signals (e.g. a hybrid title but a remote "Work Model" section)
+    # deliberately fall back to UNKNOWN rather than silently favoring either — same
+    # never-override convention as seniority_classification's structured/title conflict.
+    return WorkMode.UNKNOWN
 
 
 def infer_seniority(
@@ -963,7 +1012,7 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
     normalized_company_name = normalize_company_name(company_name)
     normalized_location = normalize_location(location_text)
     normalized_url = normalize_url(source_url)
-    work_mode = infer_work_mode(original_title, location_text, value.metadata)
+    work_mode = infer_work_mode(original_title, location_text, value.metadata, value.description)
     seniority, _ = seniority_classification(
         original_title, value.metadata, source_type=value.source_type
     )

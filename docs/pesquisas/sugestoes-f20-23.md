@@ -106,3 +106,42 @@ with Session(engine) as session:
 (o script pontual acima é ilustrativo — a forma exata pode variar, mas deve sempre rodar
 num projeto docker compose isolado do `opportunity-radar`, nunca escrever no valor
 canônico sem confirmação humana, e nunca usar a chave real do Groq em teste automatizado.)
+
+## Achado no gabarito: bug determinístico de `work_mode`, corrigido sem LLM (branch `feature/f20-work-mode`)
+
+Ao rotular o gabarito acima, os 13 casos de campo `work_mode` `UNKNOWN` (de 39 no total)
+revelaram que a regra determinística (`infer_work_mode`,
+`src/opportunity_radar/opportunities/domain.py`) nunca recebia a `description` como
+evidência — só título, `location_text` e metadados estruturados. Vários empregadores reais
+da amostra (Nubank, via Greenhouse) declaram o modo de trabalho só numa seção padronizada
+da descrição ("Work Model for this Role" / "WORK MODEL FOR THIS ROLE"), então esses 11
+casos ficavam `UNKNOWN` mesmo com evidência textual inequívoca. Corrigido diretamente na
+regra determinística (não via sugestão assistida por LLM), de forma restrita: reconhece a
+seção rotulada, a frase "<modo> model" (com ou sem parênteses), "fully on-site" e "on-site
+N days a week" — nunca um scan genérico de `\bremote\b`/`\bhybrid\b`/`\bonsite\b` na
+descrição inteira, para não confundir o status remoto de um colega ou boilerplate genérico
+de "empresa remote-friendly" com o modo desta vaga.
+
+**Medição offline contra os 13 casos rotulados** (`docs/44-roadmap-fase-20/rotulagem/
+f20-23-amostra-unknown.json`, regressão em
+`tests/backend/opportunities/test_domain.py::test_infers_work_mode_from_the_standardized_description_section`):
+
+| Antes (regra atual, sem `description`) | Depois (regra corrigida) |
+| --- | --- |
+| 13/13 `UNKNOWN` | 11/13 corrigidos para o valor certo (`HYBRID`×8, `ONSITE`×2, mais 2 já
+corretos via título "(Hybrid)"); 2/13 mantidos `UNKNOWN` de propósito |
+
+Os 2 casos mantidos `UNKNOWN` (Trigger.dev, "If you're remote, we'll arrange..." e "Home
+office ... Async working") têm evidência indireta demais para extrair com segurança sem
+risco de falso positivo em outras vagas fora da amostra — mantidos `UNKNOWN` por decisão
+consciente, não por limitação técnica. Zero casos resolvidos incorretamente; casos
+negativos de guarda (status remoto de colega, boilerplate genérico, conflito
+título-vs-seção) confirmados como `UNKNOWN` em teste.
+
+`NORMALIZER_VERSION` subiu de `"v5"` para `"v6"` (`src/opportunity_radar/opportunities/
+service.py`); único literal `v5` fora do símbolo encontrado foi a coluna
+`normalizer_version` da fixture sintética `tests/backend/fixtures/pre_f20_dump.sql` (20
+linhas), atualizada para `v6` junto. Suíte completa (`pytest`, `RUN_DATABASE_INTEGRATION=1`)
+e `ruff`/`mypy` verdes após a mudança. Reprocessamento oficial do acervo real
+(`opportunity-radar`) fica para depois da janela de sete dias em andamento, fora do escopo
+deste branch.

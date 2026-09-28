@@ -87,6 +87,139 @@ def test_infers_only_explicit_unambiguous_taxonomy_evidence() -> None:
     assert infer_contract_type("Engineer", None, {}) is ContractType.UNKNOWN
 
 
+# Card F20-23 ground truth: docs/44-roadmap-fase-20/rotulagem/f20-23-amostra-unknown.json
+# labelled 13 real work_mode=UNKNOWN postings with recoverable evidence. The deterministic
+# rule only ever looked at title/location/metadata, never description, so any posting that
+# states its mode only in a standardized "Work Model for this Role" description section (a
+# Greenhouse-style pattern used by several real employers in the sample) stayed UNKNOWN.
+# Excerpts below are anonymised/trimmed reproductions of that evidence, not verbatim scrapes.
+@pytest.mark.parametrize(
+    ("title", "description", "expected"),
+    [
+        # "Work model  Hybrid  Office requirement  2 days per week at the office"
+        (
+            "Controllership Expert - Record to Report",
+            "Work model  Hybrid  Office requirement  2 days per week at the office",
+            WorkMode.HYBRID,
+        ),
+        # "Our hybrid work model brings us to the office at least twice a week"
+        (
+            "Operations & Capabilities Lead",
+            "Our hybrid work model brings us to the office at least twice a week, "
+            "on strategic days.",
+            WorkMode.HYBRID,
+        ),
+        # "Roles are open in Brazil (hybrid model) or key US hubs"
+        (
+            "Senior Staff Software Engineer - Money Boxes",
+            "Roles are open in Brazil (hybrid model) or key US hubs.",
+            WorkMode.HYBRID,
+        ),
+        # "Work Model for this Role - Hybrid 2-3 times/week: Our hybrid work model ..."
+        (
+            "Lead Software Engineer (CloudNetwork)",
+            "Work Model for this Role - Hybrid 2-3 times/week: Our hybrid work model brings "
+            "us to the office at least twice a week.",
+            WorkMode.HYBRID,
+        ),
+        # same section, all-caps heading as seen in another real posting
+        (
+            "Senior Security Engineer (Incident Response)",
+            "WORK MODEL FOR THIS ROLE - Hybrid 2-3 times/week: Our hybrid work model brings "
+            "us to the office at least twice a week.",
+            WorkMode.HYBRID,
+        ),
+        # title-only marker: already handled by the existing title regex, kept here as a
+        # regression pin for the "(Hybrid)" title-marker case F20-23 also flagged.
+        (
+            "Enterprise Sales Development Representative US (Hybrid)",
+            None,
+            WorkMode.HYBRID,
+        ),
+        (
+            "Sales Development Representative - DACH (Berlin Hybrid)",
+            None,
+            WorkMode.HYBRID,
+        ),
+        # "This is a fully on-site role based at our Bogota office"
+        (
+            "Customer Excellence Senior Analyst - Bogota (German Speaker)",
+            "This is a fully on-site role based at our Bogota office.",
+            WorkMode.ONSITE,
+        ),
+        # "Location: San Francisco, CA (SF HQ) preferred, on-site five days a week"
+        (
+            "Legal Operations Manager",
+            "Location: San Francisco, CA (SF HQ) preferred, on-site five days a week.",
+            WorkMode.ONSITE,
+        ),
+    ],
+)
+def test_infers_work_mode_from_the_standardized_description_section(
+    title: str, description: str | None, expected: WorkMode
+) -> None:
+    assert infer_work_mode(title, None, {}, description) is expected
+
+
+def test_work_mode_from_description_avoids_known_false_positive_shapes() -> None:
+    """F20-23 also flagged near-miss phrasing that must stay UNKNOWN, not guessed."""
+    # A colleague's remote status is not this role's work mode.
+    assert (
+        infer_work_mode(
+            "Software Engineer",
+            None,
+            {},
+            "Partner with our senior remote engineers across the org on this initiative.",
+        )
+        is WorkMode.UNKNOWN
+    )
+    # Generic remote-friendly-company boilerplate, unrelated to this specific role.
+    assert (
+        infer_work_mode(
+            "Software Engineer",
+            None,
+            {},
+            "We are a remote-friendly company that values flexibility and trust.",
+        )
+        is WorkMode.UNKNOWN
+    )
+    # Two real F20-23 cases were intentionally left out of the fix: the evidence ("If
+    # you're remote, we'll arrange in-person events"; "Home office ... Async working") is
+    # too indirect to extract safely without risking false positives elsewhere, so both
+    # must remain UNKNOWN rather than being guessed as REMOTE.
+    assert (
+        infer_work_mode(
+            "Backend Engineer (Security)",
+            None,
+            {},
+            "Open to in-person events throughout the year. If you're remote, we'll "
+            "arrange these so the team gets real time together.",
+        )
+        is WorkMode.UNKNOWN
+    )
+    assert (
+        infer_work_mode(
+            "Technical Recruiter (3 month FTC, Temp to Perm)",
+            None,
+            {},
+            "Home office - we help provide equipment for a comfortable setup so you're "
+            "as productive at home as you are in the office. Async working.",
+        )
+        is WorkMode.UNKNOWN
+    )
+    # A conflicting explicit title marker vs. description section must stay UNKNOWN
+    # rather than silently favoring either signal.
+    assert (
+        infer_work_mode(
+            "Engineer (Hybrid)",
+            None,
+            {},
+            "Work Model for this Role - Remote",
+        )
+        is WorkMode.UNKNOWN
+    )
+
+
 def test_seniority_classification_records_precedence_and_conflicts() -> None:
     title_value, title_reason = seniority_classification("Junior Engineer", {})
     structured_value, structured_reason = seniority_classification(

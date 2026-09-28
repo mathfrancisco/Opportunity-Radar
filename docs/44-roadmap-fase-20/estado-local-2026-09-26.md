@@ -116,3 +116,18 @@ F20-39; `973b648` corrige a seleção do cliente PostgreSQL 17 no CI. Isto não 
 
 
 > **Segundo reinício da janela (2026-09-28T12:01:55Z).** O T0 de `00:45Z` também não valia: as 19 fontes ativas da stack real não tinham `schedule`, então o worker pulava todas (`NOT_SCHEDULED`) e nenhuma coleta rodou desde 2026-09-26. Com autorização do usuário, as fontes reais ganharam `schedule = 0 */3 * * *` (a cada 3 horas) e 3 fontes de teste que sobraram no banco real (`Probe board …`, `CI Ashby activation`, todas `SOURCE_NOT_FOUND`) foram desativadas. A primeira passada coletou 16 fontes com sucesso. Novo T0 em `docs/44-roadmap-fase-20/evidencias/f20-janela-7d-t0-2026-09-28b.json`; a janela termina em `2026-10-05T12:02Z`. Houve também uma queda do Docker Desktop por volta de 11:39Z, já recuperada. A API não tem endpoint para editar `schedule` — lacuna registrada.
+
+> **Bug determinístico de `work_mode` corrigido (2026-09-28, `feature/f20-work-mode`, sem
+> tocar a stack real).** O gabarito de F20-23 (`f20-23-amostra-unknown.json`) mostrou que os
+> 13 casos `work_mode=UNKNOWN` eram um bug de `infer_work_mode`
+> (`src/opportunity_radar/opportunities/domain.py`), não uma limitação do LLM: a função
+> nunca recebia `description`, então a seção padronizada "Work Model for this Role" (várias
+> vagas Nubank/Greenhouse) nunca era lida. Corrigido de forma restrita, sem scan genérico de
+> `remote`/`hybrid`/`onsite` na descrição inteira (evita falso positivo com status de colega
+> ou boilerplate "remote-friendly"). 11/13 casos do gabarito resolvem certo agora, 2/13
+> mantidos `UNKNOWN` por decisão (evidência indireta demais), zero errado.
+> `NORMALIZER_VERSION` v5→v6 (`service.py` e a fixture `tests/backend/fixtures/
+> pre_f20_dump.sql`, único outro literal `v5` do repo). Suíte completa +
+> `RUN_DATABASE_INTEGRATION=1` + `ruff` + `mypy` verdes. Detalhe em
+> `docs/pesquisas/sugestoes-f20-23.md`. Reprocessamento oficial do acervo real fica para
+> depois de `2026-10-05T12:02Z`, fora do escopo deste branch.
