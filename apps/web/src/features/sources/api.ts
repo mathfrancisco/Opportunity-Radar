@@ -262,6 +262,12 @@ export interface SourceControls {
   expectedVersion: number
 }
 
+export interface SourceSchedule {
+  /** `null` unschedules the source; it still runs on demand. */
+  schedule: string | null
+  expectedVersion: number
+}
+
 export type ManualInputKind = 'URL' | 'TEXT' | 'FILE'
 
 export interface ManualInput {
@@ -348,6 +354,19 @@ export async function updateSourceControls(
     collector_local_tested: controls.collectorLocalTested,
     reviewed_at: controls.reviewedAt,
     expected_version: controls.expectedVersion,
+  })
+  const source = parseSource(body)
+  if (source === null) throw new Error('A API retornou uma fonte inválida.')
+  return source
+}
+
+export async function updateSourceSchedule(
+  sourceId: string,
+  input: SourceSchedule,
+): Promise<SourceDefinition> {
+  const body = await send(`/sources/${sourceId}/schedule`, 'PATCH', {
+    schedule: input.schedule,
+    expected_version: input.expectedVersion,
   })
   const source = parseSource(body)
   if (source === null) throw new Error('A API retornou uma fonte inválida.')
