@@ -48,6 +48,16 @@ from opportunity_radar.matching.service import (
 from opportunity_radar.operations.retention import PayloadRetentionService
 from opportunity_radar.operations.service import observe_job
 from opportunity_radar.opportunities.service import OpportunityService
+from opportunity_radar.opportunities.suggestions import (
+    candidates_needing_suggestion,
+    suggest_fields,
+)
+from opportunity_radar.platform.ai.breaker import CircuitBreaker
+from opportunity_radar.platform.ai.config import AIState, ai_status
+from opportunity_radar.platform.ai.providers.groq import GroqProvider
+from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits
+from opportunity_radar.platform.ai.router import AIRouter
+from opportunity_radar.platform.ai.tasks import AITask, default_routes
 from opportunity_radar.platform.ai.telemetry import purge_older_than
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.database import create_database_engine
@@ -74,6 +84,7 @@ FUNCTIONAL_JOB_IDS = {
     "evaluate_pending": "evaluate-pending",
     "analyze_pending": "analyze-pending",
     "expire_raw_payloads": "expire-raw-payloads",
+    "suggest_fields_pending": "suggest-fields-pending",
 }
 
 logger = get_logger("opportunity_radar.worker")
@@ -245,6 +256,103 @@ def analyze_pending(
                         "reused": reused,
                         "degraded": degraded,
                         "claimed_elsewhere": claimed_elsewhere,
+                        "skipped_budget": skipped_budget,
+                        "failed": failed,
+                    },
+                )
+
+
+def build_classification_router(settings: Settings, engine: Engine) -> AIRouter | None:
+    """`AIRouter` wired for the `job_classification` task (card F20-23), or `None` when
+    AI is disabled or missing its key (SPEC 43's `ai_status`, same gate the analysis
+    adapter uses in `matching.adapters.build_analysis_adapter`). Built independently of
+    that adapter — a router alone is enough here, there is no cache or evidence-checked
+    parse to share with the semantic-analysis port.
+    """
+    state = ai_status(settings)
+    if state is not AIState.ENABLED:
+        return None
+    provider = GroqProvider(
+        api_key=settings.groq_api_key.get_secret_value(),
+        base_url=settings.groq_base_url,
+        timeout_seconds=settings.ai_timeout_seconds,
+        connect_timeout_seconds=settings.ai_connect_timeout_seconds,
+    )
+    quota_guard = QuotaGuard(
+        engine,
+        QuotaLimits(
+            minute_requests=settings.ai_minute_requests_soft_limit,
+            minute_tokens=settings.ai_minute_tokens_soft_limit,
+            day_requests=settings.ai_daily_requests_soft_limit,
+            day_tokens=settings.ai_daily_tokens_soft_limit,
+        ),
+    )
+    breaker = CircuitBreaker(
+        failures=settings.ai_breaker_failures,
+        cooldown_seconds=settings.ai_breaker_cooldown_seconds,
+    )
+    return AIRouter(
+        provider,
+        default_routes(settings),
+        fallback_enabled=settings.ai_fallback_enabled,
+        max_retries=settings.ai_max_retries,
+        breaker=breaker,
+        quota_guard=quota_guard,
+    )
+
+
+def suggest_fields_pending(
+    engine: Engine,
+    router: AIRouter | None,
+    *,
+    batch_size: int = 20,
+    worker_requests_ceiling: int | None = None,
+) -> None:
+    """Suggest `role_family`/`seniority`/`work_mode` for opportunities the deterministic
+    rules left `UNKNOWN` (card F20-23). Off by default (`worker_suggest_enabled`): the
+    card requires measuring precision on a labelled sample before this job ever writes a
+    suggestion outside a controlled run. Never touches the canonical column itself — an
+    operator accepts or rejects each suggestion through the HTTP endpoints.
+    """
+    if router is None:
+        return
+    with observe_job(
+        engine, job_name="suggest_fields_pending", interval=timedelta(seconds=300)
+    ):
+        with Session(engine) as session:
+            candidates = candidates_needing_suggestion(session, limit=batch_size)
+            quota_guard = router.quota_guard
+            route_model = router.route(AITask.JOB_CLASSIFICATION).chain[0]
+            created = discarded = skipped_budget = failed = 0
+            for opportunity in candidates:
+                if worker_requests_ceiling is not None and quota_guard is not None:
+                    probe = quota_guard.reserve(
+                        route_model, 0, ceiling_requests=worker_requests_ceiling
+                    )
+                    if probe is None:
+                        skipped_budget += 1
+                        continue
+                    quota_guard.release(probe)
+                try:
+                    outcome = run_async(suggest_fields(session, router, opportunity))
+                except Exception:
+                    session.rollback()
+                    failed += 1
+                    logger.exception(
+                        "field suggestion failed",
+                        extra={"job": "suggest-fields", "opportunity_id": str(opportunity.id)},
+                    )
+                    continue
+                created += len(outcome.created)
+                discarded += len(outcome.discarded_fields)
+            if candidates:
+                logger.info(
+                    "suggest fields batch finished",
+                    extra={
+                        "job": "suggest-fields",
+                        "processed": len(candidates),
+                        "created": created,
+                        "discarded": discarded,
                         "skipped_budget": skipped_budget,
                         "failed": failed,
                     },
@@ -645,6 +753,26 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
                 ),
             },
             id="analyze-pending",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+            next_run_time=first_run,
+        )
+    if settings.worker_suggest_enabled:
+        classification_router = build_classification_router(settings, engine)
+        scheduler.add_job(
+            suggest_fields_pending,
+            "interval",
+            seconds=300,
+            args=(engine, classification_router),
+            kwargs={
+                "batch_size": settings.worker_suggest_batch_size,
+                "worker_requests_ceiling": (
+                    settings.ai_daily_requests_soft_limit
+                    - settings.ai_interactive_reserve_requests
+                ),
+            },
+            id="suggest-fields-pending",
             replace_existing=True,
             coalesce=True,
             max_instances=1,

@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     worker_match_enabled: bool = True
     worker_analyze_enabled: bool = True
     worker_retention_enabled: bool = True
+    # Off by default (card F20-23): the precision of the `job_classification` suggestion
+    # must be measured on a labelled sample before this job writes anything, even to its
+    # own separate table.
+    worker_suggest_enabled: bool = False
+    worker_suggest_batch_size: int = 20
     worker_evaluate_batch_size: int = 50
     # The local model competes with the rest of the machine for the GPU, so a pass is
     # capped well below the evaluation batch: analysis falls behind on purpose, never the
