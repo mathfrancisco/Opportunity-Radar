@@ -11,7 +11,7 @@ fecha cada lacuna. Nada aqui é trabalho de código novo, exceto onde indicado.
 
 | Restrição | Efeito |
 | --- | --- |
-| Janela de sete dias iniciada em `2026-09-28T00:45:09Z` na stack real `opportunity-radar` (T0 em `evidencias/f20-janela-7d-t0-2026-09-28.json`) | F20-35, F20-38 e F20-49 só fecham depois de `2026-10-05T00:45Z`. A stack não pode parar, ser reconstruída nem reiniciada até lá. |
+| Janela de sete dias iniciada em `2026-09-28T00:45:09Z` na stack real `opportunity-radar` (T0 em `evidencias/f20-janela-7d-t0-2026-09-28.json`) | F20-35, F20-38 e F20-49 só fecham depois de `2026-10-05T12:02Z`. A stack não pode parar, ser reconstruída nem reiniciada até lá. |
 | Cota diária do Groq ≈ 170k tokens, compartilhada com o worker da stack real (`AI_ENABLED=true`, ~2 chamadas por minuto em 2026-09-28); uma rodada de 50 casos custa ≈ 75k com `v1` e bem mais com `v2` | Na prática, uma rodada por dia, iniciada logo após a virada UTC, e checando o uso do dia antes. |
 | Stack real roda o código de `0d55de6` (sem F20-24) | F20-24 só entra na stack real depois da janela. |
 
@@ -44,7 +44,7 @@ Todas usam a stack isolada, nunca `opportunity-radar`.
 
 ## 3. Validações que dependem da janela de sete dias
 
-Executar depois de `2026-10-05T00:45Z`, na stack real, antes de reconstruí-la.
+Executar depois de `2026-10-05T12:02Z`, na stack real, antes de reconstruí-la.
 
 | Card | O que falta | Como medir |
 | --- | --- | --- |
@@ -87,6 +87,9 @@ Depois da medição: reconstruir a stack real com o código atual (inclui F20-24
 2. F20-23 no acervo real, com o modelo escolhido; ~~medição de F20-24~~ — reserva interativa resolvida em 2026-09-28, amostra de aging ainda pendente (ver §2).
 3. Sanidade da seção 5 (testes instáveis, `alembic check`).
 4. ~~F20-39: queda real e retomada.~~ — resolvido em 2026-09-28 (ver §4).
-5. Depois de `2026-10-05T00:45Z`: T7 de F20-35/38/49, reconstrução da stack real.
+5. Depois de `2026-10-05T12:02Z`: T7 de F20-35/38/49, reconstrução da stack real.
 6. F20-01 com gabarito full-text.
 7. F20-50.
+
+
+> **Segundo reinício da janela (2026-09-28T12:01:55Z).** O T0 de `00:45Z` também não valia: as 19 fontes ativas da stack real não tinham `schedule`, então o worker pulava todas (`NOT_SCHEDULED`) e nenhuma coleta rodou desde 2026-09-26. Com autorização do usuário, as fontes reais ganharam `schedule = 0 */3 * * *` (a cada 3 horas) e 3 fontes de teste que sobraram no banco real (`Probe board …`, `CI Ashby activation`, todas `SOURCE_NOT_FOUND`) foram desativadas. A primeira passada coletou 16 fontes com sucesso. Novo T0 em `docs/44-roadmap-fase-20/evidencias/f20-janela-7d-t0-2026-09-28b.json`; a janela termina em `2026-10-05T12:02Z`. Houve também uma queda do Docker Desktop por volta de 11:39Z, já recuperada. A API não tem endpoint para editar `schedule` — lacuna registrada.
