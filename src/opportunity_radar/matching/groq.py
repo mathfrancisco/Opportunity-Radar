@@ -91,6 +91,16 @@ class GroqAnalysisAdapter:
         return self._route.chain[0]
 
     @property
+    def probe_tokens(self) -> int:
+        """Worst-case tokens of one call to the primary model (input plus output budget).
+
+        What the worker's admission probe reserves (card F48-02), so a day counter too
+        close to its ceiling defers the batch instead of failing the real call.
+        """
+        budget = self._route.budget
+        return budget.max_input_tokens + budget.max_output_tokens
+
+    @property
     def prompt_version(self) -> str:
         return self._prompt.version
 

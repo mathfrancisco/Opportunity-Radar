@@ -15,7 +15,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.companies.models import Company
@@ -45,6 +45,7 @@ from opportunity_radar.matching.service import (
     MatchingService,
 )
 from opportunity_radar.opportunities.models import OpportunityModel
+from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits, ai_quota_usage
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.profile.domain import EmploymentPreference, ProfileSnapshot, Skill
 from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
@@ -869,6 +870,91 @@ def test_the_worker_budget_probe_never_consumes_quota() -> None:
     assert guard.reserved == 1
     assert guard.released == 1
 
+
+class _TokenAwareAdapter(_StubAdapter):
+    """A `_StubAdapter` on its own quota model, advertising its per-call token estimate."""
+
+    def __init__(self, outcome: AnalysisOutcome, *, model: str, quota_guard: QuotaGuard) -> None:
+        super().__init__(outcome)
+        self._own_model = model
+        self._real_guard = quota_guard
+
+    @property
+    def model(self) -> str:
+        return self._own_model
+
+    @property
+    def quota_guard(self) -> QuotaGuard:  # type: ignore[override]
+        return self._real_guard
+
+    @property
+    def probe_tokens(self) -> int:
+        return 5_900
+
+
+def _day_quota(model: str, *, tokens_used: int) -> QuotaGuard:
+    guard = QuotaGuard(
+        create_database_engine(os.environ["DATABASE_URL"]),
+        QuotaLimits(
+            minute_requests=1_000_000,
+            minute_tokens=1_000_000,
+            day_requests=1_000_000,
+            day_tokens=170_000,
+        ),
+    )
+    if tokens_used:
+        assert guard.reserve(model, tokens_used) is not None
+    return guard
+
+
+def _forget_quota(model: str) -> None:
+    with create_database_engine(os.environ["DATABASE_URL"]).begin() as connection:
+        connection.execute(delete(ai_quota_usage).where(ai_quota_usage.c.model == model))
+
+
+def test_the_probe_reserves_the_model_estimate_and_defers_without_ai_failed_rows() -> None:
+    """Card F48-02: 169,900 of 170,000 tokens used -> no provider call, no `AI_FAILED`."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    model = f"f48-02-{uuid4().hex[:8]}"
+    guard = _day_quota(model, tokens_used=169_900)
+    try:
+        with Session(engine) as session:
+            assessment_id = _seed_assessment(session, verdict="HIGH_PRIORITY")
+            analyses_before = session.scalar(select(func.count(MatchAnalysisModel.id)))
+        adapter = _TokenAwareAdapter(_completed(), model=model, quota_guard=guard)
+
+        analyze_pending(engine, adapter, batch_size=1, worker_requests_ceiling=1_000_000)
+
+        assert adapter.calls == 0
+        with Session(engine) as session:
+            assert session.scalar(select(func.count(MatchAnalysisModel.id))) == analyses_before
+            assert (
+                session.scalar(
+                    select(MatchAnalysisModel.id).where(
+                        MatchAnalysisModel.assessment_id == assessment_id
+                    )
+                )
+                is None
+            )
+            assert assessment_id in MatchingService(session).pending_analysis_ids(limit=100)
+    finally:
+        _forget_quota(model)
+
+
+def test_the_probe_lets_a_batch_through_when_the_estimate_fits() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    model = f"f48-02-{uuid4().hex[:8]}"
+    guard = _day_quota(model, tokens_used=100_000)
+    try:
+        with Session(engine) as session:
+            _seed_assessment(session, verdict="HIGH_PRIORITY")
+        adapter = _TokenAwareAdapter(_completed(), model=model, quota_guard=guard)
+
+        analyze_pending(engine, adapter, batch_size=1, worker_requests_ceiling=1_000_000)
+
+        assert adapter.calls == 1
+    finally:
+        _forget_quota(model)
 
 def test_an_unavailable_model_degrades_the_job_without_raising() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
