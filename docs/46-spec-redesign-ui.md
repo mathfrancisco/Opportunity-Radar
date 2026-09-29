@@ -217,12 +217,12 @@ Todos em `apps/web/src/components/`, cada um com teste ao lado.
 
 | Componente | Novo/Muda | Contrato |
 | --- | --- | --- |
-| `AppShell` | substitui o miolo de `PageShell` | sidebar + painel; **mantém a API de `PageShell`** (`current`, `title`, `description`, `children`, `footer`) para não tocar as 10 rotas; `eyebrow` passa a opcional e sem destaque visual (Q3) |
+| `AppShell` | substitui o miolo de `PageShell` | sidebar + painel; **mantém a API de `PageShell`** (`current`, `title`, `description`, `children`, `footer`) para não tocar as 10 rotas; `eyebrow` passa a opcional e sem destaque visual (D10) |
 | `Sidebar` | novo | grupos "Dia a dia / Catálogo / Diagnóstico" (mesmos itens de hoje), rótulo `text-caption` cinza, itens ícone+rótulo, ativo = pílula `surface` com `aria-current="page"`, `<nav aria-label="Navegação principal">`, gaveta `< md` |
 | `PageHeader` | novo | `<h1>` + subtítulo + slot `actions` (Button secundário à direita) |
 | `Button` | ajusta | variantes `primary` e `secondary` (outlined, borda `line-strong`, raio `radius-control`), tamanho `sm` 32px; anel de foco (§9) |
 | `FilterPill` | novo | `<label>` visível + `<select>` nativo estilizado (ícone à esquerda, chevron à direita, borda `line-strong`); estado "ativo" (borda `ink`) quando valor ≠ padrão |
-| `SearchInput` | substitui `SearchBar` | campo com ícone de lupa, ~20rem, à direita da linha de filtros; mantém `role="search"`, rótulo, envio por Enter; botão "Buscar" fica `sr-only` (Q4) |
+| `SearchInput` | substitui `SearchBar` | campo com ícone de lupa, ~20rem, à direita da linha de filtros; mantém `role="search"`, rótulo, envio por Enter; botão "Buscar" fica `sr-only` (D11) |
 | `FilterBar` | novo | flex com quebra; pílulas à esquerda, `SearchInput` à direita |
 | `DataTable` | reescreve o visual | cabeçalho `panel`, `text-caption` `muted` **sem caixa alta**, linha mín. 44px, divisória `line`, contêiner com borda `line` + `radius-control`, rola dentro do contêiner, primeira coluna fixa opcional (já existe); coluna de seleção (checkbox) só com `selectable` |
 | Células | novos, finos | `PrimaryText`+`SecondaryText` (negrito escuro + cinza), `DateTimeCell` (data `ink`, hora `muted`), `Chip` (outlined, `radius-chip`), `Avatar` (iniciais; sem imagem) |
@@ -239,11 +239,11 @@ página"), não os textos em inglês da referência.
 
 | Tela | Padrão de referência | Mudanças |
 | --- | --- | --- |
-| **Oportunidades (Inbox)** | tabela + filtros + paginação | Cartões viram linhas (`DataTable`): coluna "Oportunidade" (título em negrito com link + "empresa · local" cinza, chips "Possível duplicata"/"Startup · YC S24" ao lado), "Decisão" (`VerdictBadge` como chip), demais campos hoje presentes no cartão, e a ação por linha. Os 5 `<select>` viram `FilterPill` na `FilterBar`; a busca vira `SearchInput` à direita; o `Toolbar` "Candidatura" vira `FilterPill`; `SavedSearches`/`SaveSearchForm` vão para um menu/pílula "Buscas salvas" ou ficam abaixo da barra (Q5). Paginação vira `Pagination` (URL `?page=` preservada; `PageSizeSelect` só se a API aceitar tamanho variável, Q1). Marcar "Não é para mim" continua por linha (botões secundários `sm`). `< md`: cartão atual. |
+| **Oportunidades (Inbox)** | tabela + filtros + paginação | Cartões viram linhas (`DataTable`): coluna "Oportunidade" (título em negrito com link + "empresa · local" cinza, chips "Possível duplicata"/"Startup · YC S24" ao lado), "Decisão" (`VerdictBadge` como chip), demais campos hoje presentes no cartão, e a ação por linha. Os 5 `<select>` viram `FilterPill` na `FilterBar`; a busca vira `SearchInput` à direita; o `Toolbar` "Candidatura" vira `FilterPill`; `SavedSearches`/`SaveSearchForm` vão para um dropdown "Buscas salvas" à direita da `FilterBar` (D12). Paginação vira `Pagination` (URL `?page=` preservada; `PageSizeSelect` só se a API aceitar tamanho variável, D8). Marcar "Não é para mim" continua por linha (botões secundários `sm`). `< md`: cartão atual. |
 | **Visão geral** | painel + tabela | Tiles de métrica com borda `line`, sem sombra; "Métricas operacionais por fonte" segue `DataTable` com novo visual e `Toolbar` de janela como pílula à direita do título da seção. Listas tabulares de "Decisão de hoje" viram tabela compacta. Sem paginação. |
 | **Fontes** | tabela | `DataTable` novo; nome da fonte em negrito + tipo em cinza; estado (`StatusBadge`) como chip; "Adicionar fonte" vai para `PageHeader.actions` (secundário outlined); "Executar agora" botão secundário `sm` por linha. Painéis de criação/controle/manual mantidos, com `Card` novo. Sem filtros novos. |
 | **Fila de homologação** | tabela | `HomologationQueue` reutiliza `DataTable`/`Chip`; ações por linha como botões `sm`. |
-| **Empresas** | tabela + busca | Tabela própria migra para `DataTable`; `SearchBar`→`SearchInput`; prioridade/status/verificação como chips; "Fontes" em cinza. Paginação só se a lista já for paginada (Q1). |
+| **Empresas** | tabela + busca | Tabela própria migra para `DataTable`; `SearchBar`→`SearchInput`; prioridade/status/verificação como chips; "Fontes" em cinza. Paginação só se a lista já for paginada (D8). |
 | **Detalhe da oportunidade** | detalhe | Sem tabela principal: blocos em `Card` novo dentro do painel; `PageHeader` com título + ações à direita; link "voltar" no topo do painel (papel do "Back to app"); `DataTable` internas com o novo visual; `AnalysisPanel`/`ApplicationPanel` só recebem tokens. |
 | **Detalhe da empresa** | detalhe | idem; formulários com `Field` e controles `radius-control`/`control-line`. |
 | **Candidaturas** | colunas por estágio | Mantém colunas, cartões com borda `line`; sem tabela. Alternativa de tabela por estágio fora de escopo. |
@@ -277,12 +277,12 @@ tudo; 02–06 são independentes entre si depois dele; 07–09 dependem dos comp
 | Card | Fatia | Entrega | Depende de |
 | --- | --- | --- | --- |
 | **F46-01** | `DESIGN.md` + tokens | Cria `DESIGN.md` (skill `design-md`), copia a referência para `docs/assets/`, troca **valores** dos tokens (§4.3), adiciona `control-line`, `accent-surface`, `radius-*`, `text-page-title`, auto-hospeda Inter; remove a sombra do shell; reexecuta a tabela de contraste e atualiza `35-design-tokens.md`. Telas mudam de cor, não de estrutura. | — |
-| **F46-02** | Shell + sidebar | `AppShell`/`Sidebar`/`PageHeader` com a API de `PageShell` preservada; gaveta `< md`; pular-para-conteúdo mantido; logotipo ajustado (R8). | 01 |
+| **F46-02** | Shell + sidebar | `AppShell`/`Sidebar`/`PageHeader` com a API de `PageShell` preservada; gaveta `< md`; pular-para-conteúdo mantido; logotipo ajustado (R8); *eyebrow* removido do visual (D10). | 01 |
 | **F46-03** | `Button`, `Chip`, `StatusBadge`, `Card` | Novo visual de botão (outlined), chips outlined, cartão sem sombra. | 01 |
 | **F46-04** | `DataTable` + células | Novo visual, `PrimaryText/SecondaryText/DateTimeCell`, `selectable` opt-in, skeleton com altura nova. | 01, 03 |
-| **F46-05** | `FilterPill`, `SearchInput`, `FilterBar` | Componentes + testes; ainda sem uso nas telas. | 01, 03 |
-| **F46-06** | `Pagination` + `PageSizeSelect` | Componente + testes de janela, elipse e limites. | 01, 03 |
-| **F46-07** | Migração: Oportunidades | Cartões→linhas, filtros→`FilterBar`, paginação nova; `< md` mantém cartão. Fatiar em 07a (tabela) e 07b (filtros+paginação) se o diff passar de ~300 linhas. | 02, 04, 05, 06 |
+| **F46-05** | `FilterPill`, `SearchInput`, `FilterBar` | Componentes + testes; ainda sem uso nas telas. `SearchInput` com botão "Buscar" em `sr-only` e busca por Enter (D11); dropdown "Buscas salvas" ainda sem UI definida, integrado em F46-07 (D12). | 01, 03 |
+| **F46-06** | `Pagination` + `PageSizeSelect` | Componente + testes de janela, elipse e limites. Verifica se a API da Inbox aceita `page_size` variável; se sim, `PageSizeSelect` é integrado; se não, o seletor fica de fora. `CompaniesPage` também é verificada: se paginada, recebe `Pagination` nova; se não, continua sem (D8). | 01, 03 |
+| **F46-07** | Migração: Oportunidades | Cartões→linhas, filtros→`FilterBar`, paginação nova; `< md` mantém cartão. "Buscas salvas"/"Salvar busca" movidas para dropdown à direita da `FilterBar` (D12). Fatiar em 07a (tabela) e 07b (filtros+paginação) se o diff passar de ~300 linhas. | 02, 04, 05, 06 |
 | **F46-08** | Migração: Fontes, Empresas, Fila | `DataTable` unificado (Empresas deixa a tabela própria); `SearchInput` em Empresas. | 02, 04, 05 |
 | **F46-09** | Migração: Visão geral, detalhes, Candidaturas, Perfil, Status | Só tokens/componentes novos; remove `text-display*`, `rounded-shell`, `shadow-shell`, `mt-section` quando sem uso. | 02–08 |
 | **F46-10** | Verificação visual e E2E | Screenshots por tela (Playwright existente), ajuste de seletores só se um papel/rótulo mudou de propósito; revisão de contraste e foco; fecha a SPEC. | 01–09 |
@@ -339,13 +339,13 @@ Playwright existente (`tests/e2e/browser`) no CI, sem mudança de fluxo.
 | `Sidebar` renderiza os 3 grupos e 7 itens de hoje, ativo com `aria-current="page"`; gaveta `< md` abre/fecha com `Esc` e devolve o foco | teste de componente (jsdom) |
 | `AppShell` mantém `current`, `title`, `description`, `footer`; "Pular para o conteúdo" continua o primeiro alvo de tabulação | `PageShell.test.tsx` adaptado + teste de ordem de foco |
 | `FilterPill` tem rótulo acessível, dispara `onChange`, mostra ativo quando ≠ padrão | teste de componente; `getByLabel` como nos testes de rota |
-| `SearchInput` envia por Enter e mantém `role="search"` | teste de componente |
+| `SearchInput` envia por Enter e mantém `role="search"`; botão "Buscar" em `sr-only` (D11) | teste de componente |
 | `DataTable`: `th scope=col`, `caption`, linha 44px mín. (classe), `selectable` opt-in com "selecionar todas" rotulado | teste de componente |
 | `Pagination`: "Exibindo 1 a 15 de 145", elipse, atual com `aria-current`, prev desabilitado na 1ª e next na última, caso 0 itens | teste de unidade dos limites (0, 1 página, muitas) |
 | Inbox: filtros e `?page=` na URL iguais aos de hoje; mudar filtro zera a página; asserções atuais de `InboxPage.test.tsx` seguem verdes (adaptadas só no que mudou de forma: cartão→linha) | testes de rota existentes |
 | Selo de startup (`data-testid="startup-badge"`) e "Possível duplicata" continuam na linha | `InboxPage.test.tsx` |
 | Jornada E2E passa sem mudar de fluxo; seletores só mudam se um papel/rótulo mudou de propósito, registrado no card | `npx playwright test` em `tests/e2e/browser` (CI) |
-| Checagem visual: cada tela migrada tem screenshot em 1280 e 375 anexado ao card e comparado com os traços de §4.1 | screenshots Playwright já enviados como artefato no CI; revisão humana no F46-10 (sem teste de pixel nesta SPEC, Q2) |
+| Checagem visual: cada tela migrada tem screenshot em 1280 e 375 anexado ao card e comparado com os traços de §4.1 | screenshots Playwright já enviados como artefato no CI; revisão humana no F46-10 (sem teste de pixel automatizado nesta SPEC, D9) |
 | Sem rolagem horizontal da página em 320px | teste Playwright `scrollWidth <= innerWidth` nas telas migradas |
 
 ## 12. Riscos
@@ -368,22 +368,39 @@ Playwright existente (`tests/e2e/browser`) no CI, sem mudança de fluxo.
 - **R7 — Duas fontes de verdade** entre `DESIGN.md` e `35-design-tokens.md`. Mitigação:
   `35` vira medição de contraste e cita o `DESIGN.md` como origem.
 - **R8 — Marca.** O laranja substitui o lima que identifica o produto (logotipo `◉` em disco
-  lima). Ajustar o logotipo é parte do F46-02; se a identidade deve permanecer lima, o
-  acento laranja fica só nos estados de UI (Q6).
+  lima). Ajustar o logotipo é parte do F46-02. Decidido: o logotipo mantém sua cor
+  original (D13); o acento laranja `#c2410c` fica só nos estados de UI (D14).
 
-## 13. Perguntas em aberto
+## 13. Decisões (2026-09-29)
 
-- **Q1.** A API da Inbox aceita `page_size` variável (para "Itens por página")? Hoje é
-  constante 25 no cliente. Se não, o seletor fica de fora (fatia de API separada, fora
-  desta SPEC). `CompaniesPage` é paginada?
-- **Q2.** Adicionar teste visual automatizado (baseline de screenshots no Playwright)? Esta
-  SPEC propõe só checagem humana + screenshots de CI; baseline tem custo de manutenção.
-- **Q3.** O *eyebrow* ("Decisão diária") some? Na referência não existe; proposta: sai do
-  visual e o conteúdo vai para o subtítulo.
-- **Q4.** O botão "Buscar" some visualmente (busca por Enter)? Proposta: `sr-only` + Enter
-  + ícone de lupa clicável.
-- **Q5.** Onde ficam "Buscas salvas" e "Salvar busca" (não existem na referência)?
-- **Q6.** O acento laranja vale também para o logotipo, ou só para estados de UI?
-- **Q7.** Confirmar o laranja `#c2410c` (escuro o bastante para AA como texto) ou aceitar um
-  mais vivo só para borda/ícone.
-- **Q8.** Confirmar que a faixa de abas fica fora (D4).
+Resolvidas em conversa com o usuário em 2026-09-29:
+
+- **D8 — `page_size` variável na Inbox (Q1).** O slice F46-06 verifica se a API da Inbox
+  aceita `page_size` (hoje constante 25 no cliente). Se aceitar, `PageSizeSelect` é
+  integrado; se não, o seletor fica de fora e a fatia vira apenas `Pagination` com links
+  numerados. `CompaniesPage` também é verificada no mesmo card: se já paginada, recebe
+  `Pagination` nova; se não, continua sem paginação.
+- **D9 — Teste visual sem baseline automatizado (Q2).** A SPEC propõe só checagem humana +
+  screenshots capturados no Playwright e enviados ao CI; o baseline de screenshot (com
+  revalidação a cada mudança de pixel) tem custo de manutenção. A jornada E2E continua
+  rodando no CI sem baseline visual.
+- **D10 — Remover o *eyebrow* (Q3).** O *eyebrow* ("Decisão diária") é removido do visual
+  em F46-02. Se houver conteúdo significativo, migra para o subtítulo (slot `description`
+  de `PageHeader`); se não, é descartado. Em Inbox, "Decisão diária" é um label de seção,
+  não eyebrow.
+- **D11 — Botão "Buscar" em `sr-only` (Q4).** O botão "Buscar" deixa de ser visível
+  (classe `sr-only`); a lupa é clicável e a busca é acionada por Enter no campo. O F46-05
+  implementa `SearchInput` com essa semântica.
+- **D12 — "Buscas salvas" em dropdown (Q5).** "Buscas salvas" e "Salvar busca" são movidas
+  para um dropdown ancorado à direita da `FilterBar` (ícone de marca/bookmark ou "Buscas
+  salvas" com chevron). O layout exato é definido no F46-07 ao integrar na Inbox.
+- **D13 — Logotipo mantém cor original (Q6).** O logotipo (disco e marca do Opportunity
+  Radar) mantém sua cor atual (não muda para laranja). O acento laranja `#c2410c` é usado
+  só para estados de UI (página atual, ativo, atenção), não para identidade visual do
+  produto.
+- **D14 — Laranja `#c2410c` confirmado (Q7).** O acento `#c2410c` é confirmado como valor
+  final. Sua razão de contraste como texto (5.18:1 sobre `surface`, 4.71 sobre `canvas`)
+  atende WCAG AA e está documentado em §4.3.
+- **D15 — Faixa de abas do navegador fora de escopo (Q8).** Confirmado per D4: a
+  reprodução da faixa de abas (Back, Forward, abas do navegador) é fora de escopo. O topo
+  da sidebar usa o logotipo (R8); nenhuma aba de app é criada.
