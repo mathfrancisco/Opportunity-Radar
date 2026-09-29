@@ -127,11 +127,35 @@ describe('HomologationQueue', () => {
     const container = renderWithClient(<HomologationQueue />)
     await flush()
 
-    const names = Array.from(container.querySelectorAll('li')).map((item) => item.textContent)
+    const names = Array.from(container.querySelectorAll('tbody tr')).map((item) => item.textContent)
     expect(names[0]).toContain('Alta prioridade')
     expect(names[0]).toContain('Sem sonda')
     expect(names[1]).toContain('Confirmada')
     expect(names[1]).toContain('Evidência confirmada')
+  })
+
+  it('usa DataTable, chip de estado e "Homologar" sm abre o modo sequencial na linha', async () => {
+    stubFetch({
+      items: [
+        healthItem({ source_definition_id: 'source-1', name: 'Primeira' }),
+        healthItem({ source_definition_id: 'source-2', name: 'Segunda' }),
+      ],
+    })
+
+    const container = renderWithClient(<HomologationQueue />)
+    await flush()
+
+    expect(container.querySelector('table')).not.toBeNull()
+    expect(container.querySelector('tbody tr span.rounded-chip')?.textContent).toBe('Sem sonda')
+    const second = container.querySelectorAll('tbody tr')[1]
+    const button = second.querySelector('button')
+    expect(button?.textContent).toBe('Homologar')
+    expect(button?.className).toContain('h-8')
+    act(() => button?.click())
+    await flush()
+
+    expect(container.textContent).toContain('2 de 2')
+    expect(container.textContent).toContain('Fonte source-2')
   })
 
   it('modo sequencial avança sem voltar à lista', async () => {
@@ -232,7 +256,7 @@ describe('HomologationQueue', () => {
     await flush()
     await flush()
 
-    const rows = Array.from(container.querySelectorAll('li'))
+    const rows = Array.from(container.querySelectorAll('tbody tr'))
     expect(rows[0].textContent).toContain('SOURCE_RATE_LIMITED')
     expect(rows[0].textContent).toContain('aguardar 0s')
     expect(rows[1].textContent).toContain('Sonda confirmada')

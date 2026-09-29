@@ -19,7 +19,7 @@ interface SearchInputProps {
  *
  * There is no visible "Buscar" button (D11). The magnifier *is* the button — clickable, and
  * named "Buscar" for assistive tech through a `sr-only` label — and Enter in the field
- * submits the form. Successor of `SearchBar`, which stays until the screens migrate.
+ * submits the form. Replaced the old `SearchBar`, now removed.
  */
 export function SearchInput({
   id,

@@ -1,4 +1,4 @@
-"""F48-16: `20260929_0056` backfills `recency_basis` on populated rows and reverses."""
+"""F48-16: `20260929_0057` backfills `recency_basis` on populated rows and reverses."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ from opportunity_radar.platform.database import create_database_engine
 from scripts.restore_check import create_database, drop_database
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BEFORE = "20260929_0054"
-REVISION = "20260929_0056"
+BEFORE = "20260929_0055"
+REVISION = "20260929_0057"
 
 pytestmark = [
     pytest.mark.integration,

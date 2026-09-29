@@ -1,7 +1,7 @@
 """Add `opportunities.opportunity.recency_basis` (recency reference basis).
 
-Revision ID: 20260929_0056
-Revises: 20260929_0054
+Revision ID: 20260929_0057
+Revises: 20260929_0055
 Create Date: 2026-09-29 00:00:00
 
 Card F48-16. The recency reference is `published_at ?? source_updated_at ??
@@ -9,15 +9,14 @@ first_seen_at`; `recency_basis` (`published`, `updated`, `first_seen`) records w
 won so the UI can mark the date "estimada" when it is not `published`. Backfilled from the
 two nullable date columns, then made `NOT NULL`.
 
-Chaining note: created off `20260929_0054` independently of the concurrent
-`20260929_0055` collection-alarm revision; re-chain `down_revision` on merge.
+Chaining note: chained on `20260929_0055` because `20260929_0056` (F48-08) is not merged yet; re-chain `down_revision` onto it on merge.
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "20260929_0056"
-down_revision = "20260929_0054"
+revision = "20260929_0057"
+down_revision = "20260929_0055"
 branch_labels = None
 depends_on = None
 

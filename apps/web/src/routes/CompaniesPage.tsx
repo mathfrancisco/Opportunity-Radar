@@ -1,15 +1,26 @@
-import { type FormEvent, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../components/Button'
+import { Card } from '../components/Card'
+import { Chip } from '../components/Chip'
+import { PrimaryText, SecondaryText } from '../components/cells'
 import { CompanyForm } from '../components/CompanyForm'
+import { DataTable } from '../components/DataTable'
+import { FilterBar } from '../components/FilterBar'
 import { PageShell } from '../components/PageShell'
+import { PageSizeSelect } from '../components/PageSizeSelect'
+import { Pagination } from '../components/Pagination'
+import { SearchInput } from '../components/SearchInput'
 import { CardListSkeleton, TableSkeleton } from '../components/skeletons'
 import { EmptyState, ErrorState } from '../components/states'
-import { SearchBar } from '../components/SearchBar'
 import { type Company } from '../features/companies/api'
 import { useCompanies, useRegisterCompany } from '../features/companies/useCompanies'
+import { useMediaQuery } from '../lib/useMediaQuery'
 
-const pageSize = 25
+const defaultPageSize = 25
+// The endpoint accepts page_size up to 100 (companies.py).
+const pageSizeOptions = [10, 25, 50, 100] as const
+const tableColumns = ['Empresa', 'Prioridade', 'Status', 'Verificação', 'Fontes']
 
 function display(value: string | number | null | undefined) {
   return value === undefined || value === null || value === '' ? '—' : value
@@ -25,80 +36,85 @@ function sourceNames(company: Company) {
     .join(', ')
 }
 
-function CompanyList({ companies }: { companies: Company[] }) {
-  return (
-    <>
-      <div className="hidden overflow-hidden rounded-2xl border border-line md:block">
-        <table className="w-full border-collapse text-left text-sm">
-          <thead className="bg-canvas text-overline uppercase text-muted">
-            <tr>
-              <th className="px-5 py-4 font-semibold" scope="col">Empresa</th>
-              <th className="px-5 py-4 font-semibold" scope="col">Prioridade</th>
-              <th className="px-5 py-4 font-semibold" scope="col">Status</th>
-              <th className="px-5 py-4 font-semibold" scope="col">Verificação</th>
-              <th className="px-5 py-4 font-semibold" scope="col">Fontes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {companies.map((company) => (
-              <tr className="border-t border-divider" key={company.id}>
-                <td className="px-5 py-4">
-                  <p className="font-semibold">
-                    <Link
-                      className="underline decoration-accent decoration-2 underline-offset-4"
-                      to={`/companies/${company.id}`}
-                    >
-                      {company.name}
-                    </Link>
-                  </p>
-                  <p className="mt-1 text-muted">{display(company.domain)}</p>
-                </td>
-                <td className="px-5 py-4">{display(company.priority)}</td>
-                <td className="px-5 py-4">{display(company.status)}</td>
-                <td className="px-5 py-4">{display(company.verificationState)}</td>
-                <td className="break-anywhere max-w-64 px-5 py-4 text-subtle">
-                  {sourceNames(company)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+/** A value as an outlined chip; a missing one stays a plain dash. */
+function ValueChip({ value }: { value: string | number | null | undefined }) {
+  const shown = display(value)
+  return shown === '—' ? <span className="text-muted">—</span> : <Chip>{shown}</Chip>
+}
 
-      <div className="grid gap-3 md:hidden">
+function CompanyLink({ company }: { company: Company }) {
+  return (
+    <Link
+      className="underline decoration-accent decoration-2 underline-offset-4"
+      to={`/companies/${company.id}`}
+    >
+      {company.name}
+    </Link>
+  )
+}
+
+function CompanyList({ companies, isDesktop }: { companies: Company[]; isDesktop: boolean }) {
+  if (isDesktop) {
+    return (
+      <DataTable caption="Empresas" columns={tableColumns}>
         {companies.map((company) => (
-          <article className="rounded-2xl border border-line p-4" key={company.id}>
-            <h2 className="font-semibold">
-              <Link
-                className="underline decoration-accent decoration-2 underline-offset-4"
-                to={`/companies/${company.id}`}
-              >
-                {company.name}
-              </Link>
-            </h2>
-            <p className="mt-1 text-sm text-muted">{display(company.domain)}</p>
-            <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
-              <div>
-                <dt className="text-muted">Prioridade</dt>
-                <dd className="mt-1 font-medium">{display(company.priority)}</dd>
-              </div>
-              <div>
-                <dt className="text-muted">Status</dt>
-                <dd className="mt-1 font-medium">{display(company.status)}</dd>
-              </div>
-              <div>
-                <dt className="text-muted">Verificação</dt>
-                <dd className="mt-1 font-medium">{display(company.verificationState)}</dd>
-              </div>
-            </dl>
-            <p className="mt-4 text-sm text-subtle">
-              <span className="font-medium text-ink">Fontes: </span>
-              {sourceNames(company)}
-            </p>
-          </article>
+          <tr key={company.id}>
+            <td>
+              <PrimaryText>
+                <CompanyLink company={company} />
+              </PrimaryText>
+              <SecondaryText>{display(company.domain)}</SecondaryText>
+            </td>
+            <td>
+              <ValueChip value={company.priority} />
+            </td>
+            <td>
+              <ValueChip value={company.status} />
+            </td>
+            <td>
+              <ValueChip value={company.verificationState} />
+            </td>
+            <td className="break-anywhere max-w-64 text-muted">{sourceNames(company)}</td>
+          </tr>
         ))}
-      </div>
-    </>
+      </DataTable>
+    )
+  }
+  return (
+    <div className="grid gap-3">
+      {companies.map((company) => (
+        <Card as="article" key={company.id}>
+          <h2 className="font-semibold">
+            <CompanyLink company={company} />
+          </h2>
+          <p className="mt-1 text-sm text-muted">{display(company.domain)}</p>
+          <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
+            <div>
+              <dt className="text-muted">Prioridade</dt>
+              <dd className="mt-1">
+                <ValueChip value={company.priority} />
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted">Status</dt>
+              <dd className="mt-1">
+                <ValueChip value={company.status} />
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted">Verificação</dt>
+              <dd className="mt-1">
+                <ValueChip value={company.verificationState} />
+              </dd>
+            </div>
+          </dl>
+          <p className="mt-4 text-sm text-muted">
+            <span className="font-medium text-ink">Fontes: </span>
+            {sourceNames(company)}
+          </p>
+        </Card>
+      ))}
+    </div>
   )
 }
 
@@ -106,13 +122,13 @@ export function CompaniesPage() {
   const [input, setInput] = useState('')
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState<number>(defaultPageSize)
+  const isDesktop = useMediaQuery('(min-width: 768px)')
   const companies = useCompanies({ page, pageSize, q: query })
   const register = useRegisterCompany()
   const [creating, setCreating] = useState(false)
-  const totalPages = companies.data ? Math.ceil(companies.data.total / pageSize) : 0
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  function submit() {
     setQuery(input.trim())
     setPage(1)
   }
@@ -162,29 +178,29 @@ export function CompaniesPage() {
         )}
       </div>
 
-      <SearchBar
-        id="company-search"
-        label="Buscar empresas"
-        onChange={setInput}
-        onSubmit={submit}
-        placeholder="Nome ou domínio"
-        value={input}
-      />
+      <FilterBar
+        label="Busca de empresas"
+        search={
+          <SearchInput
+            id="company-search"
+            label="Buscar empresas"
+            onChange={setInput}
+            onSubmit={submit}
+            placeholder="Nome ou domínio"
+            value={input}
+          />
+        }
+      >
+        {null}
+      </FilterBar>
 
-      <div className="mt-8">
-        {companies.isPending && (
-          <>
-            {/* A mesma troca de forma da lista: tabela em tela larga, cartões na estreita. A
-                variante escondida sai também da árvore de acessibilidade, então o anúncio
-                continua sendo um só. */}
-            <div className="hidden md:block">
-              <TableSkeleton columns={5} label="Carregando empresas…" />
-            </div>
-            <div className="md:hidden">
-              <CardListSkeleton label="Carregando empresas…" />
-            </div>
-          </>
-        )}
+      <div className="mt-6">
+        {companies.isPending &&
+          (isDesktop ? (
+            <TableSkeleton columns={tableColumns.length} label="Carregando empresas…" />
+          ) : (
+            <CardListSkeleton label="Carregando empresas…" />
+          ))}
         {companies.isError && (
           <ErrorState onRetry={() => void companies.refetch()}>Não foi possível carregar as empresas.</ErrorState>
         )}
@@ -193,38 +209,32 @@ export function CompaniesPage() {
         )}
         {companies.data && companies.data.items.length > 0 && (
           <>
-            <p className="mb-4 text-sm text-muted">
+            <p className="mb-3 text-sm text-muted">
               {companies.data.total} empresa
               {companies.data.total === 1 ? '' : 's'} encontrada
               {companies.data.total === 1 ? '' : 's'}.
             </p>
-            <CompanyList companies={companies.data.items} />
-            {totalPages > 1 && (
-              <nav
-                aria-label="Paginação de empresas"
-                className="mt-6 flex items-center justify-between gap-4"
-              >
-                <Button
-                  disabled={page === 1}
-                  onClick={() => setPage((current) => current - 1)}
-                  size="sm"
-                  variant="secondary"
-                >
-                  Anterior
-                </Button>
-                <span className="text-sm text-muted">
-                  Página {page} de {totalPages}
-                </span>
-                <Button
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((current) => current + 1)}
-                  size="sm"
-                  variant="secondary"
-                >
-                  Próxima
-                </Button>
-              </nav>
-            )}
+            <CompanyList companies={companies.data.items} isDesktop={isDesktop} />
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+              <Pagination
+                className="min-w-0 flex-1"
+                itemLabel="empresas"
+                label="Paginação de empresas"
+                onPageChange={setPage}
+                page={page}
+                pageSize={pageSize}
+                total={companies.data.total}
+              />
+              <PageSizeSelect
+                id="companies-page-size"
+                onChange={(size) => {
+                  setPageSize(size)
+                  setPage(1)
+                }}
+                options={pageSizeOptions}
+                value={pageSize}
+              />
+            </div>
           </>
         )}
       </div>

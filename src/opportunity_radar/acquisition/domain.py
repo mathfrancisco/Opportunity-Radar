@@ -320,6 +320,20 @@ class CollectionRequest:
             raise ValueError("resuming a run requires an explicit cursor")
 
 
+def item_payload_bytes(item: CollectedItem) -> int:
+    """UTF-8 size of the item's raw payload as serialized, the run's received-bytes unit."""
+    return len(json.dumps(item.raw_payload, ensure_ascii=False, default=str).encode("utf-8"))
+
+
+def newest_item_age_seconds(newest: datetime | None, at: datetime) -> int | None:
+    """Age of the newest dated item at `at`; `None` when no item carried a date."""
+    if newest is None:
+        return None
+    if newest.tzinfo is None:
+        newest = newest.replace(tzinfo=timezone.utc)
+    return max(0, int((at - newest).total_seconds()))
+
+
 @dataclass(frozen=True, slots=True)
 class CollectedItem:
     """Pre-normalization data emitted by a collector without fabricated values."""
@@ -412,6 +426,10 @@ class SourceRun:
     #: (when a total is known) `items_seen` reached it. Only a complete run may close a
     #: job that stopped appearing — see `evaluate_completeness`.
     complete: bool = False
+    #: Serialized size of the items this run received, and how old its newest dated item
+    #: was when the run ended (F48-07). `None` = not measured, never a guessed zero.
+    bytes_received: int | None = None
+    newest_item_age_seconds: int | None = None
 
     def start(self, at: datetime | None = None) -> None:
         if self.status is not SourceRunStatus.PENDING:
