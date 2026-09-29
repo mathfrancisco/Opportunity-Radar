@@ -451,7 +451,7 @@ jobs:
           compose="docker compose -f compose.yaml -f compose.ci.yaml"
           WORKER_COLLECT_ENABLED=false WORKER_NORMALIZE_ENABLED=false \
             WORKER_MATCH_ENABLED=false WORKER_ANALYZE_ENABLED=false \
-            WORKER_RETENTION_ENABLED=false \
+            WORKER_RETENTION_ENABLED=false WORKER_SUGGEST_ENABLED=true \
             $compose up --detach --force-recreate worker
           # The container reports "Started" before the interpreter has booted. Waiting for
           # the ready file is what makes the startup log readable: the worker touches it
@@ -463,7 +463,7 @@ jobs:
           done
           test "$status" = "healthy"
           $compose logs --no-color --no-log-prefix worker | \
-            python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; configured=[line for line in lines if line.get('message') == 'worker jobs configured']; assert configured, 'the worker never reported its job configuration'; jobs=configured[-1]['jobs']; assert jobs == {'collect_enabled_sources': False, 'normalize_opportunities': False, 'evaluate_pending': False, 'analyze_pending': False, 'expire_raw_payloads': False, 'suggest_fields_pending': False}, jobs"
+            python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; configured=[line for line in lines if line.get('message') == 'worker jobs configured']; assert configured, 'the worker never reported its job configuration'; jobs=configured[-1]['jobs']; assert jobs == {'collect_enabled_sources': False, 'normalize_opportunities': False, 'evaluate_pending': False, 'analyze_pending': False, 'expire_raw_payloads': False, 'suggest_fields_pending': True}, jobs"
       - name: Verify catalogue curation through the public API
         run: |
           api="http://127.0.0.1:3000/api"

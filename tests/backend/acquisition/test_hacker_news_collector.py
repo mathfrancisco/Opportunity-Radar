@@ -210,6 +210,35 @@ def test_header_without_role_keeps_company_but_never_guesses_a_title() -> None:
     assert parsed.location_text == "Hybrid"
 
 
+def test_comment_without_a_role_is_skipped_not_emitted_or_invalid() -> None:
+    """F48-03: an untitled comment is not an opportunity, so it is `skipped`, not `FAILED`."""
+    comments: dict[int, Any] = {
+        1: {
+            "id": 1,
+            "type": "comment",
+            "time": 1790000000,
+            "text": "Middesk | Full-time | NYC, NY | Hybrid | middesk.com",
+        },
+        2: {
+            "id": 2,
+            "type": "comment",
+            "time": 1790000100,
+            "text": (
+                "Middesk | Full-time | NYC, NY | Hybrid | "
+                '<a href="https:&#x2F;&#x2F;boards.greenhouse.io&#x2F;middesk&#x2F;jobs&#x2F;1">'
+                "apply</a>"
+            ),
+        },
+    }
+    request = CollectionRequest()
+    items = _run(request, _handler([], comments=comments))
+    # The untitled comment that links a supported ATS board still reaches the proposal
+    # queue (F20-55), so only the one without any board is skipped.
+    assert [i.external_id for i in items] == ["2"]
+    assert request.telemetry.skipped_items == 1
+    assert request.telemetry.invalid_items == 0
+
+
 def test_company_urls_and_parentheticals_are_stripped() -> None:
     parsed = parse_comment("Smarkets (https://www.smarkets.com) | Junior Engineer | London, UK")
     assert parsed is not None and parsed.company == "Smarkets"
