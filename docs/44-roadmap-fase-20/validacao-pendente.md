@@ -1,6 +1,6 @@
 # Fase 20 — o que já fizemos e o que falta
 
-Atualizado em 2026-09-28. Branch `feature/f20-groq-e-consolidacao` (PR #25), CI verde em
+Atualizado em 2026-09-29. Branch `feature/f20-groq-e-consolidacao` (PR #25), CI verde em
 `13d6605` (backend, migrações, frontend, Compose E2E e Playwright).
 
 "Verde na CI" prova o comportamento com fakes e fixtures. Por isso cada card abaixo separa
@@ -56,7 +56,7 @@ reais).
 | Ordem | Card | Tarefa | Critério |
 | --- | --- | --- | --- |
 | 1 | F20-23 | **Feito em 2026-09-29** (`evidencias/precisao-f20-23-2026-09-29.md`): 69% geral (11/16), `seniority` 73%, `work_mode` 50%; 36,7 mil tokens do 20B; valores canônicos intactos; corrigido schema/prompt que causava HTTP 400. | Manter `worker_suggest_enabled=False`; reavaliar só `seniority` com gabarito maior. |
-| 2–6 | F20-22 | 120B médio; 20B baixo e médio; Qwen baixo e médio (comandos em `docs/pesquisas/benchmark-modelos-groq.md`) | Revisão humana por relatório (recomendações pré-autorizadas) e decisão por `scripts/benchmark_report.py`. |
+| 2–6 | F20-22 | Quota Groq `gpt-oss-120b` esgotada em 2026-09-29 13:27Z (169.522 tokens); rodada movida para 2026-09-30 00:00Z. Depois: 120B médio; 20B baixo e médio; Qwen baixo e médio (comandos em `docs/pesquisas/benchmark-modelos-groq.md`) | Revisão humana por relatório (recomendações pré-autorizadas) e decisão por `scripts/benchmark_report.py`. |
 | 7 | F20-18 | Comparação completa dos 50 casos, `v2` × `v1` | `coverage` e português sobem; `inventions` 0; nada piora no `reserved`. |
 | 8 | F20-24 | Amostra de aging sob Groq real | Itens fora do topo processados na proporção configurada. |
 
@@ -76,10 +76,12 @@ reais).
    + 9 achadas por `discover_ats.py` entre as 42 empresas classe (d) importadas. Lista
    completa, ATS, chave e execução real por fonte em
    `evidencias/mapa-carreira-vs-catalogo-2026-09-28.md` ("Resultados da execução").
-   Pendente, não fechado por este card: rodar `discover_sites.py` (antes de
-   `discover_ats.py`, em outro dia — mesmo portão de novidade de 30 dias) sobre as 13
-   empresas sem ATS achado e pesquisar a URL de carreiras real das 20 que ficaram
-   `backlog` por palpite de URL incorreto.
+   **Status 2026-09-29**: pesquisa de backlog careers realizada
+   (`evidencias/careers-backlog-f20-60-2026-09-29.md`) — 3 ativar (DoorDash, Remotebase, Lemon.io),
+   9 sondagem (Mercado Livre, Nuvemshop, AgileEngine, FullStack, Cognizant, TCS, Infosys, Terminal, AI/R),
+   3 bloqueadas (Howdy-YC/Stefanini-Gupy/Grupo OLX-Gupy), 5 sem site. `discover_sites.py`
+   não rodado (13 empresas no-ATS estão na lock de 30 dias até 2026-10-28); rerun agendado
+   para 2026-10-28 ou depois, antes de `discover_ats.py`. Crossover no forbidden terms.
 8. F20-71 (junior/estágio): rodada 1 (boards separados de 8 empresas grandes) não achou
    nada; rodada 2 (busca Tavily nos domínios de ATS) ativou e coletou na `f20manual` 26
    fontes, todas `SUCCEEDED`. Ativar na pilha real, depois da janela, as mesmas 26
@@ -91,13 +93,14 @@ reais).
    `evidencias/early-careers-2026-09-29.md` §"Rodada 2". Depois reprocessar com o
    normalizador do F20-70 (estagiário/trainee/aprendiz/new grad ainda caem em UNKNOWN).
 9. [F20-53](fase-20/f20-53-descoberta-de-startups-em-dominios-de-ats.md) (startups): ativar
-   na pilha real, depois da janela, as 23 fontes propostas por `tavily_startup_search` e
+   na pilha real, depois da janela, as 21 fontes propostas por `tavily_startup_search` e
    ativadas na `f20manual` (nomes `Proposed <Empresa> <ats>`): Ashby Aios, ClassDojo,
    Clipboard, Fieldguide, Jiga, Legionhealth; Greenhouse Alpaca, Daybreak Health,
    Instawork, Postscript, Si, Swayable; Lever Emi Labs, Fampay, Tryjeeves, Weekdayworks;
-   Workable Open, Pearl Talent, Weekday, Writesonic, talentpluto; Teamtailor EWOR GmbH,
-   Supersub (113 → 136 habilitadas). Chaves, resultados por fonte e ressalvas de precisão
-   (agências de recrutamento) em `evidencias/startups-f20-53-2026-09-29.md`.
+   Workable Open, Weekday, Writesonic; Teamtailor EWOR GmbH, Supersub (113 → 134 habilitadas).
+   **Rejeitadas 2026-09-29**: talentpluto e Pearl Talent (agências intermediárias, sem modelo
+   de hiring direto — ver `evidencias/revisao-agencias-talentpluto-pearl-2026-09-29.md`).
+   Chaves, resultados por fonte e ressalvas de precisão em `evidencias/startups-f20-53-2026-09-29.md`.
 
 ## 5. Falta — sanidade e pendências menores
 
@@ -116,9 +119,9 @@ reais).
 | [F20-61 — Filtro de recência (14 dias) com exceção para estágio/programas com prazo](fase-20/f20-61-filtro-de-recencia-14-dias.md) | Implementado em `feature/f20-61-recencia`; critérios de aceite cobertos por teste (backend + componente). Volume real de vaga junior/estágio/programa-com-prazo no acervo real ainda não foi medido (item 5 do escopo do card, nota explícita, não critério de aceite) |
 | [F20-70 — Fechar lacunas de palavra-chave do normalizador de senioridade](fase-20/f20-70-lacunas-de-palavra-chave-senioridade.md) | Regras e testes implementados em `feature/f20-61-recencia` (`seniority-v2` → `seniority-v3`); reprocessamento do acervo real (critério de aceite 4 do card) não executado por instrução explícita do coordenador desta sessão de não tocar no acervo real |
 | [F20-54 — Marcação "startup" com evidência e filtro na UI](fase-20/f20-54-marcacao-de-startup-e-filtro.md) | Implementado em `feature/f20-54-startup-tag`; critérios cobertos por teste (backend + componente). Pendente: nenhuma evidência real gravada ainda (o F20-53 produz o sinal; sem backfill, o card não define fonte para empresas existentes) — o filtro devolve vazio no acervo real até lá |
-| [F20-74 — Workday: parar no `total` anunciado (cap de 2000)](fase-20/f20-74-workday-paginacao-cap-2000.md) | Validado na `f20manual` após a correção: Accenture com `items_seen` 2000, `persisted` 1989, `PARTIAL` com `INVALID_ITEM` (11 itens sem título; ver o card). O wrap de paginação está corrigido (sem `PARSER_SCHEMA_CHANGED`); os 11 itens inválidos são outro assunto |
+| [F20-74 — Workday: parar no `total` anunciado (cap de 2000)](fase-20/f20-74-workday-paginacao-cap-2000.md) | Validado na `f20manual` após a correção: Accenture com `items_seen` 2000, `persisted` 1989, `PARTIAL` com `INVALID_ITEM` (11 itens sem título; ver o card). O wrap de paginação está corrigido (sem `PARSER_SCHEMA_CHANGED`). **Pendente 2026-09-29**: itens sem título contam como `skipped`, não `invalid` (novo card [F20-75](fase-20/f20-75-workday-postings-sem-titulo.md)); re-execução da Accenture na `f20manual` esperada após merge, resultado esperado SUCCEEDED com 11 skipped |
 | [F20-72 — Perfil padrão inclui JUNIOR/INTERN](fase-20/f20-72-perfil-padrao-inclui-junior-intern.md) | Fechado sem mudança de código de produção; testes de domínio adicionados |
-| [F20-55 — Coletor "Who is hiring?" da Hacker News](fase-20/f20-55-hn-who-is-hiring.md) | Termos revisados (viável, risco residual em `pesquisas/termos-hn-who-is-hiring.md`); coletor `hacker_news` implementado em `feature/f20-55-hn`, critérios cobertos por teste; execução real na `f20manual` (`evidencias/hn-who-is-hiring-2026-09-29.md`): `PARTIAL` (19 comentários sem empresa), 175 oportunidades, JUNIOR+INTERN 2,3%, 3 propostas de ATS. Pendente: a fonte ficou desabilitada (worker da `f20manual` roda código sem o coletor); ativar depois do merge, com imagem nova, e decidir agenda mensal; ampliar a extração de papel do corpo do texto (61 itens sem título) só com evidência. |
+| [F20-55 — Coletor "Who is hiring?" da Hacker News](fase-20/f20-55-hn-who-is-hiring.md) | Termos revisados (viável, risco residual em `pesquisas/termos-hn-who-is-hiring.md`); coletor `hacker_news` implementado em `feature/f20-55-hn`, critérios cobertos por teste; execução real na `f20manual` (`evidencias/hn-who-is-hiring-2026-09-29.md`): `PARTIAL` (19 comentários sem empresa), 175 oportunidades, JUNIOR+INTERN 2,3%, 3 propostas de ATS. **2026-09-29**: fonte habilitada com schedule `0 18 3 * *` (mensal, dia 3, 18Z, após acumular comentários de 1 dia). Ativar na pilha real depois de 2026-10-05T12:02Z. Ampliar a extração de papel do corpo do texto (61 itens sem título) só com evidência. |
 
 ## 6. Último card
 
