@@ -74,14 +74,14 @@ export function TableSkeleton({
 }) {
   return (
     <Skeleton label={label}>
-      <div className="overflow-hidden rounded-2xl border border-line">
-        <div className="flex gap-6 bg-canvas px-4 py-3">
+      <div className="overflow-hidden rounded-control border border-line">
+        <div className="flex h-10 items-center gap-6 bg-panel px-4">
           {range(columns).map((column) => (
             <Bone className="h-2.5 flex-1" key={column} />
           ))}
         </div>
         {range(rows).map((row) => (
-          <div className="flex gap-6 border-t border-divider bg-surface px-4 py-4" key={row}>
+          <div className="flex h-11 items-center gap-6 border-t border-line bg-surface px-4" key={row}>
             {range(columns).map((column) => (
               <Bone className={column === 0 ? 'flex-1' : 'flex-1 opacity-60'} key={column} />
             ))}
