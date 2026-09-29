@@ -22,7 +22,7 @@ interface LoadingStateProps {
 export function LoadingState({ children, className = '' }: LoadingStateProps) {
   return (
     <p
-      className={`rounded-2xl bg-info-surface p-5 text-info-ink ${className}`.trim()}
+      className={`rounded-panel bg-info-surface p-5 text-info-ink ${className}`.trim()}
       role="status"
     >
       {children}
@@ -44,7 +44,7 @@ interface EmptyStateProps {
 export function EmptyState({ children, className = '' }: EmptyStateProps) {
   return (
     <div
-      className={`rounded-2xl border border-dashed border-line-strong p-5 text-subtle ${className}`.trim()}
+      className={`rounded-panel border border-dashed border-line-strong p-5 text-subtle ${className}`.trim()}
       role="status"
     >
       {children}
@@ -68,7 +68,7 @@ export function ErrorState({
 }: ErrorStateProps) {
   return (
     <div
-      className={`rounded-2xl bg-danger-surface-strong p-5 text-danger-ink ${className}`.trim()}
+      className={`rounded-panel bg-danger-surface-strong p-5 text-danger-ink ${className}`.trim()}
       role="alert"
     >
       <p>{children}</p>
@@ -97,7 +97,7 @@ export function ConflictNotice({
 }: ConflictNoticeProps) {
   return (
     <div
-      className={`rounded-2xl border border-warning-line bg-warning-surface p-5 text-warning-ink ${className}`.trim()}
+      className={`rounded-panel border border-warning-line bg-warning-surface p-5 text-warning-ink ${className}`.trim()}
       role="alert"
     >
       <p>{children}</p>

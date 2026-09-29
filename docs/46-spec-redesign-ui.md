@@ -1,6 +1,8 @@
 # SPEC — Redesenho da interface web (visual "admin" claro: sidebar, painel branco, tabelas densas)
 
-- **Status:** Planejada; nenhuma capacidade abaixo é declarada entregue
+- **Status:** Implementada (F46-01 a F46-10) com pendências: imagem de referência ausente em
+  `docs/assets/` e revisão visual humana dos screenshots. Evidência em
+  [f46-10-verificacao.md](46-roadmap-redesign/f46-10-verificacao.md)
 - **Data:** 2026-09-29
 - **Escopo:** mudar a aparência e a estrutura de layout de `apps/web` para o padrão da
   imagem de referência (fundo cinza neutro, painel branco arredondado, sidebar agrupada,

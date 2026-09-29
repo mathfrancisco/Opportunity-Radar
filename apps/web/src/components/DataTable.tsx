@@ -84,7 +84,7 @@ export function DataTable({
     : ''
   return (
     <div
-      className={`overflow-x-auto rounded-control border border-line bg-surface ${className}`.trim()}
+      className={`relative overflow-x-auto rounded-control border border-line bg-surface ${className}`.trim()}
       id={id}
     >
       <table

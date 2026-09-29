@@ -88,7 +88,7 @@ function CompanyList({ companies, isDesktop }: { companies: Company[]; isDesktop
             <CompanyLink company={company} />
           </h2>
           <p className="mt-1 text-sm text-muted">{display(company.domain)}</p>
-          <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
+          <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-3 text-sm">
             <div>
               <dt className="text-muted">Prioridade</dt>
               <dd className="mt-1">

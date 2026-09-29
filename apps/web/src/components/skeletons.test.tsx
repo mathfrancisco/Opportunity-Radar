@@ -32,7 +32,7 @@ describe('esqueletos de carregamento', () => {
     const cards = render(<CardListSkeleton count={3} label="Carregando…" />)
     const table = render(<TableSkeleton columns={4} label="Carregando…" rows={2} />)
 
-    expect(cards.querySelectorAll('.rounded-2xl')).toHaveLength(3)
+    expect(cards.querySelectorAll('.rounded-panel')).toHaveLength(3)
     // Um cabeçalho e duas linhas, cada uma com quatro colunas.
     expect(table.querySelectorAll('.flex.gap-6')).toHaveLength(3)
     expect(table.querySelectorAll('.flex.gap-6 > span')).toHaveLength(12)
