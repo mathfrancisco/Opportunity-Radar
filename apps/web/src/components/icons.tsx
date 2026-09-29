@@ -94,3 +94,28 @@ export function StatusIcon() {
     </Icon>
   )
 }
+
+export function SearchIcon() {
+  return (
+    <Icon>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m20 20-4.2-4.2" />
+    </Icon>
+  )
+}
+
+export function ChevronDownIcon() {
+  return (
+    <Icon>
+      <path d="m6 9.5 6 6 6-6" />
+    </Icon>
+  )
+}
+
+export function FilterIcon() {
+  return (
+    <Icon>
+      <path d="M4 5.5h16l-6 7.5v5.5l-4 2V13z" />
+    </Icon>
+  )
+}
