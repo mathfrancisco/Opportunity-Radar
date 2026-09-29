@@ -17,7 +17,7 @@ export function Card({
 }: CardProps) {
   const hover = interactive ? ' transition hover:border-ink' : ''
   return (
-    <Component className={`rounded-2xl border border-line bg-surface p-5${hover} ${className}`.trim()}>
+    <Component className={`rounded-control border border-line bg-surface p-5${hover} ${className}`.trim()}>
       {children}
     </Component>
   )

@@ -34,7 +34,7 @@ describe('PageShell', () => {
 
     expect(active).toHaveLength(1)
     expect(active[0].textContent).toBe('Fontes')
-    expect(active[0].className).toContain('bg-ink')
+    expect(active[0].className).toContain('bg-surface')
   })
 
   it('não marca nada numa página que não está na navegação', () => {
@@ -59,5 +59,26 @@ describe('PageShell', () => {
 
     expect(first?.getAttribute('href')).toBe('#conteudo')
     expect(container.querySelector('#conteudo')).not.toBeNull()
+  })
+
+  it('mantém a API antiga: eyebrow é aceito e não aparece; description e footer sim', () => {
+    const container = render(
+      <MemoryRouter>
+        <PageShell
+          current="/sources"
+          description="Subtítulo"
+          eyebrow="Operação"
+          footer="Rodapé"
+          title="Fontes"
+        >
+          <p>conteúdo</p>
+        </PageShell>
+      </MemoryRouter>,
+    )
+
+    expect(container.textContent).not.toContain('Operação')
+    expect(container.textContent).toContain('Subtítulo')
+    expect(container.querySelector('footer')?.textContent).toBe('Rodapé')
+    expect(container.querySelector('h1')?.textContent).toBe('Fontes')
   })
 })
