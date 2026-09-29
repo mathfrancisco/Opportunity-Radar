@@ -51,7 +51,7 @@ export function CardListSkeleton({ label, count = 4 }: { label: string; count?: 
       <div className="grid gap-3">
         <Bone className="my-1 w-40" />
         {range(count).map((index) => (
-          <div className="rounded-2xl border border-line bg-surface p-5" key={index}>
+          <div className="rounded-panel border border-line bg-surface p-5" key={index}>
             <Bone className="h-4 w-2/3" />
             <Bone className="mt-3 w-1/3" />
             <Bone className="mt-4 w-5/6" />
@@ -96,7 +96,7 @@ export function TableSkeleton({
 export function PanelSkeleton({ label, columns = 3 }: { label: string; columns?: number }) {
   return (
     <Skeleton label={label}>
-      <div className="grid gap-3 rounded-2xl border border-line bg-panel p-5 text-sm sm:grid-cols-3">
+      <div className="grid gap-3 rounded-panel border border-line bg-panel p-5 text-sm sm:grid-cols-3">
         {range(columns).map((column) => (
           <div className="py-1" key={column}>
             <Bone className="w-24" />

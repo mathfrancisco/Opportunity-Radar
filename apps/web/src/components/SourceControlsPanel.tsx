@@ -63,7 +63,7 @@ export function SourceControlsPanel({ sourceId }: { sourceId: string }) {
   const scheduleId = `schedule-${sourceId}`
 
   return (
-    <section aria-labelledby={reviewId} className="mt-4 rounded-2xl border border-line bg-panel p-4">
+    <section aria-labelledby={reviewId} className="mt-4 rounded-panel border border-line bg-panel p-4">
       <h3 className="font-semibold" id={reviewId}>
         Homologação
       </h3>
@@ -144,7 +144,7 @@ export function SourceControlsPanel({ sourceId }: { sourceId: string }) {
       )}
 
       {record.sourceType !== 'manual' && !record.enabled && (
-        <div className="mt-4 rounded-xl border border-line bg-surface p-3 text-sm">
+        <div className="mt-4 rounded-control border border-line bg-surface p-3 text-sm">
           <p className="font-medium">Teste do collector</p>
           <p className="mt-1 text-subtle">
             Pede um item ao endpoint público e descarta o que leu. Se o collector entender a

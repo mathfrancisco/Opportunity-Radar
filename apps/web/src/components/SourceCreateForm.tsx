@@ -254,7 +254,7 @@ export function SourceCreateForm({ initialType, onCreated, onCancel }: SourceCre
   return (
     <form
       aria-labelledby="new-source-title"
-      className="rounded-2xl border border-line bg-surface p-5"
+      className="rounded-panel border border-line bg-surface p-5"
       noValidate
       onSubmit={submit}
     >

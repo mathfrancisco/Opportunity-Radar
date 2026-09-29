@@ -198,7 +198,7 @@ function ItemCard({ item }: { item: InboxItem }) {
       </dl>
 
       {item.isStale && (
-        <p className="mt-4 rounded-xl border border-warning-line bg-warning-surface p-3 text-sm text-warning-ink" role="status">
+        <p className="mt-4 rounded-control border border-warning-line bg-warning-surface p-3 text-sm text-warning-ink" role="status">
           Esta avaliação usa uma versão anterior do perfil ou da oportunidade. A
           reavaliação está pendente; o resultado anterior continua disponível.
           {item.assessmentProfileVersionId && item.currentProfileVersionId && (
