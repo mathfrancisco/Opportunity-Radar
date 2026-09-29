@@ -13,6 +13,7 @@ describe('StatusBadge', () => {
 
     expect(badge?.textContent).toBe('Sucesso')
     expect(badge?.className).toContain('bg-success-surface')
+    expect(badge?.className).toContain('rounded-chip')
   })
 
   it('mostra o próprio código quando o estado não tem tradução', () => {

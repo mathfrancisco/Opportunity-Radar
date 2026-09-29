@@ -342,6 +342,9 @@ class AcquisitionService:
     def list_sources(self, *, offset: int, limit: int) -> tuple[list[SourceDefinitionModel], int]:
         return self.repository.list_sources(offset=offset, limit=limit)
 
+    def list_collectable_sources(self) -> list[SourceDefinitionModel]:
+        return self.repository.list_collectable_sources()
+
     def get_source(self, source_id: UUID) -> SourceDefinitionModel | None:
         return self.repository.get_source(source_id)
 

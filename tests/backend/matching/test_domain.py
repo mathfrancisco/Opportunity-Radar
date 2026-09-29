@@ -20,6 +20,7 @@ from opportunity_radar.matching.domain import (
     Verdict,
     evaluate_match,
 )
+from opportunity_radar.matching.service import _known_contracts, _optional_enum
 from opportunity_radar.opportunities.domain import (
     CompensationPeriod,
     ContractType,
@@ -305,3 +306,39 @@ def test_rule_set_requires_versioned_complete_weights_and_aware_assessment_time(
         )
     with pytest.raises(MatchingError, match="timezone-aware"):
         evaluate_match(_opportunity(), _profile(), _rules(), assessed_at=datetime(2026, 9, 15))
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [
+        ("full-time", ContractType.FULL_TIME),
+        ("FULL_TIME", ContractType.FULL_TIME),
+        (" Full Time ", ContractType.FULL_TIME),
+        ("part-time", ContractType.PART_TIME),
+        ("internship", ContractType.INTERNSHIP),
+        ("contract", ContractType.CONTRACT),
+        ("freelance-ish", None),
+    ],
+)
+def test_profile_contract_spellings_resolve_to_the_same_enum(
+    stored: str, expected: ContractType | None
+) -> None:
+    # F48-04: the profile stores `full-time`, which used to become `FULL-TIME` and miss.
+    assert _optional_enum(ContractType, stored) is expected
+
+
+def test_a_hyphenated_profile_contract_makes_contract_compatible_known() -> None:
+    accepted = _known_contracts(("full-time",))
+    assert accepted == (ContractType.FULL_TIME,)
+
+    result = evaluate_match(
+        _opportunity(contract_types=(ContractType.FULL_TIME,)),
+        _profile(accepted_contract_types=accepted),
+        _rules(),
+        assessed_at=ASSESSED_AT,
+    )
+
+    contract = next(
+        item for item in result.eligibility.filters if item.code == "CONTRACT_COMPATIBLE"
+    )
+    assert contract.result is KnowledgeState.TRUE

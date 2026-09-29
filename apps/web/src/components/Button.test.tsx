@@ -26,6 +26,17 @@ describe('Button', () => {
     expect(secondary?.className).not.toContain('bg-ink')
   })
 
+  it('usa o raio de controle e oferece o tamanho sm de 32px', () => {
+    const sm = render(
+      <Button size="sm" variant="secondary">
+        Pequeno
+      </Button>,
+    ).querySelector('button')
+
+    expect(sm?.className).toContain('rounded-control')
+    expect(sm?.className).toContain('h-8')
+  })
+
   it('mostra o estado desabilitado em vez de apenas ignorar o clique', () => {
     const container = render(<Button disabled>Executar agora</Button>)
     const button = container.querySelector('button')
