@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render } from '../components/testing'
 import { type SavedSearchFilters } from '../features/saved-searches/api'
@@ -444,5 +444,206 @@ describe('InboxPage startup filter', () => {
       (badge) => badge.textContent?.replace(/\s+/g, ' ').trim(),
     )
     expect(badges).toEqual(['Startup · YC S24', 'Startup (sinal fraco)'])
+  })
+})
+
+/** Card F46-07: table rows, pagination, page size and the "Buscas salvas" dropdown. */
+describe('InboxPage table, pagination and filters', () => {
+  function stubInbox(total: number, calledUrls: string[], items = [inboxItem()]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        calledUrls.push(url)
+        if (url.includes('/inbox')) {
+          return new Response(
+            JSON.stringify({
+              items,
+              total,
+              offset: 0,
+              limit: 25,
+              order: 'priority',
+              off_filter_count: 0,
+            }),
+            { status: 200 },
+          )
+        }
+        if (url.includes('/saved-searches')) {
+          return new Response(JSON.stringify([savedSearch()]), { status: 200 })
+        }
+        return new Response(JSON.stringify([]), { status: 200 })
+      }),
+    )
+  }
+
+  function Probe() {
+    const location = useLocation()
+    return <output data-testid="location">{location.search}</output>
+  }
+
+  function renderAt(path: string): HTMLElement {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[path]}>
+          <InboxPage />
+          <Probe />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  function search(container: HTMLElement): URLSearchParams {
+    return new URLSearchParams(container.querySelector('[data-testid="location"]')?.textContent ?? '')
+  }
+
+  function choose(select: HTMLSelectElement, value: string) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+    act(() => {
+      setter?.call(select, value)
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+  }
+
+  it('desenha a oportunidade como linha de tabela com decisão, duplicata e selo de startup', async () => {
+    const urls: string[] = []
+    stubInbox(
+      1,
+      urls,
+      [
+        inboxItem({
+          verdict: 'STRONG_MATCH',
+          has_pending_duplicate: true,
+          startup_strength: 'strong',
+          startup_batch: 'S24',
+        }),
+      ],
+    )
+    const container = renderAt('/inbox')
+    await flush()
+
+    const row = container.querySelector('tbody tr') as HTMLElement
+    expect(row).not.toBeNull()
+    expect(row.textContent).toContain('Backend Engineer')
+    expect(row.textContent).toContain('Acme · Remote')
+    expect(row.textContent).toContain('Possível duplicata')
+    expect(row.querySelector('[data-testid="startup-badge"]')).not.toBeNull()
+    expect(row.textContent).toContain('Não é para mim')
+    expect(container.textContent).toContain('1 oportunidade encontrada.')
+  })
+
+  it('abaixo de md mantém a visão em cartões', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({
+        matches: false,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })),
+    )
+    stubInbox(1, [])
+    const container = renderAt('/inbox')
+    await flush()
+
+    expect(container.querySelector('table')).toBeNull()
+    expect(container.querySelector('article')).not.toBeNull()
+  })
+
+  it('pagina pelo Pagination, preserva ?page= e envia a página à API', async () => {
+    const urls: string[] = []
+    stubInbox(60, urls)
+    const container = renderAt('/inbox?page=2')
+    await flush()
+
+    expect(urls.some((url) => url.includes('/inbox') && url.includes('offset=25'))).toBe(true)
+    expect(container.textContent).toContain('Exibindo 26 a 50 de 60 oportunidades')
+
+    const next = container.querySelector('button[aria-label="Próxima página"]') as HTMLButtonElement
+    act(() => next.click())
+    await flush()
+    expect(search(container).get('page')).toBe('3')
+
+    const first = container.querySelector('button[aria-label="Página 1"]') as HTMLButtonElement
+    act(() => first.click())
+    await flush()
+    expect(search(container).get('page')).toBeNull()
+  })
+
+  it('trocar o tamanho da página o coloca na URL e volta para a página 1', async () => {
+    const urls: string[] = []
+    stubInbox(300, urls)
+    const container = renderAt('/inbox?page=3')
+    await flush()
+
+    const select = container.querySelector('#inbox-page-size') as HTMLSelectElement
+    expect(select.value).toBe('25')
+    choose(select, '50')
+    await flush()
+
+    expect(search(container).get('size')).toBe('50')
+    expect(search(container).get('page')).toBeNull()
+    expect(urls.some((url) => url.includes('/inbox') && url.includes('limit=50'))).toBe(
+      true,
+    )
+
+    choose(container.querySelector('#inbox-page-size') as HTMLSelectElement, '25')
+    await flush()
+    expect(search(container).get('size')).toBeNull()
+  })
+
+  it('mudar um filtro volta para a página 1 e mantém o tamanho', async () => {
+    stubInbox(300, [])
+    const container = renderAt('/inbox?page=4&size=50')
+    await flush()
+
+    choose(container.querySelector('#inbox-work-mode') as HTMLSelectElement, 'REMOTE')
+    await flush()
+
+    const params = search(container)
+    expect(params.get('work_mode')).toBe('REMOTE')
+    expect(params.get('page')).toBeNull()
+    expect(params.get('size')).toBe('50')
+  })
+
+  it('a Candidatura é um FilterPill e filtra por applied', async () => {
+    stubInbox(1, [])
+    const container = renderAt('/inbox')
+    await flush()
+
+    choose(container.querySelector('#inbox-applied') as HTMLSelectElement, 'true')
+    await flush()
+    expect(search(container).get('applied')).toBe('true')
+  })
+
+  it('as buscas salvas ficam num menu: abre, aplica a busca e Esc fecha', async () => {
+    stubInbox(1, [])
+    const container = renderAt('/inbox')
+    await flush()
+
+    const button = Array.from(container.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent === 'Buscas salvas',
+    ) as HTMLButtonElement
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+    expect(container.textContent).not.toContain('Backend remoto')
+
+    act(() => button.click())
+    await flush()
+    expect(button.getAttribute('aria-expanded')).toBe('true')
+    expect(container.textContent).toContain('Backend remoto')
+    expect(container.textContent).toContain('Salvar esta busca')
+
+    act(() => {
+      button.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+
+    act(() => button.click())
+    await flush()
+    clickButton(container, 'Backend remoto')
+    await flush()
+    expect(search(container).get('work_mode')).toBe('REMOTE')
+    expect(button.getAttribute('aria-expanded')).toBe('false')
   })
 })
