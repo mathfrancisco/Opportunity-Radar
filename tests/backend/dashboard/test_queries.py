@@ -413,7 +413,7 @@ def test_inbox_query_filters_by_created_after() -> None:
         assert [item.opportunity_id for item in page.items] == [after.id]
 
 
-def test_inbox_orders_by_priority_recency_and_score() -> None:
+def test_inbox_default_order_is_score_then_recency_not_company_priority() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         profile_version = _profile_version(session)
@@ -458,7 +458,8 @@ def test_inbox_orders_by_priority_recency_and_score() -> None:
                 if item.opportunity_id in {old_high.id, new_low.id}
             ]
 
-        assert ids(InboxOrder.PRIORITY) == [old_high.id, new_low.id]
+        # F48-14: a `high` company no longer outranks a better-scored `low` one.
+        assert ids(InboxOrder.PRIORITY) == [new_low.id, old_high.id]
         assert ids(InboxOrder.RECENCY) == [new_low.id, old_high.id]
         assert ids(InboxOrder.SCORE) == [new_low.id, old_high.id]
 

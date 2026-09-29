@@ -171,9 +171,12 @@ class SourceSchedulingState:
     is_low_yield: bool = False
 
 
-#: Cron schedules for a company source that names no schedule of its own. A high-priority
-#: company is worth checking far more often than a low one; every cadence here stays well
-#: inside a source's own minimum run interval for any policy this codebase configures.
+#: Cron schedules for a company source that names no schedule of its own. Cadence follows
+#: `Company.priority` (the user's interest) and nothing else: `research_confidence` (how
+#: mature the catalogue is, F48-14) is operational and never lowers a company to weekly.
+#: A high-priority company is worth checking far more often than a low one; every
+#: cadence here stays well inside a source's own minimum run interval for any policy
+#: this codebase configures.
 DEFAULT_SCHEDULE_BY_COMPANY_PRIORITY = {
     "high": "0 */6 * * *",  # every 6 hours
     "normal": "0 0 * * *",  # once a day

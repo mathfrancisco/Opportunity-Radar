@@ -706,7 +706,8 @@ def _inbox_ordering(order: InboxOrder, assessments: Any, search_term: str = "") 
         return [recency, score, OpportunityModel.id]
     if order is InboxOrder.SCORE:
         return [score, recency, OpportunityModel.id]
-    return [_priority_rank().desc(), score, recency, OpportunityModel.id]
+    # F48-14: company priority is a factor of the score (COMPANY_PRIORITY), not a sort key.
+    return [score, recency, OpportunityModel.id]
 
 
 def list_opportunity_inbox(session: Session, query: InboxQuery) -> InboxPage:

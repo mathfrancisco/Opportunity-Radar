@@ -228,7 +228,11 @@ class ResearchRow:
         return any(state in normalized for state in BACKLOG_STATES)
 
     @property
-    def source_priority(self) -> str:
+    def research_confidence(self) -> str:
+        """How mature the catalogue's knowledge of the company is (F48-14).
+
+        Operational only. It is not the user's interest, so it never becomes `priority`.
+        """
         normalized = self.situation.casefold()
         if "api json" in normalized:
             return "high"
@@ -269,7 +273,8 @@ class ResearchRow:
             domain=None,
             aliases=RESEARCH_ALIASES.get(self.name, ()),
             sources=self.source_candidates(),
-            priority=self.source_priority,
+            priority="normal",
+            research_confidence=self.research_confidence,
         )
 
 
@@ -397,10 +402,12 @@ def _update_company_state(
     *,
     created: bool,
 ) -> None:
-    if created or PRIORITY_RANK[row.source_priority] > PRIORITY_RANK.get(
-        company.priority, -1
+    # `priority` is the user's interest (F48-14): a new company starts at `normal` (set by
+    # the candidate) and an existing one is never touched. Only maturity is recorded.
+    if created or PRIORITY_RANK[row.research_confidence] > PRIORITY_RANK.get(
+        company.research_confidence, -1
     ):
-        company.priority = row.source_priority
+        company.research_confidence = row.research_confidence
     if created:
         company.radar_status = "backlog" if row.is_backlog else "active"
     elif not row.is_backlog:
