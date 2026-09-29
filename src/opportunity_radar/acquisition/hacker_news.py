@@ -271,6 +271,15 @@ class HackerNewsCollector:
                     f"Hacker News comment {kid}: company or role not identifiable"
                 )
                 continue
+            if parsed.title is None and not any(
+                detect_ats_board(url) is not None for url in parsed.urls
+            ):
+                # Card F48-03 (same family as F20-75): a header that names no role is not an
+                # opportunity. Skipped, not persisted as a raw item the normalizer would
+                # then record as FAILED. A comment that still links a supported ATS board
+                # is persisted: it feeds the source-proposal queue (F20-55).
+                request.telemetry.record_skipped_item()
+                continue
             if keywords and not any(k in parsed.text.casefold() for k in keywords):
                 continue
             yield self._item(comment, parsed, thread_id, thread_title)

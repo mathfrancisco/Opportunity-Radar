@@ -46,6 +46,9 @@ from opportunity_radar.opportunities.role_family import (
     classify_role_family,
     departments_from_metadata,
 )
+from opportunity_radar.platform.logging import get_logger
+
+logger = get_logger("opportunity_radar.opportunities")
 
 NORMALIZER_VERSION = "v6"
 
@@ -853,7 +856,14 @@ def _optional_datetime(value: Mapping[str, Any], key: str) -> datetime | None:
     except ValueError as error:
         raise NormalizationError(f"collected_item_v1 {key} must be an ISO datetime") from error
     if parsed.tzinfo is None:
-        raise NormalizationError(f"collected_item_v1 {key} must include a timezone")
+        # Card F48-03 (decision 9): a date without a timezone is not evidence of a moment,
+        # and inventing UTC would shift it by hours. The item keeps every other field and
+        # recency falls back to the collection date, instead of failing the whole item.
+        logger.warning(
+            "collected_item_v1 datetime without timezone dropped",
+            extra={"field": key},
+        )
+        return None
     return parsed
 
 

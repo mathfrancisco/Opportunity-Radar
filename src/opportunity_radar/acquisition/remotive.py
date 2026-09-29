@@ -350,9 +350,14 @@ class RemotiveCollector:
                 "Remotive publication_date must be a string",
             )
         try:
-            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError as error:
             raise AcquisitionError(
                 AcquisitionErrorCode.PARSER_SCHEMA_CHANGED,
                 "Remotive publication_date is invalid",
             ) from error
+        # The API sends `publication_date` without a timezone and its documentation does
+        # not state one, so no fuso is invented (card F48-03, spec 48 decision 9): the
+        # date is dropped and recency falls back to the collection date. The raw payload
+        # still carries the original string.
+        return parsed if parsed.tzinfo is not None else None
