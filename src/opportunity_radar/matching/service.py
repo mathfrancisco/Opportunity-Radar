@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
@@ -1019,7 +1020,8 @@ def _optional_enum(enum_type: type[EnumType], value: str | None) -> EnumType | N
     if value is None:
         return None
     try:
-        return enum_type(value.strip().upper())
+        # The profile stores ull-time; enum members use FULL_TIME (F48-04).
+        return enum_type(re.sub(r"[-\s]+", "_", value.strip()).upper())
     except ValueError:
         return None
 
