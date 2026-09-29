@@ -74,6 +74,8 @@ class OpportunityModel(Base):
             "lifecycle_status",
         ),
         Index("ix_opportunity_published", "published_at"),
+        Index("ix_opportunity_first_seen", "first_seen_at"),
+        Index("ix_opportunity_valid_through", "valid_through"),
         Index("ix_opportunity_role_family", "role_family"),
         # Both created by their own migrations (F17-06, F17-03) with a GIN index the ORM
         # never declared, which made `alembic check` propose dropping them (F20 sanity
@@ -111,6 +113,26 @@ class OpportunityModel(Base):
     lifecycle_status: Mapped[str] = mapped_column(String(16), nullable=False, default="DISCOVERED")
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: When the radar first saw this opportunity (`SourceOccurrenceModel.first_seen_at`
+    #: of the occurrence that created it), set once at creation and never updated
+    #: afterwards. Card F20-61's recency fallback when `published_at` is `None` — an
+    #: estimate of "seen", never presented as a real publication date.
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=func.now(), server_default=func.now()
+    )
+    #: Explicit application-window deadline (schema.org `JobPosting.validThrough`,
+    #: card F20-61), threaded from the collector when it exposes one (today only
+    #: `jobposting.py`). `None` for every other collector — never fabricated. A
+    #: future date is a recency-filter exception on its own, independent of
+    #: `contract_type` or age.
+    valid_through: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: Recency-filter exception signal (card F20-61): a time-boxed entry program
+    #: (estágio/trainee/early-careers/residência), which stays open far longer than a
+    #: single senior/mid role and should not disappear from the default listing after
+    #: 14 days. Never a matching/scoring input.
+    recency_exempt_program: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -323,6 +345,10 @@ class SourceOccurrenceModel(Base):
     )
     source_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: Explicit application-window deadline for this occurrence's source (card
+    #: F20-61), same contract as `Opportunity.valid_through` — `None` unless the
+    #: collector exposes one.
+    source_valid_through: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     #: When retention expired the raw body this occurrence came from, and `None` while it
     #: is still there. Read as a column rather than through the payload relationship so a
     #: list of occurrences never drags every raw payload into memory to answer it.

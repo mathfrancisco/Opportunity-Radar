@@ -16,6 +16,11 @@ export interface InboxItem {
   lifecycleStatus: string
   roleFamily: string
   publishedAt: string | null
+  /** Card F20-61: `publishedAt` when the source has one, else `first_seen_at`. */
+  recencyEffectiveDate: string | null
+  /** `true` when `recencyEffectiveDate` came from the `first_seen_at` fallback —
+   * never presented as a real publication date without this flag. */
+  dateIsEstimated: boolean
   opportunityVersion: number
   assessmentId: string | null
   assessmentOpportunityVersion: number | null
@@ -72,6 +77,10 @@ export interface InboxParams {
   /** ISO country code from the `regions-v1` table. Unknown-country opportunities are
    * never implicitly excluded — the API keeps them visible (card F17-06). */
   allowedCountry?: string
+  /** Card F20-61: `true` (the default, matching the server's own default) shows only
+   * a posting from the last 14 days, except a time-boxed entry program or one with a
+   * still-open application deadline. `false` is the "mostrar tudo" toggle. */
+  onlyRecent?: boolean
 }
 
 export interface FailingSource {
@@ -251,6 +260,8 @@ function parseInboxItem(value: unknown): InboxItem | null {
     lifecycleStatus: text(value.lifecycle_status) ?? 'UNKNOWN',
     roleFamily: text(value.role_family) ?? 'UNKNOWN',
     publishedAt: text(value.published_at),
+    recencyEffectiveDate: text(value.recency_effective_date),
+    dateIsEstimated: value.date_is_estimated === true,
     opportunityVersion: typeof value.opportunity_version === 'number' ? value.opportunity_version : 1,
     assessmentId: text(value.assessment_id),
     assessmentOpportunityVersion:
@@ -309,6 +320,7 @@ export async function getInbox({
   salaryMax,
   sourceDefinitionIds,
   allowedCountry,
+  onlyRecent = true,
 }: InboxParams): Promise<InboxPage> {
   const params = new URLSearchParams({
     offset: String((page - 1) * pageSize),
@@ -330,6 +342,7 @@ export async function getInbox({
   if (salaryMax) params.set('salary_max', salaryMax)
   sourceDefinitionIds?.forEach((value) => params.append('source_definition_id', value))
   if (allowedCountry) params.set('allowed_country', allowedCountry)
+  if (!onlyRecent) params.set('only_recent', 'false')
 
   const response = await fetch(apiUrl(`/inbox?${params.toString()}`), {
     headers: { Accept: 'application/json' },

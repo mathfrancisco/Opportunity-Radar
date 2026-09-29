@@ -334,6 +334,7 @@ class WorkableCollector:
             company_name=company_name,
             location_text=location_text,
             description=description,
+            published_at=WorkableCollector._parse_published_on(job.get("published_on")),
             raw_payload=job,
             metadata={
                 "workplace_type": (location or {}).get("workplace_type"),
@@ -345,6 +346,28 @@ class WorkableCollector:
                 "parser_version": _PARSER_VERSION,
             },
         )
+
+    #: Card F20-61. Workable's public widget carries `published_on` (a `YYYY-MM-DD`
+    #: date, the real day this posting went live — distinct from `created_at`, which
+    #: is a draft's creation time and may predate publication). `None` when the job
+    #: has no value (e.g. never published) rather than falling back to `created_at`,
+    #: which would misrepresent draft time as publication time.
+    @staticmethod
+    def _parse_published_on(value: Any) -> datetime | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise AcquisitionError(
+                AcquisitionErrorCode.PARSER_SCHEMA_CHANGED,
+                "Workable published_on must be a string",
+            )
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=UTC)
+        except ValueError as error:
+            raise AcquisitionError(
+                AcquisitionErrorCode.PARSER_SCHEMA_CHANGED,
+                "Workable published_on is invalid",
+            ) from error
 
     @staticmethod
     def _string(value: Any) -> str | None:

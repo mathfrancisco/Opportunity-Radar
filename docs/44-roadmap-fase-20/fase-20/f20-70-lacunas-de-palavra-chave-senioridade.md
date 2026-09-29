@@ -1,6 +1,10 @@
 # CARD F20-70 — Fechar lacunas de palavra-chave do normalizador de senioridade (trainee, estagiário, entry level, new grad, graduate, early career, apprentice/aprendiz)
 
-- **Status:** Backlog.
+- **Status:** Regras e testes implementados nesta branch (`feature/f20-61-recencia`,
+  junto com F20-61); reprocessamento do acervo real (critério de aceite 4) **não
+  executado** por instrução explícita do coordenador desta sessão ("Do not reprocess
+  the real acervo") — pendência registrada em
+  `docs/44-roadmap-fase-20/validacao-pendente.md`.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** A — Fechamento do que está em revisão
 - **Depende de:** F20-02

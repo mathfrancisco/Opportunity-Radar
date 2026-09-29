@@ -246,7 +246,7 @@ def test_seniority_classification_records_precedence_and_conflicts() -> None:
 def test_seniority_v2_covers_portuguese_titles_and_abbreviations() -> None:
     from opportunity_radar.opportunities.domain import SENIORITY_MAPPING_VERSION
 
-    assert SENIORITY_MAPPING_VERSION == "seniority-v2"
+    assert SENIORITY_MAPPING_VERSION == "seniority-v3"
     assert infer_seniority("Engenheiro Especialista", None, {}) is Seniority.STAFF
     assert infer_seniority("Principal Engineer", None, {}) is Seniority.STAFF
     assert infer_seniority("Desenvolvedor Pl", None, {}) is Seniority.MID
@@ -255,6 +255,75 @@ def test_seniority_v2_covers_portuguese_titles_and_abbreviations() -> None:
     assert infer_seniority("Dev Sr", None, {}) is Seniority.SENIOR
     assert infer_seniority("Tech Lider", None, {}) is Seniority.LEAD
     assert infer_seniority("Tech Líder", None, {}) is Seniority.LEAD
+
+
+# Card F20-70: the noun form "estágio"/"estágia" was already covered, but the far more
+# common Brazilian job-title form is the person/adjective "estagiário"/"estagiária"
+# ("Vaga de Estagiário de X"), and several entry-program keywords (trainee, entry
+# level, new grad, apprentice/aprendiz, early career, graduate) had no pattern at all
+# and fell into UNKNOWN. docs/44-roadmap-fase-20/fase-20/
+# f20-70-lacunas-de-palavra-chave-senioridade.md.
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("Vaga de Estagiário de Dados", Seniority.INTERN),
+        ("Vaga de Estagiária de Dados", Seniority.INTERN),
+        ("Vaga de Estagiario de Dados", Seniority.INTERN),  # no accent
+        ("Vaga de Estagiaria de Dados", Seniority.INTERN),  # no accent
+        ("Estagiários de Engenharia", Seniority.INTERN),  # plural
+        ("Programa Trainee 2027", Seniority.INTERN),
+        ("Software Engineer, Entry Level", Seniority.INTERN),
+        ("Software Engineer - Entry-Level", Seniority.INTERN),
+        ("New Grad Software Engineer", Seniority.INTERN),
+        ("New Graduate Software Engineer", Seniority.INTERN),
+        ("Apprentice Software Engineer", Seniority.INTERN),
+        ("Vaga de Aprendiz Administrativo", Seniority.INTERN),
+        ("Early Career Software Engineer", Seniority.JUNIOR),
+        ("Graduate Software Engineer", Seniority.JUNIOR),
+    ],
+)
+def test_seniority_v3_covers_entry_program_keywords(
+    title: str, expected: Seniority
+) -> None:
+    assert infer_seniority(title, None, {}) is expected
+
+
+# Negative cases from the same diagnostic: a bare "graduate" naming an academic
+# credential, not a job level, must not become JUNIOR; "internal"/"international"
+# must not become INTERN (title-only `\b` boundaries already prevented this — this
+# locks the behavior in as a regression test).
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Graduate School Recruiting Coordinator",
+        "Graduate Degree Program Advisor",
+        "Graduate Program Coordinator",
+        "Internal Communications Specialist",
+        "International Sales Analyst",
+    ],
+)
+def test_seniority_v3_does_not_regress_false_positives(title: str) -> None:
+    assert infer_seniority(title, None, {}) is Seniority.UNKNOWN
+
+
+# Regression: senior/mid/lead terms that already worked in seniority-v2 must keep
+# working unchanged after the v3 additions (same evidence as
+# test_seniority_v2_covers_portuguese_titles_and_abbreviations, re-asserted here per
+# card F20-70's explicit "não regredir" acceptance criterion).
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("Senior Engineer", Seniority.SENIOR),
+        ("Sr Engineer", Seniority.SENIOR),
+        ("Desenvolvedor Pleno", Seniority.MID),
+        ("Middle Engineer", Seniority.MID),
+        ("Junior Developer", Seniority.JUNIOR),
+    ],
+)
+def test_seniority_v3_does_not_regress_existing_terms(
+    title: str, expected: Seniority
+) -> None:
+    assert infer_seniority(title, None, {}) is expected
 
 
 def test_structured_seniority_conflict_keeps_candidate_unknown() -> None:

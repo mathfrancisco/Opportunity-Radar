@@ -19,7 +19,7 @@ from functools import reduce
 from typing import Any, Literal
 from uuid import UUID
 
-from sqlalchemy import Select, case, func, literal, select
+from sqlalchemy import Select, and_, case, func, literal, or_, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import (
@@ -33,6 +33,7 @@ from opportunity_radar.dashboard.search_synonyms import synonym_variants
 from opportunity_radar.matching import currency
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
 from opportunity_radar.matching.service import RULES_VERSION
+from opportunity_radar.opportunities.domain import DEFAULT_RECENCY_WINDOW_DAYS
 from opportunity_radar.opportunities.models import (
     DuplicateCandidateModel,
     NormalizationResultModel,
@@ -72,6 +73,14 @@ class InboxItem:
     lifecycle_status: str
     role_family: str
     published_at: datetime | None
+    #: Card F20-61: `published_at` when the source has one, else `first_seen_at`
+    #: (never a fabricated real date) — the date the recency filter actually compared
+    #: against.
+    recency_effective_date: datetime | None
+    #: `True` when `recency_effective_date` came from `first_seen_at` (the radar's own
+    #: "first seen" fallback), never presented to the client as a real publication
+    #: date without this flag.
+    date_is_estimated: bool
     opportunity_version: int
     assessment_id: UUID | None = None
     assessment_opportunity_version: int | None = None
@@ -152,6 +161,22 @@ class InboxQuery:
     order: InboxOrder = InboxOrder.PRIORITY
     offset: int = 0
     limit: int = 50
+    #: Card F20-61. `True` shows only a posting from the last `recency_window_days`
+    #: days (`published_at` or, as a marked estimate, `first_seen_at`), except a
+    #: time-boxed entry program (`recency_exempt_program`) or one with a still-open
+    #: `valid_through`. Defaults to `False` *here* (an unfiltered query object, so an
+    #: existing or future direct caller of `list_opportunity_inbox` is never silently
+    #: narrowed) — the product default ("server shows only recent unless the client
+    #: asks for everything") lives one layer up, in the `/inbox` HTTP contract
+    #: (`presentation/http/dashboard.py`), whose own `Query(default=True)` is what
+    #: actually makes "no parameter" mean "filtered" for the API's callers.
+    only_recent: bool = False
+    recency_window_days: int = DEFAULT_RECENCY_WINDOW_DAYS
+    #: The instant the recency window is measured against. A `field(default_factory=...)`
+    #: rather than a fixed default so every unparametrized `InboxQuery()` still reads the
+    #: real clock exactly once, at construction — never re-reading it later — while a
+    #: test can freeze it by passing an explicit value.
+    now: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(frozen=True, slots=True)
@@ -434,6 +459,7 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
             OpportunityModel.lifecycle_status,
             OpportunityModel.role_family,
             OpportunityModel.published_at,
+            OpportunityModel.first_seen_at,
             OpportunityModel.version,
             assessments.c.assessment_id,
             assessments.c.assessment_opportunity_version,
@@ -474,6 +500,28 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
     )
 
 
+def _recency_condition(query: InboxQuery) -> Any:
+    """SQL mirror of `opportunities.domain.recency_decision` (card F20-61).
+
+    Kept as a plain column comparison (no correlated subquery) so it runs at listing
+    scale: `published_at` when the source has one, else the denormalized
+    `first_seen_at`, compared against the window; OR'd with the two independent
+    exceptions (time-boxed program, still-open `valid_through`). Any change to the
+    pure function's rule must be mirrored here — `tests/backend/dashboard/
+    test_queries.py` covers this condition directly against both fallback paths.
+    """
+    cutoff = query.now - timedelta(days=query.recency_window_days)
+    within_window = or_(
+        and_(OpportunityModel.published_at.is_not(None), OpportunityModel.published_at >= cutoff),
+        and_(OpportunityModel.published_at.is_(None), OpportunityModel.first_seen_at >= cutoff),
+    )
+    has_open_deadline = and_(
+        OpportunityModel.valid_through.is_not(None),
+        OpportunityModel.valid_through > query.now,
+    )
+    return or_(within_window, OpportunityModel.recency_exempt_program.is_(True), has_open_deadline)
+
+
 def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> list[Any]:
     filters: list[Any] = []
     if query.verdicts:
@@ -502,6 +550,8 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
         filters.append(OpportunityModel.created_at > query.created_after)
     if query.seniorities:
         filters.append(OpportunityModel.seniority.in_(query.seniorities))
+    if query.only_recent:
+        filters.append(_recency_condition(query))
     if query.allowed_country:
         filters.append(
             OpportunityModel.allowed_countries.is_(None)
@@ -628,25 +678,27 @@ def _inbox_item(row: Any) -> InboxItem:
         lifecycle_status=row[9],
         role_family=row[10],
         published_at=row[11],
-        opportunity_version=row[12],
-        assessment_id=row[13],
-        assessment_opportunity_version=row[14],
-        assessment_profile_version_id=row[15],
-        current_profile_version_id=row[16],
-        verdict=row[17],
-        eligibility=row[18],
-        score=row[19],
-        confidence=row[20],
-        rules_version=row[21],
-        is_stale=row[22],
-        assessed_at=row[23],
-        analysis_status=row[24],
-        analysis_recommended_review=row[25],
-        analysis_summary=row[26],
-        application_id=row[27],
-        application_stage=row[28],
-        application_next_action_at=row[29],
-        has_pending_duplicate=bool(row[30]),
+        recency_effective_date=row[11] if row[11] is not None else row[12],
+        date_is_estimated=row[11] is None and row[12] is not None,
+        opportunity_version=row[13],
+        assessment_id=row[14],
+        assessment_opportunity_version=row[15],
+        assessment_profile_version_id=row[16],
+        current_profile_version_id=row[17],
+        verdict=row[18],
+        eligibility=row[19],
+        score=row[20],
+        confidence=row[21],
+        rules_version=row[22],
+        is_stale=row[23],
+        assessed_at=row[24],
+        analysis_status=row[25],
+        analysis_recommended_review=row[26],
+        analysis_summary=row[27],
+        application_id=row[28],
+        application_stage=row[29],
+        application_next_action_at=row[30],
+        has_pending_duplicate=bool(row[31]),
     )
 
 

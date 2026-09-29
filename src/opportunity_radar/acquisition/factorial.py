@@ -418,6 +418,8 @@ class FactorialCollector:
             title=title,
             company_name=company_name,
             location_text=location_name or None,
+            # Card F20-61: the careers page exposes no date attribute at all (only
+            # team/location/contract/remote), so `published_at` stays `None`.
             raw_payload={"attrs": dict(job.attrs), "texts": list(job.texts)},
             metadata={
                 "team_name": team_name or None,

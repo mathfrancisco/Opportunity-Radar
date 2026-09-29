@@ -205,6 +205,7 @@ class OpportunityService:
                 occurrence.last_seen_run_id = raw_item.source_run_id
                 occurrence.source_published_at = candidate.published_at
                 occurrence.source_updated_at = candidate.source_updated_at
+                occurrence.source_valid_through = candidate.valid_through
         else:
             url_match = self.repository.opportunity_by_normalized_url(candidate.normalized_url)
             if url_match is not None:
@@ -224,7 +225,7 @@ class OpportunityService:
                     reasons = [{"code": "EXACT_VERSIONED_FINGERPRINT"}]
                 else:
                     review_candidates = self.repository.identity_review_candidates(candidate)
-                    opportunity = _new_opportunity(candidate)
+                    opportunity = _new_opportunity(candidate, first_seen_at=raw_item.fetched_at)
                     self.session.add(opportunity)
                     if review_candidates:
                         decision = "REVIEW"
@@ -253,6 +254,7 @@ class OpportunityService:
                 last_seen_run_id=raw_item.source_run_id,
                 source_published_at=candidate.published_at,
                 source_updated_at=candidate.source_updated_at,
+                source_valid_through=candidate.valid_through,
             )
             self.session.add(occurrence)
 
@@ -743,6 +745,7 @@ def _normalization_input(evidence: RawItemEvidence) -> NormalizationInput:
         description=_optional_string(snapshot, "description"),
         published_at=_optional_datetime(snapshot, "published_at"),
         updated_at=_optional_datetime(snapshot, "updated_at"),
+        valid_through=_optional_datetime(snapshot, "valid_through"),
         company_id=evidence.company_id,
         metadata=dict(metadata),
     )
@@ -932,7 +935,7 @@ def _search_skills_text(skills: list[OpportunitySkillModel]) -> str | None:
     return " ".join(names) or None
 
 
-def _new_opportunity(candidate: CanonicalCandidate) -> OpportunityModel:
+def _new_opportunity(candidate: CanonicalCandidate, *, first_seen_at: datetime) -> OpportunityModel:
     return OpportunityModel(
         fingerprint=candidate.fingerprint,
         fingerprint_version=candidate.fingerprint_version,
@@ -950,6 +953,12 @@ def _new_opportunity(candidate: CanonicalCandidate) -> OpportunityModel:
         lifecycle_status=OpportunityStatus.DISCOVERED.value,
         published_at=candidate.published_at,
         source_updated_at=candidate.source_updated_at,
+        # Card F20-61: set once, from the same instant that seeds this opportunity's
+        # first `SourceOccurrenceModel.first_seen_at` — never updated afterwards, so
+        # it stays "when the radar first saw this", not "when it was last touched".
+        first_seen_at=first_seen_at,
+        valid_through=candidate.valid_through,
+        recency_exempt_program=candidate.recency_exempt_program,
         role_family=candidate.role_family.value,
         role_family_evidence=dict(candidate.role_family_evidence) or None,
         role_family_version=candidate.role_family_version,
@@ -980,6 +989,9 @@ def _apply_rule_fields(opportunity: OpportunityModel, candidate: CanonicalCandid
     changed |= _set_if_changed(opportunity, "work_mode", candidate.work_mode.value)
     changed |= _set_if_changed(opportunity, "seniority", candidate.seniority.value)
     changed |= _set_if_changed(opportunity, "contract_type", candidate.contract_type.value)
+    changed |= _set_if_changed(
+        opportunity, "recency_exempt_program", candidate.recency_exempt_program
+    )
     changed |= _set_if_changed(
         opportunity, "allowed_countries", list(candidate.allowed_countries) or None
     )
@@ -1028,6 +1040,7 @@ def _apply_evidence_fields(opportunity: OpportunityModel, candidate: CanonicalCa
     changed |= _set_if_changed(opportunity, "description", candidate.description)
     changed |= _set_if_changed(opportunity, "published_at", candidate.published_at)
     changed |= _set_if_changed(opportunity, "source_updated_at", candidate.source_updated_at)
+    changed |= _set_if_changed(opportunity, "valid_through", candidate.valid_through)
     changed |= _set_if_changed(opportunity, "fingerprint", candidate.fingerprint)
     changed |= _set_if_changed(opportunity, "fingerprint_version", candidate.fingerprint_version)
     return changed

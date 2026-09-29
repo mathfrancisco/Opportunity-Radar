@@ -18,7 +18,7 @@ import math
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Any
 
@@ -427,6 +427,7 @@ class WorkdayCollector:
             # The listing endpoint never carries the full description; only the per-job
             # detail page does, and this collector does not fetch it (see module docstring).
             description=None,
+            published_at=WorkdayCollector._parse_posted_on(posting.get("postedOn")),
             cursor=cursor,
             raw_payload=posting,
             metadata={
@@ -435,6 +436,34 @@ class WorkdayCollector:
                 "parser_version": _PARSER_VERSION,
             },
         )
+
+    #: Card F20-61. Workday's public CxS listing endpoint never carries an exact
+    #: posting timestamp — the only date-shaped signal it exposes is this relative
+    #: age string ("Posted Today", "Posted 3 Days Ago", "Posted 30+ Days Ago"). It is
+    #: real source data, not a fabricated date: `"Posted N Days Ago"` at least means
+    #: the posting is `N` days old as of the request, so `now - N days` is read as
+    #: that lower bound, never as an exact publication instant. Anything outside this
+    #: known vocabulary (a future Workday UI string change) yields `None` rather than
+    #: a guess.
+    _POSTED_ON_PATTERN = re.compile(
+        r"^posted\s+(today|yesterday|(\d+)\+?\s+days?\s+ago)$", re.IGNORECASE
+    )
+
+    @staticmethod
+    def _parse_posted_on(value: Any) -> datetime | None:
+        if not isinstance(value, str):
+            return None
+        match = WorkdayCollector._POSTED_ON_PATTERN.match(value.strip())
+        if match is None:
+            return None
+        now = datetime.now(UTC)
+        head = match.group(1).lower()
+        if head == "today":
+            return now
+        if head == "yesterday":
+            return now - timedelta(days=1)
+        days = match.group(2)
+        return now - timedelta(days=int(days)) if days is not None else None
 
     @staticmethod
     def _string(value: Any) -> str | None:

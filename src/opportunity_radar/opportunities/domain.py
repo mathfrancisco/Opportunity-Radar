@@ -7,7 +7,7 @@ import json
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Any, Mapping
@@ -249,6 +249,9 @@ class NormalizationInput:
     description: str | None = None
     published_at: datetime | None = None
     updated_at: datetime | None = None
+    #: Explicit application-window deadline (card F20-61), threaded from
+    #: `CollectedItem.valid_through`. `None` for collectors that do not expose one.
+    valid_through: datetime | None = None
     company_id: UUID | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
@@ -290,6 +293,15 @@ class CanonicalCandidate:
     #: and this must never be read as "no country allowed" (card F17-06).
     allowed_countries: tuple[str, ...] = ()
     allowed_countries_version: str = REGIONS_VERSION
+    #: Explicit application-window deadline (card F20-61), threaded from the
+    #: collector when it exposes one (today only `jobposting.py`). `None` otherwise —
+    #: never fabricated.
+    valid_through: datetime | None = None
+    #: Recency-filter exception signal (card F20-61): an estágio/trainee/entry-level/
+    #: early-careers/residency program, which tends to stay open far longer than a
+    #: single senior/mid role. Independent of `ContractType` — a program is still
+    #: shown past the recency window even when its contract type is `UNKNOWN`.
+    recency_exempt_program: bool = False
 
 
 def _clean_text(value: str | None) -> str | None:
@@ -855,8 +867,37 @@ def infer_seniority(
             ),
         ),
         {
-            Seniority.INTERN: (r"\bintern(ship)?\b", r"\best[aá]gi[oa]\b"),
-            Seniority.JUNIOR: (r"\bjunior\b", r"\bjr\.?\b"),
+            # seniority-v3 (F20-70): the noun form "estágio"/"estágia" was already
+            # covered, but the far more common Brazilian job-title form is the
+            # person/adjective form "estagiário"/"estagiária" ("Vaga de Estagiário de
+            # X"), with or without the accent, singular or plural — that pattern was
+            # missing entirely. `trainee`, `entry level`, `new grad` and
+            # `apprentice`/`aprendiz` are treated as INTERN-equivalent entry programs in
+            # this app's domain (not an intermediate level).
+            Seniority.INTERN: (
+                r"\bintern(ship)?\b",
+                r"\best[aá]gi[oa]\b",
+                r"\best[aá]gi[áa]ri[oa]s?\b",
+                r"\btrainee\b",
+                r"\bentry[ -]level\b",
+                r"\bnew grad(?:uate)?\b",
+                r"\bapprentice\b",
+                r"\baprendiz\b",
+            ),
+            Seniority.JUNIOR: (
+                r"\bjunior\b",
+                r"\bjr\.?\b",
+                # "early career" (Greenhouse convention) and a bare "graduate" title
+                # (not "Graduate School"/"...degree"/"...program", which name an
+                # academic credential, not a job level) read as JUNIOR, per the
+                # diagnostic in docs/44-roadmap-fase-20/evidencias/
+                # diagnostico-vagas-junior-2026-09-28.md.
+                r"\bearly career\b",
+                # "new grad(uate)" is handled by the INTERN pattern above; excluded
+                # here so it is not ambiguous between the two enums (the 4-char
+                # lookbehind matches "new " exactly, case-folded evidence).
+                r"(?<!new )\bgraduate\b(?!\s+(?:school|degree|program))",
+            ),
             Seniority.MID: (
                 r"\bmid(?:[- ]level)?\b",
                 r"\bmiddle\b",
@@ -877,7 +918,13 @@ def infer_seniority(
     return Seniority(result)
 
 
-SENIORITY_MAPPING_VERSION = "seniority-v2"
+#: v2 -> v3 (F20-70): fixed INTERN to also match the person/adjective form
+#: "estagiário"/"estagiária" (was noun-only, "estágio"/"estágia"), and added
+#: trainee/entry level/new grad/apprentice/aprendiz (INTERN) and early
+#: career/graduate (JUNIOR) — see docs/44-roadmap-fase-20/fase-20/
+#: f20-70-lacunas-de-palavra-chave-senioridade.md. No existing non-UNKNOWN
+#: classification changes; this only fills previously-UNKNOWN titles.
+SENIORITY_MAPPING_VERSION = "seniority-v3"
 
 # Collector payloads are intentionally listed even when they have no approved level
 # field. Adding a field here is part of that collector's homologation, not a heuristic.
@@ -968,6 +1015,50 @@ def infer_contract_type(
     return ContractType(result)
 
 
+#: Card F20-61: title/metadata evidence for "this is a time-boxed entry program"
+#: (estágio/trainee/early-careers/residência) — the recency-filter exception signal.
+#: Deliberately not a `ContractType` member: "trainee" is not the same thing as
+#: "internship" for the rest of the system (e.g. `ContractType.INTERNSHIP` also
+#: implies eligibility/matching semantics this signal must not carry). Reuses
+#: `ContractType.INTERNSHIP`'s own patterns (estágio/internship) plus the additional
+#: terms this card's exception explicitly covers.
+_RECENCY_EXEMPT_PROGRAM_PATTERNS: tuple[str, ...] = (
+    r"\binternship\b",
+    r"\best[aá]gi[oa]\b",
+    r"\best[aá]gi[áa]ri[oa]s?\b",
+    r"\btrainee\b",
+    r"\bresid[eê]ncia\b",
+    r"\bresidency\b",
+    r"\bearly[ -]?career[s]?\b",
+    r"\bin[íi]cio de carreira\b",
+)
+
+
+def infer_recency_exempt_program(
+    title: str | None, metadata: Mapping[str, Any], *, contract_type: ContractType
+) -> bool:
+    """Whether the recency filter's "programa com prazo" exception applies.
+
+    True whenever the contract type is already `INTERNSHIP`, or the title/metadata
+    otherwise names a time-boxed entry program (trainee/early-careers/residência) that
+    `infer_contract_type`'s narrower pattern set does not classify as INTERNSHIP.
+    """
+    if contract_type is ContractType.INTERNSHIP:
+        return True
+    evidence = _evidence_texts(
+        title,
+        metadata=metadata,
+        metadata_keys=frozenset(
+            {"employmenttype", "employment_type", "commitment", "job_type", "categories"}
+        ),
+    )
+    return any(
+        re.search(pattern, text)
+        for text in evidence
+        for pattern in _RECENCY_EXEMPT_PROGRAM_PATTERNS
+    )
+
+
 def opportunity_fingerprint(
     *,
     company_id: UUID | None,
@@ -1017,6 +1108,9 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
         original_title, value.metadata, source_type=value.source_type
     )
     contract_type = infer_contract_type(original_title, location_text, value.metadata)
+    recency_exempt_program = infer_recency_exempt_program(
+        original_title, value.metadata, contract_type=contract_type
+    )
     role_family_decision = classify_role_family(
         title=original_title,
         departments=departments_from_metadata(value.metadata),
@@ -1062,9 +1156,68 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
         role_family_evidence=dict(role_family_decision.evidence),
         role_family_version=role_family_decision.version,
         allowed_countries=allowed_countries,
+        valid_through=value.valid_through,
+        recency_exempt_program=recency_exempt_program,
     )
 
 
 def build_candidate(value: NormalizationInput) -> CanonicalCandidate:
     """Compatibility entry point for the original normalization slice."""
     return normalize_candidate(value)
+
+
+#: Card F20-61: the default search shows only a posting from the last 14 days. Not a
+#: matching/scoring parameter — never read by `score`, eligibility or verdict (same
+#: Phase 20 invariant `opportunity_fingerprint`/role-family classification follow).
+DEFAULT_RECENCY_WINDOW_DAYS = 14
+
+
+@dataclass(frozen=True, slots=True)
+class RecencyDecision:
+    """Whether one opportunity belongs in the default (recency-filtered) listing.
+
+    `effective_date` is `published_at` when the source provided one, else
+    `first_seen_at` (`date_is_estimated=True` in that case) — never a fabricated date.
+    `visible` is `True` when any of three independent conditions holds: the effective
+    date is inside the window, the posting is a time-boxed entry program (estágio/
+    trainee/early-careers/residência), or `valid_through` names an application
+    deadline still in the future. Toggling the filter off (card F20-61 scope item 3)
+    is the caller's job — this always answers "would the filter show it", regardless
+    of whether the caller applies that answer.
+    """
+
+    visible: bool
+    effective_date: datetime | None
+    date_is_estimated: bool
+
+
+def recency_decision(
+    *,
+    published_at: datetime | None,
+    first_seen_at: datetime | None,
+    valid_through: datetime | None,
+    recency_exempt_program: bool,
+    now: datetime,
+    window_days: int = DEFAULT_RECENCY_WINDOW_DAYS,
+) -> RecencyDecision:
+    """Pure, deterministic recency calculation (card F20-61, scope item 3).
+
+    `now` is always supplied by the caller — this function never reads the clock, so
+    tests can freeze time and cover both sides of the window boundary exactly.
+    """
+    if published_at is not None:
+        effective_date: datetime | None = published_at
+        date_is_estimated = False
+    else:
+        effective_date = first_seen_at
+        date_is_estimated = first_seen_at is not None
+    within_window = (
+        effective_date is not None and effective_date >= now - timedelta(days=window_days)
+    )
+    has_open_deadline = valid_through is not None and valid_through > now
+    visible = within_window or recency_exempt_program or has_open_deadline
+    return RecencyDecision(
+        visible=visible,
+        effective_date=effective_date,
+        date_is_estimated=date_is_estimated,
+    )

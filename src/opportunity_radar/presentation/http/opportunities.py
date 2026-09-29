@@ -161,6 +161,13 @@ class OpportunityResponse(BaseModel):
     role_family_version: str | None
     published_at: datetime | None
     source_updated_at: datetime | None
+    #: Card F20-61: `published_at` when the source has one, else `first_seen_at`
+    #: (never a fabricated real date).
+    recency_effective_date: datetime | None
+    #: `True` when `recency_effective_date` came from the `first_seen_at` fallback.
+    date_is_estimated: bool
+    valid_through: datetime | None
+    recency_exempt_program: bool
     #: When this opportunity was first persisted. Exposed so the duplicate-candidate
     #: comparison UI (F20-26) can tell which side of a pair `confirm_duplicate` will
     #: treat as the survivor (the older `created_at`) before it calls confirm.
@@ -334,6 +341,9 @@ def list_opportunities(
     lifecycle_status: OpportunityStatus | None = None,
     work_mode: WorkMode | None = None,
     company_id: UUID | None = None,
+    #: Card F20-61: the server's own default, absent this parameter, is filtered.
+    #: The client's "mostrar tudo" toggle passes `only_recent=false`.
+    only_recent: bool = Query(default=True),
     session: Session = Depends(get_session),
 ) -> OpportunityPageResponse:
     items, total = OpportunityRepository(session).list(
@@ -342,6 +352,7 @@ def list_opportunities(
         lifecycle_status=lifecycle_status.value if lifecycle_status else None,
         work_mode=work_mode.value if work_mode else None,
         company_id=company_id,
+        only_recent=only_recent,
     )
     return OpportunityPageResponse(
         items=[_opportunity_response(item, session=session) for item in items],
@@ -689,6 +700,10 @@ def _opportunity_response(
         role_family_version=opportunity.role_family_version,
         published_at=opportunity.published_at,
         source_updated_at=opportunity.source_updated_at,
+        recency_effective_date=opportunity.published_at or opportunity.first_seen_at,
+        date_is_estimated=opportunity.published_at is None,
+        valid_through=opportunity.valid_through,
+        recency_exempt_program=opportunity.recency_exempt_program,
         created_at=opportunity.created_at,
         version=opportunity.version,
         compensations=[

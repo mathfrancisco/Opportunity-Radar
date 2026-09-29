@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from opportunity_radar.acquisition.models import (
@@ -15,7 +16,7 @@ from opportunity_radar.acquisition.models import (
     SourceRunModel,
 )
 from opportunity_radar.companies.models import Company, CompanySource
-from opportunity_radar.opportunities.domain import CanonicalCandidate
+from opportunity_radar.opportunities.domain import DEFAULT_RECENCY_WINDOW_DAYS, CanonicalCandidate
 from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
     OpportunityModel,
@@ -330,6 +331,11 @@ class OpportunityRepository:
         lifecycle_status: str | None = None,
         work_mode: str | None = None,
         company_id: UUID | None = None,
+        #: Card F20-61: the server's own default, absent a caller override, is
+        #: filtered — a plain listing agrees with `/inbox`'s own default.
+        only_recent: bool = True,
+        now: datetime | None = None,
+        recency_window_days: int = DEFAULT_RECENCY_WINDOW_DAYS,
     ) -> tuple[list[OpportunityModel], int]:
         filters = []
         if lifecycle_status:
@@ -338,6 +344,30 @@ class OpportunityRepository:
             filters.append(OpportunityModel.work_mode == work_mode)
         if company_id:
             filters.append(OpportunityModel.canonical_company_id == company_id)
+        if only_recent:
+            reference = now or datetime.now(UTC)
+            cutoff = reference - timedelta(days=recency_window_days)
+            within_window = or_(
+                and_(
+                    OpportunityModel.published_at.is_not(None),
+                    OpportunityModel.published_at >= cutoff,
+                ),
+                and_(
+                    OpportunityModel.published_at.is_(None),
+                    OpportunityModel.first_seen_at >= cutoff,
+                ),
+            )
+            has_open_deadline = and_(
+                OpportunityModel.valid_through.is_not(None),
+                OpportunityModel.valid_through > reference,
+            )
+            filters.append(
+                or_(
+                    within_window,
+                    OpportunityModel.recency_exempt_program.is_(True),
+                    has_open_deadline,
+                )
+            )
         items = list(
             self.session.scalars(
                 select(OpportunityModel)

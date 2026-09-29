@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render } from '../components/testing'
 import { type SavedSearchFilters } from '../features/saved-searches/api'
-import { SaveSearchForm, SavedSearches } from './InboxPage'
+import { InboxPage, SaveSearchForm, SavedSearches } from './InboxPage'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -233,5 +233,134 @@ describe('SavedSearches', () => {
     await flush()
 
     expect(deleteCalled).toBe(true)
+  })
+})
+
+function inboxItem(overrides: Record<string, unknown> = {}) {
+  return {
+    opportunity_id: 'opp-1',
+    title: 'Backend Engineer',
+    company_id: null,
+    company_name: 'Acme',
+    company_priority: null,
+    location: 'Remote',
+    work_mode: 'REMOTE',
+    seniority: 'SENIOR',
+    contract_type: 'FULL_TIME',
+    lifecycle_status: 'ACTIVE',
+    role_family: 'SOFTWARE_ENGINEERING',
+    published_at: '2026-09-27T00:00:00Z',
+    recency_effective_date: '2026-09-27T00:00:00Z',
+    date_is_estimated: false,
+    opportunity_version: 1,
+    assessment_id: null,
+    assessment_opportunity_version: null,
+    assessment_profile_version_id: null,
+    current_profile_version_id: null,
+    verdict: null,
+    eligibility: null,
+    score: null,
+    confidence: null,
+    rules_version: null,
+    is_stale: null,
+    assessed_at: null,
+    analysis_status: null,
+    analysis_recommended_review: null,
+    analysis_summary: null,
+    applied: false,
+    application_id: null,
+    application_stage: null,
+    application_next_action_at: null,
+    has_pending_duplicate: false,
+    ...overrides,
+  }
+}
+
+/** Card F20-61: the recency toggle defaults to on (no `only_recent` param means the
+ * server's own default already applies the filter) and unchecking it sends an
+ * explicit `only_recent=false` request. */
+describe('InboxPage recency toggle', () => {
+  it('inicia marcado e não envia only_recent (o padrão do servidor já filtra)', async () => {
+    const calledUrls: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        calledUrls.push(url)
+        if (url.includes('/inbox')) {
+          return new Response(
+            JSON.stringify({
+              items: [inboxItem()],
+              total: 1,
+              offset: 0,
+              limit: 25,
+              order: 'priority',
+              off_filter_count: 0,
+            }),
+            { status: 200 },
+          )
+        }
+        return new Response(JSON.stringify([]), { status: 200 })
+      }),
+    )
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush()
+
+    const toggle = Array.from(container.querySelectorAll('label')).find((label) =>
+      label.textContent?.includes('Mostrar só vagas dos últimos 14 dias'),
+    )
+    const checkbox = toggle?.querySelector('input') as HTMLInputElement
+    expect(checkbox.checked).toBe(true)
+    expect(calledUrls.some((url) => url.includes('/inbox'))).toBe(true)
+    expect(calledUrls.every((url) => !url.includes('only_recent'))).toBe(true)
+  })
+
+  it('ao desmarcar, envia only_recent=false e mostra "(estimada)" quando aplicável', async () => {
+    const calledUrls: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        calledUrls.push(url)
+        if (url.includes('/inbox')) {
+          return new Response(
+            JSON.stringify({
+              items: [
+                inboxItem({
+                  opportunity_id: 'opp-2',
+                  published_at: null,
+                  recency_effective_date: '2026-09-01T00:00:00Z',
+                  date_is_estimated: true,
+                }),
+              ],
+              total: 1,
+              offset: 0,
+              limit: 25,
+              order: 'priority',
+              off_filter_count: 0,
+            }),
+            { status: 200 },
+          )
+        }
+        return new Response(JSON.stringify([]), { status: 200 })
+      }),
+    )
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush()
+
+    expect(container.textContent).toContain('(estimada)')
+
+    const toggle = Array.from(container.querySelectorAll('label')).find((label) =>
+      label.textContent?.includes('Mostrar só vagas dos últimos 14 dias'),
+    )
+    const checkbox = toggle?.querySelector('input') as HTMLInputElement
+    act(() => checkbox.click())
+    await flush()
+
+    expect(calledUrls.some((url) => url.includes('/inbox') && url.includes('only_recent=false'))).toBe(
+      true,
+    )
   })
 })

@@ -78,6 +78,12 @@ class InboxItemResponse(BaseModel):
     lifecycle_status: str
     role_family: str
     published_at: datetime | None
+    #: Card F20-61: `published_at` when the source has one, else `first_seen_at`
+    #: (never a fabricated real date).
+    recency_effective_date: datetime | None
+    #: `True` when `recency_effective_date` came from the `first_seen_at` fallback,
+    #: never presented as a real publication date without this flag.
+    date_is_estimated: bool
     opportunity_version: int
     assessment_id: UUID | None
     assessment_opportunity_version: int | None
@@ -489,6 +495,9 @@ def list_inbox(
     order: InboxOrder = InboxOrder.PRIORITY,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
+    #: Card F20-61: the server's own default, absent this parameter, is filtered.
+    #: The client's "mostrar tudo" toggle passes `only_recent=false`.
+    only_recent: bool = Query(default=True),
     session: Session = Depends(get_session),
 ) -> InboxPageResponse:
     role_families = tuple(role_family or ())
@@ -520,6 +529,7 @@ def list_inbox(
             order=order,
             offset=offset,
             limit=limit,
+            only_recent=only_recent,
         ),
     )
     return InboxPageResponse(
@@ -729,6 +739,8 @@ def _inbox_item_response(item: InboxItem) -> InboxItemResponse:
         lifecycle_status=item.lifecycle_status,
         role_family=item.role_family,
         published_at=item.published_at,
+        recency_effective_date=item.recency_effective_date,
+        date_is_estimated=item.date_is_estimated,
         opportunity_version=item.opportunity_version,
         assessment_id=item.assessment_id,
         assessment_opportunity_version=item.assessment_opportunity_version,

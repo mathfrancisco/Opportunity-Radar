@@ -357,6 +357,7 @@ class LeverCollector:
             company_name=company_name,
             location_text=LeverCollector._string((categories or {}).get("location")),
             description=LeverCollector._string(posting.get("descriptionPlain")),
+            published_at=LeverCollector._parse_created_at(posting.get("createdAt")),
             raw_payload=posting,
             metadata={
                 "categories": categories,
@@ -367,6 +368,27 @@ class LeverCollector:
                 "parser_version": _PARSER_VERSION,
             },
         )
+
+    #: Card F20-61. Lever's public Postings API carries `createdAt`: an epoch-
+    #: millisecond timestamp of when the posting was created — the real publication
+    #: date, not a last-updated time. `None` when absent; a non-numeric value is a
+    #: schema change, same posture as every other required-shape check in this file.
+    @staticmethod
+    def _parse_created_at(value: Any) -> datetime | None:
+        if value is None:
+            return None
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise AcquisitionError(
+                AcquisitionErrorCode.PARSER_SCHEMA_CHANGED,
+                "Lever createdAt must be a number",
+            )
+        try:
+            return datetime.fromtimestamp(value / 1000, tz=UTC)
+        except (OverflowError, OSError, ValueError) as error:
+            raise AcquisitionError(
+                AcquisitionErrorCode.PARSER_SCHEMA_CHANGED,
+                "Lever createdAt is invalid",
+            ) from error
 
     @staticmethod
     def _is_http_url(value: str) -> bool:

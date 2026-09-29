@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -52,7 +53,28 @@ def test_maps_payload_and_requests_global_api() -> None:
     assert items[0].metadata["categories"] == payload[0]["categories"]
     assert items[0].metadata["country"] == "BR"
     assert items[0].metadata["parser_version"] == "lever-postings-v1"
+    # Card F20-61: `createdAt` (epoch ms, the real posting creation date) threads
+    # into `published_at`; a posting without it (the fixture's second entry) keeps
+    # `published_at` `None` rather than guessing.
+    assert items[0].published_at == datetime(2026, 8, 20, 9, 15, tzinfo=UTC)
+    assert items[1].published_at is None
     assert collection_request.telemetry.http_requests == 1
+
+
+def test_invalid_created_at_is_a_schema_change() -> None:
+    payload = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+    payload[0]["createdAt"] = "not-a-number"
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _request: httpx.Response(200, json=payload))
+    )
+    collection_request = CollectionRequest(company_reference="acme", company_name="Acme")
+    try:
+        items = asyncio.run(_collect(LeverCollector(client=client), collection_request))
+    finally:
+        asyncio.run(client.aclose())
+    # A malformed posting is skipped and reported, not raised through `discover()`.
+    assert [item.external_id for item in items] == [payload[1]["id"]]
+    assert collection_request.telemetry.invalid_items == 1
 
 
 def test_uses_eu_api_and_paginates_until_short_page() -> None:
