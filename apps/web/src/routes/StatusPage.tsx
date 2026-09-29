@@ -1,4 +1,5 @@
 import { Button } from '../components/Button'
+import { Chip } from '../components/Chip'
 import { PageShell } from '../components/PageShell'
 import { useReadiness } from '../features/health/useReadiness'
 
@@ -6,28 +7,28 @@ const content = {
   loading: {
     title: 'Verificando o radar',
     description: 'Conectando à API local para confirmar que o ambiente está pronto.',
-    tone: 'loading',
+    tone: 'border-line-strong bg-info-surface text-info-ink',
     label: 'Consultando /api/health/ready',
   },
   error: {
     title: 'A API não está disponível',
     description:
       'Inicie os serviços locais e tente novamente. O dashboard volta a consultar a API quando você recarregar a página.',
-    tone: 'error',
+    tone: 'border-danger-line bg-danger-surface-strong text-danger-ink',
     label: 'Conexão pendente',
   },
   degraded: {
     title: 'Radar disponível com recursos limitados',
     description:
       'A API está respondendo, mas uma dependência está indisponível. Coleta e análise podem ficar parcialmente limitadas.',
-    tone: 'degraded',
+    tone: 'border-warning-line bg-warning-surface-strong text-warning-ink-strong',
     label: 'Estado degradado',
   },
   ready: {
     title: 'Radar pronto para começar',
     description:
       'A base local está conectada. O catálogo de empresas já pode ser importado e consultado no dashboard.',
-    tone: 'ready',
+    tone: 'border-success-line bg-success-surface-strong text-success-ink-strong',
     label: 'API pronta',
   },
 } as const
@@ -51,9 +52,10 @@ export function StatusPage() {
     >
       <div className="mt-6">
         {/* O estado é o conteúdo desta tela, e não um substituto enquanto ela carrega. */}
-        <div className={`status status-${view.tone}`} role="status">
-          <span aria-hidden="true" className="status-dot" />
-          {view.label}
+        <div role="status">
+          <Chip dot tone={view.tone}>
+            {view.label}
+          </Chip>
         </div>
         {readiness.isError && (
           <div>

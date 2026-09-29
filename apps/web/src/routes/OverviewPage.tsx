@@ -2,6 +2,7 @@ import { useQueries } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card } from '../components/Card'
+import { Chip } from '../components/Chip'
 import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
 import { Bone, Skeleton, TableSkeleton } from '../components/skeletons'
@@ -56,7 +57,7 @@ function Tile({
   if (to) {
     return (
       <Link
-        className="rounded-2xl border border-line bg-surface p-5 transition hover:border-ink"
+        className="rounded-control border border-line bg-surface p-5 transition hover:border-ink"
         to={to}
       >
         {body}
@@ -76,7 +77,7 @@ function FailingSources({ sources }: { sources: FailingSource[] }) {
     <ul className="grid gap-3">
       {sources.map((source) => (
         <li
-          className="rounded-2xl border border-danger-line bg-danger-surface p-5"
+          className="rounded-control border border-danger-line bg-danger-surface p-5"
           key={source.sourceDefinitionId}
         >
           <p className="font-semibold">
@@ -122,36 +123,36 @@ function SourceMetricsRow({ source }: { source: SourceMetrics }) {
     .sort(([, a], [, b]) => b - a)
   const mappings = Object.keys(seniority.mappingVersions)
   return (
-    <tr className="border-t border-divider align-top">
-      <td className="min-w-40 px-4 py-3">
+    <tr className="align-top">
+      <td className="min-w-40">
         <p className="break-anywhere font-medium">{source.name}</p>
         <p className="text-xs text-muted">{source.sourceType}</p>
         {source.incidentOpen && (
           <p className="mt-1 text-xs font-semibold text-danger-ink">Incidente aberto</p>
         )}
       </td>
-      <td className="px-4 py-3">
+      <td>
         <StatusBadge
           labels={coverageLabels}
           tones={coverageTones}
           value={source.coverageState}
         />
       </td>
-      <td className="px-4 py-3 text-sm">
+      <td>
         {source.runs} execuç{source.runs === 1 ? 'ão' : 'ões'}
         <br />
         <span className="text-xs text-muted">
           {source.itemsPersisted} persistidos / {source.itemsSeen} vistos
         </span>
       </td>
-      <td className="px-4 py-3 text-sm">
+      <td>
         <span className="text-xs text-muted">erro</span> {percent(source.errorRate)}
         <br />
         <span className="text-xs text-muted">dedupe</span> {percent(source.dedupeRate)}
         <br />
         <span className="text-xs text-muted">p95</span> {seconds(source.latencyP95Seconds)}
       </td>
-      <td className="px-4 py-3 text-sm">
+      <td>
         {Object.keys(source.errorsByCode).length === 0 ? (
           <Unavailable reason="nenhum erro registrado" />
         ) : (
@@ -164,7 +165,7 @@ function SourceMetricsRow({ source }: { source: SourceMetrics }) {
           </ul>
         )}
       </td>
-      <td className="px-4 py-3 text-sm">
+      <td>
         {seniority.total === 0 ? (
           <span className="text-muted">sem vagas normalizadas na janela</span>
         ) : (
@@ -255,7 +256,7 @@ function SourceMetricsSection() {
   const active = windows.find((item) => item.window === selected) ?? windows[0]
 
   return (
-    <section className="mt-section">
+    <section className="mt-10">
       {/* A altura mínima é a dos botões de janela, que só existem depois da resposta. */}
       <div className="flex min-h-10 flex-wrap items-center justify-between gap-3">
         <h2 className="text-section">Métricas operacionais por fonte</h2>
@@ -316,7 +317,7 @@ function SummarySkeleton() {
         <p className="text-section">Decisão de hoje</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[0, 1, 2, 3].map((tile) => (
-            <div className="rounded-2xl border border-line bg-surface p-5" key={tile}>
+            <div className="rounded-control border border-line bg-surface p-5" key={tile}>
               <Bone className="w-24" />
               <Bone className="mt-4 h-8 w-12" />
               {/* O cartão de follow-up traz uma dica, e a linha de cartões cresce com ela. */}
@@ -325,18 +326,19 @@ function SummarySkeleton() {
           ))}
         </div>
         {/* As pílulas de veredito, que aparecem sempre que há alguma vaga avaliada. */}
-        <div className="mt-3 flex flex-wrap gap-3">
-          {[0, 1].map((pill) => (
-            <span className="block h-9 w-36 rounded-full border border-line bg-surface" key={pill} />
+        <div className="mt-3 rounded-control border border-line bg-surface">
+          <span className="block h-9 border-b border-line bg-panel" />
+          {[0, 1].map((row) => (
+            <span className="block h-11" key={row} />
           ))}
         </div>
       </section>
-      <section className="mt-section">
+      <section className="mt-10">
         <p className="text-section">Acervo</p>
         <Bone className="mt-3 w-2/3" />
         {supportLines([true, true, true, false])}
       </section>
-      <section className="mt-section">
+      <section className="mt-10">
         <p className="text-section">Operação</p>
         <Bone className="mt-3 w-1/2" />
         {supportLines([true, true, true])}
@@ -462,9 +464,9 @@ function AIUsageCard() {
               <div className="flex items-baseline justify-between gap-2">
                 <span className="truncate text-sm font-medium">{model.model}</span>
                 {breakerOpen && (
-                  <span className="rounded-full bg-danger-surface px-2 py-0.5 text-xs font-semibold text-danger-ink">
+                  <Chip tone="border-danger-line bg-danger-surface text-danger-ink">
                     breaker {model.breaker}
-                  </span>
+                  </Chip>
                 )}
               </div>
               {used !== null && (
@@ -501,7 +503,7 @@ function Block({
   children: ReactNode
 }) {
   return (
-    <section className="mt-section">
+    <section className="mt-10">
       <h2 className="text-section">{title}</h2>
       <p className="mt-1 text-sm text-muted">{description}</p>
       <div className="mt-4">{children}</div>
@@ -536,21 +538,27 @@ export function SavedSearchesWithNews() {
 
   return (
     <div className="mt-4">
-      <p className="text-sm font-medium">Buscas salvas com novidade</p>
-      <ul className="mt-2 flex flex-wrap gap-3">
+      <h3 className="text-body-sm font-medium">Buscas salvas com novidade</h3>
+      <DataTable
+        caption="Buscas salvas com vagas novas"
+        className="mt-2"
+        columns={['Busca', 'Vagas novas']}
+      >
         {withNews.map(({ savedSearch, count }) => (
-          <li key={savedSearch.id}>
-            <Link
-              className="flex items-baseline gap-2 rounded-full border border-line-strong bg-surface px-4 py-2 text-sm hover:border-ink"
-              onClick={() => open.mutate(savedSearch.id)}
-              to={savedSearchInboxLink(savedSearch.filters)}
-            >
-              <span className="text-subtle">{savedSearch.name}</span>
-              <span className="font-semibold">{count}</span>
-            </Link>
-          </li>
+          <tr key={savedSearch.id}>
+            <td>
+              <Link
+                className="font-medium underline decoration-accent decoration-2 underline-offset-4"
+                onClick={() => open.mutate(savedSearch.id)}
+                to={savedSearchInboxLink(savedSearch.filters)}
+              >
+                {savedSearch.name}
+              </Link>
+            </td>
+            <td className="font-semibold">{count}</td>
+          </tr>
         ))}
-      </ul>
+      </DataTable>
     </div>
   )
 }
@@ -565,7 +573,7 @@ function PendingDecisions({ overview }: { overview: Overview }) {
     <section className="mt-8">
       <h2 className="text-section">Decisão de hoje</h2>
       {pending === 0 ? (
-        <p className="mt-4 rounded-2xl border border-success-line bg-success-surface p-5 text-success-ink">
+        <p className="mt-4 rounded-control border border-success-line bg-success-surface p-5 text-success-ink">
           Nada exige decisão agora: sem vagas novas na janela, sem recomendações abertas e
           sem follow-up devido.
         </p>
@@ -596,19 +604,25 @@ function PendingDecisions({ overview }: { overview: Overview }) {
       )}
 
       {verdicts.length > 0 && (
-        <ul className="mt-3 flex flex-wrap gap-3">
+        <DataTable
+          caption="Vagas avaliadas por decisão"
+          className="mt-3"
+          columns={['Decisão', 'Vagas']}
+        >
           {verdicts.map((verdict) => (
-            <li key={verdict}>
-              <Link
-                className="flex items-baseline gap-2 rounded-full border border-line-strong bg-surface px-4 py-2 text-sm hover:border-ink"
-                to={`/inbox?verdict=${verdict}`}
-              >
-                <span className="text-subtle">{verdictCountLabels[verdict] ?? verdict}</span>
-                <span className="font-semibold">{overview.verdictCounts[verdict]}</span>
-              </Link>
-            </li>
+            <tr key={verdict}>
+              <td>
+                <Link
+                  className="underline decoration-accent decoration-2 underline-offset-4"
+                  to={`/inbox?verdict=${verdict}`}
+                >
+                  {verdictCountLabels[verdict] ?? verdict}
+                </Link>
+              </td>
+              <td className="font-semibold">{overview.verdictCounts[verdict]}</td>
+            </tr>
           ))}
-        </ul>
+        </DataTable>
       )}
 
       <StartupShortcut />
@@ -700,10 +714,10 @@ function Summary({ overview }: { overview: Overview }) {
           />
           <AnalysisSupport />
         </dl>
-        <div className="mt-block">
+        <div className="mt-6">
           <FailingSources sources={overview.failingSources} />
         </div>
-        <div className="mt-block">
+        <div className="mt-6">
           <AIUsageCard />
         </div>
         <SourceMetricsSection />

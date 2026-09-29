@@ -29,34 +29,36 @@ export function Toolbar<T extends string>({
   className = '',
 }: ToolbarProps<T>) {
   return (
-    <div
-      aria-label={label}
-      className={`flex flex-wrap items-center gap-2 text-sm ${className}`.trim()}
-      role="group"
-    >
+    <div className={`flex flex-wrap items-center gap-2 text-sm ${className}`.trim()}>
       {showLabel && (
-        <span aria-hidden="true" className="mr-1 text-muted">
+        <span aria-hidden="true" className="text-muted">
           {label}
         </span>
       )}
-      {options.map((option) => {
-        const pressed = option.value === value
-        return (
-          <button
-            aria-pressed={pressed}
-            className={`rounded-full border px-4 py-2 transition ${
-              pressed
-                ? 'border-ink bg-ink font-semibold text-surface focus-visible:outline-accent'
-                : 'border-line-strong bg-surface font-medium hover:border-ink'
-            }`}
-            key={option.value}
-            onClick={() => onChange(option.value)}
-            type="button"
-          >
-            {option.label}
-          </button>
-        )
-      })}
+      <div
+        aria-label={label}
+        className="inline-flex items-center gap-0.5 rounded-full border border-line-strong bg-surface p-0.5"
+        role="group"
+      >
+        {options.map((option) => {
+          const pressed = option.value === value
+          return (
+            <button
+              aria-pressed={pressed}
+              className={`rounded-full px-3 py-1 text-body-sm transition max-md:min-h-11 ${
+                pressed
+                  ? 'bg-canvas font-semibold text-ink'
+                  : 'font-medium text-subtle hover:text-ink'
+              }`}
+              key={option.value}
+              onClick={() => onChange(option.value)}
+              type="button"
+            >
+              {option.label}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

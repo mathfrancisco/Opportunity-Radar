@@ -66,8 +66,8 @@ escopo, SPEC §2) troca valores sem tocar telas.
 | linha de tabela | 2.75rem mínimo | densidade |
 | sidebar | 15rem, `p-3`, item `h-9` | largura fixa `md+` |
 
-`text-display*`, `rounded-shell`, `shadow-shell` e `mt-section` continuam definidos até a
-última tela migrar (F46-09); o invólucro já não usa a sombra.
+Os tokens de transição (`text-display*`, `rounded-shell`, `shadow-shell`, `mt-section`, `mt-block`)
+foram removidos em F46-09, com a última tela migrada.
 
 ## 4. Regras
 

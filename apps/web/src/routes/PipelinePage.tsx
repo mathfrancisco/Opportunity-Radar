@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { Card } from '../components/Card'
 import { PageShell } from '../components/PageShell'
 import { Bone, Skeleton } from '../components/skeletons'
 import { EmptyState, ErrorState } from '../components/states'
@@ -32,10 +33,10 @@ function isOverdue(value: string | null) {
   return !Number.isNaN(parsed.getTime()) && parsed.getTime() <= Date.now()
 }
 
-function Card({ application }: { application: Application }) {
+function ApplicationCard({ application }: { application: Application }) {
   const due = formatDate(application.nextActionAt)
   return (
-    <li className="rounded-2xl border border-line bg-surface p-4 text-sm">
+    <Card as="li" className="text-sm">
       <Link
         className="font-medium underline decoration-accent decoration-2 underline-offset-4"
         to={`/opportunities/${application.opportunityId}`}
@@ -58,7 +59,7 @@ function Card({ application }: { application: Application }) {
         {application.history.length} movimento
         {application.history.length === 1 ? '' : 's'} no histórico
       </p>
-    </li>
+    </Card>
   )
 }
 
@@ -75,7 +76,7 @@ function BoardSkeleton() {
             </div>
             <div className="mt-3 grid gap-2">
               {[0, 1].map((card) => (
-                <div className="rounded-2xl border border-line bg-surface p-4" key={card}>
+                <div className="rounded-control border border-line bg-surface p-5" key={card}>
                   <Bone className="w-24" />
                   <Bone className="mt-3 w-4/5" />
                   <Bone className="mt-3 w-1/2" />
@@ -116,7 +117,7 @@ function Board({ applications }: { applications: Application[] }) {
           </h2>
           <ul className="mt-3 grid gap-2">
             {(byStage.get(stage) ?? []).map((application) => (
-              <Card application={application} key={application.id} />
+              <ApplicationCard application={application} key={application.id} />
             ))}
           </ul>
         </section>
@@ -136,7 +137,7 @@ function Closed({ applications }: { applications: Application[] }) {
     .filter((entry) => entry.total > 0)
 
   return (
-    <section className="mt-section">
+    <section className="mt-10">
       <h2 className="text-section">Encerradas</h2>
       <ul className="mt-4 flex flex-wrap gap-3">
         {counts.map((entry) => (

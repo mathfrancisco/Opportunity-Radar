@@ -75,7 +75,7 @@ export function AnalysisPanel({
         <EmptyState>Nenhuma análise semântica registrada para esta avaliação.</EmptyState>
       )}
       {analysis && analysis.status !== 'AI_COMPLETED' && (
-        <div className="rounded-2xl border border-warning-line bg-warning-surface p-5 text-sm">
+        <div className="rounded-control border border-warning-line bg-warning-surface p-5 text-sm">
           <p className="font-medium text-warning-ink">
             Camada semântica degradada ({analysis.status}
             {analysis.failureCode ? `, ${analysis.failureCode}` : ''}).
