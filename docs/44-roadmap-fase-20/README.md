@@ -78,7 +78,7 @@ evidência de aceite ou correção.
 | [F20-72 — Perfil padrão e UI não devem esconder JUNIOR/INTERN silenciosamente no matching](fase-20/f20-72-perfil-padrao-inclui-junior-intern.md) | Nenhum | Feito — sem mudança de produção: `accepted_seniorities` vazio já é permissivo (UNKNOWN, como vaga sem senioridade) e nenhuma UI/API de perfil o preenche; testes de domínio adicionados |
 | [F20-73 — Garantir exceção de "programa" na regra de recência de 14 dias para não agravar a escassez de junior/estágio](fase-20/f20-73-recencia-14-dias-excecao-programas.md) | Card real da regra de recência de 14 dias (não localizado nesta sessão) | Absorvido pelo F20-61 (exceção de programas já é critério do F20-61) |
 | [F20-74 — Coletor Workday: parar no `total` anunciado (Workday reinicia do offset 0 após o cap de 2000)](fase-20/f20-74-workday-paginacao-cap-2000.md) | F20-28 | Feito — correção + teste de regressão |
-| [F20-75 — Workday postings sem título contam como skipped, não invalid](fase-20/f20-75-workday-postings-sem-titulo.md) | F20-28 | Implementado e testado; full suite 1177 passed. Pendente: re-execução da Accenture na `f20manual` esperado SUCCEEDED com 11 skipped |
+| [F20-75 — Workday postings sem título contam como skipped, não invalid](fase-20/f20-75-workday-postings-sem-titulo.md) | F20-28 | Validado: full suite 1177 passed; Accenture na `f20manual` `SUCCEEDED` (2000 vistos, 1996 persistidos, 4 skipped, 0 invalid) |
 
 ### Bloco D — Varredura produtiva
 

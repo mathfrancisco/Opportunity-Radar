@@ -1,7 +1,7 @@
 # CARD F20-75 — Coletor Workday: postagem sem título é `skipped`, não inválida
 
-- **Status:** Feito (2026-09-29) — correção e testes; re-execução real da Accenture
-  pendente.
+- **Status:** Validado (2026-09-29) — correção, testes e re-execução real da Accenture
+  na `f20manual` (`SUCCEEDED`, 2000 vistos, 1996 persistidos, 4 skipped, 0 invalid).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-74
@@ -36,4 +36,4 @@ contador de inválidos:
       `test_workday_untitled_postings_count_as_skipped_and_do_not_degrade_the_run`.
 - [x] Item malformado por outro motivo continua inválido —
       `test_skips_malformed_listed_job_and_reports_it` (inalterado).
-- [ ] Re-execução real da Accenture (coordenador): esperado `SUCCEEDED`, `items_skipped` 11.
+- [x] Re-execução real da Accenture na `f20manual` (run `dd1f739e-fa11-4568-84ca-5f516aa7d3dc`, 2026-09-29): `SUCCEEDED`, `items_seen` 2000, `items_persisted` 1996, `items_skipped` 4, `items_invalid` 0, sem `error_code`. O board tinha 4 postings sem título nesse dia (eram 11 antes).
