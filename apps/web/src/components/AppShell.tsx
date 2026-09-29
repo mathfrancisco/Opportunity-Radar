@@ -9,6 +9,8 @@ export interface AppShellProps {
   eyebrow?: string
   title: string
   description?: string
+  /** Header action slot: at most one secondary Button (SPEC 46, 7.1). */
+  actions?: ReactNode
   children: ReactNode
   footer?: ReactNode
 }
@@ -19,7 +21,7 @@ const drawerId = 'sidebar'
  * Sidebar + white content panel. From `md` up the sidebar is a fixed column; below it, it
  * is a drawer opened by the menu button.
  */
-export function AppShell({ current, title, description, children, footer }: AppShellProps) {
+export function AppShell({ current, title, description, actions, children, footer }: AppShellProps) {
   const [open, setOpen] = useState(false)
   const menuButton = useRef<HTMLButtonElement>(null)
 
@@ -81,7 +83,7 @@ export function AppShell({ current, title, description, children, footer }: AppS
       <main className="min-w-0 flex-1 md:p-3 md:pl-0">
         <div className="min-h-[calc(100vh-1.5rem)] border-line bg-surface p-4 md:rounded-panel md:border md:p-6">
           <section id="conteudo" tabIndex={-1}>
-            <PageHeader description={description} title={title} />
+            <PageHeader actions={actions} description={description} title={title} />
             <div className="mt-6">{children}</div>
           </section>
           {footer && (

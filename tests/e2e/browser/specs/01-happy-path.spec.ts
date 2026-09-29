@@ -36,7 +36,7 @@ test.describe('happy path', () => {
     // 36342824454: two "Senior Python Engineer" links on the same Inbox page).
     const source = await seedEnabledGreenhouseSource(SOURCE_NAME)
     await page.goto('/sources')
-    const sourceCard = page.locator('article', { hasText: source.name })
+    const sourceCard = page.locator('tr', { hasText: source.name })
     await expect(sourceCard).toBeVisible()
     await sourceCard.getByRole('button', { name: 'Executar agora' }).click()
     await expect(sourceCard.getByText(/Execução SUCCEEDED/)).toBeVisible({ timeout: 30_000 })

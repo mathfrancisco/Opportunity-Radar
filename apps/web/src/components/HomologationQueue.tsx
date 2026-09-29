@@ -11,6 +11,8 @@ import {
 import { ConflictError } from '../lib/api'
 import { Button } from './Button'
 import { Card } from './Card'
+import { PrimaryText, SecondaryText } from './cells'
+import { DataTable, RowSelect } from './DataTable'
 import { controlClassName } from './Field'
 import { CardListSkeleton } from './skeletons'
 import { ConflictNotice, EmptyState, ErrorState, LoadingState } from './states'
@@ -312,43 +314,61 @@ export function HomologationQueue() {
         </Button>
       </div>
 
-      <ul className="mt-4 grid gap-3">
-        {items.map((item) => {
+      <DataTable
+        caption="Propostas aguardando homologação"
+        className="mt-4"
+        columns={[<span className="sr-only" key="select">Selecionar</span>, 'Fonte', 'Estado', 'Ações']}
+      >
+        {items.map((item, index) => {
           const state = stateFor(item, failedProbes.has(item.sourceDefinitionId))
           const result = batch.data?.find((row) => row.sourceId === item.sourceDefinitionId)
           return (
-            <Card as="li" key={item.sourceDefinitionId}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <label className="flex items-center gap-2">
-                  <input
-                    checked={selected.has(item.sourceDefinitionId)}
-                    className="h-4 w-4"
-                    onChange={() => toggleSelected(item.sourceDefinitionId)}
-                    type="checkbox"
-                  />
-                  <span className="font-medium">{item.name}</span>
-                  <span className="text-sm text-muted">({item.sourceType})</span>
-                </label>
+            <tr key={item.sourceDefinitionId}>
+              <td className="w-10">
+                <RowSelect
+                  checked={selected.has(item.sourceDefinitionId)}
+                  label={`Selecionar ${item.name}`}
+                  onChange={() => toggleSelected(item.sourceDefinitionId)}
+                />
+              </td>
+              <td>
+                <PrimaryText>{item.name}</PrimaryText>
+                <SecondaryText>{item.sourceType}</SecondaryText>
+                {result && (
+                  <p
+                    className={`mt-1 text-caption ${result.ok ? 'text-success-ink' : 'text-danger-ink'}`}
+                    role="status"
+                  >
+                    {result.ok
+                      ? 'Sonda confirmada.'
+                      : `Falhou: ${result.errorCode ?? 'erro'}${
+                          result.retryAfterSeconds !== null
+                            ? ` — aguardar ${result.retryAfterSeconds}s`
+                            : ''
+                        }`}
+                  </p>
+                )}
+              </td>
+              <td>
                 <StatusBadge labels={stateLabels} tones={stateTones} value={state} />
-              </div>
-              {result && (
-                <p
-                  className={`mt-2 text-sm ${result.ok ? 'text-success-ink' : 'text-danger-ink'}`}
-                  role="status"
+              </td>
+              <td>
+                <Button
+                  aria-label={`Homologar ${item.name}`}
+                  onClick={() => {
+                    setCursor(index)
+                    setMode('sequential')
+                  }}
+                  size="sm"
+                  variant="secondary"
                 >
-                  {result.ok
-                    ? 'Sonda confirmada.'
-                    : `Falhou: ${result.errorCode ?? 'erro'}${
-                        result.retryAfterSeconds !== null
-                          ? ` — aguardar ${result.retryAfterSeconds}s`
-                          : ''
-                      }`}
-                </p>
-              )}
-            </Card>
+                  Homologar
+                </Button>
+              </td>
+            </tr>
           )
         })}
-      </ul>
+      </DataTable>
     </div>
   )
 }
