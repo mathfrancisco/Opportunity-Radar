@@ -180,6 +180,7 @@ class OpportunityService:
             normalized_url=candidate.normalized_url,
         )
         content_is_current = True
+        created_opportunity = False
         if occurrence is not None:
             opportunity = occurrence.opportunity
             current_raw_item = self.session.get(RawItemModel, occurrence.raw_item_id)
@@ -187,19 +188,44 @@ class OpportunityService:
                 current_raw_item is None
                 or raw_item.fetched_at >= current_raw_item.fetched_at
             )
-            if (
-                opportunity.fingerprint == candidate.fingerprint
-                and opportunity.fingerprint_version == candidate.fingerprint_version
-            ):
-                decision = "REFRESHED"
-                result_status = "SUCCEEDED"
-                reasons: list[dict[str, Any]] = [{"code": "SAME_SOURCE_EXTERNAL_IDENTITY"}]
-                if content_is_current:
-                    refresh_changed = _refresh_opportunity(opportunity, candidate)
-            else:
+            previous_fingerprint = opportunity.fingerprint
+            identity_changed = (
+                previous_fingerprint != candidate.fingerprint
+                or opportunity.fingerprint_version != candidate.fingerprint_version
+            )
+            # F48-09: the source's `external_id` *is* the identity. A new fingerprint for it
+            # refreshes the opportunity; only another opportunity already owning that
+            # fingerprint is a real dispute (the unique index would refuse it anyway).
+            competing = (
+                self.repository.opportunity_by_fingerprint(
+                    fingerprint=candidate.fingerprint,
+                    fingerprint_version=candidate.fingerprint_version,
+                )
+                if identity_changed
+                else None
+            )
+            reasons: list[dict[str, Any]]
+            if competing is not None and competing.id != opportunity.id:
                 decision = "REVIEW"
                 result_status = "REVIEW_REQUIRED"
                 reasons = [{"code": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED"}]
+            else:
+                decision = "REFRESHED"
+                result_status = "SUCCEEDED"
+                reasons = [{"code": "SAME_SOURCE_EXTERNAL_IDENTITY"}]
+                if content_is_current:
+                    refresh_changed = _refresh_opportunity(opportunity, candidate)
+                    if opportunity.fingerprint != previous_fingerprint:
+                        reasons = [{"code": "IDENTITY_REFRESHED_SAME_EXTERNAL_ID"}]
+                        opportunity.closure_evidence = {
+                            **(opportunity.closure_evidence or {}),
+                            "identity_refresh": {
+                                "previous_fingerprint": previous_fingerprint,
+                                "fingerprint": opportunity.fingerprint,
+                                "raw_item_id": str(raw_item.id),
+                                "at": raw_item.fetched_at.isoformat(),
+                            },
+                        }
             if content_is_current:
                 occurrence.raw_item_id = raw_item.id
                 occurrence.source_url = candidate.source_url
@@ -230,6 +256,7 @@ class OpportunityService:
                     review_candidates = self.repository.identity_review_candidates(candidate)
                     opportunity = _new_opportunity(candidate, first_seen_at=raw_item.fetched_at)
                     self.session.add(opportunity)
+                    created_opportunity = True
                     if review_candidates:
                         decision = "REVIEW"
                         result_status = "REVIEW_REQUIRED"
@@ -289,10 +316,11 @@ class OpportunityService:
         ):
             opportunity.version += 1
 
-        if decision == "NEW":
-            # F20-26: a brand-new opportunity is the only case that can introduce a fresh
-            # duplicate pair — REFRESHED/MERGED reuse an existing opportunity, which was
-            # already checked when it was first created.
+        if created_opportunity:
+            # F20-26 / F48-09: a brand-new opportunity is the only case that introduces a
+            # fresh duplicate pair — REFRESHED/MERGED reuse one already checked when created.
+            # `REVIEW` (same company and title, other identity) also creates one and is where
+            # a republished pair arrives; candidates stay PENDING, never auto-merged.
             find_title_location_window_candidates(self.session, opportunity)
 
         result = NormalizationResultModel(
