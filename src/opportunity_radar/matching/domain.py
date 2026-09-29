@@ -428,6 +428,14 @@ def _seniority_filter(
             "SENIORITY_COMPATIBLE", "Seniority compatibility is not stated."
         )
     compatible = opportunity.seniority in profile.accepted_seniorities
+    if not compatible and _is_senior_tier(opportunity.seniority):
+        # F48-13: SENIOR and above outside the preference rank lower, they are not excluded.
+        return HardFilterResult(
+            code="SENIORITY_COMPATIBLE",
+            result=KnowledgeState.TRUE,
+            reason="Seniority is above the profile preference; ranked lower, not excluded.",
+            evidence_refs=opportunity.evidence_refs + profile.evidence_refs,
+        )
     return _binary_filter(
         "SENIORITY_COMPATIBLE",
         compatible,
@@ -436,6 +444,41 @@ def _seniority_filter(
         opportunity,
         profile,
     )
+
+
+_SENIOR_TIER = frozenset(
+    {
+        Seniority.SENIOR,
+        Seniority.STAFF,
+        Seniority.LEAD,
+        Seniority.MANAGER,
+        Seniority.DIRECTOR,
+    }
+)
+#: Raw score of the seniority factor for a level above the preference: low, not zero.
+SENIORITY_ABOVE_PREFERENCE_SCORE = Decimal("0.25")
+
+
+def _is_senior_tier(seniority: Seniority) -> bool:
+    return seniority in _SENIOR_TIER
+
+
+def _seniority_measurement(
+    opportunity: OpportunitySnapshot, profile: ProfileSnapshot
+) -> tuple[KnowledgeState, Decimal | None, str, tuple[str, ...]]:
+    result = _seniority_filter(opportunity, profile)
+    if (
+        result.result is KnowledgeState.TRUE
+        and _is_senior_tier(opportunity.seniority)
+        and opportunity.seniority not in profile.accepted_seniorities
+    ):
+        return (
+            KnowledgeState.TRUE,
+            SENIORITY_ABOVE_PREFERENCE_SCORE,
+            result.reason,
+            result.evidence_refs,
+        )
+    return _filter_measurement(result)
 
 
 def _work_authorization_filter(
@@ -612,8 +655,7 @@ def _factor_measurement(
             opportunity.evidence_refs,
         )
     if code == "SENIORITY_SCOPE":
-        result = _seniority_filter(opportunity, profile)
-        return _filter_measurement(result)
+        return _seniority_measurement(opportunity, profile)
     if code == "CONTRACT_COMPENSATION":
         return _contract_compensation_measurement(opportunity, profile)
     if code == "RECENCY":

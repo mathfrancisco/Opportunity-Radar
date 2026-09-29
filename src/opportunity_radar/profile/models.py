@@ -261,6 +261,14 @@ class EmploymentPreferenceModel(Base):
         default=list,
         server_default=text("'{}'::varchar[]"),
     )
+    # Backfilled with the default on existing versions (F48-13); an empty array means "not
+    # stated" and never hides or ranks down a level.
+    accepted_seniorities: Mapped[list[str]] = mapped_column(
+        ARRAY(String(16)),
+        nullable=False,
+        default=list,
+        server_default=text("'{INTERN,JUNIOR,MID,UNKNOWN}'::varchar[]"),
+    )
     profile_version: Mapped[ProfileVersionModel] = relationship(
         back_populates="preference"
     )
