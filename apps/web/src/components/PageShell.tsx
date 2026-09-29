@@ -86,13 +86,13 @@ export function PageShell({
       >
         Pular para o conteúdo
       </a>
-      <div className="mx-auto min-h-[calc(100vh-3.5rem)] max-w-5xl rounded-shell border border-line-soft bg-raised p-7 shadow-shell sm:p-12">
+      <div className="mx-auto min-h-[calc(100vh-3.5rem)] max-w-5xl rounded-shell border border-line-soft bg-raised p-7 sm:p-12">
         <header
           className="flex flex-col gap-6"
           aria-label="Opportunity Radar"
         >
           <Link className="flex items-center gap-3 self-start" to="/">
-            <span className="grid h-10 w-10 place-items-center rounded-full bg-accent text-lg font-black">
+            <span className="grid h-10 w-10 place-items-center rounded-full bg-brand text-lg font-black">
               ◉
             </span>
             <span className="text-section tracking-tight">Opportunity Radar</span>
