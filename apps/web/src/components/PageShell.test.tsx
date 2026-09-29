@@ -81,4 +81,18 @@ describe('PageShell', () => {
     expect(container.querySelector('footer')?.textContent).toBe('Rodapé')
     expect(container.querySelector('h1')?.textContent).toBe('Fontes')
   })
+
+  it('repassa `actions` ao cabeçalho, e sem ele não desenha o espaço da ação', () => {
+    const withActions = render(
+      <MemoryRouter>
+        <PageShell actions={<button type="button">Adicionar</button>} title="Fontes">
+          <p>conteúdo</p>
+        </PageShell>
+      </MemoryRouter>,
+    )
+    expect(withActions.querySelector('header button')?.textContent).toBe('Adicionar')
+
+    const without = renderShell('/sources')
+    expect(without.querySelector('header button')).toBeNull()
+  })
 })
