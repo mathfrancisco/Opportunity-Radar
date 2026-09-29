@@ -52,7 +52,18 @@ depois, se uma vaga futura citar o sinal.
   fraco") na Inbox; atalho "Ver só startups" na Overview.
 - **Interface para o F20-53**: `record_startup_evidence(session, company_id, ...)` é o
   único ponto de escrita; este card não detecta sinal nem escreve o coletor.
-- **Sem backfill**: o card não define fonte para empresas já existentes (`f20manual`);
+- **Ligação com o F20-53** (`feature/f20-54-wiring`): `propose_startups` grava a evidência
+  logo após `reconcile` devolver a empresa (é o primeiro ponto com `company_id`; a busca
+  ainda não tem empresa) e depois de a proposta ser criada/reconhecida, com URL do
+  resultado Tavily do board validado. Força forte/`yc_batch` só se o **texto** do
+  resultado cita "Y Combinator"/"YC" (batch lido só se vier logo após a marca); termo de
+  marca sem marca no texto vira fraco/`other`; termo de estágio vira fraco
+  (`series_a`/`seed_stage` conforme o texto). Reexecução é idempotente.
+- **Backfill** (`scripts/backfill_startup_evidence.py`): lê só `discovery_excerpt`,
+  `startup_boards` e `startup_signal_*` já gravados nas propostas `tavily_startup_search`,
+  nunca inventa sinal (proposta sem texto/URL é pulada); `--weak-company` força fraco
+  (usar para `talentpluto` e `Pearl Talent`, prováveis agências de recrutamento).
+- **Sem backfill (versão inicial)**: o card não define fonte para empresas já existentes (`f20manual`);
   nada foi inventado. A marca aparece quando o F20-53 (ou outro coletor) gravar evidência.
 
 ## Fora de escopo
