@@ -1,6 +1,15 @@
 # CARD F20-72 — Perfil padrão e UI não devem esconder JUNIOR/INTERN silenciosamente no matching
 
-- **Status:** Backlog.
+- **Status:** Feito (2026-09-29) — fechado sem mudança de código de produção.
+- **Evidência:** `_seniority_filter` já trata `accepted_seniorities` vazio como UNKNOWN
+  (não bloqueia), igual à vaga sem senioridade. Além disso, `matching/service.py`
+  (montagem do `ProfileSnapshot`, ~l.531) nunca preenche `accepted_seniorities`, e não há
+  campo de perfil, rota nem UI para ele (`grep` em `src/`, `migrations/`, `apps/web/src`):
+  na prática todo perfil real é "sem preferência" e nada é escondido. Testes novos em
+  `tests/backend/matching/test_domain.py`
+  (`test_empty_accepted_seniorities_never_hides_any_level`,
+  `test_explicit_seniority_preference_is_symmetric_across_levels`). Se um dia houver UI
+  para a preferência, o vazio deve continuar significando "aceita todos".
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** Nenhum

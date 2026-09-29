@@ -162,6 +162,44 @@ def test_repeated_page_raises_instead_of_claiming_complete_board() -> None:
     assert len(calls) == 2
 
 
+def test_stops_at_the_announced_total_when_workday_wraps_past_the_cap() -> None:
+    # Regression (Accenture, wd103): Workday states `total` (capped at 2000) only on the
+    # offset-0 page, has a real short tail page of 10, and past the cap it wraps back to
+    # the first page instead of ending. That is the end of the board, not a schema change.
+    def posting(number: int) -> dict[str, object]:
+        return {
+            "title": f"Engineer {number}",
+            "externalPath": f"/job/Remote/Engineer-{number}_R{number}",
+            "locationsText": "Remote",
+        }
+
+    total = 60
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        offset = json.loads(request.content)["offset"]
+        calls.append(offset)
+        start = offset % total  # wrap past the cap, like the real endpoint
+        page = [posting(start + i) for i in range(min(20, total - start))]
+        return httpx.Response(
+            200, json={"total": total if offset == 0 else 0, "jobPostings": page}
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    collection_request = CollectionRequest(
+        company_reference="acme/ExternalCareerSite", api_region="wd5"
+    )
+    try:
+        items = asyncio.run(_collect(WorkdayCollector(client=client), collection_request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert len(items) == total
+    assert len({item.external_id for item in items}) == total
+    assert calls == [0, 20, 40]  # never asks for offset == total
+    assert collection_request.telemetry.items_announced == total
+
+
 def test_retries_rate_limit_using_retry_after() -> None:
     calls = 0
     delays: list[float] = []
