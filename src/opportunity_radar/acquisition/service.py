@@ -23,6 +23,7 @@ from opportunity_radar.acquisition.alerts import (
 )
 from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.collectors import CollectorRegistry, ManualCollector
+from opportunity_radar.acquisition.concurrency import source_host_key
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
     AcquisitionErrorCode,
@@ -99,8 +100,29 @@ _PROVIDER_HOST_BY_SOURCE_TYPE: dict[str, str] = {
 }
 
 
+#: Source types whose provider host is one tenant/site among many (F48-08): their budget is
+#: keyed per tenant via `source_host_key`, so fifteen Workday tenants are fifteen buckets,
+#: not one shared row that a single run can exhaust for everybody.
+_TENANT_BUDGET_TYPES = frozenset({"workday", "teamtailor", "factorial", "jobposting"})
+
+_HOST_KEY_MAX_LENGTH = 255
+
+#: Request ceiling a new host budget row gets, per source_type (F48-08). A Workday tenant
+#: needs ~1 request per 20 postings, so one large board fits its own bucket. Overridable
+#: through `Settings.host_request_ceilings`; a persisted row keeps the ceiling it has.
+DEFAULT_HOST_CEILING_BY_SOURCE_TYPE: dict[str, int] = {"workday": 500, "hacker_news": 500}
+
+
 def _host_for_source_type(source_type: str) -> str:
     return _PROVIDER_HOST_BY_SOURCE_TYPE.get(source_type, source_type)
+
+
+def _budget_host_for_source(source_type: str, configuration: dict[str, Any] | None) -> str:
+    """Persisted budget key of one source: the tenant for per-tenant types (F48-08), the
+    physical provider host for shared-host types, `source_type` for anything else."""
+    if source_type in _TENANT_BUDGET_TYPES:
+        return source_host_key(source_type, configuration)[:_HOST_KEY_MAX_LENGTH]
+    return _host_for_source_type(source_type)
 
 
 def _conditional_headers_for(
@@ -197,6 +219,7 @@ class AcquisitionService:
         alert_notifier: SourceAlertNotifier | None = None,
         alerts: SourceAlertService | None = None,
         tavily_extraction: TavilyExtractionSettings | None = None,
+        host_request_ceilings: Mapping[str, int] | None = None,
     ) -> None:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
@@ -216,6 +239,13 @@ class AcquisitionService:
         # disables it — the same "absent is a supported deployment" treatment
         # `tavily_api_key` gets elsewhere.
         self._tavily_extraction = tavily_extraction
+        # F48-08: request ceiling per source_type for a host budget row created by this
+        # service (an existing row keeps the ceiling it was persisted with).
+        self._host_request_ceilings: Mapping[str, int] = (
+            DEFAULT_HOST_CEILING_BY_SOURCE_TYPE
+            if host_request_ceilings is None
+            else host_request_ceilings
+        )
 
     def create_source(
         self,
@@ -866,7 +896,7 @@ class AcquisitionService:
         reader, and cannot disagree.
         """
         policy = _network_policy(source.rate_limit_policy or {})
-        host = _host_for_source_type(source.source_type)
+        host = _budget_host_for_source(source.source_type, source.configuration)
         host_budget_row = self.repository.get_host_budget(host)
         host_budget = (
             HostBudgetState(
@@ -1029,6 +1059,9 @@ class AcquisitionService:
             if self._tavily_extraction is not None
             else None
         )
+        # F48-08: Tavily `/extract` calls are counted here, never in `run_telemetry` —
+        # that one feeds the ATS host budget, and extraction is a different provider.
+        tavily_telemetry = CollectionTelemetry()
         extraction_budget = (
             TavilyCreditBudget(limit=self._tavily_extraction.credit_budget_per_run)
             if self._tavily_extraction is not None
@@ -1070,9 +1103,10 @@ class AcquisitionService:
                     item,
                     client=extraction_client,
                     budget=extraction_budget,
-                    telemetry=run_telemetry,
+                    telemetry=tavily_telemetry,
                     network_policy=network_policy,
                     run=run,
+                    source_type=source.source_type,
                 )
                 try:
                     created = self._persist_item(
@@ -1248,10 +1282,12 @@ class AcquisitionService:
         )
         if run_telemetry.http_requests or cooldown_until is not None:
             self.repository.record_host_budget_usage(
-                _host_for_source_type(source.source_type),
+                _budget_host_for_source(source.source_type, source.configuration),
                 now=datetime.now(UTC),
                 requests=run_telemetry.http_requests,
-                default_ceiling=DEFAULT_HOST_REQUESTS_CEILING,
+                default_ceiling=self._host_request_ceilings.get(
+                    source.source_type, DEFAULT_HOST_REQUESTS_CEILING
+                ),
                 cooldown_until=cooldown_until,
             )
         self.session.commit()
@@ -1315,6 +1351,7 @@ class AcquisitionService:
         telemetry: CollectionTelemetry,
         network_policy: CollectionNetworkPolicy,
         run: SourceRun,
+        source_type: str | None = None,
     ) -> CollectedItem:
         """Extracts a body for `item` when it has none, from any source, not only
         `tavily_search`'s own results (F20-45). A no-op when extraction is not configured
@@ -1336,10 +1373,19 @@ class AcquisitionService:
             return item
         if (item.description or "").strip():
             return item
+        settings = self._tavily_extraction
+        # F48-08: a source type whose pages Tavily cannot read (Workday is JS) never spends
+        # a call, and a host that failed N times in a row stops being tried.
+        if source_type is not None and source_type in settings.skip_source_types:
+            return item
         cache = TavilyExtractionCache(
             session=self.session,
-            ttl_seconds=self._tavily_extraction.cache_ttl_seconds,
+            ttl_seconds=settings.cache_ttl_seconds,
         )
+        if settings.host_failure_threshold > 0 and cache.host_is_failing(
+            item.url, threshold=settings.host_failure_threshold
+        ):
+            return item
         results = await extract_missing_descriptions(
             client,
             cache,

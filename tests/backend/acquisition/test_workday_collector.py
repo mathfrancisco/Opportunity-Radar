@@ -1,18 +1,26 @@
 import asyncio
 import json
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import uuid4
 
 import httpx
 import pytest
 
+from opportunity_radar.acquisition.alerts import SourceAlertService
+from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
     AcquisitionErrorCode,
+    CollectionMode,
     CollectionNetworkPolicy,
     CollectionRequest,
 )
-from opportunity_radar.acquisition.scheduling import ConditionalRequestHeaders
+from opportunity_radar.acquisition.models import SourceDefinitionModel
+from opportunity_radar.acquisition.scheduling import ConditionalRequestHeaders, SourceRunHistory
+from opportunity_radar.acquisition.service import AcquisitionService
+from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
 from opportunity_radar.acquisition.workday import WorkdayCollector
 
 _FIXTURE = Path(__file__).parents[2] / "fixtures" / "workday_jobs.json"
@@ -484,3 +492,142 @@ def test_parse_posted_on_reads_the_relative_age(
 @pytest.mark.parametrize("posted_on", [None, "", "Applications closing soon", 42])
 def test_parse_posted_on_returns_none_for_unknown_shapes(posted_on: object) -> None:
     assert WorkdayCollector._parse_posted_on(posted_on) is None
+
+
+# --- F48-08: a big Workday board never touches Tavily nor a shared budget bucket --------
+
+
+class _RunMemorySession:
+    def __init__(self) -> None:
+        self.added: list[object] = []
+
+    def add(self, model: object) -> None:
+        self.added.append(model)
+
+    def flush(self) -> None:
+        return None
+
+    def begin_nested(self):
+        return nullcontext()
+
+    def rollback(self) -> None:
+        return None
+
+    def commit(self) -> None:
+        return None
+
+    def refresh(self, model: object, attribute_names: object = None) -> None:
+        del model, attribute_names
+
+    def scalar(self, statement: object) -> None:
+        del statement
+        return None
+
+    def get(self, model: type, primary_key: object) -> None:
+        del model, primary_key
+        return None
+
+
+class _RunMemoryRepository:
+    def __init__(self, source: SourceDefinitionModel) -> None:
+        self.source = source
+        self.budget_calls: list[dict[str, object]] = []
+
+    def run_history(self, source_id: object, *, sample: int = 32) -> SourceRunHistory:
+        del source_id, sample
+        return SourceRunHistory()
+
+    def get_source(self, source_id: object) -> SourceDefinitionModel | None:
+        return self.source if source_id == self.source.id else None
+
+    def identical_raw_item_exists(self, **_: object) -> bool:
+        return False
+
+    def raw_item_by_envelope(self, **_: object) -> bool:
+        return False
+
+    def get_host_budget(self, host: str) -> None:
+        del host
+        return None
+
+    def record_host_budget_usage(
+        self,
+        host: str,
+        *,
+        now: object,
+        requests: int,
+        default_ceiling: int,
+        cooldown_until: object = None,
+    ) -> None:
+        del now, cooldown_until
+        self.budget_calls.append(
+            {"host": host, "requests": requests, "default_ceiling": default_ceiling}
+        )
+
+
+def _large_workday_run(items: int):
+    tavily_calls: list[httpx.Request] = []
+
+    def workday_handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        offset, limit = body["offset"], body["limit"]
+        postings = [
+            {
+                "title": f"Engineer {number}",
+                "externalPath": f"/job/Remote/Engineer-{number}_R{number}",
+                "locationsText": "Remote",
+                "bulletFields": [f"R{number}"],
+            }
+            for number in range(offset, min(offset + limit, items))
+        ]
+        return httpx.Response(200, json={"total": items, "jobPostings": postings})
+
+    def tavily_handler(request: httpx.Request) -> httpx.Response:
+        tavily_calls.append(request)
+        return httpx.Response(200, json={"results": [], "usage": {"credits": 1}})
+
+    workday_client = httpx.AsyncClient(transport=httpx.MockTransport(workday_handler))
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="workday",
+        name="Adobe",
+        enabled=True,
+        configuration={"tenant_identifier": "adobe/external", "api_region": "wd5"},
+    )
+    session = _RunMemorySession()
+    repository = _RunMemoryRepository(source)
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((WorkdayCollector(client=workday_client),)),
+        repository=repository,  # type: ignore[arg-type]
+        alerts=SourceAlertService(session, notifier=None),  # type: ignore[arg-type]
+        tavily_extraction=TavilyExtractionSettings(
+            client_factory=lambda: TavilyClient(
+                api_key="test-key",
+                client=httpx.AsyncClient(transport=httpx.MockTransport(tavily_handler)),
+            ),
+            cache_ttl_seconds=3600,
+            credit_budget_per_run=100,
+        ),
+    )
+    try:
+        run = asyncio.run(
+            service.execute(source.id, CollectionRequest(mode=CollectionMode.DISCOVERY))
+        )
+    finally:
+        asyncio.run(workday_client.aclose())
+    return run, tavily_calls, repository
+
+
+def test_500_item_workday_run_makes_zero_tavily_calls_and_finishes_pagination() -> None:
+    run, tavily_calls, repository = _large_workday_run(500)
+
+    assert tavily_calls == []
+    assert run.items_seen == 500
+    assert run.status == "SUCCEEDED"
+    assert run.error_code != AcquisitionErrorCode.CREDIT_BUDGET_EXCEEDED.value
+    assert run.credits_used == 0
+    # Only the 25 listing pages count against the tenant's own bucket.
+    assert repository.budget_calls == [
+        {"host": "workday:adobe/external:wd5", "requests": 25, "default_ceiling": 500}
+    ]

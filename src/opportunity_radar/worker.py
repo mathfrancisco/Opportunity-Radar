@@ -572,6 +572,8 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
             credit_budget_per_run=settings.tavily_credit_budget_per_run,
             extract_depth=settings.tavily_extract_depth,
             format=settings.tavily_extract_format,
+            skip_source_types=settings.extraction_skip_source_type_set,
+            host_failure_threshold=settings.tavily_extract_host_failure_threshold,
         )
         if settings.tavily_api_key
         else None
@@ -587,6 +589,7 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
                 threshold=settings.source_alert_failure_threshold,
             ),
             tavily_extraction=tavily_extraction,
+            host_request_ceilings=settings.host_request_ceiling_map,
         )
 
     return build

@@ -107,6 +107,32 @@ class Settings(BaseSettings):
     # monthly ceiling is a concern, until real usage is measured (docs/41-spec-tavily.md,
     # section 9).
     tavily_credit_budget_per_run: int = 100
+    # F48-08: source types whose items never go through Tavily `/extract` (comma
+    # separated). Workday pages are JS-rendered: every call failed and burned credits.
+    extraction_skip_source_types: str = "workday"
+    # F48-08: stop extracting for a host after this many consecutive failures (0 = off).
+    tavily_extract_host_failure_threshold: int = 5
+    # F48-08: request ceiling per source type for a new host budget row, `type=ceiling`
+    # comma separated. Types not listed use the scheduler default (200 per hour).
+    host_request_ceilings: str = "workday=500,hacker_news=500"
+
+    @property
+    def extraction_skip_source_type_set(self) -> frozenset[str]:
+        return frozenset(
+            item.strip().lower()
+            for item in self.extraction_skip_source_types.split(",")
+            if item.strip()
+        )
+
+    @property
+    def host_request_ceiling_map(self) -> dict[str, int]:
+        ceilings: dict[str, int] = {}
+        for entry in self.host_request_ceilings.split(","):
+            if not entry.strip():
+                continue
+            source_type, _, value = entry.partition("=")
+            ceilings[source_type.strip()] = int(value)
+        return ceilings
 
     @property
     def analysis_eligible_verdicts(self) -> tuple[str, ...]:
