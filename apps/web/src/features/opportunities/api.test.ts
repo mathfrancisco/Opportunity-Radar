@@ -117,6 +117,24 @@ describe('getOpportunity', () => {
     expect(detail.occurrences[0].payloadExpiredAt).toBe('2026-09-22T00:00:00Z')
   })
 
+  it('expõe a base da recência (F48-16) e cai em "publicada" só sem sinal de estimativa', async () => {
+    respond({
+      id: 'opportunity-1',
+      published_at: null,
+      recency_effective_date: '2026-09-25T00:00:00Z',
+      recency_basis: 'updated',
+      date_is_estimated: true,
+    })
+    const updated = await getOpportunity('opportunity-1')
+    expect(updated.recencyBasis).toBe('updated')
+    expect(updated.recencyEffectiveDate).toBe('2026-09-25T00:00:00Z')
+
+    respond({ id: 'opportunity-1', published_at: '2026-09-01T00:00:00Z' })
+    const published = await getOpportunity('opportunity-1')
+    expect(published.recencyBasis).toBe('published')
+    expect(published.recencyEffectiveDate).toBe('2026-09-01T00:00:00Z')
+  })
+
   it('traduz 404 em uma mensagem própria', async () => {
     respond({ detail: { code: 'opportunity_not_found' } }, 404)
     await expect(getOpportunity('missing')).rejects.toThrow('não encontrada')

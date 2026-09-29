@@ -16,7 +16,12 @@ import { CardListSkeleton, TableSkeleton } from '../components/skeletons'
 import { EmptyState, ErrorState } from '../components/states'
 import { SearchInput } from '../components/SearchInput'
 import { StatusBadge } from '../components/StatusBadge'
-import { type InboxItem, type InboxOrder, inboxOrders } from '../features/dashboard/api'
+import {
+  type InboxItem,
+  type InboxOrder,
+  estimatedDateHint,
+  inboxOrders,
+} from '../features/dashboard/api'
 import { useInbox } from '../features/dashboard/useInbox'
 import { verdictLabels, verdictTones } from '../features/matching/verdicts'
 import { useMarkRelevance } from '../features/opportunities/useOpportunity'
@@ -173,7 +178,12 @@ function ItemCard({ item }: { item: InboxItem }) {
           <dd className="mt-1 font-medium">
             {formatDate(item.recencyEffectiveDate)}
             {item.dateIsEstimated && (
-              <span className="ml-1 text-xs font-normal text-subtle">(estimada)</span>
+              <span
+                className="ml-1 text-xs font-normal text-subtle"
+                title={estimatedDateHint(item.recencyBasis)}
+              >
+                (estimada)
+              </span>
             )}
           </dd>
         </div>
@@ -291,7 +301,11 @@ function ItemRow({ item }: { item: InboxItem }) {
       <td>{item.lifecycleStatus}</td>
       <td className="whitespace-nowrap">
         {formatDate(item.recencyEffectiveDate)}
-        {item.dateIsEstimated && <SecondaryText>(estimada)</SecondaryText>}
+        {item.dateIsEstimated && (
+          <span title={estimatedDateHint(item.recencyBasis)}>
+            <SecondaryText>(estimada)</SecondaryText>
+          </span>
+        )}
       </td>
       <td>
         <div className="flex flex-wrap gap-2">
@@ -559,6 +573,11 @@ export function InboxPage() {
   // default — only an explicit `only_recent=false` (the "mostrar tudo" click) turns
   // the filter off.
   const onlyRecent = params.get('only_recent') !== 'false'
+  // Card F48-16: window lens. '' is the 30-day default; `novas` narrows it to 14 days;
+  // `abertas` shows whatever the source's last complete run still saw, no date limit.
+  const lensParam = params.get('lens')
+  const recencyLens: '' | 'novas' | 'abertas' =
+    lensParam === 'novas' || lensParam === 'abertas' ? lensParam : ''
   // Card F20-54: display/filter only, never changes score or verdict.
   const onlyStartups = params.get('only_startups') === 'true'
 
@@ -582,6 +601,8 @@ export function InboxPage() {
     sourceDefinitionIds: source ? [source] : undefined,
     allowedCountry: allowedCountry || undefined,
     onlyRecent,
+    recencyWindowDays: recencyLens === 'novas' ? 14 : undefined,
+    openAtSource: recencyLens === 'abertas',
     onlyStartups,
   })
 
@@ -701,6 +722,17 @@ export function InboxPage() {
           value={order}
         />
         <FilterPill
+          id="inbox-recency-lens"
+          label="Recência"
+          onChange={(value) => update({ lens: value || null })}
+          options={[
+            { value: '', label: 'Últimos 30 dias' },
+            { value: 'novas', label: 'Novas (14 dias)' },
+            { value: 'abertas', label: 'Abertas na fonte' },
+          ]}
+          value={recencyLens}
+        />
+        <FilterPill
           id="inbox-applied"
           label="Candidatura"
           onChange={(value) => update({ applied: value || null })}
@@ -786,7 +818,7 @@ export function InboxPage() {
           }
           type="checkbox"
         />
-        Mostrar só vagas dos últimos 14 dias (estágio, trainee e vagas com prazo de
+        Mostrar só vagas dos últimos 30 dias (estágio, trainee e vagas com prazo de
         candidatura continuam visíveis)
       </label>
 

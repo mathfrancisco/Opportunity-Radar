@@ -18,6 +18,7 @@ import {
   useLatestAssessment,
 } from '../features/matching/useAssessment'
 import { type DuplicateCandidate, type OpportunityDetail } from '../features/opportunities/api'
+import { estimatedDateHint } from '../features/dashboard/api'
 import { verdictLabels } from '../features/matching/verdicts'
 import {
   useConfirmDuplicate,
@@ -91,7 +92,17 @@ function Facts({ opportunity }: { opportunity: OpportunityDetail }) {
       </div>
       <div>
         <dt className="text-muted">Publicada</dt>
-        <dd className="mt-1 font-medium">{formatDate(opportunity.publishedAt)}</dd>
+        <dd className="mt-1 font-medium">
+          {formatDate(opportunity.recencyEffectiveDate)}
+          {opportunity.recencyBasis !== 'published' && (
+            <span
+              className="ml-1 text-xs font-normal text-subtle"
+              title={estimatedDateHint(opportunity.recencyBasis)}
+            >
+              (estimada)
+            </span>
+          )}
+        </dd>
       </div>
       <div>
         <dt className="text-muted">Versão do conteúdo</dt>

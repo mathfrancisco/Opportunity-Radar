@@ -19,7 +19,7 @@ from functools import reduce
 from typing import Any, Literal
 from uuid import UUID
 
-from sqlalchemy import Select, and_, case, func, literal, or_, select
+from sqlalchemy import Select, case, func, literal, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import (
@@ -33,7 +33,11 @@ from opportunity_radar.dashboard.search_synonyms import synonym_variants
 from opportunity_radar.matching import currency
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
 from opportunity_radar.matching.service import RULES_VERSION
-from opportunity_radar.opportunities.domain import DEFAULT_RECENCY_WINDOW_DAYS
+from opportunity_radar.opportunities.domain import (
+    DEFAULT_RECENCY_WINDOW_DAYS,
+    RecencyBasis,
+    recency_reference,
+)
 from opportunity_radar.opportunities.models import (
     DuplicateCandidateModel,
     NormalizationResultModel,
@@ -43,6 +47,7 @@ from opportunity_radar.opportunities.models import (
     SourceOccurrenceModel,
 )
 from opportunity_radar.opportunities.regions import ANY_COUNTRY
+from opportunity_radar.opportunities.repository import recency_condition
 from opportunity_radar.pipeline.models import ApplicationProcessModel
 
 NEW_OPPORTUNITY_WINDOW_DAYS = 7
@@ -73,14 +78,16 @@ class InboxItem:
     lifecycle_status: str
     role_family: str
     published_at: datetime | None
-    #: Card F20-61: `published_at` when the source has one, else `first_seen_at`
+    #: Cards F20-61/F48-16: `published_at ?? source_updated_at ?? first_seen_at`
     #: (never a fabricated real date) — the date the recency filter actually compared
     #: against.
     recency_effective_date: datetime | None
-    #: `True` when `recency_effective_date` came from `first_seen_at` (the radar's own
-    #: "first seen" fallback), never presented to the client as a real publication
-    #: date without this flag.
+    #: `True` whenever `recency_effective_date` is not the source's own `published_at`
+    #: (an update stamp or the radar's own "first seen"), never presented to the client
+    #: as a real publication date without this flag.
     date_is_estimated: bool
+    #: Persisted `opportunity.recency_basis`: `published`, `updated` or `first_seen`.
+    recency_basis: str
     opportunity_version: int
     assessment_id: UUID | None = None
     assessment_opportunity_version: int | None = None
@@ -166,8 +173,9 @@ class InboxQuery:
     order: InboxOrder = InboxOrder.PRIORITY
     offset: int = 0
     limit: int = 50
-    #: Card F20-61. `True` shows only a posting from the last `recency_window_days`
-    #: days (`published_at` or, as a marked estimate, `first_seen_at`), except a
+    #: Cards F20-61/F48-16. `True` shows only a posting whose reference date
+    #: (`published_at ?? source_updated_at ?? first_seen_at`) is inside the last
+    #: `recency_window_days` days, except a
     #: time-boxed entry program (`recency_exempt_program`) or one with a still-open
     #: `valid_through`. Defaults to `False` *here* (an unfiltered query object, so an
     #: existing or future direct caller of `list_opportunity_inbox` is never silently
@@ -180,6 +188,10 @@ class InboxQuery:
     #: startup evidence row (any strength). Never touches score or verdict.
     only_startups: bool = False
     recency_window_days: int = DEFAULT_RECENCY_WINDOW_DAYS
+    #: Card F48-16 lens "Abertas na fonte": keeps what the last complete run of the
+    #: occurrence's source still saw, with no date limit (replaces the window; the
+    #: window and its program/deadline exceptions are then irrelevant).
+    open_at_source: bool = False
     #: The instant the recency window is measured against. A `field(default_factory=...)`
     #: rather than a fixed default so every unparametrized `InboxQuery()` still reads the
     #: real clock exactly once, at construction — never re-reading it later — while a
@@ -496,6 +508,8 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
             .label("has_pending_duplicate"),
             _startup_strength_column(),
             _startup_batch_column(),
+            OpportunityModel.source_updated_at,
+            OpportunityModel.recency_basis,
         )
         .select_from(OpportunityModel)
         .outerjoin(assessments, assessments.c.opportunity_id == OpportunityModel.id)
@@ -543,25 +557,33 @@ def _startup_batch_column() -> Any:
 
 
 def _recency_condition(query: InboxQuery) -> Any:
-    """SQL mirror of `opportunities.domain.recency_decision` (card F20-61).
+    """Inbox recency window (cards F20-61, F48-16): the shared SQL rule of
+    `opportunities.repository.recency_condition` (mirror of `recency_decision`)."""
+    return recency_condition(now=query.now, window_days=query.recency_window_days)
 
-    Kept as a plain column comparison (no correlated subquery) so it runs at listing
-    scale: `published_at` when the source has one, else the denormalized
-    `first_seen_at`, compared against the window; OR'd with the two independent
-    exceptions (time-boxed program, still-open `valid_through`). Any change to the
-    pure function's rule must be mirrored here — `tests/backend/dashboard/
-    test_queries.py` covers this condition directly against both fallback paths.
-    """
-    cutoff = query.now - timedelta(days=query.recency_window_days)
-    within_window = or_(
-        and_(OpportunityModel.published_at.is_not(None), OpportunityModel.published_at >= cutoff),
-        and_(OpportunityModel.published_at.is_(None), OpportunityModel.first_seen_at >= cutoff),
+
+def _open_at_source_condition() -> Any:
+    """Card F48-16 "Abertas na fonte": some occurrence was seen in the latest complete
+    run of its own source (`last_seen_run_id` equals that run), whatever its age."""
+    latest_complete_run = (
+        select(SourceRunModel.id)
+        .where(
+            SourceRunModel.source_definition_id == SourceOccurrenceModel.source_definition_id,
+            SourceRunModel.complete.is_(True),
+        )
+        .order_by(SourceRunModel.started_at.desc())
+        .limit(1)
+        .correlate(SourceOccurrenceModel)
+        .scalar_subquery()
     )
-    has_open_deadline = and_(
-        OpportunityModel.valid_through.is_not(None),
-        OpportunityModel.valid_through > query.now,
+    return (
+        select(SourceOccurrenceModel.id)
+        .where(
+            SourceOccurrenceModel.opportunity_id == OpportunityModel.id,
+            SourceOccurrenceModel.last_seen_run_id == latest_complete_run,
+        )
+        .exists()
     )
-    return or_(within_window, OpportunityModel.recency_exempt_program.is_(True), has_open_deadline)
 
 
 def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> list[Any]:
@@ -592,7 +614,9 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
         filters.append(OpportunityModel.created_at > query.created_after)
     if query.seniorities:
         filters.append(OpportunityModel.seniority.in_(query.seniorities))
-    if query.only_recent:
+    if query.open_at_source:
+        filters.append(_open_at_source_condition())
+    elif query.only_recent:
         filters.append(_recency_condition(query))
     if query.only_startups:
         filters.append(_startup_evidence_rows().exists())
@@ -722,8 +746,11 @@ def _inbox_item(row: Any) -> InboxItem:
         lifecycle_status=row[9],
         role_family=row[10],
         published_at=row[11],
-        recency_effective_date=row[11] if row[11] is not None else row[12],
-        date_is_estimated=row[11] is None and row[12] is not None,
+        recency_effective_date=recency_reference(
+            published_at=row[11], source_updated_at=row[34], first_seen_at=row[12]
+        )[0],
+        date_is_estimated=row[35] != RecencyBasis.PUBLISHED.value,
+        recency_basis=row[35],
         opportunity_version=row[13],
         assessment_id=row[14],
         assessment_opportunity_version=row[15],

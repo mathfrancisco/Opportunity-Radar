@@ -54,7 +54,12 @@ from opportunity_radar.dashboard.saved_searches import (
 )
 from opportunity_radar.matching.analysis import SemanticAnalysisPort
 from opportunity_radar.matching.service import MatchingService
-from opportunity_radar.opportunities.domain import OpportunityStatus, Seniority, WorkMode
+from opportunity_radar.opportunities.domain import (
+    DEFAULT_RECENCY_WINDOW_DAYS,
+    OpportunityStatus,
+    Seniority,
+    WorkMode,
+)
 from opportunity_radar.platform.ai.config import ai_status
 from opportunity_radar.platform.ai.metrics import ModelAIMetrics, ai_metrics
 from opportunity_radar.platform.config import Settings, get_settings
@@ -78,12 +83,14 @@ class InboxItemResponse(BaseModel):
     lifecycle_status: str
     role_family: str
     published_at: datetime | None
-    #: Card F20-61: `published_at` when the source has one, else `first_seen_at`
+    #: Cards F20-61/F48-16: `published_at ?? source_updated_at ?? first_seen_at`
     #: (never a fabricated real date).
     recency_effective_date: datetime | None
-    #: `True` when `recency_effective_date` came from the `first_seen_at` fallback,
-    #: never presented as a real publication date without this flag.
+    #: `True` when `recency_effective_date` is not the source's `published_at`, never
+    #: presented as a real publication date without this flag.
     date_is_estimated: bool
+    #: `published`, `updated` or `first_seen` (persisted `recency_basis`).
+    recency_basis: str
     opportunity_version: int
     assessment_id: UUID | None
     assessment_opportunity_version: int | None
@@ -501,6 +508,12 @@ def list_inbox(
     #: Card F20-61: the server's own default, absent this parameter, is filtered.
     #: The client's "mostrar tudo" toggle passes `only_recent=false`.
     only_recent: bool = Query(default=True),
+    #: Card F48-16: window over the reference date (default 30 days; the "Novas" lens
+    #: sends 14).
+    recency_window_days: int = Query(default=DEFAULT_RECENCY_WINDOW_DAYS, ge=1, le=365),
+    #: Card F48-16 lens "Abertas na fonte": seen in the last complete run of the
+    #: occurrence's source, no date limit.
+    open_at_source: bool = False,
     #: Card F20-54: only companies with at least one startup-evidence row.
     only_startups: bool = False,
     session: Session = Depends(get_session),
@@ -535,6 +548,8 @@ def list_inbox(
             offset=offset,
             limit=limit,
             only_recent=only_recent,
+            recency_window_days=recency_window_days,
+            open_at_source=open_at_source,
             only_startups=only_startups,
         ),
     )
@@ -747,6 +762,7 @@ def _inbox_item_response(item: InboxItem) -> InboxItemResponse:
         published_at=item.published_at,
         recency_effective_date=item.recency_effective_date,
         date_is_estimated=item.date_is_estimated,
+        recency_basis=item.recency_basis,
         opportunity_version=item.opportunity_version,
         assessment_id=item.assessment_id,
         assessment_opportunity_version=item.assessment_opportunity_version,

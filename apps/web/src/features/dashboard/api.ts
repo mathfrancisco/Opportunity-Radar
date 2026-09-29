@@ -3,6 +3,20 @@ import { apiUrl } from '../../lib/api'
 export const inboxOrders = ['priority', 'recency', 'score'] as const
 export type InboxOrder = (typeof inboxOrders)[number]
 
+export type RecencyBasis = 'published' | 'updated' | 'first_seen'
+
+export function parseRecencyBasis(value: unknown, estimated: boolean): RecencyBasis {
+  if (value === 'published' || value === 'updated' || value === 'first_seen') return value
+  return estimated ? 'first_seen' : 'published'
+}
+
+/** Tooltip for a date that is not the source's own publication date. */
+export function estimatedDateHint(basis: RecencyBasis): string {
+  return basis === 'updated'
+    ? 'Sem data de publicação; usamos a última atualização da fonte.'
+    : 'Sem data de publicação; usamos a data em que o radar viu a vaga.'
+}
+
 export interface InboxItem {
   opportunityId: string
   title: string
@@ -16,11 +30,13 @@ export interface InboxItem {
   lifecycleStatus: string
   roleFamily: string
   publishedAt: string | null
-  /** Card F20-61: `publishedAt` when the source has one, else `first_seen_at`. */
+  /** Cards F20-61/F48-16: `published_at ?? source_updated_at ?? first_seen_at`. */
   recencyEffectiveDate: string | null
-  /** `true` when `recencyEffectiveDate` came from the `first_seen_at` fallback —
+  /** `true` when `recencyEffectiveDate` is not the source's own publication date —
    * never presented as a real publication date without this flag. */
   dateIsEstimated: boolean
+  /** Card F48-16: which date the reference came from. */
+  recencyBasis: RecencyBasis
   opportunityVersion: number
   assessmentId: string | null
   assessmentOpportunityVersion: number | null
@@ -81,10 +97,16 @@ export interface InboxParams {
   /** ISO country code from the `regions-v1` table. Unknown-country opportunities are
    * never implicitly excluded — the API keeps them visible (card F17-06). */
   allowedCountry?: string
-  /** Card F20-61: `true` (the default, matching the server's own default) shows only
-   * a posting from the last 14 days, except a time-boxed entry program or one with a
-   * still-open application deadline. `false` is the "mostrar tudo" toggle. */
+  /** Cards F20-61/F48-16: `true` (the default, matching the server's own default) shows
+   * only a posting whose reference date is inside the window (30 days by default),
+   * except a time-boxed entry program or one with a still-open application deadline.
+   * `false` is the "mostrar tudo" toggle. */
   onlyRecent?: boolean
+  /** Card F48-16 lens "Novas (14 dias)": overrides the server's 30-day window. */
+  recencyWindowDays?: number
+  /** Card F48-16 lens "Abertas na fonte": seen in the last complete run of its source,
+   * no date limit. */
+  openAtSource?: boolean
   /** Card F20-54: only companies with at least one startup-evidence row. */
   onlyStartups?: boolean
 }
@@ -268,6 +290,7 @@ function parseInboxItem(value: unknown): InboxItem | null {
     publishedAt: text(value.published_at),
     recencyEffectiveDate: text(value.recency_effective_date),
     dateIsEstimated: value.date_is_estimated === true,
+    recencyBasis: parseRecencyBasis(value.recency_basis, value.date_is_estimated === true),
     opportunityVersion: typeof value.opportunity_version === 'number' ? value.opportunity_version : 1,
     assessmentId: text(value.assessment_id),
     assessmentOpportunityVersion:
@@ -332,6 +355,8 @@ export async function getInbox({
   sourceDefinitionIds,
   allowedCountry,
   onlyRecent = true,
+  recencyWindowDays,
+  openAtSource,
   onlyStartups,
 }: InboxParams): Promise<InboxPage> {
   const params = new URLSearchParams({
@@ -355,6 +380,8 @@ export async function getInbox({
   sourceDefinitionIds?.forEach((value) => params.append('source_definition_id', value))
   if (allowedCountry) params.set('allowed_country', allowedCountry)
   if (!onlyRecent) params.set('only_recent', 'false')
+  if (recencyWindowDays) params.set('recency_window_days', String(recencyWindowDays))
+  if (openAtSource) params.set('open_at_source', 'true')
   if (onlyStartups) params.set('only_startups', 'true')
 
   const response = await fetch(apiUrl(`/inbox?${params.toString()}`), {

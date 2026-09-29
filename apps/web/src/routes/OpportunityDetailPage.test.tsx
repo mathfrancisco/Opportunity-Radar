@@ -42,6 +42,8 @@ function opportunity(overrides: Partial<OpportunityDetail> = {}): OpportunityDet
     description: null,
     lifecycleStatus: 'ACTIVE',
     publishedAt: '2026-09-10T00:00:00Z',
+    recencyEffectiveDate: '2026-09-10T00:00:00Z',
+    recencyBasis: 'published',
     createdAt: '2026-09-05T00:00:00Z',
     version: 1,
     compensations: [],

@@ -472,7 +472,7 @@ coleta → (normaliza o run se completo) → `normalize-opportunities` pega o re
   eliminatório `SENIORITY_COMPATIBLE` é **sempre `UNKNOWN`** (`matching/domain.py:423-431`):
   nenhuma vaga é eliminada por senioridade, e JUNIOR/INTERN não são escondidos. "O perfil
   padrão inclui JUNIOR/INTERN" é, portanto, "o perfil não restringe senioridade".
-- **Recência (F20-61).** A Inbox mostra por padrão só vagas dos **últimos 14 dias**
+- **Recência (F20-61, ajustada no F48-16).** A Inbox mostra por padrão só vagas dos **últimos 30 dias** (14 dias na lente "Novas"; referência `published_at ?? source_updated_at ?? first_seen_at`, base persistida em `recency_basis`)
   (`DEFAULT_RECENCY_WINDOW_DAYS`, `domain.py:1172`), usando `published_at` ou, sem ele,
   `first_seen_at` marcado como estimado. Continua visível se (a) for programa com prazo
   (`recency_exempt_program`: internship, estágio/estagiário, trainee, residência/residency,
