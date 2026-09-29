@@ -2,8 +2,9 @@
 
 - **Status:** Medido offline com casos sintéticos/anonimizados. Amostra real de 30 vagas
   `UNKNOWN` com gabarito rotulado em 2026-09-28 (`docs/44-roadmap-fase-20/rotulagem/
-  f20-23-amostra-unknown.md`); falta só a rodada real do Groq contra esse gabarito, fora do
-  escopo deste worker (worker continua desligado, `worker_suggest_enabled: bool = False`).
+  f20-23-amostra-unknown.md`); rodada real do Groq feita em 2026-09-29 (69% geral; ver
+  `../44-roadmap-fase-20/evidencias/precisao-f20-23-2026-09-29.md`); worker continua
+  desligado (`worker_suggest_enabled: bool = False`).
 - **Card:** [F20-23](../44-roadmap-fase-20/fase-20/f20-23-classificacao-assistida.md)
 - **SPEC:** [43-spec-llm-cloud-e-consolidacao.md](../43-spec-llm-cloud-e-consolidacao.md), §6, §6.1
 - **Contexto:** baseline real do acervo (`opportunity-radar`, medição de 7 dias em

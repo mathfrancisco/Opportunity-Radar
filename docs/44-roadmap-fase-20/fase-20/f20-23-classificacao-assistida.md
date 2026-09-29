@@ -1,8 +1,8 @@
 # CARD F20-23 — Classificação e extração assistidas para campos ambíguos
 
-- **Status:** Implementado sem Groq (`feature/f20-23-classificacao`); falta medir
-  precisão no acervo real (ver `docs/pesquisas/sugestoes-f20-23.md`) antes de ligar
-  `worker_suggest_enabled` por padrão.
+- **Status:** Implementado; precisão real medida em 2026-09-29 (69% geral, `work_mode`
+  50%; ver `evidencias/precisao-f20-23-2026-09-29.md`). `worker_suggest_enabled`
+  continua `False`: recomendação é ligar no máximo para `seniority` após ampliar o gabarito.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** B — IA cloud no Groq
 - **Depende de:** F20-22, F20-02, F20-03
@@ -69,9 +69,10 @@ unique (opportunity_id, opportunity_version, field)
 - [x] Nenhuma chamada para campo resolvido por regra (`unknown_fields` filtra antes de
       montar o prompt; `test_suggest_fields_never_persists_a_field_already_resolved_by_rule`).
 - [x] Sugestão sem trecho literal é descartada (`test_suggest_fields_discards_suggestion_without_literal_evidence`).
-- [x] Precisão medida registrada antes de ligar por padrão — medição sintética/offline em
-      `docs/pesquisas/sugestoes-f20-23.md`; medição no acervo real é o passo restante,
-      registrado no mesmo arquivo, e `worker_suggest_enabled` continua `False`.
+- [x] Precisão medida registrada antes de ligar por padrão — medição real com o Groq
+      (`gpt-oss-20b`) contra os 30 casos rotulados em
+      `evidencias/precisao-f20-23-2026-09-29.md` (script `scripts/eval_field_suggestions.py`;
+      nenhum valor canônico alterado); `worker_suggest_enabled` continua `False`.
 
 ## Testes
 
