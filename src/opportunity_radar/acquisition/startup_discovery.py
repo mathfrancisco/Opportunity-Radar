@@ -16,7 +16,7 @@ from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 from urllib.parse import urlsplit
-from uuid import NAMESPACE_URL, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 import httpx
 from sqlalchemy import select
@@ -51,6 +51,7 @@ from opportunity_radar.companies.domain import (
 )
 from opportunity_radar.companies.repository import CompanyRepository
 from opportunity_radar.companies.service import CompanyService
+from opportunity_radar.companies.startup import derive_startup_evidence, record_startup_evidence
 
 DISCOVERY_VIA = "tavily_startup_search"
 
@@ -398,6 +399,27 @@ def _board_url_of(ats: str | None, api_url: str) -> str:
     return ""
 
 
+def _record_evidence(
+    session: Session, company_id: UUID, candidate: StartupCandidate, board: StartupBoard
+) -> None:
+    """Attach the discovery signal to the company (F20-54), whatever the proposal outcome:
+    the sighting is about the company, and identical sightings are idempotent."""
+    derived = derive_startup_evidence(
+        strong_term=candidate.strength == "forte",
+        term=candidate.terms[0] if candidate.terms else "",
+        excerpt=candidate.excerpt,
+    )
+    record_startup_evidence(
+        session,
+        company_id,
+        signal=derived.signal,
+        strength=derived.strength,
+        source_text=derived.source_text,
+        source_url=board.url,
+        batch=derived.batch,
+    )
+
+
 def propose_startups(
     session: Session,
     validated: Iterable[ValidatedStartup],
@@ -410,6 +432,9 @@ def propose_startups(
     acquisition = AcquisitionService(session, registry=registry)
     outcomes: list[StartupProposalOutcome] = []
     items: list[CollectedItem] = []
+    # Evidence attaches to the company, which exists once `reconcile` returned it, so the
+    # wiring point is here (not in `search_startup_boards`, which has no company yet).
+    pending: list[tuple[UUID, StartupCandidate, StartupBoard]] = []
     for entry in validated:
         candidate, board = entry.candidate, entry.board
         if board is None:
@@ -423,6 +448,7 @@ def propose_startups(
         if result.company is None:
             outcomes.append(StartupProposalOutcome(candidate.name, "invalid_name"))
             continue
+        pending.append((result.company.id, candidate, board))
         items.append(
             CollectedItem(
                 source_type="tavily_search",
@@ -440,7 +466,7 @@ def propose_startups(
                 },
             )
         )
-    for item in items:
+    for item, (company_id, candidate, board) in zip(items, pending, strict=True):
         try:
             with session.begin_nested():
                 report = acquisition.propose_from_tavily_evidence(
@@ -451,6 +477,7 @@ def propose_startups(
             outcomes.append(StartupProposalOutcome(item.company_name or "", rejected, item.url))
             continue
         outcome = report.outcomes[0]
+        _record_evidence(session, company_id, candidate, board)
         outcomes.append(
             StartupProposalOutcome(
                 item.company_name or "", outcome.outcome, item.url, outcome.proposal_id

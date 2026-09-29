@@ -7,6 +7,7 @@ audit. This is display/filter metadata — matching, score and verdict never rea
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -103,3 +104,62 @@ def startup_evidence(session: Session, company_id: UUID) -> Sequence[CompanyStar
         .where(CompanyStartupEvidence.company_id == company_id)
         .order_by(CompanyStartupEvidence.captured_at, CompanyStartupEvidence.id)
     ).all()
+
+
+_BRAND_CASED_YC = re.compile(r"\bYC\b")
+_YC_WORD = re.compile(r"\bY[\s-]?Combinator\b", re.IGNORECASE)
+_BATCH = re.compile(
+    r"(?:\bYC\b|Y[\s-]?Combinator)[^.\n]{0,25}?\b([SWXF]\d{2}|[SW]20\d{2})\b",
+    re.IGNORECASE,
+)
+_SERIES_A = re.compile(r"\bSeries\s+A\b", re.IGNORECASE)
+_SEED = re.compile(r"\bseed[\s-]stage\b|\bseed\s+round\b|\bseed[\s-]funded\b", re.IGNORECASE)
+
+
+@dataclass(frozen=True, slots=True)
+class DerivedStartupEvidence:
+    signal: str
+    strength: str
+    source_text: str
+    batch: str | None
+
+
+def _snippet(text: str, start: int, end: int, radius: int = 90) -> str:
+    left, right = max(0, start - radius), min(len(text), end + radius)
+    return " ".join(text[left:right].split())
+
+
+def derive_startup_evidence(
+    *, strong_term: bool, term: str, excerpt: str | None
+) -> DerivedStartupEvidence:
+    """Turn a discovery signal into auditable evidence, from literal text only.
+
+    A `strong_term` (brand term) is recorded strong/`yc_batch` only when the result text
+    itself names Y Combinator/YC; the search term alone does not prove it (SPEC 45 pilot:
+    recruiting agencies match brand queries), so it is stored weak/`other`. A weak (stage)
+    term maps to `series_a`/`seed_stage` when the text says so, else `other`. The batch is
+    read only when it follows the brand in the text (e.g. "YC S24").
+    """
+    text = excerpt or ""
+    if strong_term:
+        brand = _YC_WORD.search(text) or _BRAND_CASED_YC.search(text)
+        if brand is not None:
+            batch = _BATCH.search(text)
+            return DerivedStartupEvidence(
+                "yc_batch",
+                "strong",
+                _snippet(text, brand.start(), brand.end()),
+                batch.group(1).upper() if batch else None,
+            )
+        return DerivedStartupEvidence(
+            "other", "weak", f"busca por {term}; o texto do resultado não cita a marca", None
+        )
+    for signal, pattern in (("series_a", _SERIES_A), ("seed_stage", _SEED)):
+        found = pattern.search(text)
+        if found is not None:
+            return DerivedStartupEvidence(
+                signal, "weak", _snippet(text, found.start(), found.end()), None
+            )
+    return DerivedStartupEvidence(
+        "other", "weak", f"busca por {term}; o texto do resultado não cita o estágio", None
+    )
