@@ -324,6 +324,14 @@ class GreenhouseCollector:
             company_name=company_name,
             location_text=GreenhouseCollector._string((location or {}).get("name")),
             description=GreenhouseCollector._string(job.get("content")),
+            # Card F20-61 checked this collector for a real `published_at` source:
+            # the public Job Board API's job object carries only `updated_at` (this
+            # collector's own `updated_at` above) and no `first_published`/
+            # `posted_at`/`date_posted` field at all — `updated_at` is a
+            # last-modified time, not a publication date, so it is deliberately not
+            # reused as `published_at` here (that would misrepresent a re-touched
+            # posting as freshly published). `published_at` stays `None`; the
+            # recency filter falls back to `first_seen_at`, marked estimated.
             updated_at=GreenhouseCollector._updated_at(job.get("updated_at")),
             raw_payload=job,
             metadata={

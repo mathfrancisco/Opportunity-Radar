@@ -1433,6 +1433,7 @@ def collected_item_v1(
         "description": item.description,
         "published_at": item.published_at.isoformat() if item.published_at else None,
         "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+        "valid_through": item.valid_through.isoformat() if item.valid_through else None,
         # This is part of the interpretation boundary even for legacy/custom collectors
         # that did not supply parser metadata.  Keep the received metadata untouched;
         # the canonical `None` only makes the semantic identity explicit.

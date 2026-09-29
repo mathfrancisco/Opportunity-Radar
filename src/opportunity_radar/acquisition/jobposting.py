@@ -483,6 +483,7 @@ class JobPostingCollector:
             location_text=fields.job_location_text,
             description=fields.description_html,
             published_at=fields.date_posted,
+            valid_through=fields.valid_through,
             raw_payload=fields.raw_node,
             metadata={
                 "job_posting_v1": job_posting_metadata_v1(fields),

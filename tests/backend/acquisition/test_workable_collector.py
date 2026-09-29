@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -52,8 +53,47 @@ def test_parses_listed_jobs_and_preserves_payload() -> None:
     assert items[0].metadata["workplace_type"] == "hybrid"
     assert items[0].metadata["experience"] == "Mid"
     assert items[0].metadata["parser_version"] == "workable-widget-v1"
+    # Card F20-61: `published_on` (the real day the posting went live) threads into
+    # `published_at`, distinct from `created_at` (a draft's creation time).
+    assert items[0].published_at == datetime(2026, 9, 1, tzinfo=UTC)
+    assert items[1].published_at == datetime(2026, 9, 5, tzinfo=UTC)
     assert collection_request.telemetry.http_requests == 1
     assert collection_request.telemetry.items_announced == 2
+
+
+def test_missing_published_on_yields_no_published_at() -> None:
+    payload = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+    payload["jobs"][0].pop("published_on")
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _request: httpx.Response(200, json=payload))
+    )
+    collection_request = CollectionRequest(company_reference="acme", company_name="Acme")
+    try:
+        items = asyncio.run(
+            _collect(WorkableCollector(client=client), collection_request)
+        )
+    finally:
+        asyncio.run(client.aclose())
+    assert items[0].published_at is None
+
+
+def test_invalid_published_on_is_a_schema_change() -> None:
+    payload = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+    payload["jobs"][0]["published_on"] = "not-a-date"
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _request: httpx.Response(200, json=payload))
+    )
+    collection_request = CollectionRequest(company_reference="acme", company_name="Acme")
+    try:
+        items = asyncio.run(
+            _collect(WorkableCollector(client=client), collection_request)
+        )
+    finally:
+        asyncio.run(client.aclose())
+    # A malformed job is skipped and reported, not raised through `discover()`
+    # (same contract as `test_skips_malformed_listed_job_and_reports_it`).
+    assert [item.external_id for item in items] == [payload["jobs"][1]["id"]]
+    assert collection_request.telemetry.invalid_items == 1
 
 
 def test_single_response_has_no_pagination_and_stops_at_max_items() -> None:

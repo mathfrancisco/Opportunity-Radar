@@ -166,6 +166,8 @@ def test_identical_replay_does_not_bump_version() -> None:
         work_mode=candidate.work_mode.value,
         seniority=candidate.seniority.value,
         contract_type=candidate.contract_type.value,
+        recency_exempt_program=candidate.recency_exempt_program,
+        valid_through=candidate.valid_through,
         allowed_countries=list(candidate.allowed_countries),
         allowed_countries_version=candidate.allowed_countries_version,
         role_family=candidate.role_family.value,

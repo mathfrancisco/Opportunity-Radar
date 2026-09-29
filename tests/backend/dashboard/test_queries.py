@@ -435,7 +435,13 @@ def test_inbox_orders_by_priority_recency_and_score() -> None:
         def ids(order: InboxOrder, company_id: UUID | None = None) -> list[UUID]:
             page = list_opportunity_inbox(
                 session,
-                InboxQuery(order=order, company_id=company_id, only_assessed=True, limit=200),
+                InboxQuery(
+                    order=order,
+                    company_id=company_id,
+                    only_assessed=True,
+                    limit=200,
+                    only_recent=False,
+                ),
             )
             return [
                 item.opportunity_id

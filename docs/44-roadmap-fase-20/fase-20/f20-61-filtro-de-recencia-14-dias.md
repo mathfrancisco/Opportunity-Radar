@@ -1,6 +1,6 @@
 # CARD F20-61 — Filtro de recência (14 dias) com exceção para estágio/programas com prazo
 
-- **Status:** Backlog
+- **Status:** Implementado em `feature/f20-61-recencia` (aguardando merge/CI)
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-01, F20-03
@@ -87,22 +87,22 @@ para saber quais coletores têm data real de publicação e qual é o fallback:
 
 ## Critérios de aceite
 
-- [ ] Vaga com `published_at` (ou `first_seen_at` de fallback) há 13 dias aparece na
+- [x] Vaga com `published_at` (ou `first_seen_at` de fallback) há 13 dias aparece na
       listagem padrão (filtro ligado); vaga com 15 dias não aparece — teste cobrindo os dois
       lados do limite de 14 dias, com o mesmo instante de referência controlado no teste
       (não `datetime.now()` sem congelar).
-- [ ] Vaga classificada como estágio/trainee/early-careers/residência com 60 dias desde
+- [x] Vaga classificada como estágio/trainee/early-careers/residência com 60 dias desde
       `published_at`/`first_seen_at` continua aparecendo na listagem padrão (exceção não
       expira aos 14 dias) — teste com título/sinal de estágio e data de 60 dias atrás.
-- [ ] Vaga sem `published_at` (coletor que não expõe essa data) usa `first_seen_at` como
+- [x] Vaga sem `published_at` (coletor que não expõe essa data) usa `first_seen_at` como
       fallback e vem marcada como data estimada na resposta da API (campo booleano ou
       enum explícito) — teste garantindo que o fallback participa do cálculo de recência e
       que a marca de estimativa está presente e correta (`True` no fallback, `False` quando
       `published_at` é real).
-- [ ] Vaga com `valid_through` (prazo de candidatura) no futuro aparece na listagem padrão
+- [x] Vaga com `valid_through` (prazo de candidatura) no futuro aparece na listagem padrão
       mesmo com `published_at` mais antigo que 14 dias, sem precisar ser estágio — teste
       cobrindo `jobposting.py` (única fonte hoje com essa data).
-- [ ] Com o filtro desligado pelo usuário (parâmetro/toggle), toda vaga aparece,
+- [x] Com o filtro desligado pelo usuário (parâmetro/toggle), toda vaga aparece,
       independente de idade, tipo de contrato ou `valid_through` — teste de componente (UI)
       e de contrato de API (parâmetro presente vs. ausente) confirmando que o padrão do
       servidor é filtrar e que o toggle desligado remove o filtro por completo.
@@ -153,3 +153,10 @@ npm run check --prefix apps/web
 
 Todos os critérios de aceite estão marcados com evidência (incluindo os quatro testes de
 limite/exceção/fallback/toggle), o comando de verificação passa e o CI está verde.
+
+## Evidência de implementação
+
+- Testes: `tests/backend/opportunities/test_recency_filter.py` (limites 13/14/15 dias com `now` congelado, exceção de programa aos 60 dias, fallback `first_seen_at` marcado estimado, `valid_through` futuro), `tests/backend/test_recency_filter_http_integration.py` (`/inbox` e `/opportunities`: padrão filtra, `only_recent=false` mostra tudo), `apps/web/src/routes/InboxPage.test.tsx` (toggle ligado por padrão, desliga enviando `only_recent=false`).
+- Filtro SQL em `dashboard/queries.py` (`_recency_condition`) e `opportunities/repository.py`; regra pura em `opportunities/domain.py` (`recency_decision`). Migração `20260928_0053`.
+- `published_at` real agora em: Lever (`createdAt`), Workable (`published_on`), Workday (`postedOn` relativo, limite inferior). Greenhouse (só `updated_at`, não é publicação) e Factorial (sem data) seguem com fallback estimado.
+- F20-73 absorvido: exceção de programa (estágio/trainee/residência/early careers) implementada (`recency_exempt_program`).

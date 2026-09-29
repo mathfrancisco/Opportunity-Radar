@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -65,6 +66,13 @@ def test_parses_listed_jobs_and_preserves_payload() -> None:
     assert items[0].metadata["requisition_id"] == "R12345"
     assert items[0].metadata["posted_on"] == "Posted 3 Days Ago"
     assert items[0].metadata["parser_version"] == "workday-cxs-v1"
+    # Card F20-61: "Posted N Days Ago" is real source data (a relative age), parsed
+    # as a lower-bound `published_at` — never a fabricated exact date.
+    now = datetime.now(UTC)
+    assert items[0].published_at is not None
+    assert abs((now - timedelta(days=3)) - items[0].published_at) < timedelta(minutes=1)
+    assert items[1].published_at is not None
+    assert abs(now - items[1].published_at) < timedelta(minutes=1)  # "Posted Today"
     assert collection_request.telemetry.http_requests == 1
     # Each item carries the offset a resume should pick up from if this run is
     # interrupted right after it (F20-39 "retomada da mesma execução").
@@ -382,3 +390,27 @@ def test_rejects_a_malformed_cursor() -> None:
     finally:
         asyncio.run(client.aclose())
     assert error.value.code is AcquisitionErrorCode.INVALID_CONFIGURATION
+
+
+@pytest.mark.parametrize(
+    ("posted_on", "expected_days_ago"),
+    [
+        ("Posted Today", 0),
+        ("Posted Yesterday", 1),
+        ("Posted 3 Days Ago", 3),
+        ("Posted 1 Day Ago", 1),
+        ("Posted 30+ Days Ago", 30),
+    ],
+)
+def test_parse_posted_on_reads_the_relative_age(
+    posted_on: str, expected_days_ago: int
+) -> None:
+    now = datetime.now(UTC)
+    parsed = WorkdayCollector._parse_posted_on(posted_on)
+    assert parsed is not None
+    assert abs((now - timedelta(days=expected_days_ago)) - parsed) < timedelta(minutes=1)
+
+
+@pytest.mark.parametrize("posted_on", [None, "", "Applications closing soon", 42])
+def test_parse_posted_on_returns_none_for_unknown_shapes(posted_on: object) -> None:
+    assert WorkdayCollector._parse_posted_on(posted_on) is None

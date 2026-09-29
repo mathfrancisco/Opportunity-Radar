@@ -152,7 +152,12 @@ function ItemCard({ item }: { item: InboxItem }) {
         </div>
         <div>
           <dt className="text-muted">Publicada</dt>
-          <dd className="mt-1 font-medium">{formatDate(item.publishedAt)}</dd>
+          <dd className="mt-1 font-medium">
+            {formatDate(item.recencyEffectiveDate)}
+            {item.dateIsEstimated && (
+              <span className="ml-1 text-xs font-normal text-subtle">(estimada)</span>
+            )}
+          </dd>
         </div>
       </dl>
 
@@ -339,6 +344,10 @@ export function InboxPage() {
   const salaryMax = params.get('salary_max') ?? ''
   const source = params.get('source') ?? ''
   const allowedCountry = params.get('allowed_country') ?? ''
+  // Card F20-61: absent parameter means "filtered", matching the server's own
+  // default — only an explicit `only_recent=false` (the "mostrar tudo" click) turns
+  // the filter off.
+  const onlyRecent = params.get('only_recent') !== 'false'
 
   const inbox = useInbox({
     page,
@@ -359,6 +368,7 @@ export function InboxPage() {
     salaryMax: salaryMax || undefined,
     sourceDefinitionIds: source ? [source] : undefined,
     allowedCountry: allowedCountry || undefined,
+    onlyRecent,
   })
   const totalPages = inbox.data ? Math.max(1, Math.ceil(inbox.data.total / pageSize)) : 0
 
@@ -560,6 +570,19 @@ export function InboxPage() {
           type="checkbox"
         />
         Somente oportunidades já avaliadas
+      </label>
+
+      <label className="mt-2 flex items-center gap-2 text-sm text-subtle">
+        <input
+          checked={onlyRecent}
+          className="h-4 w-4"
+          onChange={(event) =>
+            update({ only_recent: event.target.checked ? null : 'false' })
+          }
+          type="checkbox"
+        />
+        Mostrar só vagas dos últimos 14 dias (estágio, trainee e vagas com prazo de
+        candidatura continuam visíveis)
       </label>
 
       <fieldset className="mt-4" aria-describedby="area-filter-hint">

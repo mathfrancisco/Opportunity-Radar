@@ -328,6 +328,11 @@ class CollectedItem:
     description: str | None = None
     published_at: datetime | None = None
     updated_at: datetime | None = None
+    #: Explicit application-window deadline (schema.org `JobPosting.validThrough`,
+    #: card F20-61). `None` for every collector that does not expose one — never
+    #: guessed. A future date is a recency-filter exception independent of contract
+    #: type or age.
+    valid_through: datetime | None = None
     cursor: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
