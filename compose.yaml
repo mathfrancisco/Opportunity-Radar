@@ -83,6 +83,7 @@ services:
       retries: 12
       start_period: 5s
     networks: [app_net]
+    restart: unless-stopped
 
   migrate:
     build:
@@ -115,6 +116,7 @@ services:
       retries: 6
       start_period: 10s
     networks: [app_net]
+    restart: unless-stopped
 
   worker:
     build:
@@ -135,6 +137,7 @@ services:
       retries: 6
       start_period: 5s
     networks: [app_net]
+    restart: unless-stopped
 
   frontend:
     build:
@@ -152,6 +155,7 @@ services:
       retries: 6
       start_period: 5s
     networks: [app_net]
+    restart: unless-stopped
 
 networks:
   app_net:
