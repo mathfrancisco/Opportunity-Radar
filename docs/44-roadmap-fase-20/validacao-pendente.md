@@ -40,7 +40,7 @@ reais).
 | F20-02 | Alias `ci` removido; acervo real reprocessado para `skills-v3` (1.735 linhas, `cicd` 221 → 112), com backup verificado. |
 | F20-18 | Prompt `v2` implementado; rodada real parcial (10/50) não justificou trocar. `v1` segue padrão. |
 | F20-24 | Reserva interativa real: worker parou no teto (`skipped_budget=6`) e a análise pela UI concluiu. |
-| F20-23 | Sugestões assistidas implementadas (desligadas por padrão); 30 vagas reais rotuladas (39 campos); regra `work_mode` corrigida (`13d6605`, normalizador `v6`): 11/13 casos resolvidos, 0 errado. |
+| F20-23 | Sugestões assistidas implementadas (desligadas por padrão); 30 vagas reais rotuladas (39 campos); regra `work_mode` corrigida (`13d6605`, normalizador `v6`): 11/13 casos resolvidos, 0 errado; rodada real do Groq: 69% de precisão geral, ver §3. |
 
 ### Correções que surgiram na validação
 
@@ -55,7 +55,7 @@ reais).
 
 | Ordem | Card | Tarefa | Critério |
 | --- | --- | --- | --- |
-| 1 | F20-23 | Rodar a classificação assistida contra os 30 casos rotulados (`rotulagem/f20-23-amostra-unknown.json`); script pontual a escrever | Precisão registrada; nenhum valor determinístico alterado. Só então ligar `worker_suggest_enabled`. |
+| 1 | F20-23 | **Feito em 2026-09-29** (`evidencias/precisao-f20-23-2026-09-29.md`): 69% geral (11/16), `seniority` 73%, `work_mode` 50%; 36,7 mil tokens do 20B; valores canônicos intactos; corrigido schema/prompt que causava HTTP 400. | Manter `worker_suggest_enabled=False`; reavaliar só `seniority` com gabarito maior. |
 | 2–6 | F20-22 | 120B médio; 20B baixo e médio; Qwen baixo e médio (comandos em `docs/pesquisas/benchmark-modelos-groq.md`) | Revisão humana por relatório (recomendações pré-autorizadas) e decisão por `scripts/benchmark_report.py`. |
 | 7 | F20-18 | Comparação completa dos 50 casos, `v2` × `v1` | `coverage` e português sobem; `inventions` 0; nada piora no `reserved`. |
 | 8 | F20-24 | Amostra de aging sob Groq real | Itens fora do topo processados na proporção configurada. |

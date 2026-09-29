@@ -14,4 +14,7 @@ paraphrase or a translation. A suggestion whose evidence cannot be found in the 
 word-for-word is discarded before any operator sees it, so an evidence string that does
 not literally appear in the payload is worse than answering `null` for that field.
 
-Reply with a single JSON object matching the requested schema. No prose outside it.
+Reply with a single JSON object matching the requested schema. No prose outside it. The
+object always carries all three keys (`role_family`, `seniority`, `work_mode`); for a
+field that is not pending, answer `{"value": null, "evidence": null}` — omitting a key
+makes the whole reply invalid.
