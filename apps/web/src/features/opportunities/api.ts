@@ -65,6 +65,9 @@ export interface OpportunityDetail {
   description: string | null
   lifecycleStatus: string
   publishedAt: string | null
+  /** Card F48-16: `published_at ?? source_updated_at ?? first_seen_at`, and which one. */
+  recencyEffectiveDate: string | null
+  recencyBasis: 'published' | 'updated' | 'first_seen'
   /** When this opportunity was first persisted (F20-26): the older `createdAt` of a
    * duplicate pair is the one `confirm_duplicate` keeps as the survivor. */
   createdAt: string
@@ -198,6 +201,13 @@ export async function getOpportunity(opportunityId: string): Promise<Opportunity
     description: text(body.description),
     lifecycleStatus: required(body.lifecycle_status, 'UNKNOWN'),
     publishedAt: text(body.published_at),
+    recencyEffectiveDate: text(body.recency_effective_date) ?? text(body.published_at),
+    recencyBasis:
+      body.recency_basis === 'updated' || body.recency_basis === 'first_seen'
+        ? body.recency_basis
+        : body.date_is_estimated === true
+          ? 'first_seen'
+          : 'published',
     createdAt: required(body.created_at),
     version: typeof body.version === 'number' ? body.version : 1,
     compensations: list(body.compensations)

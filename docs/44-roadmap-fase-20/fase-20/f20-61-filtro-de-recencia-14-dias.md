@@ -1,4 +1,5 @@
 # CARD F20-61 — Filtro de recência (14 dias) com exceção para estágio/programas com prazo
+> **Atualização F48-16 (2026-09-29):** a janela padrão passou de 14 para **30 dias** sobre `published_at ?? source_updated_at ?? first_seen_at` (spec 48, decisão 3). Os 14 dias seguem como a lente "Novas (14 dias)" (`recency_window_days=14`); a exceção de programa/prazo continua. Os textos e critérios abaixo descrevem o F20-61 original (14 dias); os testes foram atualizados para 30 dias e para a lente de 14. Ver `docs/48-roadmap-mais-vagas/f48-16-recencia.md`.
 
 - **Status:** Feito — mesclado em `feature/f20-groq-e-consolidacao` (`5a1e062`), CI verde em `13d6605`; volume real de junior/estágio/programa-com-prazo (nota do item 5, não critério de aceite) segue no backlog da próxima fase (`validacao-pendente.md` §7)
 - **Fase:** 20 — IA cloud e consolidação

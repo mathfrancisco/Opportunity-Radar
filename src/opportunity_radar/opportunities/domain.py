@@ -1166,21 +1166,60 @@ def build_candidate(value: NormalizationInput) -> CanonicalCandidate:
     return normalize_candidate(value)
 
 
-#: Card F20-61: the default search shows only a posting from the last 14 days. Not a
-#: matching/scoring parameter — never read by `score`, eligibility or verdict (same
-#: Phase 20 invariant `opportunity_fingerprint`/role-family classification follow).
-DEFAULT_RECENCY_WINDOW_DAYS = 14
+#: Card F20-61 / F48-16: the default search shows only a posting whose reference date
+#: (`recency_reference`) is inside this window. Not a matching/scoring parameter — never
+#: read by `score`, eligibility or verdict (same Phase 20 invariant
+#: `opportunity_fingerprint`/role-family classification follow). Decision 3 (spec 48 §9)
+#: moved the default from 14 to 30 days; 14 stays available as the "Novas" lens.
+DEFAULT_RECENCY_WINDOW_DAYS = 30
+NEW_RECENCY_WINDOW_DAYS = 14
+
+
+class RecencyBasis(StrEnum):
+    """Which date the recency reference came from (persisted as `recency_basis`)."""
+
+    PUBLISHED = "published"
+    UPDATED = "updated"
+    FIRST_SEEN = "first_seen"
+
+
+def recency_reference(
+    *,
+    published_at: datetime | None,
+    source_updated_at: datetime | None,
+    first_seen_at: datetime | None,
+) -> tuple[datetime | None, RecencyBasis]:
+    """The single recency rule (card F48-16): `published_at ?? source_updated_at ??
+    first_seen_at`, plus which of the three won.
+
+    SQL mirror: `dashboard.queries._recency_reference_expression` (COALESCE in the same
+    order); `tests/backend/opportunities/test_recency_filter.py` locks the two together.
+    """
+    if published_at is not None:
+        return published_at, RecencyBasis.PUBLISHED
+    if source_updated_at is not None:
+        return source_updated_at, RecencyBasis.UPDATED
+    return first_seen_at, RecencyBasis.FIRST_SEEN
+
+
+def recency_basis_of(
+    *, published_at: datetime | None, source_updated_at: datetime | None
+) -> RecencyBasis:
+    """The persisted basis. `first_seen_at` always exists, so it never affects the basis."""
+    return recency_reference(
+        published_at=published_at, source_updated_at=source_updated_at, first_seen_at=None
+    )[1]
 
 
 @dataclass(frozen=True, slots=True)
 class RecencyDecision:
     """Whether one opportunity belongs in the default (recency-filtered) listing.
 
-    `effective_date` is `published_at` when the source provided one, else
-    `first_seen_at` (`date_is_estimated=True` in that case) — never a fabricated date.
-    `visible` is `True` when any of three independent conditions holds: the effective
-    date is inside the window, the posting is a time-boxed entry program (estágio/
-    trainee/early-careers/residência), or `valid_through` names an application
+    `effective_date` is `published_at ?? source_updated_at ?? first_seen_at` with
+    `basis` telling which (`date_is_estimated` whenever it is not `published`) — never a
+    fabricated date. `visible` is `True` when any of three independent conditions holds:
+    the effective date is inside the window, the posting is a time-boxed entry program
+    (estágio/trainee/early-careers/residência), or `valid_through` names an application
     deadline still in the future. Toggling the filter off (card F20-61 scope item 3)
     is the caller's job — this always answers "would the filter show it", regardless
     of whether the caller applies that answer.
@@ -1189,6 +1228,7 @@ class RecencyDecision:
     visible: bool
     effective_date: datetime | None
     date_is_estimated: bool
+    basis: RecencyBasis = RecencyBasis.FIRST_SEEN
 
 
 def recency_decision(
@@ -1199,18 +1239,19 @@ def recency_decision(
     recency_exempt_program: bool,
     now: datetime,
     window_days: int = DEFAULT_RECENCY_WINDOW_DAYS,
+    source_updated_at: datetime | None = None,
 ) -> RecencyDecision:
-    """Pure, deterministic recency calculation (card F20-61, scope item 3).
+    """Pure, deterministic recency calculation (cards F20-61 and F48-16).
 
     `now` is always supplied by the caller — this function never reads the clock, so
     tests can freeze time and cover both sides of the window boundary exactly.
     """
-    if published_at is not None:
-        effective_date: datetime | None = published_at
-        date_is_estimated = False
-    else:
-        effective_date = first_seen_at
-        date_is_estimated = first_seen_at is not None
+    effective_date, basis = recency_reference(
+        published_at=published_at,
+        source_updated_at=source_updated_at,
+        first_seen_at=first_seen_at,
+    )
+    date_is_estimated = basis is not RecencyBasis.PUBLISHED and effective_date is not None
     within_window = (
         effective_date is not None and effective_date >= now - timedelta(days=window_days)
     )
@@ -1220,4 +1261,5 @@ def recency_decision(
         visible=visible,
         effective_date=effective_date,
         date_is_estimated=date_is_estimated,
+        basis=basis,
     )

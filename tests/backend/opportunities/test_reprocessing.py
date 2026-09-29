@@ -161,6 +161,7 @@ def test_identical_replay_does_not_bump_version() -> None:
         description=candidate.description,
         published_at=candidate.published_at,
         source_updated_at=candidate.source_updated_at,
+        recency_basis="updated",
         fingerprint=candidate.fingerprint,
         fingerprint_version=candidate.fingerprint_version,
         work_mode=candidate.work_mode.value,

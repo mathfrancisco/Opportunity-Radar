@@ -24,6 +24,7 @@ from opportunity_radar.opportunities.domain import (
     OpportunityStatus,
     SkillClassification,
     build_candidate,
+    recency_basis_of,
     seniority_classification,
 )
 from opportunity_radar.opportunities.duplicates import find_title_location_window_candidates
@@ -991,6 +992,10 @@ def _new_opportunity(candidate: CanonicalCandidate, *, first_seen_at: datetime) 
         lifecycle_status=OpportunityStatus.DISCOVERED.value,
         published_at=candidate.published_at,
         source_updated_at=candidate.source_updated_at,
+        recency_basis=recency_basis_of(
+            published_at=candidate.published_at,
+            source_updated_at=candidate.source_updated_at,
+        ).value,
         # Card F20-61: set once, from the same instant that seeds this opportunity's
         # first `SourceOccurrenceModel.first_seen_at` — never updated afterwards, so
         # it stays "when the radar first saw this", not "when it was last touched".
@@ -1078,6 +1083,14 @@ def _apply_evidence_fields(opportunity: OpportunityModel, candidate: CanonicalCa
     changed |= _set_if_changed(opportunity, "description", candidate.description)
     changed |= _set_if_changed(opportunity, "published_at", candidate.published_at)
     changed |= _set_if_changed(opportunity, "source_updated_at", candidate.source_updated_at)
+    changed |= _set_if_changed(
+        opportunity,
+        "recency_basis",
+        recency_basis_of(
+            published_at=candidate.published_at,
+            source_updated_at=candidate.source_updated_at,
+        ).value,
+    )
     changed |= _set_if_changed(opportunity, "valid_through", candidate.valid_through)
     changed |= _set_if_changed(opportunity, "fingerprint", candidate.fingerprint)
     changed |= _set_if_changed(opportunity, "fingerprint_version", candidate.fingerprint_version)

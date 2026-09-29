@@ -310,7 +310,7 @@ describe('InboxPage recency toggle', () => {
     await flush()
 
     const toggle = Array.from(container.querySelectorAll('label')).find((label) =>
-      label.textContent?.includes('Mostrar só vagas dos últimos 14 dias'),
+      label.textContent?.includes('Mostrar só vagas dos últimos 30 dias'),
     )
     const checkbox = toggle?.querySelector('input') as HTMLInputElement
     expect(checkbox.checked).toBe(true)
@@ -355,13 +355,118 @@ describe('InboxPage recency toggle', () => {
     expect(container.textContent).toContain('(estimada)')
 
     const toggle = Array.from(container.querySelectorAll('label')).find((label) =>
-      label.textContent?.includes('Mostrar só vagas dos últimos 14 dias'),
+      label.textContent?.includes('Mostrar só vagas dos últimos 30 dias'),
     )
     const checkbox = toggle?.querySelector('input') as HTMLInputElement
     act(() => checkbox.click())
     await flush()
 
     expect(calledUrls.some((url) => url.includes('/inbox') && url.includes('only_recent=false'))).toBe(
+      true,
+    )
+  })
+})
+
+/** Card F48-16: the recency lens is a FilterPill, sends the window/lens parameters, and
+ * a date that is not the source's own publication date reads "(estimada)" with a hint. */
+describe('InboxPage recency lenses', () => {
+  function stubInbox(items: unknown[], calledUrls: string[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        calledUrls.push(url)
+        if (url.includes('/inbox')) {
+          return new Response(
+            JSON.stringify({
+              items,
+              total: items.length,
+              offset: 0,
+              limit: 25,
+              order: 'priority',
+              off_filter_count: 0,
+            }),
+            { status: 200 },
+          )
+        }
+        return new Response(JSON.stringify([]), { status: 200 })
+      }),
+    )
+  }
+
+  function choose(select: HTMLSelectElement, value: string) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+    act(() => {
+      setter?.call(select, value)
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+  }
+
+  it('oferece as lentes como FilterPill e envia recency_window_days / open_at_source', async () => {
+    const calledUrls: string[] = []
+    stubInbox([inboxItem()], calledUrls)
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush()
+
+    const lens = container.querySelector('#inbox-recency-lens') as HTMLSelectElement
+    expect(lens).not.toBeNull()
+    expect(Array.from(lens.options).map((option) => option.textContent)).toEqual([
+      'Últimos 30 dias',
+      'Novas (14 dias)',
+      'Abertas na fonte',
+    ])
+    expect(calledUrls.every((url) => !url.includes('recency_window_days'))).toBe(true)
+
+    choose(lens, 'novas')
+    await flush()
+    expect(
+      calledUrls.some((url) => url.includes('/inbox') && url.includes('recency_window_days=14')),
+    ).toBe(true)
+
+    choose(container.querySelector('#inbox-recency-lens') as HTMLSelectElement, 'abertas')
+    await flush()
+    expect(
+      calledUrls.some((url) => url.includes('/inbox') && url.includes('open_at_source=true')),
+    ).toBe(true)
+  })
+
+  it('marca "(estimada)" quando a base é atualização da fonte, não quando é publicação', async () => {
+    const calledUrls: string[] = []
+    stubInbox(
+      [
+        inboxItem({
+          opportunity_id: 'opp-upd',
+          title: 'Atualizada na fonte',
+          published_at: null,
+          recency_effective_date: '2026-09-25T00:00:00Z',
+          date_is_estimated: true,
+          recency_basis: 'updated',
+        }),
+        inboxItem({
+          opportunity_id: 'opp-pub',
+          title: 'Publicada de verdade',
+          recency_basis: 'published',
+        }),
+      ],
+      calledUrls,
+    )
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush()
+
+    const hints = Array.from(container.querySelectorAll('[title]')).filter((node) =>
+      node.textContent?.includes('(estimada)'),
+    )
+    expect(hints.length).toBeGreaterThan(0)
+    expect(hints.every((node) => node.getAttribute('title')?.includes('última atualização'))).toBe(
+      true,
+    )
+    // Only the "updated" item is estimated: the published one adds no "(estimada)".
+    const rowsWithEstimate = Array.from(container.querySelectorAll('tr')).filter((row) =>
+      row.textContent?.includes('(estimada)'),
+    )
+    expect(rowsWithEstimate.every((row) => row.textContent?.includes('Atualizada na fonte'))).toBe(
       true,
     )
   })

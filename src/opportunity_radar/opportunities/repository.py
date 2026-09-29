@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import and_, func, or_, select
@@ -33,6 +34,30 @@ class RawItemEvidence:
     company_id: UUID | None
     company_name: str | None
     source_configuration: dict[str, object]
+
+
+def recency_reference_expression() -> Any:
+    """SQL side of `domain.recency_reference` (card F48-16): the same
+    `published_at ?? source_updated_at ?? first_seen_at` order, as a COALESCE."""
+    return func.coalesce(
+        OpportunityModel.published_at,
+        OpportunityModel.source_updated_at,
+        OpportunityModel.first_seen_at,
+    )
+
+
+def recency_condition(*, now: datetime, window_days: int) -> Any:
+    """SQL side of `domain.recency_decision` (cards F20-61, F48-16): reference date inside
+    the window, OR a time-boxed program, OR a still-open `valid_through`. One definition,
+    shared by `/opportunities` and the Inbox (`dashboard.queries._recency_condition`);
+    `tests/backend/dashboard/test_recency_mirror_integration.py` compares it with the
+    pure function over the same input grid."""
+    within_window = recency_reference_expression() >= now - timedelta(days=window_days)
+    has_open_deadline = and_(
+        OpportunityModel.valid_through.is_not(None),
+        OpportunityModel.valid_through > now,
+    )
+    return or_(within_window, OpportunityModel.recency_exempt_program.is_(True), has_open_deadline)
 
 
 class OpportunityRepository:
@@ -358,27 +383,9 @@ class OpportunityRepository:
         if company_id:
             filters.append(OpportunityModel.canonical_company_id == company_id)
         if only_recent:
-            reference = now or datetime.now(UTC)
-            cutoff = reference - timedelta(days=recency_window_days)
-            within_window = or_(
-                and_(
-                    OpportunityModel.published_at.is_not(None),
-                    OpportunityModel.published_at >= cutoff,
-                ),
-                and_(
-                    OpportunityModel.published_at.is_(None),
-                    OpportunityModel.first_seen_at >= cutoff,
-                ),
-            )
-            has_open_deadline = and_(
-                OpportunityModel.valid_through.is_not(None),
-                OpportunityModel.valid_through > reference,
-            )
             filters.append(
-                or_(
-                    within_window,
-                    OpportunityModel.recency_exempt_program.is_(True),
-                    has_open_deadline,
+                recency_condition(
+                    now=now or datetime.now(UTC), window_days=recency_window_days
                 )
             )
         items = list(
