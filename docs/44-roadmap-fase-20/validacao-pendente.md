@@ -115,6 +115,8 @@ reais).
 | Rotacionar a chave Groq usada nas rodadas | Com o usuário |
 | [F20-61 — Filtro de recência (14 dias) com exceção para estágio/programas com prazo](fase-20/f20-61-filtro-de-recencia-14-dias.md) | Implementado em `feature/f20-61-recencia`; critérios de aceite cobertos por teste (backend + componente). Volume real de vaga junior/estágio/programa-com-prazo no acervo real ainda não foi medido (item 5 do escopo do card, nota explícita, não critério de aceite) |
 | [F20-70 — Fechar lacunas de palavra-chave do normalizador de senioridade](fase-20/f20-70-lacunas-de-palavra-chave-senioridade.md) | Regras e testes implementados em `feature/f20-61-recencia` (`seniority-v2` → `seniority-v3`); reprocessamento do acervo real (critério de aceite 4 do card) não executado por instrução explícita do coordenador desta sessão de não tocar no acervo real |
+| [F20-74 — Workday: parar no `total` anunciado (cap de 2000)](fase-20/f20-74-workday-paginacao-cap-2000.md) | Correção e teste de regressão feitos; a re-execução da fonte Accenture na `f20manual` **não foi feita** (a ação de copiar o coletor corrigido para o container do worker foi negada pelo classificador da sessão): rodar depois de `docker cp`/rebuild da `f20manual` com este código e conferir `SUCCEEDED` (~2000 itens) |
+| [F20-72 — Perfil padrão inclui JUNIOR/INTERN](fase-20/f20-72-perfil-padrao-inclui-junior-intern.md) | Fechado sem mudança de código de produção; testes de domínio adicionados |
 
 ## 6. Último card
 

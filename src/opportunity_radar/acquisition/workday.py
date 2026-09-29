@@ -125,6 +125,7 @@ class WorkdayCollector:
     ) -> AsyncIterator[CollectedItem]:
         seen_pages: set[tuple[str, ...]] = set()
         total_fetched = 0
+        board_total: int | None = None
         # A resumed run (F20-39 `resume_of_run_id`) supplies an explicit cursor: the offset
         # to pick up from, never derived automatically. A fresh run has no cursor and
         # starts at 0, same as before this card.
@@ -134,12 +135,20 @@ class WorkdayCollector:
                 None if request.max_items is None else request.max_items - emitted
             )
             limit = min(_PAGE_SIZE, remaining) if remaining is not None else _PAGE_SIZE
+            if board_total is not None and offset >= board_total:
+                # Workday serves at most `total` (capped at 2000) results; past that it
+                # wraps back to the first page instead of ending, so the announced total
+                # is the end of the board, not a page repeat.
+                request.telemetry.record_items_announced(total_fetched)
+                return
             try:
-                postings = await self._fetch_page(
+                postings, total = await self._fetch_page(
                     client, tenant, site, pod, offset, limit, request
                 )
             except NotModifiedResponse:
                 return
+            if board_total is None and total is not None and offset == 0:
+                board_total = total
             page_signature = tuple(str(posting.get("externalPath")) for posting in postings)
             if postings and page_signature in seen_pages:
                 raise AcquisitionError(
@@ -230,7 +239,7 @@ class WorkdayCollector:
         offset: int,
         limit: int,
         request: CollectionRequest,
-    ) -> list[Mapping[str, Any]]:
+    ) -> tuple[list[Mapping[str, Any]], int | None]:
         url = f"https://{tenant}.{pod}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs"
         policy = request.network_policy
         max_retries = policy.max_retries if policy is not None else self._max_retries
@@ -274,7 +283,7 @@ class WorkdayCollector:
                 record_conditional_response(request, response)
                 error = self._response_error(response)
                 if error is None:
-                    return self._postings(response)
+                    return self._postings(response), self._total(response)
             except httpx.TimeoutException:
                 error = AcquisitionError(
                     AcquisitionErrorCode.SOURCE_TIMEOUT,
@@ -360,6 +369,16 @@ class WorkdayCollector:
                 if math.isfinite(parsed_seconds):
                     delay = max(0.0, parsed_seconds)
         return min(delay, maximum)
+
+    @staticmethod
+    def _total(response: httpx.Response) -> int | None:
+        # Workday only states `total` on the offset-0 page (later pages carry 0) and caps
+        # it at 2000 on huge boards, so it is read leniently and only trusted when > 0.
+        payload = response.json()
+        total = payload.get("total") if isinstance(payload, dict) else None
+        if isinstance(total, bool) or not isinstance(total, int) or total <= 0:
+            return None
+        return total
 
     @staticmethod
     def _postings(response: httpx.Response) -> list[Mapping[str, Any]]:
