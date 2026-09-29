@@ -180,8 +180,9 @@ def analyze_pending(
 
     `worker_requests_ceiling`, when given, is a day-request budget lower than the
     adapter's own `QuotaGuard` limit (`settings.ai_daily_requests_soft_limit -
-    ai_interactive_reserve_requests`, card F20-24): before each call, a zero-token probe
-    reservation checks the day counter against it and is released immediately either way,
+    ai_interactive_reserve_requests`, card F20-24): before each call, a probe
+    reservation of the primary model's per-call token estimate (F48-02) checks the day
+    counter against it and is released immediately either way,
     so the check never itself consumes quota. An assessment that fails the probe is
     skipped with no attempt recorded — the retry budget never counts a budget defer, and
     the opportunity is back in the next pass, not lost.
@@ -210,11 +211,15 @@ def analyze_pending(
                         extra={"job": "warm-up", "reason": "idle", "load_ms": metrics.load_ms},
                     )
             quota_guard = getattr(adapter, "quota_guard", None)
+            # The probe reserves what one call of the primary model can cost (0 for an
+            # adapter that does not say): a zero-token probe passes with 100 tokens left
+            # and the real call then fails as QUOTA_EXHAUSTED, one wasted attempt each.
+            probe_tokens = int(getattr(adapter, "probe_tokens", 0) or 0)
             completed = reused = degraded = claimed_elsewhere = failed = skipped_budget = 0
             for assessment_id in pending:
                 if worker_requests_ceiling is not None and quota_guard is not None:
                     probe = quota_guard.reserve(
-                        adapter.model, 0, ceiling_requests=worker_requests_ceiling
+                        adapter.model, probe_tokens, ceiling_requests=worker_requests_ceiling
                     )
                     if probe is None:
                         skipped_budget += 1
