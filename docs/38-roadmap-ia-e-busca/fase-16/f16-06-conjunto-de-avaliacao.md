@@ -1,6 +1,6 @@
 # CARD F16-06 — Conjunto de avaliação e `make eval-analysis`
 
-- **Status:** Backlog
+- **Status:** Em revisão — harness pronto; casos e baselines na máquina de referência
 - **Fase:** 16 — Camada local de IA
 - **Depende de:** F16-03
 - **Bloqueia:** F16-07, F16-11, F16-12
@@ -8,11 +8,11 @@
 
 ## Resultado
 
-Existe um conjunto fixo de 30 casos e um comando que roda qualquer combinação de prompt e
+Existe um conjunto fixo de no mínimo 30 casos e um comando que roda qualquer combinação de prompt e
 modelo contra ele, com nota por critério e comparação com o último baseline. A partir
 daqui, trocar prompt, modelo ou quantização é decisão com número.
 
-## Contexto
+## Contexto inicial (antes da implementação)
 
 `prompts/opportunity_analysis/v1/examples.json` guarda saídas de referência lidas só por
 teste. Não há como dizer se um prompt `v2` é melhor que o `v1`, nem se o `qwen3:8b` é
@@ -20,7 +20,7 @@ melhor que o `llama3.2:3b` — só impressão.
 
 ## Escopo
 
-- **Casos:** 30 pares vaga/perfil reais, anonimizados, em
+- **Casos:** no mínimo 30 pares vaga/perfil reais, anonimizados, em
   `prompts/opportunity_analysis/eval/cases/NN-descricao.json`. Cada caso guarda o payload
   de entrada completo (snapshot, perfil e, quando existir, o bloco `posting`) e o
   **gabarito**:
@@ -29,7 +29,8 @@ melhor que o `llama3.2:3b` — só impressão.
   - `must_not_claim`: afirmações que seriam invenção (ex.: remuneração não informada);
   - `language: pt-BR`.
 - **Cobertura dos casos:** vaga forte, vaga fraca, ambígua, descrição longa, descrição em
-  inglês, sem descrição, remuneração ausente, país não informado.
+  inglês, sem descrição, remuneração ausente, país não informado, negações,
+  requisitos opcionais, contradições e instruções maliciosas no anúncio.
 - **Pontuação por código** (`scripts/eval_analysis.py`):
   - fidelidade: fração dos `evidence` que aparecem literalmente no payload (a partir do
     schema `v2`; no `v1`, não se aplica);
@@ -57,15 +58,24 @@ melhor que o `llama3.2:3b` — só impressão.
   descrições; manter o conteúdo técnico.
 - O comando usa o mesmo adaptador de produção com as mesmas `Settings`, para medir o que
   vai rodar de verdade.
-- `seed` fixo (F16-02) torna duas rodadas do mesmo par comparáveis; rodar cada caso uma
-  vez só.
+- Separar casos de ajuste e reservados por grupo de vagas semelhantes. Registrar
+  ids/hash, payload, configuração e rubrica; mudanças no conjunto são versionadas.
+- Seed fixo não garante saída idêntica. Rodar casos críticos três vezes, sem cache
+  em nenhuma camada, e reportar variação. Avaliação não aquece o cache de produção.
+- Presença de trecho é validação sintática. Revisão humana julga se a origem correta
+  sustenta a afirmação; casamento de termos não resolve negação. Métrica ausente
+  em v1 é não comparável; exigir acerto contra gabarito no v2.
 
 ## Critérios de aceite
 
-- [ ] 30 casos anonimizados, com gabarito, cobrindo os tipos listados.
+- [ ] No mínimo 30 casos anonimizados, com gabarito, cobrindo os tipos listados.
 - [ ] `make eval-analysis` gera relatório JSON e Markdown com nota por critério e por caso.
 - [ ] A comparação com baseline mostra melhora, piora ou empate por critério.
 - [ ] Os dois baselines iniciais estão em `docs/pesquisas/`.
+
+- [ ] Relatório separa desenvolvimento e casos reservados sem vazamento por duplicata.
+- [ ] Negação e exigência opcional não passam por mera presença de palavra-chave.
+- [ ] Rubrica humana, configuração, dispersão e execução sem cache são registradas.
 
 ## Verificação
 

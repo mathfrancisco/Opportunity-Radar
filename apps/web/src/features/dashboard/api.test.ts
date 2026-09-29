@@ -110,6 +110,49 @@ describe('getInbox', () => {
     respond({ total: 0 })
     await expect(getInbox({ page: 1, pageSize: 25 })).rejects.toThrow('inbox inválida')
   })
+
+  it('expõe o selo de possível duplicata (F20-26)', async () => {
+    respond({
+      items: [
+        { opportunity_id: 'opportunity-1', has_pending_duplicate: true },
+        { opportunity_id: 'opportunity-2', has_pending_duplicate: false },
+        { opportunity_id: 'opportunity-3' },
+      ],
+      total: 3,
+      offset: 0,
+      limit: 25,
+    })
+
+    const page = await getInbox({ page: 1, pageSize: 25 })
+
+    expect(page.items[0].hasPendingDuplicate).toBe(true)
+    expect(page.items[1].hasPendingDuplicate).toBe(false)
+    // Absent field never becomes an implicit "has a duplicate" claim.
+    expect(page.items[2].hasPendingDuplicate).toBe(false)
+  })
+
+  it('lê o resumo de startup e nunca inventa um sinal ausente (F20-54)', async () => {
+    respond({
+      items: [
+        { opportunity_id: 'o1', startup_strength: 'strong', startup_batch: 'S24' },
+        { opportunity_id: 'o2', startup_strength: 'weak', startup_batch: null },
+        { opportunity_id: 'o3', startup_strength: 'bogus' },
+        { opportunity_id: 'o4' },
+      ],
+      total: 4,
+      offset: 0,
+      limit: 25,
+    })
+
+    const page = await getInbox({ page: 1, pageSize: 25 })
+
+    expect(page.items.map((item) => [item.startupStrength, item.startupBatch])).toEqual([
+      ['strong', 'S24'],
+      ['weak', null],
+      [null, null],
+      [null, null],
+    ])
+  })
 })
 
 describe('getOverview', () => {
@@ -321,5 +364,68 @@ describe('getAnalysisMetrics', () => {
     respond({ current_model: 'x' })
 
     await expect(getAnalysisMetrics()).rejects.toThrow('métricas de análise inválidas')
+  })
+
+  it('lê o bloco ai com saldo diário, fallback e breaker por modelo', async () => {
+    respond({
+      generated_at: '2026-09-26T12:00:00Z',
+      current_model: 'openai/gpt-oss-120b',
+      pending: 0,
+      windows: [{ window: '24h', since: '', until: '', models: [] }],
+      ai: {
+        state: 'enabled',
+        window_hours: 24,
+        cache_hit_rate: 0.35,
+        by_model: [
+          {
+            model: 'openai/gpt-oss-120b',
+            requests: 120,
+            success_rate: 0.97,
+            rate_limited_rate: 0.02,
+            fallback_rate: 0.01,
+            latency_ms_avg: 900,
+            latency_ms_p95: 2100,
+            prompt_tokens: 250000,
+            completion_tokens: 50000,
+            json_valid_rate: 0.99,
+            breaker: 'closed',
+            day_requests_used: 120,
+            day_requests_limit: 850,
+            day_tokens_used: 300000,
+            day_tokens_limit: 170000,
+          },
+        ],
+      },
+    })
+
+    const report = await getAnalysisMetrics()
+
+    expect(report.ai.state).toBe('enabled')
+    expect(report.ai.cacheHitRate).toBe(0.35)
+    expect(report.ai.byModel[0]).toMatchObject({
+      model: 'openai/gpt-oss-120b',
+      dayRequestsUsed: 120,
+      dayRequestsLimit: 850,
+      fallbackRate: 0.01,
+      breaker: 'closed',
+    })
+  })
+
+  it('sem o bloco ai, responde um estado desligado em vez de falhar', async () => {
+    respond({
+      generated_at: '2026-09-26T12:00:00Z',
+      current_model: 'x',
+      pending: 0,
+      windows: [{ window: '24h', since: '', until: '', models: [] }],
+    })
+
+    const report = await getAnalysisMetrics()
+
+    expect(report.ai).toEqual({
+      state: 'disabled',
+      windowHours: 24,
+      byModel: [],
+      cacheHitRate: null,
+    })
   })
 })

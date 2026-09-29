@@ -1,0 +1,85 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "41.7500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "UNKNOWN",
+      "compensation": null,
+      "published_at": "2026-09-16T13:11:01.743000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [
+        "typescript"
+      ],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:typescript:sha256:c1b0f54e354306b42bf3445b0deb4a17db59ca98b8675a8b176744fe20a2b0bf"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Design Engineer",
+    "company_name": "Empresa X",
+    "location_text": "Remote or Hybrid UK",
+    "description": "ABOUT Empresa X\n\nEmpresa X [link] is an open source platform used by developers to build production-grade AI agents. It's an SDK and the infrastructure to run agents reliably at scale, so teams can focus on the product instead of the plumbing.\n\nOur Cloud product is a managed service where we deploy our users' code and auto-scale from zero to millions of executions. With the rise of AI, being able to offload async tasks reliably is a key part of any developer's toolkit - we're building the infrastructure to make that a reality.\n\nABOUT THE POSITION\n\nWe're a small team shipping fast, and as we accelerate building new features and expand the team, we want to make sure the quality and polish of what we ship keeps pace. That's where you come in.\n\nWe're looking for a Design Engineer to help raise the bar on UX and visual quality across our product and marketing surfaces. You'll blend design sensibility with real engineering ability, and be able to take a rough idea, a Figma file, or even just a problem statement, and turn it into a well-crafted, production-quality experience yourself, without needing a traditional design-to-dev handoff.\n\nThis is a hands-on, high-impact role for someone who cares as much about how something feels to use as they do about how it's built.\n\nWhat you'll be doing\n\nYou'll do a variety of things including:\n\n- Designing and building high-quality, polished UI across our web app and marketing site\n\n- You'll work closely with the rest of the engineering team to build new features with a focus on design craft and great UX.\n\n- Owning design decisions end-to-end: from rough concept through to shipped, production code\n\n- Building and evolving our design system and component library so quality scales as the product grows\n\n- Improving accessibility, responsiveness, and interaction polish across existing product surfaces\n\n- Prototyping new ideas quickly in code as well as static mockups, so we can iterate fast\n\n- Helping instil a stronger design/UX sensibility across the wider engineering team\n\nREQUIREMENTS\n\nYou really need to have:\n\n- A strong portfolio showing both design quality and the ability to ship real, production UI yourself\n\n- Expertise in modern frontend engineering - React and TypeScript (we use Remix)\n\n- A sharp eye for visual and interaction detail - typography, spacing, motion, and the small things that make software high quality\n\n- Comfort working directly from a problem statement rather than a fully-specced design - you can drive design decisions yourself\n\n- If you are remote you must be within CET to ET timezones (GMT+1:00 to GMT-5:00). We will arrange in-person events throughout the year\n\nYou'll be an amazing fit if you:\n\n- Experience owning design end-to-end at a small startup, without a separate design team to hand off to\n\n- Worked at a developer tools company, or have strong empathy for developers as an end user\n\n- Experience building or evolving a design system / component library\n\n- A track record of shipping fast and iterating in public\n\n- If you're based in the UK and you are able to join the team in London\n\n- Contributed to open source projects\n\n- Previously been a venture-backed startup founder\n\n- Have a social media presence\n\nABOUT THE TEAM\n\n- We are a small team with a flat hierarchy\n\n- We encourage continuous learning and personal development\n\n- Everyone operates autonomously; we trust you to get the job done, but to also quickly raise your hand if you need help\n\n- We care about our customers and the open-source community\n\n- Being a start-up, the work is challenging and fast-paced, but we also understand the importance of taking time off to recharge\n\nWORKING AT A COMMERCIAL OPEN SOURCE SOFTWARE COMPANY IS MORE THAN JUST YOUR DAY JOB\n\n- We have an active community on Discord and GitHub. Everyone on the team helps customers, reviews PRs, and creates issues\n\n- Great documentation matters more than ever, both for humans and for the AI tools that read it. Everyone here keeps docs up to date\n\n- We are a product-led growth company so everyone is expected to get involved in creating content like code examples, blog articles, videos and tweets\n\n- Generous, transparent compensation and equity - We hire the best talent and pay to reflect that. We also offer equity as a way to ensure everyone is invested in the success of the company."
+  },
+  "split": "reserved",
+  "group": "1ae2aab0c111",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

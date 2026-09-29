@@ -1,0 +1,99 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "55.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "DIRECTOR",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "5.20",
+        "currency": null
+      },
+      "published_at": "2026-09-22T13:13:45.181000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:mongodb:sha256:dec983c67f38f83ae4005b4e2196998748a09bf1d3dffaf28bcfa7a19041b20e"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "5.20",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "$5.2",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Global Director of Revenue Enablement (Remote Europe or East Coast)",
+    "company_name": "Empresa X",
+    "location_text": "Berlin Office",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nLocation: Remote — Europe or US East Coast (Virginia, New York, New Jersey, Massachusetts, Florida only)\n\n🎯 Your main goal will be to build Empresa X's global revenue enablement engine — installing one enterprise selling methodology across every region, compressing ramp for every revenue team worldwide, and turning our community-led momentum into repeatable 7–8 figure enterprise revenue.\n\nYou'll report directly to our senior commercial leadership, inherit a small enablement team with basic onboarding in place, and have the mandate (and explicit VP trajectory) to build the function from the ground up: for a remote-first company selling across EMEA, the US, and beyond.\n\nTo do so, here are your responsibilities:\n\nMETHODOLOGY & ENTERPRISE SELLING EXCELLENCE\n\n- Own the global install of one enterprise methodology (MEDDICC / value-selling framework): selection, rollout, certification, and continuous reinforcement across every rep and manager, in every region.\n\n- Build the PLG-to-enterprise playbook: teach sellers to convert community and self-serve signals into qualified 7-figure pipeline.\n\n- Partner with PMM and Product to arm the field with AI-led narratives, competitive plays, and launch enablement.\n\nRAMP, ONBOARDING & MANAGER DEVELOPMENT\n\n- Build one global onboarding engine, pre-boarding through certification to first-deal support, and compress time-to-quota for hiring waves in every region.\n\n- Develop frontline sales managers: coaching frameworks, deal inspection, and forecast rigor that make the methodology stick.\n\n- Define enablement's scorecard in revenue terms: ramp time, win rate, forecast accuracy, not course completions.\n\nBUILDING THE GLOBAL FUNCTION\n\n- Lead and grow the enablement team (starting with 1–2 ICs) across sales, SDR, CS, and partner enablement.\n\n- Stand up the enablement infrastructure: tooling, content systems, certification tracking, and measurement with RevOps.\n\n- Operate as a trusted peer to regional sales leaders across EMEA, the US, and future markets: in deal rooms, QBRs, and forecast reviews.\n\nREQUIREMENTS\n\nMUST-HAVES\n\n- 🚀 Hypergrowth pedigree: You built enablement at a developer-tool, open-source, or technical B2B SaaS company as it scaled enterprise.\n\n- 📈 €xm→€1bn scaling: You grew the function through a major GTM headcount wave and constant evolution of sales maturity. You've solved ramp at volume, not maintained steady-state.\n\n- 🧠 Methodology implementation owner: You've run a company-wide MEDDICC / Command of the Message-style install end-to-end, with certification and reinforcement that stuck.\n\n- ⏱️ Ramp engineer: You've built onboarding programs with measurable time-to-productivity compression.\n\n- 📊 Revenue-outcome mindset: You measure enablement in deal size, win rate, ramp time, and forecast accuracy.\n\nNICE-TO-HAVES\n\n- 🎖️ Methodology-firm pedigree: Force Management, or similar as a consultant or a certified in-house champion.\n\n- 💼 Carried a bag: You sold enterprise deals yourself, so reps and leaders trust you in deal conversations.\n\n- 🌱 PLG-to-enterprise: You've enabled teams converting community/self-serve momentum into enterprise revenue.\n\n- 🤖 AI narrative: You've positioned AI/ML-driven products in enterprise settings and think of an AI first solution to solving problems.\n\nWhy join us?\n\nAt Empresa X, your work won't disappear into an LMS. You'll build the global enablement function at the exact moment we scale from community-led momentum into 7–8 figure enterprise deals - the moment enablement leaders at MongoDB or HashiCorp will tell you was the best of their career. You'll install the methodology worldwide, set one ramp standard across regions, develop managers on every continent we sell in, and grow the team, with a direct line to senior commercial leadership and an explicit path to VP. You'll join a fast-growing, remote-first team that values autonomy, experimentation, and continuous learning.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "a vaga está alinhada com a área de atuação do perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

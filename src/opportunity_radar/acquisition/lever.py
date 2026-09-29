@@ -22,6 +22,12 @@ from opportunity_radar.acquisition.domain import (
     CollectorCapabilities,
     HealthcheckContext,
     HealthResult,
+    parse_retry_after_seconds,
+)
+from opportunity_radar.acquisition.http_conditional import (
+    NotModifiedResponse,
+    conditional_request_headers,
+    record_conditional_response,
 )
 
 _SITE_SLUG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
@@ -33,7 +39,9 @@ class LeverCollector:
     """Reads public postings from Lever's global or EU API instance."""
 
     source_type = "lever"
-    capabilities = CollectorCapabilities(company_jobs=True, pagination=True)
+    capabilities = CollectorCapabilities(
+        company_jobs=True, pagination=True, etag=True, last_modified=True
+    )
 
     def __init__(
         self,
@@ -103,14 +111,18 @@ class LeverCollector:
         emitted: int,
     ) -> AsyncIterator[CollectedItem]:
         seen_pages: set[tuple[tuple[str, str], ...]] = set()
+        total_fetched = 0
         while request.max_items is None or emitted < request.max_items:
             remaining = (
                 None if request.max_items is None else request.max_items - emitted
             )
             limit = min(_PAGE_SIZE, remaining) if remaining is not None else _PAGE_SIZE
-            postings = await self._fetch_page(
-                client, site, instance, skip, limit, request
-            )
+            try:
+                postings = await self._fetch_page(
+                    client, site, instance, skip, limit, request
+                )
+            except NotModifiedResponse:
+                return
             page_signature = tuple(
                 (str(posting.get("id")), str(posting.get("hostedUrl")))
                 for posting in postings
@@ -121,6 +133,7 @@ class LeverCollector:
                     "Lever pagination repeated a page without making progress",
                 )
             seen_pages.add(page_signature)
+            total_fetched += len(postings)
             for posting in postings:
                 try:
                     item = self._item(posting, company_name=request.company_name)
@@ -134,6 +147,9 @@ class LeverCollector:
                 if request.max_items is not None and emitted >= request.max_items:
                     return
             if len(postings) < limit:
+                # A short page is how Lever signals the end: no field states the total,
+                # so this exhaustive read is itself the announced count.
+                request.telemetry.record_items_announced(total_fetched)
                 return
             skip += len(postings)
 
@@ -188,11 +204,22 @@ class LeverCollector:
             error: AcquisitionError | None = None
             try:
                 request.telemetry.record_http_attempt(retry=attempt > 0)
+                # Validators only ever describe page one of the whole board (the checkpoint
+                # `AcquisitionService` builds them from), so only the first page's request
+                # conditions on them — a later page is a different resource, not a scope a
+                # 304 for page one could ever speak for.
+                headers = conditional_request_headers(request) if skip == 0 else {}
                 response = await client.get(
-                    url, params={"mode": "json", "skip": skip, "limit": limit}
+                    url,
+                    params={"mode": "json", "skip": skip, "limit": limit},
+                    headers=headers or None,
                 )
                 if response.status_code == 429:
                     request.telemetry.record_rate_limit()
+                if response.status_code == 304:
+                    record_conditional_response(request, response)
+                    raise NotModifiedResponse()
+                record_conditional_response(request, response)
                 error = self._response_error(response)
                 if error is None:
                     return self._postings(response)
@@ -237,7 +264,14 @@ class LeverCollector:
         code = codes.get(status)
         if code is not None:
             return AcquisitionError(
-                code, f"Lever returned HTTP {status}", retryable=status == 429
+                code,
+                f"Lever returned HTTP {status}",
+                retryable=status == 429,
+                retry_after_seconds=(
+                    parse_retry_after_seconds(response.headers.get("Retry-After"))
+                    if status == 429
+                    else None
+                ),
             )
         if 500 <= status < 600:
             return AcquisitionError(
@@ -323,6 +357,7 @@ class LeverCollector:
             company_name=company_name,
             location_text=LeverCollector._string((categories or {}).get("location")),
             description=LeverCollector._string(posting.get("descriptionPlain")),
+            published_at=LeverCollector._parse_created_at(posting.get("createdAt")),
             raw_payload=posting,
             metadata={
                 "categories": categories,
@@ -333,6 +368,27 @@ class LeverCollector:
                 "parser_version": _PARSER_VERSION,
             },
         )
+
+    #: Card F20-61. Lever's public Postings API carries `createdAt`: an epoch-
+    #: millisecond timestamp of when the posting was created — the real publication
+    #: date, not a last-updated time. `None` when absent; a non-numeric value is a
+    #: schema change, same posture as every other required-shape check in this file.
+    @staticmethod
+    def _parse_created_at(value: Any) -> datetime | None:
+        if value is None:
+            return None
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise AcquisitionError(
+                AcquisitionErrorCode.PARSER_SCHEMA_CHANGED,
+                "Lever createdAt must be a number",
+            )
+        try:
+            return datetime.fromtimestamp(value / 1000, tz=UTC)
+        except (OverflowError, OSError, ValueError) as error:
+            raise AcquisitionError(
+                AcquisitionErrorCode.PARSER_SCHEMA_CHANGED,
+                "Lever createdAt is invalid",
+            ) from error
 
     @staticmethod
     def _is_http_url(value: str) -> bool:

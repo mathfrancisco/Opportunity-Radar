@@ -12,6 +12,7 @@ from opportunity_radar.acquisition.domain import (
     CollectionRequest,
 )
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
+from opportunity_radar.acquisition.scheduling import ConditionalRequestHeaders
 
 _FIXTURE = Path(__file__).parents[2] / "fixtures" / "greenhouse_job_board.json"
 
@@ -53,6 +54,20 @@ def test_maps_public_board_payload_and_preserves_raw_job() -> None:
     )
     assert items[0].metadata["parser_version"] == "greenhouse-job-board-v1"
     assert request.telemetry.http_requests == 1
+
+
+def test_records_meta_total_as_items_announced() -> None:
+    payload = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    )
+    request = CollectionRequest(company_reference="acme")
+    try:
+        items = asyncio.run(_collect(GreenhouseCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+    assert len(items) == payload["meta"]["total"]
+    assert request.telemetry.items_announced == payload["meta"]["total"]
 
 
 def test_stops_at_max_items() -> None:
@@ -188,6 +203,55 @@ def test_rejects_invalid_response_schema(payload: object) -> None:
         asyncio.run(client.aclose())
 
     assert error.value.code is AcquisitionErrorCode.PARSER_SCHEMA_CHANGED
+
+
+def test_sends_conditional_headers_when_checkpoint_has_validators() -> None:
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json={"jobs": [], "meta": {"total": 0}})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    request = CollectionRequest(
+        company_reference="acme",
+        conditional_headers=ConditionalRequestHeaders(
+            if_none_match='"abc123"', if_modified_since="Wed, 21 Oct 2015 07:28:00 GMT"
+        ),
+    )
+    try:
+        asyncio.run(_collect(GreenhouseCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert calls[0].headers["If-None-Match"] == '"abc123"'
+    assert calls[0].headers["If-Modified-Since"] == "Wed, 21 Oct 2015 07:28:00 GMT"
+
+
+def test_bare_304_yields_no_items_and_records_not_modified_without_a_total() -> None:
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                304, headers={"ETag": '"abc123"', "Last-Modified": "Wed, 21 Oct 2015 07:28:00 GMT"}
+            )
+        )
+    )
+    request = CollectionRequest(
+        company_reference="acme",
+        conditional_headers=ConditionalRequestHeaders(if_none_match='"abc123"'),
+    )
+    try:
+        items = asyncio.run(_collect(GreenhouseCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert items == []
+    assert request.telemetry.not_modified is True
+    assert request.telemetry.not_modified_count == 1
+    assert request.telemetry.response_etag == '"abc123"'
+    assert request.telemetry.response_last_modified == "Wed, 21 Oct 2015 07:28:00 GMT"
+    # A 304 must never be read as "the board announced zero jobs" (SPEC 39 §7).
+    assert request.telemetry.items_announced is None
 
 
 def test_rejects_invalid_configuration_and_skips_invalid_job() -> None:

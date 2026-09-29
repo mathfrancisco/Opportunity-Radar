@@ -33,6 +33,7 @@ from opportunity_radar.matching.repository import (
     SqlAlchemyMatchingRepository,
 )
 from opportunity_radar.matching.service import RULES_VERSION
+from opportunity_radar.opportunities.domain import SKILL_TAXONOMY_VERSION
 from opportunity_radar.opportunities.models import OpportunityModel, OpportunitySkillModel
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
@@ -45,7 +46,7 @@ pytestmark = [
     ),
 ]
 
-_TAXONOMY = "skills-v1"
+_TAXONOMY = SKILL_TAXONOMY_VERSION
 
 
 def _session() -> Session:

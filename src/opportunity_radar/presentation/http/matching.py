@@ -7,7 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from opportunity_radar.matching.analysis import SemanticAnalysisPort
+from opportunity_radar.matching.analysis import (
+    SemanticAnalysisPort,
+    claim_text,
+    item_evidence,
+)
 from opportunity_radar.matching.models import (
     MatchAnalysisModel,
     MatchAssessmentModel,
@@ -56,8 +60,30 @@ class AnalysisMetricsResponse(BaseModel):
     prompt_tokens_estimate: int | None = None
 
 
+class AnalysisClaimResponse(BaseModel):
+    """An `analysis-v2` strength or risk: the claim and the passage behind it, if any."""
+
+    claim: str
+    evidence: str | None
+    source: str | None
+
+
+class AnalysisContextRefResponse(BaseModel):
+    """A decided posting the prompt received as context (card F16-11), as it stood."""
+
+    opportunity_id: UUID
+    content_version: int | None = None
+    decision: str
+    decided_at: str | None = None
+    similarity: float | None = None
+
+
 class MatchAnalysisResponse(BaseModel):
-    """Advisory layer. Carries no score, verdict or eligibility by construction."""
+    """Advisory layer. Carries no score, verdict or eligibility by construction.
+
+    `strengths` and `risks` are strings under `analysis-v1` and claims with evidence from
+    `analysis-v2` on; `schema_version` says which, and old rows stay readable as written.
+    """
 
     id: UUID
     assessment_id: UUID
@@ -65,8 +91,8 @@ class MatchAnalysisResponse(BaseModel):
     failure_code: str | None
     detail: str | None
     summary: str | None
-    strengths: list[str]
-    risks: list[str]
+    strengths: list[AnalysisClaimResponse | str]
+    risks: list[AnalysisClaimResponse | str]
     inferences: list[str]
     unknowns: list[str]
     recommended_review: bool | None
@@ -74,6 +100,9 @@ class MatchAnalysisResponse(BaseModel):
     prompt_version: str | None
     schema_version: str
     cache_key: str
+    key_version: str | None = None
+    payload_hash: str | None = None
+    context_refs: list[AnalysisContextRefResponse] = []
     analyzed_at: str
     created_at: str
     metrics: AnalysisMetricsResponse | None = None
@@ -264,8 +293,8 @@ def _analysis_response(analysis: MatchAnalysisModel) -> MatchAnalysisResponse:
         failure_code=analysis.failure_code,
         detail=analysis.detail,
         summary=analysis.summary,
-        strengths=[str(item) for item in analysis.strengths],
-        risks=[str(item) for item in analysis.risks],
+        strengths=[_item_response(item) for item in analysis.strengths],
+        risks=[_item_response(item) for item in analysis.risks],
         inferences=[str(item) for item in analysis.inferences],
         unknowns=[str(item) for item in analysis.unknowns],
         recommended_review=analysis.recommended_review,
@@ -273,6 +302,13 @@ def _analysis_response(analysis: MatchAnalysisModel) -> MatchAnalysisResponse:
         prompt_version=analysis.prompt_version,
         schema_version=analysis.schema_version,
         cache_key=analysis.cache_key,
+        key_version=analysis.key_version,
+        payload_hash=analysis.payload_hash,
+        context_refs=[
+            AnalysisContextRefResponse(**ref)
+            for ref in analysis.context_refs or []
+            if isinstance(ref, dict)
+        ],
         analyzed_at=analysis.analyzed_at.isoformat(),
         created_at=analysis.created_at.isoformat(),
         metrics=(
@@ -290,6 +326,13 @@ def _analysis_response(analysis: MatchAnalysisModel) -> MatchAnalysisResponse:
             else None
         ),
     )
+
+
+def _item_response(item: Any) -> AnalysisClaimResponse | str:
+    if isinstance(item, dict):
+        evidence, source = item_evidence(item)
+        return AnalysisClaimResponse(claim=claim_text(item), evidence=evidence, source=source)
+    return str(item)
 
 
 def _factor_response(factor: MatchFactorModel) -> MatchFactorResponse:

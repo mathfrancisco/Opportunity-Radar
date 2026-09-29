@@ -1,0 +1,85 @@
+{
+  "kinds": [
+    "ambiguous",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "53.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": null,
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:a18c976543ed0923fe1501181f705fcaddab6e71d5bce442252d60a90b57f315",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:aws:sha256:9ab12bf6f0de433d1c30910881e97774a7ae37b26178620ee56a2aa27b043725",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:cicd:sha256:a18c976543ed0923fe1501181f705fcaddab6e71d5bce442252d60a90b57f315",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:java:sha256:9ab12bf6f0de433d1c30910881e97774a7ae37b26178620ee56a2aa27b043725",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:python:sha256:940ecabfaa07df2cd6cd29d05f67fd2debb02b21f659f7661a182f56ab2f7f85",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:sql:sha256:940ecabfaa07df2cd6cd29d05f67fd2debb02b21f659f7661a182f56ab2f7f85"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "[Job-31311] Master JAVA/AWS  Developer, Brazil",
+    "company_name": "Empresa X",
+    "location_text": "Brazil",
+    "description": "Na Empresa X , ajudamos grandes empresas a transformar o potencial da AI em impacto real nos negócios com AI Deployment, execução AI-native e tech-integrated business solutions.\nCom 30 anos de experiência em transformação tecnológica, aceleramos inovação com expertise em agentic SDLC, application modernization, Data & AI, martech e business strategy.\nSomos 8.000 Empresa Xers em mais de 25 países, colaborando para construir soluções com impacto real. AI já faz parte da forma como trabalhamos, evoluímos e inovamos todos os dias.\nImportante: se você reside na Região Metropolitana de Campinas, sua presença nos escritórios da cidade será obrigatória, conforme a política de frequencia vigente.\n\nOlá, aqui é a Bia da Empresa X!\n\nSou Analista de Atração de Talentos e procuro pessoas Engenheiras de Dados que utilizam IA e localizadas no Brasil para atuar em um dos clientes da Empresa X.\n\nSobre a Vaga\n\nSe você é uma pessoa engenheira de Dados com domínio profundo de Python (Pyspark) e SQL e gosta de ir além da execução de código, esta é a oportunidade ideal para você.\n\nQueremos uma pessoa capaz de investigar dados, caçar anomalias, desenvolver indicadores e garantir que toda a nossa esteira funcione com excelência.\n\nO que você fará no dia a dia:\n\nDesenvolvimento de Pipelines: Criar e manter processos de ETL robustos, com forte atuação utilizando AWS Glue, Python PySpark e SQL.\n\nAnálise e Qualidade de Dados: Atuar ativamente na análise dos dados, identificando erros, anomalias e possíveis problemas antes que impactem o negócio.\n\nCriação de Indicadores: Apoiar o time no desenvolvimento de métricas de confiabilidade e saúde dos dados.\n\nObservabilidade Avançada: Implementar e gerenciar o monitoramento de pipelines utilizando ferramentas como Datadog ou AWS CloudWatch, assegurando a estabilidade, performance e qualidade das nossas cargas de trabalho de Inteligência Artificial.\n\nO que buscamos (Hard e Soft Skills):\n\nExperiência consolidada em Engenharia de Dados, processos de ETL e cloud.\n\nDomínio avançado em Python (Pyspark) e SQL.\n\nExperiência prática com AWS Glue e ferramentas de monitoramento (Datadog/CloudWatch).\n\nMentalidade Consultiva: Foco real em entender e resolver a \"dor do cliente\" e do negócio.\n\nProatividade e Autogerenciamento: Capacidade de trabalhar com autonomia, garantindo o comprometimento com prazos e a qualidade das entregas.\n\nExcelente comunicação para atuar de forma colaborativa com diferentes áreas.\n\n#LI-BA1"
+  },
+  "split": "tuning",
+  "group": "be102fe8dfb1",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

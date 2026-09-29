@@ -1,0 +1,112 @@
+{
+  "card": "F20-02",
+  "gerado_em": "2026-09-26",
+  "fonte": "opportunities.opportunity.description via COPY somente-leitura (opportunity-radar), 630 descricoes, 648 oportunidades",
+  "arquivo_alvo": "src/opportunity_radar/opportunities/domain.py (SKILL_TAXONOMY)",
+  "decisoes": [
+    {
+      "canonical_id": "ai",
+      "termo": "ai",
+      "contagem": 462,
+      "recomendacao": "manter",
+      "confianca": "alta",
+      "justificativa": "Termo tecnico inequivoco, altissima frequencia, sem alias curto arriscado.",
+      "aceito": true
+    },
+    {
+      "canonical_id": "ai",
+      "termo": "artificial intelligence / machine learning / ml / agentic ai",
+      "contagem": null,
+      "recomendacao": "manter",
+      "confianca": "alta",
+      "justificativa": "Sinonimos/variacoes reais observadas no corpus.",
+      "aceito": true
+    },
+    {
+      "canonical_id": "cicd",
+      "termo": "ci/cd, continuous integration, continuous deployment",
+      "contagem": null,
+      "recomendacao": "manter",
+      "confianca": "alta",
+      "justificativa": "Termos multi-palavra, nao colidem com nomes de empresa.",
+      "aceito": true
+    },
+    {
+      "canonical_id": "cicd",
+      "termo": "ci (alias isolado)",
+      "contagem": 218,
+      "recomendacao": "remover_alias",
+      "confianca": "alta",
+      "justificativa": "82% das ocorrencias (179/218) vem de 'CI&T' (nome da empresa que posta a maioria das vagas), nao de CI/CD real.",
+      "aceito": true
+    },
+    {
+      "canonical_id": "observability",
+      "termo": "observability",
+      "contagem": 124,
+      "recomendacao": "manter",
+      "confianca": "alta",
+      "justificativa": "Termo tecnico inequivoco, sem ambiguidade observada.",
+      "aceito": true
+    },
+    {
+      "canonical_id": null,
+      "termo": "apis",
+      "contagem": 146,
+      "recomendacao": "descartado",
+      "confianca": "alta",
+      "justificativa": "Generico demais; nao identifica protocolo/skill discreta.",
+      "aceito": true
+    },
+    {
+      "canonical_id": null,
+      "termo": "cloud",
+      "contagem": 193,
+      "recomendacao": "descartado",
+      "confianca": "alta",
+      "justificativa": "Provedores especificos (aws/azure/gcp) ja cobertos; termo generico arrisca falso positivo.",
+      "aceito": true
+    },
+    {
+      "canonical_id": null,
+      "termo": "sdlc",
+      "contagem": 183,
+      "recomendacao": "descartado",
+      "confianca": "media",
+      "justificativa": "Sigla de processo/metodologia, nao tecnologia nomeada.",
+      "aceito": true
+    },
+    {
+      "canonical_id": null,
+      "termo": "martech",
+      "contagem": 178,
+      "recomendacao": "descartado",
+      "confianca": "alta",
+      "justificativa": "Categoria de produto/marketing, fora da area do perfil.",
+      "aceito": true
+    },
+    {
+      "canonical_id": null,
+      "termo": "architecture/systems/platform/frameworks/tools/stack",
+      "contagem": null,
+      "recomendacao": "descartado",
+      "confianca": "alta",
+      "justificativa": "Palavras-guarda-chuva sem tecnologia nomeada.",
+      "aceito": true
+    },
+    {
+      "canonical_id": "ai",
+      "termo": "agentic (alias)",
+      "contagem": 140,
+      "recomendacao": "manter_como_alias",
+      "confianca": "media",
+      "justificativa": "Variacao de 'agentic AI', ja coberta pelo alias 'agentic ai' da entrada ai.",
+      "aceito": true
+    }
+  ],
+  "achado_quantitativo": {
+    "descricoes_com_ci_isolado": 218,
+    "descricoes_com_CI_and_T": 179,
+    "percentual_explicavel_por_nome_empresa": 0.82
+  }
+}

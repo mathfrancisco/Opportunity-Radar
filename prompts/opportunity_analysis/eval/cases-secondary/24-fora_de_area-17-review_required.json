@@ -1,0 +1,97 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "54.2500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": "YEAR",
+        "maximum": "211750.00",
+        "minimum": "157500.00",
+        "currency": "USD"
+      },
+      "published_at": "2026-09-14T19:06:54.819000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "YEAR",
+          "maximum": "211750.00",
+          "minimum": "157500.00",
+          "currency": "USD",
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "{\"compensationType\": \"Salary\", \"currencyCode\": \"USD\", \"interval\": \"1 YEAR\", \"maxValue\": 211750, \"minValue\": 157500}",
+          "evidence_source": "ashby.compensation.summaryComponents.Salary",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Senior Partner Manager SI, West Coast",
+    "company_name": "Empresa X",
+    "location_text": "San Francisco",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\n🎯 Your main goal will be to build and scale Empresa X’s Service Partner ecosystem across the region, creating a strong network of consulting firms and systems integrators that drives partner-sourced pipeline, revenue growth, and customer success.\n\nYou’ll own the development of high-impact, long-term relationships with regional partners, helping them build successful service offerings around Empresa X and supporting our growth across the West Coast.\n\nHere’s how you’ll make that happen:\n\n🔍 Acquire and qualify high-potential partners\n\n- Build a strong understanding of the regional partner landscape and prioritize firms aligned with our go-to-market strategy.\n\n- Assess partner-market fit, technical capabilities, customer reach, and commercial potential.\n\n- Recruit partners motivated to build and scale dedicated automation and AI service offerings around Empresa X.\n\n- Develop relationships with senior stakeholders across partner organizations, from founders and practice leads to sales and delivery teams.\n\n🧠 Enable, support, and scale partnerships\n\n- Design and deliver onboarding, enablement, and certification programs that help partners become commercially and technically successful.\n\n- Support partners in building internal Empresa X expertise, service packages, and repeatable implementation capabilities.\n\n- Create reusable resources, including playbooks, toolkits, templates, and best practices, to scale partner operations.\n\n- Drive partner education across technical, sales, and go-to-market tracks.\n\n- Help partners move from initial onboarding to active pipeline generation and customer delivery.\n\n📈 Drive pipeline and co-selling success\n\n- Build, track, and grow partner-sourced and partner-influenced pipeline across the region.\n\n- Collaborate closely with Sales, Solutions Engineering, Customer Success, and Marketing to identify and activate opportunities.\n\n- Develop joint account plans and co-selling motions for strategic customers and prospects.\n\n- Co-own joint business plans with priority partners and ensure they deliver measurable commercial outcomes.\n\n- Maintain clear visibility into partner performance, pipeline progression, and revenue contribution.\n\n📣 Activate regional go-to-market initiatives\n\n- Plan and execute joint campaigns, webinars, events, and regional initiatives with partners.\n\n- Build strong relationships with local sales and field teams to ensure partners are embedded within regional go-to-market activity.\n\n- Represent Empresa X at relevant partner, industry, and technology events across the region.\n\n- Keep the partner ecosystem engaged through regular communication, updates, and community initiatives.\n\n🌀 Champion partner feedback and continuous improvement\n\n- Act as the voice of partners internally, sharing insights that shape future programs, incentives, and product priorities.\n\n- Identify regional challenges and opportunities, and translate them into scalable improvements.\n\n- Use partner and performance data to improve the partner experience and increase operational efficiency.\n\n- Contribute to the evolution of Empresa X’s global partner program based on regional learnings.\n\n- Help define what excellent SI partnerships look like as Empresa X continues to scale.\n\nRequirements\n\nMust-haves\n\n- 🚀 SaaS partnership experience: You have 8+ years of experience in business development, partnerships, alliances, or sales within fast-scaling SaaS or technology companies, including at least 3 years working directly with services partners as a quota-carrying individual contributor.\n\n- 🤝 Partner recruitment and enablement: You have recruited, onboarded, and scaled high-performing consulting, agency, or systems integration partners.\n\n- 📈 Commercial ownership: You have owned partner-sourced pipeline or revenue targets and know how to move partnerships from relationship-building to measurable commercial results.\n\n- ⚡ High-growth mindset: You have thrived in fast-paced technology environments and know how to prioritize, execute, and make decisions in ambiguous situations.\n\n- 📣 Strong communicator and collaborator: You build trust quickly and influence senior internal and external stakeholders with clarity, credibility, and confidence.\n\n- 💻 Technical depth: You are comfortable discussing APIs, integrations, automation workflows, and the broader AI and automation landscape.\n\n- 🏗️ Builder’s mindset: You enjoy creating programs and processes from scratch rather than maintaining static playbooks. You are hands-on, data-driven, and focused on outcomes.\n\nNice-to-haves\n\n- 💼 Larger deal experience: You have supported partner-involved deals in the €100K to €500K range.\n\n- 🎯 GTM and co-sell experience: You understand regional go-to-market strategy, partner sales enablement, account mapping, and field collaboration.\n\n- 🔧 Industry knowledge: You have experience with iPaaS, workflow automation, AI, developer tools, or another technical SaaS platform.\n\n- 🏢 SI and enterprise experience: You have worked with systems integrators supporting complex software implementations for mid-market and enterprise customers.\n\n- 🌐 Regional network: You already have relationships with influential consulting firms, boutique SIs, digital agencies, or technology partners across the region.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "a vaga está alinhada com a área de atuação do perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

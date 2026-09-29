@@ -1,0 +1,87 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "53.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "SENIOR",
+      "work_mode": "REMOTE",
+      "compensation": null,
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:b0a505cd3980f611bc2f8afb491b4328f38b63a33470945b8ee1b02ed5399630",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:azure:sha256:0ee4660c933a4e03387d79a9d154c70c45a70ab9ae5f6825ed2a6902ba53c75b",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:cicd:sha256:8c1c26bcf43e1650acf33ed3ff519ee9830c1264ab117fc683e2690fa96be61e",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:observability:sha256:1338fe4328f976010d7018d00e48f6a69d88f34515220b360c3fcb2246503aa2",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:python:sha256:2a6918e0eb79fd75573f7fc9df58bf177abf895be12c4880b42b80b28b9b201f",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:sql:sha256:2a6918e0eb79fd75573f7fc9df58bf177abf895be12c4880b42b80b28b9b201f"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "[Job-31614]  Senior Machine Learning Engineer, Brazil",
+    "company_name": "Empresa X",
+    "location_text": "Brazil",
+    "description": "At Empresa X, we help large enterprises transform the potential of AI into real business impact with AI Deployment, AI-native execution, and tech-integrated business solutions.\nWith 30 years of experience in technological transformation, we accelerate innovation with expertise in Agentic SDLC, Application modernization, Data & AI, Martech and Business strategy.\nWe are 8,000 Empresa Xers across more than 25 countries, collaborating to build solutions with real impact. AI is already part of how we work, evolve, and innovate every day.\n\nAbout the Opportunity\nWe are looking for a Senior Machine Learning Engineer to lead the development, industrialization, and evolution of Machine Learning products at an enterprise scale.\nThis professional will work at the intersection of Data Science, Data Engineering, and MLOps, taking ownership of the architecture, governance, operationalization, and support of ML solutions in production. The role requires end-to-end ownership, from solution design and development to monitoring, documentation, and continuous improvement.\nKey Responsibilities\nLead MLOps initiatives, including model training, deployment, model serving, monitoring, and lifecycle governance.\nDevelop and maintain ETL/ELT pipelines, DAGs, and data and Machine Learning workflows using PySpark.\nDesign and manage enterprise Feature Stores, ensuring feature versioning, lineage, and consistency between training and inference.\nDevelop, validate, and operationalize Machine Learning models for different analytical use cases.\nImplement model versioning strategies, Champion/Challenger approaches, rollouts, model promotion, and Model Registry management.\nEnsure observability, quality, traceability, reproducibility, and governance across data, features, pipelines, and models.\nDesign and implement CI/CD processes and Infrastructure as Code (IaC) for Machine Learning platforms.\nDefine architectural standards, engineering best practices, and MLOps guidelines.\nConduct technical code reviews, support Data Scientists in industrializing ML solutions, and maintain technical, architectural, and operational documentation.\nRequired Qualifications\nAdvanced experience with Databricks, including MLflow, Unity Catalog, Delta Lake, Databricks Workflows, Model Registry, Model Serving, and Databricks Asset Bundles (DABs).\nStrong experience developing, operationalizing, and monitoring Machine Learning models in production.\nExperience with Feature Engineering, hyperparameter optimization, model evaluation, and supervised and unsupervised learning algorithms.\nExperience with enterprise Feature Stores, including feature versioning and point-in-time lookups.\nKnowledge of Data Drift, Concept Drift, Performance Drift, and observability of data and ML pipelines.\nExperience building CI/CD pipelines, managing DEV, QA, and PROD environments, and implementing Infrastructure as Code.\nExperience with automated testing for data and Machine Learning pipelines.\nExperience with distributed processing and Spark workload optimization.\nStrong proficiency in Python, PySpark, SQL, MLflow, Spark MLlib, and key Machine Learning ecosystem libraries.\nKnowledge of secure credential and secrets management, such as Service Principals, Key Vault, or equivalent solutions.\nExperience with Azure DevOps or equivalent tools.\nLanguages\nIntermediate English.\nAbility to interact with global teams and produce technical documentation in English.\nNice to Have\nDatabricks Certified Machine Learning Professional – highly desirable.\nDatabricks Certified Data Engineer Professional.\nExperience with GenAI, LLMOps, and RAG architectures.\nWhat We’re Looking For\nWe are looking for a highly technical, hands-on professional with a strong architectural mindset, capable of transforming analytical models into scalable, production-ready solutions.\nBeyond developing models, this professional will be responsible for ensuring that Machine Learning solutions are governed, observable, auditable, reproducible, and sustainable throughout their lifecycle, while leading new initiatives and continuously evolving the organization's data and MLOps platform."
+  },
+  "split": "tuning",
+  "group": "be102fe8dfb1",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

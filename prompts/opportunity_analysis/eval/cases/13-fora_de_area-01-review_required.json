@@ -1,0 +1,99 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "53.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "5.20",
+        "currency": null
+      },
+      "published_at": "2026-09-03T16:14:01.228000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:sql:sha256:0131354a50b383d7db4ba8c2efc93eb0e7f37d18c780913d42631c501831f7f8"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "5.20",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "$5.2",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Senior FP&A Manager - Marketing",
+    "company_name": "Empresa X",
+    "location_text": "Germany",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\n🎯 Your main goal will be to own the forward-looking financial plan for the top and mid funnel of Empresa X’s commercial engine, helping Marketing leadership make sharper investment decisions across both our PLG and SLG motions.\n\nTo do so, you’ll turn demand, funnel, and marketing investment decisions into an integrated financial view that leadership can act on:\n\nOWN MARKETING PLANNING & FORECASTING\n\n- Drive Empresa X’s annual planning and regular forecasting process for Marketing end to end, from top-down targets and cross-functional alignment through regional segmentation, budget ownership, and consolidation into the company plan.\n\n- Partner with Marketing budget owners across demand generation, brand, community and DevRel, product marketing, and events to set budgets, forecast spend, and sharpen investment trade-offs.\n\n- Own program spend with the same rigor as headcount, including agency and media contracts, event and sponsorship commitments, phasing, seasonality, and in-year reallocations.\n\nMODEL FUNNEL & CHANNEL ECONOMICS\n\n- Model demand creation, signup and MQL volume, activation, qualified opportunity, conversion, and velocity with Marketing Ops and RevOps across both PLG and SLG motions.\n\n- Translate funnel and channel levers into the demand assumptions behind Empresa X’s integrated top-line model and quantify the financial impact and trade-offs of changing them.\n\n- Assess CAC and payback, conversion, pipeline contribution, and expected versus realized ROI using attribution, incrementality testing, and other causal methods where appropriate.\n\nBUILD A RIGOROUS MARKETING INVESTMENT FRAMEWORK\n\n- Establish a repeatable process for material marketing bets covering hypothesis, baseline, expected return, confidence range, leading indicators, scale-or-stop triggers, and post-investment review.\n\n- Build and defend investment cases for brand, community, content, events, and other spend that does not attribute cleanly to closed revenue.\n\n- Use internal evidence, external benchmarks, and post-investment learnings to drive in-year reallocations toward the highest-impact opportunities.\n\nTURN DATA INTO DECISIONS\n\n- Partner with Marketing Ops, RevOps, Data, and Controlling to keep the financial view aligned with Empresa X’s attribution, measurement, and reporting frameworks.\n\n- Own the financial metric definitions behind Marketing reporting and ensure teams are operating from a consistent view of performance.\n\n- Turn financial reporting and variance analysis into tangible insights and recommendations for Marketing leadership, executives, and board-level audiences when needed.\n\nREQUIREMENTS\n\nMUST-HAVES\n\n- 📊 FP&A experience: You have 7+ years of experience in FP&A or strategic finance, ideally in a fast-paced technology or B2B SaaS environment.\n\n- 🗂️ Complex planning experience: You have led complex, multi-entity, multi-stakeholder annual planning, budgeting, and forecasting processes end to end.\n\n- 🤝 Marketing business partnering: You have deep demand-side finance partnering experience in either a self-serve/PLG funnel or an enterprise/SLG demand generation motion, plus a strong working understanding of the other.\n\n- 📈 Funnel and channel economics: You are fluent in CAC and CAC payback by channel and motion, blended versus paid CAC, CLV/CAC, pipeline attribution, funnel conversion, and velocity.\n\n- 🧭 Judgment on unattributable spend: You have built and defended investment cases for brand, community, content, or similar spend that will never attribute cleanly to a closed deal.\n\n- 💶 Program spend ownership: You are comfortable owning a budget weighted toward program spend, including commitments, phasing, agency costs, vendor economics, and reallocations.\n\n- 🧮 Financial modeling: You build sophisticated, integrated financial models that remain robust as assumptions, scenarios, and operating inputs change.\n\n- 🗣️ Executive communication: You translate complex analysis into clear recommendations and are comfortable presenting to Marketing leadership, executives, and board audiences when needed.\n\n- 🤖 AI- and automation-first mindset: You naturally use AI and automation platforms such as Empresa X to improve the quality, speed, and repeatability of your planning, reporting, and analysis.\n\nNICE-TO-HAVES\n\n- 🔄 PLG + SLG fluency: You have deep experience across both product-led and sales-led demand motions rather than primarily one.\n\n- 🧑‍💻 Developer-focused environment: You have worked at a community-led, open-source, or developer-focused product company.\n\n- 🧪 Incrementality & experimentation: You have exposure to incrementality testing, holdout design, or marketing mix modeling.\n\n- 🛠️ Marketing & RevOps tooling: You have experience consuming data from tools such as HubSpot or Marketo, GA4, attribution platforms, and Salesforce.\n\n- 📋 Planning platforms: You have worked with financial or headcount planning platforms such as Pigment in complex, multi-entity, or multi-stakeholder environments.\n\n- 🧑‍🔬 Data self-sufficiency: You are comfortable using SQL and building your own views in tools such as Looker, Metabase, or Hex rather than waiting on a Data team.\n\n- ⚙️ Relevant SaaS domain experience: You have worked in workflow automation, developer tools, or infrastructure SaaS.\n\nWhy join us?\n\nAt Empresa X, you’ll own the financial view of one of the most important joins in our growth engine: where community, product-led adoption, and enterprise demand generation meet. You’ll work closely with Marketing leadership and counterpart FP&A Managers covering the PLG and SLG bottom of funnel, giving you visibility across the full commercial plan and real influence over how we allocate one of our largest discretionary investments.\n\nYou’ll join a fast-growing, remote-first company where finance is expected to help shape decisions, not simply report on them. As Empresa X expands the opportunity around AI agent orchestration and helps businesses unlock measurable ROI through automation, you’ll help build the planning discipline, investment frameworks, and automation-first finance practices that support our next stage of growth.\n\nSound like a challenge you’re excited to take on?\n\nApply now — and help us build the future of automation.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "a vaga está alinhada com a área de atuação do perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

@@ -7,7 +7,7 @@ import json
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Any, Mapping
@@ -15,6 +15,16 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 from opportunity_radar.companies.domain import normalize_name
+from opportunity_radar.opportunities.regions import (
+    REGIONS_VERSION,
+    resolve_allowed_countries,
+)
+from opportunity_radar.opportunities.role_family import (
+    ROLE_FAMILY_VERSION,
+    RoleFamily,
+    classify_role_family,
+    departments_from_metadata,
+)
 
 
 class WorkMode(StrEnum):
@@ -109,7 +119,7 @@ class NormalizationError(ValueError):
     """Raised when a collected item cannot form a canonical candidate."""
 
 
-SKILL_TAXONOMY_VERSION = "skills-v1"
+SKILL_TAXONOMY_VERSION = "skills-v3"
 _MAX_DATABASE_AMOUNT = Decimal("999999999999.99")
 _AMBIGUOUS_SKILL_ALIASES = frozenset({"go", "react"})
 
@@ -207,6 +217,20 @@ SKILL_TAXONOMY: tuple[SkillTaxonomyEntry, ...] = (
     SkillTaxonomyEntry("gcp", ("gcp", "google cloud platform")),
     SkillTaxonomyEntry("terraform", ("terraform",)),
     SkillTaxonomyEntry("graphql", ("graphql",)),
+    # Added by F20-02 curation (`docs/pesquisas/curadoria-skills-v2.md`) from
+    # `scripts/unmatched_skill_terms.py` over the reference-machine acervo.
+    SkillTaxonomyEntry(
+        "ai",
+        ("ai", "artificial intelligence", "machine learning", "ml", "agentic ai"),
+    ),
+    # F20-02 follow-up (rotulagem humana): the bare "ci" alias was removed because
+    # 82% of its real-corpus occurrences come from the company name "CI&T", not
+    # from CI/CD content (docs/44-roadmap-fase-20/rotulagem/f20-02-curadoria-skills-v2.md).
+    SkillTaxonomyEntry(
+        "cicd",
+        ("ci/cd", "continuous integration", "continuous deployment"),
+    ),
+    SkillTaxonomyEntry("observability", ("observability",)),
 )
 
 
@@ -225,6 +249,9 @@ class NormalizationInput:
     description: str | None = None
     published_at: datetime | None = None
     updated_at: datetime | None = None
+    #: Explicit application-window deadline (card F20-61), threaded from
+    #: `CollectedItem.valid_through`. `None` for collectors that do not expose one.
+    valid_through: datetime | None = None
     company_id: UUID | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
@@ -258,6 +285,23 @@ class CanonicalCandidate:
     compensation: Compensation | None = None
     skills: tuple[ExtractedSkill, ...] = ()
     fingerprint_version: str = "v1"
+    role_family: RoleFamily = RoleFamily.UNKNOWN
+    role_family_evidence: dict[str, str] = field(default_factory=dict)
+    role_family_version: str = ROLE_FAMILY_VERSION
+    #: ISO country codes (or `regions.ANY_COUNTRY`) the `regions-v1` table resolved from
+    #: `location_text`. Empty means unknown — office location is never allowed country,
+    #: and this must never be read as "no country allowed" (card F17-06).
+    allowed_countries: tuple[str, ...] = ()
+    allowed_countries_version: str = REGIONS_VERSION
+    #: Explicit application-window deadline (card F20-61), threaded from the
+    #: collector when it exposes one (today only `jobposting.py`). `None` otherwise —
+    #: never fabricated.
+    valid_through: datetime | None = None
+    #: Recency-filter exception signal (card F20-61): an estágio/trainee/entry-level/
+    #: early-careers/residency program, which tends to stay open far longer than a
+    #: single senior/mid role. Independent of `ContractType` — a program is still
+    #: shown past the recency window even when its contract type is `UNKNOWN`.
+    recency_exempt_program: bool = False
 
 
 def _clean_text(value: str | None) -> str | None:
@@ -733,32 +777,81 @@ def _infer_unique(
     return next(iter(matches)) if len(matches) == 1 else unknown
 
 
+# card F20-XX: real postings from several ATSes (e.g. Nubank/Greenhouse) render work mode
+# only inside the description body, in a standardized "Work Model for this Role" section,
+# never in title/location/metadata. These patterns are intentionally narrow (the labelled
+# section itself, or a "<mode> model" / "fully on-site" phrasing) rather than a bare
+# \bremote\b / \bhybrid\b scan of the whole description, which would false-positive on a
+# colleague's remote status ("partner with senior remote engineers") or generic
+# remote-friendly-company boilerplate unrelated to this specific role.
+_WORK_MODE_DESCRIPTION_SECTION_PATTERNS: dict[WorkMode, tuple[str, ...]] = {
+    WorkMode.REMOTE: (
+        r"\bwork model(?:\s+for\s+this\s+role)?\b[\s:\-]*\s*remote\b",
+        r"\bremote\s+(?:work\s+)?model\b",
+    ),
+    WorkMode.HYBRID: (
+        r"\bwork model(?:\s+for\s+this\s+role)?\b[\s:\-]*\s*hybrid\b",
+        r"\bhybrid\s+(?:work\s+)?model\b",
+    ),
+    WorkMode.ONSITE: (
+        r"\bwork model(?:\s+for\s+this\s+role)?\b[\s:\-]*\s*on[ -]?site\b",
+        r"\bon[ -]?site\s+(?:work\s+)?model\b",
+        r"\bfully\s+on[ -]?site\b",
+        r"\bon[ -]?site\s+(?:role|position)\b",
+        r"\bon[ -]?site\s+(?:\d+|one|two|three|four|five|six|seven)\s+days?\s+a\s+week\b",
+    ),
+}
+
+
+def _work_mode_from_description(description_text: str) -> WorkMode:
+    result = _infer_unique(
+        (description_text,), _WORK_MODE_DESCRIPTION_SECTION_PATTERNS, WorkMode.UNKNOWN
+    )
+    return WorkMode(result)
+
+
 def infer_work_mode(
-    title: str | None, location_text: str | None, metadata: Mapping[str, Any]
+    title: str | None,
+    location_text: str | None,
+    metadata: Mapping[str, Any],
+    description: str | None = None,
 ) -> WorkMode:
     remote_flag = any(
         key.casefold() in {"isremote", "is_remote", "remote"} and value is True
         for key, value in metadata.items()
     )
     explicit_flag = "remote" if remote_flag else None
-    result = _infer_unique(
-        _evidence_texts(
-            title,
-            location_text,
-            explicit_flag,
-            metadata=metadata,
-            metadata_keys=frozenset(
-                {"workplacetype", "workplace_type", "remote_scope", "categories"}
+    general_result = WorkMode(
+        _infer_unique(
+            _evidence_texts(
+                title,
+                location_text,
+                explicit_flag,
+                metadata=metadata,
+                metadata_keys=frozenset(
+                    {"workplacetype", "workplace_type", "remote_scope", "categories"}
+                ),
             ),
-        ),
-        {
-            WorkMode.REMOTE: (r"\bremote\b", r"\bremoto\b", r"\bremota\b"),
-            WorkMode.HYBRID: (r"\bhybrid\b", r"\bh[ií]brid[oa]\b"),
-            WorkMode.ONSITE: (r"\bon[ -]?site\b", r"\bpresencial\b"),
-        },
-        WorkMode.UNKNOWN,
+            {
+                WorkMode.REMOTE: (r"\bremote\b", r"\bremoto\b", r"\bremota\b"),
+                WorkMode.HYBRID: (r"\bhybrid\b", r"\bh[ií]brid[oa]\b"),
+                WorkMode.ONSITE: (r"\bon[ -]?site\b", r"\bpresencial\b"),
+            },
+            WorkMode.UNKNOWN,
+        )
     )
-    return WorkMode(result)
+    description_text = normalize_location(description) or ""
+    description_result = (
+        _work_mode_from_description(description_text) if description_text else WorkMode.UNKNOWN
+    )
+    if general_result is WorkMode.UNKNOWN:
+        return description_result
+    if description_result is WorkMode.UNKNOWN or description_result is general_result:
+        return general_result
+    # Conflicting explicit signals (e.g. a hybrid title but a remote "Work Model" section)
+    # deliberately fall back to UNKNOWN rather than silently favoring either — same
+    # never-override convention as seniority_classification's structured/title conflict.
+    return WorkMode.UNKNOWN
 
 
 def infer_seniority(
@@ -774,11 +867,48 @@ def infer_seniority(
             ),
         ),
         {
-            Seniority.INTERN: (r"\bintern(ship)?\b", r"\best[aá]gi[oa]\b"),
-            Seniority.JUNIOR: (r"\bjunior\b", r"\bjr\.?\b"),
-            Seniority.MID: (r"\bmid(?:[- ]level)?\b", r"\bmiddle\b", r"\bpleno\b"),
+            # seniority-v3 (F20-70): the noun form "estágio"/"estágia" was already
+            # covered, but the far more common Brazilian job-title form is the
+            # person/adjective form "estagiário"/"estagiária" ("Vaga de Estagiário de
+            # X"), with or without the accent, singular or plural — that pattern was
+            # missing entirely. `trainee`, `entry level`, `new grad` and
+            # `apprentice`/`aprendiz` are treated as INTERN-equivalent entry programs in
+            # this app's domain (not an intermediate level).
+            Seniority.INTERN: (
+                r"\bintern(ship)?\b",
+                r"\best[aá]gi[oa]\b",
+                r"\best[aá]gi[áa]ri[oa]s?\b",
+                r"\btrainee\b",
+                r"\bentry[ -]level\b",
+                r"\bnew grad(?:uate)?\b",
+                r"\bapprentice\b",
+                r"\baprendiz\b",
+            ),
+            Seniority.JUNIOR: (
+                r"\bjunior\b",
+                r"\bjr\.?\b",
+                # "early career" (Greenhouse convention) and a bare "graduate" title
+                # (not "Graduate School"/"...degree"/"...program", which name an
+                # academic credential, not a job level) read as JUNIOR, per the
+                # diagnostic in docs/44-roadmap-fase-20/evidencias/
+                # diagnostico-vagas-junior-2026-09-28.md.
+                r"\bearly career\b",
+                # "new grad(uate)" is handled by the INTERN pattern above; excluded
+                # here so it is not ambiguous between the two enums (the 4-char
+                # lookbehind matches "new " exactly, case-folded evidence).
+                r"(?<!new )\bgraduate\b(?!\s+(?:school|degree|program))",
+            ),
+            Seniority.MID: (
+                r"\bmid(?:[- ]level)?\b",
+                r"\bmiddle\b",
+                r"\bpleno\b",
+                r"\bpl\.?\b",
+            ),
             Seniority.SENIOR: (r"\bsenior\b", r"\bsr\.?\b"),
-            Seniority.STAFF: (r"\bstaff\b",),
+            # "especialista" and "principal" have no dedicated enum tier; both denote a
+            # deep individual-contributor level closest to STAFF, so they are folded
+            # into it rather than inventing a new Seniority member (card F17-06 scope).
+            Seniority.STAFF: (r"\bstaff\b", r"\bespecialista\b", r"\bprincipal\b"),
             Seniority.LEAD: (r"\blead\b", r"\bl[ií]der\b"),
             Seniority.MANAGER: (r"\bmanager\b", r"\bgerente\b"),
             Seniority.DIRECTOR: (r"\bdirector\b", r"\bdiretor\b"),
@@ -788,10 +918,22 @@ def infer_seniority(
     return Seniority(result)
 
 
-SENIORITY_MAPPING_VERSION = "seniority-v1"
+#: v2 -> v3 (F20-70): fixed INTERN to also match the person/adjective form
+#: "estagiário"/"estagiária" (was noun-only, "estágio"/"estágia"), and added
+#: trainee/entry level/new grad/apprentice/aprendiz (INTERN) and early
+#: career/graduate (JUNIOR) — see docs/44-roadmap-fase-20/fase-20/
+#: f20-70-lacunas-de-palavra-chave-senioridade.md. No existing non-UNKNOWN
+#: classification changes; this only fills previously-UNKNOWN titles.
+SENIORITY_MAPPING_VERSION = "seniority-v3"
 
 # Collector payloads are intentionally listed even when they have no approved level
 # field. Adding a field here is part of that collector's homologation, not a heuristic.
+#
+# seniority-v2 checked the real fixtures under tests/backend/acquisition/ for Ashby,
+# Greenhouse and Lever payloads: none of them carry a structured seniority/level field
+# (no key such as "level", "seniority", "experienceLevel" appears in any fixture), so
+# those three collectors remain unmapped (()). Adding an entry later requires the same
+# fixture evidence, per the mapping-version comment above.
 HOMOLOGATED_SENIORITY_FIELDS: dict[str, tuple[str, ...]] = {
     "ashby": (),
     "greenhouse": (),
@@ -873,6 +1015,50 @@ def infer_contract_type(
     return ContractType(result)
 
 
+#: Card F20-61: title/metadata evidence for "this is a time-boxed entry program"
+#: (estágio/trainee/early-careers/residência) — the recency-filter exception signal.
+#: Deliberately not a `ContractType` member: "trainee" is not the same thing as
+#: "internship" for the rest of the system (e.g. `ContractType.INTERNSHIP` also
+#: implies eligibility/matching semantics this signal must not carry). Reuses
+#: `ContractType.INTERNSHIP`'s own patterns (estágio/internship) plus the additional
+#: terms this card's exception explicitly covers.
+_RECENCY_EXEMPT_PROGRAM_PATTERNS: tuple[str, ...] = (
+    r"\binternship\b",
+    r"\best[aá]gi[oa]\b",
+    r"\best[aá]gi[áa]ri[oa]s?\b",
+    r"\btrainee\b",
+    r"\bresid[eê]ncia\b",
+    r"\bresidency\b",
+    r"\bearly[ -]?career[s]?\b",
+    r"\bin[íi]cio de carreira\b",
+)
+
+
+def infer_recency_exempt_program(
+    title: str | None, metadata: Mapping[str, Any], *, contract_type: ContractType
+) -> bool:
+    """Whether the recency filter's "programa com prazo" exception applies.
+
+    True whenever the contract type is already `INTERNSHIP`, or the title/metadata
+    otherwise names a time-boxed entry program (trainee/early-careers/residência) that
+    `infer_contract_type`'s narrower pattern set does not classify as INTERNSHIP.
+    """
+    if contract_type is ContractType.INTERNSHIP:
+        return True
+    evidence = _evidence_texts(
+        title,
+        metadata=metadata,
+        metadata_keys=frozenset(
+            {"employmenttype", "employment_type", "commitment", "job_type", "categories"}
+        ),
+    )
+    return any(
+        re.search(pattern, text)
+        for text in evidence
+        for pattern in _RECENCY_EXEMPT_PROGRAM_PATTERNS
+    )
+
+
 def opportunity_fingerprint(
     *,
     company_id: UUID | None,
@@ -917,11 +1103,20 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
     normalized_company_name = normalize_company_name(company_name)
     normalized_location = normalize_location(location_text)
     normalized_url = normalize_url(source_url)
-    work_mode = infer_work_mode(original_title, location_text, value.metadata)
+    work_mode = infer_work_mode(original_title, location_text, value.metadata, value.description)
     seniority, _ = seniority_classification(
         original_title, value.metadata, source_type=value.source_type
     )
     contract_type = infer_contract_type(original_title, location_text, value.metadata)
+    recency_exempt_program = infer_recency_exempt_program(
+        original_title, value.metadata, contract_type=contract_type
+    )
+    role_family_decision = classify_role_family(
+        title=original_title,
+        departments=departments_from_metadata(value.metadata),
+        description=value.description,
+    )
+    allowed_countries = resolve_allowed_countries(location_text)
     return CanonicalCandidate(
         original_title=original_title,
         normalized_title=normalized_title,
@@ -957,9 +1152,72 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
             source_type=value.source_type,
         ),
         skills=extract_skills(original_title, value.description, value.metadata),
+        role_family=role_family_decision.role_family,
+        role_family_evidence=dict(role_family_decision.evidence),
+        role_family_version=role_family_decision.version,
+        allowed_countries=allowed_countries,
+        valid_through=value.valid_through,
+        recency_exempt_program=recency_exempt_program,
     )
 
 
 def build_candidate(value: NormalizationInput) -> CanonicalCandidate:
     """Compatibility entry point for the original normalization slice."""
     return normalize_candidate(value)
+
+
+#: Card F20-61: the default search shows only a posting from the last 14 days. Not a
+#: matching/scoring parameter — never read by `score`, eligibility or verdict (same
+#: Phase 20 invariant `opportunity_fingerprint`/role-family classification follow).
+DEFAULT_RECENCY_WINDOW_DAYS = 14
+
+
+@dataclass(frozen=True, slots=True)
+class RecencyDecision:
+    """Whether one opportunity belongs in the default (recency-filtered) listing.
+
+    `effective_date` is `published_at` when the source provided one, else
+    `first_seen_at` (`date_is_estimated=True` in that case) — never a fabricated date.
+    `visible` is `True` when any of three independent conditions holds: the effective
+    date is inside the window, the posting is a time-boxed entry program (estágio/
+    trainee/early-careers/residência), or `valid_through` names an application
+    deadline still in the future. Toggling the filter off (card F20-61 scope item 3)
+    is the caller's job — this always answers "would the filter show it", regardless
+    of whether the caller applies that answer.
+    """
+
+    visible: bool
+    effective_date: datetime | None
+    date_is_estimated: bool
+
+
+def recency_decision(
+    *,
+    published_at: datetime | None,
+    first_seen_at: datetime | None,
+    valid_through: datetime | None,
+    recency_exempt_program: bool,
+    now: datetime,
+    window_days: int = DEFAULT_RECENCY_WINDOW_DAYS,
+) -> RecencyDecision:
+    """Pure, deterministic recency calculation (card F20-61, scope item 3).
+
+    `now` is always supplied by the caller — this function never reads the clock, so
+    tests can freeze time and cover both sides of the window boundary exactly.
+    """
+    if published_at is not None:
+        effective_date: datetime | None = published_at
+        date_is_estimated = False
+    else:
+        effective_date = first_seen_at
+        date_is_estimated = first_seen_at is not None
+    within_window = (
+        effective_date is not None and effective_date >= now - timedelta(days=window_days)
+    )
+    has_open_deadline = valid_through is not None and valid_through > now
+    visible = within_window or recency_exempt_program or has_open_deadline
+    return RecencyDecision(
+        visible=visible,
+        effective_date=effective_date,
+        date_is_estimated=date_is_estimated,
+    )

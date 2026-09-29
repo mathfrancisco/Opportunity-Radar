@@ -4,15 +4,25 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from opportunity_radar.acquisition.models import (
+    HostBudgetStateModel,
     RawItemModel,
     SourceCheckpointModel,
     SourceDefinitionModel,
     SourceRunModel,
 )
-from opportunity_radar.acquisition.scheduling import SourceRunHistory
+from opportunity_radar.acquisition.scheduling import (
+    DEFAULT_HOST_BUDGET_WINDOW,
+    SourceRunHistory,
+)
+from opportunity_radar.companies.models import CompanySource
+from opportunity_radar.opportunities.models import (
+    SourceOccurrenceModel,
+    SourceOccurrenceObservationModel,
+)
 
 _UNFINISHED_RUN_STATUSES = ("PENDING", "RUNNING")
 
@@ -28,9 +38,24 @@ class AcquisitionRepository:
             .options(selectinload(SourceDefinitionModel.checkpoint))
         )
 
-    def list_sources(
-        self, *, offset: int, limit: int
-    ) -> tuple[list[SourceDefinitionModel], int]:
+    def enabled_ats_boards(self) -> frozenset[tuple[str, str]]:
+        rows = self.session.execute(
+            select(CompanySource.source_type, CompanySource.external_key)
+            .join(
+                SourceDefinitionModel,
+                SourceDefinitionModel.company_source_id == CompanySource.id,
+            )
+            .where(
+                SourceDefinitionModel.enabled.is_(True),
+                CompanySource.external_key.is_not(None),
+                CompanySource.source_type.in_(("ashby", "greenhouse", "lever")),
+            )
+        )
+        return frozenset(
+            (source_type, external_key) for source_type, external_key in rows if external_key
+        )
+
+    def list_sources(self, *, offset: int, limit: int) -> tuple[list[SourceDefinitionModel], int]:
         statement = select(SourceDefinitionModel).order_by(SourceDefinitionModel.name)
         sources = list(self.session.scalars(statement.offset(offset).limit(limit)))
         total = self.session.scalar(select(func.count(SourceDefinitionModel.id))) or 0
@@ -46,11 +71,7 @@ class AcquisitionRepository:
     def list_runs(
         self, *, offset: int, limit: int, source_id: UUID | None = None
     ) -> tuple[list[SourceRunModel], int]:
-        filters = (
-            []
-            if source_id is None
-            else [SourceRunModel.source_definition_id == source_id]
-        )
+        filters = [] if source_id is None else [SourceRunModel.source_definition_id == source_id]
         statement = (
             select(SourceRunModel)
             .where(*filters)
@@ -58,10 +79,7 @@ class AcquisitionRepository:
             .order_by(SourceRunModel.started_at.desc(), SourceRunModel.id.desc())
         )
         runs = list(self.session.scalars(statement.offset(offset).limit(limit)))
-        total = (
-            self.session.scalar(select(func.count(SourceRunModel.id)).where(*filters))
-            or 0
-        )
+        total = self.session.scalar(select(func.count(SourceRunModel.id)).where(*filters)) or 0
         return runs, total
 
     def run_history(self, source_id: UUID, *, sample: int = 32) -> SourceRunHistory:
@@ -102,14 +120,150 @@ class AcquisitionRepository:
 
     def identical_raw_item_exists(
         self, *, source_id: UUID, identity_key: str, payload_hash: str
-    ) -> bool:
+    ) -> RawItemModel | None:
         return self.session.scalar(
-            select(RawItemModel.id).where(
+            select(RawItemModel).where(
                 RawItemModel.source_definition_id == source_id,
                 RawItemModel.identity_key == identity_key,
                 RawItemModel.payload_hash == payload_hash,
             )
-        ) is not None
+        )
+
+    def raw_item_by_envelope(
+        self,
+        *,
+        source_id: UUID,
+        identity_key: str,
+        payload_hash: str,
+        semantic_hash: str,
+        semantic_hash_version: str,
+    ) -> RawItemModel | None:
+        """Return only evidence with the same immutable parser interpretation."""
+        return self.session.scalar(
+            select(RawItemModel).where(
+                RawItemModel.source_definition_id == source_id,
+                RawItemModel.identity_key == identity_key,
+                RawItemModel.payload_hash == payload_hash,
+                RawItemModel.semantic_hash == semantic_hash,
+                RawItemModel.semantic_hash_version == semantic_hash_version,
+            )
+        )
+
+    def record_presence_observation(
+        self,
+        *,
+        raw_item: RawItemModel,
+        source_run_id: UUID,
+        observed_at: datetime,
+        content_hash_matched: bool,
+    ) -> None:
+        occurrence = self.session.scalar(
+            select(SourceOccurrenceModel).where(SourceOccurrenceModel.raw_item_id == raw_item.id)
+        )
+        if occurrence is None and raw_item.external_id:
+            occurrence = self.session.scalar(
+                select(SourceOccurrenceModel).where(
+                    SourceOccurrenceModel.source_definition_id == raw_item.source_definition_id,
+                    SourceOccurrenceModel.external_id == raw_item.external_id,
+                )
+            )
+        if occurrence is None and raw_item.canonical_url:
+            occurrence = self.session.scalar(
+                select(SourceOccurrenceModel).where(
+                    SourceOccurrenceModel.source_definition_id == raw_item.source_definition_id,
+                    SourceOccurrenceModel.source_url == raw_item.canonical_url,
+                )
+            )
+        if occurrence is not None and observed_at > occurrence.last_seen_at:
+            occurrence.last_seen_at = observed_at
+            occurrence.last_seen_run_id = source_run_id
+        try:
+            with self.session.begin_nested():
+                self.session.add(
+                    SourceOccurrenceObservationModel(
+                        source_occurrence_id=occurrence.id if occurrence is not None else None,
+                        source_run_id=source_run_id,
+                        raw_item_id=raw_item.id,
+                        observed_at=observed_at,
+                        content_hash_matched=content_hash_matched,
+                    )
+                )
+                self.session.flush()
+        except IntegrityError:
+            pass
+
+    def resumable_run(self, run_id: UUID, *, source_id: UUID) -> SourceRunModel | None:
+        """A named run of this source whose persisted prefix a caller may resume.
+
+        Only a run that stopped short (`PARTIAL`/`FAILED`) while still persisting some
+        evidence qualifies (F20-39 "retomada da mesma execução"); a `SUCCEEDED` run has
+        nothing left to continue, and a run with no persisted items has no prefix at all.
+        """
+        return self.session.scalar(
+            select(SourceRunModel).where(
+                SourceRunModel.id == run_id,
+                SourceRunModel.source_definition_id == source_id,
+                SourceRunModel.status.in_(("PARTIAL", "FAILED")),
+                SourceRunModel.items_persisted > 0,
+            )
+        )
+
+    def has_completed_run(self, source_id: UUID, *, exclude_run_id: UUID) -> bool:
+        """Whether some other run for this source ever proved the board fully read.
+
+        Used only to let a fully-revalidated 304 manifest (F20-39) reuse that persisted
+        complete inventory; `exclude_run_id` keeps the current in-flight run (already
+        flushed, not yet committed) from counting as its own prior proof.
+        """
+        return (
+            self.session.scalar(
+                select(SourceRunModel.id)
+                .where(
+                    SourceRunModel.source_definition_id == source_id,
+                    SourceRunModel.id != exclude_run_id,
+                    SourceRunModel.complete.is_(True),
+                )
+                .limit(1)
+            )
+            is not None
+        )
 
     def checkpoint(self, source_id: UUID) -> SourceCheckpointModel | None:
         return self.session.get(SourceCheckpointModel, source_id)
+
+    def get_host_budget(self, host: str) -> HostBudgetStateModel | None:
+        return self.session.get(HostBudgetStateModel, host)
+
+    def record_host_budget_usage(
+        self,
+        host: str,
+        *,
+        now: datetime,
+        requests: int,
+        default_ceiling: int,
+        cooldown_until: datetime | None = None,
+    ) -> None:
+        """Persist this run's spend against `host`'s shared budget (F20-38).
+
+        Read-modify-write on the same row every source of this host shares: two sources
+        collected in the same pass each call this once, so the second one to commit sees
+        the first one's spend already counted, not a stale ceiling. `cooldown_until` is set
+        unconditionally when given — the caller (a fresh `Retry-After`) always wins over
+        whatever cooldown was there before, never the other way round.
+        """
+        row = self.session.get(HostBudgetStateModel, host)
+        if row is None:
+            row = HostBudgetStateModel(
+                host=host,
+                window_start=now,
+                requests_used=0,
+                requests_ceiling=default_ceiling,
+            )
+            self.session.add(row)
+        elif now - row.window_start >= DEFAULT_HOST_BUDGET_WINDOW:
+            row.window_start = now
+            row.requests_used = 0
+        row.requests_used += requests
+        if cooldown_until is not None:
+            row.cooldown_until = cooldown_until
+        self.session.flush()

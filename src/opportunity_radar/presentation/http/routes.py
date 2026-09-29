@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Response, status
 
 from opportunity_radar.platform.config import Settings, get_settings
-from opportunity_radar.platform.health import ollama_health, ready_health
+from opportunity_radar.platform.health import ai_health, ready_health
 from opportunity_radar.presentation.http.acquisition import router as acquisition_router
 from opportunity_radar.presentation.http.companies import router as companies_router
 from opportunity_radar.presentation.http.dashboard import router as dashboard_router
@@ -36,11 +36,11 @@ def ready(response: Response, settings: Settings = Depends(get_settings)) -> dic
 @router.get("/health")
 def health(response: Response, settings: Settings = Depends(get_settings)) -> dict[str, object]:
     database = ready_health(settings)
-    ollama = ollama_health(settings)
+    ai = ai_health(settings)
     if database.status != "healthy":
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return {
         "status": "ok" if database.status == "healthy" else "unhealthy",
         "database": database.as_dict(),
-        "ollama": ollama.as_dict(),
+        "ai": ai.as_dict(),
     }

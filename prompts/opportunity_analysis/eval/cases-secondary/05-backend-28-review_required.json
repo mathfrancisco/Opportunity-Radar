@@ -1,0 +1,99 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "51.7500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "STAFF",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": "YEAR",
+        "maximum": "201600.00",
+        "minimum": "127500.00",
+        "currency": "EUR"
+      },
+      "published_at": "2026-08-11T11:49:58.471000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:nodejs:sha256:7659ca3254683ea111f2d91ab2fff2410157a28d969cab74f2d4375d2f18e4eb",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:typescript:sha256:d34ee8830e6157f4507d823429716e9786f423ed91125f446ec5bb5d32d28186"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "YEAR",
+          "maximum": "201600.00",
+          "minimum": "127500.00",
+          "currency": "EUR",
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "{\"compensationType\": \"Salary\", \"currencyCode\": \"EUR\", \"interval\": \"1 YEAR\", \"maxValue\": 201600, \"minValue\": 127500}",
+          "evidence_source": "ashby.compensation.summaryComponents.Salary",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Staff Core Platform Engineer",
+    "company_name": "Empresa X",
+    "location_text": "Berlin Office",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\n🎯 Your main goal will be to shape and evolve the core platform architecture that powers Empresa X — creating scalable, configurable foundations across execution, infrastructure, and frontend platform so 80+ product engineers and our open-source community can build confidently across cloud and self-hosted deployments.\n\nWorking across our platform teams, you’ll bring architectural coherence to the systems they jointly own and help us make the right long-term technical decisions as Empresa X scales:\n\nARCHITECTURAL DIRECTION ACROSS CORE PLATFORM\n\n- Drive architecture across the two Core Platform teams, ensuring execution, infrastructure, data, and frontend platform systems evolve as a coherent whole rather than independent components.\n\n- Design highly adaptable backend foundations that support different workloads, deployment models, shared product team needs, and future scale without creating unnecessary complexity.\n\n- Partner with the FE platform workstream on core canvas architecture, real-time communication, performance, plugin contracts, and other platform primitives used by product teams.\n\nEXECUTION, DISTRIBUTED SYSTEMS & DATA FOUNDATIONS\n\n- Evolve core subsystems including durable workflow execution and state, orchestration, queue and task distribution, worker management, scheduling, and horizontal scaling.\n\n- Design for correctness and resilience across distributed environments, including failure modes, idempotency, state transitions, tenant isolation, and reliability guarantees.\n\n- Shape our data and persistence architecture, including database scaling, sharding, migration strategies, deployment abstractions, and long-term operational maintainability.\n\nPLATFORM ARCHITECTURE & ENGINEERING ENABLEMENT\n\n- Lead consequential technical decisions through clear proposals and RFCs, making trade-offs explicit and aligning engineers and stakeholders around durable solutions.\n\n- Define stable platform interfaces and abstractions that reduce coupling, support safe migrations, and make the platform easier for feature teams to build on.\n\n- Mentor engineers across all engineering teams through design reviews, pairing, and technical guidance, raising the bar for architecture, system design, and maintainability.\n\nREQUIREMENTS\n\nMUST-HAVES\n\n- 🏗️ Staff-level architectural ownership: You have a track record of leading architecture across multiple systems or teams, including migrations, re-architectures, or foundational platform initiatives with long-term organizational impact.\n\n- 🧠 Systems thinking: You reason deeply about invariants, correctness, failure modes, boundaries, and trade-offs, and you’re comfortable making decisions where there is no obviously perfect solution.\n\n- ⚙️ Configurable systems at scale: You’ve designed highly configurable, adaptable systems that serve multiple use cases or operating modes without becoming brittle or excessively complex.\n\n- 🌐 Distributed systems depth: You’ve designed and operated distributed systems involving concepts such as asynchronous processing, idempotency, state machines, queues, consistency, and resilience.\n\n- 🗄️ Data architecture at scale: You’ve worked on data-intensive systems where persistence, performance, isolation, migrations, and operational reliability were meaningful architectural concerns.\n\n- 🛠️ TypeScript & Node.js depth: You have strong TypeScript experience and have built substantial backend systems with Node.js beyond conventional CRUD applications.\n\n- 🤝 Cross-team technical leadership: You influence through technical judgment, clear communication, RFCs, design reviews, and mentorship, helping multiple teams converge on better solutions without relying on formal authority.\n\n- 🧱 Platform enablement mindset: You care about creating clear contracts, abstractions, and developer experiences that allow other engineers to move faster and more safely.\n\n- 🧹 Long-horizon engineering: You’re energized by modularization, migrations, refactoring, and evolving existing systems while keeping the product and engineering organization moving.\n\nNICE-TO-HAVES\n\n- 🧰 Workflow, orchestration or devtools experience: You’ve worked on workflow engines, orchestration platforms, developer tools, or infrastructure-heavy SaaS products.\n\n- 🖥️ Frontend platform architecture: You’ve worked with architecture-heavy frontend systems such as canvas applications, plugin systems, real-time applications, web workers, or complex rendering environments.\n\n- 🧾 Durable execution patterns: You’ve designed or operated systems using event sourcing, sagas, durable execution, or related state-management patterns.\n\n- 👥 Multi-tenant architecture: You’ve designed systems where tenant isolation, resource management, data boundaries, or noisy-neighbour concerns were important.\n\n- 🌍 Open-source experience: You’ve contributed to or maintained open-source software and understand the additional pressure around public contracts and backward compatibility.\n\n- 📈 Large-scale SaaS exposure: You’ve operated systems at meaningful scale or worked in environments where reliability and architectural decisions had broad customer impact.\n\n- 🧩 Monolith → modular migrations: You’ve decomposed monolithic systems or led incremental architectural migrations without preventing product teams from continuing to ship.\n\n- ☁️ Multi-deployment awareness: You’ve designed products that need to work consistently across both managed cloud and self-hosted environments.\n\n- 🔭 Observability mindset: You think about instrumentation, debugging, incident response, rollout safety, and operability as part of system design rather than an afterthought.\n\n- 🧪 Strong CS grounding: You bring deep knowledge of distributed systems concepts, consistency models, consensus, formal methods, or similarly rigorous approaches to system correctness.\n\nWhy join us?\n\nAt Empresa X, you’ll work on the foundations that almost every product experience depends on. You’ll have influence across two Core Platform teams, helping shape how our execution engine, infrastructure, data architecture, and frontend platform evolve together as both our product and engineering organization scale.\n\nThis is a Staff role with real architectural leverage: you’ll tackle problems that span team boundaries, evolve systems that already operate at meaningful scale, and create platform capabilities that make 80+ engineers more effective. You’ll do that in a remote-first environment that values autonomy, thoughtful experimentation, and engineers who influence through strong technical judgment rather than hierarchy.\n\nSound like the kind of platform challenge you want to own?\n\nApply now — and help us build the future of automation.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

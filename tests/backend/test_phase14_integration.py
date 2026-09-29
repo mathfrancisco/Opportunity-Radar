@@ -234,8 +234,8 @@ def test_company_source_is_registered_corrected_and_proposed_inertly() -> None:
     unsupported = client.post(
         f"/companies/{company['id']}/sources",
         json={
-            "source_type": "workday",
-            "endpoint": "https://example.wd1.myworkdayjobs.com",
+            "source_type": "smartrecruiters",
+            "endpoint": "https://jobs.smartrecruiters.com/example",
             "external_key": "example",
             "evidence_note": "Seen on the careers page.",
         },

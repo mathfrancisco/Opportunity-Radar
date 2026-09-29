@@ -8,6 +8,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -27,6 +28,7 @@ class Company(Base):
     __tablename__ = "company"
     __table_args__ = (
         UniqueConstraint("normalized_name", name="uq_company_normalized_name"),
+        Index("ix_company_normalized_name", "normalized_name"),
         {"schema": SCHEMA},
     )
 
@@ -34,7 +36,12 @@ class Company(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     canonical_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    normalized_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    # Named explicitly: `index=True`'s auto-generated name depends on whether autogenerate
+    # was run with `include_schemas=True` (unset when this table's migration was authored),
+    # so it must not be left to drift with that setting (F20 sanity pass, alembic check).
+    normalized_name: Mapped[str] = mapped_column(
+        String(255), nullable=False, index=False
+    )
     domain: Mapped[str | None] = mapped_column(String(253), unique=True)
     priority: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
     radar_status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
@@ -64,6 +71,7 @@ class CompanyAlias(Base):
             "normalized_alias",
             name="uq_company_alias_company_normalized",
         ),
+        Index("ix_company_alias_normalized_alias", "normalized_alias"),
         {"schema": SCHEMA},
     )
 
@@ -74,7 +82,9 @@ class CompanyAlias(Base):
         ForeignKey(f"{SCHEMA}.company.id", ondelete="CASCADE"), nullable=False
     )
     alias: Mapped[str] = mapped_column(String(255), nullable=False)
-    normalized_alias: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    normalized_alias: Mapped[str] = mapped_column(
+        String(255), nullable=False, index=False
+    )
     company: Mapped[Company] = relationship(back_populates="aliases")
 
 
@@ -154,6 +164,82 @@ class CompanySourceRevision(Base):
     changes: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     evidence_note: Mapped[str] = mapped_column(Text, nullable=False)
     company_source: Mapped[CompanySource] = relationship(back_populates="revisions")
+
+
+class DiscoveryAttemptModel(Base):
+    """One `discover_ats` GET against a company's careers page (F20-27).
+
+    Recorded whether or not it found anything, so `eligible_companies` never repeats the
+    same company inside the revisit interval. Discovery itself never creates a
+    `SourceRun` or `RawItem`: this table is the only trace of the attempt.
+    """
+
+    __tablename__ = "discovery_attempt"
+    __table_args__ = (
+        Index("ix_discovery_attempt_company_attempted", "company_id", "attempted_at"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey(f"{SCHEMA}.company.id", ondelete="CASCADE"), nullable=False
+    )
+    checked_url: Mapped[str] = mapped_column(Text, nullable=False)
+    http_status: Mapped[int | None] = mapped_column(Integer)
+    ats_found: Mapped[str | None] = mapped_column(String(50))
+    attempted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    #: Multi-page discovery's own verdict (F20-36); `None` for a single-request F20-27
+    #: attempt, which never set this column.
+    stop_reason: Mapped[str | None] = mapped_column(String(32))
+    urls_examined: Mapped[int | None] = mapped_column(Integer)
+    http_requests: Mapped[int | None] = mapped_column(Integer)
+    #: When `eligible_companies` (and the equivalent multi-page revisit check) may retry
+    #: this company again. `None` falls back to `DEFAULT_REVISIT_INTERVAL_DAYS`.
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CompanyStartupEvidence(Base):
+    """One piece of evidence that a company is a startup (card F20-54).
+
+    Append-only: a second sighting is a second row, never an overwrite, and a weak signal
+    never displaces a strong one — the company's strength is derived by reading every row
+    (`companies.startup`). Display/filter metadata only: nothing in matching reads it.
+    """
+
+    __tablename__ = "company_startup_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "signal IN ('yc_batch', 'seed_stage', 'series_a', 'other')",
+            name="ck_company_startup_evidence_signal",
+        ),
+        CheckConstraint(
+            "strength IN ('strong', 'weak')",
+            name="ck_company_startup_evidence_strength",
+        ),
+        Index("ix_company_startup_evidence_company", "company_id"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey(f"{SCHEMA}.company.id", ondelete="CASCADE"), nullable=False
+    )
+    signal: Mapped[str] = mapped_column(String(20), nullable=False)
+    strength: Mapped[str] = mapped_column(String(10), nullable=False)
+    #: The literal text the signal was read from (e.g. "Y Combinator (S24)").
+    source_text: Mapped[str] = mapped_column(Text, nullable=False)
+    source_url: Mapped[str | None] = mapped_column(Text)
+    #: YC batch code (e.g. "S24") when `signal` is `yc_batch` and the text names one.
+    batch: Mapped[str | None] = mapped_column(String(20))
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class CompanyImportBatch(Base):

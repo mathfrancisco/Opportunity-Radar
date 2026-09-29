@@ -11,14 +11,15 @@ still in the inbox: hiding it would make the screen quietly disagree with the ca
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any
+from functools import reduce
+from typing import Any, Literal
 from uuid import UUID
 
-from sqlalchemy import Select, case, func, literal, select
+from sqlalchemy import Select, and_, case, func, literal, or_, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import (
@@ -26,15 +27,22 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
     SourceRunModel,
 )
-from opportunity_radar.companies.models import Company, CompanySource
+from opportunity_radar.companies.models import Company, CompanySource, CompanyStartupEvidence
+from opportunity_radar.dashboard.metrics import _is_homologated
+from opportunity_radar.dashboard.search_synonyms import synonym_variants
 from opportunity_radar.matching import currency
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
 from opportunity_radar.matching.service import RULES_VERSION
+from opportunity_radar.opportunities.domain import DEFAULT_RECENCY_WINDOW_DAYS
 from opportunity_radar.opportunities.models import (
+    DuplicateCandidateModel,
     NormalizationResultModel,
+    OpportunityCompensationModel,
     OpportunityModel,
+    RelevanceMarkModel,
     SourceOccurrenceModel,
 )
+from opportunity_radar.opportunities.regions import ANY_COUNTRY
 from opportunity_radar.pipeline.models import ApplicationProcessModel
 
 NEW_OPPORTUNITY_WINDOW_DAYS = 7
@@ -63,7 +71,16 @@ class InboxItem:
     seniority: str
     contract_type: str
     lifecycle_status: str
+    role_family: str
     published_at: datetime | None
+    #: Card F20-61: `published_at` when the source has one, else `first_seen_at`
+    #: (never a fabricated real date) — the date the recency filter actually compared
+    #: against.
+    recency_effective_date: datetime | None
+    #: `True` when `recency_effective_date` came from `first_seen_at` (the radar's own
+    #: "first seen" fallback), never presented to the client as a real publication
+    #: date without this flag.
+    date_is_estimated: bool
     opportunity_version: int
     assessment_id: UUID | None = None
     assessment_opportunity_version: int | None = None
@@ -82,6 +99,15 @@ class InboxItem:
     application_id: UUID | None = None
     application_stage: str | None = None
     application_next_action_at: datetime | None = None
+    #: Whether a `PENDING` `duplicate_candidate` row names this opportunity, on either
+    #: side of the pair (F20-26). Never `True` for a `CONFIRMED`/`REJECTED` row — the
+    #: badge is for a decision still owed, not a settled one.
+    has_pending_duplicate: bool = False
+    #: Card F20-54: the company's startup evidence, summarized (`strong` when any row is
+    #: strong, else `weak`; `None` without evidence) and the YC batch when a strong
+    #: `yc_batch` row names one. Display only — matching never reads it.
+    startup_strength: str | None = None
+    startup_batch: str | None = None
 
     @property
     def applied(self) -> bool:
@@ -96,6 +122,10 @@ class InboxPage:
     total: int
     offset: int
     limit: int
+    #: Opportunities the same filters would show without the area filter. 0 when no
+    #: `role_families` filter is active, so a client never subtracts a filter it did not
+    #: apply. Never a count of hidden rows: they stay one click away, never deleted.
+    off_filter_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,13 +138,53 @@ class InboxQuery:
     work_mode: str | None = None
     lifecycle_status: str | None = None
     published_after: datetime | None = None
+    created_after: datetime | None = None
     only_assessed: bool = False
     applied: bool | None = None
     search: str | None = None
+    #: `role-family-v1` codes. Empty means every area — never a filter that hides rows.
+    role_families: tuple[str, ...] = ()
     profile_version_id: UUID | None = None
+    #: Empty means every seniority — an unknown/blank value is never an implicit
+    #: exclusion (SPEC 37, "Contrato de consulta").
+    seniorities: tuple[str, ...] = ()
+    #: ISO country code from the `regions-v1` table (`opportunities.regions`). `None`
+    #: means every country. An opportunity whose `allowed_countries` is unknown (`NULL`)
+    #: still matches — unknown never becomes an implicit exclusion (card F17-06, same
+    #: contract as `role_families`/`seniorities` above).
+    allowed_country: str | None = None
+    #: Compensation range, compared as-is against `OpportunityCompensationModel`
+    #: amounts. No currency conversion: mixing currencies in one query compares raw
+    #: numbers, a known limitation until a conversion service exists for filtering
+    #: (`matching.currency` only converts for scoring today).
+    salary_min: Decimal | None = None
+    salary_max: Decimal | None = None
+    #: `SourceDefinitionModel` ids. Matches on the opportunity's occurrences (`EXISTS`),
+    #: never a join — an opportunity with several matching sources still appears once
+    #: (SPEC 37, "Contrato de consulta": "fonte filtra ocorrências, não duplica").
+    source_definition_ids: tuple[UUID, ...] = ()
     order: InboxOrder = InboxOrder.PRIORITY
     offset: int = 0
     limit: int = 50
+    #: Card F20-61. `True` shows only a posting from the last `recency_window_days`
+    #: days (`published_at` or, as a marked estimate, `first_seen_at`), except a
+    #: time-boxed entry program (`recency_exempt_program`) or one with a still-open
+    #: `valid_through`. Defaults to `False` *here* (an unfiltered query object, so an
+    #: existing or future direct caller of `list_opportunity_inbox` is never silently
+    #: narrowed) — the product default ("server shows only recent unless the client
+    #: asks for everything") lives one layer up, in the `/inbox` HTTP contract
+    #: (`presentation/http/dashboard.py`), whose own `Query(default=True)` is what
+    #: actually makes "no parameter" mean "filtered" for the API's callers.
+    only_recent: bool = False
+    #: Card F20-54: `True` keeps only opportunities whose company has at least one
+    #: startup evidence row (any strength). Never touches score or verdict.
+    only_startups: bool = False
+    recency_window_days: int = DEFAULT_RECENCY_WINDOW_DAYS
+    #: The instant the recency window is measured against. A `field(default_factory=...)`
+    #: rather than a fixed default so every unparametrized `InboxQuery()` still reads the
+    #: real clock exactly once, at construction — never re-reading it later — while a
+    #: test can freeze it by passing an explicit value.
+    now: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +210,9 @@ class SourceHealth:
     last_run_items_skipped: int | None = None
     last_run_items_invalid: int | None = None
     seniority_counts: dict[str, int] = field(default_factory=dict)
+    #: The optimistic-concurrency version (F20-25): a batch probe over several proposals
+    #: needs each one's own version, not the id it started the batch with.
+    version: int = 1
 
     @property
     def last_run_duration_seconds(self) -> float | None:
@@ -188,6 +261,111 @@ class OverviewSummary:
     #: Active applications whose next action is already due or falls inside the window.
     follow_ups_due: int = 0
     follow_up_window_days: int = FOLLOW_UP_WINDOW_DAYS
+    #: Support line data for the "Acervo" block (F17-01). `precision_percent` is `None`
+    #: when there are not enough marks to compute it — never a frail number.
+    precision_percent: Decimal | None = None
+    precision_marked_count: int = 0
+    companies_covered: int = 0
+    companies_with_ats: int = 0
+
+
+#: Source types with a collector registered (`registry.py`), i.e. an ATS the radar can
+#: actually collect from. "Empresas com ATS identificado" per the SPEC notes.
+ATS_COLLECTOR_SOURCE_TYPES = (
+    "ashby",
+    "greenhouse",
+    "lever",
+    "workday",
+    "teamtailor",
+    "workable",
+    "factorial",
+)
+#: Number of top Inbox rows, in the default order, that the precision report samples.
+PRECISION_SAMPLE_SIZE = 50
+
+
+@dataclass(frozen=True, slots=True)
+class SourceCoverageMetric:
+    source_definition_id: UUID
+    name: str
+    runs: int
+    items_seen: int
+    items_persisted: int
+    items_duplicate: int
+    items_invalid: int
+    new_opportunities: int
+
+
+@dataclass(frozen=True, slots=True)
+class CoverageMetrics:
+    window_days: int
+    runs: int
+    items_seen: int
+    items_persisted: int
+    items_duplicate: int
+    items_invalid: int
+    new_opportunities: int
+    companies_covered: int
+    companies_with_ats: int
+    seniority_unknown_rate: Decimal | None
+    #: Rate of `role_family == 'UNKNOWN'` in the whole catalogue. Card F17-02's acceptance
+    #: is < 10%, measured here rather than fabricated.
+    role_family_unknown_rate: Decimal | None
+    by_source: tuple[SourceCoverageMetric, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class PrecisionMetrics:
+    """Precision of the top `sample_size` Inbox rows, computed only over marked ones."""
+
+    sample_size: int
+    marked_count: int
+    relevant_count: int
+    precision: Decimal | None
+
+
+@dataclass(frozen=True, slots=True)
+class SearchMetricsReport:
+    window_days: int
+    generated_at: datetime
+    coverage: CoverageMetrics
+    precision: PrecisionMetrics
+
+
+@dataclass(frozen=True, slots=True)
+class CompanyFunnelStage:
+    stage: str
+    companies: int
+    of_previous: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class CompanyCoverageFunnel:
+    window_days: int
+    generated_at: datetime
+    canonical_companies_total: int
+    stages: tuple[CompanyFunnelStage, ...]
+    enabled_but_unhealthy: int
+
+
+@dataclass(frozen=True, slots=True)
+class UsefulYieldMetric:
+    """Windowed yield; `judged_opportunities` shows support for relevance rates.
+
+    An unmarked opportunity is not a negative mark. Rates are null only when their
+    denominator is zero, and a measured zero relevance rate remains zero.
+    """
+
+    window_days: int
+    requests: int
+    new_unique_opportunities: int
+    judged_opportunities: int
+    judged_relevant: int | None
+    judgement_rate: Decimal | None
+    yield_per_100_requests: Decimal | None
+    discovery_delay_p50_seconds: float | None
+    discovery_delay_p95_seconds: float | None
+    contribution_by_source: dict[UUID, int]
 
 
 def _latest_assessments(profile_version_id: UUID | None) -> Any:
@@ -287,7 +465,9 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
             OpportunityModel.seniority,
             OpportunityModel.contract_type,
             OpportunityModel.lifecycle_status,
+            OpportunityModel.role_family,
             OpportunityModel.published_at,
+            OpportunityModel.first_seen_at,
             OpportunityModel.version,
             assessments.c.assessment_id,
             assessments.c.assessment_opportunity_version,
@@ -306,6 +486,16 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
             applications.c.application_id,
             applications.c.current_stage,
             applications.c.next_action_at,
+            select(DuplicateCandidateModel.id)
+            .where(
+                DuplicateCandidateModel.status == "PENDING",
+                (DuplicateCandidateModel.opportunity_id == OpportunityModel.id)
+                | (DuplicateCandidateModel.duplicate_opportunity_id == OpportunityModel.id),
+            )
+            .exists()
+            .label("has_pending_duplicate"),
+            _startup_strength_column(),
+            _startup_batch_column(),
         )
         .select_from(OpportunityModel)
         .outerjoin(assessments, assessments.c.opportunity_id == OpportunityModel.id)
@@ -318,6 +508,60 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
         assessments,
         analyses,
     )
+
+
+def _startup_evidence_rows(*conditions: Any) -> Select[Any]:
+    return select(CompanyStartupEvidence.id).where(
+        CompanyStartupEvidence.company_id == OpportunityModel.canonical_company_id,
+        *conditions,
+    )
+
+
+def _startup_strength_column() -> Any:
+    return case(
+        (_startup_evidence_rows(CompanyStartupEvidence.strength == "strong").exists(), "strong"),
+        (_startup_evidence_rows().exists(), "weak"),
+        else_=None,
+    ).label("startup_strength")
+
+
+def _startup_batch_column() -> Any:
+    return (
+        select(CompanyStartupEvidence.batch)
+        .where(
+            CompanyStartupEvidence.company_id == OpportunityModel.canonical_company_id,
+            CompanyStartupEvidence.signal == "yc_batch",
+            CompanyStartupEvidence.strength == "strong",
+            CompanyStartupEvidence.batch.is_not(None),
+        )
+        .order_by(CompanyStartupEvidence.captured_at.desc(), CompanyStartupEvidence.id)
+        .limit(1)
+        .correlate(OpportunityModel)
+        .scalar_subquery()
+        .label("startup_batch")
+    )
+
+
+def _recency_condition(query: InboxQuery) -> Any:
+    """SQL mirror of `opportunities.domain.recency_decision` (card F20-61).
+
+    Kept as a plain column comparison (no correlated subquery) so it runs at listing
+    scale: `published_at` when the source has one, else the denormalized
+    `first_seen_at`, compared against the window; OR'd with the two independent
+    exceptions (time-boxed program, still-open `valid_through`). Any change to the
+    pure function's rule must be mirrored here — `tests/backend/dashboard/
+    test_queries.py` covers this condition directly against both fallback paths.
+    """
+    cutoff = query.now - timedelta(days=query.recency_window_days)
+    within_window = or_(
+        and_(OpportunityModel.published_at.is_not(None), OpportunityModel.published_at >= cutoff),
+        and_(OpportunityModel.published_at.is_(None), OpportunityModel.first_seen_at >= cutoff),
+    )
+    has_open_deadline = and_(
+        OpportunityModel.valid_through.is_not(None),
+        OpportunityModel.valid_through > query.now,
+    )
+    return or_(within_window, OpportunityModel.recency_exempt_program.is_(True), has_open_deadline)
 
 
 def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> list[Any]:
@@ -340,20 +584,90 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
         filters.append(OpportunityModel.work_mode == query.work_mode)
     if query.lifecycle_status:
         filters.append(OpportunityModel.lifecycle_status == query.lifecycle_status)
+    if query.role_families:
+        filters.append(OpportunityModel.role_family.in_(query.role_families))
     if query.published_after is not None:
         filters.append(OpportunityModel.published_at >= query.published_after)
-    if query.search and query.search.strip():
-        pattern = f"%{query.search.strip().lower()}%"
+    if query.created_after is not None:
+        filters.append(OpportunityModel.created_at > query.created_after)
+    if query.seniorities:
+        filters.append(OpportunityModel.seniority.in_(query.seniorities))
+    if query.only_recent:
+        filters.append(_recency_condition(query))
+    if query.only_startups:
+        filters.append(_startup_evidence_rows().exists())
+    if query.allowed_country:
         filters.append(
-            func.lower(OpportunityModel.canonical_title).like(pattern)
-            | func.lower(func.coalesce(OpportunityModel.company_name, "")).like(pattern)
+            OpportunityModel.allowed_countries.is_(None)
+            | OpportunityModel.allowed_countries.any(query.allowed_country)
+            | OpportunityModel.allowed_countries.any(ANY_COUNTRY)
         )
+    if query.salary_min is not None or query.salary_max is not None:
+        compensation_conditions = [
+            OpportunityCompensationModel.opportunity_id == OpportunityModel.id
+        ]
+        if query.salary_min is not None:
+            compensation_conditions.append(
+                OpportunityCompensationModel.amount_max.is_(None)
+                | (OpportunityCompensationModel.amount_max >= query.salary_min)
+            )
+        if query.salary_max is not None:
+            compensation_conditions.append(
+                OpportunityCompensationModel.amount_min.is_(None)
+                | (OpportunityCompensationModel.amount_min <= query.salary_max)
+            )
+        filters.append(
+            select(OpportunityCompensationModel.id)
+            .where(*compensation_conditions)
+            .exists()
+        )
+    if query.source_definition_ids:
+        filters.append(
+            select(SourceOccurrenceModel.id)
+            .where(
+                SourceOccurrenceModel.opportunity_id == OpportunityModel.id,
+                SourceOccurrenceModel.source_definition_id.in_(
+                    query.source_definition_ids
+                ),
+            )
+            .exists()
+        )
+    term = query.search.strip() if query.search else ""
+    if term:
+        filters.append(OpportunityModel.search_document.op("@@")(_search_tsquery(term)))
     return filters
 
 
-def _inbox_ordering(order: InboxOrder, assessments: Any) -> list[Any]:
+_DICTIONARIES = ("portuguese", "english")
+
+
+def _search_tsquery(term: str) -> Any:
+    """`websearch_to_tsquery` over both dictionaries, ORed across synonym variants.
+
+    Quoted phrases, `AND`/`OR`/`-negation` in `term` come from `websearch_to_tsquery`
+    itself; `synonym_variants` only substitutes plain tokens before parsing, so those
+    semantics survive (SPEC 37, "Contrato de consulta").
+    """
+    expressions: list[Any] = [
+        func.websearch_to_tsquery(dictionary, variant)
+        for variant in synonym_variants(term)
+        for dictionary in _DICTIONARIES
+    ]
+    return reduce(lambda left, right: left.op("||")(right), expressions)
+
+
+def _search_rank(term: str) -> Any:
+    return func.ts_rank_cd(OpportunityModel.search_document, _search_tsquery(term))
+
+
+def _inbox_ordering(order: InboxOrder, assessments: Any, search_term: str = "") -> list[Any]:
     recency = OpportunityModel.published_at.desc().nulls_last()
     score = assessments.c.score.desc().nulls_last()
+    if search_term:
+        # Contract: rank when there is a term; tie-break by recency then id so
+        # pagination never repeats or drops a row on a tie (SPEC 37, "Contrato de
+        # consulta").
+        return [_search_rank(search_term).desc(), recency, OpportunityModel.id]
     if order is InboxOrder.RECENCY:
         return [recency, score, OpportunityModel.id]
     if order is InboxOrder.SCORE:
@@ -367,15 +681,30 @@ def list_opportunity_inbox(session: Session, query: InboxQuery) -> InboxPage:
         session.scalar(select(func.count()).select_from(statement.subquery("inbox"))) or 0
     )
     rows = session.execute(
-        statement.order_by(*_inbox_ordering(query.order, assessments))
+        statement.order_by(
+            *_inbox_ordering(
+                query.order, assessments, (query.search or "").strip()
+            )
+        )
         .offset(query.offset)
         .limit(query.limit)
     ).all()
+    off_filter_count = 0
+    if query.role_families:
+        broader_statement, _, _ = _inbox_statement(replace(query, role_families=()))
+        broader_total = (
+            session.scalar(
+                select(func.count()).select_from(broader_statement.subquery("inbox_all"))
+            )
+            or 0
+        )
+        off_filter_count = max(broader_total - total, 0)
     return InboxPage(
         items=tuple(_inbox_item(row) for row in rows),
         total=total,
         offset=query.offset,
         limit=query.limit,
+        off_filter_count=off_filter_count,
     )
 
 
@@ -391,25 +720,31 @@ def _inbox_item(row: Any) -> InboxItem:
         seniority=row[7],
         contract_type=row[8],
         lifecycle_status=row[9],
-        published_at=row[10],
-        opportunity_version=row[11],
-        assessment_id=row[12],
-        assessment_opportunity_version=row[13],
-        assessment_profile_version_id=row[14],
-        current_profile_version_id=row[15],
-        verdict=row[16],
-        eligibility=row[17],
-        score=row[18],
-        confidence=row[19],
-        rules_version=row[20],
-        is_stale=row[21],
-        assessed_at=row[22],
-        analysis_status=row[23],
-        analysis_recommended_review=row[24],
-        analysis_summary=row[25],
-        application_id=row[26],
-        application_stage=row[27],
-        application_next_action_at=row[28],
+        role_family=row[10],
+        published_at=row[11],
+        recency_effective_date=row[11] if row[11] is not None else row[12],
+        date_is_estimated=row[11] is None and row[12] is not None,
+        opportunity_version=row[13],
+        assessment_id=row[14],
+        assessment_opportunity_version=row[15],
+        assessment_profile_version_id=row[16],
+        current_profile_version_id=row[17],
+        verdict=row[18],
+        eligibility=row[19],
+        score=row[20],
+        confidence=row[21],
+        rules_version=row[22],
+        is_stale=row[23],
+        assessed_at=row[24],
+        analysis_status=row[25],
+        analysis_recommended_review=row[26],
+        analysis_summary=row[27],
+        application_id=row[28],
+        application_stage=row[29],
+        application_next_action_at=row[30],
+        has_pending_duplicate=bool(row[31]),
+        startup_strength=row[32],
+        startup_batch=row[33],
     )
 
 
@@ -441,6 +776,8 @@ def summarize_overview(
         .group_by(ApplicationProcessModel.current_stage)
     ).all()
     applications_by_stage = {str(stage): int(total) for stage, total in stage_rows}
+    precision = _precision_metrics(session, profile_version_id=profile_version_id)
+    companies_covered, companies_with_ats = _companies_coverage(session)
     return OverviewSummary(
         opportunities_total=_count(session, select(func.count(OpportunityModel.id))),
         opportunities_active=_count(
@@ -481,6 +818,10 @@ def summarize_overview(
                 <= reference + timedelta(days=FOLLOW_UP_WINDOW_DAYS),
             ),
         ),
+        precision_percent=precision.precision,
+        precision_marked_count=precision.marked_count,
+        companies_covered=companies_covered,
+        companies_with_ats=companies_with_ats,
     )
 
 
@@ -531,8 +872,14 @@ def list_source_health(
     session: Session,
     *,
     only_failing: bool = False,
+    status: Literal["proposed"] | None = None,
 ) -> tuple[SourceHealth, ...]:
-    """Every source with its last run. A source that never ran reports `None`, not zero."""
+    """Every source with its last run. A source that never ran reports `None`, not zero.
+
+    `status="proposed"` narrows the listing to disabled sources awaiting homologation
+    (F20-25) and orders them by the priority of the company that proposed them, highest
+    first, so the queue surfaces the sources that matter most.
+    """
     latest = _latest_runs()
     statement = (
         select(
@@ -544,6 +891,7 @@ def list_source_health(
             SourceDefinitionModel.terms_reviewed,
             SourceDefinitionModel.collector_local_tested,
             SourceDefinitionModel.schedule,
+            SourceDefinitionModel.version,
             latest.c.run_id,
             latest.c.status,
             latest.c.started_at,
@@ -558,13 +906,18 @@ def list_source_health(
         .select_from(SourceDefinitionModel)
         .outerjoin(latest, latest.c.source_definition_id == SourceDefinitionModel.id)
     )
+    if status == "proposed":
+        statement = statement.outerjoin(
+            CompanySource, CompanySource.id == SourceDefinitionModel.company_source_id
+        ).outerjoin(Company, Company.id == CompanySource.company_id)
+        statement = statement.where(SourceDefinitionModel.enabled.is_(False))
     if only_failing:
         statement = statement.where(latest.c.status.in_(FAILING_RUN_STATUSES))
-    rows = session.execute(
-        statement.order_by(
-            latest.c.finished_at.desc().nulls_last(), SourceDefinitionModel.name
-        )
-    ).all()
+    if status == "proposed":
+        order_by = (_priority_rank().desc(), SourceDefinitionModel.name)
+    else:
+        order_by = (latest.c.finished_at.desc().nulls_last(), SourceDefinitionModel.name)
+    rows = session.execute(statement.order_by(*order_by)).all()
     seniority_rows = session.execute(
         select(
             SourceOccurrenceModel.source_definition_id,
@@ -590,16 +943,17 @@ def list_source_health(
             terms_reviewed=row[5],
             collector_local_tested=row[6],
             schedule=row[7],
-            last_run_id=row[8],
-            last_run_status=row[9],
-            last_run_started_at=row[10],
-            last_run_finished_at=row[11],
-            last_run_error_code=row[12],
-            last_run_error=row[13],
-            last_run_items_seen=row[14],
-            last_run_items_persisted=row[15],
-            last_run_items_skipped=row[16],
-            last_run_items_invalid=row[17],
+            version=row[8],
+            last_run_id=row[9],
+            last_run_status=row[10],
+            last_run_started_at=row[11],
+            last_run_finished_at=row[12],
+            last_run_error_code=row[13],
+            last_run_error=row[14],
+            last_run_items_seen=row[15],
+            last_run_items_persisted=row[16],
+            last_run_items_skipped=row[17],
+            last_run_items_invalid=row[18],
             seniority_counts=seniority_by_source.get(row[0], {}),
         )
         for row in rows
@@ -687,20 +1041,461 @@ def source_coverage_report(
     )
 
 
+def _companies_coverage(session: Session) -> tuple[int, int]:
+    """(canonical companies with an enabled homologated source, companies with ATS)."""
+    funnel = company_coverage_funnel(session)
+    covered = funnel.stages[3].companies
+    with_ats = _count(
+        session,
+        select(func.count(func.distinct(CompanySource.company_id))).where(
+            CompanySource.source_type.in_(ATS_COLLECTOR_SOURCE_TYPES)
+        ),
+    )
+    return covered, with_ats
+
+
+def company_coverage_funnel(
+    session: Session, *, window_days: int = 7, now: datetime | None = None
+) -> CompanyCoverageFunnel:
+    reference = now or datetime.now(UTC)
+    since = reference - timedelta(days=window_days)
+    company_ids = set(session.scalars(select(Company.id)).all())
+    company_source_rows = session.execute(
+        select(CompanySource.id, CompanySource.company_id)
+    ).all()
+    discovered = {company_id for _, company_id in company_source_rows}
+
+    source_rows = session.execute(
+        select(SourceDefinitionModel, CompanySource.company_id)
+        .join(
+            CompanySource,
+            SourceDefinitionModel.company_source_id == CompanySource.id,
+        )
+    ).all()
+    homologated_source_ids = {
+        source.id for source, _ in source_rows if _is_homologated(source)
+    }
+    homologated = {
+        company_id
+        for source, company_id in source_rows
+        if source.id in homologated_source_ids
+    }
+    enabled = {
+        company_id
+        for source, company_id in source_rows
+        if source.id in homologated_source_ids and source.enabled
+    }
+
+    latest_runs = (
+        select(
+            SourceRunModel.source_definition_id.label("source_definition_id"),
+            SourceRunModel.status.label("status"),
+            SourceRunModel.complete.label("complete"),
+            SourceRunModel.started_at.label("started_at"),
+            func.row_number()
+            .over(
+                partition_by=SourceRunModel.source_definition_id,
+                order_by=(
+                    SourceRunModel.started_at.desc(),
+                    SourceRunModel.finished_at.desc(),
+                    SourceRunModel.id.desc(),
+                ),
+            )
+            .label("position"),
+        )
+        .subquery("latest_company_source_runs")
+    )
+    latest_by_source = {
+        source_id: (status, complete, started_at)
+        for source_id, status, complete, started_at in session.execute(
+            select(
+                latest_runs.c.source_definition_id,
+                latest_runs.c.status,
+                latest_runs.c.complete,
+                latest_runs.c.started_at,
+            ).where(latest_runs.c.position == 1)
+        ).all()
+    }
+    unhealthy: set[UUID] = set()
+    for source, company_id in source_rows:
+        latest = latest_by_source.get(source.id)
+        terminal_incomplete = latest is not None and (
+            latest[0] in ("SUCCEEDED", "CANCELLED") and not latest[1]
+        )
+        if (
+            source.id in homologated_source_ids
+            and source.enabled
+            and latest is not None
+            and (latest[0] in FAILING_RUN_STATUSES or terminal_incomplete)
+        ):
+            unhealthy.add(company_id)
+    collected = {
+        company_id
+        for source, company_id in source_rows
+        if source.id in homologated_source_ids
+        and source.enabled
+        and (run := latest_by_source.get(source.id)) is not None
+        and run[0] == "SUCCEEDED"
+        and run[1]
+        and run[2] is not None
+        and run[2] >= since
+        and run[2] <= reference
+    }
+
+    counts = (
+        len(company_ids),
+        len(discovered & company_ids),
+        len(homologated & company_ids),
+        len(enabled & company_ids),
+        len(collected & company_ids),
+    )
+    names = (
+        "cataloged",
+        "endpoint_discovered",
+        "homologated",
+        "enabled",
+        "collected_recently",
+    )
+    stages = tuple(
+        CompanyFunnelStage(
+            stage=name,
+            companies=count,
+            of_previous=None if index == 0 else counts[index - 1],
+        )
+        for index, (name, count) in enumerate(zip(names, counts, strict=True))
+    )
+    return CompanyCoverageFunnel(
+        window_days=window_days,
+        generated_at=reference,
+        canonical_companies_total=len(company_ids),
+        stages=stages,
+        enabled_but_unhealthy=len(unhealthy & company_ids),
+    )
+
+
+def useful_yield_metrics(
+    session: Session, *, window_days: int = 7, now: datetime | None = None
+) -> UsefulYieldMetric:
+    reference = now or datetime.now(UTC)
+    since = reference - timedelta(days=window_days)
+    requests = int(
+        session.scalar(
+            select(func.coalesce(func.sum(SourceRunModel.http_requests), 0)).where(
+                SourceRunModel.started_at >= since,
+                SourceRunModel.started_at <= reference,
+            )
+        )
+        or 0
+    )
+    cohort = (
+        select(OpportunityModel.id.label("opportunity_id"))
+        .where(
+            OpportunityModel.created_at >= since,
+            OpportunityModel.created_at <= reference,
+            OpportunityModel.duplicate_of.is_(None),
+        )
+        .subquery("yield_opportunity_cohort")
+    )
+    new_unique_opportunities = int(
+        session.scalar(select(func.count()).select_from(cohort)) or 0
+    )
+    latest_marks = (
+        select(
+            RelevanceMarkModel.opportunity_id.label("opportunity_id"),
+            RelevanceMarkModel.relevant.label("relevant"),
+            func.row_number()
+            .over(
+                partition_by=RelevanceMarkModel.opportunity_id,
+                order_by=(RelevanceMarkModel.marked_at.desc(), RelevanceMarkModel.id.desc()),
+            )
+            .label("position"),
+        )
+        # Support counts judgments made inside this report window, not older or future marks.
+        .where(
+            RelevanceMarkModel.opportunity_id.in_(
+                select(cohort.c.opportunity_id)
+            ),
+            RelevanceMarkModel.marked_at >= since,
+            RelevanceMarkModel.marked_at <= reference,
+        )
+        .subquery("latest_yield_marks")
+    )
+    marks = session.execute(
+        select(latest_marks.c.relevant).where(latest_marks.c.position == 1)
+    ).all()
+    judged_count = len(marks)
+    judged_relevant = sum(1 for (relevant,) in marks if relevant)
+    judgement_rate = (
+        Decimal(judged_relevant) / Decimal(judged_count)
+        if judged_count > 0
+        else None
+    )
+    yield_per_100_requests = (
+        Decimal(judged_relevant * 100) / Decimal(requests)
+        if requests > 0
+        else None
+    )
+
+    contribution_by_source = {
+        source_id: int(count)
+        for source_id, count in session.execute(
+            select(
+                SourceOccurrenceModel.source_definition_id,
+                func.count(func.distinct(SourceOccurrenceModel.opportunity_id)),
+            )
+            .join(
+                cohort,
+                cohort.c.opportunity_id == SourceOccurrenceModel.opportunity_id,
+            )
+            .where(
+                SourceOccurrenceModel.first_seen_at >= since,
+                SourceOccurrenceModel.first_seen_at <= reference,
+            )
+            .group_by(SourceOccurrenceModel.source_definition_id)
+        ).all()
+    }
+    occurrence_rows = session.execute(
+        select(
+            SourceOccurrenceModel.opportunity_id,
+            SourceOccurrenceModel.first_seen_at,
+            SourceOccurrenceModel.source_published_at,
+        )
+        .join(
+            cohort,
+            cohort.c.opportunity_id == SourceOccurrenceModel.opportunity_id,
+        )
+        .where(
+            SourceOccurrenceModel.first_seen_at <= reference,
+        )
+    ).all()
+    first_seen: dict[UUID, datetime] = {}
+    trustworthy_publication: dict[UUID, list[datetime]] = {}
+    for opportunity_id, observed_at, published_at in occurrence_rows:
+        first_seen[opportunity_id] = min(
+            first_seen.get(opportunity_id, observed_at), observed_at
+        )
+        if published_at is not None:
+            trustworthy_publication.setdefault(opportunity_id, []).append(published_at)
+    delays = sorted(
+        (first_seen[opportunity_id] - min(publications)).total_seconds()
+        for opportunity_id, publications in trustworthy_publication.items()
+        if opportunity_id in first_seen
+        and min(publications) <= first_seen[opportunity_id]
+    )
+    return UsefulYieldMetric(
+        window_days=window_days,
+        requests=requests,
+        new_unique_opportunities=new_unique_opportunities,
+        judged_opportunities=judged_count,
+        judged_relevant=(
+            judged_relevant if new_unique_opportunities > 0 else None
+        ),
+        judgement_rate=judgement_rate,
+        yield_per_100_requests=yield_per_100_requests,
+        discovery_delay_p50_seconds=_percentile(delays, 0.50),
+        discovery_delay_p95_seconds=_percentile(delays, 0.95),
+        contribution_by_source=contribution_by_source,
+    )
+
+
+def _percentile(values: list[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    decimal_percentile = Decimal(str(percentile))
+    index = Decimal(len(values) - 1) * decimal_percentile
+    lower = int(index)
+    upper = min(lower + 1, len(values) - 1)
+    fraction = index - lower
+    lower_value = Decimal(str(values[lower]))
+    upper_value = Decimal(str(values[upper]))
+    return float(lower_value + (upper_value - lower_value) * fraction)
+
+
+def _precision_metrics(
+    session: Session,
+    *,
+    profile_version_id: UUID | None = None,
+    sample_size: int = PRECISION_SAMPLE_SIZE,
+) -> PrecisionMetrics:
+    """Precision over the top `sample_size` Inbox rows in the default order.
+
+    Computed only over marked opportunities, `None` when nothing is marked yet: a
+    percentage over zero marks would be a frail number, not a metric.
+    """
+    page = list_opportunity_inbox(
+        session,
+        InboxQuery(order=InboxOrder.PRIORITY, limit=sample_size, offset=0),
+    )
+    opportunity_ids = [item.opportunity_id for item in page.items]
+    if not opportunity_ids:
+        return PrecisionMetrics(
+            sample_size=0, marked_count=0, relevant_count=0, precision=None
+        )
+    latest = (
+        select(
+            RelevanceMarkModel.opportunity_id.label("opportunity_id"),
+            RelevanceMarkModel.relevant.label("relevant"),
+            func.row_number()
+            .over(
+                partition_by=RelevanceMarkModel.opportunity_id,
+                order_by=(
+                    RelevanceMarkModel.marked_at.desc(),
+                    RelevanceMarkModel.id.desc(),
+                ),
+            )
+            .label("position"),
+        )
+        .where(RelevanceMarkModel.opportunity_id.in_(opportunity_ids))
+        .subquery("ranked_marks")
+    )
+    marks = session.execute(
+        select(latest.c.relevant).where(latest.c.position == 1)
+    ).all()
+    marked_count = len(marks)
+    relevant_count = sum(1 for (relevant,) in marks if relevant)
+    precision = (
+        Decimal(relevant_count) / Decimal(marked_count) if marked_count > 0 else None
+    )
+    return PrecisionMetrics(
+        sample_size=len(opportunity_ids),
+        marked_count=marked_count,
+        relevant_count=relevant_count,
+        precision=precision,
+    )
+
+
+def search_metrics(
+    session: Session,
+    *,
+    window_days: int = 7,
+    profile_version_id: UUID | None = None,
+    now: datetime | None = None,
+) -> SearchMetricsReport:
+    """The cobertura and precisão report the SPEC (§3) and F17-01 call for."""
+    reference = now or datetime.now(UTC)
+    since = reference - timedelta(days=window_days)
+
+    run_rows = session.execute(
+        select(
+            SourceRunModel.source_definition_id,
+            SourceDefinitionModel.name,
+            func.count(SourceRunModel.id),
+            func.coalesce(func.sum(SourceRunModel.items_seen), 0),
+            func.coalesce(func.sum(SourceRunModel.items_persisted), 0),
+            func.coalesce(func.sum(SourceRunModel.items_skipped), 0),
+            func.coalesce(func.sum(SourceRunModel.items_invalid), 0),
+        )
+        .join(
+            SourceDefinitionModel,
+            SourceDefinitionModel.id == SourceRunModel.source_definition_id,
+        )
+        .where(SourceRunModel.started_at >= since)
+        .group_by(SourceRunModel.source_definition_id, SourceDefinitionModel.name)
+        .order_by(SourceDefinitionModel.name)
+    ).all()
+
+    new_by_source: dict[UUID, int] = {
+        row[0]: row[1]
+        for row in session.execute(
+            select(SourceOccurrenceModel.source_definition_id, func.count())
+            .join(
+                OpportunityModel,
+                OpportunityModel.id == SourceOccurrenceModel.opportunity_id,
+            )
+            .where(OpportunityModel.created_at >= since)
+            .group_by(SourceOccurrenceModel.source_definition_id)
+        ).all()
+    }
+
+    by_source = tuple(
+        SourceCoverageMetric(
+            source_definition_id=row[0],
+            name=row[1],
+            runs=int(row[2]),
+            items_seen=int(row[3]),
+            items_persisted=int(row[4]),
+            items_duplicate=int(row[5]),
+            items_invalid=int(row[6]),
+            new_opportunities=int(new_by_source.get(row[0], 0)),
+        )
+        for row in run_rows
+    )
+
+    new_opportunities = _count(
+        session,
+        select(func.count(OpportunityModel.id)).where(
+            OpportunityModel.created_at >= since
+        ),
+    )
+    seniority_total = _count(session, select(func.count(OpportunityModel.id)))
+    seniority_unknown = _count(
+        session,
+        select(func.count(OpportunityModel.id)).where(
+            OpportunityModel.seniority == "UNKNOWN"
+        ),
+    )
+    seniority_unknown_rate = (
+        Decimal(seniority_unknown) / Decimal(seniority_total)
+        if seniority_total > 0
+        else None
+    )
+    role_family_unknown = _count(
+        session,
+        select(func.count(OpportunityModel.id)).where(
+            OpportunityModel.role_family == "UNKNOWN"
+        ),
+    )
+    role_family_unknown_rate = (
+        Decimal(role_family_unknown) / Decimal(seniority_total)
+        if seniority_total > 0
+        else None
+    )
+    companies_covered, companies_with_ats = _companies_coverage(session)
+
+    coverage = CoverageMetrics(
+        window_days=window_days,
+        runs=sum(item.runs for item in by_source),
+        items_seen=sum(item.items_seen for item in by_source),
+        items_persisted=sum(item.items_persisted for item in by_source),
+        items_duplicate=sum(item.items_duplicate for item in by_source),
+        items_invalid=sum(item.items_invalid for item in by_source),
+        new_opportunities=new_opportunities,
+        companies_covered=companies_covered,
+        companies_with_ats=companies_with_ats,
+        seniority_unknown_rate=seniority_unknown_rate,
+        role_family_unknown_rate=role_family_unknown_rate,
+        by_source=by_source,
+    )
+    precision = _precision_metrics(session, profile_version_id=profile_version_id)
+    return SearchMetricsReport(
+        window_days=window_days,
+        generated_at=reference,
+        coverage=coverage,
+        precision=precision,
+    )
+
+
 __all__ = [
+    "ATS_COLLECTOR_SOURCE_TYPES",
     "FAILING_RUN_STATUSES",
     "FOLLOW_UP_WINDOW_DAYS",
     "NEW_OPPORTUNITY_WINDOW_DAYS",
+    "PRECISION_SAMPLE_SIZE",
+    "CoverageMetrics",
     "InboxItem",
     "InboxOrder",
     "InboxPage",
     "InboxQuery",
     "OverviewSummary",
+    "PrecisionMetrics",
+    "SearchMetricsReport",
+    "SourceCoverageMetric",
     "SourceHealth",
     "SourceCoverage",
     "SourceCoverageReport",
     "list_opportunity_inbox",
     "list_source_health",
+    "search_metrics",
     "source_coverage_report",
     "summarize_overview",
 ]

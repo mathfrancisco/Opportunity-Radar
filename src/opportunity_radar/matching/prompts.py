@@ -16,6 +16,7 @@ valid JSON document.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Mapping
@@ -26,7 +27,7 @@ from typing import Any
 
 import yaml
 
-from opportunity_radar.matching.analysis import ANALYSIS_SCHEMA_VERSION, OUTPUT_SCHEMA
+from opportunity_radar.matching.analysis import OUTPUT_SCHEMAS
 
 PROMPT_FAMILY = "opportunity_analysis"
 DEFAULT_PROMPT_NAME = "v1"
@@ -38,6 +39,9 @@ _EXAMPLES_FILE = "examples.json"
 _METADATA_FILE = "metadata.yaml"
 
 _PLACEHOLDER = re.compile(r"{{\s*([a-z_][a-z0-9_]*)\s*}}")
+#: Sampling settings a prompt version may pin in its metadata, so they are part of the
+#: versioned artifact instead of a server default (SPEC 36, section 4.4).
+_SAMPLING_KEYS = ("temperature", "top_k", "top_p")
 
 
 class PromptArtifactError(RuntimeError):
@@ -58,6 +62,39 @@ class PromptArtifacts:
     @property
     def variables(self) -> tuple[str, ...]:
         return tuple(sorted(set(_PLACEHOLDER.findall(self.user_template))))
+
+    @property
+    def schema_version(self) -> str:
+        return str(self.metadata["schema_version"])
+
+    @property
+    def sampling(self) -> dict[str, Any]:
+        """The sampling options the metadata pins; `temperature` defaults to 0."""
+        pinned = {key: self.metadata[key] for key in _SAMPLING_KEYS if key in self.metadata}
+        pinned.setdefault("temperature", 0)
+        return pinned
+
+    @property
+    def reads_profile_history(self) -> bool:
+        """Whether the profile block carries recent experiences and projects (F16-07)."""
+        return self.metadata.get("profile_history") is True
+
+    @property
+    def digest(self) -> str:
+        """The prompt's content, not its label: a reworded file under the same version
+        must not reuse answers produced by the old wording."""
+        encoded = json.dumps(
+            {
+                "system": self.system,
+                "user": self.user_template,
+                "schema": self.output_schema,
+                "sampling": self.sampling,
+                "profile_history": self.reads_profile_history,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
 
     def render_user(self, values: Mapping[str, str]) -> str:
         """Substitute every placeholder. Unused or unknown names are errors, not silence."""
@@ -101,20 +138,23 @@ def load_prompt(
     output_schema = _read_json(directory / _SCHEMA_FILE)
     metadata = _read_metadata(directory / _METADATA_FILE)
 
-    if output_schema != OUTPUT_SCHEMA:
-        raise PromptArtifactError(
-            f"{version} output.schema.json drifted from matching.analysis.OUTPUT_SCHEMA; "
-            "regenerate it with scripts/export_prompt_schema.py"
-        )
     if metadata.get("prompt_version") != version:
         raise PromptArtifactError(
             f"{version} metadata declares prompt_version "
             f"{metadata.get('prompt_version')!r}"
         )
-    if metadata.get("schema_version") != ANALYSIS_SCHEMA_VERSION:
+    # Each version validates against its own schema; v1 and v2 coexist (card F16-07).
+    expected_schema = OUTPUT_SCHEMAS.get(str(metadata.get("schema_version")))
+    if expected_schema is None:
         raise PromptArtifactError(
             f"{version} metadata declares schema_version "
-            f"{metadata.get('schema_version')!r}, expected {ANALYSIS_SCHEMA_VERSION!r}"
+            f"{metadata.get('schema_version')!r}, expected one of {sorted(OUTPUT_SCHEMAS)}"
+        )
+    if output_schema != expected_schema:
+        raise PromptArtifactError(
+            f"{version} output.schema.json drifted from the schema of "
+            f"{metadata.get('schema_version')}; regenerate it with "
+            "scripts/export_prompt_schema.py"
         )
 
     artifacts = PromptArtifacts(
@@ -132,6 +172,16 @@ def load_prompt(
             f"{list(artifacts.variables)}"
         )
     return artifacts
+
+
+def prompt_names(*, root: Path | None = None) -> list[str]:
+    """Every prompt version on disk, in name order."""
+    family = (root or prompts_root()) / PROMPT_FAMILY
+    return sorted(
+        path.name
+        for path in family.iterdir()
+        if path.is_dir() and (path / _METADATA_FILE).is_file()
+    )
 
 
 def load_examples(
@@ -188,5 +238,6 @@ __all__ = [
     "PromptArtifacts",
     "load_examples",
     "load_prompt",
+    "prompt_names",
     "prompts_root",
 ]

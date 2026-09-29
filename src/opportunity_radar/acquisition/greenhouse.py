@@ -22,6 +22,12 @@ from opportunity_radar.acquisition.domain import (
     CollectorCapabilities,
     HealthcheckContext,
     HealthResult,
+    parse_retry_after_seconds,
+)
+from opportunity_radar.acquisition.http_conditional import (
+    NotModifiedResponse,
+    conditional_request_headers,
+    record_conditional_response,
 )
 
 _BOARD_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
@@ -33,7 +39,7 @@ class GreenhouseCollector:
     """Reads jobs from Greenhouse's unauthenticated public board API."""
 
     source_type = "greenhouse"
-    capabilities = CollectorCapabilities(company_jobs=True)
+    capabilities = CollectorCapabilities(company_jobs=True, etag=True, last_modified=True)
 
     def __init__(
         self,
@@ -80,7 +86,11 @@ class GreenhouseCollector:
         self, request: CollectionRequest
     ) -> AsyncIterator[CollectedItem]:
         board = self.validate_board_token(request.company_reference)
-        jobs = await self._fetch_jobs(board, request)
+        try:
+            jobs, total = await self._fetch_jobs(board, request)
+        except NotModifiedResponse:
+            return
+        request.telemetry.record_items_announced(total)
         emitted = 0
         for job in jobs:
             try:
@@ -106,7 +116,7 @@ class GreenhouseCollector:
 
     async def _fetch_jobs(
         self, board: str, request: CollectionRequest
-    ) -> list[Mapping[str, Any]]:
+    ) -> tuple[list[Mapping[str, Any]], int]:
         if self._client is not None:
             return await self._fetch_jobs_with_client(self._client, board, request)
         async with self._client_factory() as client:
@@ -117,7 +127,7 @@ class GreenhouseCollector:
         client: httpx.AsyncClient,
         board: str,
         request: CollectionRequest,
-    ) -> list[Mapping[str, Any]]:
+    ) -> tuple[list[Mapping[str, Any]], int]:
         url = f"{self._base_url}/v1/boards/{quote(board)}/jobs"
         policy = request.network_policy
         max_retries = policy.max_retries if policy is not None else self._max_retries
@@ -138,9 +148,17 @@ class GreenhouseCollector:
             error: AcquisitionError | None = None
             try:
                 request.telemetry.record_http_attempt(retry=attempt > 0)
-                response = await client.get(url, params={"content": "true"})
+                response = await client.get(
+                    url,
+                    params={"content": "true"},
+                    headers=conditional_request_headers(request) or None,
+                )
                 if response.status_code == 429:
                     request.telemetry.record_rate_limit()
+                if response.status_code == 304:
+                    record_conditional_response(request, response)
+                    raise NotModifiedResponse()
+                record_conditional_response(request, response)
                 error = self._response_error(response)
                 if error is None:
                     return self._jobs(response)
@@ -201,6 +219,11 @@ class GreenhouseCollector:
                 code,
                 f"Greenhouse returned HTTP {status}",
                 retryable=status == 429,
+                retry_after_seconds=(
+                    parse_retry_after_seconds(response.headers.get("Retry-After"))
+                    if status == 429
+                    else None
+                ),
             )
         if 500 <= status < 600:
             return AcquisitionError(
@@ -239,7 +262,7 @@ class GreenhouseCollector:
         return min(delay, maximum)
 
     @staticmethod
-    def _jobs(response: httpx.Response) -> list[Mapping[str, Any]]:
+    def _jobs(response: httpx.Response) -> tuple[list[Mapping[str, Any]], int]:
         try:
             payload = response.json()
         except ValueError as error:
@@ -272,7 +295,7 @@ class GreenhouseCollector:
                 AcquisitionErrorCode.PARSER_SCHEMA_CHANGED,
                 "Greenhouse response meta.total must be a non-negative integer",
             )
-        return jobs
+        return jobs, total
 
     @staticmethod
     def _item(
@@ -301,6 +324,14 @@ class GreenhouseCollector:
             company_name=company_name,
             location_text=GreenhouseCollector._string((location or {}).get("name")),
             description=GreenhouseCollector._string(job.get("content")),
+            # Card F20-61 checked this collector for a real `published_at` source:
+            # the public Job Board API's job object carries only `updated_at` (this
+            # collector's own `updated_at` above) and no `first_published`/
+            # `posted_at`/`date_posted` field at all — `updated_at` is a
+            # last-modified time, not a publication date, so it is deliberately not
+            # reused as `published_at` here (that would misrepresent a re-touched
+            # posting as freshly published). `published_at` stays `None`; the
+            # recency filter falls back to `first_seen_at`, marked estimated.
             updated_at=GreenhouseCollector._updated_at(job.get("updated_at")),
             raw_payload=job,
             metadata={

@@ -21,14 +21,33 @@ export interface EligibilityDetail {
   evidenceRefs: unknown[]
 }
 
+/**
+ * A strength or risk. Under `analysis-v1` it is plain text; from `analysis-v2` on it
+ * carries the passage of the payload that supports it and where the passage came from.
+ * Both shapes normalize to this one, so old analyses stay readable.
+ */
+export interface AnalysisClaim {
+  claim: string
+  evidence: string | null
+  source: 'posting' | 'profile' | null
+}
+
+/** A decided posting the model received as context, as it stood when it was sent. */
+export interface AnalysisContextRef {
+  opportunityId: string
+  decision: string
+  decidedAt: string | null
+  similarity: number | null
+}
+
 export interface MatchAnalysis {
   id: string
   status: string
   failureCode: string | null
   detail: string | null
   summary: string | null
-  strengths: string[]
-  risks: string[]
+  strengths: AnalysisClaim[]
+  risks: AnalysisClaim[]
   inferences: string[]
   unknowns: string[]
   recommendedReview: boolean | null
@@ -36,6 +55,7 @@ export interface MatchAnalysis {
   promptVersion: string | null
   schemaVersion: string
   analyzedAt: string
+  contextRefs: AnalysisContextRef[]
   /** What the model call cost; null when there was no call or it was not recorded. */
   metrics: AnalysisMetrics | null
 }
@@ -127,6 +147,38 @@ function parseEligibility(value: unknown): EligibilityDetail | null {
   }
 }
 
+function parseClaim(value: unknown): AnalysisClaim | null {
+  if (typeof value === 'string') return { claim: value, evidence: null, source: null }
+  if (!isRecord(value) || typeof value.claim !== 'string') return null
+  const source = value.source === 'posting' || value.source === 'profile' ? value.source : null
+  const evidence = text(value.evidence)
+  // A passage without a known origin is shown as a plain claim, never as evidence.
+  return {
+    claim: value.claim,
+    evidence: source ? evidence : null,
+    source: evidence ? source : null,
+  }
+}
+
+function claims(value: unknown): AnalysisClaim[] {
+  return list(value)
+    .map(parseClaim)
+    .filter((item): item is AnalysisClaim => item !== null)
+}
+
+function parseContextRef(value: unknown): AnalysisContextRef | null {
+  if (!isRecord(value) || typeof value.opportunity_id !== 'string') return null
+  return {
+    opportunityId: value.opportunity_id,
+    decision: required(value.decision),
+    decidedAt: text(value.decided_at),
+    similarity:
+      typeof value.similarity === 'number' && Number.isFinite(value.similarity)
+        ? value.similarity
+        : null,
+  }
+}
+
 function parseAnalysis(value: unknown): MatchAnalysis | null {
   if (!isRecord(value) || typeof value.id !== 'string') return null
   return {
@@ -135,8 +187,8 @@ function parseAnalysis(value: unknown): MatchAnalysis | null {
     failureCode: text(value.failure_code),
     detail: text(value.detail),
     summary: text(value.summary),
-    strengths: strings(value.strengths),
-    risks: strings(value.risks),
+    strengths: claims(value.strengths),
+    risks: claims(value.risks),
     inferences: strings(value.inferences),
     unknowns: strings(value.unknowns),
     recommendedReview: typeof value.recommended_review === 'boolean'
@@ -146,6 +198,9 @@ function parseAnalysis(value: unknown): MatchAnalysis | null {
     promptVersion: text(value.prompt_version),
     schemaVersion: required(value.schema_version),
     analyzedAt: required(value.analyzed_at),
+    contextRefs: list(value.context_refs)
+      .map(parseContextRef)
+      .filter((item): item is AnalysisContextRef => item !== null),
     metrics: parseMetrics(value.metrics),
   }
 }

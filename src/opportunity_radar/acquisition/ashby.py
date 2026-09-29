@@ -23,6 +23,12 @@ from opportunity_radar.acquisition.domain import (
     CollectorCapabilities,
     HealthcheckContext,
     HealthResult,
+    parse_retry_after_seconds,
+)
+from opportunity_radar.acquisition.http_conditional import (
+    NotModifiedResponse,
+    conditional_request_headers,
+    record_conditional_response,
 )
 
 _BOARD_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
@@ -33,7 +39,7 @@ class AshbyCollector:
     """Reads listed jobs from Ashby's unauthenticated public job-board API."""
 
     source_type = "ashby"
-    capabilities = CollectorCapabilities(company_jobs=True)
+    capabilities = CollectorCapabilities(company_jobs=True, etag=True, last_modified=True)
 
     def __init__(
         self,
@@ -72,8 +78,12 @@ class AshbyCollector:
         self, request: CollectionRequest
     ) -> AsyncIterator[CollectedItem]:
         board = self.validate_board_identifier(request.company_reference)
-        payload = await self._fetch_jobs(board, request)
+        try:
+            payload = await self._fetch_jobs(board, request)
+        except NotModifiedResponse:
+            return
         jobs = self._jobs(payload)
+        request.telemetry.record_items_announced(len(jobs))
         emitted = 0
         for job in jobs:
             if job.get("isListed") is not True:
@@ -133,10 +143,16 @@ class AshbyCollector:
             try:
                 request.telemetry.record_http_attempt(retry=attempt > 0)
                 response = await client.get(
-                    url, params={"includeCompensation": "true"}
+                    url,
+                    params={"includeCompensation": "true"},
+                    headers=conditional_request_headers(request) or None,
                 )
                 if response.status_code == 429:
                     request.telemetry.record_rate_limit()
+                if response.status_code == 304:
+                    record_conditional_response(request, response)
+                    raise NotModifiedResponse()
+                record_conditional_response(request, response)
                 error = self._response_error(response)
                 if error is None:
                     return self._json_payload(response)
@@ -186,6 +202,11 @@ class AshbyCollector:
                 code,
                 f"Ashby returned HTTP {status}",
                 retryable=status == 429,
+                retry_after_seconds=(
+                    parse_retry_after_seconds(response.headers.get("Retry-After"))
+                    if status == 429
+                    else None
+                ),
             )
         if 500 <= status < 600:
             return AcquisitionError(

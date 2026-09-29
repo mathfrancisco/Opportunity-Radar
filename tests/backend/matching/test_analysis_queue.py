@@ -7,7 +7,9 @@ on what gets queued and what gets persisted — never on the content of an analy
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -16,14 +18,22 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from opportunity_radar.companies.models import Company
 from opportunity_radar.matching.analysis import (
     AnalysisFailureCode,
+    AnalysisMetrics,
     AnalysisOutcome,
     AnalysisRequest,
     AnalysisStatus,
+    PreparedAnalysis,
     SemanticAnalysis,
+    analysis_key,
 )
-from opportunity_radar.matching.models import MatchAnalysisClaimModel, MatchAnalysisModel
+from opportunity_radar.matching.models import (
+    MatchAnalysisClaimModel,
+    MatchAnalysisModel,
+    MatchAssessmentModel,
+)
 from opportunity_radar.matching.repository import (
     AnalysisRecord,
     AssessmentRecord,
@@ -36,7 +46,9 @@ from opportunity_radar.matching.service import (
 )
 from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.platform.database import create_database_engine
+from opportunity_radar.profile.domain import EmploymentPreference, ProfileSnapshot, Skill
 from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
+from opportunity_radar.profile.service import ProfileService
 from opportunity_radar.worker import analyze_pending
 
 pytestmark = [
@@ -51,24 +63,132 @@ _MODEL = "llama3.2:3b"
 _PROMPT_VERSION = "opportunity_analysis/v1"
 
 
-class _StubAdapter:
-    """Stands in for Ollama. Counts calls, because the cap per pass is the point."""
+@pytest.fixture(autouse=True)
+def _retire_pending_assessments_left_by_this_test() -> Iterator[None]:
+    """Every test in this file that proves a *value ranking* — verdict, company
+    priority, freshness — seeds real, committed `MatchAssessmentModel` rows in this
+    shared, never-truncated integration database, and several never analyze them (that
+    is the point: they assert the row is skipped, deferred or merely enumerable). Left
+    pending, a `score=100.0000`/`HIGH_PRIORITY` default is the highest a later test's own
+    seed can ever tie, and stealing a batch slot from it is exactly the F20-24 note's
+    "value-ordered queue leftovers" (F20 sanity pass: reproduced under randomized order,
+    e.g. by `test_the_queue_serves_the_most_valuable_verdict_first_then_the_newest_posting`
+    against `test_the_job_analyzes_a_bounded_batch_and_commits_each_result`).
 
-    def __init__(self, outcome: AnalysisOutcome) -> None:
+    Retiring here, once, after every test — rather than patching each test's seeding
+    helper — is what keeps this fixed regardless of which new test starts seeding
+    assessments next.
+    """
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        before_ids = set(session.scalars(select(MatchAssessmentModel.id)))
+    yield
+    with Session(engine) as session:
+        pending_now = set(
+            MatchingService(session).pending_analysis_ids(limit=1_000_000)
+        )
+        leaked = pending_now - before_ids
+        if not leaked:
+            return
+        repository = SqlAlchemyMatchingRepository(session)
+        for assessment_id in leaked:
+            repository.add_analysis(
+                AnalysisRecord(
+                    assessment_id=assessment_id,
+                    cache_key=uuid4().hex + uuid4().hex,
+                    status=AnalysisStatus.AI_COMPLETED.value,
+                    schema_version="analysis-v1",
+                    analyzed_at=datetime.now(UTC),
+                    summary="retired for test isolation",
+                    model_id=_MODEL,
+                    recommended_review=False,
+                )
+            )
+        session.commit()
+
+
+class _FakeQuotaGuard:
+    """Stands in for `QuotaGuard`: `allow` decides every `reserve` outright.
+
+    Counts `reserve`/`release` calls so a test can prove the worker's admission probe
+    nets to zero (card F20-24: "o worker nunca consome" the interactive reserve).
+    """
+
+    def __init__(self, *, allow: bool) -> None:
+        self.allow = allow
+        self.reserved = 0
+        self.released = 0
+
+    def reserve(
+        self, model: str, estimated_tokens: int, *, ceiling_requests: int | None = None
+    ) -> object | None:
+        del model, estimated_tokens, ceiling_requests
+        if not self.allow:
+            return None
+        self.reserved += 1
+        return object()
+
+    def release(self, reservation: object) -> None:
+        del reservation
+        self.released += 1
+
+
+class _StubAdapter:
+    """Stands in for the analysis provider. Counts calls, because the cap per pass is the point."""
+
+    def __init__(
+        self, outcome: AnalysisOutcome, *, quota_guard: _FakeQuotaGuard | None = None
+    ) -> None:
         self._outcome = outcome
         self.calls = 0
         self.warm_ups = 0
+        self._quota_guard = quota_guard
 
     @property
     def model(self) -> str:
         return _MODEL
 
     @property
+    def quota_guard(self) -> _FakeQuotaGuard | None:
+        return self._quota_guard
+
+    @property
     def prompt_version(self) -> str:
         return _PROMPT_VERSION
 
-    async def analyze(self, request: AnalysisRequest) -> AnalysisOutcome:
-        del request
+    @property
+    def requires(self) -> frozenset[str]:
+        return frozenset()
+
+    def prepare(self, request: AnalysisRequest) -> PreparedAnalysis:
+        payload_hash = hashlib.sha256(
+            f"{request.opportunity_id}:{request.profile_version_id}:"
+            f"{request.opportunity_content_version}".encode()
+        ).hexdigest()
+        return PreparedAnalysis(
+            cache_key=analysis_key(
+                request,
+                model_id=self.model,
+                prompt_version=self.prompt_version,
+                schema_version="stub-v1",
+                prompt_digest="stub",
+                payload_hash=payload_hash,
+                options={},
+            ),
+            payload_hash=payload_hash,
+            payload={},
+            inference={"model": self.model},
+            size=AnalysisMetrics(),
+        )
+
+    async def analyze(
+        self,
+        request: AnalysisRequest,
+        *,
+        prepared: PreparedAnalysis | None = None,
+        use_cache: bool = True,
+    ) -> AnalysisOutcome:
+        del request, prepared, use_cache
         self.calls += 1
         return self._outcome
 
@@ -97,7 +217,7 @@ def _failed() -> AnalysisOutcome:
     return AnalysisOutcome(
         status=AnalysisStatus.AI_FAILED,
         failure_code=AnalysisFailureCode.TRANSPORT_ERROR,
-        detail="could not connect to ollama",
+        detail="could not connect to provider",
     )
 
 
@@ -128,10 +248,17 @@ def _seed_assessment(
     session: Session,
     *,
     verdict: str = "RECOMMENDED",
+    # The maximum the `score` column allows: this suite's integration database is never
+    # truncated between test files, so a lower default risks losing the value ranking
+    # (card F20-24) to an older, unrelated pending assessment left by another file (e.g.
+    # `tests/backend/dashboard/test_queries.py` seeds one at 91.0000) and picking the
+    # wrong id for a batch this test never queued.
+    score: Decimal = Decimal("100.0000"),
     assessed_at: datetime | None = None,
     published_at: datetime | None = None,
     opportunity: OpportunityModel | None = None,
     profile_version: ProfileVersionModel | None = None,
+    company: Company | None = None,
 ) -> UUID:
     """Persist one assessment, returning its id. Snapshots are minimal on purpose."""
     version = profile_version or _profile_version(session)
@@ -147,6 +274,7 @@ def _seed_assessment(
             lifecycle_status="ACTIVE",
             version=1,
             published_at=published_at or datetime.now(UTC),
+            canonical_company_id=company.id if company is not None else None,
         )
         session.add(opportunity)
         session.flush()
@@ -164,7 +292,7 @@ def _seed_assessment(
             eligibility="ELIGIBLE",
             eligibility_details=(),
             verdict=verdict,
-            score=Decimal("80.0000"),
+            score=score,
             confidence=Decimal("0.900"),
             assessed_at=assessed_at or datetime.now(UTC),
         ),
@@ -172,6 +300,23 @@ def _seed_assessment(
     )
     session.commit()
     return assessment.id
+
+
+def _profile_version_with_preference(session: Session) -> ProfileVersionModel:
+    """A version `evaluate()` can use directly: it needs a persisted preference row."""
+    service = ProfileService(session)
+    profile = session.scalar(select(CareerProfileModel).limit(1))
+    expected = profile.version if profile is not None else 0
+    snapshot = ProfileSnapshot(
+        skills=(Skill(canonical_name="python"),),
+        experiences=(),
+        projects=(),
+        preferences=EmploymentPreference(work_modes=("REMOTE",), countries=("BR",)),
+    )
+    version = service.create_version(snapshot, expected)
+    stored = session.get(ProfileVersionModel, version.id)
+    assert stored is not None
+    return stored
 
 
 def _record_attempt(
@@ -238,6 +383,148 @@ def test_the_queue_serves_the_most_valuable_verdict_first_then_the_newest_postin
             for verdict in ("HIGH_PRIORITY", "RECOMMENDED", "REVIEW_REQUIRED", "WATCHLIST")
             for age in (1, 5)
         ]
+
+
+def _company(session: Session, *, priority: str) -> Company:
+    company = Company(
+        canonical_name=f"Company {priority} {uuid4().hex[:8]}",
+        normalized_name=f"company-{priority}-{uuid4().hex}",
+        priority=priority,
+    )
+    session.add(company)
+    session.flush()
+    return company
+
+
+def test_pending_analysis_orders_by_value() -> None:
+    """Card F20-24: company priority (F16-04) outranks score, which outranks freshness."""
+    with _session() as session:
+        high = _company(session, priority="high")
+        low = _company(session, priority="low")
+
+        # Same verdict throughout, so verdict_rank never breaks any of these ties.
+        high_priority_low_score = _seed_assessment(
+            session, verdict="RECOMMENDED", score=Decimal("50.0000"), company=high
+        )
+        normal_high_score = _seed_assessment(
+            session, verdict="RECOMMENDED", score=Decimal("90.0000")
+        )
+        normal_low_score = _seed_assessment(
+            session, verdict="RECOMMENDED", score=Decimal("40.0000")
+        )
+        low_priority_top_score = _seed_assessment(
+            session, verdict="RECOMMENDED", score=Decimal("99.0000"), company=low
+        )
+        ours_ids = {
+            high_priority_low_score,
+            normal_high_score,
+            normal_low_score,
+            low_priority_top_score,
+        }
+
+        queued = MatchingService(session).pending_analysis_ids(limit=100)
+
+        ours = [item for item in queued if item in ours_ids]
+        assert ours == [
+            high_priority_low_score,  # company priority beats every score below it
+            normal_high_score,  # no company (normal tier) beats a low-priority company
+            normal_low_score,  # ties within the same priority tier break by score
+            low_priority_top_score,  # the highest score still loses to a low priority
+        ]
+
+
+def test_pending_analysis_skips_without_material_change() -> None:
+    """Card F20-24 / F20-39: re-evaluating an unchanged opportunity must not re-queue it."""
+    with _session() as session:
+        version = _profile_version_with_preference(session)
+        opportunity = OpportunityModel(
+            fingerprint=uuid4().hex,
+            fingerprint_version="v1",
+            canonical_title="Backend Engineer",
+            normalized_title="backend engineer",
+            work_mode="REMOTE",
+            seniority="SENIOR",
+            contract_type="FULL_TIME",
+            lifecycle_status="ACTIVE",
+            version=1,
+        )
+        session.add(opportunity)
+        session.flush()
+        service = MatchingService(session)
+        first = service.evaluate(opportunity.id, profile_version_id=version.id)
+        session.commit()
+
+        adapter = _StubAdapter(_completed())
+        asyncio.run(service.analyze(first.id, adapter))
+        assert first.id not in service.pending_analysis_ids(limit=100)
+
+        # Nothing about the opportunity or the profile moved: the same input_hash reuses
+        # the same assessment (F20-39) instead of creating a new pending item.
+        second = service.evaluate(opportunity.id, profile_version_id=version.id)
+        assert second.id == first.id
+        assert first.id not in service.pending_analysis_ids(limit=100)
+
+        # The persisted analysis is the cache (F20-16): revisiting must not call Groq again.
+        asyncio.run(service.analyze(second.id, adapter))
+        assert adapter.calls == 1
+
+
+def test_pending_analysis_reserves_aging_sample() -> None:
+    """Card F20-24 / SPEC 39 section 9: a fraction of the batch samples the tail.
+
+    `HIGH_PRIORITY` verdict, `high` company priority and a score above 95 outrank every
+    other test's leftover pending rows in this shared integration database (verdict,
+    then priority, then score), so these 20 ids are guaranteed to occupy the top of the
+    ranking regardless of run order.
+    """
+    with _session() as session:
+        top_company = _company(session, priority="high")
+        # Distinct descending scores make the "top of the ranking" unambiguous.
+        seeded = [
+            _seed_assessment(
+                session,
+                verdict="HIGH_PRIORITY",
+                score=Decimal(f"{100 - i}.0000"),
+                company=top_company,
+            )
+            for i in range(20)
+        ]
+        service = MatchingService(session)
+
+        without_aging = service.pending_analysis_ids(limit=10, aging_sample_ratio=0.0)
+        with_aging = service.pending_analysis_ids(limit=10, aging_sample_ratio=0.1)
+
+        assert without_aging == seeded[:10]
+        assert len(with_aging) == 10
+        # The reserved slot is not from the top of the value ranking; the other nine are.
+        assert with_aging[:9] == seeded[:9]
+        assert with_aging[9] not in set(without_aging)
+
+        # This integration database is never truncated between tests: leaving these 20
+        # rows pending would let their inflated scores outrank every later test's own
+        # HIGH_PRIORITY seed for the rest of the run. Completing them retires them from
+        # the queue the same way a real analysis would.
+        for assessment_id in seeded:
+            SqlAlchemyMatchingRepository(session).add_analysis(
+                AnalysisRecord(
+                    assessment_id=assessment_id,
+                    cache_key=uuid4().hex + uuid4().hex,
+                    status=AnalysisStatus.AI_COMPLETED.value,
+                    schema_version="analysis-v1",
+                    analyzed_at=datetime.now(UTC),
+                    summary="retired for test isolation",
+                    model_id=_MODEL,
+                    recommended_review=False,
+                )
+            )
+        # `add_analysis` only stages the row (`session.add`); `with _session()` closes on
+        # exit without committing, so without this the retirement above was silently
+        # discarded and all 20 rows stayed pending — the highest-ranked in the whole
+        # database — for the rest of the run (F20 sanity pass, seed 999 of the randomized
+        # order reproduced it as a wrong id in
+        # test_the_job_analyzes_a_bounded_batch_and_commits_each_result).
+        session.commit()
+        session.commit()
 
 
 def test_the_backlog_count_matches_the_uncapped_queue() -> None:
@@ -521,6 +808,66 @@ def test_the_job_skips_a_claimed_assessment_without_failing_the_pass() -> None:
             )
             is None
         )
+
+
+def test_the_job_defers_a_pending_id_when_the_worker_ceiling_is_exhausted() -> None:
+    """Card F20-24: budget adia sem perder oportunidade nem bloquear o worker."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        assessment_id = _seed_assessment(session, verdict="HIGH_PRIORITY")
+    guard = _FakeQuotaGuard(allow=False)
+    adapter = _StubAdapter(_completed(), quota_guard=guard)
+
+    analyze_pending(engine, adapter, batch_size=1, worker_requests_ceiling=1)
+
+    assert adapter.calls == 0
+    with Session(engine) as session:
+        assert (
+            session.scalar(
+                select(MatchAnalysisModel.id).where(
+                    MatchAnalysisModel.assessment_id == assessment_id
+                )
+            )
+            is None
+        )
+        # Not discarded, not counted against the retry budget: still queued next pass.
+        assert assessment_id in MatchingService(session).pending_analysis_ids(limit=100)
+
+        # This assessment is deliberately left pending above (that's what the test
+        # proves), but at the default `score=100.0000` it would then rank at the very
+        # top of this shared, never-truncated database's queue for the rest of the run —
+        # exactly what wrongly won a slot in
+        # test_the_job_analyzes_a_bounded_batch_and_commits_each_result under a
+        # randomized order (F20 sanity pass). Retire it now that the deferral itself has
+        # been observed.
+        SqlAlchemyMatchingRepository(session).add_analysis(
+            AnalysisRecord(
+                assessment_id=assessment_id,
+                cache_key=uuid4().hex + uuid4().hex,
+                status=AnalysisStatus.AI_COMPLETED.value,
+                schema_version="analysis-v1",
+                analyzed_at=datetime.now(UTC),
+                summary="retired for test isolation",
+                model_id=_MODEL,
+                recommended_review=False,
+            )
+        )
+        session.commit()
+
+
+def test_the_worker_budget_probe_never_consumes_quota() -> None:
+    """The admission check nets to zero: one `reserve` is always paired with a `release`."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        _seed_assessment(session, verdict="HIGH_PRIORITY")
+    guard = _FakeQuotaGuard(allow=True)
+    adapter = _StubAdapter(_completed(), quota_guard=guard)
+
+    analyze_pending(engine, adapter, batch_size=1, worker_requests_ceiling=100)
+
+    assert adapter.calls == 1
+    assert guard.reserved == 1
+    assert guard.released == 1
 
 
 def test_an_unavailable_model_degrades_the_job_without_raising() -> None:

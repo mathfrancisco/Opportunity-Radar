@@ -5,6 +5,15 @@ criterion. This restores into a throwaway database, runs smoke queries against i
 compares them with the manifest written at backup time. The working database is never
 touched, and the scratch one is dropped afterwards unless asked to stay.
 
+Card F20-41 (old F18-08): the gate is strict by default — no manifest, an incompatible
+`format_version`, or a dump whose sha256 no longer matches the manifest all fail the run
+before anything is restored. `--allow-missing-manifest` is the one, explicit way past
+that, for a dump that predates this manifest shape; it downgrades the check to
+readability-only, and the run says so on every line it prints. The comparison itself now
+also covers the relationship counts and the extensions the manifest recorded, not just
+row counts: a restore that lost a foreign key's other side, or came up in an image
+without pgvector, fails here instead of only failing the first query that needs it.
+
     python scripts/restore_check.py                       # newest dump in data/backups
     python scripts/restore_check.py --dump path/to.dump   # a specific one
     python scripts/restore_check.py --keep                # leave the scratch DB behind
@@ -23,9 +32,14 @@ from typing import Any
 from sqlalchemy import create_engine, text
 
 from opportunity_radar.platform.backup import (
+    ALEMBIC_REVISION_QUERY,
+    EXTENSIONS_QUERY,
+    FORMAT_VERSION,
     MANIFEST_QUERIES,
+    RELATIONSHIP_QUERIES,
     database_url,
     postgres_dsn,
+    sha256_file,
     with_database,
 )
 
@@ -87,14 +101,73 @@ def restore(dump: Path, url: str, name: str) -> None:
 def smoke_queries(url: str, name: str) -> dict[str, Any]:
     engine = create_engine(with_database(url, name))
     counts: dict[str, int] = {}
+    relationships: dict[str, int] = {}
     with engine.connect() as connection:
-        revision = connection.execute(
-            text("SELECT version_num FROM alembic_version")
-        ).scalar_one()
+        revision = connection.execute(text(ALEMBIC_REVISION_QUERY)).scalar_one()
         for label, query in MANIFEST_QUERIES.items():
             counts[label] = int(connection.execute(text(query)).scalar_one())
+        for label, query in RELATIONSHIP_QUERIES.items():
+            relationships[label] = int(connection.execute(text(query)).scalar_one())
+        extensions = [
+            row[0] for row in connection.execute(text(EXTENSIONS_QUERY)).all()
+        ]
     engine.dispose()
-    return {"alembic_revision": revision, "counts": counts}
+    return {
+        "alembic_revision": revision,
+        "counts": counts,
+        "relationships": relationships,
+        "extensions": extensions,
+    }
+
+
+def load_manifest(path: Path, *, allow_missing: bool) -> dict[str, Any] | None:
+    """The manifest a restore is graded against, or `None` for a readability-only run.
+
+    Strict by default: an absent manifest or an incompatible `format_version` fails the
+    whole run rather than silently checking less than the caller thinks it is checking.
+    `allow_missing` is the explicit override for a dump that predates this manifest shape.
+    """
+    if not path.is_file():
+        if allow_missing:
+            print(
+                f"no manifest at {path}; checking readability only "
+                "(--allow-missing-manifest)",
+                file=sys.stderr,
+            )
+            return None
+        raise SystemExit(
+            f"no manifest at {path}; refusing to grade this restore without one "
+            "(pass --allow-missing-manifest to check readability only)"
+        )
+    manifest: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    if manifest.get("format_version") != FORMAT_VERSION:
+        if allow_missing:
+            print(
+                f"manifest format_version {manifest.get('format_version')!r} is not "
+                f"supported (expected {FORMAT_VERSION}); checking readability only "
+                "(--allow-missing-manifest)",
+                file=sys.stderr,
+            )
+            return None
+        raise SystemExit(
+            f"manifest format_version {manifest.get('format_version')!r} is not "
+            f"supported (expected {FORMAT_VERSION}); pass --allow-missing-manifest to "
+            "check readability only"
+        )
+    return manifest
+
+
+def verify_checksum(dump: Path, manifest: dict[str, Any]) -> None:
+    """Refuse to restore a dump that no longer matches the checksum its manifest recorded."""
+    expected = manifest.get("sha256")
+    if expected is None:
+        return
+    actual = sha256_file(dump)
+    if actual != expected:
+        raise SystemExit(
+            f"{dump.name}: checksum mismatch, expected {expected}, got {actual} "
+            "(the file changed after the backup wrote it)"
+        )
 
 
 def compare(manifest: dict[str, Any], restored: dict[str, Any]) -> list[str]:
@@ -108,6 +181,13 @@ def compare(manifest: dict[str, Any], restored: dict[str, Any]) -> list[str]:
         actual = restored["counts"].get(label)
         if actual != expected:
             problems.append(f"{label}: expected {expected}, restored {actual}")
+    for label, expected in manifest.get("relationships", {}).items():
+        actual = restored["relationships"].get(label)
+        if actual != expected:
+            problems.append(f"relationship {label}: expected {expected}, restored {actual}")
+    missing_extensions = sorted(set(manifest.get("extensions", [])) - set(restored["extensions"]))
+    if missing_extensions:
+        problems.append(f"extensions missing after restore: {', '.join(missing_extensions)}")
     return problems
 
 
@@ -116,22 +196,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dump", type=Path, default=None)
     parser.add_argument("--backup-dir", type=Path, default=DEFAULT_BACKUP_DIR)
     parser.add_argument("--keep", action="store_true", help="do not drop the scratch DB")
+    parser.add_argument(
+        "--allow-missing-manifest",
+        action="store_true",
+        help="check readability only when no valid manifest is found, instead of failing",
+    )
     args = parser.parse_args(argv)
 
     url = database_url()
     dump = args.dump or newest_dump(args.backup_dir)
     manifest_path = dump.with_suffix(".manifest.json")
-    manifest: dict[str, Any] = (
-        json.loads(manifest_path.read_text(encoding="utf-8"))
-        if manifest_path.is_file()
-        else {}
-    )
-    if not manifest:
-        print(
-            f"no manifest beside {dump.name}; the restore will be checked for "
-            "readability only",
-            file=sys.stderr,
-        )
+    manifest = load_manifest(manifest_path, allow_missing=args.allow_missing_manifest)
+    if manifest is not None:
+        verify_checksum(dump, manifest)
 
     name = scratch_name()
     print(f"restoring {dump} into {name}")
@@ -147,14 +224,19 @@ def main(argv: list[str] | None = None) -> int:
 
     for label, value in restored["counts"].items():
         print(f"  {label}: {value}")
+    if restored["extensions"]:
+        print(f"  extensions: {', '.join(restored['extensions'])}")
 
-    problems = compare(manifest, restored) if manifest else []
+    problems = compare(manifest, restored) if manifest is not None else []
     if problems:
         print("restore check failed:", file=sys.stderr)
         for problem in problems:
             print(f"  - {problem}", file=sys.stderr)
         return 1
-    print("restore check passed")
+    if manifest is not None:
+        print("restore check passed")
+    else:
+        print("restore check passed (readability only)")
     return 0
 
 

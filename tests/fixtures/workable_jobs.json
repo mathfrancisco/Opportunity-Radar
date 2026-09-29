@@ -1,0 +1,41 @@
+{
+  "jobs": [
+    {
+      "id": "d8f4799e-9412-4af5-a3f2-0325d7cae0a0",
+      "shortcode": "D8F4799E",
+      "title": "Senior Backend Engineer",
+      "url": "https://apply.workable.com/acme/j/D8F4799E/",
+      "shortlink": "https://apply.workable.com/j/D8F4799E",
+      "location": {
+        "location_str": "Sao Paulo, Brazil",
+        "city": "Sao Paulo",
+        "country_name": "Brazil",
+        "telecommuting": false,
+        "workplace_type": "hybrid"
+      },
+      "description": "Build dependable services for customers.",
+      "full_description": "<p>Build dependable services for customers.</p>",
+      "experience": "Mid",
+      "published_on": "2026-09-01",
+      "created_at": "2026-08-30T10:00:00.000Z",
+      "state": "published"
+    },
+    {
+      "id": "bc5f04af-7d7f-4f7e-b5e3-6f6ed351ea21",
+      "shortcode": "BC5F04AF",
+      "title": "Product Designer",
+      "url": "https://apply.workable.com/acme/j/BC5F04AF/",
+      "location": {
+        "location_str": "Remote",
+        "telecommuting": true,
+        "workplace_type": "remote"
+      },
+      "description": "Design clear, useful workflows.",
+      "full_description": "<p>Design clear, useful workflows.</p>",
+      "experience": "Senior",
+      "published_on": "2026-09-05",
+      "created_at": "2026-09-04T10:00:00.000Z",
+      "state": "published"
+    }
+  ]
+}

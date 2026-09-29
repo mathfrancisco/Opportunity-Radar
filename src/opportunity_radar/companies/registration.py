@@ -20,6 +20,7 @@ from sqlalchemy.exc import IntegrityError
 
 from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.domain import AcquisitionError
+from opportunity_radar.acquisition.factorial import FactorialCollector
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.proposals import (
@@ -27,6 +28,9 @@ from opportunity_radar.acquisition.proposals import (
     ProposalFollowUp,
     follow_correction,
 )
+from opportunity_radar.acquisition.teamtailor import TeamtailorCollector
+from opportunity_radar.acquisition.workable import WorkableCollector
+from opportunity_radar.acquisition.workday import WorkdayCollector
 from opportunity_radar.companies.domain import (
     AmbiguousCompanyIdentityError,
     CompanyCandidate,
@@ -45,7 +49,15 @@ from opportunity_radar.companies.service import CompanyService
 PRIORITIES = ("high", "normal", "low")
 RADAR_STATUSES = ("active", "paused")
 # The ATS types a proposal can be made from; anything else has no collector to feed.
-SUPPORTED_ATS = ("ashby", "lever", "greenhouse")
+SUPPORTED_ATS = (
+    "ashby",
+    "lever",
+    "greenhouse",
+    "workday",
+    "teamtailor",
+    "workable",
+    "factorial",
+)
 
 
 class CompanyRegistrationError(ValueError):
@@ -374,6 +386,10 @@ def _source_values(
         "ashby": AshbyCollector.validate_board_identifier,
         "lever": LeverCollector.validate_site_slug,
         "greenhouse": GreenhouseCollector.validate_board_token,
+        "workday": WorkdayCollector.validate_tenant_identifier,
+        "teamtailor": TeamtailorCollector.validate_company_identifier,
+        "workable": WorkableCollector.validate_account_identifier,
+        "factorial": FactorialCollector.validate_company_identifier,
     }
     try:
         validators[ats](key)

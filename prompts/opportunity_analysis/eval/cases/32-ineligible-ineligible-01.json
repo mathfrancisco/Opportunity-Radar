@@ -1,0 +1,98 @@
+{
+  "kinds": [
+    "english_description",
+    "missing_country",
+    "weak_match"
+  ],
+  "payload": {
+    "eligibility": "INELIGIBLE",
+    "verdict": "INELIGIBLE",
+    "score": "44.2500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "ONSITE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "30.00",
+        "currency": null
+      },
+      "published_at": "2026-09-16T01:18:27.928000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:python:sha256:e240e3a91714168f145073203bb3b6ff087b12f3553b7a94658b91c62b357bf3"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "30.00",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "30",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Treasury Expert",
+    "company_name": "Empresa X",
+    "location_text": "Ciudad de México",
+    "description": "ABOUT NU\n\nNu serves more than 140 million customers, guided by a mission to fight complexity and empower people. The company has been leading an industry transformation through innovative products and human-centered services.\n\nProprietary technology and data at scale power Nu’s digital platform, built to promote financial access, advancement, and transparency. Its business model thrives on customer love and lower costs, feeding a flywheel of growth and profitability.\n\nVisit our Institutional Page [link]\n\nABOUT THE ROLE\n\nYou will play a crucial role in Empresa X's balance sheet management. Your responsibilities will focus on optimizing risk-adjusted returns for the bank, involving daily assessment of the balance sheet, funding and liquidity needs, understanding trading positioning, and identifying potential levers to generate value for the company. Initially, you'll be tasked with the development and implementation of new products, and with supporting and automating traders' routines, but as you gain experience and develop, you will take on broader responsibilities across the desk.\n\nWhat You'll Do\n\n- Support day-to-day treasury activities, including the sizing and implementation of cash and derivative trades, portfolio optimization, P&L calculation, and trading limit control.\n\n- Develop internal modeling and data visualization tools to support traders' decision-making processes and automate daily workflows.\n\n- Coordinate with other teams and build strong working partnerships, primarily with — but not limited to — ALM, Finance, and Risk teams.\n\n- Engage in ad-hoc projects related to new trading strategies, funding strategies, and other treasury solutions.\n\n- Contribute to the design, structuring, and implementation of new products, eventually including IRS, FX derivatives, and bond portfolios.\n\n- Act as a back up for the funding desk\n\nWhat We're Looking For\n\n- At least 5 years of experience in financial sector.\n\n- Market experience and technical knowledge of fixed-income products, understanding how financial instruments are priced and traded.\n\n- Prior experience with derivatives (IRS, FX) and bond portfolio management in a treasury or trading desk environment.\n\n- Experience designing and developing analytical tools or data visualizations.\n\n- Excellent analytical skills, with a meticulous and detail-oriented approach.\n\n- Technical proficiency in Python and/or other programming languages.\n\n- Ability to multi-task and adapt, delivering across a variety of topics in a fast-paced environment.\n\n- Strong communication and presentation skills.\n\n- Fluent in English.\n\nCertifications\n\n- AMIB 3/5 certification — required.\n\nWork model\n\n[Hybrid / On-Site]\n\nOffice requirement\n\n2 days per week at the office.\n\nOUR BENEFITS\n\nMEXICO JOBS:\n\n- Chance of earning equity at Empresa X - [Reminder: Ops Teams don't have equity];\n\n- Food Card\n\n- NuCare – Psychological, Financial and Legal Assistance Program\n\n- Life Insurance\n\n- Medical Plan\n\n- Dental Plan\n\n- NuLanguage – Language Course Program\n\n- Nucleo - Our learning platform of courses\n\n- Extended Parental Leave\n\n- Daycare Allowance\n\n- Parental Consultancy\n\n- Work-from-home Allowance\n\n- Gym Partnerships\n\n- Holiday Bonus (\"Aguinaldo\") of 30 days of pay per year\n\n- 17 days of paid vacation with 25% vacation bonus\n\n- Relocation Assistance Package, if applicable\n\nOur recruitment process may involve the use of artificial intelligence–enabled tools, such as automated interview transcription and analysis, to support the evaluation process. Artificial intelligence is not used to make final hiring decisions; all decisions are made by human reviewers.\n\nTo maintain a consistent and fair process for every candidate, Nu does not provide individualized technical feedback. See how our policy works here [link]"
+  },
+  "split": "reserved",
+  "group": "ineligible-001",
+  "critical": false,
+  "expected": {
+    "verdict": "INELIGIBLE",
+    "must_mention_risks": [
+      "Vaga é presencial (ONSITE), incompatível com o modo de trabalho aceito no perfil (remoto).",
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "a vaga é compatível com trabalho remoto"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

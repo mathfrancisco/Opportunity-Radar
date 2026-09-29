@@ -17,8 +17,11 @@ export function useProfileVersions() {
 export function useSaveProfile() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (input: { draft: ProfileDraft; expectedProfileVersion: number }) =>
-      saveProfileVersion(input.draft, input.expectedProfileVersion),
+    mutationFn: (input: {
+      draft: ProfileDraft
+      expectedProfileVersion: number
+      baseVersionId: string | null
+    }) => saveProfileVersion(input.draft, input.expectedProfileVersion, input.baseVersionId),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ['profile'] })
       // A new active version changes every assessment the inbox shows.

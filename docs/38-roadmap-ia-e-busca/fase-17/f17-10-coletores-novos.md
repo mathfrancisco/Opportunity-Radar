@@ -2,8 +2,8 @@
 
 - **Status:** Backlog
 - **Fase:** 17 — Busca de vagas: cobertura e precisão
-- **Depende de:** F17-09, F17-02
-- **Bloqueia:** Milestone P
+- **Depende de:** F17-09, F17-02, F17-06, F17-07
+- **Bloqueia:** Nenhum; expansão após Milestone P
 - **Origem:** [SPEC de busca](../../37-spec-busca.md), §6
 
 ## Resultado
@@ -50,7 +50,11 @@ Endpoints candidatos, **a confirmar na revisão de termos** (não são fato até
 
 ## Notas de implementação
 
-- A ordem sai do relatório do F17-09, não desta tabela.
+- A ordem sai do relatório do F17-09/F18-01: empresas canônicas desbloqueadas,
+  vagas únicas úteis, custo de integração/manutenção e disponibilidade do endpoint.
+  Quantidade de empresas é hipótese de rendimento, não garantia.
+- Paginação, detalhe ausente, 429/Retry-After, duplicatas entre páginas e mudança
+  de schema entram no contrato de cada coletor; falha nunca parece board vazio.
 - Coletor novo só é habilitado depois do F17-02, pela mesma razão do F17-05.
 
 ## Critérios de aceite (por sub-card)

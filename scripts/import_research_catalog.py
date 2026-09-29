@@ -15,9 +15,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from sqlalchemy import and_, or_, select, text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.ashby import AshbyCollector
+from opportunity_radar.acquisition.domain import AcquisitionError
+from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
+from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.models import SourceDefinitionModel
 from opportunity_radar.companies.domain import (
     AmbiguousCompanyIdentityError,
@@ -61,6 +65,50 @@ VERIFICATION_RANK = {
     "api_json_confirmed": 4,
 }
 
+# The board-link shape each ATS publishes, keyed to the collector validator that confirms
+# an extracted candidate is a usable board key. Lever additionally carries the api_region
+# implied by the domain the link was found on.
+_KEY_LINK_PATTERNS: dict[str, tuple[tuple[re.Pattern[str], str | None], ...]] = {
+    "ashby": ((re.compile(r"^https://jobs\.ashbyhq\.com/([^/?#]+)"), None),),
+    "greenhouse": (
+        (re.compile(r"^https://boards\.greenhouse\.io/([^/?#]+)"), None),
+        (re.compile(r"^https://job-boards\.greenhouse\.io/([^/?#]+)"), None),
+    ),
+    "lever": (
+        (re.compile(r"^https://jobs\.lever\.co/([^/?#]+)"), "global"),
+        (re.compile(r"^https://jobs\.eu\.lever\.co/([^/?#]+)"), "eu"),
+    ),
+}
+_KEY_VALIDATORS = {
+    "ashby": AshbyCollector.validate_board_identifier,
+    "greenhouse": GreenhouseCollector.validate_board_token,
+    "lever": LeverCollector.validate_site_slug,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class ExtractedKey:
+    key: str
+    api_region: str | None
+
+
+def extract_ats_key(source_type: str, url: str) -> ExtractedKey | None:
+    """Extract a board key from a research board link, validated by that ATS's collector.
+
+    Returns ``None`` when the link doesn't match any known board-link shape for the ATS,
+    or when the extracted candidate fails the collector's own validator.
+    """
+    for pattern, api_region in _KEY_LINK_PATTERNS.get(source_type, ()):
+        match = pattern.match(url)
+        if match is None:
+            continue
+        try:
+            validated = _KEY_VALIDATORS[source_type](match.group(1))
+        except AcquisitionError:
+            return None
+        return ExtractedKey(validated, api_region)
+    return None
+
 
 def register_researched_collectors(session: Session, *, dry_run: bool) -> int:
     """Materialize researched source candidates as disabled definitions."""
@@ -68,17 +116,9 @@ def register_researched_collectors(session: Session, *, dry_run: bool) -> int:
         select(CompanySource)
         .join(CompanySource.company)
         .where(
-            or_(
-                and_(
-                    CompanySource.verification_status == "api_json_confirmed",
-                    CompanySource.source_type.in_(
-                        ("ashby", "lever", "greenhouse")
-                    ),
-                ),
-                and_(
-                    CompanySource.verification_status == "ats_identified",
-                    CompanySource.source_type == "greenhouse",
-                ),
+            CompanySource.source_type.in_(("ashby", "lever", "greenhouse")),
+            CompanySource.verification_status.in_(
+                ("ats_identified", "api_json_confirmed")
             ),
             CompanySource.external_key.is_not(None),
         )
@@ -119,7 +159,8 @@ def register_researched_collectors(session: Session, *, dry_run: bool) -> int:
         if source.source_type == "lever":
             configuration["api_region"] = (
                 "eu"
-                if urlparse(source.endpoint).hostname == "api.eu.lever.co"
+                if urlparse(source.endpoint).hostname
+                in {"api.eu.lever.co", "jobs.eu.lever.co"}
                 else "global"
             )
         session.add(
@@ -286,30 +327,55 @@ def _source_status(row: ResearchRow, source: CompanySource) -> str:
     return "ats_identified"
 
 
-def _source_external_key(row: ResearchRow, source: CompanySource) -> str | None:
-    identified_urls = {
-        url
-        for label, url in row.links
-        if label.casefold() in {"json", "board"}
-    }
-    if source.endpoint not in identified_urls:
-        return None
-    return source.endpoint.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0] or None
+@dataclass(frozen=True, slots=True)
+class KeyResolution:
+    key: str | None
+    verification_method: str
+    unresolved_reason: str | None = None
+
+
+def _resolve_source_key(row: ResearchRow, source: CompanySource) -> KeyResolution:
+    json_urls = {url for label, url in row.links if label.casefold() == "json"}
+    board_urls = {url for label, url in row.links if label.casefold() == "board"}
+    if source.endpoint in json_urls:
+        key = source.endpoint.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0] or None
+        return KeyResolution(key, "research_markdown")
+    if source.source_type not in _KEY_LINK_PATTERNS:
+        return KeyResolution(None, "research_markdown")
+    if source.endpoint in board_urls:
+        extracted = extract_ats_key(source.source_type, source.endpoint)
+        if extracted is not None:
+            return KeyResolution(extracted.key, "research_link")
+        return KeyResolution(
+            None,
+            "research_link",
+            f"{source.source_type} board link does not match the expected board-URL "
+            f"pattern or failed collector validation: {source.endpoint}",
+        )
+    if row.source_status in {"ats_identified", "api_json_confirmed"}:
+        return KeyResolution(
+            None,
+            "research_markdown",
+            f"{source.source_type} identified with no board or JSON link to extract a key from.",
+        )
+    return KeyResolution(None, "research_markdown")
 
 
 def _record_source_metadata(
     company_sources: Iterable[CompanySource], row: ResearchRow
-) -> None:
+) -> list[tuple[str, str]]:
     identities = {
         (candidate.source_type, candidate.endpoint)
         for candidate in row.source_candidates()
     }
+    unresolved: list[tuple[str, str]] = []
     for source in company_sources:
         if (source.source_type, source.endpoint) not in identities:
             continue
         source.verification_status = _source_status(row, source)
-        source.verification_method = "research_markdown"
-        source.external_key = _source_external_key(row, source)
+        resolution = _resolve_source_key(row, source)
+        source.verification_method = resolution.verification_method
+        source.external_key = resolution.key
         source.evidence_note = _source_evidence(row)
         source.last_verified_at = RESEARCHED_AT
         if source.verification_status == "api_json_confirmed":
@@ -320,6 +386,9 @@ def _record_source_metadata(
             source.confidence = Decimal("0.600")
         else:
             source.confidence = Decimal("0.300")
+        if resolution.unresolved_reason is not None:
+            unresolved.append((source.source_type, resolution.unresolved_reason))
+    return unresolved
 
 
 def _update_company_state(
@@ -440,7 +509,16 @@ def import_research_file(
             continue
         company = reconciliation.company
         _update_company_state(company, row, created=reconciliation.created)
-        _record_source_metadata(company.sources, row)
+        unresolved = _record_source_metadata(company.sources, row)
+        for source_type, reason in unresolved:
+            _record_issue(
+                batch,
+                result,
+                row_number=row_number,
+                code="ats_key_unresolved",
+                message=f"{source_type}: {reason}",
+                row=row,
+            )
         if reconciliation.created:
             result["created"] += 1
         else:

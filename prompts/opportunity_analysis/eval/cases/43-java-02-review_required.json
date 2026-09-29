@@ -1,0 +1,94 @@
+{
+  "kinds": [
+    "ambiguous",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "40.5000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "SENIOR",
+      "work_mode": "REMOTE",
+      "compensation": null,
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [
+        "aws",
+        "java",
+        "kotlin"
+      ],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:e6aebe5796c4cfc2fca29e1b47ca56cc40c9a9f4406ec41b6f2ef174e75210ac",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:aws:sha256:aaba20f7156d64191a628f0fa40b780d2c3f41636ee82ba9737490d39fc3987a",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:cicd:sha256:e6aebe5796c4cfc2fca29e1b47ca56cc40c9a9f4406ec41b6f2ef174e75210ac",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:docker:sha256:f4e287e3e90f8557ff83ac54b10c1e7c3eff8e9fb9dd15eeb404e836fdb1b1ff",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:java:sha256:aaba20f7156d64191a628f0fa40b780d2c3f41636ee82ba9737490d39fc3987a",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:kotlin:sha256:aaba20f7156d64191a628f0fa40b780d2c3f41636ee82ba9737490d39fc3987a",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:kubernetes:sha256:f4e287e3e90f8557ff83ac54b10c1e7c3eff8e9fb9dd15eeb404e836fdb1b1ff",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:nodejs:sha256:12332f0831b8a449332aa91de6163fad3397df2e7202bb718fb2be588b5f2293",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:sql:sha256:e6671e58c8723913b57b5f793129b41364d3b3a869558991ffbc93fd133852f8"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "[Job-31106]  Senior Kotlin/Java Developer, Brazil",
+    "company_name": "Empresa X",
+    "location_text": "Campinas, SP",
+    "description": "Na Empresa X , ajudamos grandes empresas a transformar o potencial da AI em impacto real nos negócios com AI Deployment, execução AI-native e tech-integrated business solutions.\nCom 30 anos de experiência em transformação tecnológica, aceleramos inovação com expertise em agentic SDLC, application modernization, Data & AI, martech e business strategy.\nSomos 8.000 Empresa Xers em mais de 25 países, colaborando para construir soluções com impacto real. AI já faz parte da forma como trabalhamos, evoluímos e inovamos todos os dias.\nImportante: se você reside na Região Metropolitana de Campinas, sua presença nos escritórios da cidade será obrigatória, conforme a política de frequencia vigente.\n\nEstamos em busca de uma Pessoa Desenvolvedora Sênior com fortes conhecimentos em Java, Kotlin Backend, AWS para atuar em um projeto desafiador vinculado a um dos maiores bancos digitais do Brasil. Sua missão será atuar em todo o ciclo de vida do desenvolvimento, desde a concepção de funcionalidades até a sustentação e melhoria contínua dos serviços.\n\nSua Missão:\n- Atuar em todas as etapas do ciclo de vida do desenvolvimento de software, incluindo concepção de funcionalidades, testes, deploy em produção, sustentação e melhorias contínuas.\n\nRequisitos:\n- Atuação com linguagens orientadas a objeto, com proficiência em Java e Kotlin.\n- Arquitetura de microserviços.\n- Boas práticas de desenvolvimento de software, como TDD (Test-Driven Development), DDD (Domain-Driven Design), Clean Code e Arquitetura Hexagonal.\n- Práticas/Frameworks ágeis, como SCRUM ou KANBAN.\n- Banco de dados SQL.\n- Protocolo HTTP/HTTPS.\n- GIT e Git Flow.\n- Boa comunicação e habilidade de parceria com o time.\n- Solução de problemas técnicos (bugs, incidentes, análises).\n- Seguir políticas e processos definidos pelo cliente.\n- Codificação de testes unitários, funcionais e de performance, conforme diretrizes do time.\n- Instrumentação de aplicações para extração de informações de performance, logs de funcionamento e métricas.\n\nVocê Irá Se Destacar Com:\n- Experiência com Spring Boot e/ou Javalin.\n- Familiaridade com Kafka, SQS e SNS.\n- Conhecimento em bancos de dados NoSQL.\n- Experiência com Docker e Kubernetes.\n- Experiência em soluções de streaming de dados.\n- Experiência com soluções orientadas a eventos.\n- Conhecimento em plataformas como ApiGee e Node.js (gerenciamento server-side, gerenciamento de APIs).\n- Experiência com AWS.\n\n#LI-DJ1\n#LI-midsenior"
+  },
+  "split": "tuning",
+  "group": "be102fe8dfb1",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga exige AWS, que não está no perfil.",
+      "A vaga exige Java, que não está no perfil.",
+      "A vaga exige Kotlin, que não está no perfil.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

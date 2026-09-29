@@ -1,0 +1,99 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "53.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "MANAGER",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "5.20",
+        "currency": null
+      },
+      "published_at": "2026-09-07T15:30:45.904000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:sql:sha256:27ab6c478f1556969c70c66ca851f6a2ac9e49152dc55ff7a390a76288c5ad3e"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "5.20",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "$5.2",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Strategy & Operations Manager - Partnerships",
+    "company_name": "Empresa X",
+    "location_text": "Berlin Office",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nPartnerships is still a young motion at Empresa X, and that's exactly what makes it exciting. Despite strong inbound interest, we're early in building this out, with ambitious growth targets and strong executive backing. The team is scaling quickly, new leadership is joining soon, and there's real momentum from recent strategic partnership wins. You'd be shaping strategy and operations across a genuinely broad ecosystem, spanning GSIs, affiliates, agencies, resellers, tech partners, education partners, and hyperscalers, with real room to define how it's structured and run rather than inheriting someone else's playbook.\n\n🎯 Your main goal will be to become Empresa X's dedicated architect of Partner Ecosystem strategy and operations, building the systems, data, and processes that let this fast-growing partner network scale alongside Empresa X's growth.\n\nTo do so, here are your responsibilities:\n\nCHANNEL PROGRAM OPERATIONS\n\n- Own the operational infrastructure powering Empresa X's global partner ecosystem across reseller and referral segments.\n\n- Design and maintain partner-attributed pipeline tracking, keeping sourced, influenced, and co-sell deals accurately categorized in Salesforce.\n\n- Build and maintain channel reporting frameworks covering partner-sourced MRR, activation rates, deal registration, and tier performance.\n\nPARTNER PERFORMANCE & PIPELINE\n\n- Support partner pipeline inspection and forecast roll-ups alongside Channel Sales leadership.\n\n- Develop reporting and insights that drive partner growth and sharpen program performance.\n\n- Build channel-specific territory and routing logic so partner-sourced leads and registered deals are prioritized and attributed correctly.\n\nPROGRAM & SYSTEMS ADMINISTRATION\n\n- Own configuration and adoption of partner-facing tools, including the partner portal and Salesforce's channel-specific objects.\n\n- Maintain documentation and training materials covering channel processes, rules of engagement, and partner program policies.\n\n- Manage partner tier qualification, tracking certifications and activity thresholds, while using AI-enabled tools to streamline and scale the work.\n\nCROSS-FUNCTIONAL COLLABORATION\n\n- Partner with Channel Sales, Revenue Operations, Marketing, Legal, and Finance to operationalize GTM motions like co-marketing campaigns and partner enablement launches.\n\n- Serve as the channel operations subject matter expert across cross-functional planning cycles, from annual planning to QBRs and GTM launches.\n\n- Triage and support ad hoc requests, partner escalations, and troubleshooting as they come up.\n\nREQUIREMENTS\n\nMUST-HAVES\n\n- 🎯 Channel/Partner Ops experience: You bring 5+ years in Sales Operations or Channel/Partner Operations at a technology company, ideally supporting partner or indirect revenue programs in a high-growth SaaS environment.\n\n- 🤝 Channel program know-how: You understand channel mechanics like deal registration, partner tiering, co-sell motions, referral fee structures, and margin/discount governance.\n\n- ⚙️ Salesforce & channel tech stack: You're proficient in Salesforce objects, relationships, and reporting - including channel-specific objects - and you've worked with tools like PartnerStack, Crossbeam, or partner portals.\n\n- 📊 Data & analytics chops: You're highly proficient in Google Sheets or Excel and comfortable with BI tools, turning partner data into clear insights on contribution and pipeline attribution.\n\n- 🔍 Precision & attention to detail: You bring meticulous organization and hold your own work to a high standard of accuracy.\n\n- 🔄 Change management: You've led org-wide change before, especially when operationalizing new program structures.\n\n- 🧩 Problem-solving mindset: You spot operational gaps quickly and build scalable solutions that move the needle on efficiency and outcomes.\n\nNICE-TO-HAVES\n\n- 🏅 Salesforce Admin certification: You hold a Salesforce Admin certification, or you're close to earning one.\n\n- 💻 SQL proficiency: You're comfortable writing SQL queries to dig into partner and pipeline data yourself.\n\nWhy join us?\n\nAt Empresa X, you'll be a founding voice in how we scale our partner motion - shaping the systems, data, and processes behind a channel strategy that's still being built from the ground up. You'll work closely with Partner leadership and the broader RevOps team, with the autonomy to drive initiatives end-to-end and the visibility that comes with being a first dedicated hire in this space. You'll join a supportive, remote-first team that values autonomy, experimentation, and continuous learning, inside one of Europe's fastest-growing startups.\n\nSound like a challenge you're excited to take on?\n\nApply now - and help us build the future of automation.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "a vaga está alinhada com a área de atuação do perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

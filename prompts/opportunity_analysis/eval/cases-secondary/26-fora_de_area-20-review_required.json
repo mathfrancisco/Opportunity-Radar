@@ -1,0 +1,99 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "53.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": "YEAR",
+        "maximum": "152300.00",
+        "minimum": "89700.00",
+        "currency": "EUR"
+      },
+      "published_at": "2026-08-31T13:32:55.577000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:sql:sha256:f4c643d57b698622e1321cc7f7badb3943a62621da12a0a41d7291fb6d9a4066"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "YEAR",
+          "maximum": "152300.00",
+          "minimum": "89700.00",
+          "currency": "EUR",
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "{\"compensationType\": \"Salary\", \"currencyCode\": \"EUR\", \"interval\": \"1 YEAR\", \"maxValue\": 152300, \"minValue\": 89700}",
+          "evidence_source": "ashby.compensation.summaryComponents.Salary",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Senior Product Manager (Enterprise)",
+    "company_name": "Empresa X",
+    "location_text": "Berlin Office",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nYour main goal will be to empower Empresa X enterprise users to treat automation as software, enabling them to develop, deploy, and scale mission-critical workflows with absolute confidence.\n\nTo do so, you’ll own product strategy and execution for Empresa X’s Enterprise team, focused on application lifecycle management, developer tools, and production-grade workflow operations:\n\nWORKFLOW LIFECYCLE MANAGEMENT\n\n- Define how teams move workflows from development to production with clear environment separation and promotion paths.\n\n- Shape capabilities for workflow version history, rollback, branching, and conflict resolution.\n\n- Build product experiences that help engineering teams safely manage changes across mission-critical automations.\n\nENTERPRISE DEVELOPER EXPERIENCE\n\n- Own Git-based source control workflows that make Empresa X fit naturally into modern software development practices.\n\n- Work closely with Engineering and Design to deliver powerful yet intuitive tools for technical teams.\n\n- Translate complex developer workflows into product experiences that feel reliable, scalable, and easy to adopt.\n\nPRODUCTION OPERATIONS AND OBSERVABILITY\n\n- Build visibility into workflow performance, usage, and reliability across environments and instances.\n\n- Define how enterprise teams manage external secrets, variables, and configuration across deployments.\n\n- Help customers operate Empresa X at scale through multi-instance management and cross-instance visibility.\n\nPRODUCT DISCOVERY AND CROSS-FUNCTIONAL LEADERSHIP\n\n- Deeply engage with enterprise customers, engineering leaders, admins, and developers to understand their software delivery needs.\n\n- Prioritize ruthlessly across technical depth, usability, enterprise readiness, and long-term platform leverage.\n\n- Align Engineering, Design, Sales, Solutions Engineering, Customer Success, and leadership through clear strategy, specs, and communication.\n\nREQUIREMENTS\n\nMUST-HAVES\n\n- Proven product management experience: You’ve shipped complex technical products in enterprise environments and can point to lessons learned that shaped your craft.\n\n- Strong developer empathy: You understand how engineering teams build, test, version, deploy, and operate software in production.\n\n- Thrive in ambiguity: You bring structure to fuzzy technical problems and prioritize clearly across many possible directions.\n\n- Exceptional product sense: You anticipate edge cases, second-order effects, and enterprise-grade reliability needs without needing perfect information.\n\n- Ownership and bias for action: You fix what’s broken, ship, learn, and iterate rather than over-plan.\n\n- Influence without authority: You align engineering, design, data, sales, solutions engineering, customer success, and docs through clarity and trust.\n\n- Technical product judgment: You’re comfortable making tradeoffs across usability, scalability, security, reliability, and implementation complexity.\n\nNICE-TO-HAVES\n\n- Git and source control experience: You’ve worked on or closely with products involving Git, branching, versioning, pull requests, or conflict resolution.\n\n- Enterprise security experience: You understand secrets management, environment variables, access control, or secure configuration patterns.\n\n- Observability experience: You’ve worked on products involving monitoring, usage insights, performance visibility, or operational dashboards.\n\n- Coding or SQL skills: You can code, write SQL, or go deep enough technically to partner effectively with engineers on architecture-level discussions.\n\n- Remote work experience: You’re familiar with remote-first work environments and can collaborate effectively across time zones.\n\n- Entrepreneurial or early-stage experience: You’ve worn many hats and can navigate in many areas at once.\n\nWhy join us?\n\nAt Empresa X, your work won’t disappear into a slide deck. You’ll shape how engineering teams build, version, deploy, and operate mission-critical automations at scale — turning Empresa X into the platform where automation is treated with the same rigor as software. You’ll join a fast-growing, remote-first team with high autonomy, strong technical ambition, and direct visibility into enterprise customer impact.\n\nSound like a challenge you’re excited to take on?\n\nApply now — and help us build the future of automation.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "a vaga está alinhada com a área de atuação do perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

@@ -12,17 +12,19 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import SourceDefinitionModel, SourceRunModel
-from opportunity_radar.companies.models import Company
+from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.dashboard.queries import (
     InboxOrder,
     InboxQuery,
     list_opportunity_inbox,
     list_source_health,
+    search_metrics,
     source_coverage_report,
     summarize_overview,
 )
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
-from opportunity_radar.opportunities.models import OpportunityModel
+from opportunity_radar.opportunities.domain import SKILL_TAXONOMY_VERSION
+from opportunity_radar.opportunities.models import DuplicateCandidateModel, OpportunityModel
 from opportunity_radar.pipeline.domain import ApplicationStage
 from opportunity_radar.pipeline.service import PipelineService
 from opportunity_radar.platform.database import create_database_engine
@@ -90,6 +92,10 @@ def _opportunity(
     published_at: datetime | None,
     lifecycle_status: str = "ACTIVE",
     work_mode: str = "REMOTE",
+    seniority: str = "SENIOR",
+    description: str | None = None,
+    role_family: str = "UNKNOWN",
+    search_skills: str | None = None,
 ) -> OpportunityModel:
     opportunity = OpportunityModel(
         fingerprint=uuid4().hex,
@@ -99,10 +105,13 @@ def _opportunity(
         canonical_company_id=company.id,
         company_name=company.canonical_name,
         work_mode=work_mode,
-        seniority="SENIOR",
+        seniority=seniority,
         contract_type="FULL_TIME",
         lifecycle_status=lifecycle_status,
         published_at=published_at,
+        description=description,
+        role_family=role_family,
+        search_skills=search_skills,
         version=1,
     )
     session.add(opportunity)
@@ -125,7 +134,7 @@ def _assessment(
         profile_version_id=profile_version_id,
         input_hash=uuid4().hex + uuid4().hex,
         rules_version="matching-v1",
-        taxonomy_version="skills-v1",
+        taxonomy_version=SKILL_TAXONOMY_VERSION,
         opportunity_snapshot={"work_mode": opportunity.work_mode},
         profile_snapshot={"skills": ["python"]},
         eligibility="ELIGIBLE",
@@ -308,6 +317,93 @@ def test_inbox_filters_by_verdict_score_search_and_only_assessed() -> None:
         assert [item.opportunity_id for item in searched.items] == [weak.id]
 
 
+def test_inbox_filters_by_role_family_without_deleting_off_filter_rows() -> None:
+    """Card F17-02: the area filter narrows the page, never hides a row for good."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company = _company(session, "normal")
+        engineering = _opportunity(
+            session, company, title="Backend Engineer", published_at=NOW
+        )
+        engineering.role_family = "SOFTWARE_ENGINEERING"
+        sales = _opportunity(session, company, title="Account Executive", published_at=NOW)
+        sales.role_family = "SALES"
+        session.commit()
+
+        everything = list_opportunity_inbox(session, InboxQuery(company_id=company.id))
+        assert everything.total == 2
+        assert everything.off_filter_count == 0
+
+        engineering_only = list_opportunity_inbox(
+            session,
+            InboxQuery(company_id=company.id, role_families=("SOFTWARE_ENGINEERING",)),
+        )
+        assert [item.opportunity_id for item in engineering_only.items] == [engineering.id]
+        assert engineering_only.off_filter_count == 1
+
+        # The sales role stays reachable without the area filter: never deleted.
+        broadened = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search="account executive")
+        )
+        assert [item.opportunity_id for item in broadened.items] == [sales.id]
+
+
+def test_inbox_filters_by_allowed_country_without_excluding_unknown_rows() -> None:
+    """Card F17-06: an unrecognized/unknown allowed country never becomes an implicit
+    exclusion — it stays visible next to the countries the filter names."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company = _company(session, "normal")
+        brazil = _opportunity(session, company, title="Backend BR", published_at=NOW)
+        brazil.allowed_countries = ["BR"]
+        mexico = _opportunity(session, company, title="Backend MX", published_at=NOW)
+        mexico.allowed_countries = ["MX"]
+        unknown = _opportunity(session, company, title="Backend Unknown", published_at=NOW)
+        unknown.allowed_countries = None
+        session.commit()
+
+        everything = list_opportunity_inbox(session, InboxQuery(company_id=company.id))
+        assert everything.total == 3
+
+        br_filtered = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, allowed_country="BR")
+        )
+        assert {item.opportunity_id for item in br_filtered.items} == {
+            brazil.id,
+            unknown.id,
+        }
+
+
+def test_inbox_query_filters_by_created_after() -> None:
+    # Uses the module's real-clock `NOW`, not a fixed distant date: F20-35's coverage-funnel
+    # fixtures (tests/backend/dashboard/test_coverage_funnel.py) rely on a fixed 2040 clock to
+    # keep their absolute yield windows outside the persisted corpus. Committing opportunities
+    # near that same instant here would leak into those windows across test files.
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    reference = NOW
+    with Session(engine) as session:
+        company = _company(session, "normal")
+        before = _opportunity(
+            session, company, title="Created before", published_at=reference
+        )
+        before.created_at = reference - timedelta(seconds=1)
+        at_boundary = _opportunity(
+            session, company, title="Created at boundary", published_at=reference
+        )
+        at_boundary.created_at = reference
+        after = _opportunity(
+            session, company, title="Created after", published_at=reference
+        )
+        after.created_at = reference + timedelta(seconds=1)
+        session.commit()
+
+        page = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, created_after=reference)
+        )
+
+        assert [item.opportunity_id for item in page.items] == [after.id]
+
+
 def test_inbox_orders_by_priority_recency_and_score() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
@@ -339,7 +435,13 @@ def test_inbox_orders_by_priority_recency_and_score() -> None:
         def ids(order: InboxOrder, company_id: UUID | None = None) -> list[UUID]:
             page = list_opportunity_inbox(
                 session,
-                InboxQuery(order=order, company_id=company_id, only_assessed=True, limit=200),
+                InboxQuery(
+                    order=order,
+                    company_id=company_id,
+                    only_assessed=True,
+                    limit=200,
+                    only_recent=False,
+                ),
             )
             return [
                 item.opportunity_id
@@ -406,6 +508,55 @@ def test_inbox_knows_whether_an_opportunity_was_already_applied_to() -> None:
         }
 
 
+def test_inbox_flags_opportunities_with_a_pending_duplicate_candidate() -> None:
+    """F20-26: the Inbox badge reads a `PENDING` `duplicate_candidate` row naming the
+    opportunity on either side of the pair; `CONFIRMED`/`REJECTED` rows never flag it."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company = _company(session, "normal")
+        older = _opportunity(session, company, title="Backend role", published_at=NOW)
+        newer = _opportunity(
+            session, company, title="Backend role again", published_at=NOW
+        )
+        untouched = _opportunity(
+            session, company, title="Unrelated role", published_at=NOW
+        )
+        resolved_a = _opportunity(
+            session, company, title="Resolved role a", published_at=NOW
+        )
+        resolved_b = _opportunity(
+            session, company, title="Resolved role b", published_at=NOW
+        )
+        session.add(
+            DuplicateCandidateModel(
+                opportunity_id=min(older.id, newer.id),
+                duplicate_opportunity_id=max(older.id, newer.id),
+                rule="title_location_window",
+                status="PENDING",
+            )
+        )
+        session.add(
+            DuplicateCandidateModel(
+                opportunity_id=min(resolved_a.id, resolved_b.id),
+                duplicate_opportunity_id=max(resolved_a.id, resolved_b.id),
+                rule="title_location_window",
+                status="REJECTED",
+                decided_by="operator@example.com",
+                decided_at=NOW,
+            )
+        )
+        session.commit()
+
+        page = list_opportunity_inbox(session, InboxQuery(company_id=company.id))
+
+        by_id = {item.opportunity_id: item for item in page.items}
+        assert by_id[older.id].has_pending_duplicate is True
+        assert by_id[newer.id].has_pending_duplicate is True
+        assert by_id[untouched.id].has_pending_duplicate is False
+        assert by_id[resolved_a.id].has_pending_duplicate is False
+        assert by_id[resolved_b.id].has_pending_duplicate is False
+
+
 def test_source_health_reports_the_last_run_and_keeps_never_run_sources() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
@@ -464,6 +615,85 @@ def test_source_health_reports_the_last_run_and_keeps_never_run_sources() -> Non
         assert never_run.id not in failing_ids
 
 
+def test_list_source_health_filters_by_status_proposed() -> None:
+    """F20-25: the homologation queue only lists disabled sources awaiting evidence."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        marker = uuid4().hex[:8]
+        company = _company(session, "normal")
+        company_source = CompanySource(
+            company_id=company.id,
+            source_type="greenhouse",
+            endpoint=f"https://boards.greenhouse.io/{marker}",
+        )
+        session.add(company_source)
+        session.flush()
+
+        proposed = SourceDefinitionModel(
+            source_type="greenhouse",
+            name=f"Proposed {marker}",
+            enabled=False,
+            evidence_status="unverified",
+            company_source_id=company_source.id,
+        )
+        enabled = SourceDefinitionModel(
+            source_type="manual", name=f"Enabled {marker}", enabled=True
+        )
+        session.add_all([proposed, enabled])
+        session.commit()
+
+        proposed_only = list_source_health(session, status="proposed")
+        proposed_ids = {item.source_definition_id for item in proposed_only}
+
+        assert proposed.id in proposed_ids
+        assert enabled.id not in proposed_ids
+
+
+def test_list_source_health_orders_by_company_priority() -> None:
+    """F20-25: the fila de homologação orders proposals by company priority, highest first."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        marker = uuid4().hex[:8]
+        high_company = _company(session, "high")
+        low_company = _company(session, "low")
+        high_source = CompanySource(
+            company_id=high_company.id,
+            source_type="greenhouse",
+            endpoint=f"https://boards.greenhouse.io/high-{marker}",
+        )
+        low_source = CompanySource(
+            company_id=low_company.id,
+            source_type="greenhouse",
+            endpoint=f"https://boards.greenhouse.io/low-{marker}",
+        )
+        session.add_all([high_source, low_source])
+        session.flush()
+
+        low_definition = SourceDefinitionModel(
+            source_type="greenhouse",
+            name=f"Low priority {marker}",
+            enabled=False,
+            company_source_id=low_source.id,
+        )
+        high_definition = SourceDefinitionModel(
+            source_type="greenhouse",
+            name=f"High priority {marker}",
+            enabled=False,
+            company_source_id=high_source.id,
+        )
+        # Insert the low-priority one first so a name/insertion-order sort would fail.
+        session.add_all([low_definition, high_definition])
+        session.commit()
+
+        ordered = [
+            item.source_definition_id
+            for item in list_source_health(session, status="proposed")
+            if item.source_definition_id in {low_definition.id, high_definition.id}
+        ]
+
+        assert ordered == [high_definition.id, low_definition.id]
+
+
 def test_source_coverage_distinguishes_disabled_not_run_and_successful_zero() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
@@ -508,13 +738,33 @@ def test_overview_counts_reflect_the_catalogue_and_flag_the_missing_pipeline() -
         profile_version = _profile_version(session)
         company = _company(session, "high")
         opportunity = _opportunity(session, company, title="Overview role", published_at=NOW)
-        _assessment(
+        assessment = _assessment(
             session,
             opportunity,
             profile_version.id,
             verdict="HIGH_PRIORITY",
             score="88.0000",
             assessed_at=NOW,
+        )
+        # Completed, not left pending: a HIGH_PRIORITY verdict on a `high`-priority
+        # company outranks every other pending assessment's company priority regardless
+        # of score, so an uncompleted row here permanently stole a batch slot from any
+        # later test's own HIGH_PRIORITY seed in this shared, never-truncated database
+        # (F20 sanity pass — reproduced under randomized order against
+        # tests/backend/matching/test_analysis_queue.py::
+        # test_the_job_analyzes_a_bounded_batch_and_commits_each_result).
+        session.add(
+            MatchAnalysisModel(
+                assessment_id=assessment.id,
+                cache_key=uuid4().hex + uuid4().hex,
+                status="AI_COMPLETED",
+                summary="Retired for test isolation.",
+                recommended_review=False,
+                model_id="llama3.2:3b",
+                prompt_version="opportunity_analysis/v1",
+                schema_version="analysis-v1",
+                analyzed_at=NOW,
+            )
         )
         session.commit()
 
@@ -529,3 +779,81 @@ def test_overview_counts_reflect_the_catalogue_and_flag_the_missing_pipeline() -
         assert summary.sources_failing == len(summary.failing_sources)
         assert summary.applications_active == sum(summary.applications_by_stage.values())
         assert summary.follow_ups_due <= summary.applications_active
+
+
+def test_search_metrics_reports_coverage_numeric_fields() -> None:
+    """Card F17-01: per-source run counters, company coverage, and seniority-unknown."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        marker = uuid4().hex[:8]
+        ats_company = Company(
+            canonical_name=f"ATS Co {marker}",
+            normalized_name=f"ats-co-{marker}",
+        )
+        plain_company = Company(
+            canonical_name=f"Plain Co {marker}",
+            normalized_name=f"plain-co-{marker}",
+        )
+        session.add_all([ats_company, plain_company])
+        session.flush()
+
+        ats_source = CompanySource(
+            company_id=ats_company.id,
+            source_type="greenhouse",
+            endpoint=f"https://boards.greenhouse.io/{marker}",
+        )
+        session.add(ats_source)
+        session.flush()
+
+        source_definition = SourceDefinitionModel(
+            source_type="greenhouse",
+            name=f"Coverage source {marker}",
+            enabled=True,
+            company_source_id=ats_source.id,
+        )
+        session.add(source_definition)
+        session.flush()
+
+        session.add(
+            SourceRunModel(
+                source_definition_id=source_definition.id,
+                status="SUCCEEDED",
+                started_at=NOW - timedelta(minutes=5),
+                finished_at=NOW - timedelta(minutes=4),
+                items_seen=10,
+                items_persisted=6,
+                items_skipped=3,
+                items_invalid=1,
+            )
+        )
+        _opportunity(
+            session, ats_company, title="Known Seniority", published_at=NOW,
+            seniority="SENIOR",
+        )
+        _opportunity(
+            session, plain_company, title="Unknown Seniority", published_at=NOW,
+            seniority="UNKNOWN",
+        )
+        session.commit()
+
+        report = search_metrics(session, window_days=7, now=NOW)
+
+        by_source = {item.source_definition_id: item for item in report.coverage.by_source}
+        assert by_source[source_definition.id].runs == 1
+        assert by_source[source_definition.id].items_seen == 10
+        assert by_source[source_definition.id].items_persisted == 6
+        assert by_source[source_definition.id].items_duplicate == 3
+        assert by_source[source_definition.id].items_invalid == 1
+        assert report.coverage.runs >= 1
+        assert report.coverage.items_seen >= 10
+        assert report.coverage.items_duplicate >= 3
+        assert report.coverage.companies_with_ats >= 1
+        assert report.coverage.seniority_unknown_rate is not None
+        assert report.coverage.seniority_unknown_rate > 0
+
+
+def test_ats_coverage_counts_every_ats_with_a_collector() -> None:
+    from opportunity_radar.dashboard.queries import ATS_COLLECTOR_SOURCE_TYPES
+
+    ats_types = {"ashby", "greenhouse", "lever", "workday", "teamtailor", "workable", "factorial"}
+    assert set(ATS_COLLECTOR_SOURCE_TYPES) == ats_types

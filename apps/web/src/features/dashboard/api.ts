@@ -14,7 +14,13 @@ export interface InboxItem {
   seniority: string
   contractType: string
   lifecycleStatus: string
+  roleFamily: string
   publishedAt: string | null
+  /** Card F20-61: `publishedAt` when the source has one, else `first_seen_at`. */
+  recencyEffectiveDate: string | null
+  /** `true` when `recencyEffectiveDate` came from the `first_seen_at` fallback —
+   * never presented as a real publication date without this flag. */
+  dateIsEstimated: boolean
   opportunityVersion: number
   assessmentId: string | null
   assessmentOpportunityVersion: number | null
@@ -34,6 +40,12 @@ export interface InboxItem {
   applicationId: string | null
   applicationStage: string | null
   applicationNextActionAt: string | null
+  /** A `PENDING` duplicate_candidate row names this opportunity (F20-26). */
+  hasPendingDuplicate: boolean
+  /** Card F20-54: startup evidence summary of the company; display/filter only. */
+  startupStrength: 'strong' | 'weak' | null
+  /** YC batch (e.g. `S24`) when a strong `yc_batch` evidence names one. */
+  startupBatch: string | null
 }
 
 export interface InboxPage {
@@ -42,6 +54,8 @@ export interface InboxPage {
   offset: number
   limit: number
   order: InboxOrder
+  /** Opportunities the same filters would show without the area filter, per F17-02. */
+  offFilterCount: number
 }
 
 export interface InboxParams {
@@ -56,6 +70,23 @@ export interface InboxParams {
   applied?: boolean
   search?: string
   order?: InboxOrder
+  /** `role-family-v1` codes. Omitted defaults server-side to the profile's areas. */
+  roleFamilies?: string[]
+  /** Bypass the profile default and show every area — the "ver todas" click. */
+  allAreas?: boolean
+  seniorities?: string[]
+  salaryMin?: string
+  salaryMax?: string
+  sourceDefinitionIds?: string[]
+  /** ISO country code from the `regions-v1` table. Unknown-country opportunities are
+   * never implicitly excluded — the API keeps them visible (card F17-06). */
+  allowedCountry?: string
+  /** Card F20-61: `true` (the default, matching the server's own default) shows only
+   * a posting from the last 14 days, except a time-boxed entry program or one with a
+   * still-open application deadline. `false` is the "mostrar tudo" toggle. */
+  onlyRecent?: boolean
+  /** Card F20-54: only companies with at least one startup-evidence row. */
+  onlyStartups?: boolean
 }
 
 export interface FailingSource {
@@ -85,6 +116,10 @@ export interface Overview {
   applicationsByStage: Record<string, number>
   followUpsDue: number
   followUpWindowDays: number
+  precisionPercent: string | null
+  precisionMarkedCount: number
+  companiesCovered: number
+  companiesWithAts: number
 }
 
 export const metricWindows = ['24h', '7d'] as const
@@ -159,11 +194,37 @@ export interface AnalysisMetricsWindow {
   models: ModelAnalysisMetrics[]
 }
 
+export interface ModelAIMetrics {
+  model: string
+  requests: number
+  successRate: number | null
+  rateLimitedRate: number | null
+  fallbackRate: number | null
+  latencyMsAvg: number | null
+  latencyMsP95: number | null
+  promptTokens: number
+  completionTokens: number
+  jsonValidRate: number | null
+  breaker: string
+  dayRequestsUsed: number
+  dayRequestsLimit: number | null
+  dayTokensUsed: number
+  dayTokensLimit: number | null
+}
+
+export interface AIMetrics {
+  state: string
+  windowHours: number
+  byModel: ModelAIMetrics[]
+  cacheHitRate: number | null
+}
+
 export interface AnalysisMetricsReport {
   generatedAt: string
   currentModel: string
   pending: number
   windows: AnalysisMetricsWindow[]
+  ai: AIMetrics
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -203,7 +264,10 @@ function parseInboxItem(value: unknown): InboxItem | null {
     seniority: text(value.seniority) ?? 'UNKNOWN',
     contractType: text(value.contract_type) ?? 'UNKNOWN',
     lifecycleStatus: text(value.lifecycle_status) ?? 'UNKNOWN',
+    roleFamily: text(value.role_family) ?? 'UNKNOWN',
     publishedAt: text(value.published_at),
+    recencyEffectiveDate: text(value.recency_effective_date),
+    dateIsEstimated: value.date_is_estimated === true,
     opportunityVersion: typeof value.opportunity_version === 'number' ? value.opportunity_version : 1,
     assessmentId: text(value.assessment_id),
     assessmentOpportunityVersion:
@@ -226,6 +290,12 @@ function parseInboxItem(value: unknown): InboxItem | null {
     applicationId: text(value.application_id),
     applicationStage: text(value.application_stage),
     applicationNextActionAt: text(value.application_next_action_at),
+    hasPendingDuplicate: value.has_pending_duplicate === true,
+    startupStrength:
+      value.startup_strength === 'strong' || value.startup_strength === 'weak'
+        ? value.startup_strength
+        : null,
+    startupBatch: text(value.startup_batch),
   }
 }
 
@@ -254,6 +324,15 @@ export async function getInbox({
   applied,
   search,
   order = 'priority',
+  roleFamilies,
+  allAreas,
+  seniorities,
+  salaryMin,
+  salaryMax,
+  sourceDefinitionIds,
+  allowedCountry,
+  onlyRecent = true,
+  onlyStartups,
 }: InboxParams): Promise<InboxPage> {
   const params = new URLSearchParams({
     offset: String((page - 1) * pageSize),
@@ -268,6 +347,15 @@ export async function getInbox({
   if (onlyAssessed) params.set('only_assessed', 'true')
   if (applied !== undefined) params.set('applied', applied ? 'true' : 'false')
   if (search?.trim()) params.set('search', search.trim())
+  roleFamilies?.forEach((family) => params.append('role_family', family))
+  if (allAreas) params.set('all_areas', 'true')
+  seniorities?.forEach((value) => params.append('seniority', value))
+  if (salaryMin) params.set('salary_min', salaryMin)
+  if (salaryMax) params.set('salary_max', salaryMax)
+  sourceDefinitionIds?.forEach((value) => params.append('source_definition_id', value))
+  if (allowedCountry) params.set('allowed_country', allowedCountry)
+  if (!onlyRecent) params.set('only_recent', 'false')
+  if (onlyStartups) params.set('only_startups', 'true')
 
   const response = await fetch(apiUrl(`/inbox?${params.toString()}`), {
     headers: { Accept: 'application/json' },
@@ -283,6 +371,7 @@ export async function getInbox({
     offset: count(body.offset),
     limit: typeof body.limit === 'number' ? body.limit : pageSize,
     order,
+    offFilterCount: count(body.off_filter_count),
   }
 }
 
@@ -390,6 +479,43 @@ function parseModelAnalysisMetrics(value: unknown): ModelAnalysisMetrics | null 
   }
 }
 
+function parseModelAIMetrics(value: unknown): ModelAIMetrics | null {
+  if (!isRecord(value) || typeof value.model !== 'string') return null
+  return {
+    model: value.model,
+    requests: count(value.requests),
+    successRate: optionalNumber(value.success_rate),
+    rateLimitedRate: optionalNumber(value.rate_limited_rate),
+    fallbackRate: optionalNumber(value.fallback_rate),
+    latencyMsAvg: optionalNumber(value.latency_ms_avg),
+    latencyMsP95: optionalNumber(value.latency_ms_p95),
+    promptTokens: count(value.prompt_tokens),
+    completionTokens: count(value.completion_tokens),
+    jsonValidRate: optionalNumber(value.json_valid_rate),
+    breaker: text(value.breaker) ?? 'closed',
+    dayRequestsUsed: count(value.day_requests_used),
+    dayRequestsLimit: optionalNumber(value.day_requests_limit),
+    dayTokensUsed: count(value.day_tokens_used),
+    dayTokensLimit: optionalNumber(value.day_tokens_limit),
+  }
+}
+
+function parseAIMetrics(value: unknown): AIMetrics {
+  if (!isRecord(value)) {
+    return { state: 'disabled', windowHours: 24, byModel: [], cacheHitRate: null }
+  }
+  return {
+    state: text(value.state) ?? 'disabled',
+    windowHours: count(value.window_hours),
+    byModel: Array.isArray(value.by_model)
+      ? value.by_model
+          .map(parseModelAIMetrics)
+          .filter((item): item is ModelAIMetrics => item !== null)
+      : [],
+    cacheHitRate: optionalNumber(value.cache_hit_rate),
+  }
+}
+
 export async function getAnalysisMetrics(): Promise<AnalysisMetricsReport> {
   const response = await fetch(apiUrl('/analysis-metrics'), {
     headers: { Accept: 'application/json' },
@@ -418,6 +544,7 @@ export async function getAnalysisMetrics(): Promise<AnalysisMetricsReport> {
         }
       })
       .filter((entry): entry is AnalysisMetricsWindow => entry !== null),
+    ai: parseAIMetrics(body.ai),
   }
 }
 
@@ -450,5 +577,9 @@ export async function getOverview(): Promise<Overview> {
     applicationsByStage: countMap(body.applications_by_stage),
     followUpsDue: count(body.follow_ups_due),
     followUpWindowDays: count(body.follow_up_window_days),
+    precisionPercent: text(body.precision_percent),
+    precisionMarkedCount: count(body.precision_marked_count),
+    companiesCovered: count(body.companies_covered),
+    companiesWithAts: count(body.companies_with_ats),
   }
 }

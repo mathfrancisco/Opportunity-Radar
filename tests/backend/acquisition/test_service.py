@@ -7,6 +7,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
+from opportunity_radar.acquisition.alerts import SourceAlertService
 from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.domain import (
@@ -19,6 +20,7 @@ from opportunity_radar.acquisition.domain import (
     ExecutionTrigger,
     HealthResult,
 )
+from opportunity_radar.acquisition.factorial import FactorialCollector
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.models import (
@@ -26,6 +28,7 @@ from opportunity_radar.acquisition.models import (
     SourceCheckpointModel,
     SourceDefinitionModel,
 )
+from opportunity_radar.acquisition.probing import run_probe
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.scheduling import SourceRunHistory
 from opportunity_radar.acquisition.service import (
@@ -33,6 +36,10 @@ from opportunity_radar.acquisition.service import (
     AcquisitionService,
     canonical_payload_hash,
 )
+from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
+from opportunity_radar.acquisition.teamtailor import TeamtailorCollector
+from opportunity_radar.acquisition.workable import WorkableCollector
+from opportunity_radar.acquisition.workday import WorkdayCollector
 
 
 class _MemorySession:
@@ -64,11 +71,18 @@ class _MemorySession:
         del statement
         return None
 
+    def get(self, model: type, primary_key: object) -> None:
+        """No cache row has ever been written here, so every lookup is a cache miss —
+        exactly what `TavilyExtractionCache.get`/`put` need to run without a real
+        database (see `test_execute_fills_missing_description_via_tavily_extraction`)."""
+        del model, primary_key
+        return None
+
 
 class _MemoryRepository:
     def __init__(self, source: SourceDefinitionModel) -> None:
         self.source = source
-        self.hashes: set[tuple[str, str]] = set()
+        self.hashes: set[tuple[object, str, str, str, str]] = set()
 
     def run_history(self, source_id: object, *, sample: int = 32) -> SourceRunHistory:
         del source_id, sample
@@ -80,11 +94,45 @@ class _MemoryRepository:
     def identical_raw_item_exists(
         self, *, source_id: object, identity_key: str, payload_hash: str
     ) -> bool:
-        key = (identity_key, payload_hash)
+        # Compatibility seam for older test adapters. Production uses the envelope-aware
+        # lookup below, which also keeps parser interpretation in the dedupe key.
+        key = (source_id, identity_key, payload_hash, "", "")
         if key in self.hashes:
             return True
         self.hashes.add(key)
         return False
+
+    def raw_item_by_envelope(
+        self,
+        *,
+        source_id: object,
+        identity_key: str,
+        payload_hash: str,
+        semantic_hash: str,
+        semantic_hash_version: str,
+    ) -> bool:
+        key = (source_id, identity_key, payload_hash, semantic_hash, semantic_hash_version)
+        if key in self.hashes:
+            return True
+        self.hashes.add(key)
+        return False
+
+    def get_host_budget(self, host: str) -> None:
+        """No shared budget persisted in memory: `scheduling_state` sees `None`, and
+        `execute`'s per-run bookkeeping (F20-38) has nothing to read back here."""
+        del host
+        return None
+
+    def record_host_budget_usage(
+        self,
+        host: str,
+        *,
+        now: object,
+        requests: int,
+        default_ceiling: int,
+        cooldown_until: object = None,
+    ) -> None:
+        del host, now, requests, default_ceiling, cooldown_until
 
 
 class _Collector:
@@ -153,7 +201,76 @@ class _PartiallyInvalidCollector(_Collector):
         )
 
 
-def _service(collector: _Collector) -> tuple[AcquisitionService, _MemorySession]:
+class _RepeatedCursorLoopCollector(_Collector):
+    async def discover(
+        self, request: CollectionRequest
+    ) -> AsyncIterator[CollectedItem]:
+        del request
+        yield CollectedItem(
+            source_type=self.source_type,
+            external_id="job-1",
+            raw_payload={"title": "First"},
+            cursor="cursor-1",
+        )
+        raise AcquisitionError(
+            AcquisitionErrorCode.PARSER_SCHEMA_CHANGED,
+            "provider repeated cursor cursor-1",
+        )
+
+
+class _UnderReportingCollector(_Collector):
+    """Announces more items than it ever yields, like a board with broken pagination."""
+
+    async def discover(
+        self, request: CollectionRequest
+    ) -> AsyncIterator[CollectedItem]:
+        request.telemetry.record_items_announced(5)
+        items = [
+            CollectedItem(
+                source_type=self.source_type,
+                external_id="job-1",
+                raw_payload={"title": "First"},
+            ),
+            CollectedItem(
+                source_type=self.source_type,
+                external_id="job-2",
+                raw_payload={"title": "Second"},
+            ),
+        ]
+        if request.max_items is not None:
+            items = items[: request.max_items]
+        for item in items:
+            yield item
+
+
+class _NoDescriptionCollector(_Collector):
+    """Yields one item with a URL but no description, like any collector normalizing an
+    item that arrived with no body — not only `tavily_search`'s own results (F20-45)."""
+
+    async def discover(
+        self, request: CollectionRequest
+    ) -> AsyncIterator[CollectedItem]:
+        del request
+        yield CollectedItem(
+            source_type=self.source_type,
+            external_id="job-1",
+            url="https://example.com/jobs/1",
+            raw_payload={"title": "First"},
+        )
+
+
+class _RecordingNotifier:
+    def __init__(self) -> None:
+        self.messages: list[dict[str, object]] = []
+
+    def send(self, message: dict[str, object]) -> bool:
+        self.messages.append(message)
+        return True
+
+
+def _service(
+    collector: _Collector, *, notifier: _RecordingNotifier | None = None
+) -> tuple[AcquisitionService, _MemorySession]:
     source = SourceDefinitionModel(
         id=uuid4(),
         source_type="example",
@@ -166,6 +283,7 @@ def _service(collector: _Collector) -> tuple[AcquisitionService, _MemorySession]
         session,  # type: ignore[arg-type]
         registry=CollectorRegistry((collector,)),
         repository=_MemoryRepository(source),  # type: ignore[arg-type]
+        alerts=SourceAlertService(session, notifier=notifier),  # type: ignore[arg-type]
     )
     return service, session
 
@@ -175,6 +293,62 @@ def test_payload_hash_is_canonical_for_mapping_order() -> None:
     second_hash = canonical_payload_hash({"b": 2, "a": 1})
 
     assert first_hash == second_hash
+
+
+def test_parser_or_parsed_boundary_variant_creates_fresh_raw_evidence() -> None:
+    service, session = _service(_Collector())
+    raw_payload = {"id": "job-1", "body": "unchanged bytes"}
+    parser_v1 = CollectedItem(
+        source_type="example",
+        external_id="job-1",
+        title="Backend Engineer",
+        description="Build APIs.",
+        raw_payload=raw_payload,
+        metadata={"parser_version": "example-v1"},
+    )
+    parser_v2 = CollectedItem(
+        source_type="example",
+        external_id="job-1",
+        title="Backend Engineer",
+        description="Build APIs.",
+        raw_payload=raw_payload,
+        metadata={"parser_version": "example-v2"},
+    )
+    corrected_fields = CollectedItem(
+        source_type="example",
+        external_id="job-1",
+        title="Backend Engineer",
+        description="Build APIs with Python.",
+        raw_payload=raw_payload,
+        metadata={"parser_version": "example-v2"},
+    )
+
+    assert service._persist_item(  # noqa: SLF001 - verifies the persistence boundary.
+        service.repository.source.id, uuid4(), "example", parser_v1, observed_at=datetime.now(UTC)
+    )
+    assert not service._persist_item(  # noqa: SLF001
+        service.repository.source.id, uuid4(), "example", parser_v1, observed_at=datetime.now(UTC)
+    )
+    assert service._persist_item(  # noqa: SLF001
+        service.repository.source.id, uuid4(), "example", parser_v2, observed_at=datetime.now(UTC)
+    )
+    assert service._persist_item(  # noqa: SLF001
+        service.repository.source.id,
+        uuid4(),
+        "example",
+        corrected_fields,
+        observed_at=datetime.now(UTC),
+    )
+
+    raw_items = [item for item in session.added if isinstance(item, RawItemModel)]
+    assert len(raw_items) == 3
+    assert {item.payload_hash for item in raw_items} == {canonical_payload_hash(raw_payload)}
+    assert [item.item_metadata["parser_version"] for item in raw_items] == [
+        "example-v1",
+        "example-v2",
+        "example-v2",
+    ]
+    assert len({item.semantic_hash for item in raw_items}) == 3
 
 
 def test_run_deduplicates_identical_identity_but_preserves_changed_payload() -> None:
@@ -193,6 +367,96 @@ def test_run_deduplicates_identical_identity_but_preserves_changed_payload() -> 
     assert run.items_skipped == 1
     assert run.checkpoint_after == "cursor-2"
     assert session.committed
+
+
+def test_execute_fills_missing_description_via_tavily_extraction() -> None:
+    """The real wiring gap this closes (F20-45): before this, nothing in the collection
+    flow called `extract_missing_descriptions` — the routine existed and was tested in
+    isolation, but no run ever reached it. `_NoDescriptionCollector` stands in for any
+    collector (not `tavily_search` itself) whose item arrived with no body."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"url": "https://example.com/jobs/1", "raw_content": "# Full body"}
+                ],
+                "usage": {"credits": 1},
+            },
+        )
+
+    tavily_extraction = TavilyExtractionSettings(
+        client_factory=lambda: TavilyClient(
+            api_key="test-key",
+            client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        ),
+        cache_ttl_seconds=3600,
+        credit_budget_per_run=100,
+    )
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="example",
+        name="Example",
+        enabled=True,
+        configuration={},
+    )
+    session = _MemorySession()
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((_NoDescriptionCollector(),)),
+        repository=_MemoryRepository(source),  # type: ignore[arg-type]
+        alerts=SourceAlertService(session, notifier=None),  # type: ignore[arg-type]
+        tavily_extraction=tavily_extraction,
+    )
+
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+        )
+    )
+
+    assert run.status == "SUCCEEDED"
+    assert run.credits_used == 1
+    raw_items = [item for item in session.added if isinstance(item, RawItemModel)]
+    assert len(raw_items) == 1
+    persisted = raw_items[0].item_metadata[COLLECTED_ITEM_V1_KEY]
+    assert persisted["description"] == "# Full body"
+
+
+def test_execute_leaves_description_alone_when_extraction_is_not_configured() -> None:
+    """No `tavily_extraction` passed to `AcquisitionService` (the default): the run must
+    still succeed, with the item's own (absent) description untouched — extraction is an
+    opt-in enrichment, not a requirement for collection to work."""
+    service, session = _service(_NoDescriptionCollector())
+
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+        )
+    )
+
+    assert run.status == "SUCCEEDED"
+    raw_items = [item for item in session.added if isinstance(item, RawItemModel)]
+    assert len(raw_items) == 1
+    assert raw_items[0].item_metadata[COLLECTED_ITEM_V1_KEY]["description"] is None
+
+
+def test_repeated_cursor_loop_error_never_marks_run_complete() -> None:
+    service, _ = _service(_RepeatedCursorLoopCollector())
+
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+        )
+    )
+
+    assert run.status == "PARTIAL"
+    assert run.complete is False
+    assert run.checkpoint_after is None
 
 
 def test_run_defaults_to_on_demand_execution_trigger() -> None:
@@ -256,6 +520,43 @@ def test_partial_run_does_not_promote_checkpoint() -> None:
     assert run.items_invalid == 1
     assert run.checkpoint_after is None
     assert checkpoints == []
+
+
+def test_pagination_gap_alert_fires_for_an_unbounded_shortfall() -> None:
+    notifier = _RecordingNotifier()
+    service, _ = _service(_UnderReportingCollector(), notifier=notifier)
+
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+        )
+    )
+
+    assert run.items_seen == 2
+    assert run.items_announced == 5
+    assert [message["event"] for message in notifier.messages] == [
+        "source_pagination_gap"
+    ]
+    assert notifier.messages[0]["items_seen"] == 2
+    assert notifier.messages[0]["items_announced"] == 5
+
+
+def test_pagination_gap_alert_does_not_fire_when_max_items_caps_the_run() -> None:
+    notifier = _RecordingNotifier()
+    service, _ = _service(_UnderReportingCollector(), notifier=notifier)
+
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY, max_items=1),
+        )
+    )
+
+    assert run.items_seen == 1
+    assert run.items_announced == 5
+    assert run.complete is False
+    assert notifier.messages == []
 
 
 def test_ashby_source_configuration_reaches_collector_and_records_http_metrics() -> None:
@@ -326,6 +627,234 @@ def test_ashby_source_configuration_reaches_collector_and_records_http_metrics()
     assert snapshot["metadata"]["parser_version"] == "ashby-job-board-v2"
     assert len(throttling_delays) == 1
     assert 0 < throttling_delays[0] <= 5
+
+
+def test_workday_source_configuration_reaches_collector_via_execute() -> None:
+    """F20-28/F20-38: `_collector_settings` must build a Workday `CollectionRequest` from
+    `SourceDefinitionModel.configuration` the same way `probe_request` already does — a
+    real homologated Workday source ran through `service.execute` with `company_reference`
+    left as `None` (only the probe path built it), so every scheduled run raised
+    INVALID_CONFIGURATION before this fix. `tenant_identifier`/`api_region` are the keys
+    `IDENTIFIER_KEYS`/`probe_request` already use for this ATS."""
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="workday",
+        name="Acme jobs",
+        enabled=True,
+        configuration={
+            "tenant_identifier": "acme/ExternalCareerSite",
+            "api_region": "wd5",
+            "company_name": "Acme",
+        },
+        last_http_attempt_at=datetime.now(UTC),
+    )
+    session = _MemorySession()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "acme.wd5.myworkdayjobs.com"
+        return httpx.Response(
+            200,
+            json={
+                "total": 1,
+                "jobPostings": [
+                    {
+                        "title": "Backend Engineer",
+                        "externalPath": "/job/Remote/Backend-Engineer_R1",
+                        "locationsText": "Remote",
+                        "bulletFields": ["R1"],
+                    }
+                ],
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((WorkdayCollector(client=client),)),
+        repository=_MemoryRepository(source),  # type: ignore[arg-type]
+    )
+    try:
+        run = asyncio.run(service.execute(source.id, CollectionRequest()))
+    finally:
+        asyncio.run(client.aclose())
+
+    raw_items = [item for item in session.added if isinstance(item, RawItemModel)]
+    assert run.status == "SUCCEEDED"
+    assert run.items_seen == 1
+    assert run.items_persisted == 1
+    assert raw_items[0].payload["title"] == "Backend Engineer"
+
+
+def test_workday_untitled_postings_count_as_skipped_and_do_not_degrade_the_run() -> None:
+    """F20-75: untitled Workday postings are skipped, so the run stays SUCCEEDED."""
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="workday",
+        name="Acme jobs",
+        enabled=True,
+        configuration={
+            "tenant_identifier": "acme/ExternalCareerSite",
+            "api_region": "wd5",
+            "company_name": "Acme",
+        },
+        last_http_attempt_at=datetime.now(UTC),
+    )
+    session = _MemorySession()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "total": 2,
+                "jobPostings": [
+                    {"externalPath": "/job/Remote/Untitled_R0"},
+                    {
+                        "title": "Backend Engineer",
+                        "externalPath": "/job/Remote/Backend-Engineer_R1",
+                        "bulletFields": ["R1"],
+                    },
+                ],
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((WorkdayCollector(client=client),)),
+        repository=_MemoryRepository(source),  # type: ignore[arg-type]
+    )
+    try:
+        run = asyncio.run(service.execute(source.id, CollectionRequest()))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert run.status == "SUCCEEDED"
+    assert run.error_code is None
+    assert run.items_seen == 2
+    assert run.items_persisted == 1
+    assert run.items_skipped == 1
+    assert run.items_invalid == 0
+
+
+def test_probe_reports_retry_after_on_rate_limit() -> None:
+    """F20-25: a probe against a rate-limited endpoint surfaces `Retry-After` so the
+    homologation queue's batch mode knows how long to wait before the next probe."""
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(429, headers={"Retry-After": "12"})
+        )
+    )
+    registry = CollectorRegistry((AshbyCollector(client=client, max_retries=0),))
+    try:
+        outcome = asyncio.run(
+            run_probe(
+                "ashby",
+                {"board_identifier": "acme", "company_name": "Acme"},
+                registry,
+                max_items=5,
+            )
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert outcome.ok is False
+    assert outcome.error_code == AcquisitionErrorCode.SOURCE_RATE_LIMITED.value
+    assert outcome.retry_after_seconds == 12.0
+
+
+def test_probe_leaves_retry_after_unset_when_not_rate_limited() -> None:
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(500))
+    )
+    registry = CollectorRegistry((AshbyCollector(client=client, max_retries=0),))
+    try:
+        outcome = asyncio.run(
+            run_probe(
+                "ashby",
+                {"board_identifier": "acme", "company_name": "Acme"},
+                registry,
+                max_items=5,
+            )
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert outcome.ok is False
+    assert outcome.error_code == AcquisitionErrorCode.SOURCE_SERVER_ERROR.value
+    assert outcome.retry_after_seconds is None
+
+
+def test_probe_recognizes_teamtailor_source_type() -> None:
+    """F20-29: the sonda (probe) must resolve `teamtailor` from a source's own
+    `company_identifier` configuration, the same way it already does for the other ATS
+    types, so homologation can test a Teamtailor board before it is enabled."""
+    payload = {
+        "items": [
+            {
+                "id": "job-1",
+                "title": "Backend Engineer",
+                "url": "https://jobs.acme-careers.test/jobs/job-1",
+                "date_published": "2026-09-01T12:00:00Z",
+            }
+        ]
+    }
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
+    )
+    registry = CollectorRegistry((TeamtailorCollector(client=client),))
+    try:
+        outcome = asyncio.run(
+            run_probe(
+                "teamtailor",
+                {
+                    "company_identifier": "jobs.acme-careers.test",
+                    "company_name": "Acme",
+                },
+                registry,
+                max_items=5,
+            )
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert outcome.ok is True
+    assert outcome.items_seen == 1
+    assert outcome.http_requests == 1
+
+
+def test_probe_recognizes_factorial_source_type() -> None:
+    """F20-31: the sonda (probe) must resolve `factorial` from a source's own
+    `company_identifier` configuration, the same way it already does for the other ATS
+    types, so homologation can test a Factorial board before it is enabled."""
+    page = """<html><body><div data-controller='job-filters'><ul>
+    <li class='job-offer-item' data-is-remote='true' data-contract-type='indefinite'
+    data-job-postings-url='https://acme.factorialhr.com/job_posting/job-1'
+    data-team-id='1' data-location-id='1'>
+    <div><span><div class="factorial__headingFontFamily">Backend Engineer</div></span>
+    <div><div class="text-gray-350">Engineering</div></div>
+    <div><div class="text-gray-350">Remote</div></div></div></li>
+    </ul></div></body></html>"""
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, text=page, headers={"Content-Type": "text/html"})
+        )
+    )
+    registry = CollectorRegistry((FactorialCollector(client=client),))
+    try:
+        outcome = asyncio.run(
+            run_probe(
+                "factorial",
+                {"company_identifier": "acme", "company_name": "Acme"},
+                registry,
+                max_items=5,
+            )
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert outcome.ok is True
+    assert outcome.items_seen == 1
+    assert outcome.http_requests == 1
 
 
 def test_reused_request_does_not_leak_telemetry_between_runs() -> None:
@@ -577,3 +1106,86 @@ def test_run_interval_fails_fast_without_holding_the_request() -> None:
     assert run.rate_limit_events == 1
     assert sleeper_delays == []
     assert network_called is False
+
+
+def test_probe_recognizes_workday_source_type() -> None:
+    """F20-28: the sonda knows how to build a Workday request from its configuration."""
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "total": 1,
+                "jobPostings": [
+                    {
+                        "title": "Backend Engineer",
+                        "externalPath": "/job/Remote/Backend-Engineer_R1",
+                        "locationsText": "Remote",
+                        "bulletFields": ["R1"],
+                    }
+                ],
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    registry = CollectorRegistry((WorkdayCollector(client=client),))
+    try:
+        outcome = asyncio.run(
+            run_probe(
+                "workday",
+                {
+                    "tenant_identifier": "acme/ExternalCareerSite",
+                    "api_region": "wd5",
+                    "company_name": "Acme",
+                },
+                registry,
+                max_items=5,
+            )
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert outcome.ok is True
+    assert outcome.items_seen == 1
+    assert calls[0].url.host == "acme.wd5.myworkdayjobs.com"
+
+
+def test_probe_recognizes_workable_source_type() -> None:
+    """F20-30: the sonda knows how to build a Workable request from its configuration."""
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "jobs": [
+                    {
+                        "id": "abc123",
+                        "title": "Backend Engineer",
+                        "url": "https://apply.workable.com/acme/j/ABC123/",
+                        "location": {"location_str": "Remote"},
+                    }
+                ]
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    registry = CollectorRegistry((WorkableCollector(client=client),))
+    try:
+        outcome = asyncio.run(
+            run_probe(
+                "workable",
+                {"account_identifier": "acme", "company_name": "Acme"},
+                registry,
+                max_items=5,
+            )
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert outcome.ok is True
+    assert outcome.items_seen == 1
+    assert calls[0].url.host == "apply.workable.com"

@@ -1,6 +1,6 @@
 # CARD F16-01 — GPU, imagem 0.34.4, `ollama-init` e perfis de execução
 
-- **Status:** Em revisão (PR #18)
+- **Status:** Implementação integrada (PR #18); aceite documental pendente
 - **Fase:** 16 — Camada local de IA
 - **Depende de:** Nenhum
 - **Bloqueia:** F16-02, F16-09, Milestone O
@@ -11,7 +11,7 @@
 O Ollama roda na RTX 5060, na versão 0.34.4 fixada por digest, com os dois modelos
 baixados sem terminal, e o compose continua subindo numa máquina sem GPU e no CI.
 
-## Contexto
+## Contexto inicial (antes da implementação)
 
 O serviço `ollama` do `compose.yaml` usa `ollama/ollama:0.5.13` e não reserva GPU nenhuma.
 O container não enxerga a placa, então toda análise roda hoje nos 14 núcleos do Xeon

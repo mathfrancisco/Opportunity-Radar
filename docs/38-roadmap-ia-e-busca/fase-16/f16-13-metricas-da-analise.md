@@ -1,6 +1,6 @@
 # CARD F16-13 — Métricas da análise na API, na Visão geral e no `doctor`
 
-- **Status:** Em revisão (PR #18)
+- **Status:** Implementação integrada (PR #18); aceite documental pendente
 - **Fase:** 16 — Camada local de IA
 - **Depende de:** F16-03
 - **Bloqueia:** Milestone O
@@ -11,7 +11,7 @@
 O operador vê, sem abrir log, quanto a análise está custando, quanto falha e quanto está
 atrasada, e o `doctor` diz se o modelo está na GPU.
 
-## Contexto
+## Contexto inicial (antes da implementação)
 
 O F16-03 grava o custo de cada análise, mas número por linha não responde "o p95 da última
 semana subiu?". A Visão geral já tem o padrão de métricas por fonte com linha de apoio no

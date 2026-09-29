@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import { type ControlsDraft as Draft, draftFrom, missingForEnable } from '../features/sources/gate'
-import { useProbeSource, useSource, useUpdateSourceControls } from '../features/sources/useSources'
+import {
+  useProbeSource,
+  useSource,
+  useUpdateSourceControls,
+  useUpdateSourceSchedule,
+} from '../features/sources/useSources'
 import { ConflictError } from '../lib/api'
 import { Button } from './Button'
 import { Field, controlClassName } from './Field'
@@ -13,6 +18,10 @@ export function SourceControlsPanel({ sourceId }: { sourceId: string }) {
   const [draft, setDraft] = useState<Draft | null>(null)
   const update = useUpdateSourceControls(sourceId)
   const probe = useProbeSource(sourceId)
+  // Same null-until-touched pattern as `draft`, but kept separate: schedule is its own
+  // PATCH/version cycle, unrelated to the homologation gate above.
+  const [scheduleDraft, setScheduleDraft] = useState<string | null>(null)
+  const updateSchedule = useUpdateSourceSchedule(sourceId)
 
   if (source.isPending) return <LoadingState className="mt-4">Carregando homologação…</LoadingState>
   if (source.isError || !source.data) {
@@ -41,8 +50,17 @@ export function SourceControlsPanel({ sourceId }: { sourceId: string }) {
     )
   }
 
+  const currentSchedule = scheduleDraft ?? record.schedule ?? ''
+  function sendSchedule() {
+    updateSchedule.mutate(
+      { schedule: currentSchedule.trim() === '' ? null : currentSchedule.trim(), expectedVersion: record.version },
+      { onSuccess: () => setScheduleDraft(null) },
+    )
+  }
+
   const reviewId = `review-${sourceId}`
   const gateId = `gate-${sourceId}`
+  const scheduleId = `schedule-${sourceId}`
 
   return (
     <section aria-labelledby={reviewId} className="mt-4 rounded-2xl border border-line bg-panel p-4">
@@ -53,6 +71,46 @@ export function SourceControlsPanel({ sourceId }: { sourceId: string }) {
         {record.enabled ? 'Habilitada' : 'Desabilitada'} · evidência {record.evidenceStatus} ·
         versão {record.version}
       </p>
+
+      <div className="mt-4">
+        <Field hint="Cron (ex.: 0 */3 * * *). Vazio deixa a fonte sem agenda." label="Agenda">
+          <input
+            className={controlClassName}
+            id={scheduleId}
+            onChange={(event) => setScheduleDraft(event.target.value)}
+            placeholder="0 */3 * * *"
+            value={currentSchedule}
+          />
+        </Field>
+        <Button
+          className="mt-2"
+          disabled={updateSchedule.isPending || scheduleDraft === null}
+          onClick={sendSchedule}
+          size="sm"
+          variant="secondary"
+        >
+          {updateSchedule.isPending ? 'Salvando…' : 'Salvar agenda'}
+        </Button>
+        {updateSchedule.isError &&
+          (updateSchedule.error instanceof ConflictError ? (
+            <ConflictNotice
+              className="mt-2"
+              onReload={() => {
+                updateSchedule.reset()
+                void source.refetch()
+              }}
+            >
+              A fonte mudou depois que você a abriu. Recarregue para ver a versão atual.
+            </ConflictNotice>
+          ) : (
+            <ErrorState className="mt-2">{updateSchedule.error.message}</ErrorState>
+          ))}
+        {updateSchedule.isSuccess && (
+          <p className="mt-2 text-sm text-success-ink" role="status">
+            Agenda atualizada.
+          </p>
+        )}
+      </div>
 
       {record.sourceType !== 'manual' && (
         <div className="mt-4 grid gap-3 sm:grid-cols-3">

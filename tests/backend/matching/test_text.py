@@ -100,6 +100,24 @@ def test_the_budget_leaves_room_for_the_answer_and_a_margin() -> None:
     assert estimate_tokens(1000, 0.35) == 350
 
 
+def test_the_budget_tracks_a_task_budget_not_a_model_window() -> None:
+    # F20-13: `max_input_tokens`/`max_output_tokens` come from `TaskBudget` (SPEC 43
+    # section 6), e.g. `job_match`'s 5000/900, not a local model's `num_ctx`/`num_predict`.
+    assert prompt_budget(5000, 900) == 5000 - 900 - 500
+
+
+def test_the_description_cut_respects_the_task_budget() -> None:
+    description = "Uma frase curta. " * 800
+    task_input_budget = 5000
+    task_output_budget = 900
+    available = prompt_budget(task_input_budget, task_output_budget)
+
+    fitted = fit_description(description, available_tokens=available, tokens_per_char=0.35)
+
+    assert fitted.truncated
+    assert estimate_tokens(len(fitted.text), 0.35) <= available
+
+
 def test_the_description_gets_only_what_the_fixed_parts_left() -> None:
     description = "Uma frase curta. " * 100
 

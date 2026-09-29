@@ -62,6 +62,14 @@ describe('getSourceHealth', () => {
     respond({ total: 0 })
     await expect(getSourceHealth()).rejects.toThrow('fontes inválida')
   })
+
+  it('filtra por status=proposed para a fila de homologação (F20-25)', async () => {
+    respond({ items: [], total: 0, failing: 0 })
+
+    await getSourceHealth({ status: 'proposed' })
+
+    expect(fetch).toHaveBeenCalledWith('/api/source-health?status=proposed', expect.any(Object))
+  })
 })
 
 describe('getSourceRuns', () => {
@@ -265,6 +273,29 @@ describe('probeSource', () => {
 
     expect(sentBody()).toEqual({ expected_version: 1 })
     expect(probe).toMatchObject({ status: 'FAILED', errorCode: 'SOURCE_NOT_FOUND' })
+    expect(probe.retryAfterSeconds).toBeNull()
     expect(source.evidenceStatus).toBe('unverified')
+  })
+
+  it('lê o Retry-After de uma sonda com limite de taxa (F20-25)', async () => {
+    respond({
+      probe: {
+        id: 'probe-2',
+        status: 'FAILED',
+        items_seen: 0,
+        http_requests: 1,
+        error_code: 'SOURCE_RATE_LIMITED',
+        detail: 'rate limited',
+        evidence_recorded: false,
+        finished_at: '2026-09-23T12:00:00Z',
+        retry_after_seconds: 12.5,
+      },
+      source: sourceBody,
+    })
+
+    const { probe } = await probeSource('source-9', 1)
+
+    expect(probe.errorCode).toBe('SOURCE_RATE_LIMITED')
+    expect(probe.retryAfterSeconds).toBe(12.5)
   })
 })

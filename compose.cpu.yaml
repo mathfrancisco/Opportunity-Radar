@@ -1,8 +1,0 @@
-# Run the stack on a machine without an NVIDIA GPU:
-#   docker compose -f compose.yaml -f compose.cpu.yaml up --build -d   (or: make up-cpu)
-#
-# The CPU path is the fallback, not the target: the latency goals of
-# docs/36-spec-ollama.md are for the GPU, and on CPU a 7-8B model is several times slower.
-services:
-  ollama:
-    deploy: !reset null

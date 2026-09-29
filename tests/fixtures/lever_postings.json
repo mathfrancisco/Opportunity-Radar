@@ -13,7 +13,8 @@
     },
     "country": "BR",
     "workplaceType": "remote",
-    "salaryRange": {"min": 100000, "max": 150000, "currency": "USD"}
+    "salaryRange": {"min": 100000, "max": 150000, "currency": "USD"},
+    "createdAt": 1787217300000
   },
   {
     "id": "bc5f04af-7d7f-4f7e-b5e3-6f6ed351ea21",

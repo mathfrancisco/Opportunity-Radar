@@ -27,6 +27,7 @@ from opportunity_radar.matching.text import (
     prompt_budget,
 )
 from opportunity_radar.opportunities.models import OpportunityModel
+from opportunity_radar.platform.ai.tasks import AITask, default_routes
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 
@@ -43,7 +44,7 @@ def _distribution(lengths: Sequence[int]) -> dict[str, int]:
     return result
 
 
-def measure(session: Session, *, num_ctx: int, num_predict: int) -> dict[str, Any]:
+def measure(session: Session, *, max_input_tokens: int, max_output_tokens: int) -> dict[str, Any]:
     descriptions = list(
         session.scalars(
             select(OpportunityModel.description).where(
@@ -54,7 +55,7 @@ def measure(session: Session, *, num_ctx: int, num_predict: int) -> dict[str, An
     present = [text for text in descriptions if text]
     raw = [len(text) for text in present]
     cleaned = [len(clean_description(text)) for text in present]
-    budget = prompt_budget(num_ctx, num_predict)
+    budget = prompt_budget(max_input_tokens, max_output_tokens)
     tokens = [estimate_tokens(chars, DEFAULT_TOKENS_PER_CHAR) for chars in cleaned]
     return {
         "measured_at": datetime.now(UTC).isoformat(),
@@ -111,10 +112,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     settings = Settings()  # type: ignore[call-arg]  # values come from the environment
+    budget = default_routes(settings)[AITask.JOB_MATCH].budget
     engine = create_database_engine(settings.database_url)
     with Session(engine) as session:
         report = measure(
-            session, num_ctx=settings.ollama_num_ctx, num_predict=settings.ollama_num_predict
+            session,
+            max_input_tokens=budget.max_input_tokens,
+            max_output_tokens=budget.max_output_tokens,
         )
     print(json.dumps(report, ensure_ascii=False, indent=2) if args.json else _markdown(report))
     return 0

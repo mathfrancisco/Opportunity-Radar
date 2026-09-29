@@ -1,0 +1,97 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "40.5000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "LEAD",
+      "work_mode": "REMOTE",
+      "compensation": null,
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [
+        "mongodb"
+      ],
+      "company_priority": "NORMAL",
+      "preferred_skills": [
+        "rust"
+      ],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:99d9579b64579a274534f3ccc3530375d18ec9d777c445591fe3eea7167974aa",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:aws:sha256:4a4df4478f9a34ecf0e955a606a8e09b7ea108d4b3a0181c3043c9d87cd712aa",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:cicd:sha256:1e582c741dd43e10fd465d52f7ef8ecdd7bffbbc63ddbc62b6e4ff36d519c5fe",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:docker:sha256:e2bee940ed218c3321876e125718c9263664f59ed3c5ca83fb9028feaa6a44b4",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:go:sha256:4a4df4478f9a34ecf0e955a606a8e09b7ea108d4b3a0181c3043c9d87cd712aa",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:java:sha256:4a4df4478f9a34ecf0e955a606a8e09b7ea108d4b3a0181c3043c9d87cd712aa",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:kotlin:sha256:caa4bb125a51f1fb4acc5d9fadf32c699e6fa0a7b74244b70d0690bbee5e111a",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:kubernetes:sha256:a9eed69e817a448b5681dfc0c75568679c0f753af5ffe489824dd82d5e807f7b",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:mongodb:sha256:4d25836a0353437462d69e75841124db55190b4ffe2a93079082c33af970a78f",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:observability:sha256:d75d59da22831cbcd0ff2e7719789b4cfa144ca9d1478d3426c0b164baf1709a",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:redis:sha256:587c9bcb0a49931190205a2310e03950e4302d1e6e966520dd5ae2289e918a7e",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:rust:sha256:3a7be37f60841fbcea9407d3ccd4b082fb6b0fadc3d5d51689295e87fc99b291",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:terraform:sha256:a9eed69e817a448b5681dfc0c75568679c0f753af5ffe489824dd82d5e807f7b"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "[Job - 31296] Master Backend Developer / Tech Lead — Java, Go & AWS, Brazil",
+    "company_name": "Empresa X",
+    "location_text": "Brazil",
+    "description": "At Empresa X, we help large enterprises transform the potential of AI into real business impact with AI Deployment, AI-native execution, and tech-integrated business solutions.\nWith 30 years of experience in technological transformation, we accelerate innovation with expertise in Agentic SDLC, Application modernization, Data & AI, Martech and Business strategy.\nWe are 8,000 Empresa Xers across more than 25 countries, collaborating to build solutions with real impact. AI is already part of how we work, evolve, and innovate every day.\n\nWe are looking for a Senior Backend Engineer / Tech Lead to design and build high-performance backend services and cloud-native infrastructure on AWS. You will work with modern technologies (Java 21, Spring Boot 3, Go, Kubernetes, Terraform) to deliver scalable, secure and observable platforms, while leading the team technically and collaborating daily in English with international stakeholders.\n\nMust-Have Skills (Required):\nBackend Engineering\nJava 21 with Spring Boot 3.x as core backend stack.\nGo for real-time streaming / relay services.\nREST API design using Spring Web and OpenFeign.\nMongoDB / DocumentDB: data modeling, Mongock migrations, QueryDSL.\nRedis for caching (Spring Data Redis).\nWebSocket and real-time communication patterns.\nSpring Security, OAuth2/OIDC (Cognito integration).\nEvent-driven architectures: SNS, SQS, Spring Integration, state machines.\nDevOps / Infrastructure\nTerraform (modules, service composition, state management).\nAWS services: EKS, ECR, Lambda, VPC, IAM, S3, CloudFront, SSM, Secrets Manager, API Gateway.\nKubernetes (deployments, service accounts, IRSA, namespaces).\nDocker (multi-stage builds, container security best practices).\nGitLab CI/CD (pipelines and multi-environment promotion: dev → test → UAT → prod).\nNetworking concepts: NLB, DNS, security groups, WAF.\nMonitoring & observability: CloudWatch, Dynatrace, Micrometer/Prometheus.\nSecrets management: AWS Secrets Manager and SSM Parameter Store.\nCommunication & Leadership\nComfortable communicating daily in English and explaining complex technical ideas clearly.\nIdeally experience as PDM (Product/Delivery Management) and team leadership (technical guidance, mentoring).\nNice to Have:\nVideo/media infrastructure: SRS, FFmpeg, RTMP/SRT, AWS MediaLive, MediaPackage.\nRust for performance-critical Lambda workloads.\nSonarQube and other code quality tooling.\nCost optimization and capacity planning on AWS.\nGradle build system (Groovy + Kotlin DSL).\nKey Responsibilities:\nDesign, implement and maintain backend services in Java and Go for high-availability and real-time use cases.\nDefine and evolve REST APIs, event-driven flows and real-time communication patterns.\nBuild and manage cloud infrastructure on AWS using Terraform and Kubernetes (EKS).\nSet up and maintain CI/CD pipelines in GitLab, ensuring secure, repeatable deployments across environments.\nImplement observability, monitoring and alerting to ensure reliability and performance.\nCollaborate closely with product, engineering and other stakeholders, communicating clearly in English.\nProvide technical leadership to the team: code reviews, architecture decisions, mentoring and best practices.\nContribute to cost optimization, capacity planning and security hardening of the platform.\nWhat Success Looks Like\nYou deliver robust, scalable backend and cloud solutions that are secure, observable and cost-aware. The team looks to you for technical direction and you help align architecture, delivery and business goals by clearly communicating complex ideas and leading by example.\n\nIf this sounds like the kind of challenge you’re looking for, please apply — we’d be happy to talk with you.\n\n#LI-THAI23"
+  },
+  "split": "tuning",
+  "group": "be102fe8dfb1",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga exige MongoDB, que não está no perfil.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

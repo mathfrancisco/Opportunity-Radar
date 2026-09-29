@@ -21,12 +21,39 @@ from opportunity_radar.acquisition.domain import (
 )
 
 # The collectors a probe can exercise: every one with a public endpoint to call.
-PROBE_TYPES = ("ashby", "lever", "greenhouse", "remotive")
+PROBE_TYPES = (
+    "ashby",
+    "lever",
+    "greenhouse",
+    "remotive",
+    "workday",
+    "teamtailor",
+    "workable",
+    "factorial",
+    "jobposting",
+    "hacker_news",
+)
 PUBLIC_ENDPOINT_REFERENCES = {
     "ashby": "https://developers.ashbyhq.com/docs/public-job-posting-api",
     "greenhouse": "https://docs.greenhouse.io/job-board.html",
     "lever": "https://github.com/lever/postings-api",
     "remotive": "https://remotive.com/api-documentation",
+    # No official Workday documentation: this is the CXS backend every tenant career
+    # site calls, reviewed in docs/pesquisas/termos-workday.md.
+    "workday": "docs/pesquisas/termos-workday.md",
+    "teamtailor": "https://jsonfeed.org/version/1.1",
+    # No official documentation for the widget either: reviewed in
+    # docs/pesquisas/termos-workable.md.
+    "workable": "docs/pesquisas/termos-workable.md",
+    # No public API either: this is the server-rendered careers page every Factorial
+    # tenant gets, reviewed in docs/pesquisas/termos-factorial.md.
+    "factorial": "docs/pesquisas/termos-factorial.md",
+    # No API at all: the collector reads the schema.org JobPosting JSON-LD the company's
+    # own page embeds (F20-37), per https://schema.org/JobPosting.
+    "jobposting": "https://schema.org/JobPosting",
+    # Official Firebase API + Algolia HN Search, reviewed in
+    # docs/pesquisas/termos-hn-who-is-hiring.md (F20-55).
+    "hacker_news": "docs/pesquisas/termos-hn-who-is-hiring.md",
 }
 
 
@@ -38,6 +65,9 @@ class ProbeOutcome:
     http_requests: int = 0
     error_code: str | None = None
     last_http_attempt_at: datetime | None = None
+    # Only set when error_code == SOURCE_RATE_LIMITED, from the response's Retry-After
+    # header (F20-25): lets a batch of probes wait the right amount before the next one.
+    retry_after_seconds: float | None = None
 
 
 def probe_request(
@@ -58,6 +88,22 @@ def probe_request(
         common["api_region"] = configuration.get("api_region", "global")
     elif source_type == "greenhouse":
         common["company_reference"] = _required(configuration, "board_token")
+        common["company_name"] = configuration.get("company_name")
+    elif source_type == "workday":
+        common["company_reference"] = _required(configuration, "tenant_identifier")
+        common["company_name"] = configuration.get("company_name")
+        common["api_region"] = _required(configuration, "api_region")
+    elif source_type == "teamtailor":
+        common["company_reference"] = _required(configuration, "company_identifier")
+        common["company_name"] = configuration.get("company_name")
+    elif source_type == "workable":
+        common["company_reference"] = _required(configuration, "account_identifier")
+        common["company_name"] = configuration.get("company_name")
+    elif source_type == "factorial":
+        common["company_reference"] = _required(configuration, "company_identifier")
+        common["company_name"] = configuration.get("company_name")
+    elif source_type == "jobposting":
+        common["company_reference"] = _required(configuration, "page_url")
         common["company_name"] = configuration.get("company_name")
     return CollectionRequest(**common)
 
@@ -98,7 +144,12 @@ async def run_probe(
             last_http_attempt_at=request.telemetry.last_http_attempt_at,
         )
     except AcquisitionError as error:
-        return _failed(request, error.summary, error.code.value)
+        return _failed(
+            request,
+            error.summary,
+            error.code.value,
+            retry_after_seconds=error.retry_after_seconds,
+        )
     except (TypeError, ValueError) as error:
         return _failed(request, str(error), AcquisitionErrorCode.INVALID_CONFIGURATION.value)
     except Exception as error:  # A probe reports; it never takes the caller down.
@@ -127,13 +178,20 @@ def collector_test_audit(
     }
 
 
-def _failed(request: CollectionRequest | None, detail: str, code: str) -> ProbeOutcome:
+def _failed(
+    request: CollectionRequest | None,
+    detail: str,
+    code: str,
+    *,
+    retry_after_seconds: float | None = None,
+) -> ProbeOutcome:
     return ProbeOutcome(
         ok=False,
         detail=detail,
         error_code=code,
         http_requests=request.telemetry.http_requests if request else 0,
         last_http_attempt_at=request.telemetry.last_http_attempt_at if request else None,
+        retry_after_seconds=retry_after_seconds,
     )
 
 

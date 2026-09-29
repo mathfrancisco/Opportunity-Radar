@@ -96,6 +96,11 @@ class SourceControlsBody(BaseModel):
     expected_version: int = Field(ge=1)
 
 
+class SourceScheduleBody(BaseModel):
+    schedule: str | None = Field(default=None, max_length=255)
+    expected_version: int = Field(ge=1)
+
+
 class SourceProbeBody(BaseModel):
     expected_version: int = Field(ge=1)
 
@@ -111,6 +116,7 @@ class SourceProbeResult(BaseModel):
     error_code: str | None
     detail: str | None
     evidence_recorded: bool
+    retry_after_seconds: float | None = None
 
 
 class SourceProbeResponse(BaseModel):
@@ -169,10 +175,14 @@ class SourceRunPageResponse(BaseModel):
     status_code=status.HTTP_201_CREATED,
 )
 def create_source(
-    body: SourceDefinitionBody, session: Session = Depends(get_session)
+    body: SourceDefinitionBody,
+    session: Session = Depends(get_session),
+    registry: CollectorRegistry = Depends(get_collector_registry),
 ) -> SourceDefinitionResponse:
     try:
-        source = AcquisitionService(session).create_source(**body.model_dump())
+        source = AcquisitionService(session, registry=registry).create_source(
+            **body.model_dump()
+        )
     except AcquisitionError as error:
         _raise_acquisition_error(error)
     return _source_response(source)
@@ -227,6 +237,22 @@ def update_source_controls(
     return _source_response(source)
 
 
+@router.patch("/sources/{source_id}/schedule", response_model=SourceDefinitionResponse)
+def update_source_schedule(
+    source_id: UUID,
+    body: SourceScheduleBody,
+    session: Session = Depends(get_session),
+) -> SourceDefinitionResponse:
+    """Changes when the scheduler may run this source. `null` leaves it unscheduled."""
+    try:
+        source = AcquisitionService(session).update_source_schedule(
+            source_id, schedule=body.schedule, expected_version=body.expected_version
+        )
+    except AcquisitionError as error:
+        _raise_acquisition_error(error)
+    return _source_response(source)
+
+
 @router.post(
     "/sources/{source_id}/reopen-homologation", response_model=SourceDefinitionResponse
 )
@@ -258,9 +284,9 @@ async def probe_source(
     A pass that found the source changed under it recorded nothing, and answers 409.
     """
     try:
-        probe, source = await AcquisitionService(session, registry=registry).probe_source(
-            source_id, expected_version=body.expected_version
-        )
+        probe, source, outcome = await AcquisitionService(
+            session, registry=registry
+        ).probe_source(source_id, expected_version=body.expected_version)
     except AcquisitionError as error:
         _raise_acquisition_error(error)
     if probe.status == "PASSED" and not probe.evidence_recorded:
@@ -272,7 +298,10 @@ async def probe_source(
                 "meanwhile; refresh it and probe again",
             },
         )
-    return SourceProbeResponse(probe=_probe_response(probe), source=_source_response(source))
+    return SourceProbeResponse(
+        probe=_probe_response(probe, retry_after_seconds=outcome.retry_after_seconds),
+        source=_source_response(source),
+    )
 
 
 @router.post(
@@ -392,7 +421,9 @@ def _source_response(source: SourceDefinitionModel) -> SourceDefinitionResponse:
     )
 
 
-def _probe_response(probe: SourceProbeModel) -> SourceProbeResult:
+def _probe_response(
+    probe: SourceProbeModel, *, retry_after_seconds: float | None = None
+) -> SourceProbeResult:
     return SourceProbeResult(
         id=probe.id,
         requested_by=probe.requested_by,
@@ -404,6 +435,7 @@ def _probe_response(probe: SourceProbeModel) -> SourceProbeResult:
         error_code=probe.error_code,
         detail=probe.detail,
         evidence_recorded=probe.evidence_recorded,
+        retry_after_seconds=retry_after_seconds,
     )
 
 

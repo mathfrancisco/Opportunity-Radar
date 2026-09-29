@@ -1,18 +1,21 @@
 services:
-  ollama:
+  # Stands in for Groq on the OpenAI-compatible chat-completions endpoint (card F20-17,
+  # tests/e2e/fake_groq.py), so the CI gate proves the worker's own analysis wiring
+  # instead of proving a real Groq quota was available that morning.
+  groq:
     image: python:3.12-alpine
-    command: ["python", "/stub/fake_ollama.py"]
-    # The runner has no GPU, and the stub needs none; the GPU reservation and the server
-    # tuning of compose.yaml would stop the container from starting here.
-    deploy: !reset null
+    command: ["python", "/stub/fake_groq.py"]
     volumes:
       - ./tests/e2e:/stub:ro
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:11434/api/tags', timeout=2)"]
+      # The stub only answers POST /openai/v1/chat/completions, so a GET-based probe
+      # would read as a 404 failure; a plain TCP connect is enough to prove it is up.
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8080), timeout=2).close()"]
       interval: 2s
       timeout: 2s
       retries: 15
       start_period: 2s
+    networks: [app_net]
 
   # A local job board, so the scheduled collection gate proves the worker runs on its own
   # instead of proving that a third party was reachable that morning.
@@ -34,13 +37,21 @@ services:
   api:
     environment:
       GREENHOUSE_BASE_URL: http://jobboard:8477
+      GROQ_BASE_URL: http://groq:8080/openai/v1
+      GROQ_API_KEY: ci-fake
+      AI_ENABLED: "true"
     depends_on:
       jobboard:
         condition: service_started
+      groq:
+        condition: service_healthy
 
   worker:
     environment:
       GREENHOUSE_BASE_URL: http://jobboard:8477
+      GROQ_BASE_URL: http://groq:8080/openai/v1
+      GROQ_API_KEY: ci-fake
+      AI_ENABLED: "true"
       # The pass has to come round inside the gate's patience, and a failed source must be
       # retried within it rather than a real five-minute backoff later.
       COLLECTION_BACKOFF_BASE_SECONDS: 5
@@ -48,3 +59,5 @@ services:
     depends_on:
       jobboard:
         condition: service_started
+      groq:
+        condition: service_healthy

@@ -1,0 +1,1611 @@
+{
+  "card": "F20-21",
+  "gerado_em": "2026-09-26",
+  "fonte": "prompts/opportunity_analysis/eval/cases/*.json (41 casos reais, nao sinteticos)",
+  "achado_critico": {
+    "descricao": ".git/info/exclude tem a linha 'opportunity_analysis/' que impede git add em prompts/opportunity_analysis/eval/cases; nenhum caso foi commitado nesta maquina.",
+    "verificado_com": "git ls-files prompts/opportunity_analysis/eval/cases (retornou 0); git check-ignore -v confirmou .git/info/exclude:10",
+    "resolvido_em": "2026-09-27",
+    "nota": ".git/info/exclude agora tem '/opportunity_analysis/' (ancorado na raiz do repo), nao 'opportunity_analysis/'; nao casa mais com prompts/opportunity_analysis/. git ls-files prompts/opportunity_analysis/eval/cases confirma 50 arquivos rastreados nesta sessao. Achado original mantido acima para historico."
+  },
+  "lacuna_composicao": {
+    "java": {
+      "pedido": 10,
+      "existente_antes": 0,
+      "existente_depois": 10
+    },
+    "fullstack": {
+      "pedido": 10,
+      "existente_antes": 3,
+      "existente_depois": 10
+    },
+    "ai": {
+      "pedido": 10,
+      "existente_antes": 1,
+      "existente_depois": 10
+    },
+    "fora_de_area": {
+      "pedido": 10,
+      "existente_antes": 25,
+      "existente_depois": 10
+    },
+    "ineligible": {
+      "pedido": 10,
+      "existente_antes": 10,
+      "existente_depois": 10
+    }
+  },
+  "casos": [
+    {
+      "file": "01-backend-03-review_required.json",
+      "title": "Forward Deployed Engineer - US East Coast",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "reclassificar",
+      "confianca": "alta",
+      "justificativa": "Bucket 'backend' nao corresponde ao conteudo (papel nao-engenharia); inconsistente com casos equivalentes do bucket fora_de_area.",
+      "aceito": true
+    },
+    {
+      "file": "02-backend-04-review_required.json",
+      "title": "Senior Product Manager - Core Platform (Engine, Scale & Reliability)",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "reclassificar",
+      "confianca": "alta",
+      "justificativa": "Bucket 'backend' nao corresponde ao conteudo (papel nao-engenharia); inconsistente com casos equivalentes do bucket fora_de_area.",
+      "aceito": true
+    },
+    {
+      "file": "03-backend-08-review_required.json",
+      "title": "Senior Support Engineer | Remote | North America",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "reclassificar",
+      "confianca": "alta",
+      "justificativa": "Bucket 'backend' nao corresponde ao conteudo (papel nao-engenharia); inconsistente com casos equivalentes do bucket fora_de_area.",
+      "aceito": true
+    },
+    {
+      "file": "04-backend-24-review_required.json",
+      "title": "Forward Deployed Engineer - EMEA",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "reclassificar",
+      "confianca": "alta",
+      "justificativa": "Bucket 'backend' nao corresponde ao conteudo (papel nao-engenharia); inconsistente com casos equivalentes do bucket fora_de_area.",
+      "aceito": true
+    },
+    {
+      "file": "05-backend-28-review_required.json",
+      "title": "Staff Core Platform Engineer",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "media",
+      "justificativa": "Titulo e conteudo coerentes com engenharia backend/plataforma.",
+      "aceito": true
+    },
+    {
+      "file": "06-backend-31-review_required.json",
+      "title": "Technical Account Manager (US)",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "reclassificar",
+      "confianca": "alta",
+      "justificativa": "Bucket 'backend' nao corresponde ao conteudo (papel nao-engenharia); inconsistente com casos equivalentes do bucket fora_de_area.",
+      "aceito": true
+    },
+    {
+      "file": "07-backend-38-review_required.json",
+      "title": "Backend Engineer (Security)",
+      "work_mode": "UNKNOWN",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ],
+      "split": "reserved",
+      "group": "1ae2aab0c111",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_compensation",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Titulo e conteudo coerentes com engenharia backend/plataforma.",
+      "aceito": true
+    },
+    {
+      "file": "08-backend-40-review_required.json",
+      "title": "Technical Recruiter (3 month FTC, Temp to Perm)",
+      "work_mode": "UNKNOWN",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ],
+      "split": "reserved",
+      "group": "1ae2aab0c111",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "missing_compensation",
+        "missing_country"
+      ],
+      "recomendacao": "reclassificar",
+      "confianca": "alta",
+      "justificativa": "Bucket 'backend' nao corresponde ao conteudo (papel nao-engenharia); inconsistente com casos equivalentes do bucket fora_de_area.",
+      "aceito": true
+    },
+    {
+      "file": "09-fullstack-07-review_required.json",
+      "title": "Senior Product Engineer (TS/NodeJS/Vue)",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "10-fullstack-18-review_required.json",
+      "title": "Sr Growth Engineer (Fullstack TS/Vue/NodeJS)",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "11-fullstack-37-review_required.json",
+      "title": "Design Engineer",
+      "work_mode": "UNKNOWN",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ],
+      "split": "reserved",
+      "group": "1ae2aab0c111",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_compensation",
+        "missing_country"
+      ],
+      "recomendacao": "revisar",
+      "confianca": "media",
+      "justificativa": "Titulo ambiguo ('Design Engineer'); conferir descricao completa antes de aceitar o bucket fullstack.",
+      "aceito": true
+    },
+    {
+      "file": "12-ai-11-review_required.json",
+      "title": "Agentic Engineering Platform Engineer",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "13-fora_de_area-01-review_required.json",
+      "title": "Senior FP&A Manager - Marketing",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "14-fora_de_area-02-review_required.json",
+      "title": "Enterprise Sales Leader West Coast",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "15-fora_de_area-05-review_required.json",
+      "title": "Global Director of Revenue Enablement (Remote Europe or East Coast)",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "16-fora_de_area-06-review_required.json",
+      "title": "Customer Success Manager - Guided - West Coast",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "17-fora_de_area-09-review_required.json",
+      "title": "Strategy & Operations Manager - Partnerships",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "18-fora_de_area-10-review_required.json",
+      "title": "Sales Data Analyst",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "19-fora_de_area-12-review_required.json",
+      "title": "Customer Success | Team Lead | Remote in California/Colorado/Texas",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "20-fora_de_area-13-review_required.json",
+      "title": "Senior/Staff Product Designer",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "21-fora_de_area-14-review_required.json",
+      "title": "Account Executive Talent Pool US",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "22-fora_de_area-15-review_required.json",
+      "title": "Strategic Customer Experience & Success Programs Manager",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "23-fora_de_area-16-review_required.json",
+      "title": "Sales Enablement Manager (US East Coast)",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "24-fora_de_area-17-review_required.json",
+      "title": "Senior Partner Manager SI, West Coast",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "25-fora_de_area-19-review_required.json",
+      "title": "Enterprise Sales Development Representative US (Hybrid)",
+      "work_mode": "UNKNOWN",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "26-fora_de_area-20-review_required.json",
+      "title": "Senior Product Manager (Enterprise)",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "27-fora_de_area-21-review_required.json",
+      "title": "Head of Pricing and Monetization",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "28-fora_de_area-22-review_required.json",
+      "title": "Enterprise Sales Leader DACH",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "29-fora_de_area-23-review_required.json",
+      "title": "Sales Development Representative - DACH (Berlin Hybrid)",
+      "work_mode": "UNKNOWN",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "30-fora_de_area-25-review_required.json",
+      "title": "Head of People Operations & Tech",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "31-fora_de_area-26-review_required.json",
+      "title": "Deal Desk Manager",
+      "work_mode": "REMOTE",
+      "eligibility": "UNKNOWN",
+      "verdict": "REVIEW_REQUIRED",
+      "expected_verdict": "REVIEW_REQUIRED",
+      "risks": [
+        "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "a vaga está alinhada com a área de atuação do perfil"
+      ],
+      "split": "tuning",
+      "group": "636396f02b65",
+      "kinds": [
+        "ambiguous",
+        "english_description",
+        "long_description",
+        "missing_country"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "32-ineligible-ineligible-01.json",
+      "title": "Treasury Expert",
+      "work_mode": "ONSITE",
+      "eligibility": "INELIGIBLE",
+      "verdict": "INELIGIBLE",
+      "expected_verdict": "INELIGIBLE",
+      "risks": [
+        "Vaga é presencial (ONSITE), incompatível com o modo de trabalho aceito no perfil (remoto).",
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "a vaga é compatível com trabalho remoto"
+      ],
+      "split": "reserved",
+      "group": "ineligible-001",
+      "kinds": [
+        "english_description",
+        "missing_country",
+        "weak_match"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "33-ineligible-ineligible-02.json",
+      "title": "Lead Software Engineer - Buenos Aires, Argentina (Hybrid)",
+      "work_mode": "HYBRID",
+      "eligibility": "INELIGIBLE",
+      "verdict": "INELIGIBLE",
+      "expected_verdict": "INELIGIBLE",
+      "risks": [
+        "Vaga é presencial (HYBRID), incompatível com o modo de trabalho aceito no perfil (remoto).",
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "a vaga é compatível com trabalho remoto",
+        "remuneração competitiva"
+      ],
+      "split": "tuning",
+      "group": "ineligible-002",
+      "kinds": [
+        "english_description",
+        "long_description",
+        "missing_compensation",
+        "missing_country",
+        "weak_match"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "34-ineligible-ineligible-03.json",
+      "title": "Data Analytics - Regulatory Solutions",
+      "work_mode": "ONSITE",
+      "eligibility": "INELIGIBLE",
+      "verdict": "INELIGIBLE",
+      "expected_verdict": "INELIGIBLE",
+      "risks": [
+        "Vaga é presencial (ONSITE), incompatível com o modo de trabalho aceito no perfil (remoto).",
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "a vaga é compatível com trabalho remoto"
+      ],
+      "split": "tuning",
+      "group": "ineligible-003",
+      "kinds": [
+        "english_description",
+        "long_description",
+        "missing_country",
+        "weak_match"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "35-ineligible-ineligible-04.json",
+      "title": "Reliability Engineer — Regulatory Reliability",
+      "work_mode": "ONSITE",
+      "eligibility": "INELIGIBLE",
+      "verdict": "INELIGIBLE",
+      "expected_verdict": "INELIGIBLE",
+      "risks": [
+        "Vaga é presencial (ONSITE), incompatível com o modo de trabalho aceito no perfil (remoto).",
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "a vaga é compatível com trabalho remoto"
+      ],
+      "split": "tuning",
+      "group": "ineligible-004",
+      "kinds": [
+        "english_description",
+        "long_description",
+        "missing_country",
+        "weak_match"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "36-ineligible-ineligible-05.json",
+      "title": "Controllership Senior Specialist (FinOps)",
+      "work_mode": "ONSITE",
+      "eligibility": "INELIGIBLE",
+      "verdict": "INELIGIBLE",
+      "expected_verdict": "INELIGIBLE",
+      "risks": [
+        "Vaga é presencial (ONSITE), incompatível com o modo de trabalho aceito no perfil (remoto).",
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "a vaga é compatível com trabalho remoto"
+      ],
+      "split": "reserved",
+      "group": "ineligible-005",
+      "kinds": [
+        "english_description",
+        "missing_country",
+        "weak_match"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "37-ineligible-ineligible-06.json",
+      "title": "AML Analytics Expert",
+      "work_mode": "ONSITE",
+      "eligibility": "INELIGIBLE",
+      "verdict": "INELIGIBLE",
+      "expected_verdict": "INELIGIBLE",
+      "risks": [
+        "Vaga é presencial (ONSITE), incompatível com o modo de trabalho aceito no perfil (remoto).",
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "a vaga é compatível com trabalho remoto"
+      ],
+      "split": "tuning",
+      "group": "ineligible-006",
+      "kinds": [
+        "english_description",
+        "missing_country",
+        "weak_match"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "38-ineligible-ineligible-07.json",
+      "title": "Lead Infrastructure Engineer — Global Office IT Physical Infra",
+      "work_mode": "ONSITE",
+      "eligibility": "INELIGIBLE",
+      "verdict": "INELIGIBLE",
+      "expected_verdict": "INELIGIBLE",
+      "risks": [
+        "Vaga é presencial (ONSITE), incompatível com o modo de trabalho aceito no perfil (remoto).",
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "a vaga é compatível com trabalho remoto"
+      ],
+      "split": "tuning",
+      "group": "ineligible-007",
+      "kinds": [
+        "english_description",
+        "long_description",
+        "missing_country",
+        "weak_match"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "39-ineligible-ineligible-08.json",
+      "title": "Senior Data Center Engineer",
+      "work_mode": "ONSITE",
+      "eligibility": "INELIGIBLE",
+      "verdict": "INELIGIBLE",
+      "expected_verdict": "INELIGIBLE",
+      "risks": [
+        "Vaga é presencial (ONSITE), incompatível com o modo de trabalho aceito no perfil (remoto).",
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "a vaga é compatível com trabalho remoto"
+      ],
+      "split": "tuning",
+      "group": "ineligible-008",
+      "kinds": [
+        "english_description",
+        "long_description",
+        "missing_country",
+        "weak_match"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "40-ineligible-ineligible-09.json",
+      "title": "Compliance Expert",
+      "work_mode": "ONSITE",
+      "eligibility": "INELIGIBLE",
+      "verdict": "INELIGIBLE",
+      "expected_verdict": "INELIGIBLE",
+      "risks": [
+        "Vaga é presencial (ONSITE), incompatível com o modo de trabalho aceito no perfil (remoto).",
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "a vaga é compatível com trabalho remoto"
+      ],
+      "split": "reserved",
+      "group": "ineligible-009",
+      "kinds": [
+        "english_description",
+        "long_description",
+        "missing_country",
+        "weak_match"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    },
+    {
+      "file": "41-ineligible-ineligible-10.json",
+      "title": "Communications Sr Specialist",
+      "work_mode": "ONSITE",
+      "eligibility": "INELIGIBLE",
+      "verdict": "INELIGIBLE",
+      "expected_verdict": "INELIGIBLE",
+      "risks": [
+        "Vaga é presencial (ONSITE), incompatível com o modo de trabalho aceito no perfil (remoto).",
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "not_claim": [
+        "a vaga é compatível com trabalho remoto"
+      ],
+      "split": "tuning",
+      "group": "ineligible-010",
+      "kinds": [
+        "english_description",
+        "long_description",
+        "missing_country",
+        "weak_match"
+      ],
+      "recomendacao": "aceitar",
+      "confianca": "alta",
+      "justificativa": "Rotulo, veredito e riscos esperados consistentes com o restante do bucket.",
+      "aceito": true
+    }
+  ],
+  "rebalanceamento_50_casos": {
+    "regra": "Card pede exatamente 10 Java + 10 fullstack + 10 IA + 10 fora de area + 10 inelegiveis = 50. Nao ha bucket para 'backend' nem 'synthetic' no plano do card; esses casos e o excedente de fora_de_area foram movidos para prompts/opportunity_analysis/eval/cases-secondary/ (nao deletados, apenas fora do conjunto que load_cases() le por padrao) para caber exatamente em 50 sem inventar categoria nova.",
+    "movidos_para_secondary": {
+      "backend": [
+        "05-backend-28-review_required.json",
+        "07-backend-38-review_required.json"
+      ],
+      "fora_de_area_excedente": [
+        "17-fora_de_area-*-review_required.json (mantido apenas o numero, ver git mv)",
+        "18-fora_de_area-*-review_required.json (mantido apenas o numero, ver git mv)",
+        "19-fora_de_area-*-review_required.json (mantido apenas o numero, ver git mv)",
+        "20-fora_de_area-*-review_required.json (mantido apenas o numero, ver git mv)",
+        "21-fora_de_area-*-review_required.json (mantido apenas o numero, ver git mv)",
+        "22-fora_de_area-*-review_required.json (mantido apenas o numero, ver git mv)",
+        "23-fora_de_area-*-review_required.json (mantido apenas o numero, ver git mv)",
+        "24-fora_de_area-*-review_required.json (mantido apenas o numero, ver git mv)",
+        "25-fora_de_area-*-review_required.json (mantido apenas o numero, ver git mv)",
+        "26-fora_de_area-*-review_required.json (mantido apenas o numero, ver git mv)",
+        "27-fora_de_area-*-review_required.json (mantido apenas o numero, ver git mv)",
+        "28-fora_de_area-*-review_required.json (mantido apenas o numero, ver git mv)",
+        "29-fora_de_area-*-review_required.json (mantido apenas o numero, ver git mv)",
+        "30-fora_de_area-*-review_required.json (mantido apenas o numero, ver git mv)",
+        "31-fora_de_area-*-review_required.json (mantido apenas o numero, ver git mv)"
+      ],
+      "synthetic": "todos os 9 arquivos synthetic-*.json"
+    },
+    "fora_de_area_mantidos_em_cases": [
+      "01-fora_de_area-27",
+      "02-fora_de_area-28",
+      "03-fora_de_area-29",
+      "04-fora_de_area-30",
+      "06-fora_de_area-31",
+      "08-fora_de_area-32",
+      "13-fora_de_area-01",
+      "14-fora_de_area-02",
+      "15-fora_de_area-05",
+      "16-fora_de_area-06"
+    ],
+    "justificativa_selecao": "Mantidos os 6 casos reclassificados de backend->fora_de_area (01,02,03,04,06,08) porque documentam a decisao de rotulagem mais discutivel do lote (papel que parece engenharia mas nao e), e os 4 primeiros do lote batch-aceito 13-31 para manter a cobertura basica de 'vaga fora da area'. Os 15 restantes (17-31) sao do mesmo padrao e ficam em cases-secondary como reserva, nao descartados."
+  },
+  "gap_drafts_promovidos": [
+    {
+      "gap_file": "gap-java-01-review_required.json",
+      "promoted_as": "42-java-01-review_required.json",
+      "title": "[Job-30904] Mid level Java Developer, Brazil",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga exige Java, que não está no perfil.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-java-02-review_required.json",
+      "promoted_as": "43-java-02-review_required.json",
+      "title": "[Job-31106]  Senior Kotlin/Java Developer, Brazil",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga exige AWS, que não está no perfil.",
+        "A vaga exige Java, que não está no perfil.",
+        "A vaga exige Kotlin, que não está no perfil.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-java-03-review_required.json",
+      "promoted_as": "44-java-03-review_required.json",
+      "title": "[Job-31311] Master JAVA/AWS  Developer, Brazil",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-java-04-review_required.json",
+      "promoted_as": "45-java-04-review_required.json",
+      "title": "[Job 31746] Software Architect (Java)",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-java-05-review_required.json",
+      "promoted_as": "46-java-05-review_required.json",
+      "title": "[Job-31932] Senior Java /Python Developer Back End, Brazil",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-java-06-review_required.json",
+      "promoted_as": "47-java-06-review_required.json",
+      "title": "[Job - 31296] Master Backend Developer / Tech Lead — Java, Go & AWS, Brazil",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga exige MongoDB, que não está no perfil.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-java-07-review_required.json",
+      "promoted_as": "48-java-07-review_required.json",
+      "title": "[Job-31697] Mid-Level Java Developer – AI | Java + React, Brazil",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-java-08-review_required.json",
+      "promoted_as": "49-java-08-review_required.json",
+      "title": "[Job-31698] Senior Java Developer – AI | Java + React. Brazil",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-java-09-review_required.json",
+      "promoted_as": "50-java-09-review_required.json",
+      "title": "[Job 31822] Software Architect (Tech Lead Java & IA Generativa)",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-java-10-review_required.json",
+      "promoted_as": "51-java-10-review_required.json",
+      "title": "[Job-31846] Mid Level / Senior Java/IA Developer, Brazil",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-fullstack-01-review_required.json",
+      "promoted_as": "52-fullstack-01-review_required.json",
+      "title": "Senior Fullstack Engineer",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-fullstack-02-review_required.json",
+      "promoted_as": "53-fullstack-02-review_required.json",
+      "title": "[Job - 31638] Mid Level  FullStack Developer (.NET/React)",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+      ]
+    },
+    {
+      "gap_file": "gap-fullstack-03-review_required.json",
+      "promoted_as": "54-fullstack-03-review_required.json",
+      "title": "[Job-31524] Senior Software Developer Fullstack - Kotlin/Next.js (React/TypeScript), Brazil",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-fullstack-04-review_required.json",
+      "promoted_as": "55-fullstack-04-review_required.json",
+      "title": "[Job-31651] Tech Lead FullStack (.Net/React), Brazil",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-fullstack-05-review_required.json",
+      "promoted_as": "56-fullstack-05-review_required.json",
+      "title": "[Job-31927]  SR FullStack Developer - [C# / NodeJS + React]",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-fullstack-06-review_required.json",
+      "promoted_as": "57-fullstack-06-review_required.json",
+      "title": "[31868]  AI Fullstack Java/Angular Desenvolvedor",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-fullstack-07-review_required.json",
+      "promoted_as": "58-fullstack-07-review_required.json",
+      "title": "[Job- 31800] Mid-Level Fullstack Developer ( Java + Angular ) , Brazil",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-ai-01-review_required.json",
+      "promoted_as": "59-ai-01-review_required.json",
+      "title": "Applied AI Engineer",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+      ]
+    },
+    {
+      "gap_file": "gap-ai-02-review_required.json",
+      "promoted_as": "60-ai-02-review_required.json",
+      "title": "Senior Machine Learning Engineer, Personalization, Muse",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-ai-03-review_required.json",
+      "promoted_as": "61-ai-03-review_required.json",
+      "title": "Senior Staff Machine Learning Engineer - Content Platform",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-ai-04-review_required.json",
+      "promoted_as": "62-ai-04-review_required.json",
+      "title": "Staff Machine Learning Engineer, Home Surfaces",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-ai-05-review_required.json",
+      "promoted_as": "63-ai-05-review_required.json",
+      "title": "Staff Machine Learning Engineer, Personalization",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-ai-06-review_required.json",
+      "promoted_as": "64-ai-06-review_required.json",
+      "title": "[30118] - Senior AI Engineer",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-ai-07-review_required.json",
+      "promoted_as": "65-ai-07-review_required.json",
+      "title": "[Job- 31650] Master Generative AI Developer, Brazil",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-ai-08-review_required.json",
+      "promoted_as": "66-ai-08-review_required.json",
+      "title": "[Job-31614]  Senior Machine Learning Engineer, Brazil",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    },
+    {
+      "gap_file": "gap-ai-09-review_required.json",
+      "promoted_as": "67-ai-09-review_required.json",
+      "title": "[Job-31455] AI Engineer & Software Architect, Brasil",
+      "verdict": "REVIEW_REQUIRED",
+      "must_mention_risks": [
+        "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+        "A remuneração não é informada na vaga.",
+        "Os países permitidos para contratação não são informados na vaga."
+      ],
+      "must_not_claim": [
+        "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+        "remuneração competitiva"
+      ]
+    }
+  ]
+}

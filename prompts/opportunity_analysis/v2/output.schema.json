@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "inferences": {
+      "items": {
+        "maxLength": 500,
+        "type": "string"
+      },
+      "maxItems": 20,
+      "type": "array"
+    },
+    "recommended_review": {
+      "type": "boolean"
+    },
+    "risks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "claim": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "evidence": {
+            "maxLength": 300,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "enum": [
+              "posting",
+              "profile",
+              null
+            ]
+          }
+        },
+        "required": [
+          "claim",
+          "evidence",
+          "source"
+        ],
+        "type": "object"
+      },
+      "maxItems": 20,
+      "type": "array"
+    },
+    "strengths": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "claim": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "evidence": {
+            "maxLength": 300,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "enum": [
+              "posting",
+              "profile",
+              null
+            ]
+          }
+        },
+        "required": [
+          "claim",
+          "evidence",
+          "source"
+        ],
+        "type": "object"
+      },
+      "maxItems": 20,
+      "type": "array"
+    },
+    "summary": {
+      "maxLength": 2000,
+      "type": "string"
+    },
+    "unknowns": {
+      "items": {
+        "maxLength": 500,
+        "type": "string"
+      },
+      "maxItems": 20,
+      "type": "array"
+    }
+  },
+  "required": [
+    "summary",
+    "strengths",
+    "risks",
+    "inferences",
+    "unknowns",
+    "recommended_review"
+  ],
+  "title": "OpportunityAnalysis",
+  "type": "object"
+}

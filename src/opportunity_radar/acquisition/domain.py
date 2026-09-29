@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from enum import StrEnum
 from math import isfinite
 from typing import Any, Mapping
 from uuid import UUID, uuid4
+
+from opportunity_radar.acquisition.scheduling import ConditionalRequestHeaders
 
 
 class AcquisitionErrorCode(StrEnum):
@@ -26,6 +31,13 @@ class AcquisitionErrorCode(StrEnum):
     CIRCUIT_OPEN = "CIRCUIT_OPEN"
     UNKNOWN_EXTERNAL_ERROR = "UNKNOWN_EXTERNAL_ERROR"
     MANUAL_INPUT_INVALID = "MANUAL_INPUT_INVALID"
+    #: The provider says the calling account has exhausted its account-wide credit or
+    #: usage budget (Tavily HTTP 433). CREDIT_BUDGET_EXCEEDED separately reports the
+    #: per-run ceiling configured by the radar.
+    SOURCE_QUOTA_EXHAUSTED = "SOURCE_QUOTA_EXHAUSTED"
+    #: The radar stopped this run at its own Tavily credit ceiling. This is separate
+    #: from SOURCE_QUOTA_EXHAUSTED, which reports the provider's account-wide quota.
+    CREDIT_BUDGET_EXCEEDED = "CREDIT_BUDGET_EXCEEDED"
 
 
 class AcquisitionError(Exception):
@@ -38,6 +50,7 @@ class AcquisitionError(Exception):
         *,
         retryable: bool = False,
         field: str | None = None,
+        retry_after_seconds: float | None = None,
     ) -> None:
         super().__init__(summary)
         self.code = code
@@ -46,11 +59,37 @@ class AcquisitionError(Exception):
         # The request field that caused a configuration error, dotted for nested keys
         # ("configuration.board_token"), so a form can show the refusal where it belongs.
         self.field = field
+        # Only set for SOURCE_RATE_LIMITED, parsed from the response's Retry-After header
+        # (F20-25): lets a caller batching several probes wait the right amount.
+        self.retry_after_seconds = retry_after_seconds
 
 
 class InvalidSourceRunTransitionError(AcquisitionError):
     def __init__(self, summary: str) -> None:
         super().__init__(AcquisitionErrorCode.INVALID_CONFIGURATION, summary)
+
+
+def parse_retry_after_seconds(header_value: str | None) -> float | None:
+    """Parse a `Retry-After` header value (delta-seconds or HTTP-date) into seconds.
+
+    Returns `None` when the header is absent or unparseable, so a caller can fall back to
+    its own default without pretending the server gave a number.
+    """
+    if header_value is None:
+        return None
+    try:
+        seconds = float(header_value)
+    except ValueError:
+        try:
+            parsed_date = parsedate_to_datetime(header_value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if parsed_date.tzinfo is None:
+            parsed_date = parsed_date.replace(tzinfo=timezone.utc)
+        seconds = (parsed_date - datetime.now(timezone.utc)).total_seconds()
+    if not isfinite(seconds):
+        return None
+    return max(0.0, seconds)
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,7 +151,67 @@ class CollectionTelemetry:
     rate_limit_events: int = 0
     last_http_attempt_at: datetime | None = None
     invalid_items: int = 0
+    #: Items the source returned that are not opportunities (e.g. an untitled Workday
+    #: posting): counted as seen and skipped, never as invalid (F20-75).
+    skipped_items: int = 0
     last_invalid_item_error: str | None = None
+    #: What the source's own API said the board holds, when it says so at all. `None`
+    #: means the collector never learned a total, not that the board announced zero.
+    items_announced: int | None = None
+    #: Credits charged by the provider during this request. It is copied to the
+    #: run by AcquisitionService after collection completes.
+    credits_used: int = 0
+    #: The representation's validators from this attempt's response, when the collector
+    #: read and reported them (F20-38). `None` means the collector did not report one, not
+    #: that the response lacked it — a collector without HTTP-conditional support simply
+    #: never calls `record_conditional_response`.
+    response_etag: str | None = None
+    response_last_modified: str | None = None
+    #: Whether this attempt's response was a bare 304. A 304 revalidates the checkpoint's
+    #: representation; it never proves the board is fully read (SPEC 39 §7 — only F20-39's
+    #: manifest check may do that), so `AcquisitionService` must not read this as coverage.
+    not_modified: bool = False
+    #: How many 304 responses this run received across every representation it revalidated
+    #: (F20-39). Counted separately from `not_modified` (which only says "at least one")
+    #: so `AcquisitionService` can tell a single bare 304 apart from every page of a
+    #: declared manifest revalidating together.
+    not_modified_count: int = 0
+    #: How many representations (pages/categories) this run's collector declared it would
+    #: check, when it declared one at all (F20-39). `None` means no manifest was declared —
+    #: a bare 304 with no manifest can never prove full coverage, only that the one
+    #: representation it touched is unchanged.
+    manifest_size: int | None = None
+
+    def record_conditional_response(
+        self,
+        *,
+        etag: str | None = None,
+        last_modified: str | None = None,
+        not_modified: bool = False,
+    ) -> None:
+        if etag is not None:
+            self.response_etag = etag
+        if last_modified is not None:
+            self.response_last_modified = last_modified
+        if not_modified:
+            self.not_modified = True
+            self.not_modified_count += 1
+
+    def record_manifest(self, total_representations: int) -> None:
+        """A collector declares how many representations make up this run's manifest.
+
+        Only a declared manifest, fully revalidated (every representation's own 304),
+        can let a later run reuse a previously persisted complete inventory — a bare 304
+        with no declared manifest stays incomplete (SPEC 39 §7).
+        """
+        if total_representations < 1:
+            raise ValueError("manifest_size must be positive")
+        self.manifest_size = total_representations
+
+    def record_items_announced(self, total: int) -> None:
+        if total < 0:
+            raise ValueError("items_announced cannot be negative")
+        self.items_announced = total
 
     def record_http_attempt(self, *, retry: bool = False) -> None:
         self.http_requests += 1
@@ -122,6 +221,14 @@ class CollectionTelemetry:
 
     def record_rate_limit(self) -> None:
         self.rate_limit_events += 1
+
+    def record_credits(self, amount: int) -> None:
+        if amount < 0:
+            raise ValueError("credits cannot be negative")
+        self.credits_used += amount
+
+    def record_skipped_item(self) -> None:
+        self.skipped_items += 1
 
     def record_invalid_item(self, summary: str) -> None:
         self.invalid_items += 1
@@ -153,16 +260,10 @@ class CollectionNetworkPolicy:
         if self.minimum_interval_seconds > 60:
             raise ValueError("minimum_interval_seconds cannot exceed 60")
         if self.max_retry_delay_seconds < self.minimum_interval_seconds:
-            raise ValueError(
-                "max_retry_delay_seconds cannot be below minimum_interval_seconds"
-            )
+            raise ValueError("max_retry_delay_seconds cannot be below minimum_interval_seconds")
         run_interval = self.minimum_run_interval_seconds
-        if run_interval is not None and (
-            not isfinite(run_interval) or run_interval < 0
-        ):
-            raise ValueError(
-                "minimum_run_interval_seconds must be finite and non-negative"
-            )
+        if run_interval is not None and (not isfinite(run_interval) or run_interval < 0):
+            raise ValueError("minimum_run_interval_seconds must be finite and non-negative")
         if run_interval is not None and run_interval > 604_800:
             raise ValueError("minimum_run_interval_seconds cannot exceed 604800")
 
@@ -186,14 +287,26 @@ class CollectionRequest:
         default_factory=CollectionTelemetry, compare=False, repr=False
     )
     network_policy: CollectionNetworkPolicy | None = None
+    known_ats_boards: frozenset[tuple[str, str]] | None = field(
+        default=None, compare=False, repr=False
+    )
+    #: `If-None-Match`/`If-Modified-Since` for this request's representation, built by
+    #: `AcquisitionService` from the checkpoint's stored validators (F20-38). `None` when
+    #: there is no checkpoint yet, or the checkpoint belongs to a different scope. A
+    #: collector that supports HTTP-conditional requests (`CollectorCapabilities.etag`/
+    #: `last_modified`) reads this to send the headers; one that does not simply ignores it.
+    conditional_headers: ConditionalRequestHeaders | None = None
+    #: An interrupted run this collection continues (F20-39 "retomada da mesma execução").
+    #: Purely a provenance link recorded on the new run — it never derives `cursor`
+    #: automatically. The caller supplies both together: the id of the persisted prefix it
+    #: is resuming, and the explicit cursor to resume it from.
+    resume_of_run_id: UUID | None = None
 
     def __post_init__(self) -> None:
         if self.max_items is not None and self.max_items < 1:
             raise ValueError("max_items must be positive")
         if len(self.keywords) > 10 or any(
-            not isinstance(keyword, str)
-            or not keyword.strip()
-            or len(keyword) > 100
+            not isinstance(keyword, str) or not keyword.strip() or len(keyword) > 100
             for keyword in self.keywords
         ):
             raise ValueError(
@@ -203,6 +316,8 @@ class CollectionRequest:
             raise ValueError("manual collection requires at least one manual input")
         if self.mode is not CollectionMode.MANUAL and self.manual_inputs:
             raise ValueError("manual inputs require manual collection mode")
+        if self.resume_of_run_id is not None and self.cursor is None:
+            raise ValueError("resuming a run requires an explicit cursor")
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,6 +334,11 @@ class CollectedItem:
     description: str | None = None
     published_at: datetime | None = None
     updated_at: datetime | None = None
+    #: Explicit application-window deadline (schema.org `JobPosting.validThrough`,
+    #: card F20-61). `None` for every collector that does not expose one — never
+    #: guessed. A future date is a recency-filter exception independent of contract
+    #: type or age.
+    valid_through: datetime | None = None
     cursor: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
@@ -277,10 +397,21 @@ class SourceRun:
     http_requests: int = 0
     retry_count: int = 0
     rate_limit_events: int = 0
+    #: Provider credits spent by this run (e.g. Tavily's usage.credits), a different unit
+    #: from http_requests/retry_count, which keep counting HTTP calls regardless of what a
+    #: source charges per call. A generic field, not Tavily-specific: any future paid API
+    #: source can report spend the same way (F20-43, docs/41-spec-tavily.md section 6).
+    credits_used: int = 0
     error_code: AcquisitionErrorCode | None = None
     error_summary: str | None = None
     checkpoint_before: str | None = None
     checkpoint_after: str | None = None
+    #: What the source announced this run, when it said so. `None` means unknown, not zero.
+    items_announced: int | None = None
+    #: Whether this run read the whole board: `SUCCEEDED`, unbounded by `max_items`, and
+    #: (when a total is known) `items_seen` reached it. Only a complete run may close a
+    #: job that stopped appearing — see `evaluate_completeness`.
+    complete: bool = False
 
     def start(self, at: datetime | None = None) -> None:
         if self.status is not SourceRunStatus.PENDING:
@@ -316,16 +447,17 @@ class SourceRun:
         self, *, requests: int, retries: int, rate_limit_events: int = 0
     ) -> None:
         self._require_running()
-        if (
-            requests < 0
-            or retries < 0
-            or retries > requests
-            or rate_limit_events < 0
-        ):
+        if requests < 0 or retries < 0 or retries > requests or rate_limit_events < 0:
             raise ValueError("invalid HTTP activity counters")
         self.http_requests += requests
         self.retry_count += retries
         self.rate_limit_events += rate_limit_events
+
+    def record_credits(self, amount: int) -> None:
+        self._require_running()
+        if amount < 0:
+            raise ValueError("credits cannot be negative")
+        self.credits_used += amount
 
     def finish(
         self,
@@ -355,3 +487,68 @@ class SourceRun:
     def _require_running(self) -> None:
         if self.status is not SourceRunStatus.RUNNING:
             raise InvalidSourceRunTransitionError("source run is not running")
+
+
+def evaluate_completeness(
+    *,
+    status: SourceRunStatus,
+    max_items: int | None,
+    items_seen: int,
+    items_announced: int | None,
+) -> bool:
+    """Did this run read the whole board?
+
+    Only a `SUCCEEDED` run that was never bounded by `max_items` can be complete, because a
+    capped run stopping short of the total is by design, not evidence of anything missing.
+    Without a known total the run is trusted as complete on those two conditions alone; a
+    known total additionally requires `items_seen` to have reached it, which is what makes
+    a shrunk `items_seen` from broken pagination visible.
+    """
+    if status is not SourceRunStatus.SUCCEEDED:
+        return False
+    if max_items is not None:
+        return False
+    if items_announced is None:
+        return True
+    return items_seen >= items_announced
+
+
+SEMANTIC_HASH_VERSION = "semantic-hash-v1"
+# Only volatile collector bookkeeping is ignored. Posting timestamps remain material.
+SEMANTIC_HASH_NOISE_KEYS_V1 = frozenset(
+    {"scraped_at", "fetched_at", "accessed_at", "retrieved_at", "crawled_at", "views", "view_count"}
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ContentHashes:
+    raw_hash: str
+    semantic_hash: str
+    semantic_hash_version: str
+
+
+def semantic_hash(payload: Mapping[str, Any], *, version: str = SEMANTIC_HASH_VERSION) -> str:
+    if version != SEMANTIC_HASH_VERSION:
+        raise ValueError(f"unknown semantic hash version: {version}")
+
+    def clean(value: Any) -> Any:
+        if isinstance(value, Mapping):
+            return {
+                key: clean(item)
+                for key, item in value.items()
+                if key not in SEMANTIC_HASH_NOISE_KEYS_V1
+            }
+        if isinstance(value, list):
+            return [clean(item) for item in value]
+        if isinstance(value, str):
+            return " ".join(value.split())
+        return value
+
+    serialized = json.dumps(
+        clean(dict(payload)), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(f"{version}:{serialized}".encode("utf-8")).hexdigest()
+
+
+def content_hashes(payload: Mapping[str, Any], *, raw_hash: str) -> ContentHashes:
+    return ContentHashes(raw_hash, semantic_hash(payload), SEMANTIC_HASH_VERSION)

@@ -1,0 +1,100 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "55.5000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "5.20",
+        "currency": null
+      },
+      "published_at": "2026-09-24T17:05:43.386000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:javascript:sha256:2fcbd2d2f2a9f9dafcbd718a4d81782493d5511fd1d09a5a75b913ae41056d47",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:nodejs:sha256:7db796581e3650d04b65291b0d4d9681688f62d9159643ce61fb37f5206d5ed3",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:typescript:sha256:b7f9e16a074607c8e04624d71b58309ce2990f5a648b7a04fc39a99bb75ae938"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "5.20",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "$5.2",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Agentic Engineering Platform Engineer",
+    "company_name": "Empresa X",
+    "location_text": "Berlin Office",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nAGENTIC ENGINEERING PLATFORM ENGINEER\n\nDeveloper Productivity · AI Coding Agents · Developer Platform\n\n🎯 Your main goal will be to keep Empresa X operating as an AI-native engineering organization where agents are embedded across the development cycle; helping teams plan, build, test, review, learn, and improve.\n\nYou’ll do this by maintaining and evolving the platform foundations, tools, guardrails, and team processes that make agentic development safe, measurable, and sustainable. Working with Developer Platform, Security, AI/Agents, Architecture, and product engineering teams, you’ll help teams continuously adopt what works from frontier AI and make success visible through faster feedback loops, better quality, stronger resilience, and more learning from what we ship:\n\nBUILD THE PAVED ROAD FOR AGENTIC DEVELOPMENT\n\n- Define safe task categories for autonomous agents, including what they can attempt, what they should never touch, and where additional review is required.\n\n- Design and implement isolated execution environments where agents can work without exposing secrets or accessing sensitive systems unnecessarily.\n\n- Build pilot workflows that allow selected Linear issues to be picked up by agents, tested, and converted into useful draft PRs.\n\nMAKE Empresa X'S MONOREPO AGENT-READY\n\n- Create and maintain repo instructions, agent playbooks, ownership metadata, coding guidelines, and documentation that improve agent performance.\n\n- Continuously improve developer workflows, repo structure, testability, and documentation based on where agents succeed, fail, or create reviewer friction.\n\n- Partner with Architecture and senior engineers to define boundaries, dependencies, and areas where agents need more context or tighter constraints.\n\nINTEGRATE AGENTS INTO ENGINEERING WORKFLOWS\n\n- Integrate agentic workflows with Linear, GitHub, CI, test infrastructure, and developer review processes.\n\n- Design PR evidence templates that help reviewers understand what changed, why, what tests ran, what risks remain, and where human judgment is needed.\n\n- Partner with Security, AI/Agents, Developer Platform, and product engineering teams to define guardrails for sensitive areas like auth, billing, permissions, and data handling.\n\nMEASURE QUALITY, SAFETY, AND ADOPTION\n\n- Create benchmarks from real historical engineering tasks to evaluate agent output quality, failure modes, test pass rates, review burden, and production risk.\n\n- Define quality signals and adoption metrics such as draft PR usefulness rate, reviewer acceptance rate, CI pass rate, rework rate, and developer satisfaction.\n\n- Use data and feedback from pilot teams to improve agent workflows, reduce unsafe attempts, and build trust across engineering.\n\nREQUIREMENTS\n\nMUST-HAVES\n\n- 🧠 Autonomous coding agents: You have experience with autonomous coding agents, AI coding platforms, agent orchestration systems, or internal AI developer tooling.\n\n- 🤖 Agentic development experience: You have practical experience building, deploying, or operating AI-assisted or agentic software development workflows that work with developers not besides them.\n\n- 🛠️ Strong engineering foundations: You have a strong software engineering background, ideally in platform engineering, developer experience, infrastructure, tooling, CI/CD, or engineering productivity.\n\n- 🧭 Ambiguity leadership: You’re comfortable leading a first-of-a-kind technical initiative from problem definition through pilot, adoption, measurement, and iteration.\n\n- 🔁 Modern engineering workflows: You deeply understand GitHub, CI, testing strategies, code review, monorepos, issue tracking, developer environments, and release risk.\n\n- 🔐 Safety-first judgment: You have strong judgment around permissions, secrets, sandboxing, sensitive code paths, and human-in-the-loop review.\n\n- 📊 Measurable systems thinking: You know how to design benchmarks, quality signals, failure-mode tracking, and adoption metrics.\n\n- ✍️ Clear written communication: You’re strong at writing repo instructions, playbooks, PR evidence templates, technical proposals, and alignment documents.\n\n- 🤝 Cross-functional influence: You have credibility with senior engineers and can influence across Platform, Product Engineering, AI, Security, and Architecture without formal authority.\n\nNICE-TO-HAVES\n\n- 📦 TypeScript monorepos: You have worked in a large TypeScript, Node.js, or JavaScript monorepo.\n\n- ⚙️ Developer platforms: You have experience with GitHub Actions, Linear, automated testing infrastructure, preview environments, or internal developer platforms.\n\n- 🛡️ Security-aware platform engineering: You have worked on sandboxing, secrets management, least-privilege access, or sensitive code ownership.\n\n- 📏 AI evaluation: You have created evaluation frameworks, benchmarks, or quality metrics for AI-generated code or automation systems.\n\n- 🌍 Open-source communities: You have experience contributing to open-source or source-available projects with active developer communities.\n\n- 🏢 B2B SaaS context: You understand environments where reliability, permissions, data handling, and customer trust are central.\n\n- 🔗 Workflow automation: You’re familiar with workflow automation, integration platforms, AI orchestration, or developer-facing products.\n\nWhy join us?\n\nAt Empresa X, you’ll help define how autonomous AI agents become a trusted part of engineering inside one of Europe’s fastest-growing AI-native infrastructure companies. Your work will shape the platform foundations, safety model, evaluation framework, and developer workflows that determine whether agents can contribute meaningfully to production engineering without lowering the quality bar.\n\nYou’ll join a remote-first team with high autonomy, high visibility, and a strong builder mindset. Because this is a first-of-a-kind role, you’ll have the opportunity to set direction, influence engineering culture, and create learnings that may inform both internal engineering productivity and Empresa X’s external product thinking.\n\nSound like a challenge you’re excited to take on?\n\nApply now — and help us build the future of automation.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

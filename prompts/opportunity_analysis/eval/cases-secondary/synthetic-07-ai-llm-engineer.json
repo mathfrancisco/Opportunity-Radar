@@ -1,0 +1,86 @@
+{
+  "kinds": [
+    "strong_match"
+  ],
+  "payload": {
+    "eligibility": "ELIGIBLE",
+    "verdict": "RECOMMENDED",
+    "score": "80.0",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": null,
+        "currency": null
+      },
+      "published_at": "2026-09-20T12:00:00+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [
+        "python"
+      ],
+      "company_priority": "NORMAL",
+      "preferred_skills": [
+        "pytorch"
+      ],
+      "allowed_countries": [
+        "BR"
+      ],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "LLM Engineer",
+    "company_name": "Empresa X",
+    "location_text": "Remoto (Brasil)",
+    "description": "Time de IA aplicada busca engenheiro Python para construir pipelines de avaliação de modelos de linguagem. Remoto, contratação no Brasil."
+  },
+  "split": "reserved",
+  "group": "synthetic-07-ai-llm-engineer",
+  "critical": false,
+  "expected": {
+    "verdict": "RECOMMENDED",
+    "must_mention_risks": [
+      "A vaga exige Python, presente no perfil."
+    ],
+    "must_not_claim": [
+      "a vaga exige experiência prévia com Java"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

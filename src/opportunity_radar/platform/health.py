@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from json import load
 from pathlib import Path
-from urllib.request import urlopen
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
@@ -44,20 +42,17 @@ def database_health(engine: Engine) -> DependencyHealth:
     return DependencyHealth("healthy")
 
 
-def ollama_health(settings: Settings, opener: Callable = urlopen) -> DependencyHealth:
-    try:
-        with opener(
-            f"{settings.ollama_base_url.rstrip('/')}/api/tags",
-            timeout=settings.ollama_health_timeout_seconds,
-        ) as response:
-            if response.status != 200:
-                return DependencyHealth("degraded", "ollama returned a non-success status")
-            models = load(response).get("models", [])
-            available_models = {model.get("name") for model in models if isinstance(model, dict)}
-            if settings.ollama_model_analysis not in available_models:
-                return DependencyHealth("degraded", "ollama analysis model is not installed")
-    except Exception:
-        return DependencyHealth("degraded", "ollama unavailable")
+def ai_health(settings: Settings) -> DependencyHealth:
+    """Never makes a network call: healthy = AI on and a key present.
+
+    Degraded when the AI is turned off or no key is configured (detail: "ai disabled"
+    or "groq api key missing"). A network probe here would spend Groq quota on every
+    health check, which is not what a liveness check is for.
+    """
+    if not settings.ai_enabled:
+        return DependencyHealth("degraded", "ai disabled")
+    if not settings.groq_api_key.get_secret_value():
+        return DependencyHealth("degraded", "groq api key missing")
     return DependencyHealth("healthy")
 
 

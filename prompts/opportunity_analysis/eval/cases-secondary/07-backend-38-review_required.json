@@ -1,0 +1,85 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "55.5000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "UNKNOWN",
+      "compensation": null,
+      "published_at": "2026-09-23T12:47:00.771000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:nodejs:sha256:6852eaf342ce521578a261d0c8a327e249cad8b0777f6978ec69bf771fd6f64a",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:typescript:sha256:8a764532eb41253d27027a412d052d479eada02da9dc0c375e7d4960d2682698"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Backend Engineer (Security)",
+    "company_name": "Empresa X",
+    "location_text": "Remote or Hybrid UK",
+    "description": "ABOUT THE POSITION\n\nWe're looking for a backend product engineer who loves security - not a security box-ticker. You'll build and own the systems that let Trigger safely run massive volumes of untrusted user code inside our infrastructure, at scale.\n\nSome of our customers let their own users run untrusted code on top of Trigger - think coding agents executing arbitrary instructions. We have to guarantee that code can never break Trigger's systems, or our customers' systems. That makes this partly a product engineering role: building secure sandbox runtimes is a feature we ship, not something bolted on after the fact.\n\nThe ideal person here is a backend engineer with genuine offensive-security instincts - someone who naturally gravitates toward hacking, pen testing, and breaking things, and brings that curiosity into how they build. You'll pair strong backend/product instincts with a hacker's mindset.\n\nWHAT YOU'LL BE DOING\n\nYou'll do a variety of things including:\n\nSandbox and runtime security. Designing and maintaining the secure execution environments that isolate untrusted user code - the core, product-shaped problem at the heart of this role.\n\nThreat detection and incident response. Building monitoring and alerting for suspicious activity, and leading the response when something needs investigating.\n\nVulnerability management, end to end. Regular scanning and triage, plus AI-assisted security scans run on a quarterly cadence, and triaging incoming disclosures.\n\nOffensive security. Running internal, AI-assisted pen testing, and potentially bringing in external firms for deeper engagements.\n\nPR security review. Adding a security-specific review layer on top of our normal PR process.\n\nSOC 2 and compliance. Mostly done already - this is about ongoing maintenance, not standing it up from scratch.\n\nVulnerability disclosure process. Owning our vulnerability disclosure program end to end.\n\nSecurity culture. Helping the wider engineering team build secure habits - reviews, documentation, and pragmatic guardrails rather than heavy process.\n\nWorking at a Commercial Open Source Software company is more than just security work:\n\n- We have an active community on Discord and GitHub. Everyone on the team helps customers, reviews PRs, and creates issues.\n\n- Having great documentation is essential. Everyone writes docs.\n\n- We're a product-led growth company, so everyone is expected to get involved in creating content like code examples, blog articles, videos, and tweets.\n\nREQUIREMENTS\n\nReal backend engineering experience. You can design and ship production backend systems, not just audit someone else's.\n\nGenuine offensive-security curiosity. Pen testing, CTFs, bug bounty hunting, or hacking as a hobby or discipline - this isn't a checklist role.\n\nComfort owning ambiguous, product-shaped security problems. Sandboxing and runtime isolation are engineering problems as much as they are security ones.\n\nA proactive mindset. This role should take work off the team's plate, not create a queue for others - we're not looking for a security box-ticker.\n\nComfortable being on call. Reliability and security response are shared responsibilities across the team.\n\nOpen to in-person events throughout the year. If you're remote, we'll arrange these so the team gets real time together.\n\nYou'll be an amazing fit if you have:\n\n- Experience building or hardening sandboxed/isolated execution environments (containers, microVMs, gVisor, Firecracker, WASM sandboxes, or similar).\n\n- A track record in pen testing, bug bounty programs, or CTFs.\n\n- Experience using AI-assisted tooling for security scanning or workflows.\n\n- A proven track record of contributing to open source projects.\n\n- Worked at a developer tools, infrastructure, or open source company.\n\n- Experience with Node.js and TypeScript, enough to read and review application code.\n\nGenerous, transparent compensation and equity - we hire the best talent and pay to reflect that. We also offer equity so everyone is invested in the company's success."
+  },
+  "split": "reserved",
+  "group": "1ae2aab0c111",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

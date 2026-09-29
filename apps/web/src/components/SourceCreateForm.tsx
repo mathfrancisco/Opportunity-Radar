@@ -53,7 +53,49 @@ const configFields: Record<SourceType, ConfigField[]> = {
     },
     { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
   ],
+  workday: [
+    {
+      key: 'tenant_identifier',
+      label: 'Tenant e site',
+      required: true,
+      hint: '<tenant>/<site> em <tenant>.<pod>.myworkdayjobs.com/<site>.',
+    },
+    {
+      key: 'api_region',
+      label: 'Pod',
+      required: true,
+      hint: 'A parte <pod> do domínio, ex.: wd1, wd5.',
+    },
+    { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
+  ],
+  workable: [
+    {
+      key: 'account_identifier',
+      label: 'Identificador da conta',
+      required: true,
+      hint: 'O slug em apply.workable.com/<identificador>.',
+    },
+    { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
+  ],
   remotive: [],
+  teamtailor: [
+    {
+      key: 'company_identifier',
+      label: 'Domínio do board',
+      required: true,
+      hint: 'O host do site de carreiras, ex.: jobs.empresa.com (sem https:// nem caminho).',
+    },
+    { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
+  ],
+  factorial: [
+    {
+      key: 'company_identifier',
+      label: 'Identificador da empresa',
+      required: true,
+      hint: 'O slug em <identificador>.factorialhr.com (sem https:// nem caminho).',
+    },
+    { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
+  ],
   manual: [],
 }
 
@@ -61,7 +103,11 @@ const typeLabels: Record<SourceType, string> = {
   ashby: 'Ashby',
   lever: 'Lever',
   greenhouse: 'Greenhouse',
+  workday: 'Workday',
+  workable: 'Workable',
   remotive: 'Remotive',
+  teamtailor: 'Teamtailor',
+  factorial: 'Factorial',
   manual: 'Manual (entrada avulsa de vaga)',
 }
 

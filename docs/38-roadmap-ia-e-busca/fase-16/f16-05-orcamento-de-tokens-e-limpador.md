@@ -1,6 +1,6 @@
 # CARD F16-05 — Orçamento de tokens, limpador de descrição e `CONTEXT_OVERFLOW`
 
-- **Status:** Em revisão
+- **Status:** Base integrada (PR #20); reforços desta revisão pendentes
 - **Fase:** 16 — Camada local de IA
 - **Depende de:** F16-03
 - **Bloqueia:** F16-07, F16-09
@@ -8,11 +8,10 @@
 
 ## Resultado
 
-Antes de enviar, o radar sabe quantos tokens o prompt vai ocupar, corta a descrição onde
-for preciso e registra o corte — e nunca manda um prompt que o servidor truncaria sem
-avisar.
+Antes de enviar, o radar estima o tamanho, aplica limite conservador e registra
+cortes e incerteza. A calibração é medida; uma média não garante limite exato.
 
-## Contexto
+## Contexto inicial (antes da implementação)
 
 O F16-07 vai levar a descrição da vaga ao modelo. Descrições longas, somadas ao system
 prompt, ao snapshot e ao perfil, podem passar da janela de 8 192 tokens. Nesse caso o
@@ -25,12 +24,14 @@ de o texto entrar no payload.
 - **Limpador** (`matching/text.py` ou módulo compartilhado com o F16-09): remove HTML e
   entidades, colapsa espaços e quebras, descarta blocos de boilerplate reconhecidos por
   cabeçalho ("About us", "Sobre nós", "Equal opportunity", "Benefits", "Benefícios"
-  genéricos). A lista de padrões é versionada (`cleaner-v1`).
+  comprovadamente genéricos). Preservar remuneração, contrato, visto, país e fuso
+  mesmo sob esses títulos. A lista é versionada (`cleaner-v1`).
 - **Distribuição real:** script que mede no acervo o tamanho das descrições limpas
   (caracteres, percentis) e registra em `docs/pesquisas/`. É a primeira coisa que o card
   faz, para dimensionar o orçamento com dado e não com palpite.
 - **Razão caracteres/token por modelo:** calculada a partir das análises gravadas (F16-03)
-  — soma de `prompt_tokens` ÷ soma de `prompt_chars` das últimas N análises do modelo.
+  — manter a média como diagnóstico e estimar o limite pela cauda de subestimação
+  em amostras por idioma/modelo/formatador; registrar suporte e margem aplicada.
   Nova coluna `prompt_chars` em `match_analysis`. Sem histórico, razão inicial
   conservadora (0,35 token/caractere).
 - **Orçamento:** `num_ctx − num_predict − 10%`. Partes fixas (system, snapshot, perfil)
@@ -45,7 +46,9 @@ de o texto entrar no payload.
 
 - Colocar a descrição no payload (F16-07). Aqui as ferramentas existem e são testadas
   contra o payload atual.
-- Tokenizer exato em Python: a razão calibrada é suficiente com a margem de 10%.
+- Tokenizer exato em Python nesta entrega. A razão calibrada é aproximada;
+  se a cauda de erro não sustentar a margem, aumentar a reserva ou restringir
+  entradas. Não afirmar garantia absoluta de ausência de truncamento.
 
 ## Notas de implementação
 
@@ -59,16 +62,20 @@ de o texto entrar no payload.
 
 - [ ] O limpador remove HTML, entidades e boilerplate listado, com teste por ATS.
 - [ ] O relatório de distribuição do acervo existe em `docs/pesquisas/`.
-- [ ] Nenhum prompt enviado passa do orçamento; o excedente vira corte marcado ou
+- [ ] Nenhum prompt estimado acima do orçamento é enviado; o excedente vira corte marcado ou
       `CONTEXT_OVERFLOW`.
 - [ ] Cada análise grava `prompt_chars` e a estimativa; a razão é recalculada do histórico.
+
+- [ ] Fixtures preservam salário, visto, contrato, países e fuso em seções de benefícios.
+- [ ] Casos extremos pt/en, Unicode, código, URLs e JSON documentam limites da estimativa.
+- [ ] Cortes/suspeitas de estouro ficam observáveis; histórico sem calibração é explícito.
 
 ## Verificação
 
 - **CI:** testes unitários do limpador e do orçamento com textos acima e abaixo do limite;
   teste de `CONTEXT_OVERFLOW` com partes fixas artificiais maiores que a janela.
 - **Máquina de referência:** comparar estimativa × `prompt_tokens` real em 20 análises e
-  registrar o erro médio no PR.
+  registrar erro médio, p95, pior subestimação, amostra e margem no PR.
 
 ## Arquivos prováveis
 

@@ -1,0 +1,85 @@
+{
+  "kinds": [
+    "ambiguous",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "53.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": null,
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:cd9278e91bd7cdaec1c302bc9afa58d84e2efa7723f2310bbcbca023e0ab2967",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:aws:sha256:5568719efca57de499942fe681c7b2c039499bf9b7829c9cc0678e68a321fb61",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:cicd:sha256:cd9278e91bd7cdaec1c302bc9afa58d84e2efa7723f2310bbcbca023e0ab2967",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:docker:sha256:c6c5c645fff6177568baadaa6594602ad73aba7d2f8046e5816d0e21c39ed393",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:java:sha256:f9eca0e4a5b00feb70df634e5aa93031feb768de23c20ddf9636ab247bc88303",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:javascript:sha256:14557d5dc6a4bde230c8ba318c40f6ca01e14f4c31d7506ad76239cbe37a7a19"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "[Job 31746] Software Architect (Java)",
+    "company_name": "Empresa X",
+    "location_text": "Brazil",
+    "description": "Na Empresa X , ajudamos grandes empresas a transformar o potencial da AI em impacto real nos negócios com AI Deployment, execução AI-native e tech-integrated business solutions.\nCom 30 anos de experiência em transformação tecnológica, aceleramos inovação com expertise em agentic SDLC, application modernization, Data & AI, martech e business strategy.\nSomos 8.000 Empresa Xers em mais de 25 países, colaborando para construir soluções com impacto real. AI já faz parte da forma como trabalhamos, evoluímos e inovamos todos os dias.\nImportante: se você reside na Região Metropolitana de Campinas, sua presença nos escritórios da cidade será obrigatória, conforme a política de frequencia vigente.\n\nSomos uma empresa inovadora na área de Tecnologia da Informação, comprometida com a excelência em nossos produtos e serviços. Estamos em busca de um Arquiteto de Software talentoso e dedicado para integrar nosso time de TI.\nResponsabilidades\nRealizar refinamentos técnicos detalhados para assegurar a qualidade do desenvolvimento.\nGerenciar o código e pacotes de software, garantindo a integridade e eficiência.\nSuportar a equipe técnica, oferecendo orientação e soluções para desafios complexos.\nGarantir a entrega pontual e com qualidade dos projetos e temas desenvolvidos pela equipe.\nRequisitos Técnicos\nTecnologias:\n- Springboot\n- HTML, JavaScript e CSS\n- Java (versões 8 e 21)\n- Struts\n- Websphere 9\n- DB2\n- AWS RDS\n- DocumentDB\n- Clean Architecture\n- Angular 21\n- Docker e Docker Compose\n- Conhecimento em Cloud AWS\n- Estratégias de automação de testes (como a aplicação de pirâmide de testes)\nConhecimentos Essenciais:\n- Design Patterns\n- Conceitos de SOLID\n- Arquitetura de Microserviços Cloud Native\nConhecimentos Desejáveis:\n- Desenvolvimento em formato Agentico SLDC\nPerfil Desejado\n- Proatividade e capacidade de trabalhar de forma autônoma e em equipe.\n- Habilidades de comunicação para articular ideias técnicas complexas de maneira clara.\n- Capacidade de liderança e suporte técnico, com foco na resolução de problemas e entrega de soluções eficazes.\n- Perfil de liderança, com habilidades para coordenar e motivar a equipe técnica.\n#LI-RW1"
+  },
+  "split": "tuning",
+  "group": "be102fe8dfb1",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

@@ -166,7 +166,7 @@ def run_soak(
     started_at = start or datetime.now(UTC)
     steps = max(1, (hours * 60) // step_minutes)
     bootstrap = _bootstrap(engine, settings, started_at, retention_days=retention_days)
-    adapter = build_analysis_adapter(settings)
+    adapter = build_analysis_adapter(settings, engine)
 
     clock = started_at
     for step in range(steps):
@@ -339,7 +339,8 @@ def _verify(
 
 
 def _check_jobs(session: Session) -> SoakCheck:
-    expected = set(worker.FUNCTIONAL_JOB_IDS)
+    # Field suggestions (F20-23) are opt-in and call the model, so the soak never runs them.
+    expected = set(worker.FUNCTIONAL_JOB_IDS) - {"suggest_fields_pending"}
     states = {
         state.job_name: state
         for state in session.scalars(select(WorkerJobStateModel))

@@ -1,0 +1,97 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "53.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "5.20",
+        "currency": null
+      },
+      "published_at": "2026-09-04T12:41:12.560000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "5.20",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "$5.2",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Head of Pricing and Monetization",
+    "company_name": "Empresa X",
+    "location_text": "Berlin Office",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\n🎯 Your main goal will be to turn Empresa X's pricing and packaging into a deliberate, data-informed growth lever - one that scales revenue and adoption across our entire go-to-market, from our 1.5 million-strong community to global Enterprise accounts.\n\nTo do so, here's what you'll own:\n\nBUILD THE ANALYTICAL FOUNDATION FOR PRICING\n\n- Build and own the model connecting unit economics, agent run cost, willingness-to-pay, gross margin, and customer value.\n\n- Maintain competitive and market intelligence so our pricing keeps pace with a category that's shifting fast.\n\n- Run pricing experiments and turn the results into documented, reusable learnings.\n\nDESIGN OUR PRICING & PACKAGING ARCHITECTURE\n\n- Shape plan design and packaging across our community, self-serve, and Enterprise tiers, plus add-ons like our startup and charity plans.\n\n- Design pricing for new SKUs and consumption-based models as our product and cost-to-serve evolve around AI Assistant and Empresa X Connect.\n\n- Build packaging frameworks and decision tools that product teams use directly to launch new features.\n\nDRIVE AND ROLL OUT PRICING DECISIONS\n\n- Lead cross-functional pricing decision-making and secure buy-in across Product, Sales, Marketing, Finance, RevOps, and Data.\n\n- Own the rollout of major pricing changes end-to-end, from decision to launch to measured impact.\n\n- Build and own our pricing frameworks: list pricing, discount guardrails, decision rubrics, grandfathering rules, and usage-based billing decisions.\n\nRequirements\n\nMust-have\n\n- 📈 Pricing leadership in B2B SaaS: You have 6+ years in pricing, monetisation, or commercial strategy, including at least one full cycle leading a major pricing model transition — subscription to consumption, seat-based to usage-based, or a platform repricing.\n\n- ⚡ Hands-on with modern pricing models: You've personally designed and rolled out consumption-based, outcome-based, or AI-native pricing at a company past $100M ARR.\n\n- 🔀 Both self-serve and Enterprise motions: You've owned pricing on both sides of the funnel — self-serve/PLG (activation, conversion, tier design, funnel experimentation) and Enterprise, sales-led (packaging for large accounts, deal economics, discount governance). Empresa X monetises both, so fluency in one motion only isn't enough.\n\n- 🧮 Deep analytical rigour: You build the financial model yourself and reason fluently about unit economics, cost-to-serve, gross margin, willingness-to-pay, and elasticity.\n\n- 🔌 Billing fluency, technical and operational: You understand event metering, rating, entitlements, proration, overage, and revenue recognition well enough to design pricing that's actually operable — and you've partnered with a Billing function on invoicing, dunning, true-ups, and disputes.\n\n- 🛠️ Empathy for technical users and buyers: You understand where, how, and why developers and technical buyers assign value across a product experience.\n\n- 🧩 Frameworks over bottlenecks: You've built packaging frameworks and decision tools that product teams use independently, rather than routing every pricing decision through you.\n\n- 🤝 Cross-functional influence: You bring Product, Finance, Sales, Customer Success, Engineering, and Billing into alignment on contentious commercial decisions.\n\n- 🧭 Motivated by scope, not headcount: You're energised by owning a global, high-stakes topic as an individual contributor, with analytical support from Data and RevOps and rollout support from Program Management.\n\nNice-to-have\n\n- 🎓 Formal pricing training: You've been trained at Simon-Kucher or the pricing practice of another consultancy, and you bring that rigour with you.\n\n- 🧑‍💻 Developer tools experience: You've priced products sold to engineers and technical teams.\n\n- 🌍 Open source or freemium background: You know how to design pricing that converts a free community into paying customers without breaking trust.\n\nWHY JOIN US?\n\nAt Empresa X, pricing won't be an afterthought argued about in the margins of someone else's roadmap - it'll be your function to build. You'll be our first dedicated pricing hire, which means low-hanging fruit everywhere and real scope to shape how a $5.2bn company monetises across community, self-serve, and Enterprise, in 100+ countries and across both cloud and self-hosted. You'll work directly with leaders in Product, Sales, Finance, and RevOps, and you'll see your decisions land in our ARR in months, not years. You'll join a supportive, remote-first team that values autonomy, experimentation, and continuous learning.\n\nSound like a challenge you're excited to take on?\n\nApply now - and help us build the future of automation.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "a vaga está alinhada com a área de atuação do perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

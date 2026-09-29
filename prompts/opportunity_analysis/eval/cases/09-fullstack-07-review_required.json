@@ -1,0 +1,101 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "39.2500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "SENIOR",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": "YEAR",
+        "maximum": "144400.00",
+        "minimum": "72800.00",
+        "currency": "EUR"
+      },
+      "published_at": "2026-03-04T11:31:38.369000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [
+        "javascript"
+      ],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:javascript:sha256:90227e424340a5311c0a7c06237c8675c7d05b5ba7f89534348df5b8960dd76d",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:nodejs:sha256:948b3b9bdc7c48f42d6ceed43095213f0106b0e01bbbde1fa36d28b9bcd119ad",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:typescript:sha256:2fdd3bb805852ac2fec729c17a83fe8226928763ad7cb4a53a59df13c81b8abd"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "YEAR",
+          "maximum": "144400.00",
+          "minimum": "72800.00",
+          "currency": "EUR",
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "{\"compensationType\": \"Salary\", \"currencyCode\": \"EUR\", \"interval\": \"1 YEAR\", \"maxValue\": 144400, \"minValue\": 72800}",
+          "evidence_source": "ashby.compensation.summaryComponents.Salary",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Senior Product Engineer (TS/NodeJS/Vue)",
+    "company_name": "Empresa X",
+    "location_text": "Berlin Office",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\n🎯 Your main goal will be to build and ship end-to-end TypeScript product features that make Empresa X safer, more scalable, and more programmable for enterprise customers — helping large organizations run business-critical automation with confidence.\n\nTo do so, you’ll own outcomes across the full stack and stay close to users, product, security, and enterprise-scale requirements:\n\nENTERPRISE PRODUCT OWNERSHIP\n\n- Own product surfaces from discovery to delivery across areas like identity, access, governance, APIs, observability, environments, and enterprise integrations.\n\n- Ship high-quality features fast across the TypeScript stack, balancing usability, security, performance, and maintainability.\n\n- Partner closely with Product to translate complex enterprise customer needs into clear scopes, technical trade-offs, and measurable outcomes.\n\nFULLSTACK DELIVERY ACROSS PLATFORM AND PRODUCT\n\n- Build and evolve customer-facing experiences in Vue or React for admins, developers, and enterprise users managing Empresa X at scale.\n\n- Develop scalable Node.js services and APIs that power authentication, permissions, workflow lifecycle management, observability, integrations, and partner use cases.\n\n- Move fluidly between frontend and backend codebases to unblock your team and keep momentum high across complex product areas.\n\nSECURE, SCALABLE ENTERPRISE FOUNDATIONS\n\n- Build capabilities that help organizations control who can do what across Empresa X, including authentication, provisioning, RBAC, credential infrastructure, and secrets management.\n\n- Contribute to safe workflow delivery through environments, source control, versioning, testing, CI/CD validation, and deployment workflows.\n\n- Improve governance, observability, auditability, and runtime controls so admins can understand, troubleshoot, and enforce how Empresa X is used.\n\nAPIS, INTEGRATIONS, AND EXTENSIBILITY\n\n- Build and maintain enterprise-grade integrations, nodes, SDK capabilities, and execution patterns that support automation at scale.\n\n- Design APIs, embed capabilities, and multi-instance management features that make Empresa X programmable for partners, developers, and large customers.\n\n- Instrument features end-to-end so you can measure impact, debug real-world behavior, and continuously improve reliability for business-critical workflows.\n\nTEAMS YOU COULD JOIN\n\nWe’re currently hiring across multiple enterprise product engineering teams, including IAM, Enterprise Nodes, API & OEM, and Governance & Observability. During the interview process you’ll be matched to a team based on your strengths and what you’re most excited to build.\n\n- Learn more about the teams and their focus areas here [link]\n\nREQUIREMENTS\n\nMUST-HAVES\n\n- 🧩 Fullstack JavaScript/TypeScript experience: You’ve shipped customer-facing features using TypeScript across frontend and backend, and you feel comfortable working fullstack.\n\n- 🧠 Product-minded engineering: You talk about users, workflows, and outcomes rather than only implementation details, and you enjoy turning complex customer problems into simple product experiences.\n\n- ⚙️ Modern web stack fluency: You have hands-on experience with TypeScript, Node.js, and either Vue or React.\n\n- 🏢 Enterprise SaaS mindset: You understand the expectations of large organizations around security, reliability, scalability, auditability, and administrative control.\n\n- 🌐 Scalable systems experience: You’ve built or operated high-traffic SaaS systems and understand trade-offs across performance, reliability, maintainability, and developer velocity.\n\n- 📈 Metrics and instrumentation ownership: You’re used to instrumenting what you ship, measuring impact, and using data to decide what to build, fix, or iterate next.\n\n- 🧭 Ownership in small-to-mid teams: You’re comfortable wearing multiple hats, navigating ambiguity, and adapting to fast-changing priorities while keeping quality high.\n\n- 🤝 Collaborative builder mindset: You share knowledge through code reviews, docs, and mentorship, and you thrive in a team that builds together.\n\nNICE-TO-HAVES\n\n- 🔐 Identity, access, or security experience: You’ve worked on SSO, SAML, OIDC, LDAP, MFA, SCIM, RBAC, permissions, secrets management, or credential infrastructure.\n\n- 🚢 SDLC and deployment workflows: You’ve built features around environments, Git-based workflows, versioning, testing, CI/CD, release controls, or approval gates.\n\n- 🔌 Integrations and APIs: You’ve built integrations, APIs, SDKs, automation platforms, or developer tooling that helps others extend a product.\n\n- 📊 Observability and governance: You’ve worked with audit logs, OpenTelemetry, Prometheus, Grafana, SIEM integrations, admin controls, usage insights, or runtime policies.\n\n- 🤝 OEM or partner platform experience: You’ve contributed to embeddable products, partner platforms, multi-instance management, air-gapped deployments, or enterprise developer portals.\n\n- 🛠️ OSS and community involvement: You contribute to open-source, build side projects, or participate in developer communities.\n\nWhy join us?\n\nAt Empresa X, your work won’t disappear into a backlog. You’ll build the enterprise-grade foundations that make Empresa X safe, observable, programmable, and reliable for large organizations running business-critical workflows. You’ll have direct impact across product areas like identity, governance, APIs, SDLC, integrations, and observability, while helping shape how Empresa X scales for its next generation of enterprise customers.\n\nYou’ll join a fast-growing, remote-first team where autonomy is real, collaboration is valued, and your impact is visible across the product.\n\nSound like a challenge you’re excited to take on?\n\nApply now — and help us build the future of automation.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

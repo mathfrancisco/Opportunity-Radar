@@ -1,0 +1,97 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "55.5000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "MANAGER",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "5.20",
+        "currency": null
+      },
+      "published_at": "2026-09-23T09:13:24.400000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "5.20",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "$5.2",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Strategic Customer Experience & Success Programs Manager",
+    "company_name": "Empresa X",
+    "location_text": "Germany",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\n🎯 Your main goal will be to design and scale the programs, systems, and playbooks that help Empresa X retain, grow, and delight our most strategic enterprise customers, while working with the scaled Customer Success team to ensure a cohesive customer journey across segments.\n\nTo make that happen, you’ll turn customer insights and company goals into repeatable programs that enable our Customer Success team to operate effectively at scale:\n\nBUILD AND SCALE CUSTOMER SUCCESS PROGRAMS\n\n- Design and continuously improve strategic programs across onboarding, adoption, QBRs, renewals, executive escalations, and other critical moments in the customer journey.\n\n- Develop customer segmentation strategies and codify the engagement models and playbooks CSMs should use across different customer tiers.\n\n- Create scalable enablement materials, including playbooks, templates, battlecards, and training, so programs are executed consistently across the team.\n\nTURN CUSTOMER DATA INTO ACTION\n\n- Build and maintain our customer health scoring model in partnership with RevOps and Data, using meaningful signals of customer risk, adoption, and expansion opportunity.\n\n- Partner with Customer Success leadership and operations to translate retention and expansion goals into clear initiatives, timelines, metrics, and operating rhythms.\n\n- Track program performance across metrics such as adoption, NRR, churn, CSAT, and NPS, identifying what is working and where we should iterate.\n\nCONNECT CUSTOMER INSIGHT ACROSS Empresa X\n\n- Lead cross-functional initiatives such as voice-of-customer programs, customer advisory boards, and product feedback loops.\n\n- Partner closely with Sales, Product, Marketing, RevOps, and Engineering to ensure customer insights inform decisions across the business.\n\n- Build mechanisms that turn frontline customer feedback into structured, actionable insights for relevant teams.\n\nDRIVE ADOPTION AND CONTINUOUS IMPROVEMENT\n\n- Lead change management for new Customer Success tools, programs, and processes, including communication, training, rollout, and adoption.\n\n- Gather feedback from CSMs and stakeholders to continuously improve programs and remove friction from how the team operates.\n\n- Take an iterative approach to program development, launching practical first versions, measuring their impact, and improving them quickly.\n\nREQUIREMENTS\n\nMUST-HAVES\n\n- 🚀 Customer Success program experience: You have 5+ years of experience in Customer Success, Revenue Operations, Strategy & Operations, or a related function, including at least 2 years focused on building programs or processes rather than directly managing accounts.\n\n- 📊 Analytical mindset: You’re comfortable using customer and revenue data to define metrics, identify patterns, and measure program impact in tools and systems.\n\n- 🧭 Cross-functional project leadership: You have strong project management skills and experience leading initiatives involving stakeholders across teams such as Sales, Product, Marketing, and RevOps.\n\n- 💬 Clear communication: You communicate complex ideas clearly in writing and verbally, and you’re comfortable presenting recommendations and results to senior leadership.\n\n- ⚡ Bias toward action: You’re comfortable operating with ambiguity, launching a strong v1, gathering feedback, and iterating quickly based on what you learn.\n\nNICE-TO-HAVES\n\n- 📈 High-growth SaaS experience: You’ve worked in a fast-growing, product-led SaaS environment where processes and programs needed to evolve quickly.\n\n- 🔧 Customer Success tooling: You have hands-on experience with Customer Success platforms such as Gainsight, Catalyst, or Vitally and CRM systems such as Salesforce or HubSpot.\n\n- 🤖 Technical product exposure: You have experience working with workflow automation, developer tools, or another technical product used by technical teams.\n\n- 🎙️ Voice of the customer: You’ve built or scaled a customer advisory board, voice-of-customer program, or another structured customer feedback initiative.\n\nWhy join us?\n\nAt Empresa X, you’ll have the opportunity to shape how Customer Success operates as we scale. Your work will directly influence how we retain and grow strategic customers, how our CSMs engage them, and how customer insight feeds back into teams across the company.\n\nYou’ll work highly cross-functionally and have meaningful visibility into some of the most important customer and revenue challenges at one of Europe’s fastest-growing startups. You’ll join a remote-first environment where autonomy, experimentation, and continuous improvement are part of how we work — and where you’ll have room to build programs that can scale with the company.\n\nSound like a challenge you’re excited to take on?\n\nApply now — and help us build the future of automation.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "a vaga está alinhada com a área de atuação do perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

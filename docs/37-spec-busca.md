@@ -1,6 +1,6 @@
 # SPEC — Busca de vagas: cobertura e precisão
 
-- **Status:** Proposta, para revisão
+- **Status:** Planejada; contratos revisados em 2026-09-24
 - **Data:** 2026-09-24
 - **Escopo:** o caminho inteiro de "encontrar vagas": catálogo, fontes, coleta,
   normalização, identidade e a busca na Inbox
@@ -37,7 +37,7 @@ catálogo de empresas ─► fontes ─► coleta ─► normalização ─► i
 
 ## 2. Estado verificado
 
-Auditoria contra o código e contra a pesquisa em 24 de setembro de 2026. Os números do
+Baseline histórico contra código e pesquisa em 24 de setembro de 2026. Os números do
 catálogo foram contados com o próprio parser do importador
 (`scripts/import_research_catalog.py`, `read_research_rows`).
 
@@ -94,18 +94,38 @@ valor inicial; as metas marcadas "a partir do inicial" são fixadas nesse moment
 
 | Métrica | Definição | Hoje | Meta |
 | --- | --- | --- | --- |
-| Empresas com ATS cobertas | fontes habilitadas ÷ empresas com ATS identificado | 6/55 (11%) | ≥ 43/55 (78%) com os coletores existentes; ≥ 50/55 com os novos |
+| Empresas com ATS cobertas | empresas canônicas com coleta completa recente ÷ empresas canônicas com ATS identificado, inclusive sem coletor | 6/55 é apenas referência histórica de propostas; cobertura operacional a medir | até 43/55 com coletores existentes e 50/55 com novos, condicionados à homologação |
 | Empresas sem ATS conhecido | só página de carreiras ou backlog | 167 | −30% pela descoberta de ATS (§5) |
-| Vagas relevantes novas por semana | novas oportunidades nas áreas de interesse do perfil | não medida | ≥ 5× o inicial |
-| Precisão da Inbox | vagas relevantes entre as 50 primeiras, marcadas pelo operador | não medida | ≥ 80% |
+| Vagas relevantes novas por semana | oportunidades únicas, novas, abertas e julgadas relevantes; área é indicador separado | não medida | meta após baseline; 5× é hipótese, sem piorar precisão ou custo |
+| Precisão da Inbox | relevantes no snapshot das 50 primeiras com julgamento completo | não medida | ≥ 80%; sem 50 disponíveis, P@k com k explícito |
 | Duplicatas entre fontes | pares da mesma vaga em oportunidades diferentes, em amostra | não medida | < 2% |
 | Senioridade desconhecida | oportunidades com `UNKNOWN` | não medida | metade do inicial |
 | Área da vaga desconhecida | oportunidades sem área classificada | não existe | < 10% |
 | Recall de skills | skills de um conjunto marcado que a extração encontra | não medido | ≥ 90% |
-| Busca: recall@10 | nas 40 consultas de referência (§10) | não medido | ≥ 0,8 |
+| Busca: recall@10 | relevantes recuperadas ÷ relevantes julgadas no corpus congelado, por consulta | não medido | melhoria sobre baseline; ≥ 0,8 só em consultas cujo máximo teórico permita |
 | Vaga encerrada detectada | vagas que saíram do board e foram marcadas como encerradas | não medida | ≥ 95% em até 2 ciclos |
 
 ---
+
+### 3.1 Contrato das medidas
+
+- Contar empresas canônicas, reconciliando os 222 registros e os aliases antes de
+  fixar denominadores. Separar catálogo total, ATS identificado, coletor disponível,
+  homologação, habilitação e coleta completa dentro da janela de frescor.
+- Fonte habilitada sem sucesso recente não conta como cobertura operacional.
+  Denominadores e versão do catálogo acompanham cada relatório.
+- P@50 exige julgar todo o top 50 congelado. Julgamento parcial mostra taxa observada,
+  quantidade pendente e `precision_at_50 = null`; ausência de marca não é irrelevância.
+- Julgar também amostra estratificada fora do topo, por fonte/área/idioma e UNKNOWN.
+  Pares suspeitos estimam duplicação entre candidatos, não a taxa global do acervo.
+- Fixar consultas, corpus, filtros, perfil, regras, ranking e julgamentos; separar
+  ajuste e avaliação reservada. Com mais de 12 relevantes, recall@10 não pode chegar
+  a 0,8. Reportar P@10, nDCG@10, recall e tamanho do conjunto relevante juntos.
+- Métricas ainda sem instrumentação ficam nulas com motivo e card responsável.
+  F17-01 entrega infraestrutura e baseline disponível; cada card posterior mede sua
+  parte antes/depois, sem depender de um baseline impossível de todas as funções.
+- O recall da web inteira é desconhecido. F18-01 mede cobertura/frescor no catálogo
+  e recall em uma amostra manual de boards, sem chamar isso de recall global.
 
 ## 4. Frente A — Cobrir o que o catálogo já sabe
 
@@ -189,14 +209,22 @@ configuração.
 
 ## 8. Frente E — Coleta completa e vagas encerradas
 
-- **Coleta inteira do board:** a coleta agendada não usa `max_items`. Cada execução registra
-  quantos itens o board anunciou e quantos foram lidos. Diferença entre os dois é
-  paginação quebrada e vira alerta.
-- **Vaga encerrada:** vaga que estava no board e sumiu em duas coletas completas seguidas é
-  marcada como encerrada, com a execução que a viu por último como evidência. Coleta
-  parcial ou falha nunca encerra vaga: ausência só conta quando a leitura foi completa.
-- **Frequência por valor:** fonte de empresa de prioridade alta coleta mais vezes que fonte
-  de prioridade baixa, dentro do intervalo mínimo que cada política de rede permite.
+- Execução completa exige fim de paginação comprovado, sem limite de itens/páginas
+  atingido e sem erro. Total anunciado é opcional: contar a própria lista não
+  comprova cobertura independente. Detectar cursor repetido e itens únicos.
+- Persistir conjunto observado e assinatura do escopo (board, filtros, configuração).
+  Checkpoint de retomada de uma execução não é o início de uma nova varredura completa.
+- Duas ausências em coletas completas comparáveis encerram a ocorrência da fonte.
+  Falha, parcial, filtro novo ou fonte desabilitada não contam como ausência.
+- Oportunidade agregada só recebe encerramento automático quando todas as ocorrências
+  autoritativas de board estão encerradas e nenhuma outra tem presença posterior.
+  Sem fonte autoritativa, apenas desatualizada/desconhecida. Remotive e manual não
+  provam ausência global. Guardar execuções e motivo.
+- Reaparecimento reativa ocorrência; só desfaz encerramento automático. Não desfaz
+  descarte, arquivamento ou fechamento manual. Candidatura ativa recebe aviso,
+  preservando o estágio e o histórico.
+- Agendamento respeita os limites por fonte. Orçamento por host e adaptação pela
+  produtividade entram em F18-04, sem duplicar a lógica do scheduler.
 
 ---
 
@@ -211,12 +239,15 @@ configuração.
   coletado e descartado), padrões no título em português e inglês, e termos da descrição
   só como desempate. Cada classificação guarda qual evidência decidiu, como a senioridade
   já faz.
-- O perfil declara as áreas de interesse. A Inbox mostra essas áreas por padrão, com filtro
+- O perfil declara as áreas de interesse. A Inbox mostra essas áreas e `UNKNOWN`
+  por padrão, com filtro
   visível para ver as outras. Nada é apagado: vaga fora da área continua no acervo,
   classificada, e pode ser encontrada.
-- O matching ganha a área como fator informativo, não como desqualificador. Uma vaga de
-  "Solutions Engineer" classificada como vendas pode interessar, e a decisão é do operador.
+- A área é classificação e filtro, sem novo fator no matching nesta fase.
+  Acrescentar fator exige avaliação própria e nova versão de regras.
 - Classificação incerta vai para `UNKNOWN`, nunca para a área mais provável.
+  Medir precisão por área e falso descarte de relevantes; reduzir UNKNOWN não
+  autoriza adivinhar classificações. O filtro permite ver todas as vagas.
 
 ---
 
@@ -253,11 +284,19 @@ referência abaixo para decidir se vira o padrão da Inbox.
   lista os termos técnicos mais frequentes nas descrições coletadas que não casam com
   nenhuma entrada, e o crescimento é revisado entrada por entrada, com alias e
   desambiguação, como as 27 atuais.
-- **Localização e país permitido:** padrões para "Remote — Brazil", "LATAM", "Americas",
+- **Localização e país permitido:** separar local do escritório, residência permitida,
+  autorização de trabalho, patrocínio e fuso. Remoto não implica global. Padrões para
+  "Remote — Brazil", "LATAM", "Americas",
   "EMEA", "Anywhere", fuso exigido. Região que inclui o Brasil é resolvida por tabela
   versionada, não por palpite.
 
 ---
+
+O reprocessamento do F17-06 deve aplicar regras novas mesmo sem
+`source_updated_at`, sem regredir a evidência corrente ao reproduzir itens antigos.
+Guardar versão do normalizador e da evidência escolhida; mudança semântica invalida
+matching, busca e embeddings. Reexecução sem mudança não aumenta a versão.
+Payload expirado gera limitação auditável, não promessa de reconstrução completa.
 
 ## 12. Frente I — Identidade entre fontes
 
@@ -269,8 +308,10 @@ referência abaixo para decidir se vira o padrão da Inbox.
   reescrito entre fontes ("Sr. Backend Engineer" e "Senior Software Engineer, Backend").
   O candidato não junta nada sozinho. Ele aparece na Inbox como "possível duplicata de…",
   e o operador confirma ou recusa.
-- Confirmação vira regra aprendida para aquele par de fontes, versionada, e é ela que passa
-  a juntar os próximos casos iguais. A decisão inicial é humana.
+- Confirmação vale para aquele par. Junção automática aprendida fica fora desta fase.
+  Se ambas possuem candidatura ativa, bloquear a junção até resolução explícita.
+  Operação transacional/idempotente preserva ocorrências, avaliações, marcações,
+  histórico e redirecionamento de ids; não transfere score como se fosse atual.
 - A taxa de duplicatas (§3) é medida antes e depois, na mesma amostra.
 
 ---
@@ -294,17 +335,20 @@ Nada acima é demonstrável sem esta frente, e ela vem primeiro.
 
 ### 13.1 Relevância aprendida
 
-Com as marcações desta frente e os vetores da [SPEC da camada de IA](36-spec-ollama.md)
-(§7), dá para aprender o gosto do operador sem gerar texto: um classificador pequeno sobre
-vetores congelados estima a probabilidade de cada vaga interessar. É o padrão do CLM
-(Contrastive Language Models) — codificador congelado com cabeça pequena e treinável —,
-aplicado com peças que cabem no hardware de referência: o `qwen3-embedding:0.6b` em vez de
-um segundo Qwen3-8B, e regressão logística em vez de uma cabeça treinada em milhões de
-exemplos. O CLM v0.1 foi avaliado e adiado (codificador de 8B disputando a VRAM, só Linux,
-contexto calibrado até 8K, sem afirmação multilíngue), com os motivos no card F17-13.
+Experimento opcional F17-13, após as entregas de cobertura e busca textual.
+Regressão logística sobre embeddings congelados produz estimativa de interesse;
+não altera matching e não esconde oportunidades.
 
-A probabilidade ordena, não decide: não entra no score, não esconde vaga e só vira ordem
-disponível na Inbox se melhorar a precisão das 50 primeiras na validação.
+Treinar com marcas do perfil ativo. Separar treino e avaliação por tempo e por
+grupo de duplicatas; impedir vazamento entre conjuntos. O mínimo de 60 marcas
+permite explorar, não liberar P@50. O gate exige pelo menos 50 oportunidades
+independentes julgadas na janela reservada, além do conjunto de treino.
+Com menos dados, relatar P@k e manter o modo experimental desligado.
+
+Calibração tem métrica própria (Brier e faixas com suporte). A interface exibe
+"estimativa de interesse"; percentual probabilístico só após validação suficiente.
+Mudança de perfil/modelo/vetor invalida a estimativa. O relatório registra hash
+dos dados, divisão, versões e comparação pareada com a ordem padrão.
 
 ## 14. Plano de entrega
 
@@ -314,22 +358,26 @@ ganha precisão, e só então aumenta o volume.
 | Ordem | Card | Frente | Depende de |
 | --- | --- | --- | --- |
 | 1 | F17-01 — marcação de relevância e relatórios de cobertura e precisão | J | Nenhum |
-| 2 | F17-02 — área da vaga (`role-family-v1`) e filtro padrão na Inbox | F | F17-01 |
-| 3 | F17-03 — busca full-text, sinônimos e filtros combináveis | G | F17-01 |
+| 2 | F17-02 — área da vaga (`role-family-v1`) e filtro padrão na Inbox | F | F17-01, F18-07 |
+| 3 | F17-03 — busca full-text, sinônimos e filtros combináveis | G | F17-01, F17-02 |
 | 4 | F17-04 — importador propõe todo ATS identificado, chave extraída do link | A | Nenhum |
-| 5 | F17-05 — visão "propostas sem sonda" e homologação em sequência | A | F17-04 |
+| 5 | F17-05 — visão "propostas sem sonda" e homologação em sequência | A | F17-04, F17-02, F17-07 |
 | 6 | F17-06 — senioridade `v2`, skills `v2`, localização e país | H | F17-01 |
 | 7 | F17-07 — coleta completa, alerta de paginação e vaga encerrada | E | Nenhum |
 | 8 | F17-08 — candidato a duplicata entre fontes | I | F17-01 |
 | 9 | F17-09 — descoberta de ATS nas páginas de carreiras | B | F17-04 |
-| 10 | F17-10 — coletores novos, na ordem medida após F17-09 | C | F17-09 |
-| 11 | F17-11 — palavras-chave do perfil e fontes amplas | D | F17-02 |
+| 10 | F17-10 — coletores novos, na ordem medida após F17-09 | C | F17-09, F17-02, F17-06, F17-07 |
+| 11 | F17-11 — palavras-chave do perfil e fontes amplas | D | F17-02, F18-07 |
 | 12 | F17-12 — buscas salvas | G | F17-03 |
 | 13 | F17-13 — relevância aprendida a partir das marcações | J | F17-01, F16-09 |
 
+A numeração identifica cards, não a ordem obrigatória de execução. F17-07 pode
+começar em paralelo com F17-01; F17-06 antecede expansão operacional. O Milestone P
+inclui F17-01 a F17-07. F16-10 e F17-13 não bloqueiam esse marco.
+
 F17-02 vem antes de qualquer card de volume (F17-04 em diante no efeito, F17-10, F17-11)
-porque é o que mantém a precisão enquanto o volume sobe. F17-04 não depende de F17-02 para
-ser escrito, mas as fontes que ele propõe só devem ser habilitadas em massa depois dele.
+porque é o que mantém a precisão enquanto o volume sobe. F17-04 pode propor antes,
+mas habilitação em massa espera F17-02 e F17-07, pela fila F17-05.
 
 ---
 
@@ -352,7 +400,17 @@ ser escrito, mas as fontes que ele propõe só devem ser habilitadas em massa de
   Glassdoor e similares.
 - Navegador headless para páginas dinâmicas. Se a descoberta mostrar que muitas empresas
   dependem disso, é SPEC própria.
-- Modelo de linguagem classificando área ou senioridade. A regra é determinística; se o
-  `UNKNOWN` ficar alto depois da Frente H, o uso de modelo como sugestão para revisão é
-  avaliado pela SPEC da camada de IA, com o mesmo conjunto de referência.
+- Modelo gravando área, senioridade ou elegibilidade automaticamente. A IA pode
+  sugerir fatos com evidência para revisão no F18-06, sem substituir o determinístico.
 - Candidatura automática ou contato com empresa.
+
+## 17. Continuidade: varredura produtiva
+
+A [SPEC 39](39-spec-varredura-produtiva.md) e a
+[Fase 18](40-roadmap-varredura-produtiva/README.md) ampliam a aquisição:
+mapa de lacunas, descoberta limitada por site/sitemap, JobPosting público,
+agendamento por rendimento, deltas e análise local sob orçamento.
+F17-09 continua sendo detecção de ATS em uma página; F18-02 cobre a navegação
+limitada quando isso não basta. F17-11 mantém termos explícitos; IA não navega
+nem habilita fontes. Produto mede oportunidades úteis encontradas por custo e
+atraso, além da qualidade da consulta na Inbox.

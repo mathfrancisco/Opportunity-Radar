@@ -1,0 +1,20 @@
+prompt_version: job_classification/v1
+schema_version: job_classification-v1
+created_at: "2026-09-26"
+response_format: json_schema
+summary: >-
+  Suggests role_family, seniority or work_mode for the fields a deterministic rule left
+  UNKNOWN. Carries no authority: the suggestion is stored separately and only becomes
+  the canonical value after an operator accepts it (card F20-23, F18-06/F20-24).
+variables:
+  - pending_fields
+  - title
+  - description
+artifacts:
+  - system.md
+  - user.md.j2
+  - output.schema.json
+notes: >-
+  Loaded by opportunity_radar.opportunities.suggestions, not by
+  opportunity_radar.matching.prompts (that loader is coupled to
+  matching.analysis.OUTPUT_SCHEMAS, a different schema family).

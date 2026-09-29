@@ -1,5 +1,7 @@
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 from uuid import uuid4
 
 from opportunity_radar.opportunities.domain import (
@@ -8,7 +10,10 @@ from opportunity_radar.opportunities.domain import (
     build_candidate,
 )
 from opportunity_radar.opportunities.models import OpportunityModel, SourceOccurrenceModel
-from opportunity_radar.opportunities.service import _reconcile_enrichment
+from opportunity_radar.opportunities.service import (
+    OpportunityService,
+    _reconcile_enrichment,
+)
 
 
 def _opportunity() -> OpportunityModel:
@@ -135,3 +140,114 @@ def test_distinct_occurrences_keep_compensation_evidence_and_report_conflict() -
     assert [reason["code"] for reason in reasons] == [
         "CONFLICTING_COMPENSATION_EVIDENCE"
     ]
+
+
+class _NormalizationSession:
+    def add(self, _value) -> None:
+        pass
+
+    def flush(self) -> None:
+        pass
+
+    def commit(self) -> None:
+        pass
+
+    def refresh(self, _value) -> None:
+        pass
+
+    def execute(self, _statement):
+        class _Result:
+            @staticmethod
+            def one_or_none():
+                return None
+
+        return _Result()
+
+
+class _MergedOpportunityRepository:
+    def __init__(self, opportunity: OpportunityModel, raw_item) -> None:
+        self.opportunity = opportunity
+        self.raw_item = raw_item
+
+    def normalization_result(self, _raw_item_id, _normalizer_version):
+        return None
+
+    def raw_item_evidence(self, _raw_item_id):
+        return SimpleNamespace(raw_item=self.raw_item)
+
+    def lock_candidate_identities(self, _identity_locks) -> None:
+        pass
+
+    def occurrence_by_external_identity(self, **_kwargs):
+        return None
+
+    def opportunity_by_normalized_url(self, _normalized_url):
+        return None
+
+    def opportunity_by_fingerprint(self, **_kwargs):
+        return self.opportunity
+
+
+def _normalize_merged(
+    monkeypatch, opportunity: OpportunityModel, candidate: CanonicalCandidate
+) -> None:
+    from opportunity_radar.opportunities import service as service_module
+
+    raw_item = SimpleNamespace(
+        id=uuid4(),
+        source_definition_id=uuid4(),
+        item_metadata={},
+        semantic_hash=None,
+        semantic_hash_version=None,
+        fetched_at=datetime.now(timezone.utc),
+        source_run_id=uuid4(),
+    )
+    normalization_input = SimpleNamespace(
+        external_id="job-merged",
+        title="Backend Engineer",
+        metadata={},
+        source_type="lever",
+    )
+    monkeypatch.setattr(
+        service_module, "_normalization_input", lambda _evidence: normalization_input
+    )
+    monkeypatch.setattr(service_module, "build_candidate", lambda _input: candidate)
+    monkeypatch.setattr(
+        service_module,
+        "seniority_classification",
+        lambda *_args, **_kwargs: (None, {"code": "TEST"}),
+    )
+    repository = _MergedOpportunityRepository(opportunity, raw_item)
+    OpportunityService(_NormalizationSession(), repository).normalize(raw_item.id)
+
+
+def test_merged_normalization_bumps_version_when_skill_changes(monkeypatch) -> None:
+    opportunity = _opportunity()
+    opportunity.skills = []
+    opportunity.compensations = []
+    opportunity.search_skills = None
+    occurrence = _occurrence(opportunity)
+    candidate = _candidate(occurrence, minimum=0, maximum=0, skills=["Python"])
+
+    _normalize_merged(monkeypatch, opportunity, candidate)
+
+    assert opportunity.version == 2
+    assert opportunity.search_skills == "python"
+
+
+def test_merged_identical_enrichment_does_not_bump_version(monkeypatch) -> None:
+    opportunity = _opportunity()
+    opportunity.skills = []
+    opportunity.compensations = []
+    opportunity.search_skills = None
+    occurrence = _occurrence(opportunity)
+    candidate = replace(
+        _candidate(occurrence, minimum=0, maximum=0, skills=[]),
+        compensation=None,
+        skills=[],
+    )
+
+    _normalize_merged(monkeypatch, opportunity, candidate)
+    _normalize_merged(monkeypatch, opportunity, candidate)
+
+    assert opportunity.version == 1

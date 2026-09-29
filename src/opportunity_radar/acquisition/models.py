@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -39,9 +40,7 @@ class SourceDefinitionModel(Base):
         {"schema": "acquisition"},
     )
 
-    id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     company_source_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("company_radar.company_source.id", ondelete="SET NULL"),
@@ -61,28 +60,18 @@ class SourceDefinitionModel(Base):
         nullable=False,
         default=dict,
     )
-    evidence_status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="unverified"
-    )
+    evidence_status: Mapped[str] = mapped_column(String(32), nullable=False, default="unverified")
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     terms_reviewed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    collector_local_tested: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    collector_local_tested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_health_status: Mapped[str | None] = mapped_column(String(32))
-    last_http_attempt_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True)
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    last_http_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    runs: Mapped[list["SourceRunModel"]] = relationship(
-        back_populates="source_definition"
-    )
+    runs: Mapped[list["SourceRunModel"]] = relationship(back_populates="source_definition")
     checkpoint: Mapped["SourceCheckpointModel | None"] = relationship(
         back_populates="source_definition", uselist=False, cascade="all, delete-orphan"
     )
@@ -92,8 +81,7 @@ class SourceRunModel(Base):
     __tablename__ = "source_run"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'PARTIAL', "
-            "'FAILED', 'CANCELLED')",
+            "status IN ('PENDING', 'RUNNING', 'SUCCEEDED', 'PARTIAL', 'FAILED', 'CANCELLED')",
             name="ck_source_run_status",
         ),
         CheckConstraint(
@@ -106,6 +94,10 @@ class SourceRunModel(Base):
             "AND rate_limit_events >= 0",
             name="ck_source_run_counters",
         ),
+        CheckConstraint(
+            "credits_used >= 0",
+            name="ck_source_run_credits_used",
+        ),
         Index("ix_source_run_source_started", "source_definition_id", "started_at"),
         Index(
             "uq_source_run_active",
@@ -116,9 +108,7 @@ class SourceRunModel(Base):
         {"schema": "acquisition"},
     )
 
-    id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     source_definition_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("acquisition.source_definition.id", ondelete="RESTRICT"),
@@ -139,18 +129,65 @@ class SourceRunModel(Base):
     items_invalid: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     http_requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    rate_limit_events: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
+    rate_limit_events: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    #: Provider credits spent by this run (e.g. Tavily's usage.credits). A different unit
+    #: from http_requests/retry_count, which count HTTP calls regardless of what a source
+    #: charges per call (F20-43).
+    credits_used: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
     )
     error_code: Mapped[str | None] = mapped_column(String(64))
     error_summary: Mapped[str | None] = mapped_column(Text)
     checkpoint_before: Mapped[str | None] = mapped_column(Text)
     checkpoint_after: Mapped[str | None] = mapped_column(Text)
     correlation_id: Mapped[str | None] = mapped_column(String(255))
-    source_definition: Mapped[SourceDefinitionModel] = relationship(back_populates="runs")
-    raw_items: Mapped[list["RawItemModel"]] = relationship(
-        back_populates="source_run"
+    #: What the source's own API announced the board holds, when it said so.
+    items_announced: Mapped[int | None] = mapped_column(Integer)
+    #: Whether this run read the whole board. Only a complete run may close a job that
+    #: stopped appearing (see `opportunity_radar.acquisition.domain.evaluate_completeness`).
+    complete: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
+    #: The interrupted run this one explicitly continues (F20-39 "retomada da mesma
+    #: execução"). A provenance link only — it never changes dedupe or completeness by
+    #: itself; the resumed run's own persisted evidence is what a caller's explicit
+    #: `cursor` picks up from. `SET NULL` so deleting an old run never blocks on this.
+    resumed_from_run_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("acquisition.source_run.id", ondelete="SET NULL"),
+    )
+    source_definition: Mapped[SourceDefinitionModel] = relationship(back_populates="runs")
+    raw_items: Mapped[list["RawItemModel"]] = relationship(back_populates="source_run")
+
+
+class TavilyExtractCacheModel(Base):
+    """Cache of `/extract` results, keyed by the canonical URL's hash (F20-45).
+
+    A hit never calls Tavily again within its validity; an expired row is a miss, not an
+    error. `status` records success or failure per URL so a failed extraction is not
+    retried inside the same TTL window (see `TavilyExtractionCache`).
+    """
+
+    __tablename__ = "tavily_extract_cache"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('success', 'failed')",
+            name="ck_tavily_extract_cache_status",
+        ),
+        {"schema": "acquisition"},
+    )
+
+    #: sha256 of `canonicalize_url(url)` — the same normalization the collector's dedupe
+    #: uses (F20-44), so the same URL never lands in two entries over a query/case diff.
+    url_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    canonical_url: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_content: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error: Mapped[str | None] = mapped_column(Text)
+    extracted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class RawItemModel(Base):
@@ -162,15 +199,16 @@ class RawItemModel(Base):
             "source_definition_id",
             "identity_key",
             "payload_hash",
+            "semantic_hash",
+            "semantic_hash_version",
             name="uq_raw_item_source_identity_hash",
+            postgresql_nulls_not_distinct=True,
         ),
         Index("ix_raw_item_source_run", "source_run_id"),
         {"schema": "acquisition"},
     )
 
-    id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     source_run_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("acquisition.source_run.id", ondelete="RESTRICT"),
@@ -185,10 +223,10 @@ class RawItemModel(Base):
     canonical_url: Mapped[str | None] = mapped_column(String(2048))
     identity_key: Mapped[str] = mapped_column(String(2048), nullable=False)
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    semantic_hash: Mapped[str | None] = mapped_column(String(64))
+    semantic_hash_version: Mapped[str | None] = mapped_column(String(32))
     content_type: Mapped[str | None] = mapped_column(String(255))
-    fetched_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     parser_version: Mapped[str | None] = mapped_column(String(128))
     item_metadata: Mapped[dict[str, Any]] = mapped_column(
         "metadata",
@@ -267,9 +305,7 @@ class PayloadRetentionEventModel(Base):
         {"schema": "acquisition"},
     )
 
-    id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     raw_item_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("acquisition.raw_item.id", ondelete="CASCADE"),
@@ -302,13 +338,10 @@ class SourceAlertIncidentModel(Base):
             name="ck_source_alert_incident_delivery",
         ),
         CheckConstraint(
-            "recovery_delivery IS NULL OR recovery_delivery IN "
-            "('WEBHOOK', 'LOG_ONLY', 'FAILED')",
+            "recovery_delivery IS NULL OR recovery_delivery IN ('WEBHOOK', 'LOG_ONLY', 'FAILED')",
             name="ck_source_alert_incident_recovery_delivery",
         ),
-        CheckConstraint(
-            "consecutive_failures > 0", name="ck_source_alert_incident_failures"
-        ),
+        CheckConstraint("consecutive_failures > 0", name="ck_source_alert_incident_failures"),
         Index(
             "uq_source_alert_incident_open",
             "source_definition_id",
@@ -319,9 +352,7 @@ class SourceAlertIncidentModel(Base):
         {"schema": "acquisition"},
     )
 
-    id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     source_definition_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("acquisition.source_definition.id", ondelete="CASCADE"),
@@ -358,9 +389,7 @@ class SourceCheckpointModel(Base):
         ForeignKey("acquisition.source_definition.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    checkpoint_type: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="cursor"
-    )
+    checkpoint_type: Mapped[str] = mapped_column(String(32), nullable=False, default="cursor")
     cursor: Mapped[str | None] = mapped_column(Text)
     updated_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     etag: Mapped[str | None] = mapped_column(Text)
@@ -372,9 +401,7 @@ class SourceCheckpointModel(Base):
     promoted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    source_definition: Mapped[SourceDefinitionModel] = relationship(
-        back_populates="checkpoint"
-    )
+    source_definition: Mapped[SourceDefinitionModel] = relationship(back_populates="checkpoint")
 
 
 @event.listens_for(RawItemModel, "before_update")
@@ -406,9 +433,7 @@ class SourceProbeModel(Base):
         {"schema": "acquisition"},
     )
 
-    id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     source_definition_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("acquisition.source_definition.id", ondelete="CASCADE"),
@@ -427,3 +452,40 @@ class SourceProbeModel(Base):
     # True only when this attempt is what wrote the confirmed evidence: a probe that passed
     # after the source changed under it recorded nothing.
     evidence_recorded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class HostBudgetStateModel(Base):
+    """Request budget shared by every source of one host/provider, across worker restarts.
+
+    Keyed by `host` (the provider identity `AcquisitionService` derives per source_type,
+    not a per-source column), so two sources hitting the same board share one row and one
+    counter. `cooldown_until` survives a restart because it is read from here, not from
+    in-process state (F20-38, acceptance criterion 3).
+    """
+
+    __tablename__ = "host_budget_state"
+    __table_args__ = (
+        CheckConstraint("requests_used >= 0", name="ck_host_budget_state_requests_used"),
+        CheckConstraint("requests_ceiling >= 0", name="ck_host_budget_state_requests_ceiling"),
+        CheckConstraint(
+            "exploration_reserve_ratio >= 0 AND exploration_reserve_ratio < 1",
+            name="ck_host_budget_state_exploration_reserve_ratio",
+        ),
+        {"schema": "acquisition"},
+    )
+
+    host: Mapped[str] = mapped_column(String(255), primary_key=True)
+    window_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    requests_used: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    requests_ceiling: Mapped[int] = mapped_column(Integer, nullable=False)
+    cooldown_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    exploration_reserve_ratio: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.10, server_default=text("0.10")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

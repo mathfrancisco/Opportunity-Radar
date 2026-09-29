@@ -1,0 +1,87 @@
+{
+  "kinds": [
+    "ambiguous",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "53.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": null,
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:007168be6465b55c518eea2c2ad8dfceba3e0295f38722668f73496c9a3ef78c",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:azure:sha256:2cb6be78464ff283ee5b2d372d70b308892ccfe61b5f8501899ee7c355cc4dfd",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:cicd:sha256:5ea19c6806755bd380aeb64c1302247ab05330ac28fa5214fcfc06f4f2cb69fa",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:gcp:sha256:2cb6be78464ff283ee5b2d372d70b308892ccfe61b5f8501899ee7c355cc4dfd",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:java:sha256:5575cf58265c2b609394f4049592c157376b39e3307e2f51a78477159e07fe37",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:javascript:sha256:69122ff07eb5cd7879f5f23d173801ba83ba3c9624287e71648de41d602b06e4",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:terraform:sha256:eed8432b41a7ff8be28efd1315b9d31c7c3e564c1de2d1c817fbfb03f8bf5bbb",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:typescript:sha256:69122ff07eb5cd7879f5f23d173801ba83ba3c9624287e71648de41d602b06e4"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "[Job-31846] Mid Level / Senior Java/IA Developer, Brazil",
+    "company_name": "Empresa X",
+    "location_text": "Brazil",
+    "description": "Na Empresa X , ajudamos grandes empresas a transformar o potencial da AI em impacto real nos negócios com AI Deployment, execução AI-native e tech-integrated business solutions.\nCom 30 anos de experiência em transformação tecnológica, aceleramos inovação com expertise em agentic SDLC, application modernization, Data & AI, martech e business strategy.\nSomos 8.000 Empresa Xers em mais de 25 países, colaborando para construir soluções com impacto real. AI já faz parte da forma como trabalhamos, evoluímos e inovamos todos os dias.\nImportante: se você reside na Região Metropolitana de Campinas, sua presença nos escritórios da cidade será obrigatória, conforme a política de frequencia vigente.\n\nResponsabilidades:\nContribuir para a transformação no ciclo de entrega de software, conectando engenharia de software avançada, desenvolvimento ágil e automação inteligente.\nFocar inicialmente no descomissionamento de uma plataforma COBOL, promovendo a evolução do código e da arquitetura em um ambiente moderno e eficiente.\nParticipar da implementação e manutenção de boas práticas de engenharia, garantindo a qualidade e a eficiência operacional nas entregas.\nColaborar na definição e evolução da arquitetura de soluções (backend com Java/Spring, microsserviços e mensageria) integradas com recursos de IA.\nPromover e orientar os times na aplicação de testes unitários, automação de testes e auditorias de código (code reviews).\nConduzir análises técnicas e alinhar decisões arquiteturais e funcionais com stakeholders e times multidisciplinares.\n\nRequisitos:\n\nSólida experiência em Engenharia de Software com Java (17+) e ecossistema Spring 3.x.\nVivência prática em Inteligência Artificial aplicada à engenharia de software.\nExperiência com a aplicação de boas práticas de desenvolvimento ágil e de qualidade de código.\nConhecimento em arquitetura de microsserviços, mensageria (Kafka, RabbitMQ ou Pub/Sub) e conceitos de Cloud (GCP/Azure).\nConhecimento em banco de dados relacional (PostgresSQL, Oracle ou DB2)\nExperiência prática em testes unitários, qualidade de código e pipelines de CI/CD (GitLab, Jenkins, SonarQube, Jira, 42crunch).\nConceitos de sistemas distribuídos: comunicação síncrona (REST/Feign) e assíncrona (mensageria/Pub-Sub), idempotência, retry/circuit breaker, consistência eventual.\nBoa comunicação, postura colaborativa, perfil analítico e facilidade para atuar em ambientes dinâmicos de inovação contínua.\n\nDiferenciais:\n\nConhecimento em Angular 16+. TypeScript, javaScript, CSS.\nFamiliaridade com arquiteturas orientadas a eventos (EDA) e Infraestrutura como Código (Terraform).\nVivência com padrões de sistemas distribuídos como Saga, Event Sourcing, CQRS e tracing distribuído (OpenTelemetry).\nExperiência no desenho de arquiteturas de contexto (RAG, bases de conhecimento locais ou arquivos de especificação como agents.md).\n\n#LI-RR2"
+  },
+  "split": "tuning",
+  "group": "be102fe8dfb1",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

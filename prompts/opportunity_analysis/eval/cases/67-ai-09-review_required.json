@@ -1,0 +1,86 @@
+{
+  "kinds": [
+    "ambiguous",
+    "long_description",
+    "missing_compensation",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "53.0000",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v2",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "UNKNOWN",
+      "work_mode": "REMOTE",
+      "compensation": null,
+      "published_at": null,
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:ai:sha256:9c1d4fd0f2964cc4b76cc0364dd8eb3d60fe3537ad117344f6dee171493d6254",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:aws:sha256:372eda9a9354505cece4d7fa2d7074af7a9754af2653af4be91a161b64c3fc89",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:azure:sha256:372eda9a9354505cece4d7fa2d7074af7a9754af2653af4be91a161b64c3fc89",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:cicd:sha256:6894f353379af7319f541eb9094e4b6aa8c5cb906fecad758c29d79863151b03",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:gcp:sha256:372eda9a9354505cece4d7fa2d7074af7a9754af2653af4be91a161b64c3fc89",
+        "raw-item:00000000-0000-0000-0000-000000000000:skill:kubernetes:sha256:6894f353379af7319f541eb9094e4b6aa8c5cb906fecad758c29d79863151b03"
+      ],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "[Job-31455] AI Engineer & Software Architect, Brasil",
+    "company_name": "Empresa X",
+    "location_text": "Brazil",
+    "description": "Na Empresa X , ajudamos grandes empresas a transformar o potencial da AI em impacto real nos negócios com AI Deployment, execução AI-native e tech-integrated business solutions.\nCom 30 anos de experiência em transformação tecnológica, aceleramos inovação com expertise em agentic SDLC, application modernization, Data & AI, martech e business strategy.\nSomos 8.000 Empresa Xers em mais de 25 países, colaborando para construir soluções com impacto real. AI já faz parte da forma como trabalhamos, evoluímos e inovamos todos os dias.\nImportante: se você reside na Região Metropolitana de Campinas, sua presença nos escritórios da cidade será obrigatória, conforme a política de frequencia vigente.\n\nEm paralelo à exploração de uma nova capability de personalização inteligente para clientes B2B, precisamos de alguém que estruture a arquitetura que conecta os modelos e protótipos aos sistemas corporativos existentes — plataformas de dados comportamentais/transacionais, CRM, gateway corporativo de LLMs — com segurança, compliance e\nzero lock-in de fornecedor.\nNão buscamos alguém para desenhar uma plataforma completa antes de o protótipo provar valor.\n“Conseguimos transformar um protótipo validado em uma arquitetura confiável, seguindo os requisitos de segurança do cliente, sem amarrar a solução a um único fornecedor?”\n\nResponsabilidades:\n\n• Desenhar a arquitetura conceitual do protótipo (PoC) e seu caminho de evolução para capability escalável.\n• Avaliar feasibility técnica e de dados junto ao papel de Data Science/AI Engineer do time.\n• Garantir integração segura com sistemas corporativos existentes (CRM, plataformas de dados comportamentais/transacionais, gateway corporativo de LLMs).\n• Aplicar padrões abertos de orquestração de agentes (MCP, princípios A2A) evitando lock-in de fornecedor.\n• Registrar decisões arquiteturais via ADR (Architecture Decision Record), com alternativas e trade-offs explícitos.\n• Garantir compliance de segurança e dados (mascaramento de PII, controle de acesso, auditoria de decisões).\n• Colaborar com Data Science, Product e especialistas de negócio para transformar hipótese validada em arquitetura sustentável.\n• Estimar custo de inferência e viabilidade de escala (FinOps) para subsidiar a decisão de Go/No-Go.\n• Preparar handoff técnico caso a iniciativa avance para um time de delivery em escala.\n\nRequisitos:\n\nArquitetura & Engenharia de IA\n• Experiência sólida em arquitetura de sistemas de IA/ML em produção ou pré-produção.\n• Design de sistemas distribuídos, APIs e integrações entre plataformas.\n• Avaliação de trade-offs entre soluções built vs. buy vs. prototype.\n• Modelagem de arquitetura conceitual e evolutiva — não apenas o estado final.\nCloud & Dados\n• Experiência com plataformas cloud (GCP e/ou equivalentes AWS/Azure).\n• Data warehouses/lakes, pipelines de dados e feature pipelines.\n• Integração com gateways corporativos de LLM (proxy multi-modelo: OpenAI, Gemini, Claude etc.).\n• Vector databases e arquiteturas RAG (Retrieval-Augmented Generation), quando aplicável.\nGovernança & Compliance\n• Segurança de API (SAST/DAST), compliance de dados e privacidade (mascaramento,\nLGPD/GDPR).\n• Prática de decisões versionadas (ADR) sem burocratizar o processo.\n• Zero-trust e zero lock-in como princípios de design.\nOrquestração de agentes (diferencial)\n• MCP (Model Context Protocol) e princípios A2A (Agent-to-Agent).\n• Experiência coordenando múltiplos agentes especializados (ex: ingestão, síntese, validação de\nconhecimento).\nO diferencial: pensar além da arquitetura final\nQueremos alguém que consiga conectar:\nProtótipo validado → Integração → Confiança & Compliance → Capability escalável → Valor sustentado e não apenas:\nModelo → Deploy → Manutenção\nVocê deverá ser capaz de discutir perguntas como:\n• Essa arquitetura resolve o problema de negócio ou só parece robusta tecnicamente?\n• Onde está o menor caminho seguro entre PoC e produção?\n• Que decisões de arquitetura amarram o cliente a um fornecedor específico — e como evitar isso?\n• Como garantir que dados sensíveis nunca saiam do perímetro autorizado?\n• Qual o custo real de escalar isso 10x, 100x?\n• Como o sistema se recupera de falha de um agente/modelo específico?\n• Quando vale a pena usar orquestração de agentes vs. um pipeline determinístico simples?\nConhecimentos desejáveis\n• Vertex AI / SageMaker / Azure AI (ou equivalente).\n• BigQuery / Databricks / Snowflake.\n• Kubernetes, CI/CD, IaC leve.\n• MCP, A2A, RAG, function calling, embeddings.\n• GenAI, Agentic AI.\n• B2B / mobilidade / gestão de frotas (desejável, não obrigatório).\n• Setores regulados (compliance de dados sensíveis).\nPerfil que procuramos\n• Pensamento sistêmico com visão de longo prazo, sem perder o pragmatismo de curto prazo.\n• Capacidade de traduzir necessidade de negócio em decisão técnica e vice-versa.\n• Comunicação clara com stakeholders não técnicos.\n• Rigor em documentar decisões (ADR) sem burocratizar o processo.\n• Colaboração próxima com Data Science e Product.\n• Conforto em ambientes de alta ambiguidade e escopo evolutivo (discovery → PoC → capability).\nO que NÃO estamos procurando\n• Alguém que só desenha diagramas sem colocar a mão na integração real.\n• Um arquiteto que exige infraestrutura completa antes de validar o protótipo.\n• Alguém focado só em governança/compliance sem visão de produto.\n• Um DevOps/SRE puro sem entendimento de arquitetura de IA/ML.\n• Alguém que amarra a solução a um único fornecedor por conveniência.\nO objetivo não é construir a plataforma perfeita. O objetivo é garantir que o valor validado no protótipo chegue com segurança, integração e sustentabilidade até a decisão de escala.\nComo será o sucesso nos primeiros 90 dias\n• Arquitetura conceitual do protótipo documentada (as-is → to-be).\n• Integrações críticas mapeadas e validadas tecnicamente.\n• Decisões arquiteturais registradas via ADR.\n• Compliance de dados e segurança validado com as áreas responsáveis.\n• Estimativa de custo de escala (FinOps) pronta para subsidiar o Business Case.\n• Recomendação objetiva sobre o caminho de evolução da capability.\n\n#LI-RR2"
+  },
+  "split": "tuning",
+  "group": "be102fe8dfb1",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "A vaga não relaciona habilidades técnicas exigidas extraídas; o perfil não pode ser conferido contra requisitos explícitos.",
+      "A remuneração não é informada na vaga.",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "remuneração competitiva"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

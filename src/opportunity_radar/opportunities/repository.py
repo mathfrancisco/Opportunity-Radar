@@ -4,17 +4,24 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from opportunity_radar.acquisition.models import RawItemModel, SourceDefinitionModel
+from opportunity_radar.acquisition.models import (
+    RawItemModel,
+    SourceDefinitionModel,
+    SourceRunModel,
+)
+from opportunity_radar.companies.domain import normalize_name
 from opportunity_radar.companies.models import Company, CompanySource
-from opportunity_radar.opportunities.domain import CanonicalCandidate
+from opportunity_radar.opportunities.domain import DEFAULT_RECENCY_WINDOW_DAYS, CanonicalCandidate
 from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
     OpportunityModel,
+    RelevanceMarkModel,
     SourceOccurrenceModel,
 )
 
@@ -55,12 +62,24 @@ class OpportunityRepository:
         ).one_or_none()
         if row is None:
             return None
+        configuration = dict(row[4] or {})
+        company_id, company_name = row[2], row[3]
+        if company_id is None:
+            # Proposed sources (F20-53/60/71) are not linked to a CompanySource; the
+            # company they were proposed for is recorded by name in their configuration.
+            configured = configuration.get("company_name")
+            if isinstance(configured, str) and configured.strip():
+                company = self.session.scalar(
+                    select(Company).where(Company.normalized_name == normalize_name(configured))
+                )
+                if company is not None:
+                    company_id, company_name = company.id, company.canonical_name
         return RawItemEvidence(
             raw_item=row[0],
             source_type=row[1],
-            company_id=row[2],
-            company_name=row[3],
-            source_configuration=dict(row[4] or {}),
+            company_id=company_id,
+            company_name=company_name,
+            source_configuration=configuration,
         )
 
     def normalization_result(
@@ -92,7 +111,12 @@ class OpportunityRepository:
         return list(
             self.session.scalars(
                 select(RawItemModel)
-                .where(RawItemModel.source_run_id == source_run_id)
+                .where(
+                    RawItemModel.source_run_id == source_run_id,
+                    RawItemModel.item_metadata[
+                        "source_proposal_candidate"
+                    ].as_boolean().is_not(True),
+                )
                 .order_by(RawItemModel.fetched_at, RawItemModel.id)
             ).unique()
         )
@@ -114,6 +138,11 @@ class OpportunityRepository:
                     ),
                 )
                 .where(NormalizationResultModel.id.is_(None))
+                .where(
+                    RawItemModel.item_metadata[
+                        "source_proposal_candidate"
+                    ].as_boolean().is_not(True)
+                )
                 .order_by(RawItemModel.fetched_at, RawItemModel.id)
                 .limit(limit)
             )
@@ -195,6 +224,62 @@ class OpportunityRepository:
             )
         )
 
+    def previous_complete_run_id(
+        self, source_definition_id: UUID, *, before_run_id: UUID
+    ) -> UUID | None:
+        """The complete run immediately preceding `before_run_id` for this source."""
+        before_started_at = (
+            select(SourceRunModel.started_at)
+            .where(SourceRunModel.id == before_run_id)
+            .scalar_subquery()
+        )
+        return self.session.scalar(
+            select(SourceRunModel.id)
+            .where(
+                SourceRunModel.source_definition_id == source_definition_id,
+                SourceRunModel.complete.is_(True),
+                SourceRunModel.id != before_run_id,
+                SourceRunModel.started_at < before_started_at,
+            )
+            .order_by(SourceRunModel.started_at.desc())
+            .limit(1)
+        )
+
+    def occurrences_missing_from_both_runs(
+        self,
+        source_definition_id: UUID,
+        *,
+        current_run_id: UUID,
+        previous_complete_run_id: UUID,
+    ) -> list[SourceOccurrenceModel]:
+        """Occurrences of this source last seen in neither of the two latest complete runs."""
+        return list(
+            self.session.scalars(
+                select(SourceOccurrenceModel)
+                .where(
+                    SourceOccurrenceModel.source_definition_id == source_definition_id,
+                    SourceOccurrenceModel.last_seen_run_id.is_not(None),
+                    SourceOccurrenceModel.last_seen_run_id != current_run_id,
+                    SourceOccurrenceModel.last_seen_run_id != previous_complete_run_id,
+                )
+                .options(joinedload(SourceOccurrenceModel.opportunity))
+            )
+        )
+
+    def occurrences_seen_in_run(
+        self, source_definition_id: UUID, run_id: UUID
+    ) -> list[SourceOccurrenceModel]:
+        return list(
+            self.session.scalars(
+                select(SourceOccurrenceModel)
+                .where(
+                    SourceOccurrenceModel.source_definition_id == source_definition_id,
+                    SourceOccurrenceModel.last_seen_run_id == run_id,
+                )
+                .options(joinedload(SourceOccurrenceModel.opportunity))
+            )
+        )
+
     def get(self, opportunity_id: UUID) -> OpportunityModel | None:
         return self.session.scalar(
             select(OpportunityModel)
@@ -207,6 +292,50 @@ class OpportunityRepository:
             )
         )
 
+    def add_relevance_mark(
+        self,
+        opportunity_id: UUID,
+        *,
+        relevant: bool,
+        reason: str | None,
+        note: str | None,
+        profile_version_id: UUID | None,
+    ) -> RelevanceMarkModel:
+        """Append a judgement. History is never updated or deleted (F17-01)."""
+        mark = RelevanceMarkModel(
+            opportunity_id=opportunity_id,
+            relevant=relevant,
+            reason=reason,
+            note=note,
+            profile_version_id=profile_version_id,
+        )
+        self.session.add(mark)
+        self.session.flush()
+        return mark
+
+    def current_relevance_mark(
+        self, opportunity_id: UUID
+    ) -> RelevanceMarkModel | None:
+        return self.session.scalar(
+            select(RelevanceMarkModel)
+            .where(RelevanceMarkModel.opportunity_id == opportunity_id)
+            .order_by(
+                RelevanceMarkModel.marked_at.desc(), RelevanceMarkModel.id.desc()
+            )
+            .limit(1)
+        )
+
+    def relevance_mark_history(
+        self, opportunity_id: UUID
+    ) -> list[RelevanceMarkModel]:
+        return list(
+            self.session.scalars(
+                select(RelevanceMarkModel)
+                .where(RelevanceMarkModel.opportunity_id == opportunity_id)
+                .order_by(RelevanceMarkModel.marked_at.desc())
+            )
+        )
+
     def list(
         self,
         *,
@@ -215,6 +344,11 @@ class OpportunityRepository:
         lifecycle_status: str | None = None,
         work_mode: str | None = None,
         company_id: UUID | None = None,
+        #: Card F20-61: the server's own default, absent a caller override, is
+        #: filtered — a plain listing agrees with `/inbox`'s own default.
+        only_recent: bool = True,
+        now: datetime | None = None,
+        recency_window_days: int = DEFAULT_RECENCY_WINDOW_DAYS,
     ) -> tuple[list[OpportunityModel], int]:
         filters = []
         if lifecycle_status:
@@ -223,6 +357,30 @@ class OpportunityRepository:
             filters.append(OpportunityModel.work_mode == work_mode)
         if company_id:
             filters.append(OpportunityModel.canonical_company_id == company_id)
+        if only_recent:
+            reference = now or datetime.now(UTC)
+            cutoff = reference - timedelta(days=recency_window_days)
+            within_window = or_(
+                and_(
+                    OpportunityModel.published_at.is_not(None),
+                    OpportunityModel.published_at >= cutoff,
+                ),
+                and_(
+                    OpportunityModel.published_at.is_(None),
+                    OpportunityModel.first_seen_at >= cutoff,
+                ),
+            )
+            has_open_deadline = and_(
+                OpportunityModel.valid_through.is_not(None),
+                OpportunityModel.valid_through > reference,
+            )
+            filters.append(
+                or_(
+                    within_window,
+                    OpportunityModel.recency_exempt_program.is_(True),
+                    has_open_deadline,
+                )
+            )
         items = list(
             self.session.scalars(
                 select(OpportunityModel)

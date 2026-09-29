@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -12,6 +13,7 @@ from opportunity_radar.acquisition.domain import (
     CollectionRequest,
 )
 from opportunity_radar.acquisition.lever import LeverCollector
+from opportunity_radar.acquisition.scheduling import ConditionalRequestHeaders
 
 _FIXTURE = Path(__file__).parents[2] / "fixtures" / "lever_postings.json"
 
@@ -51,7 +53,28 @@ def test_maps_payload_and_requests_global_api() -> None:
     assert items[0].metadata["categories"] == payload[0]["categories"]
     assert items[0].metadata["country"] == "BR"
     assert items[0].metadata["parser_version"] == "lever-postings-v1"
+    # Card F20-61: `createdAt` (epoch ms, the real posting creation date) threads
+    # into `published_at`; a posting without it (the fixture's second entry) keeps
+    # `published_at` `None` rather than guessing.
+    assert items[0].published_at == datetime(2026, 8, 20, 9, 15, tzinfo=UTC)
+    assert items[1].published_at is None
     assert collection_request.telemetry.http_requests == 1
+
+
+def test_invalid_created_at_is_a_schema_change() -> None:
+    payload = json.loads(_FIXTURE.read_text(encoding="utf-8"))
+    payload[0]["createdAt"] = "not-a-number"
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _request: httpx.Response(200, json=payload))
+    )
+    collection_request = CollectionRequest(company_reference="acme", company_name="Acme")
+    try:
+        items = asyncio.run(_collect(LeverCollector(client=client), collection_request))
+    finally:
+        asyncio.run(client.aclose())
+    # A malformed posting is skipped and reported, not raised through `discover()`.
+    assert [item.external_id for item in items] == [payload[1]["id"]]
+    assert collection_request.telemetry.invalid_items == 1
 
 
 def test_uses_eu_api_and_paginates_until_short_page() -> None:
@@ -71,18 +94,19 @@ def test_uses_eu_api_and_paginates_until_short_page() -> None:
         delays.append(delay)
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    collection_request = CollectionRequest(
+        company_reference="acme",
+        api_region="eu",
+        network_policy=CollectionNetworkPolicy(
+            minimum_interval_seconds=2,
+            max_retry_delay_seconds=30,
+        ),
+    )
     try:
         items = asyncio.run(
             _collect(
                 LeverCollector(client=client, sleeper=sleeper),
-                CollectionRequest(
-                    company_reference="acme",
-                    api_region="eu",
-                    network_policy=CollectionNetworkPolicy(
-                        minimum_interval_seconds=2,
-                        max_retry_delay_seconds=30,
-                    ),
-                ),
+                collection_request,
             )
         )
     finally:
@@ -93,6 +117,39 @@ def test_uses_eu_api_and_paginates_until_short_page() -> None:
     assert calls[1].url.params["skip"] == "100"
     assert len(delays) == 1
     assert 0 < delays[0] <= 2
+    # A short final page is how Lever signals the whole board was read: the announced
+    # count is the sum of every page fetched, matching what was actually seen.
+    assert collection_request.telemetry.items_announced == 101
+
+
+def test_repeated_page_raises_instead_of_claiming_complete_board() -> None:
+    page = [
+        {
+            "id": f"job-{number}",
+            "hostedUrl": f"https://jobs.lever.co/acme/{number}",
+        }
+        for number in range(100)
+    ]
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json=page)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(AcquisitionError) as error:
+            asyncio.run(
+                _collect(
+                    LeverCollector(client=client),
+                    CollectionRequest(company_reference="acme"),
+                )
+            )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert error.value.code is AcquisitionErrorCode.PARSER_SCHEMA_CHANGED
+    assert [call.url.params["skip"] for call in calls] == ["0", "100"]
 
 
 def test_stops_at_max_items() -> None:
@@ -100,16 +157,20 @@ def test_stops_at_max_items() -> None:
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
     )
+    collection_request = CollectionRequest(company_reference="acme", max_items=1)
     try:
         items = asyncio.run(
             _collect(
                 LeverCollector(client=client),
-                CollectionRequest(company_reference="acme", max_items=1),
+                collection_request,
             )
         )
     finally:
         asyncio.run(client.aclose())
     assert len(items) == 1
+    # Capped by max_items: the collector never learns whether the board had more, so it
+    # must not claim an announced total.
+    assert collection_request.telemetry.items_announced is None
 
 
 def test_retries_rate_limit_with_network_policy() -> None:
@@ -236,3 +297,45 @@ def test_rejects_invalid_configuration_and_schema_and_skips_bad_item() -> None:
         asyncio.run(client.aclose())
     assert [item.external_id for item in items] == ["valid"]
     assert request.telemetry.invalid_items == 1
+
+
+def test_sends_conditional_headers_only_on_first_page() -> None:
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json=[])
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    request = CollectionRequest(
+        company_reference="acme",
+        conditional_headers=ConditionalRequestHeaders(if_none_match='"abc123"'),
+    )
+    try:
+        asyncio.run(_collect(LeverCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert calls[0].headers["If-None-Match"] == '"abc123"'
+
+
+def test_bare_304_yields_no_items_and_records_not_modified_without_a_total() -> None:
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(304, headers={"ETag": '"abc123"'})
+        )
+    )
+    request = CollectionRequest(
+        company_reference="acme",
+        conditional_headers=ConditionalRequestHeaders(if_none_match='"abc123"'),
+    )
+    try:
+        items = asyncio.run(_collect(LeverCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert items == []
+    assert request.telemetry.not_modified is True
+    assert request.telemetry.not_modified_count == 1
+    assert request.telemetry.response_etag == '"abc123"'
+    assert request.telemetry.items_announced is None

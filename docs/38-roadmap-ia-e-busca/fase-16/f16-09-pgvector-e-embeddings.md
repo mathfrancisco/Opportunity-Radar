@@ -2,7 +2,7 @@
 
 - **Status:** Backlog
 - **Fase:** 16 — Camada local de IA
-- **Depende de:** F16-01
+- **Depende de:** F16-01, F16-05
 - **Bloqueia:** F16-10, F16-11, F17-08
 - **Origem:** [SPEC da camada de IA](../../36-spec-ollama.md), §7.1, §7.2
 
@@ -43,8 +43,7 @@ sob índices já construídos, o que corrompe índices sem erro visível.
 - **Tipo SQLAlchemy próprio** (`platform/vector.py`), sem o pacote `pgvector`: escreve
   `[x,y,…]`, lê o mesmo formato, e sempre com `CAST(… AS vector(1024))` no bind.
 - **Texto que vira vetor** (`opportunities/embeddings.py`): título, empresa, local, modo de
-  trabalho, senioridade, skills e descrição limpa (limpador do F16-05, ou a versão mínima
-  deste card se ele ainda não existir), limitado a 6 000 caracteres.
+  trabalho, senioridade, skills e descrição limpa (limpador do F16-05, sem segunda implementação), limitado a 6 000 caracteres.
 - **Adaptador de embedding:** `POST /api/embed` com `{"model", "input": [textos],
   "keep_alive"}`, síncrono (o job do worker é síncrono), lote inteiro numa chamada; confere
   que cada vetor tem 1 024 posições.
@@ -75,6 +74,17 @@ sob índices já construídos, o que corrompe índices sem erro visível.
 - O `qwen3-embedding` usa instrução só na consulta (F16-10), não nos documentos.
 - Downgrade da migração remove tabela e extensão; nada se perde que o job não refaça.
 
+## Operação e atualidade
+
+- Persistir identidade do modelo, versão do limpador/formatador e hash do texto.
+  Consumidores só usam vetores da versão corrente da vaga e do mesmo espaço.
+- Limite de lote é também de tokens/tempo; retomada por item, com erro classificado,
+  orçamento, cooldown e observabilidade da idade do backlog.
+- Admissão compartilhada entre análise e embedding limita uso da GPU. Medir cargas
+  simultâneas; não assumir que ambos residentes cabem com o contexto configurado.
+- Troca de modelo não mistura vetores. Durante reconstrução, usar busca textual;
+  medir cobertura corrente. Restore exige extensão e imagem compatíveis (F18-08).
+
 ## Critérios de aceite
 
 - [ ] O Postgres do compose tem pgvector 0.8.6, sem trocar a base alpine.
@@ -84,6 +94,11 @@ sob índices já construídos, o que corrompe índices sem erro visível.
 - [ ] Vetor com dimensão errada é recusado com erro classificado, sem gravar.
 - [ ] `WORKER_EMBED_ENABLED=false` remove só o job de embedding.
 - [ ] O E2E confere, depois do ciclo autônomo, que as oportunidades têm vetor.
+
+- [ ] Vetores desatualizados, não finitos ou de outro modelo não são consultados.
+- [ ] Reinício/erro de item retoma sem duplicar nem perder o restante do lote.
+- [ ] Reconstrução mantém Inbox/full-text e expõe progresso; CI simula contenção.
+- [ ] Relatório real mede embedding e análise juntos, incluindo memória e espera.
 
 ## Verificação
 

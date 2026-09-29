@@ -1,0 +1,97 @@
+{
+  "kinds": [
+    "ambiguous",
+    "english_description",
+    "long_description",
+    "missing_country"
+  ],
+  "payload": {
+    "eligibility": "UNKNOWN",
+    "verdict": "REVIEW_REQUIRED",
+    "score": "51.7500",
+    "rules_version": "matching-v1",
+    "taxonomy_version": "skills-v1",
+    "opportunity_snapshot": {
+      "status": "DISCOVERED",
+      "seniority": "MANAGER",
+      "work_mode": "REMOTE",
+      "compensation": {
+        "period": null,
+        "maximum": null,
+        "minimum": "5.20",
+        "currency": null
+      },
+      "published_at": "2026-07-17T12:07:29.578000+00:00",
+      "evidence_refs": [
+        "opportunity:00000000-0000-0000-0000-000000000000:version:1"
+      ],
+      "contract_types": [
+        "FULL_TIME"
+      ],
+      "opportunity_id": "00000000-0000-0000-0000-000000000000",
+      "content_version": 1,
+      "required_skills": [],
+      "company_priority": "NORMAL",
+      "preferred_skills": [],
+      "allowed_countries": [],
+      "work_authorization": "NOT_STATED",
+      "skill_evidence_refs": [],
+      "compensation_conflict": false,
+      "timezone_overlap_hours": null,
+      "compensation_candidates": [
+        {
+          "period": "UNKNOWN",
+          "maximum": null,
+          "minimum": "5.20",
+          "currency": null,
+          "gross_net": "UNKNOWN",
+          "raw_item_id": "00000000-0000-0000-0000-000000000000",
+          "evidence_text": "$5.2",
+          "evidence_source": "description",
+          "source_occurrence_id": "00000000-0000-0000-0000-000000000000"
+        }
+      ],
+      "required_timezone_overlap_hours": null
+    },
+    "profile_snapshot": {
+      "skills": [
+        "python"
+      ],
+      "countries": [
+        "BR"
+      ],
+      "evidence_refs": [
+        "profile-version:00000000-0000-0000-0000-000000000000"
+      ],
+      "profile_version_id": "00000000-0000-0000-0000-000000000000",
+      "work_authorization": "UNKNOWN",
+      "accepted_work_modes": [
+        "REMOTE"
+      ],
+      "accepted_seniorities": [],
+      "accepted_contract_types": []
+    }
+  },
+  "posting": {
+    "title": "Deal Desk Manager",
+    "company_name": "Empresa X",
+    "location_text": "Berlin Office",
+    "description": "The AI orchestration of your wildest imagination.\n\nEmpresa X is the open workflow orchestration platform built for the new era of AI. We give technical teams the freedom of code with the speed of no-code, so they can automate faster, smarter, and without limits. Backed by a fiercely inventive community and 500+ builder-approved integrations, we’re changing the way people bring systems together and scale ideas for impact.\n\nSince our founding in 2019, we’ve grown into a diverse team of over 260 - working across Europe and the US, connected by a shared builder spirit and with our centre of gravity in Berlin. Along the way, we’ve:\n\n- Cultivated a community of more than 650,000 active developers and builders\n\n- Earned 190K+ GitHub stars, making us one of the world’s Top 40 most popular projects\n\n- Backed by top investors, from Sequoia’s first German seed to our SAP's recent strategic investment - bringing us to a $5.2bn valuation\n\nThat’s the company we’ve built. Now we’d love to see what you can build. If you’re applying, try Empresa X out - whether you’re technical or not - and share a screenshot of your first workflow with us. The easiest place to start is here: app.Empresa X.cloud/register [link]\n\nWe’re in a defining moment of an incredible journey. Come and build with us.\n\nRESPONSIBILITIES\n\n- Build Empresa X's Deal Desk function from scratch, AI- and automation-first: intake, approval workflow, and pricing guardrails.\n\n- Advise Sales on deal structure and pricing to protect margin without slowing down the sales cycle.\n\n- Maintain a simple set of discount and pricing rules that Sales can apply on their own, without escalating every deal.\n\n- Run a monthly and quarterly deal war room to keep deal velocity high, especially around month-end and quarter-end close.\n\n- Handle contract redlines and non-standard terms directly, keeping most negotiations out of Legal's hands.\n\n- Build a redline clause library of accepted and rejected language, so AI can suggest fallback terms on routine deals.\n\n- Automate approvals and quoting in CPQ, and use AI to triage incoming requests and flag which deal changes actually need re-approval.\n\n- Own Salesforce data quality and executed-contract hygiene for every deal.\n\n- Support Customer Success on non-standard renewal and expansion structuring.\n\n- Coordinate security and compliance requests (DPA, SOC 2, security addenda) between Sales, Security, and Legal.\n\n- Report monthly on deal desk performance: cycle time, discounting, and exceptions.\n\nREQUIREMENTS\n\nMUST-HAVES\n\n- 📈 Deal desk knowledge: You have in-depth experience developing and operating a deal desk function, not just executing a process someone else fully designed.\n\n- 📐 SaaS commercial fluency: You have a strong understanding of SaaS pricing models, revenue recognition and ARR reporting principles, and enterprise contract structures.\n\n- ⚖️ Contract negotiation and redlining: You can negotiate and redline order-form-level terms directly with a customer and know when to involve Legal.\n\n- 🛠️ CPQ/ Salesforce hands-on: You've configured and operated both a CPQ and Salesforce yourself, not just used what someone else set up.\n\n- 🤖 AI-native working style: You default to AI and automation in your own work, with concrete examples of deal or approval workflows you've automated.\n\n- 🤝 Stakeholder management: You have outstanding communication skills and can influence and manage complex stakeholders such as Sales, Legal, RevOps, and Finance.\n\nNICE-TO-HAVES\n\n- 🏗️ 0-to-1 builder: You've spun up a deal desk or similar function from the ground up, defining the underlying processes and policies yourself.\n\n- 🔧 Modern CPQ/billing exposure: You've worked with Salesforce CPQ or modern platforms like Hyperline or Solvimon.\n\n- 🧩 Product curiosity: You're curious about Empresa X and ideally have already successfully built a workflow.\n\nEmpresa X is an equal opportunity employer and does not discriminate on the basis of race, religion, colour, national origin, gender, sexual orientation, gender identity, age, marital status, veteran status, or disability status.\n\nWe can sponsor visas to Germany; for any other country, you need to have existing right to work.\n\nOur company language is English.\n\nYou care about diversity and inclusion? We do too! Check out our Diversity, Inclusion and Belonging initiatives at Empresa X [link] ([link]\n\nLocation disclaimer: If you see multiple job postings for the same role, it is most likely because we're hiring remotely for this role and posting in different locations to make sure every potential candidate can see the role. Please apply to the location you're the most likely to work from in the future.\n\n- Competitive compensation 💸 – We offer fair and attractive pay.\n- Europe: 30 days of vacation, plus public holidays wherever you are.\n- Europe: We provide benefits according to local country norms.*\n- Europe: We provide pension contributions according to local country norms.*\n- Europe: We provide benefits according to local country norms.*\n- Career growth 📈 – We hire rising stars who grow with us! You’ll get €1K (or equivalent) per year to spend on courses, books, events, or coaching to level up your skills.\n- Remote-first 🌏 – Our team works remotely across Europe, with regular off-sites for team bonding. Some roles, like sales in the US, are hybrid—please check the job description.\n- Giving back 🤝 – We're big fans of open source, and you'll get $100 per month to support projects you care about.\n* Country-specific details are provided in your contract."
+  },
+  "split": "tuning",
+  "group": "636396f02b65",
+  "critical": false,
+  "expected": {
+    "verdict": "REVIEW_REQUIRED",
+    "must_mention_risks": [
+      "Vaga não é de desenvolvimento de software; foge da área de atuação do perfil (Python).",
+      "Os países permitidos para contratação não são informados na vaga."
+    ],
+    "must_not_claim": [
+      "todos os requisitos técnicos da vaga são atendidos pelo perfil",
+      "a vaga está alinhada com a área de atuação do perfil"
+    ],
+    "optional_terms": [],
+    "language": "pt-BR"
+  }
+}

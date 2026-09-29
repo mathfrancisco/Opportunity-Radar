@@ -1,0 +1,53 @@
+# CARD F20-49 — Relatório de produtividade e custo
+
+- **Status:** Feito — medição parcial (janela encerrada antes pelo usuário em 2026-09-29): veredito inconclusivo para custo de IA e cobertura (~1,24 dia válido, buraco de ~12 h; fallback 23,3% e 429 22,3% acima da meta por quota diária do modelo primário; `json_valid_rate` 100%; ver `docs/44-roadmap-fase-20/evidencias/rebuild-stack-real-2026-09-29.md` §1). A medição de 7 dias fica no backlog da próxima fase (`validacao-pendente.md` §7). Metas e baseline (T0) registrados —
+  `docs/pesquisas/produtividade-fase-20.md`. Resultado (T7) fica inconclusivo até a
+  janela de 7 dias aberta pelo F20-35 (`2026-09-27T00:52:16Z`) fechar em 2026-10-05; o
+  comando exato para preencher T7 está na §4 do relatório. Nenhuma chamada ao Groq
+  (quota diária já esgotada pela rodada F20-21); nenhum dado sintético.
+- **Fase:** 20 — IA cloud e consolidação
+- **Bloco:** F — Encerramento
+- **Depende de:** F20-47, F20-48
+- **Origem:** [SPEC 43](../../43-spec-llm-cloud-e-consolidacao.md); [F18-09](../../40-roadmap-varredura-produtiva/fase-18/f18-09-prova-do-fluxo-e-produtividade.md)
+
+## Resultado
+
+Sete dias de operação real mostram vagas úteis, frescor, cobertura e custo (rede, quota Groq, créditos Tavily) contra metas registradas antes.
+
+## Contexto
+
+As fontes de dado são: relatórios do F17-01 e F20-35, métricas do F20-20 e créditos do F20-43.
+
+## Arquivos
+
+| Ação | Caminho | O quê |
+| --- | --- | --- |
+| Criar | `docs/pesquisas/produtividade-fase-20.md` | metas, baseline, janela, resultado |
+
+## Passos
+
+1. Registrar metas no documento antes de começar (ex.: vagas úteis/dia, taxa de fallback < 5 %, 429 < 2 %).
+2. Coletar 7 dias de baseline e 7 dias comparáveis.
+3. Preencher: vagas úteis/dia, análises/dia, tokens/dia por modelo, taxa de fallback e 429, créditos Tavily, erros por tipo.
+4. Marcar como inconclusivo todo efeito sem amostra suficiente.
+
+## Não fazer
+
+- Não usar dados sintéticos para declarar ganho.
+- Não alterar elegibilidade, score, veredito nem fatores do matching.
+- Não tocar em arquivo fora da lista "Arquivos" sem registrar o motivo no PR.
+- Não adicionar dependência nova em `requirements*.txt` (o projeto usa `httpx`, `pydantic`, `sqlalchemy`, `alembic`).
+- Não fazer chamada real ao Groq nos testes; usar `httpx.MockTransport`.
+- Não logar nem serializar `GROQ_API_KEY`.
+
+## Critérios de aceite
+
+- [ ] Relatório versionado com metas pré-registradas e resultados.
+
+## Testes
+
+- Nenhum teste novo.
+
+## Pronto quando
+
+Todos os critérios de aceite estão marcados, o comando de verificação passa e o CI está verde.

@@ -38,10 +38,10 @@ export async function getReadiness(): Promise<Readiness> {
   }
 
   const health: unknown = await healthResponse.json()
-  const ollama = isRecord(health) && isRecord(health.ollama) ? health.ollama : undefined
-  const ollamaStatus = typeof ollama?.status === 'string' ? ollama.status.toLowerCase() : 'unknown'
-  const state: ServiceHealth = ollamaStatus === 'healthy' ? 'ready' : 'degraded'
-  const detail = state === 'degraded' ? 'Ollama indisponível. A coleta e as regras continuam disponíveis.' : undefined
+  const ai = isRecord(health) && isRecord(health.ai) ? health.ai : undefined
+  const aiStatus = typeof ai?.status === 'string' ? ai.status.toLowerCase() : 'unknown'
+  const state: ServiceHealth = aiStatus === 'healthy' ? 'ready' : 'degraded'
+  const detail = state === 'degraded' ? 'IA indisponível. A coleta e as regras continuam disponíveis.' : undefined
 
   return { state, detail }
 }

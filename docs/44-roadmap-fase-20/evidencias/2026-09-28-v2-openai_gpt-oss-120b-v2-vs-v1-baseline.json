@@ -1,0 +1,335 @@
+{
+  "ran_at": "2026-09-28T02:02:30.154666+00:00",
+  "prompt": "v2",
+  "model": "openai/gpt-oss-120b",
+  "label": "v2-vs-v1-baseline",
+  "cases_digest": "1afa75cd3102a0d572fae7625cb3ae722815e9db5913df19508b077625bc2ba2",
+  "server": {
+    "provider": "groq",
+    "chain": [
+      "openai/gpt-oss-120b"
+    ]
+  },
+  "inference": {
+    "model": "openai/gpt-oss-120b",
+    "prompt_version": "opportunity_analysis/v2",
+    "prompt_digest": "dbc421a24981a2742d05d6805b4797b3ac4c789336df91b5ca0693f2fd348675",
+    "schema_version": "analysis-v2",
+    "options": {
+      "provider": "groq",
+      "chain": [
+        "openai/gpt-oss-120b"
+      ],
+      "reasoning_effort": "low",
+      "max_completion_tokens": 900,
+      "temperature": 0,
+      "seed": 42
+    },
+    "tokens_per_char": 0.35,
+    "calibration": {
+      "state": "uncalibrated",
+      "samples": 0,
+      "ratio": 0.35
+    },
+    "prompt_budget": 3600,
+    "cut": {
+      "cleaner_version": "cleaner-v2",
+      "description_sha256": "3cbb187e6a47d345caaf4533dfcb064b6440228e58daafae87e232b4343d3c50",
+      "description_chars": 9101,
+      "description_sent_chars": 6021,
+      "description_truncated": true,
+      "removed_sections": [],
+      "kept_facts": 0
+    }
+  },
+  "loaded_models": [],
+  "summary": {
+    "all": {
+      "completed_rate": 0.5,
+      "fidelity": 0.4,
+      "grounded": 0.6666666666666666,
+      "coverage": 0.0,
+      "inventions": 0.0,
+      "portuguese": 0.9931626264205337,
+      "prompt_tokens": 2601.875,
+      "output_tokens": 672.625,
+      "total_ms": 1908.875
+    },
+    "tuning": {
+      "completed_rate": 0.5,
+      "fidelity": 0.5,
+      "grounded": 0.6666666666666666,
+      "coverage": 0.0,
+      "inventions": 0.0,
+      "portuguese": 0.9914532830256669,
+      "prompt_tokens": 2748.6666666666665,
+      "output_tokens": 703.3333333333334,
+      "total_ms": 1981.8333333333333
+    },
+    "reserved": {
+      "completed_rate": 0.5,
+      "fidelity": 0.0,
+      "grounded": null,
+      "coverage": 0.0,
+      "inventions": 0.0,
+      "portuguese": 1.0,
+      "prompt_tokens": 2161.5,
+      "output_tokens": 580.5,
+      "total_ms": 1690.0
+    }
+  },
+  "cases": [
+    {
+      "case_id": "01-fora_de_area-27-review_required",
+      "split": "tuning",
+      "status": "AI_FAILED",
+      "failure_code": "SCHEMA_MISMATCH",
+      "fidelity": 0.0,
+      "grounded": null,
+      "evidence_rejected": true,
+      "coverage": null,
+      "inventions": null,
+      "optional_mentions": null,
+      "portuguese": null,
+      "prompt_tokens": 2651,
+      "output_tokens": 829,
+      "total_ms": 2258
+    },
+    {
+      "case_id": "02-fora_de_area-28-review_required",
+      "split": "tuning",
+      "status": "AI_FAILED",
+      "failure_code": "SCHEMA_MISMATCH",
+      "fidelity": 0.0,
+      "grounded": null,
+      "evidence_rejected": true,
+      "coverage": null,
+      "inventions": null,
+      "optional_mentions": null,
+      "portuguese": null,
+      "prompt_tokens": 2658,
+      "output_tokens": 620,
+      "total_ms": 1787
+    },
+    {
+      "case_id": "03-fora_de_area-29-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": 1.0,
+      "grounded": 1.0,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.9850746268656716,
+      "prompt_tokens": 2761,
+      "output_tokens": 645,
+      "total_ms": 1882
+    },
+    {
+      "case_id": "04-fora_de_area-30-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.9923664122137404,
+      "prompt_tokens": 2654,
+      "output_tokens": 741,
+      "total_ms": 2042
+    },
+    {
+      "case_id": "06-fora_de_area-31-review_required",
+      "split": "tuning",
+      "status": "AI_FAILED",
+      "failure_code": "SERVER_ERROR",
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": null,
+      "inventions": null,
+      "optional_mentions": null,
+      "portuguese": null,
+      "prompt_tokens": null,
+      "output_tokens": null,
+      "total_ms": null
+    },
+    {
+      "case_id": "08-fora_de_area-32-review_required",
+      "split": "reserved",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 1.0,
+      "prompt_tokens": 2075,
+      "output_tokens": 481,
+      "total_ms": 1483
+    },
+    {
+      "case_id": "09-fullstack-07-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": null,
+      "grounded": 0.0,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 0.9883720930232558,
+      "prompt_tokens": 2837,
+      "output_tokens": 490,
+      "total_ms": 1518
+    },
+    {
+      "case_id": "10-fullstack-18-review_required",
+      "split": "tuning",
+      "status": "AI_COMPLETED",
+      "failure_code": null,
+      "fidelity": 1.0,
+      "grounded": 1.0,
+      "evidence_rejected": false,
+      "coverage": 0.0,
+      "inventions": 0,
+      "optional_mentions": 0,
+      "portuguese": 1.0,
+      "prompt_tokens": 2931,
+      "output_tokens": 895,
+      "total_ms": 2404
+    },
+    {
+      "case_id": "11-fullstack-37-review_required",
+      "split": "reserved",
+      "status": "AI_FAILED",
+      "failure_code": "SCHEMA_MISMATCH",
+      "fidelity": 0.0,
+      "grounded": null,
+      "evidence_rejected": true,
+      "coverage": null,
+      "inventions": null,
+      "optional_mentions": null,
+      "portuguese": null,
+      "prompt_tokens": 2248,
+      "output_tokens": 680,
+      "total_ms": 1897
+    },
+    {
+      "case_id": "12-ai-11-review_required",
+      "split": "tuning",
+      "status": "QUOTA_BLOCKED",
+      "failure_code": "QUOTA_EXHAUSTED",
+      "fidelity": null,
+      "grounded": null,
+      "evidence_rejected": false,
+      "coverage": null,
+      "inventions": null,
+      "optional_mentions": null,
+      "portuguese": null,
+      "prompt_tokens": null,
+      "output_tokens": null,
+      "total_ms": null
+    }
+  ],
+  "variation": {},
+  "quota_blocked_case": "12-ai-11-review_required",
+  "human_review": {
+    "01-fora_de_area-27-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "02-fora_de_area-28-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "03-fora_de_area-29-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "04-fora_de_area-30-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "06-fora_de_area-31-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "08-fora_de_area-32-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "09-fullstack-07-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "10-fullstack-18-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "11-fullstack-37-review_required": {
+      "adherence": null,
+      "support": null
+    },
+    "12-ai-11-review_required": {
+      "adherence": null,
+      "support": null
+    }
+  },
+  "baseline": "/workspace/docs/44-roadmap-fase-20/evidencias/2026-09-27-v1-openai_gpt-oss-120b-baseline-pinned.json",
+  "baseline_summary": {
+    "all": {
+      "completed_rate": 1.0,
+      "fidelity": null,
+      "grounded": null,
+      "coverage": 0.0,
+      "inventions": 0.0,
+      "portuguese": 0.11349868433404792,
+      "prompt_tokens": 1030.82,
+      "output_tokens": 460.08,
+      "total_ms": 1723.08
+    },
+    "tuning": {
+      "completed_rate": 1.0,
+      "fidelity": null,
+      "grounded": null,
+      "coverage": 0.0,
+      "inventions": 0.0,
+      "portuguese": 0.11247699827393623,
+      "prompt_tokens": 1046.4222222222222,
+      "output_tokens": 461.0888888888889,
+      "total_ms": 1729.7333333333333
+    },
+    "reserved": {
+      "completed_rate": 1.0,
+      "fidelity": null,
+      "grounded": null,
+      "coverage": 0.0,
+      "inventions": 0.0,
+      "portuguese": 0.1226938588750531,
+      "prompt_tokens": 890.4,
+      "output_tokens": 451.0,
+      "total_ms": 1663.2
+    }
+  },
+  "comparison": {
+    "completed_rate": "piora",
+    "fidelity": "não comparável",
+    "grounded": "sem dado",
+    "coverage": "empate",
+    "inventions": "empate",
+    "portuguese": "melhora",
+    "prompt_tokens": "piora",
+    "output_tokens": "piora",
+    "total_ms": "piora"
+  },
+  "switch_allowed": false
+}

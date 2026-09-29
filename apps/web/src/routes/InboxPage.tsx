@@ -12,7 +12,17 @@ import { Toolbar } from '../components/Toolbar'
 import { type InboxItem, type InboxOrder, inboxOrders } from '../features/dashboard/api'
 import { useInbox } from '../features/dashboard/useInbox'
 import { verdictLabels, verdictTones } from '../features/matching/verdicts'
+import { useMarkRelevance } from '../features/opportunities/useOpportunity'
 import { type ApplicationStage, stageLabels } from '../features/pipeline/api'
+import { roleFamilies } from '../features/dashboard/roleFamilies'
+import type { SavedSearch, SavedSearchFilters } from '../features/saved-searches/api'
+import {
+  useCreateSavedSearch,
+  useDeleteSavedSearch,
+  useOpenSavedSearch,
+  useRenameSavedSearch,
+  useSavedSearches,
+} from '../features/saved-searches/useSavedSearches'
 
 const pageSize = 25
 
@@ -24,6 +34,17 @@ const orderLabels: Record<InboxOrder, string> = {
 
 const workModes = ['REMOTE', 'HYBRID', 'ONSITE', 'UNKNOWN']
 const lifecycleStatuses = ['DISCOVERED', 'ACTIVE', 'STALE', 'CLOSED']
+const seniorities = [
+  'INTERN',
+  'JUNIOR',
+  'MID',
+  'SENIOR',
+  'STAFF',
+  'LEAD',
+  'MANAGER',
+  'DIRECTOR',
+  'UNKNOWN',
+]
 
 function display(value: string | null) {
   return value === null || value === '' ? '—' : value
@@ -58,6 +79,28 @@ const appliedOptions = [
   { value: 'false', label: 'Ainda não aplicada' },
 ] as const
 
+/** Operator relevance mark (F17-01). It is evaluation data: it never feeds the score. */
+function RelevanceButtons({ opportunityId }: { opportunityId: string }) {
+  const mark = useMarkRelevance(opportunityId)
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      <Button
+        disabled={mark.isPending}
+        onClick={() => mark.mutate({ relevant: true })}
+      >
+        Relevante
+      </Button>
+      <Button
+        disabled={mark.isPending}
+        onClick={() => mark.mutate({ relevant: false })}
+        variant="secondary"
+      >
+        Não é para mim
+      </Button>
+    </div>
+  )
+}
+
 function ItemCard({ item }: { item: InboxItem }) {
   return (
     <Card as="article">
@@ -77,6 +120,20 @@ function ItemCard({ item }: { item: InboxItem }) {
         </div>
         <div className="flex flex-col items-end gap-2">
           <VerdictBadge verdict={item.verdict} />
+          {item.hasPendingDuplicate && (
+            <span className="inline-flex rounded-full border border-warning-line bg-warning-surface px-3 py-1 text-xs font-medium text-warning-ink">
+              Possível duplicata
+            </span>
+          )}
+          {item.startupStrength && (
+            <span
+              className="inline-flex rounded-full border border-accent px-3 py-1 text-xs font-medium"
+              data-testid="startup-badge"
+            >
+              Startup{item.startupBatch ? ` · YC ${item.startupBatch}` : ''}
+              {item.startupStrength === 'weak' ? ' (sinal fraco)' : ''}
+            </span>
+          )}
           {item.applied && (
             <span className="inline-flex rounded-full border border-success-line bg-success-surface px-3 py-1 text-xs font-medium text-success-ink">
               Candidatura: {stageLabels[item.applicationStage as ApplicationStage] ??
@@ -104,7 +161,12 @@ function ItemCard({ item }: { item: InboxItem }) {
         </div>
         <div>
           <dt className="text-muted">Publicada</dt>
-          <dd className="mt-1 font-medium">{formatDate(item.publishedAt)}</dd>
+          <dd className="mt-1 font-medium">
+            {formatDate(item.recencyEffectiveDate)}
+            {item.dateIsEstimated && (
+              <span className="ml-1 text-xs font-normal text-subtle">(estimada)</span>
+            )}
+          </dd>
         </div>
       </dl>
 
@@ -132,7 +194,139 @@ function ItemCard({ item }: { item: InboxItem }) {
           A análise sugere revisão humana antes de aplicar.
         </p>
       )}
+      <RelevanceButtons opportunityId={item.opportunityId} />
     </Card>
+  )
+}
+
+function filtersFromParams(params: URLSearchParams): SavedSearchFilters {
+  const filters: SavedSearchFilters = {}
+  for (const key of new Set(params.keys())) {
+    if (key === 'page') continue
+    const values = params.getAll(key)
+    filters[key] = values.length > 1 ? values : values[0]
+  }
+  return filters
+}
+
+function paramsFromFilters(filters: SavedSearchFilters): URLSearchParams {
+  const next = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (Array.isArray(value)) value.forEach((item) => next.append(key, item))
+    else next.set(key, value)
+  }
+  return next
+}
+
+/** Card F20-34: nome e filtros/termo atuais viram uma busca salva reaberta depois. */
+export function SaveSearchForm({ filters, term }: { filters: SavedSearchFilters; term: string }) {
+  const [name, setName] = useState('')
+  const create = useCreateSavedSearch()
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const trimmed = name.trim()
+    if (!trimmed) return
+    create.mutate(
+      { name: trimmed, term: term || null, filters },
+      { onSuccess: () => setName('') },
+    )
+  }
+
+  return (
+    <form className="mt-4 flex flex-wrap items-end gap-2" onSubmit={submit}>
+      <Field label="Salvar esta busca">
+        <input
+          className={controlClassName}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Nome da busca"
+          type="text"
+          value={name}
+        />
+      </Field>
+      <Button disabled={create.isPending || name.trim() === ''} type="submit">
+        Salvar
+      </Button>
+      {create.isError && (
+        <p className="text-sm text-danger-ink">Não foi possível salvar esta busca.</p>
+      )}
+    </form>
+  )
+}
+
+function SavedSearchRow({
+  savedSearch,
+  onApply,
+}: {
+  savedSearch: SavedSearch
+  onApply: (filters: SavedSearchFilters) => void
+}) {
+  const open = useOpenSavedSearch()
+  const rename = useRenameSavedSearch(savedSearch.id)
+  const remove = useDeleteSavedSearch()
+  const [renaming, setRenaming] = useState(false)
+  const [name, setName] = useState(savedSearch.name)
+
+  if (renaming) {
+    return (
+      <li className="flex items-center gap-2 rounded-full border border-line-strong bg-surface px-3 py-1 text-sm">
+        <input
+          className="w-32 rounded border border-line-strong px-2 py-1 text-sm"
+          onChange={(event) => setName(event.target.value)}
+          value={name}
+        />
+        <button
+          className="font-medium underline"
+          onClick={() => {
+            const trimmed = name.trim()
+            if (trimmed) rename.mutate(trimmed)
+            setRenaming(false)
+          }}
+          type="button"
+        >
+          Confirmar
+        </button>
+        <button onClick={() => setRenaming(false)} type="button">
+          Cancelar
+        </button>
+      </li>
+    )
+  }
+
+  return (
+    <li className="flex items-center gap-2 rounded-full border border-line-strong bg-surface px-3 py-1 text-sm">
+      <button
+        className="font-medium underline"
+        onClick={() => {
+          onApply(savedSearch.filters)
+          open.mutate(savedSearch.id)
+        }}
+        type="button"
+      >
+        {savedSearch.name}
+      </button>
+      <button onClick={() => setRenaming(true)} type="button">
+        Renomear
+      </button>
+      <button onClick={() => remove.mutate(savedSearch.id)} type="button">
+        Remover
+      </button>
+    </li>
+  )
+}
+
+export function SavedSearches({ onApply }: { onApply: (filters: SavedSearchFilters) => void }) {
+  const searches = useSavedSearches()
+  if (!searches.data || searches.data.length === 0) return null
+  return (
+    <div className="mt-2">
+      <p className="text-sm font-medium">Buscas salvas</p>
+      <ul className="mt-2 flex flex-wrap gap-3">
+        {searches.data.map((savedSearch) => (
+          <SavedSearchRow key={savedSearch.id} onApply={onApply} savedSearch={savedSearch} />
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -152,6 +346,19 @@ export function InboxPage() {
     : 'priority'
   const page = Math.max(1, Number(params.get('page') ?? '1') || 1)
   const [searchInput, setSearchInput] = useState(search)
+  const allAreas = params.get('all_areas') === 'true'
+  const areaFilter = params.getAll('area')
+  const seniority = params.get('seniority') ?? ''
+  const salaryMin = params.get('salary_min') ?? ''
+  const salaryMax = params.get('salary_max') ?? ''
+  const source = params.get('source') ?? ''
+  const allowedCountry = params.get('allowed_country') ?? ''
+  // Card F20-61: absent parameter means "filtered", matching the server's own
+  // default — only an explicit `only_recent=false` (the "mostrar tudo" click) turns
+  // the filter off.
+  const onlyRecent = params.get('only_recent') !== 'false'
+  // Card F20-54: display/filter only, never changes score or verdict.
+  const onlyStartups = params.get('only_startups') === 'true'
 
   const inbox = useInbox({
     page,
@@ -165,6 +372,15 @@ export function InboxPage() {
     applied: appliedFilter === '' ? undefined : appliedFilter === 'true',
     search: search || undefined,
     order,
+    roleFamilies: allAreas || areaFilter.length === 0 ? undefined : areaFilter,
+    allAreas,
+    seniorities: seniority ? [seniority] : undefined,
+    salaryMin: salaryMin || undefined,
+    salaryMax: salaryMax || undefined,
+    sourceDefinitionIds: source ? [source] : undefined,
+    allowedCountry: allowedCountry || undefined,
+    onlyRecent,
+    onlyStartups,
   })
   const totalPages = inbox.data ? Math.max(1, Math.ceil(inbox.data.total / pageSize)) : 0
 
@@ -178,9 +394,36 @@ export function InboxPage() {
     setParams(next)
   }
 
+  function toggleArea(code: string) {
+    const next = new URLSearchParams(params)
+    next.delete('all_areas')
+    const current = next.getAll('area')
+    next.delete('area')
+    const updated = current.includes(code)
+      ? current.filter((item) => item !== code)
+      : [...current, code]
+    updated.forEach((item) => next.append('area', item))
+    next.delete('page')
+    setParams(next)
+  }
+
+  function showAllAreas() {
+    const next = new URLSearchParams(params)
+    next.delete('area')
+    next.set('all_areas', 'true')
+    next.delete('page')
+    setParams(next)
+  }
+
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     update({ search: searchInput.trim() })
+  }
+
+  function applySavedSearch(filters: SavedSearchFilters) {
+    const next = paramsFromFilters(filters)
+    setSearchInput(next.get('search') ?? '')
+    setParams(next)
   }
 
   return (
@@ -198,6 +441,9 @@ export function InboxPage() {
         placeholder="Título ou empresa"
         value={searchInput}
       />
+
+      <SavedSearches onApply={applySavedSearch} />
+      <SaveSearchForm filters={filtersFromParams(params)} term={search} />
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Field label="Verdict">
@@ -256,6 +502,63 @@ export function InboxPage() {
           />
         </Field>
 
+        <Field label="Senioridade">
+          <select
+            className={controlClassName}
+            onChange={(event) => update({ seniority: event.target.value })}
+            value={seniority}
+          >
+            <option value="">Todas</option>
+            {seniorities.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Remuneração mínima">
+          <input
+            className={controlClassName}
+            min={0}
+            onChange={(event) => update({ salary_min: event.target.value })}
+            type="number"
+            value={salaryMin}
+          />
+        </Field>
+
+        <Field label="Remuneração máxima">
+          <input
+            className={controlClassName}
+            min={0}
+            onChange={(event) => update({ salary_max: event.target.value })}
+            type="number"
+            value={salaryMax}
+          />
+        </Field>
+
+        <Field label="Fonte (id)">
+          <input
+            className={controlClassName}
+            onChange={(event) => update({ source: event.target.value })}
+            placeholder="uuid da fonte"
+            type="text"
+            value={source}
+          />
+        </Field>
+
+        <Field label="País permitido">
+          <input
+            className={controlClassName}
+            onChange={(event) =>
+              update({ allowed_country: event.target.value.trim().toUpperCase() })
+            }
+            placeholder="ISO, ex.: BR"
+            type="text"
+            value={allowedCountry}
+          />
+        </Field>
+
         <Field label="Ordenar por">
           <select
             className={controlClassName}
@@ -280,6 +583,65 @@ export function InboxPage() {
         />
         Somente oportunidades já avaliadas
       </label>
+
+      <label className="mt-2 flex items-center gap-2 text-sm text-subtle">
+        <input
+          checked={onlyRecent}
+          className="h-4 w-4"
+          onChange={(event) =>
+            update({ only_recent: event.target.checked ? null : 'false' })
+          }
+          type="checkbox"
+        />
+        Mostrar só vagas dos últimos 14 dias (estágio, trainee e vagas com prazo de
+        candidatura continuam visíveis)
+      </label>
+
+      <label className="mt-2 flex items-center gap-2 text-sm text-subtle">
+        <input
+          checked={onlyStartups}
+          className="h-4 w-4"
+          onChange={(event) => update({ only_startups: event.target.checked ? 'true' : null })}
+          type="checkbox"
+        />
+        Só startups (empresas com sinal de startup registrado)
+      </label>
+
+      <fieldset className="mt-4" aria-describedby="area-filter-hint">
+        <legend className="text-sm font-medium">Área</legend>
+        <p className="text-sm text-muted" id="area-filter-hint">
+          Sem marcação, usa as áreas de interesse do perfil. Vagas fora do filtro nunca são
+          apagadas — continuam buscáveis.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-4">
+          {roleFamilies.map((family) => (
+            <label className="flex items-center gap-2 text-sm" key={family.code}>
+              <input
+                checked={!allAreas && areaFilter.includes(family.code)}
+                className="h-4 w-4"
+                onChange={() => toggleArea(family.code)}
+                type="checkbox"
+              />
+              {family.label}
+            </label>
+          ))}
+        </div>
+        {(allAreas || areaFilter.length > 0 || (inbox.data && inbox.data.offFilterCount > 0)) && (
+          <p className="mt-2 text-sm text-subtle">
+            {allAreas ? (
+              'Mostrando todas as áreas.'
+            ) : (
+              <>
+                {inbox.data ? inbox.data.offFilterCount : 0} vaga
+                {inbox.data?.offFilterCount === 1 ? '' : 's'} em outras áreas.{' '}
+                <button className="font-medium underline" onClick={showAllAreas} type="button">
+                  Ver todas
+                </button>
+              </>
+            )}
+          </p>
+        )}
+      </fieldset>
 
       {companyId && (
         <p className="mt-4 text-sm text-subtle">

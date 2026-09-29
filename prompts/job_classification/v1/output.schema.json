@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "role_family": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": ["string", "null"],
+          "enum": [
+            "software_engineering", "data", "infrastructure", "security", "qa",
+            "product", "design", "sales", "marketing", "operations", "people",
+            "finance", "legal", "support", "other", null
+          ]
+        },
+        "evidence": {"type": ["string", "null"]}
+      },
+      "required": ["value", "evidence"]
+    },
+    "seniority": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": ["string", "null"],
+          "enum": [
+            "intern", "junior", "mid", "senior", "staff", "lead", "manager",
+            "director", null
+          ]
+        },
+        "evidence": {"type": ["string", "null"]}
+      },
+      "required": ["value", "evidence"]
+    },
+    "work_mode": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": ["string", "null"],
+          "enum": ["remote", "hybrid", "onsite", null]
+        },
+        "evidence": {"type": ["string", "null"]}
+      },
+      "required": ["value", "evidence"]
+    }
+  },
+  "required": ["role_family", "seniority", "work_mode"]
+}

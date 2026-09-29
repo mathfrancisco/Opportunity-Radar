@@ -1,3 +1,4 @@
+import { useQueries } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card } from '../components/Card'
@@ -20,7 +21,19 @@ import {
   useSourceMetrics,
 } from '../features/dashboard/useOverview'
 import { verdictCountLabels, verdictOrder } from '../features/matching/verdicts'
+import { type SavedSearchFilters, getSavedSearchNewCount } from '../features/saved-searches/api'
+import { useOpenSavedSearch, useSavedSearches } from '../features/saved-searches/useSavedSearches'
 import { coverageLabels, coverageTones } from '../features/sources/states'
+
+function savedSearchInboxLink(filters: SavedSearchFilters): string {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (Array.isArray(value)) value.forEach((item) => params.append(key, item))
+    else params.set(key, value)
+  }
+  const query = params.toString()
+  return query ? `/inbox?${query}` : '/inbox'
+}
 
 function Tile({
   label,
@@ -393,6 +406,91 @@ function AnalysisSupport() {
   )
 }
 
+/**
+ * Card F20-20: saldo diário, taxa de fallback e breaker por modelo, nas últimas 24 h.
+ *
+ * Some when AI is disabled or nothing was called in the window: the card still explains
+ * why there is nothing to show, instead of disappearing silently.
+ */
+function AIUsageCard() {
+  const metrics = useAnalysisMetrics()
+  const ai = metrics.data?.ai
+  const percent = (value: number | null) => (value === null ? '—' : `${(value * 100).toFixed(0)}%`)
+
+  if (metrics.isError) {
+    return (
+      <Card>
+        <p className="text-sm text-muted">IA (Groq)</p>
+        <p className="mt-2 text-sm text-subtle">Não foi possível carregar as métricas de IA.</p>
+      </Card>
+    )
+  }
+  if (!ai || ai.state !== 'enabled') {
+    return (
+      <Card>
+        <p className="text-sm text-muted">IA (Groq)</p>
+        <p className="mt-2 text-sm text-subtle">
+          {ai?.state === 'blocked_by_configuration'
+            ? 'Bloqueada por configuração: falta a chave da Groq.'
+            : 'Desligada (AI_ENABLED=false).'}
+        </p>
+      </Card>
+    )
+  }
+  if (ai.byModel.length === 0) {
+    return (
+      <Card>
+        <p className="text-sm text-muted">IA (Groq)</p>
+        <p className="mt-2 text-sm text-subtle">
+          Nenhuma chamada nas últimas {ai.windowHours} h.
+        </p>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <p className="text-sm text-muted">IA (Groq) · últimas {ai.windowHours} h</p>
+      <ul className="mt-3 space-y-3">
+        {ai.byModel.map((model) => {
+          const used = model.dayRequestsLimit
+            ? Math.min(1, model.dayRequestsUsed / model.dayRequestsLimit)
+            : null
+          const breakerOpen = model.breaker !== 'closed'
+          return (
+            <li key={model.model}>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="truncate text-sm font-medium">{model.model}</span>
+                {breakerOpen && (
+                  <span className="rounded-full bg-danger-surface px-2 py-0.5 text-xs font-semibold text-danger-ink">
+                    breaker {model.breaker}
+                  </span>
+                )}
+              </div>
+              {used !== null && (
+                <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-line">
+                  <div
+                    className="h-full rounded-full bg-ink"
+                    style={{ width: `${(used * 100).toFixed(0)}%` }}
+                  />
+                </div>
+              )}
+              <p className="mt-1 text-xs text-subtle">
+                {model.dayRequestsUsed}
+                {model.dayRequestsLimit ? ` / ${model.dayRequestsLimit}` : ''} req hoje ·
+                {' '}fallback {percent(model.fallbackRate)} · 429 {percent(model.rateLimitedRate)}
+              </p>
+            </li>
+          )
+        })}
+      </ul>
+      {ai.cacheHitRate !== null && (
+        <p className="mt-3 text-xs text-subtle">Cache hit: {percent(ai.cacheHitRate)}</p>
+      )}
+    </Card>
+  )
+}
+
 function Block({
   title,
   description,
@@ -417,6 +515,46 @@ function Block({
  * Primeiro bloco e o único com peso de cartão: se nada aqui pede ação, o operador pode
  * parar de ler a página, e a tela precisa deixar isso claro sem que ele desça até o fim.
  */
+/** Card F20-34: só as buscas salvas com vaga nova desde a última abertura aparecem aqui. */
+export function SavedSearchesWithNews() {
+  const searches = useSavedSearches()
+  const open = useOpenSavedSearch()
+  const counts = useQueries({
+    queries: (searches.data ?? []).map((savedSearch) => ({
+      queryKey: ['saved-search-new-count', savedSearch.id],
+      queryFn: () => getSavedSearchNewCount(savedSearch.id),
+      enabled: searches.data !== undefined,
+    })),
+  })
+
+  const withNews = (searches.data ?? []).flatMap((savedSearch, index) => {
+    const count = counts[index]?.data
+    return count ? [{ savedSearch, count }] : []
+  })
+
+  if (withNews.length === 0) return null
+
+  return (
+    <div className="mt-4">
+      <p className="text-sm font-medium">Buscas salvas com novidade</p>
+      <ul className="mt-2 flex flex-wrap gap-3">
+        {withNews.map(({ savedSearch, count }) => (
+          <li key={savedSearch.id}>
+            <Link
+              className="flex items-baseline gap-2 rounded-full border border-line-strong bg-surface px-4 py-2 text-sm hover:border-ink"
+              onClick={() => open.mutate(savedSearch.id)}
+              to={savedSearchInboxLink(savedSearch.filters)}
+            >
+              <span className="text-subtle">{savedSearch.name}</span>
+              <span className="font-semibold">{count}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function PendingDecisions({ overview }: { overview: Overview }) {
   const highPriority = overview.verdictCounts.HIGH_PRIORITY ?? 0
   const recommended = overview.verdictCounts.RECOMMENDED ?? 0
@@ -472,7 +610,26 @@ function PendingDecisions({ overview }: { overview: Overview }) {
           ))}
         </ul>
       )}
+
+      <StartupShortcut />
+
+      <SavedSearchesWithNews />
     </section>
+  )
+}
+
+/** Card F20-54: shortcut to the Inbox filtered to companies with startup evidence.
+ * Display/filter only — it never changes any score or verdict. */
+export function StartupShortcut() {
+  return (
+    <p className="mt-3 text-sm">
+      <Link
+        className="underline decoration-accent decoration-2 underline-offset-4"
+        to="/inbox?only_startups=true"
+      >
+        Ver só startups
+      </Link>
+    </p>
   )
 }
 
@@ -507,6 +664,22 @@ function Summary({ overview }: { overview: Overview }) {
             to="/applications"
             value={String(overview.applicationsActive)}
           />
+          <SupportItem
+            hint={
+              overview.precisionPercent === null
+                ? `sem marcação suficiente · ${overview.companiesCovered} de ${overview.companiesWithAts} empresas cobertas`
+                : `(${overview.precisionMarkedCount} marcadas) · ${overview.companiesCovered} de ${overview.companiesWithAts} empresas cobertas`
+            }
+            label={`${overview.newOpportunityWindowDays} dias: vagas novas`}
+            value={String(overview.newOpportunities)}
+          />
+          {overview.precisionPercent !== null && (
+            <SupportItem
+              hint={`${overview.precisionMarkedCount} marcadas`}
+              label="Precisão da Inbox"
+              value={`${Number(overview.precisionPercent).toFixed(0)}%`}
+            />
+          )}
         </dl>
       </Block>
 
@@ -521,7 +694,7 @@ function Summary({ overview }: { overview: Overview }) {
             value={String(overview.sourcesFailing)}
           />
           <SupportItem
-            hint="Ollama indisponível, fora do contrato ou desligado"
+            hint="IA (Groq) indisponível, sem quota ou desligada"
             label="Análises degradadas"
             value={String(overview.analysesDegraded)}
           />
@@ -529,6 +702,9 @@ function Summary({ overview }: { overview: Overview }) {
         </dl>
         <div className="mt-block">
           <FailingSources sources={overview.failingSources} />
+        </div>
+        <div className="mt-block">
+          <AIUsageCard />
         </div>
         <SourceMetricsSection />
       </Block>

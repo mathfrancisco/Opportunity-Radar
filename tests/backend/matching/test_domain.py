@@ -217,6 +217,39 @@ def test_golden_case_ambiguous_seniority_stays_unknown() -> None:
     assert result.eligibility.status is EligibilityStatus.UNKNOWN
 
 
+def _seniority_result(seniority: Seniority, accepted: tuple[Seniority, ...]):
+    result = evaluate_match(
+        _opportunity(seniority=seniority),
+        _profile(accepted_seniorities=accepted),
+        _rules(),
+        assessed_at=ASSESSED_AT,
+    )
+    return next(
+        item for item in result.eligibility.filters if item.code == "SENIORITY_COMPATIBLE"
+    ), result
+
+
+@pytest.mark.parametrize("seniority", [Seniority.JUNIOR, Seniority.INTERN, Seniority.SENIOR])
+def test_empty_accepted_seniorities_never_hides_any_level(seniority: Seniority) -> None:
+    # F20-72: a profile with no seniority preference is permissive, same as UNKNOWN.
+    seniority_filter, result = _seniority_result(seniority, ())
+
+    assert seniority_filter.result is KnowledgeState.UNKNOWN
+    assert result.eligibility.status is not EligibilityStatus.INELIGIBLE
+
+
+def test_explicit_seniority_preference_is_symmetric_across_levels() -> None:
+    accepted = (Seniority.SENIOR,)
+    for excluded in (Seniority.JUNIOR, Seniority.INTERN, Seniority.MID):
+        seniority_filter, result = _seniority_result(excluded, accepted)
+        assert seniority_filter.result is KnowledgeState.FALSE
+        assert result.eligibility.status is EligibilityStatus.INELIGIBLE
+    seniority_filter, _ = _seniority_result(
+        Seniority.JUNIOR, (Seniority.JUNIOR, Seniority.INTERN)
+    )
+    assert seniority_filter.result is KnowledgeState.TRUE
+
+
 def test_golden_case_partial_skills_uses_exact_canonical_overlap() -> None:
     result = evaluate_match(
         _opportunity(required_skills=("python", "go"), preferred_skills=()),
