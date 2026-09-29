@@ -62,6 +62,9 @@ export interface InboxItem {
   startupStrength: 'strong' | 'weak' | null
   /** YC batch (e.g. `S24`) when a strong `yc_batch` evidence names one. */
   startupBatch: string | null
+  /** Card F48-10: other postings of the same company/title/source folded into this row
+   * (the same job in other cities). Nothing is merged; the detail lists them. */
+  siblingCount: number
 }
 
 export interface InboxPage {
@@ -319,6 +322,10 @@ function parseInboxItem(value: unknown): InboxItem | null {
         ? value.startup_strength
         : null,
     startupBatch: text(value.startup_batch),
+    siblingCount:
+      typeof value.sibling_count === 'number' && value.sibling_count > 0
+        ? Math.floor(value.sibling_count)
+        : 0,
   }
 }
 

@@ -488,6 +488,12 @@ class OpportunityService:
                     continue
                 if not current_status.can_transition_to(OpportunityStatus.CLOSED):
                     continue
+                # F48-11: a vanished occurrence closes nothing while another one
+                # (in this or any source) is still live in its own source's latest
+                # complete run.
+                self.session.flush()
+                if self.repository.opportunity_is_open_at_source(opportunity.id):
+                    continue
                 opportunity.lifecycle_status = OpportunityStatus.CLOSED.value
                 opportunity.closure_evidence = {
                     "closed_by_run_ids": [str(previous_run_id), str(source_run_id)],

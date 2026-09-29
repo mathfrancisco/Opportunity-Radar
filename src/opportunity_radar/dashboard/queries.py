@@ -35,6 +35,7 @@ from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmen
 from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.domain import (
     DEFAULT_RECENCY_WINDOW_DAYS,
+    OpportunityStatus,
     RecencyBasis,
     recency_reference,
 )
@@ -47,7 +48,11 @@ from opportunity_radar.opportunities.models import (
     SourceOccurrenceModel,
 )
 from opportunity_radar.opportunities.regions import ANY_COUNTRY
-from opportunity_radar.opportunities.repository import recency_condition
+from opportunity_radar.opportunities.repository import (
+    open_at_source_condition,
+    posting_group_key,
+    recency_condition,
+)
 from opportunity_radar.pipeline.models import ApplicationProcessModel
 
 NEW_OPPORTUNITY_WINDOW_DAYS = 7
@@ -115,6 +120,10 @@ class InboxItem:
     #: `yc_batch` row names one. Display only — matching never reads it.
     startup_strength: str | None = None
     startup_batch: str | None = None
+    #: Card F48-10: other postings of the same `(company, normalized title, source)`
+    #: group (e.g. the same job in other cities), folded into this row. Nothing is
+    #: merged: each is still its own opportunity, listed in this one's detail.
+    sibling_count: int = 0
 
     @property
     def applied(self) -> bool:
@@ -519,11 +528,30 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
         .outerjoin(analyses, analyses.c.assessment_id == assessments.c.assessment_id)
         .outerjoin(applications, applications.c.opportunity_id == OpportunityModel.id)
     )
-    return (
-        statement.where(*_inbox_filters(query, assessments, applications)),
-        assessments,
-        analyses,
+    filtered = statement.where(*_inbox_filters(query, assessments, applications))
+    # Card F48-10: one row per posting group, the best one in the requested order (the
+    # window uses the very ordering of the page, so the representative is the row the
+    # ungrouped list would have shown first). `group_size` counts the group's rows that
+    # passed every filter, so "+N locais" never names a hidden row.
+    key = posting_group_key()
+    ranked = filtered.with_only_columns(
+        OpportunityModel.id.label("id"),
+        func.row_number()
+        .over(
+            partition_by=key,
+            order_by=_inbox_ordering(
+                query.order, assessments, (query.search or "").strip()
+            ),
+        )
+        .label("position"),
+        func.count().over(partition_by=key).label("group_size"),
+    ).subquery("inbox_ranked")
+    grouped = (
+        filtered.join(ranked, ranked.c.id == OpportunityModel.id)
+        .where(ranked.c.position == 1)
+        .add_columns(ranked.c.group_size)
     )
+    return grouped, assessments, analyses
 
 
 def _startup_evidence_rows(*conditions: Any) -> Select[Any]:
@@ -564,30 +592,6 @@ def _recency_condition(query: InboxQuery) -> Any:
     return recency_condition(now=query.now, window_days=query.recency_window_days)
 
 
-def _open_at_source_condition() -> Any:
-    """Card F48-16 "Abertas na fonte": some occurrence was seen in the latest complete
-    run of its own source (`last_seen_run_id` equals that run), whatever its age."""
-    latest_complete_run = (
-        select(SourceRunModel.id)
-        .where(
-            SourceRunModel.source_definition_id == SourceOccurrenceModel.source_definition_id,
-            SourceRunModel.complete.is_(True),
-        )
-        .order_by(SourceRunModel.started_at.desc())
-        .limit(1)
-        .correlate(SourceOccurrenceModel)
-        .scalar_subquery()
-    )
-    return (
-        select(SourceOccurrenceModel.id)
-        .where(
-            SourceOccurrenceModel.opportunity_id == OpportunityModel.id,
-            SourceOccurrenceModel.last_seen_run_id == latest_complete_run,
-        )
-        .exists()
-    )
-
-
 def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> list[Any]:
     filters: list[Any] = []
     if query.verdicts:
@@ -608,6 +612,10 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
         filters.append(OpportunityModel.work_mode == query.work_mode)
     if query.lifecycle_status:
         filters.append(OpportunityModel.lifecycle_status == query.lifecycle_status)
+    else:
+        # F48-11: a closed posting is out of the default Inbox; the explicit filter
+        # (`lifecycle_status=CLOSED`) still lists it.
+        filters.append(OpportunityModel.lifecycle_status != OpportunityStatus.CLOSED.value)
     if query.role_families:
         filters.append(OpportunityModel.role_family.in_(query.role_families))
     if query.published_after is not None:
@@ -617,7 +625,7 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
     if query.seniorities:
         filters.append(OpportunityModel.seniority.in_(query.seniorities))
     if query.open_at_source:
-        filters.append(_open_at_source_condition())
+        filters.append(open_at_source_condition())
     elif query.only_recent:
         filters.append(_recency_condition(query))
     if query.only_startups:
@@ -774,6 +782,7 @@ def _inbox_item(row: Any) -> InboxItem:
         has_pending_duplicate=bool(row[31]),
         startup_strength=row[32],
         startup_batch=row[33],
+        sibling_count=max(int(row[36]) - 1, 0),
     )
 
 
