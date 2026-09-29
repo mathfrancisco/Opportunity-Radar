@@ -125,6 +125,15 @@ function ItemCard({ item }: { item: InboxItem }) {
               Possível duplicata
             </span>
           )}
+          {item.startupStrength && (
+            <span
+              className="inline-flex rounded-full border border-accent px-3 py-1 text-xs font-medium"
+              data-testid="startup-badge"
+            >
+              Startup{item.startupBatch ? ` · YC ${item.startupBatch}` : ''}
+              {item.startupStrength === 'weak' ? ' (sinal fraco)' : ''}
+            </span>
+          )}
           {item.applied && (
             <span className="inline-flex rounded-full border border-success-line bg-success-surface px-3 py-1 text-xs font-medium text-success-ink">
               Candidatura: {stageLabels[item.applicationStage as ApplicationStage] ??
@@ -348,6 +357,8 @@ export function InboxPage() {
   // default — only an explicit `only_recent=false` (the "mostrar tudo" click) turns
   // the filter off.
   const onlyRecent = params.get('only_recent') !== 'false'
+  // Card F20-54: display/filter only, never changes score or verdict.
+  const onlyStartups = params.get('only_startups') === 'true'
 
   const inbox = useInbox({
     page,
@@ -369,6 +380,7 @@ export function InboxPage() {
     sourceDefinitionIds: source ? [source] : undefined,
     allowedCountry: allowedCountry || undefined,
     onlyRecent,
+    onlyStartups,
   })
   const totalPages = inbox.data ? Math.max(1, Math.ceil(inbox.data.total / pageSize)) : 0
 
@@ -583,6 +595,16 @@ export function InboxPage() {
         />
         Mostrar só vagas dos últimos 14 dias (estágio, trainee e vagas com prazo de
         candidatura continuam visíveis)
+      </label>
+
+      <label className="mt-2 flex items-center gap-2 text-sm text-subtle">
+        <input
+          checked={onlyStartups}
+          className="h-4 w-4"
+          onChange={(event) => update({ only_startups: event.target.checked ? 'true' : null })}
+          type="checkbox"
+        />
+        Só startups (empresas com sinal de startup registrado)
       </label>
 
       <fieldset className="mt-4" aria-describedby="area-filter-hint">

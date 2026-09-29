@@ -130,6 +130,29 @@ describe('getInbox', () => {
     // Absent field never becomes an implicit "has a duplicate" claim.
     expect(page.items[2].hasPendingDuplicate).toBe(false)
   })
+
+  it('lê o resumo de startup e nunca inventa um sinal ausente (F20-54)', async () => {
+    respond({
+      items: [
+        { opportunity_id: 'o1', startup_strength: 'strong', startup_batch: 'S24' },
+        { opportunity_id: 'o2', startup_strength: 'weak', startup_batch: null },
+        { opportunity_id: 'o3', startup_strength: 'bogus' },
+        { opportunity_id: 'o4' },
+      ],
+      total: 4,
+      offset: 0,
+      limit: 25,
+    })
+
+    const page = await getInbox({ page: 1, pageSize: 25 })
+
+    expect(page.items.map((item) => [item.startupStrength, item.startupBatch])).toEqual([
+      ['strong', 'S24'],
+      ['weak', null],
+      [null, null],
+      [null, null],
+    ])
+  })
 })
 
 describe('getOverview', () => {

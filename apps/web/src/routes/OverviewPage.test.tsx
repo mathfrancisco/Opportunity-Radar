@@ -3,7 +3,7 @@ import { type ReactElement, act } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render } from '../components/testing'
-import { OverviewPage, SavedSearchesWithNews } from './OverviewPage'
+import { OverviewPage, SavedSearchesWithNews, StartupShortcut } from './OverviewPage'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -272,5 +272,15 @@ describe('OverviewPage — novos ATS', () => {
       expect(container.textContent).toContain(sourceType)
     }
     expect(container.textContent).toContain('saudáveis')
+  })
+})
+
+// Card F20-54: the Overview links to the Inbox filtered to startups.
+describe('StartupShortcut', () => {
+  it('leva para a Inbox filtrada por only_startups', () => {
+    const container = renderWithProviders(<StartupShortcut />)
+    const link = container.querySelector('a')
+    expect(link?.textContent).toBe('Ver só startups')
+    expect(link?.getAttribute('href')).toBe('/inbox?only_startups=true')
   })
 })

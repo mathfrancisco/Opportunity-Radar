@@ -272,6 +272,8 @@ function inboxItem(overrides: Record<string, unknown> = {}) {
     application_stage: null,
     application_next_action_at: null,
     has_pending_duplicate: false,
+    startup_strength: null,
+    startup_batch: null,
     ...overrides,
   }
 }
@@ -362,5 +364,85 @@ describe('InboxPage recency toggle', () => {
     expect(calledUrls.some((url) => url.includes('/inbox') && url.includes('only_recent=false'))).toBe(
       true,
     )
+  })
+})
+
+/** Card F20-54: the "só startups" filter sends `only_startups=true`, is off by default,
+ * and the badge shows the strength/batch without touching score or verdict. */
+describe('InboxPage startup filter', () => {
+  function stubInbox(items: unknown[], calledUrls: string[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        calledUrls.push(url)
+        if (url.includes('/inbox')) {
+          return new Response(
+            JSON.stringify({
+              items,
+              total: items.length,
+              offset: 0,
+              limit: 25,
+              order: 'priority',
+              off_filter_count: 0,
+            }),
+            { status: 200 },
+          )
+        }
+        return new Response(JSON.stringify([]), { status: 200 })
+      }),
+    )
+  }
+
+  function startupToggle(container: HTMLElement): HTMLInputElement {
+    const label = Array.from(container.querySelectorAll('label')).find((candidate) =>
+      candidate.textContent?.includes('Só startups'),
+    )
+    return label?.querySelector('input') as HTMLInputElement
+  }
+
+  it('inicia desmarcado e não envia only_startups', async () => {
+    const calledUrls: string[] = []
+    stubInbox([inboxItem()], calledUrls)
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush()
+
+    expect(startupToggle(container).checked).toBe(false)
+    expect(calledUrls.every((url) => !url.includes('only_startups'))).toBe(true)
+    expect(container.querySelector('[data-testid="startup-badge"]')).toBeNull()
+  })
+
+  it('ao marcar, envia only_startups=true', async () => {
+    const calledUrls: string[] = []
+    stubInbox([inboxItem()], calledUrls)
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush()
+    act(() => startupToggle(container).click())
+    await flush()
+
+    expect(
+      calledUrls.some((url) => url.includes('/inbox') && url.includes('only_startups=true')),
+    ).toBe(true)
+  })
+
+  it('mostra o selo com o batch YC e marca sinal fraco', async () => {
+    const calledUrls: string[] = []
+    stubInbox(
+      [
+        inboxItem({ startup_strength: 'strong', startup_batch: 'S24' }),
+        inboxItem({ opportunity_id: 'opp-2', startup_strength: 'weak', startup_batch: null }),
+      ],
+      calledUrls,
+    )
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush()
+
+    const badges = Array.from(container.querySelectorAll('[data-testid="startup-badge"]')).map(
+      (badge) => badge.textContent?.replace(/\s+/g, ' ').trim(),
+    )
+    expect(badges).toEqual(['Startup · YC S24', 'Startup (sinal fraco)'])
   })
 })

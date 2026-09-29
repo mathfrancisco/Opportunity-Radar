@@ -611,8 +611,25 @@ function PendingDecisions({ overview }: { overview: Overview }) {
         </ul>
       )}
 
+      <StartupShortcut />
+
       <SavedSearchesWithNews />
     </section>
+  )
+}
+
+/** Card F20-54: shortcut to the Inbox filtered to companies with startup evidence.
+ * Display/filter only — it never changes any score or verdict. */
+export function StartupShortcut() {
+  return (
+    <p className="mt-3 text-sm">
+      <Link
+        className="underline decoration-accent decoration-2 underline-offset-4"
+        to="/inbox?only_startups=true"
+      >
+        Ver só startups
+      </Link>
+    </p>
   )
 }
 

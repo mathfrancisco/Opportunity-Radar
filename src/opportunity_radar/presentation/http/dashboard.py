@@ -104,6 +104,9 @@ class InboxItemResponse(BaseModel):
     application_stage: str | None
     application_next_action_at: datetime | None
     has_pending_duplicate: bool
+    #: Card F20-54: startup evidence summary; `None` when the company has none.
+    startup_strength: str | None = None
+    startup_batch: str | None = None
 
 
 class InboxPageResponse(BaseModel):
@@ -498,6 +501,8 @@ def list_inbox(
     #: Card F20-61: the server's own default, absent this parameter, is filtered.
     #: The client's "mostrar tudo" toggle passes `only_recent=false`.
     only_recent: bool = Query(default=True),
+    #: Card F20-54: only companies with at least one startup-evidence row.
+    only_startups: bool = False,
     session: Session = Depends(get_session),
 ) -> InboxPageResponse:
     role_families = tuple(role_family or ())
@@ -530,6 +535,7 @@ def list_inbox(
             offset=offset,
             limit=limit,
             only_recent=only_recent,
+            only_startups=only_startups,
         ),
     )
     return InboxPageResponse(
@@ -761,6 +767,8 @@ def _inbox_item_response(item: InboxItem) -> InboxItemResponse:
         application_stage=item.application_stage,
         application_next_action_at=item.application_next_action_at,
         has_pending_duplicate=item.has_pending_duplicate,
+        startup_strength=item.startup_strength,
+        startup_batch=item.startup_batch,
     )
 
 

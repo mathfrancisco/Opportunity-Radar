@@ -202,6 +202,46 @@ class DiscoveryAttemptModel(Base):
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class CompanyStartupEvidence(Base):
+    """One piece of evidence that a company is a startup (card F20-54).
+
+    Append-only: a second sighting is a second row, never an overwrite, and a weak signal
+    never displaces a strong one — the company's strength is derived by reading every row
+    (`companies.startup`). Display/filter metadata only: nothing in matching reads it.
+    """
+
+    __tablename__ = "company_startup_evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "signal IN ('yc_batch', 'seed_stage', 'series_a', 'other')",
+            name="ck_company_startup_evidence_signal",
+        ),
+        CheckConstraint(
+            "strength IN ('strong', 'weak')",
+            name="ck_company_startup_evidence_strength",
+        ),
+        Index("ix_company_startup_evidence_company", "company_id"),
+        {"schema": SCHEMA},
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey(f"{SCHEMA}.company.id", ondelete="CASCADE"), nullable=False
+    )
+    signal: Mapped[str] = mapped_column(String(20), nullable=False)
+    strength: Mapped[str] = mapped_column(String(10), nullable=False)
+    #: The literal text the signal was read from (e.g. "Y Combinator (S24)").
+    source_text: Mapped[str] = mapped_column(Text, nullable=False)
+    source_url: Mapped[str | None] = mapped_column(Text)
+    #: YC batch code (e.g. "S24") when `signal` is `yc_batch` and the text names one.
+    batch: Mapped[str | None] = mapped_column(String(20))
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class CompanyImportBatch(Base):
     __tablename__ = "company_import_batch"
     __table_args__ = (
