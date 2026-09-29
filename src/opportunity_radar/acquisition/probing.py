@@ -31,6 +31,7 @@ PROBE_TYPES = (
     "workable",
     "factorial",
     "jobposting",
+    "hacker_news",
 )
 PUBLIC_ENDPOINT_REFERENCES = {
     "ashby": "https://developers.ashbyhq.com/docs/public-job-posting-api",
@@ -50,6 +51,9 @@ PUBLIC_ENDPOINT_REFERENCES = {
     # No API at all: the collector reads the schema.org JobPosting JSON-LD the company's
     # own page embeds (F20-37), per https://schema.org/JobPosting.
     "jobposting": "https://schema.org/JobPosting",
+    # Official Firebase API + Algolia HN Search, reviewed in
+    # docs/pesquisas/termos-hn-who-is-hiring.md (F20-55).
+    "hacker_news": "docs/pesquisas/termos-hn-who-is-hiring.md",
 }
 
 

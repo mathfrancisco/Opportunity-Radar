@@ -1,6 +1,6 @@
 # CARD F20-55 — Coletor "Who is hiring?" da Hacker News via API oficial
 
-- **Status:** Backlog
+- **Status:** Implementado em `feature/f20-55-hn` (aguardando merge/CI) — revisão de termos: viável, ver [`termos-hn-who-is-hiring.md`](../../pesquisas/termos-hn-who-is-hiring.md); execução real: [`hn-who-is-hiring-2026-09-29.md`](../evidencias/hn-who-is-hiring-2026-09-29.md)
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-27, F20-03
@@ -46,16 +46,22 @@ revisão de termos formal exigida por este card antes de qualquer código de col
 
 ## Critérios de aceite
 
-- [ ] Termos revisados e registrados antes do código, com decisão explícita
+- [x] Termos revisados e registrados antes do código, com decisão explícita
       (viável/não viável) e evidência (robots.txt, texto de termos, README da API).
-- [ ] (Se viável) Coletor registrado, resolve por `source_type` próprio, com teste.
-- [ ] (Se viável) Localiza o item do mês corrente via Algolia HN Search sem varrer IDs
+      Viável com risco residual: `docs/pesquisas/termos-hn-who-is-hiring.md`.
+- [x] (Se viável) Coletor registrado, resolve por `source_type` próprio, com teste.
+      `hacker_news`; `test_registered_by_source_type_and_probeable`.
+      `hacker_news`; `test_registered_by_source_type_and_probeable`.
+- [x] (Se viável) Localiza o item do mês corrente via Algolia HN Search sem varrer IDs
       manualmente pela Firebase API.
-- [ ] (Se viável) Comentário sem empresa identificável (heurística de parsing falha)
+      `test_locates_current_thread_via_algolia_and_reads_comments_via_firebase`.
+- [x] (Se viável) Comentário sem empresa identificável (heurística de parsing falha)
       produz pendência, não item vazio tratado como sucesso.
-- [ ] (Se viável) Item cuja empresa aponta para board de ATS já suportado gera proposta
+      Vira `items_invalid` e a execução termina `PARTIAL` (real: 19 de 255).
+- [x] (Se viável) Item cuja empresa aponta para board de ATS já suportado gera proposta
       com `discovery_via="hn_who_is_hiring"`, distinto das demais vias.
-- [ ] (Se não viável) Card fecha com a mesma régua do F20-32/F20-51/F20-52 — decisão
+      `test_ats_board_comment_creates_proposal_tagged_hn_who_is_hiring`; real: 3 propostas.
+- [ ] (Não se aplica: viável) (Se não viável) Card fecha com a mesma régua do F20-32/F20-51/F20-52 — decisão
       registrada, nenhum coletor implementado.
 
 ## Verificação

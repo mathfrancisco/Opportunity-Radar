@@ -252,6 +252,13 @@ cadência recomendada pela fonte; tentativas antecipadas falham com código
 estruturado, sem manter uma requisição aberta por horas. A definição começa como
 `unverified` e precisa dos mesmos gates operacionais antes de ser ativada.
 
+O coletor `hacker_news` (F20-55) lê o thread mensal "Ask HN: Who is hiring?": localiza o
+thread pela Algolia HN Search e lê os comentários pela API oficial Firebase (nunca o HTML
+do site; termos em `docs/pesquisas/termos-hn-who-is-hiring.md`). Cada comentário de
+primeiro nível vira uma vaga a partir do cabeçalho `Empresa | Papel | Local`; comentário
+sem empresa identificável conta como item inválido (execução `PARTIAL`), e um link para um
+board de ATS suportado gera proposta com `discovery_via="hn_who_is_hiring"`.
+
 As fontes permanecem desabilitadas até a revisão dos termos e a homologação do
 coletor. Depois desses gates, `PATCH /api/sources/{id}` ativa a definição com
 controle de versão e `POST /api/sources/{id}/runs` executa a coleta. Uma chamada

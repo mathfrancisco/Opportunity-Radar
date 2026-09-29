@@ -37,6 +37,7 @@ from opportunity_radar.acquisition.domain import (
     evaluate_completeness,
 )
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
+from opportunity_radar.acquisition.hacker_news import DISCOVERY_VIA as HN_DISCOVERY_VIA
 from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.models import (
     RawItemModel,
@@ -91,6 +92,7 @@ _PROVIDER_HOST_BY_SOURCE_TYPE: dict[str, str] = {
     "ashby": "api.ashbyhq.com",
     "lever": "api.lever.co",
     "remotive": "remotive.com",
+    "hacker_news": "hacker-news.firebaseio.com",
     "tavily_search": "api.tavily.com",
 }
 
@@ -1008,6 +1010,7 @@ class AcquisitionService:
         error: AcquisitionError | None = None
         last_cursor: str | None = None
         tavily_proposal_items: list[CollectedItem] = []
+        hn_proposal_items: list[CollectedItem] = []
         # Built once per run, not per item: reused by `_fill_missing_description` below
         # for every item in this run that needs one, and closed once the run's discovery
         # loop is done (successfully or not — every branch below is caught, so control
@@ -1078,6 +1081,10 @@ class AcquisitionService:
                     run.record_items(skipped=1)
                 if source.source_type == "tavily_search":
                     tavily_proposal_items.append(item)
+                elif source.source_type == "hacker_news":
+                    hn_proposal = _hn_proposal_item(item)
+                    if hn_proposal is not None:
+                        hn_proposal_items.append(hn_proposal)
                 if item.cursor is not None:
                     last_cursor = item.cursor
             # `_persist_item` flushed every candidate's immutable raw evidence before
@@ -1091,6 +1098,21 @@ class AcquisitionService:
                     error = AcquisitionError(
                         AcquisitionErrorCode.INVALID_CONFIGURATION,
                         f"tavily source proposal failed: {proposal_error}",
+                    )
+            if hn_proposal_items:
+                # F20-55: a "Who is hiring?" comment pointing at an ATS board we support
+                # feeds the same F20-46 queue, tagged with its own route.
+                try:
+                    with self.session.begin_nested():
+                        self.propose_from_tavily_evidence(
+                            hn_proposal_items,
+                            commit=False,
+                            discovery_via=HN_DISCOVERY_VIA,
+                        )
+                except Exception as proposal_error:
+                    error = AcquisitionError(
+                        AcquisitionErrorCode.INVALID_CONFIGURATION,
+                        f"hacker news source proposal failed: {proposal_error}",
                     )
         except AcquisitionError as caught:
             error = caught
@@ -1499,6 +1521,23 @@ def _required_string(configuration: Mapping[str, Any], key: str) -> str:
 def _optional_string(configuration: Mapping[str, Any], key: str) -> str | None:
     value = configuration.get(key)
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _hn_proposal_item(item: CollectedItem) -> CollectedItem | None:
+    """A copy of a Who-is-hiring item shaped as proposal evidence, or `None`.
+
+    The persisted item stays a normal job (it must normalize); only this copy carries the
+    ATS board URL and the `source_proposal_candidate` marker `propose_from_tavily_evidence`
+    reads.
+    """
+    ats_url = item.metadata.get("ats_board_url")
+    if not isinstance(ats_url, str) or not ats_url or not item.company_name:
+        return None
+    return replace(
+        item,
+        url=ats_url,
+        metadata={**item.metadata, "source_proposal_candidate": True},
+    )
 
 
 def _tavily_proposal_configuration(
