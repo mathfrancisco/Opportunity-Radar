@@ -192,3 +192,7 @@ senioridade, fora do alcance de regra por título.
 - Pertencimento das fontes importadas herdado da `f20manual` (probe só prova que o endpoint
   responde e o coletor lê 1 item, não que o board é da empresa).
 - `README.md` e `validacao-pendente.md` não foram alterados (outro worker).
+
+## Adendo — agenda das fontes importadas (2026-09-29 ~18:25Z)
+
+Decisão do usuário (maximizar vagas): as 95 fontes importadas sem `schedule` receberam agenda — Workday `0 6 * * *` (11), demais ATS `0 */3 * * *`. Resultado nas 137 fontes ativas: `0 */3 * * *` 113, `0 6 * * *` 11, `0 0 * * 0` 11, `0 18 3 * *` 1 (HN), 1 manual sem agenda. Worker reiniciado.
