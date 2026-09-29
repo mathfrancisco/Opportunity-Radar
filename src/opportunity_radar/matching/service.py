@@ -535,6 +535,11 @@ def _profile_snapshot(profile: ProfileVersion) -> ProfileSnapshot:
         countries=tuple(sorted(preferences.countries)),
         accepted_work_modes=_known_work_modes(preferences.work_modes),
         accepted_contract_types=_known_contracts(preferences.contracts),
+        accepted_seniorities=tuple(
+            Seniority(item)
+            for item in preferences.accepted_seniorities
+            if item in Seniority._value2member_map_
+        ),
         compensation=profile_compensation,
         work_authorization=(
             ProfileWorkAuthorization.REQUIRES_SPONSORSHIP

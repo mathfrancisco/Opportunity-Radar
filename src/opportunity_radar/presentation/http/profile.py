@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session
 from opportunity_radar.opportunities.role_family import PROFILE_ROLE_FAMILIES
 from opportunity_radar.presentation.http.dependencies import get_session
 from opportunity_radar.profile.domain import (
+    DEFAULT_ACCEPTED_SENIORITIES,
+    VALID_SENIORITIES,
     EmploymentPreference,
     Experience,
     ImmutableProfileVersionError,
@@ -67,6 +69,18 @@ class PreferenceBody(BaseModel):
     sponsorship_required: bool = False
     target_role_families: list[str] = Field(default_factory=list)
     target_titles: list[str] = Field(default_factory=list)
+    # Omitted means the default; an explicit empty list means "not stated" (F48-13).
+    accepted_seniorities: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_ACCEPTED_SENIORITIES)
+    )
+
+    @field_validator("accepted_seniorities")
+    @classmethod
+    def known_seniorities(cls, value: list[str]) -> list[str]:
+        unknown = [item for item in value if item not in VALID_SENIORITIES]
+        if unknown:
+            raise ValueError(f"unknown seniorities: {', '.join(unknown)}")
+        return list(dict.fromkeys(value))
 
     @field_validator("target_role_families")
     @classmethod

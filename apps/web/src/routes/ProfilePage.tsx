@@ -20,6 +20,17 @@ import {
 const workModes = ['REMOTE', 'HYBRID', 'ONSITE']
 const contracts = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP']
 const periods = ['YEAR', 'MONTH', 'HOUR']
+const seniorities = [
+  { code: 'INTERN', label: 'Estágio' },
+  { code: 'JUNIOR', label: 'Júnior' },
+  { code: 'MID', label: 'Pleno' },
+  { code: 'SENIOR', label: 'Sênior' },
+  { code: 'STAFF', label: 'Staff' },
+  { code: 'LEAD', label: 'Lead' },
+  { code: 'MANAGER', label: 'Gestão' },
+  { code: 'DIRECTOR', label: 'Direção' },
+  { code: 'UNKNOWN', label: 'Não informada' },
+]
 
 
 function toList(value: string): string[] {
@@ -51,6 +62,30 @@ function month(date: string): string {
 function period(startedOn: string | null, endedOn: string | null): string | null {
   if (startedOn === null) return null
   return `${month(startedOn)} – ${endedOn === null ? 'atual' : month(endedOn)}`
+}
+
+/** Empty areas or skills leave the profile unable to rank (F48-13): say so, and what it costs. */
+function EmptyProfileWarning({ noAreas, noSkills }: { noAreas: boolean; noSkills: boolean }) {
+  if (!noAreas && !noSkills) return null
+  return (
+    <div
+      className="grid gap-1 rounded-control border border-warning-line bg-warning-surface p-4 text-sm text-warning-ink"
+      role="status"
+    >
+      {noAreas && (
+        <p>
+          Nenhuma área de interesse marcada: o Inbox não filtra por área e mostra vagas de
+          qualquer área.
+        </p>
+      )}
+      {noSkills && (
+        <p>
+          Nenhuma skill informada: o encaixe tecnológico das vagas fica desconhecido e pesa
+          pouco no ranking.
+        </p>
+      )}
+    </div>
+  )
 }
 
 function Versions({ versions }: { versions: ProfileVersion[] }) {
@@ -249,6 +284,11 @@ export function ProfilePage() {
             />
           </Field>
 
+          <EmptyProfileWarning
+            noAreas={preferences.targetRoleFamilies.length === 0}
+            noSkills={toList(skillsText).length === 0}
+          />
+
           {active.data && <PreservedHistory version={active.data} />}
 
           <fieldset aria-describedby="role-families-hint">
@@ -270,6 +310,30 @@ export function ProfilePage() {
                     type="checkbox"
                   />
                   {family.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset aria-describedby="seniorities-hint">
+            <legend className="text-sm font-medium">Senioridades aceitas</legend>
+            <p className="text-sm text-muted" id="seniorities-hint">
+              Níveis fora da seleção ficam abaixo no ranking, nunca escondidos. Nenhuma marcada
+              vale como não informado: nenhum nível perde posição.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-4">
+              {seniorities.map((level) => (
+                <label className="flex items-center gap-2 text-sm" key={level.code}>
+                  <input
+                    checked={preferences.acceptedSeniorities.includes(level.code)}
+                    onChange={() =>
+                      updatePreferences({
+                        acceptedSeniorities: toggle(preferences.acceptedSeniorities, level.code),
+                      })
+                    }
+                    type="checkbox"
+                  />
+                  {level.label}
                 </label>
               ))}
             </div>

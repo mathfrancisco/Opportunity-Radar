@@ -239,7 +239,7 @@ def test_empty_accepted_seniorities_never_hides_any_level(seniority: Seniority) 
     assert result.eligibility.status is not EligibilityStatus.INELIGIBLE
 
 
-def test_explicit_seniority_preference_is_symmetric_across_levels() -> None:
+def test_explicit_seniority_preference_excludes_levels_below_the_senior_tier() -> None:
     accepted = (Seniority.SENIOR,)
     for excluded in (Seniority.JUNIOR, Seniority.INTERN, Seniority.MID):
         seniority_filter, result = _seniority_result(excluded, accepted)
@@ -249,6 +249,32 @@ def test_explicit_seniority_preference_is_symmetric_across_levels() -> None:
         Seniority.JUNIOR, (Seniority.JUNIOR, Seniority.INTERN)
     )
     assert seniority_filter.result is KnowledgeState.TRUE
+
+
+_DEFAULT_ACCEPTED = (Seniority.INTERN, Seniority.JUNIOR, Seniority.MID, Seniority.UNKNOWN)
+
+
+@pytest.mark.parametrize(
+    "seniority",
+    [Seniority.SENIOR, Seniority.STAFF, Seniority.LEAD, Seniority.MANAGER, Seniority.DIRECTOR],
+)
+def test_senior_or_above_is_below_the_preference_never_excluded(seniority: Seniority) -> None:
+    # F48-13, decision 2: SENIOR+ outside the accepted levels ranks lower, never INELIGIBLE.
+    seniority_filter, result = _seniority_result(seniority, _DEFAULT_ACCEPTED)
+
+    assert seniority_filter.result is not KnowledgeState.FALSE
+    assert result.eligibility.status is not EligibilityStatus.INELIGIBLE
+
+
+def test_senior_scores_below_an_accepted_level_on_the_seniority_factor() -> None:
+    def factor_score(seniority: Seniority) -> Decimal:
+        _, result = _seniority_result(seniority, _DEFAULT_ACCEPTED)
+        factor = next(item for item in result.factors if item.factor_code == "SENIORITY_SCOPE")
+        assert factor.raw_score is not None
+        return factor.raw_score
+
+    assert factor_score(Seniority.SENIOR) < factor_score(Seniority.JUNIOR)
+    assert factor_score(Seniority.SENIOR) > Decimal("0")
 
 
 def test_golden_case_partial_skills_uses_exact_canonical_overlap() -> None:
