@@ -43,7 +43,14 @@ class Company(Base):
         String(255), nullable=False, index=False
     )
     domain: Mapped[str | None] = mapped_column(String(253), unique=True)
+    # The user's interest in the company: feeds the score (COMPANY_PRIORITY) and the
+    # collection cadence. Never derived from how mature the research about it is.
     priority: Mapped[str] = mapped_column(String(20), nullable=False, default="normal")
+    # What the research catalogue knows about the company (F48-14). Operational only:
+    # the importer writes it, nothing ranks or schedules by it.
+    research_confidence: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="normal", server_default="normal"
+    )
     radar_status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     verification_state: Mapped[str] = mapped_column(
         String(30), nullable=False, default="unverified"
