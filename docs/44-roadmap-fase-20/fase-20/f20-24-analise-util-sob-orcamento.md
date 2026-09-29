@@ -1,6 +1,6 @@
 # CARD F20-24 — Análise útil sob orçamento de quota
 
-- **Status:** Implementado e medido contra o Groq real (2026-09-28) — CI verde (925
+- **Status:** Feito (validação real pendente: amostra de aging sob Groq real, agora na stack real — `validacao-pendente.md` §3). Implementado e medido contra o Groq real (2026-09-28) — CI verde (925
   passed); reserva interativa provada com quota real (`skipped_budget=6` no worker,
   análise interativa `AI_COMPLETED` mesmo com o teto do worker esgotado). Ver
   `docs/44-roadmap-fase-20/evidencias/analise-sob-orcamento-f20-24-2026-09-27.md` (§5,

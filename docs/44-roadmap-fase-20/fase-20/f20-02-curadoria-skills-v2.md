@@ -1,6 +1,10 @@
 # CARD F20-02 — Curadoria manual de `skills-v2`
 
-- **Status:** Feito — `scripts/unmatched_skill_terms.py` rodado contra o acervo real (648
+- **Status:** Feito — meta de UNKNOWN não atingida. Remedição de 2026-09-29 na stack real
+  (`v6`/`seniority-v3`, `docs/44-roadmap-fase-20/evidencias/rebuild-stack-real-2026-09-29.md` §8): UNKNOWN 339/686 = 49,42% (meta ~25%), sem
+  mudança com o reprocessamento; JUNIOR+INTERN 5 (0,73%). Nenhuma das 339 vagas UNKNOWN tem
+  título com palavra-chave de senioridade; o resto exige classificar pelo corpo da vaga
+  (próxima fase: [F20-76](f20-76-senioridade-por-conteudo.md)). Histórico: `scripts/unmatched_skill_terms.py` rodado contra o acervo real (648
   oportunidades, 630 descrições), saída e decisão por termo em
   `docs/pesquisas/curadoria-skills-v2.md`. Três entradas novas na `SKILL_TAXONOMY` (`ai`,
   `cicd`, `observability`) com testes de regressão usando texto real.
@@ -12,7 +16,7 @@
   `docs/pesquisas/curadoria-skills-v2.md` (seção "Reprocessamento oficial") para a
   medição completa e a lista de arquivos tocados além da lista original (`service.py`,
   `domain.py`, mais os testes com o literal `"skills-v1"` que dependiam do valor padrão).
-  F17-06 segue "Em revisão", não `Done`: o reprocessamento não regrediu evidência de
+  F17-06 segue "Em revisão", não `Done` (meta de senioridade não atingida; F20-76): o reprocessamento não regrediu evidência de
   skill, mas revelou que o critério de `seniority-v2` (reduzir `UNKNOWN` à metade) não
   está sendo atingido no acervo real (328/648 = 50,62%, igual ao baseline) — achado fora
   do escopo deste card, registrado no F17-06.

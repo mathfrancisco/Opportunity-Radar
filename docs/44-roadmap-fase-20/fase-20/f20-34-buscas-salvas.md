@@ -1,6 +1,6 @@
 # CARD F20-34 — Buscas salvas
 
-- **Status:** Done
+- **Status:** Feito
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-01

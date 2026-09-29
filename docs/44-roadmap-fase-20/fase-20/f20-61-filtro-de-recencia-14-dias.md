@@ -1,6 +1,6 @@
 # CARD F20-61 — Filtro de recência (14 dias) com exceção para estágio/programas com prazo
 
-- **Status:** Implementado em `feature/f20-61-recencia` (aguardando merge/CI)
+- **Status:** Feito — mesclado em `feature/f20-groq-e-consolidacao` (`5a1e062`), CI verde em `13d6605`; volume real de junior/estágio/programa-com-prazo (nota do item 5, não critério de aceite) segue no backlog da próxima fase (`validacao-pendente.md` §7)
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-01, F20-03

@@ -1,6 +1,6 @@
 # CARD F20-55 — Coletor "Who is hiring?" da Hacker News via API oficial
 
-- **Status:** Implementado em `feature/f20-55-hn` (aguardando merge/CI) — revisão de termos: viável, ver [`termos-hn-who-is-hiring.md`](../../pesquisas/termos-hn-who-is-hiring.md); execução real: [`hn-who-is-hiring-2026-09-29.md`](../evidencias/hn-who-is-hiring-2026-09-29.md)
+- **Status:** Feito — mesclado (`9fd4756`), CI verde em `13d6605`; fonte `hacker_news` importada e habilitada na stack real em 2026-09-29 com schedule mensal `0 18 3 * *`.  revisão de termos: viável, ver [`termos-hn-who-is-hiring.md`](../../pesquisas/termos-hn-who-is-hiring.md); execução real: [`hn-who-is-hiring-2026-09-29.md`](../evidencias/hn-who-is-hiring-2026-09-29.md)
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-27, F20-03

@@ -1,6 +1,6 @@
 # CARD F20-50 — Definition of Done da fase e documentação final
 
-- **Status:** Backlog
+- **Status:** Em andamento — só fecha depois das seções 3 e 5 de `validacao-pendente.md` (o Passo 5 da §4 foi concluído em 2026-09-29); o backlog da próxima fase (§7) não bloqueia
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** F — Encerramento
 - **Depende de:** F20-01 a F20-49

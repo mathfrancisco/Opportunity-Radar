@@ -1,8 +1,7 @@
 # CARD F20-60 — Importar empresas do mapa de carreira e ativar fontes já identificadas
 
-- **Status:** Feito na `f20manual` (pilha manual). Ativação na pilha real
-  `opportunity-radar` pendente da janela de sete dias — ver
-  [`docs/44-roadmap-fase-20/validacao-pendente.md`](../validacao-pendente.md) §4.6 e
+- **Status:** Feito — fontes ativadas na pilha real `opportunity-radar` em 2026-09-29 (importadas com probe, 137 habilitadas; inclui DoorDash, Remotebase e Lemon.io), ver
+  [`docs/44-roadmap-fase-20/validacao-pendente.md`](../validacao-pendente.md) §4 e §7 e
   [`docs/44-roadmap-fase-20/evidencias/mapa-carreira-vs-catalogo-2026-09-28.md`](../evidencias/mapa-carreira-vs-catalogo-2026-09-28.md)
   ("Resultados da execução").
 - **Fase:** 20 — IA cloud e consolidação

@@ -1,6 +1,6 @@
 # CARD F20-33 — Palavras-chave do perfil
 
-- **Status:** Implementado
+- **Status:** Feito
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-03, F20-40
