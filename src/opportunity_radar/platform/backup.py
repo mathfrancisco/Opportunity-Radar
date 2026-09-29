@@ -56,6 +56,10 @@ MANIFEST_EXCLUDED_TABLES: dict[str, str] = {
         "Losing it after a restore makes the next run act as if it had never run before; "
         "it is operational bookkeeping the worker rebuilds, not durable operator data."
     ),
+    "platform.worker_pass_history": (
+        "Pruned history of worker passes (duration, DUE sources), F48-07. Operational "
+        "bookkeeping like worker_job_state; a restore starts a fresh history."
+    ),
 }
 
 #: Never allowed to appear in a manifest's serialized JSON. The Groq API key never enters

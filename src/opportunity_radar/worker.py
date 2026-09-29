@@ -46,7 +46,7 @@ from opportunity_radar.matching.service import (
     is_reused_analysis,
 )
 from opportunity_radar.operations.retention import PayloadRetentionService
-from opportunity_radar.operations.service import observe_job
+from opportunity_radar.operations.service import annotate_pass, observe_job
 from opportunity_radar.opportunities.service import OpportunityService
 from opportunity_radar.opportunities.suggestions import (
     candidates_needing_suggestion,
@@ -530,6 +530,13 @@ def collect_enabled_sources(
                         "items_persisted": run.items_persisted,
                     },
                 )
+            # F48-07: DUE sources = the ones that reached execution (or failed doing so).
+            annotate_pass(
+                engine,
+                correlation_id,
+                due_sources=summary["completed"] + summary["failed"],
+                **summary,
+            )
             if any(summary.values()):
                 logger.info(
                     "collection batch finished", extra={"job": "collect", **summary}

@@ -35,6 +35,8 @@ from opportunity_radar.acquisition.domain import (
     SourceRunStatus,
     content_hashes,
     evaluate_completeness,
+    item_payload_bytes,
+    newest_item_age_seconds,
 )
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.hacker_news import DISCOVERY_VIA as HN_DISCOVERY_VIA
@@ -1009,6 +1011,8 @@ class AcquisitionService:
 
         error: AcquisitionError | None = None
         last_cursor: str | None = None
+        received_bytes = 0
+        newest_dated_item: datetime | None = None
         tavily_proposal_items: list[CollectedItem] = []
         hn_proposal_items: list[CollectedItem] = []
         # Built once per run, not per item: reused by `_fill_missing_description` below
@@ -1053,6 +1057,12 @@ class AcquisitionService:
             )
             async for item in collector.discover(collector_request):
                 run.record_items(seen=1)
+                received_bytes += item_payload_bytes(item)
+                item_date = item.published_at or item.updated_at
+                if item_date is not None and (
+                    newest_dated_item is None or item_date > newest_dated_item
+                ):
+                    newest_dated_item = item_date
                 item = await self._fill_missing_description(
                     item,
                     client=extraction_client,
@@ -1163,6 +1173,10 @@ class AcquisitionService:
             checkpoint_after=(last_cursor if final_status is SourceRunStatus.SUCCEEDED else None),
         )
         run.items_announced = run_telemetry.items_announced
+        run.bytes_received = received_bytes
+        run.newest_item_age_seconds = newest_item_age_seconds(
+            newest_dated_item, run.finished_at or datetime.now(UTC)
+        )
         run.complete = evaluate_completeness(
             status=run.status,
             max_items=request.max_items,
@@ -1437,6 +1451,8 @@ class AcquisitionService:
         model.items_announced = run.items_announced
         model.complete = run.complete
         model.credits_used = run.credits_used
+        model.bytes_received = run.bytes_received
+        model.newest_item_age_seconds = run.newest_item_age_seconds
 
 
 def canonical_payload_hash(payload: Mapping[str, Any]) -> str:

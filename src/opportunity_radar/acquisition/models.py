@@ -5,6 +5,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -98,6 +99,11 @@ class SourceRunModel(Base):
             "credits_used >= 0",
             name="ck_source_run_credits_used",
         ),
+        CheckConstraint(
+            "(bytes_received IS NULL OR bytes_received >= 0) "
+            "AND (newest_item_age_seconds IS NULL OR newest_item_age_seconds >= 0)",
+            name="ck_source_run_telemetry",
+        ),
         Index("ix_source_run_source_started", "source_definition_id", "started_at"),
         Index(
             "uq_source_run_active",
@@ -136,6 +142,11 @@ class SourceRunModel(Base):
     credits_used: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
+    #: Serialized size of the items this run received (F48-07); `None` before the column
+    #: existed or when the run read nothing, never a guessed zero.
+    bytes_received: Mapped[int | None] = mapped_column(BigInteger)
+    #: Age, at the end of the run, of the newest item that carried a date (F48-07).
+    newest_item_age_seconds: Mapped[int | None] = mapped_column(Integer)
     error_code: Mapped[str | None] = mapped_column(String(64))
     error_summary: Mapped[str | None] = mapped_column(Text)
     checkpoint_before: Mapped[str | None] = mapped_column(Text)
