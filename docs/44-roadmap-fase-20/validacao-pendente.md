@@ -1,6 +1,6 @@
 # Fase 20 — o que já fizemos e o que falta
 
-Atualizado em 2026-09-29. Branch `feature/f20-groq-e-consolidacao` (PR #25), CI verde em
+Atualizado em 2026-09-29 (ativação do backlog F20-60). Branch `feature/f20-groq-e-consolidacao` (PR #25), CI verde em
 `13d6605` (backend, migrações, frontend, Compose E2E e Playwright).
 
 "Verde na CI" prova o comportamento com fakes e fixtures. Por isso cada card abaixo separa
@@ -56,17 +56,23 @@ reais).
 | Ordem | Card | Tarefa | Critério |
 | --- | --- | --- | --- |
 | 1 | F20-23 | **Feito em 2026-09-29** (`evidencias/precisao-f20-23-2026-09-29.md`): 69% geral (11/16), `seniority` 73%, `work_mode` 50%; 36,7 mil tokens do 20B; valores canônicos intactos; corrigido schema/prompt que causava HTTP 400. | Manter `worker_suggest_enabled=False`; reavaliar só `seniority` com gabarito maior. |
-| 2–6 | F20-22 | Quota Groq `gpt-oss-120b` esgotada em 2026-09-29 13:27Z (169.522 tokens); rodada movida para 2026-09-30 00:00Z. Depois: 120B médio; 20B baixo e médio; Qwen baixo e médio (comandos em `docs/pesquisas/benchmark-modelos-groq.md`) | Revisão humana por relatório (recomendações pré-autorizadas) e decisão por `scripts/benchmark_report.py`. |
+| 2–6 | F20-22 | Quota Groq `gpt-oss-120b` esgotada em 2026-09-29 13:27Z (169.522 tokens); rodadas a partir de **2026-09-30 00:00Z**, uma por dia: 120B baixo, 120B médio; 20B baixo e médio; Qwen baixo e médio (comandos em `docs/pesquisas/benchmark-modelos-groq.md`) | Depois das rodadas: revisão humana por relatório (rubrica; recomendações pré-autorizadas) e decisão por `scripts/benchmark_report.py`. |
 | 7 | F20-18 | Comparação completa dos 50 casos, `v2` × `v1` | `coverage` e português sobem; `inventions` 0; nada piora no `reserved`. |
-| 8 | F20-24 | Amostra de aging sob Groq real | Itens fora do topo processados na proporção configurada. |
+| 8 | F20-24 | Amostra de aging sob Groq real (worker da stack real só depois da janela; na `f20manual` antes) | Itens fora do topo processados na proporção configurada. |
 
 ## 4. Falta — depois de `2026-10-05T12:02Z`
 
-1. Medir T7 na stack real: F20-35 (`/search-metrics?window=7d`), F20-38 (agenda adaptativa, bytes evitados por ETag) e F20-49 (cinco comandos de `docs/pesquisas/produtividade-fase-20.md`).
-2. Reconstruir a stack real com o código atual e reprocessar o acervo para o normalizador `v6`.
-3. Aplicar os endpoints de Anthropic e Apollo GraphQL e ativar as fontes.
-4. Adicionar `restart: unless-stopped` ao compose.
-5. Medir de novo o UNKNOWN de senioridade (meta do F17-06/F20-02: metade de 50,62%) com a `v6` e, se aprovado, as sugestões do F20-23.
+**Passo 5** — lista de execução da stack real, só depois de `2026-10-05T12:02Z`, nesta ordem:
+
+1. Medir T7 na stack real: F20-35 (`/search-metrics?window=7d`), F20-38 (agenda adaptativa, bytes evitados por ETag) e F20-49 (cinco comandos de `docs/pesquisas/produtividade-fase-20.md`). Registrar as lacunas na janela: `2026-09-28` ~16Z (Docker caiu ~16:20Z, religado 16:43Z) e `2026-09-29T00:01Z` a ~12:10Z (sem `source_run`; Docker/host parado, religado com `start`).
+2. Backup verificado e reconstrução da stack real com o código atual, aplicando as migrações (head `20260926_0052`); reprocessar o acervo para o normalizador `v6` / `seniority-v3`.
+3. `scripts/backfill_opportunity_company.py` e `scripts/backfill_startup_evidence.py`, cada um com dry-run antes de gravar.
+4. Aplicar os endpoints de Anthropic e Apollo GraphQL e ativar as fontes já validadas (itens 6 a 9 abaixo), incluindo a HN com schedule mensal `0 18 3 * *` (linha F20-55 da §5). Sondar (probe) cada fonte antes de habilitar.
+5. Adicionar `restart: unless-stopped` ao compose da stack real.
+6. Medir de novo o UNKNOWN de senioridade (meta do F17-06/F20-02: metade de 50,62%) e a fatia de JUNIOR/INTERN com `v6`/`seniority-v3` e, se aprovado, as sugestões do F20-23.
+
+Os itens 6 a 9 abaixo detalham as fontes que o passo 4 ativa.
+
 6. Ativar na pilha real, depois da janela, as 34 fontes já homologadas e ativadas na
    `f20manual` (30 → 64 fontes habilitadas): lista completa, ATS, slug, probe e execução
    real por fonte em `evidencias/ativacao-fontes-2026-09-28.md`.
@@ -77,11 +83,19 @@ reais).
    completa, ATS, chave e execução real por fonte em
    `evidencias/mapa-carreira-vs-catalogo-2026-09-28.md` ("Resultados da execução").
    **Status 2026-09-29**: pesquisa de backlog careers realizada
-   (`evidencias/careers-backlog-f20-60-2026-09-29.md`) — 3 ativar (DoorDash, Remotebase, Lemon.io),
-   9 sondagem (Mercado Livre, Nuvemshop, AgileEngine, FullStack, Cognizant, TCS, Infosys, Terminal, AI/R),
-   3 bloqueadas (Howdy-YC/Stefanini-Gupy/Grupo OLX-Gupy), 5 sem site. `discover_sites.py`
-   não rodado (13 empresas no-ATS estão na lock de 30 dias até 2026-10-28); rerun agendado
-   para 2026-10-28 ou depois, antes de `discover_ats.py`. Crossover no forbidden terms.
+   (`evidencias/careers-backlog-f20-60-2026-09-29.md`) — 3 ativar, 9 sondagem, 3 bloqueadas
+   (Howdy-YC, Stefanini-Gupy, Grupo OLX-Gupy), 5 sem site. **As 3 "ativar" foram
+   confirmadas e habilitadas na `f20manual` (+3 habilitadas além das 20 acima)**, todas `SUCCEEDED`:
+   DoorDash (Greenhouse `doordashusa`, 463 vistos/persistidos), Remotebase (Workable
+   `remotebase`, 5/5), Lemon.io (Ashby `lemon-io`, 4/4); prova de pertencimento, source ids e
+   ressalvas (Remotebase é a de evidência mais fraca, sem URL de domínio próprio) em
+   `evidencias/ativacao-backlog-f20-60-2026-09-29.md`. Ativar na pilha real depois da janela,
+   com probe antes, junto das demais fontes deste item: DoorDash jobs, Remotebase jobs,
+   Lemon.io jobs.
+   Pendências do F20-60 (ver também §5): `discover_sites.py` nas 13 empresas sem ATS
+   (lock de 30 dias) em ou depois de `2026-10-28`, antes de `discover_ats.py` (Crossover
+   excluído); 9 empresas `probe` (Mercado Livre, Nuvemshop, FullStack, AgileEngine,
+   Cognizant, TCS, Infosys, Terminal, AI/R Avenue Code) seguem sem decisão.
 8. F20-71 (junior/estágio): rodada 1 (boards separados de 8 empresas grandes) não achou
    nada; rodada 2 (busca Tavily nos domínios de ATS) ativou e coletou na `f20manual` 26
    fontes, todas `SUCCEEDED`. Ativar na pilha real, depois da janela, as mesmas 26
@@ -122,8 +136,10 @@ reais).
 | [F20-74 — Workday: parar no `total` anunciado (cap de 2000)](fase-20/f20-74-workday-paginacao-cap-2000.md) | Validado na `f20manual` após a correção: Accenture com `items_seen` 2000, `persisted` 1989, `PARTIAL` com `INVALID_ITEM` (11 itens sem título; ver o card). O wrap de paginação está corrigido (sem `PARSER_SCHEMA_CHANGED`). **Resolvido 2026-09-29**: itens sem título contam como `skipped`, não `invalid` (novo card [F20-75](fase-20/f20-75-workday-postings-sem-titulo.md)); re-execução da Accenture na `f20manual` com o F20-75: `SUCCEEDED`, 2000 vistos, 1996 persistidos, 4 skipped, 0 invalid |
 | [F20-72 — Perfil padrão inclui JUNIOR/INTERN](fase-20/f20-72-perfil-padrao-inclui-junior-intern.md) | Fechado sem mudança de código de produção; testes de domínio adicionados |
 | [F20-55 — Coletor "Who is hiring?" da Hacker News](fase-20/f20-55-hn-who-is-hiring.md) | Termos revisados (viável, risco residual em `pesquisas/termos-hn-who-is-hiring.md`); coletor `hacker_news` implementado em `feature/f20-55-hn`, critérios cobertos por teste; execução real na `f20manual` (`evidencias/hn-who-is-hiring-2026-09-29.md`): `PARTIAL` (19 comentários sem empresa), 175 oportunidades, JUNIOR+INTERN 2,3%, 3 propostas de ATS. **2026-09-29**: fonte habilitada com schedule `0 18 3 * *` (mensal, dia 3, 18Z, após acumular comentários de 1 dia). Ativar na pilha real depois de 2026-10-05T12:02Z. Ampliar a extração de papel do corpo do texto (61 itens sem título) só com evidência. |
+| F20-60 — pendências do backlog de carreiras | (a) `discover_sites.py` nas 13 empresas sem ATS em ou depois de `2026-10-28` (fim do lock de 30 dias), **antes** de `discover_ats.py`; Crossover excluído; (b) 9 empresas `probe` pendentes (Mercado Livre, Nuvemshop, FullStack, AgileEngine, Cognizant, TCS, Infosys, Terminal, AI/R Avenue Code): páginas dinâmicas ou bloqueio a bot impediram confirmar JSON-LD/ATS; não ativar os boards homônimos (`fullstack`, `terminal`, `tcs`, `aircompany`). Os 3 `activate` já estão feitos na `f20manual` (§4 item 7). |
 
 ## 6. Último card
 
 **F20-50 — Definition of Done e documentação final.** Começa quando as seções 3, 4 e 5
-estiverem fechadas; depois, merge do PR #25 na `main`.
+estiverem fechadas. Critérios: corrigir a tabela de status do `README.md`; documentação
+final; CI verde; depois, merge do PR #25 na `main` **com confirmação do usuário**.
