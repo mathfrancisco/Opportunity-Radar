@@ -63,10 +63,11 @@ from opportunity_radar.opportunities.models import (
     OpportunitySkillModel,
 )
 from opportunity_radar.opportunities.repository import OpportunityRepository
+from opportunity_radar.opportunities.role_family import classify_role_family
 from opportunity_radar.profile.domain import ProfileNotFoundError, ProfileVersion
 from opportunity_radar.profile.service import ProfileService
 
-RULES_VERSION = "matching-v1"
+RULES_VERSION = "matching-v2"
 
 # Section 50: the semantic layer is spent where it can still change a decision. A verdict
 # the rules already settled downwards gets no model time.
@@ -493,6 +494,8 @@ def _opportunity_snapshot(
         status=OpportunityStatus(opportunity.lifecycle_status),
         work_mode=WorkMode(opportunity.work_mode),
         seniority=Seniority(opportunity.seniority),
+        allowed_countries=_allowed_countries(opportunity.allowed_countries),
+        role_family=opportunity.role_family,
         contract_types=_known_contracts((opportunity.contract_type,)),
         required_skills=tuple(
             item.canonical_name for item in skills if item.requirement == "REQUIRED"
@@ -541,6 +544,7 @@ def _profile_snapshot(profile: ProfileVersion) -> ProfileSnapshot:
             if item in Seniority._value2member_map_
         ),
         compensation=profile_compensation,
+        role_families=_profile_role_families(profile),
         work_authorization=(
             ProfileWorkAuthorization.REQUIRES_SPONSORSHIP
             if preferences.sponsorship_required
@@ -548,6 +552,31 @@ def _profile_snapshot(profile: ProfileVersion) -> ProfileSnapshot:
         ),
         evidence_refs=(f"profile-version:{profile.id}",),
     )
+
+
+def _allowed_countries(values: Sequence[str] | None) -> tuple[str, ...]:
+    """Countries the posting allows (`allowed_countries`, F17); empty when never derived."""
+    seen: dict[str, None] = {}
+    for value in values or ():
+        code = value.strip().upper()
+        if code:
+            seen.setdefault(code)
+    return tuple(seen)
+
+
+def _profile_role_families(profile: ProfileVersion) -> tuple[str, ...]:
+    """Areas the profile's experiences and projects evidence, by the posting classifier."""
+    families: set[str] = set()
+    for experience in profile.snapshot.experiences:
+        decision = classify_role_family(
+            title=experience.title, description=experience.summary
+        )
+        families.add(decision.role_family.value)
+    for project in profile.snapshot.projects:
+        decision = classify_role_family(title=project.name, description=project.description)
+        families.add(decision.role_family.value)
+    families.discard("UNKNOWN")
+    return tuple(sorted(families))
 
 
 def _opportunity_compensation(opportunity: OpportunityModel) -> tuple[
@@ -947,6 +976,7 @@ def _snapshot_dict(snapshot: OpportunitySnapshot | ProfileSnapshot) -> dict[str,
             "work_mode": snapshot.work_mode.value,
             "seniority": snapshot.seniority.value,
             "allowed_countries": list(snapshot.allowed_countries),
+            "role_family": snapshot.role_family,
             "contract_types": [item.value for item in snapshot.contract_types],
             "required_skills": list(snapshot.required_skills),
             "preferred_skills": list(snapshot.preferred_skills),
@@ -985,6 +1015,7 @@ def _snapshot_dict(snapshot: OpportunitySnapshot | ProfileSnapshot) -> dict[str,
             item.value for item in snapshot.accepted_contract_types
         ],
         "accepted_seniorities": [item.value for item in snapshot.accepted_seniorities],
+        "role_families": list(snapshot.role_families),
         "compensation": _compensation_dict(snapshot.compensation),
         "work_authorization": snapshot.work_authorization.value,
         "evidence_refs": list(snapshot.evidence_refs),

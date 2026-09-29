@@ -23,6 +23,7 @@ from opportunity_radar.dashboard.queries import (
     summarize_overview,
 )
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
+from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.domain import SKILL_TAXONOMY_VERSION
 from opportunity_radar.opportunities.models import DuplicateCandidateModel, OpportunityModel
 from opportunity_radar.pipeline.domain import ApplicationStage
@@ -133,7 +134,7 @@ def _assessment(
         opportunity_version=opportunity.version,
         profile_version_id=profile_version_id,
         input_hash=uuid4().hex + uuid4().hex,
-        rules_version="matching-v1",
+        rules_version=RULES_VERSION,
         taxonomy_version=SKILL_TAXONOMY_VERSION,
         opportunity_snapshot={"work_mode": opportunity.work_mode},
         profile_snapshot={"skills": ["python"]},
