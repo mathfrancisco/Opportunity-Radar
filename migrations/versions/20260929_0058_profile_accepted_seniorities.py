@@ -1,7 +1,7 @@
 """Add the accepted seniorities preference to the profile.
 
 Revision ID: 20260929_0058
-Revises: 20260929_0055
+Revises: 20260929_0057
 Create Date: 2026-09-29 00:00:00
 
 Card F48-13. Existing versions are backfilled with INTERN, JUNIOR, MID and UNKNOWN (decision
@@ -13,7 +13,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "20260929_0058"
-down_revision = "20260929_0055"
+down_revision = "20260929_0057"
 branch_labels = None
 depends_on = None
 
