@@ -151,6 +151,9 @@ class CollectionTelemetry:
     rate_limit_events: int = 0
     last_http_attempt_at: datetime | None = None
     invalid_items: int = 0
+    #: Items the source returned that are not opportunities (e.g. an untitled Workday
+    #: posting): counted as seen and skipped, never as invalid (F20-75).
+    skipped_items: int = 0
     last_invalid_item_error: str | None = None
     #: What the source's own API said the board holds, when it says so at all. `None`
     #: means the collector never learned a total, not that the board announced zero.
@@ -223,6 +226,9 @@ class CollectionTelemetry:
         if amount < 0:
             raise ValueError("credits cannot be negative")
         self.credits_used += amount
+
+    def record_skipped_item(self) -> None:
+        self.skipped_items += 1
 
     def record_invalid_item(self, summary: str) -> None:
         self.invalid_items += 1

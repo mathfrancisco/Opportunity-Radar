@@ -326,6 +326,38 @@ def test_skips_malformed_listed_job_and_reports_it() -> None:
     assert request.telemetry.invalid_items == 1
 
 
+def test_untitled_posting_is_skipped_not_invalid() -> None:
+    """F20-75: a posting Workday returns without a title is not an opportunity; it is
+    skipped, not a malformed item that degrades the run."""
+    request = CollectionRequest(company_reference="acme/ExternalCareerSite", api_region="wd5")
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda http_request: httpx.Response(
+                200,
+                json={
+                    "total": 3,
+                    "jobPostings": [
+                        {"externalPath": "/job/Remote/Untitled_R0"},
+                        {"title": "  ", "externalPath": "/job/Remote/Blank_R2"},
+                        {
+                            "title": "Valid Job",
+                            "externalPath": "/job/Remote/Valid-Job_R1",
+                            "bulletFields": ["R1"],
+                        },
+                    ],
+                },
+            )
+        )
+    )
+    try:
+        items = asyncio.run(_collect(WorkdayCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+    assert [item.external_id for item in items] == ["/job/Remote/Valid-Job_R1"]
+    assert request.telemetry.skipped_items == 2
+    assert request.telemetry.invalid_items == 0
+
+
 def test_sends_conditional_headers_only_for_a_fresh_full_run() -> None:
     calls: list[httpx.Request] = []
 

@@ -158,6 +158,10 @@ class WorkdayCollector:
             seen_pages.add(page_signature)
             total_fetched += len(postings)
             for index, posting in enumerate(postings):
+                if not self._has_title(posting):
+                    # Card F20-75: no title, no opportunity. Skipped, not invalid.
+                    request.telemetry.record_skipped_item()
+                    continue
                 try:
                     item = self._item(
                         posting,
@@ -402,6 +406,11 @@ class WorkdayCollector:
                 "Workday response is missing a jobPostings list",
             )
         return postings
+
+    @staticmethod
+    def _has_title(posting: Mapping[str, Any]) -> bool:
+        title = posting.get("title")
+        return isinstance(title, str) and bool(title.strip())
 
     @staticmethod
     def _item(

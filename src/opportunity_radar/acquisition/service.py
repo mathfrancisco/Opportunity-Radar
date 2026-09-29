@@ -1122,6 +1122,10 @@ class AcquisitionService:
             if extraction_client is not None:
                 await extraction_client.aclose()
 
+        if run_telemetry.skipped_items:
+            run.record_items(
+                seen=run_telemetry.skipped_items, skipped=run_telemetry.skipped_items
+            )
         if run_telemetry.invalid_items:
             run.record_items(
                 seen=run_telemetry.invalid_items,
