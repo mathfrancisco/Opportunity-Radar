@@ -685,6 +685,57 @@ def test_workday_source_configuration_reaches_collector_via_execute() -> None:
     assert raw_items[0].payload["title"] == "Backend Engineer"
 
 
+def test_workday_untitled_postings_count_as_skipped_and_do_not_degrade_the_run() -> None:
+    """F20-75: untitled Workday postings are skipped, so the run stays SUCCEEDED."""
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="workday",
+        name="Acme jobs",
+        enabled=True,
+        configuration={
+            "tenant_identifier": "acme/ExternalCareerSite",
+            "api_region": "wd5",
+            "company_name": "Acme",
+        },
+        last_http_attempt_at=datetime.now(UTC),
+    )
+    session = _MemorySession()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "total": 2,
+                "jobPostings": [
+                    {"externalPath": "/job/Remote/Untitled_R0"},
+                    {
+                        "title": "Backend Engineer",
+                        "externalPath": "/job/Remote/Backend-Engineer_R1",
+                        "bulletFields": ["R1"],
+                    },
+                ],
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((WorkdayCollector(client=client),)),
+        repository=_MemoryRepository(source),  # type: ignore[arg-type]
+    )
+    try:
+        run = asyncio.run(service.execute(source.id, CollectionRequest()))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert run.status == "SUCCEEDED"
+    assert run.error_code is None
+    assert run.items_seen == 2
+    assert run.items_persisted == 1
+    assert run.items_skipped == 1
+    assert run.items_invalid == 0
+
+
 def test_probe_reports_retry_after_on_rate_limit() -> None:
     """F20-25: a probe against a rate-limited endpoint surfaces `Retry-After` so the
     homologation queue's batch mode knows how long to wait before the next probe."""
