@@ -116,6 +116,8 @@ class InboxItemResponse(BaseModel):
     #: Card F20-54: startup evidence summary; `None` when the company has none.
     startup_strength: str | None = None
     startup_batch: str | None = None
+    #: Card F48-10: other postings of the same company/title/source folded into this row.
+    sibling_count: int = 0
 
 
 class InboxPageResponse(BaseModel):
@@ -881,6 +883,7 @@ def _inbox_item_response(item: InboxItem) -> InboxItemResponse:
         has_pending_duplicate=item.has_pending_duplicate,
         startup_strength=item.startup_strength,
         startup_batch=item.startup_batch,
+        sibling_count=item.sibling_count,
     )
 
 

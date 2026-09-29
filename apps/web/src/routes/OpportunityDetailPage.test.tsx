@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render } from '../components/testing'
 import { type OpportunityDetail } from '../features/opportunities/api'
-import { DuplicateCandidates } from './OpportunityDetailPage'
+import { DuplicateCandidates, SiblingLocations } from './OpportunityDetailPage'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -50,6 +50,7 @@ function opportunity(overrides: Partial<OpportunityDetail> = {}): OpportunityDet
     skills: [],
     occurrences: [],
     normalizationResults: [],
+    siblingLocations: [],
     relevanceMark: null,
     ...overrides,
   }
@@ -304,5 +305,34 @@ describe('DuplicateCandidates', () => {
     await flush()
 
     expect(rejectedBody).toEqual({ decided_by: 'web-operator' })
+  })
+})
+
+describe('SiblingLocations (F48-10)', () => {
+  it('lists the other cities with links to each opportunity', () => {
+    const container = renderWithProviders(
+      <SiblingLocations
+        opportunity={opportunity({
+          siblingLocations: [
+            { opportunityId: 'opp-b', location: 'Recife', sourceUrl: 'https://jobs.example/b' },
+            { opportunityId: 'opp-c', location: null, sourceUrl: null },
+          ],
+        })}
+      />,
+    )
+    const links = Array.from(container.querySelectorAll('a')).map((a) => [
+      a.textContent,
+      a.getAttribute('href'),
+    ])
+    expect(links).toEqual([
+      ['Recife', '/opportunities/opp-b'],
+      ['vaga original', 'https://jobs.example/b'],
+      ['Local não informado', '/opportunities/opp-c'],
+    ])
+  })
+
+  it('renders nothing without siblings', () => {
+    const container = renderWithProviders(<SiblingLocations opportunity={opportunity()} />)
+    expect(container.querySelector('[data-testid="sibling-locations"]')).toBeNull()
   })
 })

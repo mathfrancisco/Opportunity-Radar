@@ -32,6 +32,13 @@ export interface SourceOccurrence {
   payloadExpiredAt: string | null
 }
 
+/** Card F48-10: another posting of the same company, title and source (other city). */
+export interface SiblingLocation {
+  opportunityId: string
+  location: string | null
+  sourceUrl: string | null
+}
+
 export interface NormalizationResult {
   id: string
   rawItemId: string
@@ -76,6 +83,7 @@ export interface OpportunityDetail {
   skills: OpportunitySkill[]
   occurrences: SourceOccurrence[]
   normalizationResults: NormalizationResult[]
+  siblingLocations: SiblingLocation[]
   relevanceMark: RelevanceMark | null
 }
 
@@ -163,6 +171,15 @@ function parseOccurrence(value: unknown): SourceOccurrence | null {
   }
 }
 
+function parseSiblingLocation(value: unknown): SiblingLocation | null {
+  if (!isRecord(value) || typeof value.opportunity_id !== 'string') return null
+  return {
+    opportunityId: value.opportunity_id,
+    location: text(value.location),
+    sourceUrl: text(value.source_url),
+  }
+}
+
 function parseNormalization(value: unknown): NormalizationResult | null {
   if (!isRecord(value) || typeof value.id !== 'string') return null
   return {
@@ -222,6 +239,9 @@ export async function getOpportunity(opportunityId: string): Promise<Opportunity
     normalizationResults: list(body.normalization_results)
       .map(parseNormalization)
       .filter((item): item is NormalizationResult => item !== null),
+    siblingLocations: list(body.sibling_locations)
+      .map(parseSiblingLocation)
+      .filter((item): item is SiblingLocation => item !== null),
     relevanceMark: parseRelevanceMark(body.relevance_mark),
   }
 }

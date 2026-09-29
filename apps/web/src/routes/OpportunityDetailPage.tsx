@@ -164,6 +164,37 @@ function Skills({ opportunity }: { opportunity: OpportunityDetail }) {
   )
 }
 
+/** Card F48-10: the other cities of the same job, each still its own opportunity. */
+export function SiblingLocations({ opportunity }: { opportunity: OpportunityDetail }) {
+  if (opportunity.siblingLocations.length === 0) return null
+  return (
+    <Section title={`Outros locais (${opportunity.siblingLocations.length})`}>
+      <ul className="grid gap-2 text-sm" data-testid="sibling-locations">
+        {opportunity.siblingLocations.map((sibling) => (
+          <li className="flex flex-wrap gap-x-3" key={sibling.opportunityId}>
+            <Link
+              className="underline decoration-accent decoration-2 underline-offset-4"
+              to={`/opportunities/${sibling.opportunityId}`}
+            >
+              {sibling.location ?? 'Local não informado'}
+            </Link>
+            {sibling.sourceUrl && (
+              <a
+                className="break-anywhere text-muted underline underline-offset-4"
+                href={sibling.sourceUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                vaga original
+              </a>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Section>
+  )
+}
+
 function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
   return (
     <>
@@ -582,6 +613,8 @@ export function OpportunityDetailPage() {
         {opportunity.data && (
           <>
             <Facts opportunity={opportunity.data} />
+
+            <SiblingLocations opportunity={opportunity.data} />
 
             <Section title="Relevância">
               <RelevanceMark opportunity={opportunity.data} />

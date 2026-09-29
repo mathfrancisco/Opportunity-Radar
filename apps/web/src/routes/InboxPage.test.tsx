@@ -550,6 +550,28 @@ describe('InboxPage startup filter', () => {
     )
     expect(badges).toEqual(['Startup · YC S24', 'Startup (sinal fraco)'])
   })
+
+  it('mostra "+N locais" só na vaga agrupada (F48-10)', async () => {
+    const calledUrls: string[] = []
+    stubInbox(
+      [
+        inboxItem({ sibling_count: 99 }),
+        inboxItem({ opportunity_id: 'opp-2', sibling_count: 1 }),
+        inboxItem({ opportunity_id: 'opp-3' }),
+      ],
+      calledUrls,
+    )
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush()
+
+    const chips = Array.from(container.querySelectorAll('[data-testid="sibling-chip"]')).map(
+      (chip) => chip.textContent?.replace(/\s+/g, ' ').trim(),
+    )
+    expect(chips).toContain('+99 locais')
+    expect(chips).toContain('+1 local')
+    expect(chips.some((text) => text?.startsWith('+0'))).toBe(false)
+  })
 })
 
 /** Card F46-07: table rows, pagination, page size and the "Buscas salvas" dropdown. */

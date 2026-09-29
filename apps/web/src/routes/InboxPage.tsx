@@ -130,6 +130,14 @@ function ItemCard({ item }: { item: InboxItem }) {
           </h2>
           <p className="mt-1 text-sm text-muted">
             {display(item.companyName)} · {display(item.location)}
+            {item.siblingCount > 0 && (
+              <span
+                className="ml-2 inline-flex rounded-full border border-line px-2 py-0.5 text-xs font-medium"
+                data-testid="sibling-chip"
+              >
+                +{item.siblingCount} {item.siblingCount === 1 ? 'local' : 'locais'}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -250,8 +258,15 @@ function ItemRow({ item }: { item: InboxItem }) {
         <SecondaryText>
           {display(item.companyName)} · {display(item.location)}
         </SecondaryText>
-        {(item.hasPendingDuplicate || item.startupStrength) && (
+        {(item.hasPendingDuplicate || item.startupStrength || item.siblingCount > 0) && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {item.siblingCount > 0 && (
+              <span data-testid="sibling-chip">
+                <Chip tone="border-line bg-surface text-ink">
+                  +{item.siblingCount} {item.siblingCount === 1 ? 'local' : 'locais'}
+                </Chip>
+              </span>
+            )}
             {item.hasPendingDuplicate && <Chip tone={duplicateTone}>Possível duplicata</Chip>}
             <StartupChip item={item} />
           </div>

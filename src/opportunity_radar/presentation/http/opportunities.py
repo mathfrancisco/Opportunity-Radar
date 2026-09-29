@@ -183,8 +183,17 @@ class OpportunityResponse(BaseModel):
     relevance_mark: RelevanceMarkResponse | None = None
 
 
+class SiblingLocationResponse(BaseModel):
+    """Card F48-10: another posting of the same company, title and source."""
+
+    opportunity_id: UUID
+    location: str | None
+    source_url: str | None
+
+
 class OpportunityDetailResponse(OpportunityResponse):
     normalization_results: list[NormalizationResultResponse]
+    sibling_locations: list[SiblingLocationResponse] = []
 
 
 class OpportunityPageResponse(BaseModel):
@@ -386,6 +395,16 @@ def get_opportunity(
         normalization_results=[
             _normalization_response(item)
             for item in opportunity.normalization_results
+        ],
+        sibling_locations=[
+            SiblingLocationResponse(
+                opportunity_id=sibling.id,
+                location=sibling.location_text,
+                source_url=url,
+            )
+            for sibling, url in OpportunityRepository(session).posting_group_siblings(
+                opportunity
+            )
         ],
     )
 
