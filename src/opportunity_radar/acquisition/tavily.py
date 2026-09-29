@@ -56,8 +56,14 @@ _TRACKING_QUERY_KEYS = frozenset({"ref", "source", "gclid", "fbclid"})
 # Board key location per ATS, matching `acquisition.proposals.IDENTIFIER_KEYS`.
 _ATS_BOARD_PATTERNS: dict[str, re.Pattern[str]] = {
     "ashby": re.compile(r"^jobs\.ashbyhq\.com/([^/?#]+)"),
-    "greenhouse": re.compile(r"^boards\.greenhouse\.io/([^/?#]+)"),
+    "greenhouse": re.compile(r"^(?:job-)?boards\.greenhouse\.io/([^/?#]+)"),
     "lever": re.compile(r"^jobs\.lever\.co/([^/?#]+)"),
+    "workable": re.compile(r"^apply\.workable\.com/([^/?#]+)"),
+    # Teamtailor keys a board by its career-site hostname (what `company_identifier` takes);
+    # `www`/`app` are the vendor's own.
+    "teamtailor": re.compile(
+        r"^((?!(?:www|app|career|support)\.)[a-z0-9-]+\.teamtailor\.com)(?:/|$)"
+    ),
 }
 
 
