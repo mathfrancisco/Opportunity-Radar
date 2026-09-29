@@ -112,3 +112,80 @@ Nubank/Adobe, fora do escopo de sondagem direta de ATS deste card).
   fonte nova a coletar; a seção 4 usa a mesma leitura de banco do início e do fim da
   sessão para provar a ausência de mudança, não uma medição antes/depois de uma
   ativação real.
+
+## Rodada 2 — descoberta por busca Tavily nos domínios de ATS (2026-09-29)
+
+A rodada 1 (acima) adivinhou boards separados de empresas grandes e não achou nenhum.
+A rodada 2 inverte o método, o mesmo do piloto F20-53 (`docs/pesquisas/descoberta-startups-ats.md`):
+busca Tavily restrita aos domínios de ATS que o radar coleta, com termos de vaga
+junior/estágio; do resultado tira-se o **board da empresa**, sonda-se a API real do ATS e
+só se ativa board populado com pelo menos uma vaga JUNIOR/INTERN pelo título. Gupy nunca
+consultado; nenhuma empresa protegida do F20-60 tocada.
+
+### Método e custo
+
+- 12 buscas `tvly search --max-results 10` (basic, 1 crédito cada), `--include-domains` por
+  ATS (`jobs.ashbyhq.com`, `job-boards.greenhouse.io`/`boards.greenhouse.io`,
+  `jobs.lever.co`, `apply.workable.com`, `teamtailor.com`, `myworkdayjobs.com`), uma
+  consulta PT (`estágio OR estagiário OR trainee ... Brasil`) e uma EN (`intern OR
+  internship OR "entry level" OR "new grad" ... Brazil OR LATAM OR remote`) por domínio.
+  **Créditos: 12 (estimado por chamada; `tvly` não expõe saldo). Total do card com a rodada 1:
+  ~14 de ~40 pedidos / 100 por execução (F20-43).**
+- A consulta PT em Workable devolveu quase só sites fora do domínio (o `include-domains`
+  da Tavily é preferência, não filtro rígido); a EN funcionou.
+- Sondagem direta (1 req/candidato, 1 s de pausa) de ~35 boards: título casado por
+  palavras-chave (`estágio/estagiário/trainee/jovem aprendiz/aprendiz/intern/internship/
+  entry level/new grad/junior/júnior/graduate`). Workday paginado até 120 vagas nos que não
+  mostraram sinal na 1ª página.
+- Correção de sonda: o JSON Feed do Teamtailor usa a chave `items` (não `data`); a
+  primeira passada com `data` deu falso "0 vagas" em Loft/Leroy Merlin/Obramax/BYD e foi refeita.
+
+### Boards ativados (26, todos `probe` ok, `enable_sources.py --accept-terms`, execução real `SUCCEEDED`)
+
+Cadastro via `CompanyService.reconcile` + `SourceDefinitionModel` (mesmo padrão de
+`import_research_catalog.py`), depois `enable_sources.py --probe-only` (26/26 ok) e
+`--accept-terms` (26 ativadas), depois `collect.py` só nos 26 IDs (`--max-items 200`).
+
+| ATS | Fontes (vagas coletadas → JUNIOR/INTERN pelo normalizador / por título) |
+| --- | --- |
+| Ashby | Upvest 17→4/4; Cohere 145→3/4; Quora 6→0/1; Realm 11→1/2; Replit 75→0/1 |
+| Greenhouse | XP Inc 172→8/12; Artefact 118→27/20; Grupo Burson Brasil 187→12/14; Monks 197→9/8; Hunter Douglas 73→1/6; Stone 193→0/2; Altafonte Brasil 1→1/0 |
+| Lever | Palantir 200→25/46; Zippi 5→1/0; Welo Global 200→2/2 |
+| Workable | Valatam 12→5/4 |
+| Teamtailor | Leroy Merlin Brasil 100→0/8 (Jovem Aprendiz); Obramax 96→1/30 (Vendedor Júnior) |
+| Workday | P&G 199→41/58; AIG 198→19/19; ERM 200→9/16; Chanel 199→9/8; Toyota TLAC 51→5/0*; Biogen 197→4/4; RELX 196→4/5; Abbott 179→2/1 |
+
+\* o regex de título desta medição usa `estagi` sem acento; "Estágio" acentuado do Toyota
+não casa nele, mas o normalizador o marcou INTERN (5). Ambas as contagens são conservadoras.
+
+Total das 26 fontes: **3227 oportunidades, 193 JUNIOR/INTERN pelo normalizador, 275 por
+palavra-chave de título** (a correção F20-70 ainda não está mergeada: "Estagiário",
+"Trainee", "Jovem Aprendiz", "New Grad" caem em UNKNOWN, então a contagem por título é a
+mais fiel). Os boards brasileiros (XP, Stone, Burson, Artefact, Monks, Leroy Merlin,
+Obramax, Zippi, Altafonte, Toyota) trazem vagas de estágio/aprendiz em PT.
+
+### Antes/depois
+
+| Escopo | Antes | Depois |
+| --- | --- | --- |
+| Acervo da `f20manual` no início do card (diagnóstico) | 18 JUNIOR+INTERN / 2288 (0,79%) | — |
+| Acervo global agora | — | 249 JUNIOR+INTERN / 8850 (2,81%); 349 por título |
+| Global excluindo as 26 fontes desta rodada | 56 / 5623 (1,00%) | — |
+| Só as 26 fontes desta rodada | 0 | 193 / 3227 (5,98%); 275 por título |
+
+**Confusor:** a `f20manual` é compartilhada com o worker do F20-60, que coletou fontes em
+paralelo (2288 → ~5600 oportunidades sem as minhas). Por isso o efeito atribuível a esta
+rodada é a linha "só as 26 fontes" (193 JUNIOR/INTERN novos pelo normalizador, 275 por
+título), não a diferença global.
+
+### Incertezas
+
+- `--max-items 200` truncou boards grandes (Workday, Palantir, Stone, Monks, Welo Global);
+  os números são piso, não o total dos boards.
+- Vários JUNIOR/INTERN são de vagas nos EUA/Europa (Palantir, AIG, Cohere), não Brasil/LATAM;
+  a filtragem por localização é do matching, não da coleta.
+- Doctoralia Brasil (Ashby, 17 vagas, "Jovem Aprendiz" visto na busca) e Mechanical Orchard
+  (Lever) não tinham vaga junior/intern no título na sonda e não foram ativados; Loft e BYD
+  Brasil (Teamtailor) idem; Nubank Greenhouse continua vazio (rodada 1).
+- Créditos Tavily estimados, sem contador da CLI. Docker da `f20manual` caiu (exit 255)
+  entre a coleta e a medição; reiniciada com `docker compose -p f20manual ... start`, dados intactos.

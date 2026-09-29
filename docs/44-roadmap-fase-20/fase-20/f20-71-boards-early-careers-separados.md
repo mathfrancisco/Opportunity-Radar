@@ -1,6 +1,13 @@
 # CARD F20-71 — Pesquisar e coletar boards de "early careers"/universidade separados do board principal
 
-- **Status:** Fechado — não viável nesta rodada. Sondagem real (65 requisições diretas
+- **Status:** Concluído (rodada 2, 2026-09-29) — a rodada 1 (abaixo) não achou boards
+  separados; a rodada 2 mudou o método (busca Tavily nos domínios de ATS coletados por
+  termos de estágio/junior, sonda do board real) e ativou **26 boards** na `f20manual`,
+  todos `SUCCEEDED`: 3227 oportunidades, 193 JUNIOR/INTERN pelo normalizador e 275 por
+  título (acervo global antes: 18/2288, 0,79%). Pendente para o real: ativação na pilha
+  real (ver `validacao-pendente.md` §4) e F20-70 (regex de estagiário/trainee). Detalhe
+  em `evidencias/early-careers-2026-09-29.md` §"Rodada 2". Texto da rodada 1:
+  Fechado — não viável. Sondagem real (65 requisições diretas
   às APIs públicas de Ashby/Greenhouse/Lever/Workday, 1 req/candidato, mesma régua do
   F20-27/F20-36/F20-60) contra 8 empresas do catálogo (Nubank, Stripe, Datadog, CI&T,
   Spotify, Adobe, Santander, NVIDIA — nenhuma da lista protegida do F20-60) não
