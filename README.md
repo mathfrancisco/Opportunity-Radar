@@ -9,9 +9,17 @@ PostgreSQL concentra o estado, a API é FastAPI, o worker é APScheduler, o fron
 ## Status
 
 - **Fase 20 (Groq e consolidação das fases 16 a 19) mesclada em `main` em 2026-09-29** (PR #25). O Ollama e os embeddings locais foram removidos; a busca é full-text.
-- Na stack real de 2026-09-29: 144 fontes definidas, **137 habilitadas**, 686 oportunidades, 223 empresas. Números, limitações e melhorias priorizadas estão em [Arquitetura atual](docs/47-arquitetura-atual.md), que é a referência do estado do código.
+- Na stack real, snapshot de 2026-09-29 ~20:04Z (depois da importação de 120 fontes): 147 fontes definidas, **137 habilitadas**, **11.267 oportunidades** (eram 686 antes da importação), 265 empresas. Números, limitações e melhorias priorizadas estão em [Arquitetura atual](docs/47-arquitetura-atual.md), que é a referência do estado do código; o funil medido está na [SPEC 48](docs/48-spec-mais-vagas.md).
 - **Em planejamento:** [SPEC 46 — redesenho da interface web](docs/46-spec-redesign-ui.md) (apenas apresentação; nenhuma capacidade nova declarada).
 - Pendências conhecidas da Fase 20 estão em [validacao-pendente.md](docs/44-roadmap-fase-20/validacao-pendente.md). A medição de produtividade e custo de IA foi **inconclusiva** (amostra de ~1,24 dia): ver [evidência do rebuild](docs/44-roadmap-fase-20/evidencias/rebuild-stack-real-2026-09-29.md).
+
+### Próximos passos
+
+1. Revisar e mesclar o PR #26 (documentação: SPEC 46, arquitetura atual, SPEC 48 e as decisões de 2026-09-29).
+2. Implementar a **onda 1 da SPEC 48** (F48-01 a F48-05, mais a parte de dados do F48-13: áreas-alvo do perfil). A ordem completa está no §6 da SPEC 48; F48-16 (recência) precisa sair antes de 2026-10-13.
+3. Depois, o redesenho da SPEC 46, a partir do F46-01 (`DESIGN.md`).
+4. Rodadas do Groq do F20-22, uma por dia, **pendentes a partir de 2026-09-30 00:00Z** (comandos em `docs/pesquisas/benchmark-modelos-groq.md`); ver [validação pendente](docs/44-roadmap-fase-20/validacao-pendente.md).
+5. Ação do usuário: manter o host da stack real sem suspensão enquanto o radar coletar (SPEC 48, decisão 10).
 
 ## Stack
 
@@ -119,7 +127,7 @@ O Groq é um adaptador de infraestrutura, não uma autoridade de domínio. A IA 
 
 ## Estratégia de fontes
 
-Prioridade: ATS com endpoint público e formato previsível; APIs e feeds oficiais; páginas públicas estáveis com dados estruturados; descoberta assistida por busca; entrada manual. Toda fonte externa só coleta depois de evidência confirmada, termos revisados e coletor testado. **Não fazem parte da coleta** Gupy, Wellfound, Y Combinator/Work at a Startup, Careerflow, Landing.jobs, LinkedIn, X e páginas protegidas; o motivo de cada uma (termos de uso ou ausência de endpoint estruturado) está na [arquitetura atual](docs/47-arquitetura-atual.md#31-aquisição-acquisition).
+Prioridade: ATS com endpoint público e formato previsível; APIs e feeds oficiais; páginas públicas estáveis com dados estruturados; descoberta assistida por busca; entrada manual. Toda fonte externa só coleta depois de evidência confirmada, termos revisados e coletor testado. **Não fazem parte da coleta** Gupy, Wellfound, Y Combinator/Work at a Startup, Careerflow, Crossover, Braintrust (sem endpoint estruturado, não por termos), Landing.jobs, LinkedIn, X e páginas protegidas; o motivo de cada uma (termos de uso ou ausência de endpoint estruturado) está na [arquitetura atual](docs/47-arquitetura-atual.md#31-aquisição-acquisition).
 
 ## Segurança e privacidade
 

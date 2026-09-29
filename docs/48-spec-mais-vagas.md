@@ -1,7 +1,9 @@
 # SPEC — Mais vagas úteis: funil medido, problemas e cards F48
 
 - **Status:** Planejada; nenhuma correção abaixo está feita. Documento de diagnóstico e
-  desenho, sem mudança de código, configuração ou teste.
+  desenho, sem mudança de código, configuração ou teste. **Todas as perguntas abertas foram
+  decididas em 2026-09-29** (§9): o usuário delegou a escolha do melhor caminho para o objetivo
+  principal (mais vagas úteis e relevantes, dentro dos limites legais e de termos de uso).
 - **Data:** 2026-09-29
 - **Base verificada:** branch `spec-46-redesign-ui` (`844aafd`) e o banco da stack real em
   execução, lido só com `SELECT` (nada foi escrito, reiniciado ou parado). Snapshot do banco em
@@ -36,7 +38,8 @@ Uma vaga conta como **útil visível** quando, ao mesmo tempo:
 3. não é `INELIGIBLE` para o perfil ativo e o país permitido é desconhecido, `BR` ou `ANY`;
 4. está numa área-alvo do perfil (`target_role_families`); enquanto o perfil não tiver áreas
    (hoje não tem, ver V06), usa-se o **proxy técnico** `SOFTWARE_ENGINEERING, DATA,
-   INFRASTRUCTURE, SECURITY`;
+   INFRASTRUCTURE, SECURITY`, que a decisão 1 do §9 grava como áreas-alvo iniciais do perfil
+   (F48-13), de modo que proxy e perfil passam a coincidir;
 5. conta **uma vez** por `(empresa normalizada, título normalizado)`, para que 100 cidades da
    mesma vaga não valham 100.
 
@@ -69,7 +72,10 @@ Uma vaga conta como **útil visível** quando, ao mesmo tempo:
 
 Consultas `SELECT` na stack real (`docker compose -p opportunity-radar`, banco `postgres`),
 instante ~19:37Z de 2026-09-29. O acervo saltou de 686 para **11.267 oportunidades** depois da
-importação de 120 fontes às 18:41Z; o README e o §5 do doc 47 ainda citam 686.
+importação de 120 fontes às 18:41Z. Releitura às 20:04Z do mesmo dia: 11.267 oportunidades,
+147 fontes definidas (137 habilitadas, 136 não `manual`), 265 empresas, 338 `company_source`,
+12.536 `raw_item`, `seniority = UNKNOWN` 5.711, JUNIOR+INTERN 223. O README e o §5 do doc 47
+foram atualizados para este snapshot (eles citavam 686, valor de antes da importação).
 
 ### 2.1 Do cadastro à Inbox
 
@@ -254,11 +260,13 @@ experiência, `target_role_families = {}`, `target_titles = {}`, modo `remote`, 
 só recorta quando há áreas), `TECHNOLOGY_FIT` é conhecido em 277 de 4.537 fatores e vale 0,11 na
 média, e o Remotive não tem palavras-chave úteis (`profile/keywords.py`).
 
-**Correção.** (a) Dado, não código: o usuário preenche áreas-alvo, títulos e skills
-(pergunta aberta 1, §9). (b) Código: preferência de senioridade no perfil (`accepted_seniorities`
-no snapshot, padrão INTERN/JUNIOR/MID/UNKNOWN como o F20-72 assume) e aviso na tela de perfil
-quando "áreas-alvo" está vazio ("o Inbox não filtra por área"). Sem (a), a north-star do §1
-usa o proxy técnico.
+**Correção.** (a) Dado, não código (decisão 1, §9): gravar como áreas-alvo iniciais o proxy
+técnico (`SOFTWARE_ENGINEERING, DATA, INFRASTRUCTURE, SECURITY`) por script com `--dry-run`, sem
+sobrescrever área que o usuário já tenha editado; skills e títulos-alvo não são inventados: o
+usuário os completa pela tela de perfil, e o aviso do item (b) lembra disso. (b) Código:
+preferência de senioridade no perfil (`accepted_seniorities` no snapshot, padrão
+INTERN/JUNIOR/MID/UNKNOWN como o F20-72 assume, decisão 2) e aviso na tela de perfil quando
+"áreas-alvo" ou skills estão vazias ("o Inbox não filtra por área").
 
 ### 4.7 V07 — Avaliadores dos fatores mortos
 
@@ -388,8 +396,10 @@ estejam vivas (Ashby `publishedAt` original, meses); (4) Greenhouse tem `updated
 
 **Correção.** Coluna `recency_basis` (`published`, `updated`, `first_seen`) e regra única
 `data_de_referencia = published_at ?? source_updated_at ?? first_seen_at`, mostrada na UI como
-"estimada" quando não for `published`. A janela e a exceção de programa continuam do F20-61.
-A decisão de mudar a janela padrão é do usuário (pergunta aberta 3).
+"estimada" quando não for `published`. A exceção de programa com prazo continua do F20-61.
+**Decidido em 2026-09-29 (decisão 3, §9):** a janela padrão do Inbox passa de 14 para 30 dias
+sobre essa data de referência, com as lentes "Novas (14 dias)" e "Abertas na fonte" (vista na
+última run completa da sua fonte, sem limite de data).
 
 ### 4.14 V14 — Fechamento correto
 
@@ -499,12 +509,15 @@ Ordem por custo-benefício (todas dentro de termos; nenhuma fonte proibida):
    coletor entra sem (a) termos lidos e registrados, (b) endpoint público documentado, (c)
    probe real de 1 item, (d) teste com fixture, como nos cards F20-27 a F20-31.
 5. **Agregadores de vagas remotas com API oficial** (além do Remotive): candidatos a revisar
-   termos e atribuição; nenhum é declarado viável aqui.
+   termos e atribuição; nenhum é declarado viável aqui. **Decidido (2026-09-29):** entram na
+   mesma revisão de termos do F48-19 (mesmo padrão `termos-*.md`, mesmo rito de coletor do
+   F48-20); nenhum coletor sem veredito "viável" por escrito.
 6. **Lista proibida permanece:** Gupy, Wellfound, YC/Work at a Startup, Careerflow, Crossover,
    Braintrust, Landing.jobs. F48-19 propõe a lista central (P2-1) para que isso seja
-   verificado em código, não só em documentos (Braintrust: o card F20-56 fecha por falta de
-   endpoint estruturado, não por cláusula de termos; a classificação "proibida" merece revisão
-   do usuário — pergunta aberta 8).
+   verificado em código, não só em documentos. **Nota sobre Braintrust:** o motivo do card
+   F20-56 é a **falta de endpoint estruturado**, não cláusula de termos de uso. Ela **continua
+   excluída** (decisão 8, §9), mas o `FORBIDDEN_PLATFORMS` do F48-19 e os demais documentos
+   devem registrar esse motivo, sem chamá-la de "proibida por termos".
 
 ---
 
@@ -540,8 +553,9 @@ tokens: 0 chamadas ao provedor, 0 `match_analysis` novos, tentativas iguais; com
 Escopo: `acquisition/remotive.py:344-359`, `opportunities/service.py:842-857`, novo
 `scripts/backfill_failed_normalizations.py`.
 Aceite:
-- [ ] `publication_date` sem fuso não reprova o item; o normalizador o trata como `None` ou
-  como UTC documentado.
+- [ ] `publication_date` sem fuso não reprova o item; o coletor grava `published_at = None`
+  (decisão 9, §9: não inventar fuso) e a recência usa a data de referência do F48-16. Só passa
+  a UTC se a documentação oficial da Remotive disser UTC, com o link citado no card.
 - [ ] `--dry-run` do script lista os 35 itens afetados; execução apaga só `FAILED`
   `INVALID_COLLECTED_ITEM_V1` e o `normalize_pending` cria as oportunidades.
 - [ ] HN sem título vira `skipped`.
@@ -650,7 +664,12 @@ veredito antes/depois no evidence file.
 Escopo: `profile/domain.py`, `profile/service.py`, `apps/web/src/routes/ProfilePage.tsx`,
 migração.
 Aceite:
-- [ ] Preferência de senioridade no perfil e no snapshot (`accepted_seniorities`).
+- [ ] Preferência de senioridade no perfil e no snapshot (`accepted_seniorities`); padrão
+  INTERN, JUNIOR, MID e UNKNOWN, SENIOR+ "abaixo, não excluído" (decisão 2).
+- [ ] Script com `--dry-run` grava `target_role_families` = `SOFTWARE_ENGINEERING, DATA,
+  INFRASTRUCTURE, SECURITY` no perfil ativo quando estiver vazio, sem sobrescrever edição do
+  usuário (decisão 1); com isso o Inbox passa a recortar por área e o proxy do §1 deixa de ser
+  proxy.
 - [ ] Aviso na tela do perfil quando áreas-alvo ou skills estão vazias.
 - [ ] Perfil sem senioridade **não elimina** INTERN/JUNIOR (mantém o F20-72).
 Teste: `tests/backend/profile/`, teste de componente da `ProfilePage`, ponta a ponta "perfil
@@ -681,9 +700,13 @@ migração (`recency_basis`), `apps/web`.
 Aceite:
 - [ ] `recency_basis` gravada e mostrada na UI ("estimada" quando não `published`).
 - [ ] Regra única em Python e SQL (espelho testado).
+- [ ] Janela padrão do Inbox de 30 dias sobre `published_at ?? source_updated_at ?? first_seen_at`
+  (decisão 3); lente "Novas (14 dias)" preserva o pedido do F20-61; lente "Abertas na fonte"
+  mostra tudo que a última run completa da fonte ainda viu; exceção de programa com prazo mantida.
 - [ ] O penhasco de 2026-10-13 não ocorre para vaga com `source_updated_at` recente.
 Teste: `tests/backend/opportunities/test_recency_filter.py`, `test_recency_filter_http_integration.py`
-e teste de componente. **Depende da decisão do usuário** (pergunta aberta 3).
+e teste de componente. **Não depende mais de decisão do usuário** (decidido em 2026-09-29).
+Como muda o padrão do F20-61 (14 dias), o card atualiza o texto e os testes desse card.
 
 ### Onda 4 — empresas e expansão
 
@@ -700,8 +723,9 @@ Teste: `tests/backend/companies/test_company_link.py`, `tests/backend/acquisitio
 **F48-18 — Ativar o pool interno de boards (V20.1).**
 Escopo: dados e `scripts/enable_sources.py`; sem código novo de coletor.
 Aceite:
-- [ ] Os `company_source` com ATS identificado e sem fonte viram propostas e passam pelo
-  probe (`TERMS_REVIEWED=1` só após conferência, como hoje).
+- [ ] Os ~40 `company_source` com ATS identificado e sem fonte (decisão 6: podem ser
+  ativados) viram propostas e passam pelo probe (`TERMS_REVIEWED=1` só após conferência, como
+  hoje). Só depois de F48-01 estar implantado, para não competir por relógio.
 - [ ] Nenhum host proibido; nenhuma fonte duplicada de uma já habilitada.
 Teste: `tests/backend/test_enable_sources.py`; evidência em `docs/44-roadmap-fase-20/evidencias/`.
 
@@ -709,7 +733,12 @@ Teste: `tests/backend/test_enable_sources.py`; evidência em `docs/44-roadmap-fa
 Escopo: novo módulo `acquisition/forbidden.py`, `create_source`, importadores, novos
 documentos `docs/pesquisas/termos-<ats>.md`.
 Aceite:
-- [ ] `FORBIDDEN_PLATFORMS` aplicada em `create_source`, propostas e importadores, com o motivo.
+- [ ] `FORBIDDEN_PLATFORMS` aplicada em `create_source`, propostas e importadores, com o motivo
+  (Gupy, Wellfound, YC/Work at a Startup, Careerflow, Crossover, Braintrust, Landing.jobs).
+  Braintrust entra com o motivo "sem endpoint estruturado (F20-56)", não "termos"; segue
+  excluída até haver endpoint e revisão de termos próprios (decisão 8).
+- [ ] Agregadores remotos com API oficial candidatos à revisão (decisão de §4.20 item 5) têm o
+  mesmo documento de termos e veredito.
 - [ ] Um documento de termos por candidato (SmartRecruiters, BambooHR, Recruitee, `inhire`, e o
   endpoint de detalhe do Workday) com veredito **viável / não viável / a confirmar**, cláusulas
   citadas e endpoint público documentado.
@@ -743,6 +772,9 @@ Teste: `tests/backend/matching/test_reevaluation.py`, `test_evaluation_queue.py`
 
 1. **F48-01 e F48-02** (V01, V17): mudança pequena, efeito imediato (cobertura e custo de IA).
 2. **F48-03, F48-04, F48-05**: Remotive volta, contrato do perfil casa, compose completo.
+   Junto, a **parte de dados do F48-13** (áreas-alvo iniciais no perfil, decisão 1): é um script
+   pequeno e é o que faz o Inbox parar de mostrar vendas, jurídico e operações já na onda 1. A
+   parte de código do F48-13 (senioridade no perfil, aviso) continua na etapa 6.
 3. **F48-06 e F48-07**: medir o funil e alarmar buraco *antes* das mudanças de ranking, para
    que a north-star tenha linha de base.
 4. **F48-08 e F48-09**: Workday deixa de queimar Tavily e de travar o orçamento; identidade
@@ -750,7 +782,8 @@ Teste: `tests/backend/matching/test_reevaluation.py`, `test_evaluation_queue.py`
 5. **F48-10 e F48-11**: agrupamento e fechamento.
 6. **F48-13, F48-12, F48-14, F48-15** (nessa ordem: dado do perfil, regras, prioridade,
    conteúdo): ranking útil. F48-12 e F48-15 exigem gabarito e medição antes de gravar.
-7. **F48-16** depois da decisão do usuário.
+7. **F48-16** (recência): decisão já tomada (decisão 3); pode entrar junto com F48-10 se o
+   escopo couber, e deve sair **antes de 2026-10-13**, data do penhasco de recência.
 8. **F48-17, F48-18, F48-19, F48-20, F48-21**: expansão, com a lista central e a revisão de
    termos antes de qualquer coletor novo; F48-21 respeita as datas.
 9. **F48-22** quando o banco começar a pesar.
@@ -786,36 +819,73 @@ F48-14 e F48-15 (reclassificar/reprocessar). O restore-check do dump `pre-rebuil
 | Extração por regex de anos gera senioridade errada | vaga júnior sumir do filtro | precisão ≥ 90 % no gabarito antes de gravar; evidência citada; `UNKNOWN` continua válido |
 | Agrupar por N locais esconde uma vaga que só existe numa cidade | vaga real invisível | grupo por `(empresa, título, fonte)` lista locais; busca por local continua |
 | Termos de novo ATS mudam | coleta indevida | um documento de termos por ATS, rerevisão a cada 6 meses; nada ativa sem `TERMS_REVIEWED` |
-| Mudança de recência mexe com o F20-61 (decisão do usuário) | filtro deixa de ser o pedido | só com resposta à pergunta aberta 3 |
-| A north-star medida com proxy técnico enquanto o perfil está vazio | métrica não reflete o usuário | F48-13 e pergunta aberta 1 |
+| Janela de 30 dias muda o padrão de 14 dias do F20-61 | Inbox mais cheio | lente "Novas (14 dias)" mantém o pedido original; recorte por área e agrupamento (F48-10) compensam; reversível por configuração |
+| Áreas-alvo gravadas por mim no perfil (decisão 1) não refletem o interesse real | vaga boa de outra área some do padrão | só grava se vazio; o usuário edita na tela de perfil; filtro de área continua aberto no Inbox |
 
 ---
 
-## 9. Perguntas abertas
+## 9. Decisões (2026-09-29)
 
-1. **Qual é o perfil-alvo?** Hoje há 1 skill e nenhuma área ou título. *Recomendação:* o usuário
-   preenche áreas-alvo (ex.: software, dados, infraestrutura), 10+ skills e títulos; sem isso, F48-12
-   ranqueia com `TECHNOLOGY_FIT` quase todo desconhecido.
-2. **Perfil aceita quais senioridades?** *Recomendação:* INTERN, JUNIOR, MID e UNKNOWN (o F20-72
-   já assume), com SENIOR+ como "abaixo, não excluído".
-3. **A janela de recência de 14 dias é o pedido certo para vagas sem data?** *Recomendação:* manter
-   14 dias para "novas", mas basear em `published ?? updated ?? first_seen` (V13) e oferecer
-   "abertas na fonte" como lente; decidir se o padrão passa a 30 dias.
-4. **Prioridade de empresa: quer curar à mão?** *Recomendação:* padrão `normal`, curadoria
-   manual só para `high`/`blocked`; sem `low` por maturidade de pesquisa.
-5. **Vaga em N cidades (Bluelight): mostrar uma ou todas?** *Recomendação:* uma, com "+N
-   locais" (F48-10), reversível.
-6. **Posso ativar as ~40 empresas com ATS identificado e sem fonte?** *Recomendação:* sim, com
-   probe e `TERMS_REVIEWED=1` como hoje, depois de F48-01 (para não competir por relógio).
-7. **Meta de senioridade `UNKNOWN`:** *Recomendação:* ≤ 30 % nas vagas com descrição, e só
-   medir a meta ~25 % do F17-06 depois do gabarito ampliado.
-8. **Braintrust:** o motivo do F20-56 é técnico, não cláusula de termos. *Recomendação:* manter
-   fora da lista de coleta até revisão de termos própria, mas corrigir a etiqueta "proibida"
-   nos documentos.
-9. **Remotive: qual o fuso de `publication_date`?** *Recomendação:* conferir a documentação
-   oficial; se não estiver documentado, gravar `None` (não inventar fuso).
-10. **Host do Docker pode dormir?** O buraco de 03Z-09Z sugere host suspenso. *Recomendação:*
-    configurar o host para não suspender enquanto o radar coleta, e manter o alarme de F48-07.
+O usuário delegou todas as perguntas abertas e pediu o melhor caminho para o objetivo principal
+(maximizar vagas úteis e relevantes, dentro dos limites legais e de termos de uso). Cada decisão
+abaixo é registrada, com o motivo; onde a revisão do código e dos dados mudou a recomendação
+original, isso está dito.
+
+1. **Perfil-alvo.** Decidido em 2026-09-29: gravar como áreas-alvo iniciais o proxy técnico
+   (`SOFTWARE_ENGINEERING, DATA, INFRASTRUCTURE, SECURITY`) no perfil ativo, por script com
+   `--dry-run` que só escreve se o campo estiver vazio (F48-13, parte de dados, já na onda 1).
+   Skills e títulos-alvo **não** são preenchidos por mim: são fatos pessoais que não devo
+   inventar; o aviso da tela de perfil os pede. Motivo: hoje cerca de 70 % dos 6.998 visíveis (só 2.083 são técnicos) são de áreas
+   não técnicas (vendas, operações, jurídico) ou sem área útil, e o proxy já é a definição da north-star (§1);
+   gravá-lo faz Inbox e métrica coincidirem, é reversível pela UI e não exige esperar o usuário.
+   Mudou em relação à recomendação (que esperava o usuário preencher tudo): as áreas não
+   dependem mais dele.
+2. **Senioridades aceitas.** Decidido em 2026-09-29: INTERN, JUNIOR, MID e UNKNOWN; SENIOR ou
+   mais fica "abaixo, não excluído". Motivo: é o que o F20-72 já assume, esconder SENIOR seria
+   elegibilidade sem regra explícita (§7) e `UNKNOWN` é 50,7 % do acervo. Vira preferência
+   editável no perfil (F48-13).
+3. **Janela de recência.** Decidido em 2026-09-29: base `published_at ?? source_updated_at ??
+   first_seen_at` (V13) e janela padrão do Inbox de **30 dias**, com lentes "Novas (14 dias)" e
+   "Abertas na fonte". Mudou em relação à recomendação (manter 14 dias, decidir 30 depois): os
+   dados mostram que 1.822 vagas técnicas (47 %) somem do padrão por recência, todas vistas
+   vivas na fonte nas últimas 24 h, e que o penhasco de 2026-10-13 esconderia de uma vez ~5,8 mil.
+   14 dias continua disponível como lente, então o pedido do F20-61 não se perde. F48-16 deixa
+   de esperar o usuário e deve sair antes de 2026-10-13.
+4. **Prioridade de empresa.** Decidido em 2026-09-29: importações gravam `normal`; curadoria
+   manual só para `high`/`blocked`; nenhum `low` por maturidade de pesquisa (F48-14). Motivo:
+   64,5 % das vagas estão em empresas `low` só porque a pesquisa é menos madura, não por
+   interesse, o que afunda OpenAI, Anthropic, Databricks e Stripe no ranking.
+5. **Vaga em N cidades (Bluelight).** Decidido em 2026-09-29: mostrar uma linha por `(empresa,
+   título normalizado, fonte)` com "+N locais" e lista no detalhe; nada é fundido nem fechado
+   (F48-10). Motivo: 1.420 vagas da Bluelight (12,6 % do acervo) afogam a lista; agrupar é
+   reversível e preserva a busca por local.
+6. **Ativar as ~40 empresas com ATS identificado e sem fonte.** Decidido em 2026-09-29: sim,
+   com probe e `TERMS_REVIEWED=1` como hoje, depois de F48-01 estar implantado (F48-18).
+   Motivo: é o maior ganho de cobertura sem código novo de coletor, dentro dos termos já
+   revisados por tipo de ATS.
+7. **Meta de senioridade `UNKNOWN`.** Decidido em 2026-09-29: meta de ≤ 30 % nas vagas com
+   descrição, medida só depois do gabarito ampliado a ≥ 200 vagas; a meta antiga de ~25 % do
+   F17-06 fica como aspiração, sem prazo (F48-15). Motivo: 93 % das vagas têm descrição e 47 %
+   dos `UNKNOWN` trazem "N anos", mas sem precisão medida não se grava.
+8. **Braintrust.** Decidido em 2026-09-29: continua **excluída** da coleta. O motivo do F20-56
+   é a falta de endpoint estruturado, não cláusula de termos; a etiqueta "proibida" é corrigida
+   nos documentos e em `FORBIDDEN_PLATFORMS` (F48-19). Só reentra com endpoint estruturado e
+   revisão de termos próprios. A lista proibida (Gupy, Wellfound, YC/Work at a Startup,
+   Careerflow, Crossover, Braintrust, Landing.jobs) fica inalterada.
+9. **Fuso de `publication_date` da Remotive.** Decidido em 2026-09-29: gravar `published_at =
+   None` para data sem fuso (F48-03); a recência cai na data de referência do F48-16. Só usar
+   UTC se a documentação oficial disser, com link no card. Motivo: não inventar fuso; a perda é
+   pequena (a data de coleta serve de base) e reprocessar é possível.
+10. **Host do Docker dormir.** Decidido em 2026-09-29: o host da stack real deve ficar sem
+    suspensão enquanto o radar coletar (ação do usuário no Windows: plano de energia sem
+    suspensão na tomada), e o alarme de buraco do F48-07 permanece. Motivo: 3 slots de coleta
+    perdidos (03Z, 06Z, 09Z) são compatíveis com host parado; sem coleta não há vaga nova, e o
+    `restart: unless-stopped` já cobre o Docker, mas não o suspend do host.
+
+Itens que continuam medição, não decisão (com o passo que os mede): causa exata do buraco de
+coleta (F48-07: histórico de passadas e alarme); dia certo do "Who is hiring?" do HN (F48-21:
+execução de 2026-10-03); janela real de quota do Groq (rodadas F20-22 a partir de 2026-09-30
+00:00Z, comparando o uso relatado com o guard em UTC).
 
 ---
 
@@ -830,8 +900,10 @@ F48-14 e F48-15 (reclassificar/reprocessar). O restore-check do dump `pre-rebuil
   verificado (segue aberto para F48-15).
 - **Causa do buraco de 12 h:** não está no banco; há 3 slots de coleta perdidos (03Z, 06Z, 09Z),
   compatível com host parado *(inferido)*; ver V16.
-- **Números do doc 47 §5 e do README (686 oportunidades):** desatualizados em 2026-09-29 ~19Z
-  (11.267). Não alterados aqui, fora do escopo desta SPEC.
+- **Números do doc 47 §5 e do README (686 oportunidades):** eram de antes da importação de
+  2026-09-29 (11.267). Atualizados para o snapshot de ~20:04Z junto com esta versão da SPEC.
+- **Braintrust como "proibida" (doc 47 §8):** decidida (§9, decisão 8): exclusão mantida, motivo
+  técnico registrado.
 - **P2-7 (Workday via Tavily "sob teto"):** a premissa está errada; a Tavily falha em 100 % das
   páginas Workday (V09). O card correto é F48-08 + F48-19.
 

@@ -359,7 +359,8 @@ interpretação.
    `Braintrust jobs` (Ashby `braintrust`) só ficou de fora por decisão manual na importação;
    além disso o motivo registrado no card F20-56 é técnico (sem endpoint estruturado), não uma
    proibição de termos, então a classificação "proibida" da evidência de rebuild merece
-   revisão *(incerteza aberta)*.
+   revisão. **Decidido em 2026-09-29:** Braintrust segue excluída (sem endpoint estruturado), a
+   etiqueta "proibida" é corrigida e o `FORBIDDEN_PLATFORMS` registra o motivo técnico (F48-19).
 7. **P2-2 — Conferir posse do board no probe:** comparar o nome/domínio declarado pelo board com
    a empresa e gravar aviso, já que hoje o vínculo é herdado da `f20manual`.
 8. **P2-3 — Vincular as 61 fontes sem empresa** (criar `Company` + `CompanySource` a partir de
@@ -869,17 +870,21 @@ backup/restore → ciclo autônomo → interruptores → curadoria → jornada n
 
 ## 5. Como o sistema opera hoje (resumo medido)
 
-Fonte: [rebuild-stack-real-2026-09-29.md](44-roadmap-fase-20/evidencias/rebuild-stack-real-2026-09-29.md).
+Fontes: [rebuild-stack-real-2026-09-29.md](44-roadmap-fase-20/evidencias/rebuild-stack-real-2026-09-29.md)
+(números do rebuild, 686 oportunidades) e leitura do banco real em 2026-09-29 ~20:04Z, com
+`SELECT` apenas, depois da importação de 120 fontes (11.267 oportunidades). Onde a linha traz os
+dois valores, o de 20:04Z é o atual. Os números de 686 citados em §2, §3 e §7 abaixo são medições
+datadas do rebuild e continuam como evidência histórica.
 
 | Indicador | Valor |
 | --- | --- |
-| Fontes definidas / habilitadas | 144 / 137 |
-| Oportunidades | 686 (após reprocessamento v6, sem perda nem duplicação) |
-| `raw_item` | 1.383 |
-| Empresas / `company_source` | 223 / 279 |
-| Senioridade `UNKNOWN` | 339 (49,42 %); JUNIOR+INTERN 5 (0,73 %) |
-| Normalização v6 | 1.160 OK, 185 revisão, 38 falha |
-| Janela ~29,8 h | 93 execuções, 100 % `SUCCEEDED`, +33 vagas úteis (~26,6/dia), 0 rate limit |
+| Fontes definidas / habilitadas | 147 / 137 (136 não `manual`), snapshot 2026-09-29 ~20:04Z |
+| Oportunidades | **11.267** no snapshot de 2026-09-29 ~20:04Z, depois da importação de 120 fontes às 18:41Z (eram 686 no rebuild, antes dela); funil completo em [SPEC 48 §2](48-spec-mais-vagas.md#2-funil-medido) |
+| `raw_item` | 12.536 (1.383 no rebuild) |
+| Empresas / `company_source` | 265 / 338 (223 / 279 no rebuild) |
+| Senioridade `UNKNOWN` | 5.711 de 11.267 (50,7 %); JUNIOR+INTERN 223 (2,0 %). No rebuild: 339/686 (49,42 %), JUNIOR+INTERN 5 |
+| Normalização v6 (rebuild) | 1.160 OK, 185 revisão, 38 falha; hoje 99 `FAILED` (SPEC 48 §2) |
+| Janela ~29,8 h (rebuild, antes da importação) | 93 execuções, 100 % `SUCCEEDED`, +33 vagas úteis (~26,6/dia), 0 rate limit |
 | Buraco de coleta | ~12 h (00Z–12Z de 09-29), causa não investigada |
 | IA em 09-29 | 193 chamadas, 23,3 % fallback, 22,3 % 429, `json_valid_rate` 100 % |
 | Créditos Tavily | 1 (09-28), 0 (09-29) |
@@ -898,7 +903,7 @@ O código vence. Itens a corrigir ou marcar como históricos:
 | `docs/21-ollama-prompts.md`, `docs/36-spec-ollama.md` | contrato de prompts/Ollama | substituído pela SPEC 43; prompts em `prompts/opportunity_analysis/{v1,v2}` e `prompts/job_classification/v1` |
 | Cards F20 e `evidencias` | "perfil padrão inclui JUNIOR/INTERN" | o perfil não tem preferência de senioridade; o efeito é "sem restrição" (§3.3) |
 | Card F20-38 ("agenda por rendimento") | agenda adaptativa | agenda cron estática + reserva de exploração; sem adaptação por rendimento |
-| Evidência de rebuild | Braintrust "proibida" | card F20-56 fecha por falta de endpoint estruturado, sem cláusula de Termos |
+| Evidência de rebuild | Braintrust "proibida" | card F20-56 fecha por falta de endpoint estruturado, sem cláusula de Termos; exclusão mantida (decisão 8, SPEC 48 §9) |
 | SPEC 46 | "Não existe `DESIGN.md`" | correto hoje; F46-01 o cria |
 
 ---
@@ -949,12 +954,29 @@ independe de todos.
 
 ## 8. Incertezas abertas
 
-- Efeito real de P0-1 na base: não consultei o banco; o código garante o limite de 100, o
-  impacto na base real é inferido.
-- Causa do buraco de coleta de ~12 h: não investigada em nenhuma fonte lida.
-- Origem do salto de `REVIEW_REQUIRED` (4 → 185): a evidência não explica.
-- Janela de quota do Groq: o guard usa UTC; a janela real do provedor não foi verificada.
-- Se coletores Workable/Teamtailor/Factorial/JobPosting trazem nível estruturado: não conferi
-  os payloads.
-- Classificação de Braintrust como "proibida": a pesquisa diz "não viável" por motivo técnico.
-- Contagem de linhas por pacote (§1.3) é aproximada (linhas não vazias contadas por `Measure-Object -Line`).
+Revisão de 2026-09-29: o que era decisão foi decidido; o que é medição segue aberto com o passo
+que a fecha. Detalhe das decisões em [SPEC 48 §9](48-spec-mais-vagas.md#9-decisões-2026-09-29).
+
+**Resolvidas**
+
+- Efeito real de P0-1 na base: medido; 46 fontes elegíveis fora do relógio, 38 nunca coletadas
+  ([SPEC 48 V01](48-spec-mais-vagas.md)).
+- Origem do salto de `REVIEW_REQUIRED` (4 → 185): achada; a regra de `work_mode` do v6 entra na
+  impressão digital e a mesma `external_id` passa a `EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED`
+  sem refresh da oportunidade (SPEC 48 V12).
+- Classificação de Braintrust como "proibida": **decidido** em 2026-09-29. Continua excluída
+  (sem endpoint estruturado, F20-56); a etiqueta "por termos" é corrigida (F48-19, SPEC 48
+  decisão 8).
+
+**Ainda abertas (medição), com o passo que as mede**
+
+- Causa do buraco de coleta de ~12 h e dos slots 03Z, 06Z e 09Z perdidos: compatível com host
+  parado, sem prova. Passo: histórico de passadas e alarme de buraco (F48-07); em paralelo, o
+  host fica sem suspensão (decisão 10, SPEC 48).
+- Janela de quota do Groq: o guard usa UTC; a janela real do provedor não foi verificada. Passo:
+  rodadas do F20-22 a partir de 2026-09-30 00:00Z, comparando o uso relatado pelo provedor
+  com o contador do guard.
+- Se coletores Workable/Teamtailor/Factorial/JobPosting trazem nível estruturado: não conferi os
+  payloads. Passo: amostragem de payloads no início do F48-15, antes de gravar `seniority-v4`.
+- Contagem de linhas por pacote (§1.3) é aproximada (linhas não vazias contadas por
+  `Measure-Object -Line`); sem passo, sem impacto na decisão.
