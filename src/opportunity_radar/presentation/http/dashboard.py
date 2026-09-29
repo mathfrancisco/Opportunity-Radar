@@ -17,6 +17,7 @@ from opportunity_radar.dashboard.analysis_metrics import (
     ModelAnalysisMetrics,
     analysis_metrics,
 )
+from opportunity_radar.dashboard.funnel import funnel_report
 from opportunity_radar.dashboard.metrics import (
     METRIC_WINDOWS,
     SourceMetricsWindow,
@@ -54,6 +55,7 @@ from opportunity_radar.dashboard.saved_searches import (
 )
 from opportunity_radar.matching.analysis import SemanticAnalysisPort
 from opportunity_radar.matching.service import MatchingService
+from opportunity_radar.operations.collection_alarm import collection_gap_report
 from opportunity_radar.opportunities.domain import OpportunityStatus, Seniority, WorkMode
 from opportunity_radar.platform.ai.config import ai_status
 from opportunity_radar.platform.ai.metrics import ModelAIMetrics, ai_metrics
@@ -163,13 +165,61 @@ class SourceHealthResponse(BaseModel):
     last_run_items_persisted: int | None
     last_run_items_skipped: int | None
     last_run_items_invalid: int | None
+    last_run_bytes_received: int | None = None
+    last_run_newest_item_age_seconds: int | None = None
+    #: F48-07: scheduled but no scheduled run in more than twice its cadence.
+    collection_overdue: bool = False
     seniority_counts: dict[str, int]
+
+
+class CollectionGapResponse(BaseModel):
+    """F48-07: `alarming` is the one field a screen needs; the rest says why."""
+
+    alarming: bool
+    global_overdue: bool
+    factor: float
+    evaluated_sources: int
+    global_cadence_seconds: float | None
+    last_scheduled_run_at: datetime | None
+    overdue_sources: int
+
+
+class FunnelStageResponse(BaseModel):
+    key: str
+    label: str
+    count: int
+    lost: int | None
+
+
+class RatioResponse(BaseModel):
+    count: int
+    total: int
+    ratio: float | None
+
+
+class NorthStarResponse(BaseModel):
+    role_families: list[str]
+    proxy: bool
+    stock: int
+    new_in_window: int
+    window_hours: int
+    stack: dict[str, int]
+
+
+class FunnelReportResponse(BaseModel):
+    generated_at: datetime
+    stages: list[FunnelStageResponse]
+    north_star: NorthStarResponse
+    guards: dict[str, RatioResponse]
+    forbidden_hosts_touched: int
+    not_measured: list[str]
 
 
 class SourceHealthListResponse(BaseModel):
     items: list[SourceHealthResponse]
     total: int
     failing: int
+    collection_gap: CollectionGapResponse | None = None
 
 
 class SourceCoverageResponse(BaseModel):
@@ -557,10 +607,24 @@ def list_sources_health(
     """Named `/source-health` rather than `/sources/health`: that path is a source id."""
     items = list_source_health(session, only_failing=only_failing, status=status_filter)
     failing = sum(1 for item in items if item.last_run_status in FAILING_RUN_STATUSES)
+    gap = collection_gap_report(session)
+    overdue = gap.overdue_source_ids
     return SourceHealthListResponse(
-        items=[_source_response(item) for item in items],
+        items=[
+            _source_response(item, overdue=item.source_definition_id in overdue)
+            for item in items
+        ],
         total=len(items),
         failing=failing,
+        collection_gap=CollectionGapResponse(
+            alarming=gap.alarming,
+            global_overdue=gap.global_overdue,
+            factor=gap.factor,
+            evaluated_sources=gap.evaluated_sources,
+            global_cadence_seconds=gap.global_cadence_seconds,
+            last_scheduled_run_at=gap.last_scheduled_run_at,
+            overdue_sources=len(overdue),
+        ),
     )
 
 
@@ -586,6 +650,38 @@ def get_source_metrics(
     return SourceMetricsReportResponse(
         generated_at=report.generated_at,
         windows=[_metrics_window_response(item) for item in report.windows],
+    )
+
+
+@router.get("/funnel-metrics", response_model=FunnelReportResponse)
+def get_funnel_metrics(session: Session = Depends(get_session)) -> FunnelReportResponse:
+    """F48-06: the SPEC 48 funnel, the north-star and its guards, from persisted rows."""
+    try:
+        active = ProfileService(session).get_active()
+        families = tuple(active.snapshot.preferences.target_role_families)
+    except ProfileNotFoundError:
+        families = ()
+    report = funnel_report(session, target_role_families=families)
+    return FunnelReportResponse(
+        generated_at=report.generated_at,
+        stages=[
+            FunnelStageResponse(key=item.key, label=item.label, count=item.count, lost=item.lost)
+            for item in report.stages
+        ],
+        north_star=NorthStarResponse(
+            role_families=list(report.north_star.role_families),
+            proxy=report.north_star.proxy,
+            stock=report.north_star.stock,
+            new_in_window=report.north_star.new_in_window,
+            window_hours=report.north_star.window_hours,
+            stack=dict(report.north_star.stack),
+        ),
+        guards={
+            name: RatioResponse(count=value.count, total=value.total, ratio=value.ratio)
+            for name, value in report.guards.items()
+        },
+        forbidden_hosts_touched=report.forbidden_hosts_touched,
+        not_measured=list(report.not_measured),
     )
 
 
@@ -936,7 +1032,7 @@ def _search_metrics_response(
     )
 
 
-def _source_response(source: SourceHealth) -> SourceHealthResponse:
+def _source_response(source: SourceHealth, *, overdue: bool = False) -> SourceHealthResponse:
     return SourceHealthResponse(
         source_definition_id=source.source_definition_id,
         name=source.name,
@@ -958,6 +1054,9 @@ def _source_response(source: SourceHealth) -> SourceHealthResponse:
         last_run_items_persisted=source.last_run_items_persisted,
         last_run_items_skipped=source.last_run_items_skipped,
         last_run_items_invalid=source.last_run_items_invalid,
+        last_run_bytes_received=source.last_run_bytes_received,
+        last_run_newest_item_age_seconds=source.last_run_newest_item_age_seconds,
+        collection_overdue=overdue,
         seniority_counts=source.seniority_counts,
     )
 

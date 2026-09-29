@@ -209,6 +209,8 @@ class SourceHealth:
     last_run_items_persisted: int | None = None
     last_run_items_skipped: int | None = None
     last_run_items_invalid: int | None = None
+    last_run_bytes_received: int | None = None
+    last_run_newest_item_age_seconds: int | None = None
     seniority_counts: dict[str, int] = field(default_factory=dict)
     #: The optimistic-concurrency version (F20-25): a batch probe over several proposals
     #: needs each one's own version, not the id it started the batch with.
@@ -855,6 +857,8 @@ def _latest_runs() -> Any:
         SourceRunModel.items_persisted.label("items_persisted"),
         SourceRunModel.items_skipped.label("items_skipped"),
         SourceRunModel.items_invalid.label("items_invalid"),
+        SourceRunModel.bytes_received.label("bytes_received"),
+        SourceRunModel.newest_item_age_seconds.label("newest_item_age_seconds"),
         func.row_number()
         .over(
             partition_by=SourceRunModel.source_definition_id,
@@ -902,6 +906,8 @@ def list_source_health(
             latest.c.items_persisted,
             latest.c.items_skipped,
             latest.c.items_invalid,
+            latest.c.bytes_received,
+            latest.c.newest_item_age_seconds,
         )
         .select_from(SourceDefinitionModel)
         .outerjoin(latest, latest.c.source_definition_id == SourceDefinitionModel.id)
@@ -954,6 +960,8 @@ def list_source_health(
             last_run_items_persisted=row[16],
             last_run_items_skipped=row[17],
             last_run_items_invalid=row[18],
+            last_run_bytes_received=row[19],
+            last_run_newest_item_age_seconds=row[20],
             seniority_counts=seniority_by_source.get(row[0], {}),
         )
         for row in rows

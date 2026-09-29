@@ -23,14 +23,22 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from opportunity_radar.dashboard.analysis_metrics import analysis_metrics
+from opportunity_radar.dashboard.funnel import FunnelReport, funnel_report
 from opportunity_radar.dashboard.metrics import METRIC_WINDOWS
 from opportunity_radar.matching.service import MatchingService
+from opportunity_radar.operations.collection_alarm import (
+    CollectionGapReport,
+    collection_gap_report,
+)
+from opportunity_radar.operations.service import recent_passes
 from opportunity_radar.platform.ai.config import AIState, ai_status
 from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits, day_window
 from opportunity_radar.platform.ai.telemetry import ai_call_record
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.health import database_health
+from opportunity_radar.profile.domain import ProfileNotFoundError
+from opportunity_radar.profile.service import ProfileService
 
 OK = "ok"
 WARN = "warn"
@@ -451,6 +459,123 @@ def _models_with_a_recent_failure_streak(session: Session, threshold: int) -> se
     return flagged
 
 
+def _hours(seconds: float | None) -> str:
+    return "n/a" if seconds is None else f"{seconds / 3600:.1f}h"
+
+
+def describe_collection_gap(report: CollectionGapReport) -> Check:
+    """F48-07: warn when no scheduled run happened in more than twice the cadence."""
+    facts: dict[str, Any] = {
+        "evaluated_sources": report.evaluated_sources,
+        "global_cadence": _hours(report.global_cadence_seconds),
+        "last_scheduled_run_at": (
+            report.last_scheduled_run_at.isoformat() if report.last_scheduled_run_at else None
+        ),
+        "overdue_sources": len(report.overdue_sources),
+    }
+    if not report.alarming:
+        return Check(
+            "collection gap",
+            OK,
+            f"{report.evaluated_sources} scheduled source(s) ran within {report.factor:g}x "
+            "their cadence",
+            facts=facts,
+        )
+    parts: list[str] = []
+    if report.global_overdue:
+        parts.append(
+            "no scheduled run anywhere in more than "
+            f"{report.factor:g}x the fastest cadence ({_hours(report.global_cadence_seconds)})"
+        )
+    if report.overdue_sources:
+        worst = "; ".join(
+            f"{gap.name} ({_hours(gap.age_seconds)} since last run, cadence "
+            f"{_hours(gap.cadence_seconds)})"
+            for gap in report.overdue_sources[:5]
+        )
+        parts.append(f"{len(report.overdue_sources)} source(s) overdue, worst: {worst}")
+    return Check(
+        "collection gap",
+        WARN,
+        " | ".join(parts),
+        "check that the worker is running (`make logs`) and the collect job is enabled",
+        facts,
+    )
+
+
+def check_collection_gap(settings: Settings, *, now: datetime | None = None) -> Check:
+    try:
+        engine = create_database_engine(settings.database_url)
+        with Session(engine) as session:
+            report = collection_gap_report(session, now=now)
+            passes = recent_passes(session, "collect_enabled_sources", limit=5)
+    except Exception as error:  # pragma: no cover - depends on the local environment
+        return Check("collection gap", WARN, f"could not read scheduled runs: {error}")
+    check = describe_collection_gap(report)
+    history = [
+        f"{row.started_at:%H:%M:%S} {row.duration_ms}ms due={row.due_sources}"
+        for row in passes
+    ]
+    if not history:
+        return check
+    return Check(
+        check.name,
+        check.status,
+        check.detail,
+        check.remedy,
+        {**check.facts, "recent_collect_passes": history},
+    )
+
+
+def describe_funnel(report: FunnelReport) -> Check:
+    """F48-06: the SPEC 48 stages, the north-star and the guards, one fact per line."""
+    star = report.north_star
+    facts: dict[str, Any] = {}
+    for stage in report.stages:
+        lost = "" if stage.lost is None else f" (lost {stage.lost})"
+        facts[f"stage.{stage.key}"] = f"{stage.count}{lost}"
+    facts["north_star.areas"] = (
+        f"{', '.join(star.role_families)} (technical proxy)"
+        if star.proxy
+        else ", ".join(star.role_families)
+    )
+    facts["north_star.stock"] = star.stock
+    facts[f"north_star.new_{star.window_hours}h"] = star.new_in_window
+    facts["north_star.stack"] = ", ".join(f"{label}={count}" for label, count in star.stack)
+    for name, value in report.guards.items():
+        share = "n/a" if value.ratio is None else f"{value.ratio:.1%}"
+        facts[f"guard.{name}"] = f"{value.count}/{value.total} ({share})"
+    facts["guard.forbidden_hosts_touched"] = report.forbidden_hosts_touched
+    facts["guard.not_measured"] = ", ".join(report.not_measured)
+    detail = (
+        f"useful visible stock {star.stock}, new in {star.window_hours}h {star.new_in_window}"
+    )
+    if report.forbidden_hosts_touched:
+        return Check(
+            "funnel",
+            WARN,
+            f"{detail}; {report.forbidden_hosts_touched} forbidden host reference(s)",
+            "remove the source or item that touches a forbidden host (SPEC 48 section 1.2)",
+            facts,
+        )
+    return Check("funnel", OK, detail, facts=facts)
+
+
+def check_funnel(settings: Settings) -> Check:
+    try:
+        engine = create_database_engine(settings.database_url)
+        with Session(engine) as session:
+            try:
+                active = ProfileService(session).get_active()
+                families = tuple(active.snapshot.preferences.target_role_families)
+            except ProfileNotFoundError:
+                families = ()
+            report = funnel_report(session, target_role_families=families)
+    except Exception as error:  # pragma: no cover - depends on the local environment
+        return Check("funnel", WARN, f"could not compute the funnel: {error}")
+    return describe_funnel(report)
+
+
 def check_ai_usage(settings: Settings) -> Check:
     """Daily Groq quota balance and a telemetry-based breaker alert (card F20-20)."""
     state = ai_status(settings)
@@ -524,6 +649,8 @@ def run_checks(root: Path) -> list[Check]:
         checks.append(check_tables(settings))
         checks.append(check_worker_jobs(settings))
         checks.append(check_source_incidents(settings))
+        checks.append(check_collection_gap(settings))
+        checks.append(check_funnel(settings))
         checks.append(check_analysis(settings))
         checks.append(check_ai_usage(settings))
     checks.append(check_ai(settings))
