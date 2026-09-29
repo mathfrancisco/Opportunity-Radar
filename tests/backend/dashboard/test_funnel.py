@@ -13,6 +13,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.dashboard.funnel import (
@@ -41,10 +42,19 @@ pytestmark = [
 
 
 def _profile_version(session: Session) -> ProfileVersionModel:
-    profile = CareerProfileModel(version=1)
-    session.add(profile)
-    session.flush()
-    version = ProfileVersionModel(career_profile_id=profile.id, number=1, status="DRAFT")
+    profile = session.scalar(select(CareerProfileModel).limit(1))
+    if profile is None:
+        profile = CareerProfileModel(version=1)
+        session.add(profile)
+        session.flush()
+    number = session.scalar(
+        select(func.coalesce(func.max(ProfileVersionModel.number), 0)).where(
+            ProfileVersionModel.career_profile_id == profile.id
+        )
+    )
+    version = ProfileVersionModel(
+        career_profile_id=profile.id, number=(number or 0) + 1, status="DRAFT"
+    )
     session.add(version)
     session.flush()
     session.add(EmploymentPreferenceModel(profile_version_id=version.id))
