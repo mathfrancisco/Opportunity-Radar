@@ -1,6 +1,6 @@
 # CARD F20-73 — Garantir exceção de "programa" na regra de recência de 14 dias para não agravar a escassez de junior/estágio
 
-- **Status:** Backlog.
+- **Status:** Absorvido pelo F20-61 (exceção de programas já é critério do F20-61).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** o card da regra de recência de 14 dias (em elaboração por outro

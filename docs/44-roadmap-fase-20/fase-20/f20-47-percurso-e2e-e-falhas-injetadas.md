@@ -1,6 +1,6 @@
 # CARD F20-47 — Percurso E2E no navegador com falhas injetadas
 
-- **Status:** Done
+- **Status:** Feito
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** F — Encerramento
 - **Depende de:** F20-17, F20-39, F20-40, F20-25

@@ -1,6 +1,6 @@
 # CARD F20-01 — Baselines e relatórios da busca
 
-- **Status:** Resolvido (2026-09-28). Baseline do F17-01 medido e completo
+- **Status:** Feito (2026-09-28). Baseline do F17-01 medido e completo
   (`docs/pesquisas/baseline-f17-01.md`, marcado `Done`). O relatório original do
   `eval_search.py` (`docs/pesquisas/eval-search-f17-03.md`) era **inconclusivo** — viés
   conhecido na construção automática do conjunto de referência (substring de título, o

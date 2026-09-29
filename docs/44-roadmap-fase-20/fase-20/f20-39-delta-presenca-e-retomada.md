@@ -1,6 +1,6 @@
 # CARD F20-39 — Delta, presença e retomada
 
-- **Status:** Implementado localmente — critérios de aceite cumpridos e evidenciados; falta confirmar CI verde na branch (ver "Evidência local")
+- **Status:** Feito — critérios de aceite cumpridos e evidenciados; CI verde em `13d6605` (ver "Evidência local")
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** D — Varredura produtiva
 - **Depende de:** F20-38

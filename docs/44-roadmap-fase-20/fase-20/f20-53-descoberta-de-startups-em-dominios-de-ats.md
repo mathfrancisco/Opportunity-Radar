@@ -1,6 +1,6 @@
 # CARD F20-53 — Descoberta de startups em domínios de ATS via Tavily
 
-- **Status:** Feito — `startup_discovery.py` + `scripts/discover_startups.py`; execução real na `f20manual` em 2026-09-29 (20 créditos Tavily, 23 propostas ativadas e coletadas, `evidencias/startups-f20-53-2026-09-29.md`)
+- **Status:** Feito — 21 fontes importadas e habilitadas na stack real em 2026-09-29 (probe `PASSED`, 137 habilitadas no total; `docs/44-roadmap-fase-20/evidencias/rebuild-stack-real-2026-09-29.md` §7). `startup_discovery.py` + `scripts/discover_startups.py`; execução real na `f20manual` em 2026-09-29 (20 créditos Tavily, 23 propostas ativadas e coletadas, `evidencias/startups-f20-53-2026-09-29.md`)
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-44, F20-46, F20-27, F20-36

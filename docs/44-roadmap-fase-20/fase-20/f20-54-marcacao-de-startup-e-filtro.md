@@ -1,6 +1,6 @@
 # CARD F20-54 — Marcação "startup" com evidência e filtro na UI
 
-- **Status:** Implementado em `feature/f20-54-startup-tag` (aguardando merge/CI)
+- **Status:** Feito — mesclado em `feature/f20-groq-e-consolidacao` (`b23decb`), CI verde em `13d6605`. Backfill rodado na stack real em 2026-09-29: 21 propostas, todas `skipped: company not found`, `company_startup_evidence` = 0 linhas; ligar as fontes importadas sem empresa fica no backlog da próxima fase (`validacao-pendente.md` §7)
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-53

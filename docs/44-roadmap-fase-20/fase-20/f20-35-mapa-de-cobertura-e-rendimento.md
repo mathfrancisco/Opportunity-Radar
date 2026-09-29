@@ -1,6 +1,6 @@
 # CARD F20-35 — Mapa de cobertura e rendimento
 
-- **Status:** Feito no código e validado em 53 testes de dashboard; critério 4 pendente da máquina de referência.
+- **Status:** Feito — medição parcial (janela encerrada antes pelo usuário em 2026-09-29). Código validado em 53 testes de dashboard; critério 4 medido em ~1,24 dia válido (T0b `2026-09-28T12:01:55Z`), não em 7 dias: +33 vagas úteis novas (~26,6/dia), `collected_recently` regrediu de 8 para 3 pelo buraco de ~12 h em 2026-09-29. Veredito inconclusivo para cobertura; ver `docs/44-roadmap-fase-20/evidencias/rebuild-stack-real-2026-09-29.md` §1. A medição completa de 7 dias vai para o backlog da próxima fase (`validacao-pendente.md` §7).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** D — Varredura produtiva
 - **Depende de:** F20-01, F20-03

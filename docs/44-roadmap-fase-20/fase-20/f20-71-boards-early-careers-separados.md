@@ -1,6 +1,6 @@
 # CARD F20-71 — Pesquisar e coletar boards de "early careers"/universidade separados do board principal
 
-- **Status:** Concluído (rodada 2, 2026-09-29) — a rodada 1 (abaixo) não achou boards
+- **Status:** Feito (rodada 2, 2026-09-29); as 26 fontes foram importadas e habilitadas na stack real no mesmo dia, junto com as 137 (reprocessamento com o normalizador do F20-70 feito) — a rodada 1 (abaixo) não achou boards
   separados; a rodada 2 mudou o método (busca Tavily nos domínios de ATS coletados por
   termos de estágio/junior, sonda do board real) e ativou **26 boards** na `f20manual`,
   todos `SUCCEEDED`: 3227 oportunidades, 193 JUNIOR/INTERN pelo normalizador e 275 por

@@ -1,6 +1,6 @@
 # CARD F20-23 — Classificação e extração assistidas para campos ambíguos
 
-- **Status:** Implementado; precisão real medida em 2026-09-29 (69% geral, `work_mode`
+- **Status:** Feito — sugestões seguem desligadas; reavaliar `seniority` com gabarito maior fica no backlog da próxima fase (F20-76, `validacao-pendente.md` §7). Precisão real medida em 2026-09-29 (69% geral, `work_mode`
   50%; ver `evidencias/precisao-f20-23-2026-09-29.md`). `worker_suggest_enabled`
   continua `False`: recomendação é ligar no máximo para `seniority` após ampliar o gabarito.
 - **Fase:** 20 — IA cloud e consolidação

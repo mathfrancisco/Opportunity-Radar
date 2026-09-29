@@ -1,6 +1,6 @@
 # CARD F20-37 — Coletor JobPosting público
 
-- **Status:** Done — `src/opportunity_radar/acquisition/jobposting.py`; validado com dados
+- **Status:** Feito — `src/opportunity_radar/acquisition/jobposting.py`; validado com dados
   reais em 2026-09-27 (Qonto, Scaleway, Sonar via Lever) — ver
   `docs/44-roadmap-fase-20/evidencias/sites-jobposting-2026-09-27.md`.
 - **Fase:** 20 — IA cloud e consolidação

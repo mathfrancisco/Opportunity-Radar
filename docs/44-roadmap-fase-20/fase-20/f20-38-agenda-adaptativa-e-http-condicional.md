@@ -1,6 +1,6 @@
 # CARD F20-38 — Agenda por rendimento e orçamento de rede
 
-- **Status:** Backlog
+- **Status:** Feito — medição parcial (janela encerrada antes pelo usuário em 2026-09-29). Código, HTTP condicional nos 8 coletores e orçamento por host provados; bytes evitados por ETag não foram medidos (`source_run` não guarda bytes) e a comparação de 7 dias fica no backlog da próxima fase (`validacao-pendente.md` §7). Ver `docs/44-roadmap-fase-20/evidencias/rebuild-stack-real-2026-09-29.md` §1.
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** D — Varredura produtiva
 - **Depende de:** F20-35

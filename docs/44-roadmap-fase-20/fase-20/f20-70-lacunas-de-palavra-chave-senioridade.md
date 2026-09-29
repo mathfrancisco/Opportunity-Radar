@@ -1,10 +1,6 @@
 # CARD F20-70 — Fechar lacunas de palavra-chave do normalizador de senioridade (trainee, estagiário, entry level, new grad, graduate, early career, apprentice/aprendiz)
 
-- **Status:** Regras e testes implementados nesta branch (`feature/f20-61-recencia`,
-  junto com F20-61); reprocessamento do acervo real (critério de aceite 4) **não
-  executado** por instrução explícita do coordenador desta sessão ("Do not reprocess
-  the real acervo") — pendência registrada em
-  `docs/44-roadmap-fase-20/validacao-pendente.md`.
+- **Status:** Feito — regras e testes mesclados (`4d5b973`, `5a1e062`); acervo real reprocessado para `v6`/`seniority-v3` em 2026-09-29 (critério de aceite 4; `docs/44-roadmap-fase-20/evidencias/rebuild-stack-real-2026-09-29.md` §5 e §8). O UNKNOWN geral não mudou (49,42%): nenhuma vaga UNKNOWN do acervo real tem título com essas palavras-chave (próxima fase: F20-76).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** A — Fechamento do que está em revisão
 - **Depende de:** F20-02

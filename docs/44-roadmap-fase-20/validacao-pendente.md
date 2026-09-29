@@ -1,6 +1,6 @@
 # Fase 20 — o que já fizemos e o que falta
 
-Atualizado em 2026-09-29 (ativação do backlog F20-60; status do `README.md` alinhado a esta página). Branch `feature/f20-groq-e-consolidacao` (PR #25), CI verde em
+Atualizado em 2026-09-29 (janela de 7 dias encerrada antes pelo usuário; stack real reconstruída, Passo 5 concluído; status dos cards alinhado ao `README.md`). Branch `feature/f20-groq-e-consolidacao` (PR #25), CI verde em
 `13d6605` (backend, migrações, frontend, Compose E2E e Playwright).
 
 "Verde na CI" prova o comportamento com fakes e fixtures. Por isso cada card abaixo separa
@@ -11,10 +11,11 @@ reais).
 
 | Restrição | Efeito |
 | --- | --- |
-| Janela de sete dias na stack real `opportunity-radar`, T0 `2026-09-28T12:01:55Z` (`evidencias/f20-janela-7d-t0-2026-09-28b.json`) | F20-35, F20-38 e F20-49 só fecham depois de `2026-10-05T12:02Z`. A stack não pode parar, ser reconstruída nem reiniciada até lá. |
-| A stack real não tem `restart` no compose | Se o Docker cair, a stack para. Conferir uma vez por dia (`docker compose -p opportunity-radar ps`). Incidentes dentro da janela: Docker caiu ~`2026-09-28T16:20Z`, religado com `start` às 16:43Z; a leva agendada das 15Z só rodou às 16Z. Segundo incidente: nenhuma `source_run` entre `2026-09-29T00:01Z` e ~12:10Z (Docker/host parado); religado com `start`. |
+| Janela de sete dias encerrada antes, em 2026-09-29, pelo usuário | F20-35, F20-38 e F20-49 fecharam como "medição parcial" (~1,24 dia válido, T0b `2026-09-28T12:01:55Z`); a medição completa de 7 dias está no backlog da próxima fase (§7). A stack real deixou de ter restrição de parar ou reconstruir. |
 | Cota diária do Groq ≈ 170k tokens, compartilhada com o worker da stack real (`AI_ENABLED=true`) | Uma rodada de avaliação por dia, logo após a virada UTC, conferindo o uso do dia antes. |
-| Stack real roda o código de `0d55de6` | F20-23, F20-24 e o `work_mode` v6 só entram nela depois da janela. |
+| Stack real roda o código atual (rebuild de 2026-09-29, migração `20260929_0054`, `restart: unless-stopped`) | F20-23 (sugestões, desligadas por padrão), F20-24 e o `work_mode` v6 já estão no código da stack real; a `f20manual` e as demais stacks de teste foram removidas. |
+
+Incidentes que afetaram a janela (registrados na medição parcial): Docker caiu ~`2026-09-28T16:20Z`, religado às 16:43Z; nenhuma `source_run` entre `2026-09-29T00:01Z` e ~12:10Z (Docker/host parado); causa da cadência abaixo do esperado (`0 */3 * * *`) não investigada.
 
 ## 2. Já feito
 
@@ -33,14 +34,22 @@ reais).
 | F20-47 | E2E no navegador com falhas injetadas, verde na CI. |
 | F20-48 | Upgrade do backup real e backfill retomado em 7 lotes, sem duplicata. |
 
-### Validações reais feitas em cards ainda abertos
+### Validações reais feitas em cards
 
 | Card | O que foi provado |
 | --- | --- |
-| F20-02 | Alias `ci` removido; acervo real reprocessado para `skills-v3` (1.735 linhas, `cicd` 221 → 112), com backup verificado. |
+| F20-02 | Alias `ci` removido; acervo real reprocessado para `skills-v3` (1.735 linhas, `cicd` 221 → 112), com backup verificado. **Fechado — meta de UNKNOWN não atingida**: remedição de 2026-09-29 (`v6`/`seniority-v3`) deu UNKNOWN 49,42% (339/686; meta ~25%), JUNIOR+INTERN 0,73% (5 vagas); nenhuma vaga UNKNOWN tem título com palavra-chave. Continuação: [F20-76](fase-20/f20-76-senioridade-por-conteudo.md) (§7). |
 | F20-18 | Prompt `v2` implementado; rodada real parcial (10/50) não justificou trocar. Decisão de 2026-09-28: `v1` segue padrão; a comparação completa dos 50 casos é opcional (§3, ordem 7). |
-| F20-24 | Reserva interativa real: worker parou no teto (`skipped_budget=6`) e a análise pela UI concluiu. |
-| F20-23 | Sugestões assistidas implementadas (desligadas por padrão); 30 vagas reais rotuladas (39 campos); regra `work_mode` corrigida (`13d6605`, normalizador `v6`): 11/13 casos resolvidos, 0 errado; rodada real do Groq: 69% de precisão geral, ver §3. |
+| F20-24 | Reserva interativa real: worker parou no teto (`skipped_budget=6`) e a análise pela UI concluiu. Falta a amostra de aging (§3). |
+| F20-23 | Sugestões assistidas implementadas (desligadas por padrão); 30 vagas reais rotuladas (39 campos); regra `work_mode` corrigida (`13d6605`, normalizador `v6`): 11/13 casos resolvidos, 0 errado; rodada real do Groq: 69% de precisão geral, ver §3. Fechado; sugestões seguem desligadas e a reavaliação de `seniority` com gabarito maior está no §7. |
+
+### Fechados na medição parcial e no rebuild de 2026-09-29
+
+| Card | Resultado |
+| --- | --- |
+| F20-35 / F20-38 / F20-49 | "Feito — medição parcial (janela encerrada antes pelo usuário)". Janela válida ~1,24 dia: +33 vagas úteis novas (~26,6/dia), `collected_recently` 8 → 3 pelo buraco de ~12 h, fallback do Groq 23,3% e 429 22,3% (acima da meta, quota diária do modelo primário), `json_valid_rate` 100%, 0 rate limit nas coletas. Inconclusivo para custo de IA e cobertura; bytes evitados por ETag (F20-38) não medidos porque `source_run` não guarda bytes. Evidência: [`evidencias/rebuild-stack-real-2026-09-29.md`](evidencias/rebuild-stack-real-2026-09-29.md) §1. |
+| F20-53 / F20-55 / F20-60 / F20-71 | Fontes importadas e habilitadas na stack real com probe (120 importadas, 120 `PASSED`, 137 habilitadas no total; HN com `0 18 3 * *`; DoorDash, Remotebase, Lemon.io, 26 do F20-71, 21 do F20-53). Braintrust excluída (proibida); talentpluto e Pearl Talent rejeitadas. Evidência: [`evidencias/rebuild-stack-real-2026-09-29.md`](evidencias/rebuild-stack-real-2026-09-29.md) §2 e §7. |
+| F20-70 / F20-61 | Acervo real reprocessado para `v6`/`seniority-v3` (686 oportunidades preservadas, 1383 `normalization_result` v6). |
 
 ### Correções que surgiram na validação
 
@@ -50,6 +59,7 @@ reais).
 - Cobertura de ATS do dashboard ignorava os ATS novos (`d0d3101`).
 - Soak e E2E com literais desatualizados (`skills-v1`, métricas do Ollama, `seniority-v1`, job opcional do F20-23).
 - Stack real sem `schedule` em nenhuma fonte: nada era coletado desde 2026-09-26. Corrigido para `0 */3 * * *`; 3 fontes de teste desativadas.
+- 95 das 120 fontes importadas em 2026-09-29 vieram sem `schedule` (o worker pula fonte sem agenda): receberam `0 6 * * *` (Workday) ou `0 */3 * * *` (demais ATS), para maximizar vagas.
 
 ## 3. Falta — rodadas com o Groq real (uma por dia)
 
@@ -58,61 +68,21 @@ reais).
 | 1 | F20-23 | **Feito em 2026-09-29** (`evidencias/precisao-f20-23-2026-09-29.md`): 69% geral (11/16), `seniority` 73%, `work_mode` 50%; 36,7 mil tokens do 20B; valores canônicos intactos; corrigido schema/prompt que causava HTTP 400. | Manter `worker_suggest_enabled=False`; reavaliar só `seniority` com gabarito maior. |
 | 2–6 | F20-22 | Quota Groq `gpt-oss-120b` esgotada em 2026-09-29 13:27Z (169.522 tokens); rodadas a partir de **2026-09-30 00:00Z**, uma por dia: 120B baixo, 120B médio; 20B baixo e médio; Qwen baixo e médio (comandos em `docs/pesquisas/benchmark-modelos-groq.md`) | Depois das rodadas: revisão humana por relatório (rubrica; recomendações pré-autorizadas) e decisão por `scripts/benchmark_report.py`. |
 | 7 (opcional) | F20-18 | Comparação completa dos 50 casos, `v2` × `v1`. A decisão de manter `v1` já vale (README, F20-18); esta rodada só roda com sobra de quota do Groq depois do F20-22 e não bloqueia o F20-50. | `coverage` e português sobem; `inventions` 0; nada piora no `reserved`. Só então reavaliar a troca do padrão. |
-| 8 | F20-24 | Amostra de aging sob Groq real (worker da stack real só depois da janela; na `f20manual` antes) | Itens fora do topo processados na proporção configurada. |
+| 8 | F20-24 | Amostra de aging sob Groq real, na stack real (a `f20manual` foi removida) | Itens fora do topo processados na proporção configurada. |
 
-## 4. Falta — depois de `2026-10-05T12:02Z`
+## 4. Passo 5 — concluído em 2026-09-29
 
-**Passo 5** — lista de execução da stack real, só depois de `2026-10-05T12:02Z`, nesta ordem:
+Executado em 2026-09-29, com a janela de 7 dias encerrada antes pelo usuário. Evidência
+completa: [`evidencias/rebuild-stack-real-2026-09-29.md`](evidencias/rebuild-stack-real-2026-09-29.md).
 
-1. Medir T7 na stack real: F20-35 (`/search-metrics?window=7d`), F20-38 (agenda adaptativa, bytes evitados por ETag) e F20-49 (cinco comandos de `docs/pesquisas/produtividade-fase-20.md`). Registrar as lacunas na janela: `2026-09-28` ~16Z (Docker caiu ~16:20Z, religado 16:43Z) e `2026-09-29T00:01Z` a ~12:10Z (sem `source_run`; Docker/host parado, religado com `start`).
-2. Backup verificado e reconstrução da stack real com o código atual, aplicando as migrações (head `20260926_0052`); reprocessar o acervo para o normalizador `v6` / `seniority-v3`.
-3. `scripts/backfill_opportunity_company.py` e `scripts/backfill_startup_evidence.py`, cada um com dry-run antes de gravar.
-4. Aplicar os endpoints de Anthropic e Apollo GraphQL e ativar as fontes já validadas (itens 6 a 9 abaixo), incluindo a HN com schedule mensal `0 18 3 * *` (linha F20-55 da §5). Sondar (probe) cada fonte antes de habilitar.
-5. Adicionar `restart: unless-stopped` ao compose da stack real.
-6. Medir de novo o UNKNOWN de senioridade (meta do F17-06/F20-02: metade de 50,62%) e a fatia de JUNIOR/INTERN com `v6`/`seniority-v3` e, se aprovado, as sugestões do F20-23.
+1. **Medição T7 (F20-35, F20-38, F20-49): feito, parcial.** Janela válida de ~1,24 dia; veredito inconclusivo (§2). A medição completa de 7 dias e os bytes evitados por ETag foram para o §7.
+2. **Backup e rebuild: feito.** Dump verificado (`pre-rebuild-2026-09-29.dump`, 9.469.563 bytes, sha256 `e1d9539a14c4...`; só `pg_restore --list`, sem restore-check), rebuild sem `down -v`, migrações até `20260929_0054` (head única), 686 oportunidades antes e depois. Acervo reprocessado para `v6`/`seniority-v3` (v6 = 1383 = total de `raw_item`).
+3. **Backfills: feito.** `backfill_opportunity_company.py` (nada a ligar) e `backfill_startup_evidence.py` (21 propostas, todas `skipped: company not found`; item no §7), cada um com dry-run antes.
+4. **Ativação das fontes: feito.** 120 fontes da `f20manual` importadas com probe (120 `PASSED`), 137 habilitadas na stack real: as 34 homologadas de 2026-09-28, F20-60 (incluindo DoorDash, Remotebase e Lemon.io), F20-71 (26), F20-53 (21), HN com `0 18 3 * *`. 95 fontes importadas sem `schedule` receberam `0 6 * * *` (Workday) e `0 */3 * * *` (demais ATS). Braintrust não foi importada (proibida); talentpluto e Pearl Talent rejeitadas.
+5. **`restart: unless-stopped`: feito** (`815786f`; postgres, api, worker e frontend confirmados por `docker inspect`).
+6. **Remedição de senioridade: feito, meta não atingida.** UNKNOWN 49,42% (339/686) antes e depois de `v6`/`seniority-v3` (meta ~25%); JUNIOR+INTERN 0,73%. As sugestões do F20-23 seguem desligadas. Continuação: [F20-76](fase-20/f20-76-senioridade-por-conteudo.md) (§7).
 
-Os itens 6 a 9 abaixo detalham as fontes que o passo 4 ativa.
-
-6. Ativar na pilha real, depois da janela, as 34 fontes já homologadas e ativadas na
-   `f20manual` (30 → 64 fontes habilitadas): lista completa, ATS, slug, probe e execução
-   real por fonte em `evidencias/ativacao-fontes-2026-09-28.md`.
-7. [F20-60](fase-20/f20-60-mapa-carreira-importar-e-ativar.md): ativar mais 20 fontes
-   (67 → 87 habilitadas na `f20manual`) e importar 48 empresas novas (223 → 271) do mapa
-   de carreira do usuário — 5 classe (c) resolvidas + 5 confirmadas por sondagem + Red Hat
-   + 9 achadas por `discover_ats.py` entre as 42 empresas classe (d) importadas. Lista
-   completa, ATS, chave e execução real por fonte em
-   `evidencias/mapa-carreira-vs-catalogo-2026-09-28.md` ("Resultados da execução").
-   **Status 2026-09-29**: pesquisa de backlog careers realizada
-   (`evidencias/careers-backlog-f20-60-2026-09-29.md`) — 3 ativar, 9 sondagem, 3 bloqueadas
-   (Howdy-YC, Stefanini-Gupy, Grupo OLX-Gupy), 5 sem site. **As 3 "ativar" foram
-   confirmadas e habilitadas na `f20manual` (+3 habilitadas além das 20 acima)**, todas `SUCCEEDED`:
-   DoorDash (Greenhouse `doordashusa`, 463 vistos/persistidos), Remotebase (Workable
-   `remotebase`, 5/5), Lemon.io (Ashby `lemon-io`, 4/4); prova de pertencimento, source ids e
-   ressalvas (Remotebase é a de evidência mais fraca, sem URL de domínio próprio) em
-   `evidencias/ativacao-backlog-f20-60-2026-09-29.md`. Ativar na pilha real depois da janela,
-   com probe antes, junto das demais fontes deste item: DoorDash jobs, Remotebase jobs,
-   Lemon.io jobs.
-   O resíduo do F20-60 (`discover_sites.py` nas 13 empresas sem ATS e as 9 empresas `probe`)
-   foi movido para o backlog da próxima fase (§7) e não bloqueia o F20-50.
-8. F20-71 (junior/estágio): rodada 1 (boards separados de 8 empresas grandes) não achou
-   nada; rodada 2 (busca Tavily nos domínios de ATS) ativou e coletou na `f20manual` 26
-   fontes, todas `SUCCEEDED`. Ativar na pilha real, depois da janela, as mesmas 26
-   (nomes `<Empresa> (<ats>)`): Ashby Upvest, Cohere, Quora, Realm, Replit; Greenhouse
-   XP Inc, Artefact, Grupo Burson Brasil, Monks, Hunter Douglas, Stone, Altafonte Brasil;
-   Lever Palantir Technologies, Zippi, Welo Global; Workable Valatam; Teamtailor Leroy
-   Merlin Brasil, Obramax; Workday P&G, AIG, ERM, Chanel, Toyota (TLAC), Biogen, RELX
-   (LexisNexis Legal), Abbott. Slugs/tenants e resultados por fonte em
-   `evidencias/early-careers-2026-09-29.md` §"Rodada 2". Depois reprocessar com o
-   normalizador do F20-70 (estagiário/trainee/aprendiz/new grad ainda caem em UNKNOWN).
-9. [F20-53](fase-20/f20-53-descoberta-de-startups-em-dominios-de-ats.md) (startups): ativar
-   na pilha real, depois da janela, as 21 fontes propostas por `tavily_startup_search` e
-   ativadas na `f20manual` (nomes `Proposed <Empresa> <ats>`): Ashby Aios, ClassDojo,
-   Clipboard, Fieldguide, Jiga, Legionhealth; Greenhouse Alpaca, Daybreak Health,
-   Instawork, Postscript, Si, Swayable; Lever Emi Labs, Fampay, Tryjeeves, Weekdayworks;
-   Workable Open, Weekday, Writesonic; Teamtailor EWOR GmbH, Supersub (113 → 134 habilitadas).
-   **Rejeitadas 2026-09-29**: talentpluto e Pearl Talent (agências intermediárias, sem modelo
-   de hiring direto — ver `evidencias/revisao-agencias-talentpluto-pearl-2026-09-29.md`).
-   Chaves, resultados por fonte e ressalvas de precisão em `evidencias/startups-f20-53-2026-09-29.md`.
+Pertencimento das fontes importadas é herdado da `f20manual` (o probe prova que o endpoint responde e que o coletor lê 1 item, não que o board é da empresa; Remotebase é a de evidência mais fraca).
 
 ## 5. Falta — sanidade e pendências menores
 
@@ -128,24 +98,25 @@ Os itens 6 a 9 abaixo detalham as fontes que o passo 4 ativa.
 | Overview e Sources com ATS novos sem teste visual | Resolvido (`4f4a0ae`): testes de componente cobrindo `workday`, `teamtailor`, `workable`, `factorial` e `jobposting` em `apps/web/src/routes/SourcesPage.test.tsx` (novo) e `apps/web/src/routes/OverviewPage.test.tsx` (fontes com falha e métricas por fonte) |
 | GitGuardian no PR #25 | Resolvido como falso positivo — 1 achado (`Bearer Token`, commit `17962c84e2074f58eb38544ed0869ae5d89554f7`, `tests/backend/platform/ai/test_sanitizer.py:96`): fixture de teste do sanitizador (`test_bearer_token_masked`), valor sintético (`abc123.def456.ghi789`), não é uma credencial real. Nenhuma rotação necessária. Repositório não tem convenção `.gitguardian.yaml`; nenhuma criada (fora do pedido) |
 | Rotacionar a chave Groq usada nas rodadas | Com o usuário |
-| [F20-61 — Filtro de recência (14 dias) com exceção para estágio/programas com prazo](fase-20/f20-61-filtro-de-recencia-14-dias.md) | Mesclado em `feature/f20-groq-e-consolidacao` (`5a1e062`); critérios de aceite cobertos por teste (backend + componente). Volume real de vaga junior/estágio/programa-com-prazo no acervo real ainda não foi medido (item 5 do escopo do card, nota explícita, não critério de aceite) |
-| [F20-70 — Fechar lacunas de palavra-chave do normalizador de senioridade](fase-20/f20-70-lacunas-de-palavra-chave-senioridade.md) | Regras e testes mesclados em `feature/f20-groq-e-consolidacao` (`5a1e062`; `seniority-v2` → `seniority-v3`); reprocessamento do acervo real (critério de aceite 4 do card) não executado por instrução explícita do coordenador desta sessão de não tocar no acervo real |
-| [F20-54 — Marcação "startup" com evidência e filtro na UI](fase-20/f20-54-marcacao-de-startup-e-filtro.md) | Mesclado em `feature/f20-groq-e-consolidacao` (`12f7dfb`; ligação com a descoberta em `82ea977`, script `scripts/backfill_startup_evidence.py`); critérios cobertos por teste (backend + componente). Pendente: nenhuma evidência real gravada ainda (o F20-53 produz o sinal; sem backfill, o card não define fonte para empresas existentes) — o filtro devolve vazio no acervo real até lá |
+| [F20-61 — Filtro de recência (14 dias) com exceção para estágio/programas com prazo](fase-20/f20-61-filtro-de-recencia-14-dias.md) | Feito — mesclado em `feature/f20-groq-e-consolidacao` (`5a1e062`), CI verde em `13d6605`; critérios de aceite cobertos por teste (backend + componente). Volume real de vaga junior/estágio/programa-com-prazo no acervo real (item 5 do escopo do card, não critério de aceite) foi para o §7 |
+| [F20-70 — Fechar lacunas de palavra-chave do normalizador de senioridade](fase-20/f20-70-lacunas-de-palavra-chave-senioridade.md) | Feito — regras e testes mesclados (`5a1e062`; `seniority-v2` → `seniority-v3`); acervo real reprocessado em 2026-09-29 (critério de aceite 4). O UNKNOWN geral não mudou (49,42%): ver F20-02 e [F20-76](fase-20/f20-76-senioridade-por-conteudo.md) (§7) |
+| [F20-54 — Marcação "startup" com evidência e filtro na UI](fase-20/f20-54-marcacao-de-startup-e-filtro.md) | Feito — mesclado em `feature/f20-groq-e-consolidacao` (`12f7dfb`; ligação com a descoberta em `82ea977`, script `scripts/backfill_startup_evidence.py`); critérios cobertos por teste (backend + componente). Backfill na stack real em 2026-09-29: 21 propostas, todas `skipped: company not found`, 0 evidências gravadas; o filtro devolve vazio no acervo real até haver empresa ligada (§7) |
 | [F20-74 — Workday: parar no `total` anunciado (cap de 2000)](fase-20/f20-74-workday-paginacao-cap-2000.md) | Validado na `f20manual` após a correção: Accenture com `items_seen` 2000, `persisted` 1989, `PARTIAL` com `INVALID_ITEM` (11 itens sem título; ver o card). O wrap de paginação está corrigido (sem `PARSER_SCHEMA_CHANGED`). **Resolvido 2026-09-29**: itens sem título contam como `skipped`, não `invalid` (novo card [F20-75](fase-20/f20-75-workday-postings-sem-titulo.md)); re-execução da Accenture na `f20manual` com o F20-75: `SUCCEEDED`, 2000 vistos, 1996 persistidos, 4 skipped, 0 invalid |
 | [F20-72 — Perfil padrão inclui JUNIOR/INTERN](fase-20/f20-72-perfil-padrao-inclui-junior-intern.md) | Fechado sem mudança de código de produção; testes de domínio adicionados |
-| [F20-55 — Coletor "Who is hiring?" da Hacker News](fase-20/f20-55-hn-who-is-hiring.md) | Termos revisados (viável, risco residual em `pesquisas/termos-hn-who-is-hiring.md`); coletor `hacker_news` mesclado em `feature/f20-groq-e-consolidacao` (`198fade`), critérios cobertos por teste; execução real na `f20manual` (`evidencias/hn-who-is-hiring-2026-09-29.md`): `PARTIAL` (19 comentários sem empresa), 175 oportunidades, JUNIOR+INTERN 2,3%, 3 propostas de ATS. **2026-09-29**: fonte habilitada com schedule `0 18 3 * *` (mensal, dia 3, 18Z, após acumular comentários de 1 dia). Ativar na pilha real depois de 2026-10-05T12:02Z. Ampliar a extração de papel do corpo do texto (61 itens sem título) só com evidência. |
-| F20-60 — pendências do backlog de carreiras | Movidas para o backlog da próxima fase (§7); não bloqueiam o F20-50. Os 3 `activate` já estão feitos na `f20manual` (§4 item 7). |
+| [F20-55 — Coletor "Who is hiring?" da Hacker News](fase-20/f20-55-hn-who-is-hiring.md) | Feito — termos revisados (viável, risco residual em `pesquisas/termos-hn-who-is-hiring.md`); coletor `hacker_news` mesclado em `feature/f20-groq-e-consolidacao` (`198fade`), critérios cobertos por teste; execução real na `f20manual` (`evidencias/hn-who-is-hiring-2026-09-29.md`): `PARTIAL` (19 comentários sem empresa), 175 oportunidades, JUNIOR+INTERN 2,3%, 3 propostas de ATS. Fonte importada e habilitada na stack real em 2026-09-29 com schedule `0 18 3 * *` (mensal, dia 3, 18Z). Ampliar a extração de papel do corpo do texto (61 itens sem título) só com evidência |
+| F20-60 — pendências do backlog de carreiras | Movidas para o backlog da próxima fase (§7); não bloqueiam o F20-50. Os 3 `activate` (DoorDash, Remotebase, Lemon.io) estão habilitados na stack real (§4 item 4). |
 
 ## 6. Último card
 
-**F20-50 — Definition of Done e documentação final.** Começa quando as seções 3, 4 e 5
-estiverem fechadas. Não bloqueiam: a comparação opcional do F20-18 (§3, ordem 7) e o
-backlog da próxima fase (§7). Critérios: corrigir a tabela de status do `README.md`; documentação
-final; CI verde; depois, merge do PR #25 na `main` **com confirmação do usuário**.
+**F20-50 — Definition of Done e documentação final.** Começa quando as seções 3 e 5
+estiverem fechadas (a §4 foi concluída em 2026-09-29). Não bloqueiam: a comparação opcional
+do F20-18 (§3, ordem 7) e o backlog da próxima fase (§7). Critérios: corrigir a tabela de
+status do `README.md`; documentação final; CI verde; depois, merge do PR #25 na `main`
+**com confirmação do usuário**.
 
 ## 7. Backlog para a próxima fase
 
-Itens que sobraram do F20-60 e não bloqueiam o F20-50 nem o merge do PR #25:
+Itens que sobraram da fase (F20-60, medição parcial, senioridade, vínculo de empresas) e não bloqueiam o F20-50 nem o merge do PR #25:
 
 - `discover_sites.py` nas 13 empresas sem ATS, em ou depois de `2026-10-28` (fim do lock de
   30 dias), **antes** de `discover_ats.py`; Crossover excluído.
@@ -153,3 +124,19 @@ Itens que sobraram do F20-60 e não bloqueiam o F20-50 nem o merge do PR #25:
   Cognizant, TCS, Infosys, Terminal, AI/R Avenue Code): páginas dinâmicas ou bloqueio a bot
   impediram confirmar JSON-LD/ATS; não ativar os boards homônimos (`fullstack`, `terminal`,
   `tcs`, `aircompany`). Detalhes em `evidencias/careers-backlog-f20-60-2026-09-29.md`.
+- Medição completa de 7 dias (F20-35, F20-38, F20-49): a de 2026-09-29 cobriu ~1,24 dia
+  válido. Refazer com a stack real estável (`restart: unless-stopped`) e agenda em todas as
+  fontes; medir bytes evitados por ETag (hoje `source_run` não guarda bytes), custo de IA e
+  cobertura, e investigar a cadência abaixo do esperado (6 blocos em ~30 h em vez de ~10) e
+  o buraco de ~12 h de 2026-09-29.
+- [F20-76](fase-20/f20-76-senioridade-por-conteudo.md): classificar senioridade pelo corpo da
+  vaga e/ou sugestões do F20-23 (com gabarito maior) quando a cota do Groq permitir; meta de
+  UNKNOWN ~25% (hoje 49,42%).
+- Empresas sem vínculo: 61 fontes importadas na stack real estão sem `company_source`/empresa
+  (21 "Proposed ..." e fontes criadas só com `company_name`), e as 21 propostas do
+  `backfill_startup_evidence.py` foram `skipped: company not found` (0 linhas em
+  `company_startup_evidence`). Criar/ligar as empresas e reexecutar o backfill (dry-run antes).
+- F20-61: medir o volume real de vaga junior/estágio/programa-com-prazo no acervo real (item 5
+  do card).
+- Restore-check do dump `pre-rebuild-2026-09-29` (`scripts/restore_check.py`; só o TOC foi
+  listado) e revisão de pertencimento das fontes importadas (herdado da `f20manual`).

@@ -1,7 +1,7 @@
 # CARD F20-74 — Coletor Workday: parar no `total` anunciado (cap de 2000)
 
 - **Status:** Feito (2026-09-29) — correção e teste de regressão; re-execução real da
-  Accenture pendente (ver Evidência).
+  Accenture validada na `f20manual` com o F20-75 (ver Evidência).
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-28
