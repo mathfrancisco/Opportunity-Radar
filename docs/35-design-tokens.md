@@ -22,7 +22,6 @@ O nome descreve o papel, não o tom. `text-muted` continua correto se o cinza mu
 | `panel` | `#fafafa` | cabeçalho de tabela, bloco de resumo |
 | `line` | `#e4e4e7` | borda do painel, divisória de linha |
 | `line-strong` | `#d4d4d8` | borda de pílula, botão outlined e chip |
-| `line-soft` | `#e4e4e7` | borda do invólucro (igual a `line`) |
 | `divider` | `#ececee` | separador entre linhas de tabela e traço do esqueleto |
 | `control-line` | `#8a8a8a` | borda de campo de texto e checkbox |
 | `accent` | `#c2410c` | página atual, marca de ativo, sublinhado de link, anel sobre fundo escuro |
@@ -100,13 +99,10 @@ a escolha é feita — ninguém decide `2.25rem`, decide "título de página".
 
 | Token | Tamanho | Entrelinha | Espaçamento | Peso | Uso |
 | --- | --- | --- | --- | --- | --- |
-| `text-display` | 2.25rem | 1.1 | -0.04em | 600 | título da página |
-| `text-display-lg` | 3rem | 1.05 | -0.04em | 600 | o mesmo título a partir de `sm` |
 | `text-metric-lg` | 2.25rem | 1.1 | -0.03em | 600 | score no detalhe da oportunidade |
 | `text-metric` | 1.875rem | 1.15 | -0.03em | 600 | número do tile da Visão geral |
 | `text-metric-sm` | 1.5rem | 1.2 | -0.03em | 600 | score no cartão da Inbox |
 | `text-section` | 1.125rem | 1.4 | — | 600 | título de seção |
-| `text-overline` | 0.75rem | 1.3 | 0.08em | 600 | cabeçalho de tabela |
 | `text-body` | 1rem | 1.75 | — | — | texto corrido |
 | `text-prose` | 0.875rem | 1.5 | — | — | resumo dentro de cartão |
 
@@ -121,10 +117,6 @@ mudar uma decisão.
 | `radius-panel` | 1rem | painel de conteúdo |
 | `radius-control` | 0.5rem | pílula, botão, campo |
 | `radius-chip` | 0.375rem | chip e badge outlined |
-| `rounded-shell` | 2rem | permanece até F46-09; o invólucro ainda o usa |
-| `shadow-shell` | `0 24px 70px rgb(23 23 23 / 0.10)` | permanece definido até F46-09; o invólucro **não** o usa mais |
-| `mt-section`, `gap-section` | 2.5rem | distância entre seções de uma tela |
-| `mt-block`, `gap-block` | 1.5rem | distância entre blocos dentro de uma seção |
 
 Papéis de texto novos (F46-01): `text-page-title` (1.25rem / 1.75rem / 600 / -0.01em),
 `text-body-sm` (0.875rem / 1.25rem / 400), `text-caption` (0.75rem / 1rem / 500).

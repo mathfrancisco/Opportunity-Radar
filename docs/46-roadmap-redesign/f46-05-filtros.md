@@ -9,7 +9,7 @@
 ## Resultado
 
 Três componentes novos para a linha de filtros, com teste e sem uso em tela: as rotas
-continuam com `SearchBar` e `Toolbar` até F46-07/08.
+continuam com `SearchBar` e `Toolbar` até F46-07/08 (`SearchBar.tsx` foi removido no F46-08).
 
 ## Contexto
 
@@ -34,7 +34,7 @@ Hoje a Inbox usa cinco `<select>` em grade e `SearchBar` (campo + botão "Buscar
 ## Fora de escopo
 
 - Dropdown "Buscas salvas"/"Salvar busca" (D12): sem UI aqui, integrado no F46-07.
-- Remover `SearchBar` (fica até as telas migrarem; F46-07/08 trocam e apagam).
+- Remover `SearchBar` (não era escopo aqui; o F46-08 o apagou depois de migrar `CompaniesPage`).
 - Estilizar a lista aberta do `<select>` (R2).
 
 ## Critérios de aceite
@@ -42,7 +42,7 @@ Hoje a Inbox usa cinco `<select>` em grade e `SearchBar` (campo + botão "Buscar
 - [x] `FilterPill` com rótulo acessível, `onChange` e estado ativo só quando ≠ padrão.
 - [x] `SearchInput` com `role="search"`, envio por Enter/lupa e botão "Buscar" `sr-only`.
 - [x] `FilterBar` com quebra e busca em largura total abaixo de `md` (classes).
-- [x] `SearchBar` e rotas existentes intactos e verdes.
+- [x] `SearchBar` e rotas existentes intactos e verdes (naquele momento; `SearchBar.tsx` foi removido no F46-08).
 - [x] Nenhum hexadecimal em `.ts/.tsx`.
 
 ## Verificação

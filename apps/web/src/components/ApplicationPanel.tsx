@@ -40,7 +40,7 @@ function History({ entries }: { entries: StageHistoryEntry[] }) {
   return (
     <ol className="mt-4 grid gap-2">
       {entries.map((entry) => (
-        <li className="rounded-2xl border border-line bg-surface p-4 text-sm" key={entry.id}>
+        <li className="rounded-control border border-line bg-surface p-4 text-sm" key={entry.id}>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="font-medium">
               {entry.fromStage ? `${label(entry.fromStage)} → ` : ''}

@@ -23,7 +23,7 @@ Fonte: `docs/46-spec-redesign-ui.md` (6, 7, 9-11, D8, D11, D12).
 - `Pagination` + `PageSizeSelect` (10/25/50/100, padrao 25). `?page=` preservado;
   tamanho em `?size=` (ausente = 25). Trocar filtro ou tamanho volta para a pagina 1.
   `size` nao entra nas buscas salvas.
-- `SearchBar.tsx` permanece: `CompaniesPage` ainda o usa.
+- `SearchBar.tsx` permaneceu nesta etapa (`CompaniesPage` ainda o usava); foi removido no F46-08.
 
 ## E2E
 

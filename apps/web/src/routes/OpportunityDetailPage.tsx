@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { ApplicationPanel } from '../components/ApplicationPanel'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
+import { Chip } from '../components/Chip'
 import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
 import { EmptyState, ErrorState, LoadingState } from '../components/states'
@@ -55,7 +56,7 @@ function formatNumber(value: string | null, digits = 1) {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="mt-section">
+    <section className="mt-10">
       <h2 className="text-section">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
@@ -64,7 +65,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function Facts({ opportunity }: { opportunity: OpportunityDetail }) {
   return (
-    <dl className="mt-8 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+    <Card className="mt-6">
+    <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
       <div>
         <dt className="text-muted">Empresa</dt>
         <dd className="mt-1 font-medium">{display(opportunity.companyName)}</dd>
@@ -98,6 +100,7 @@ function Facts({ opportunity }: { opportunity: OpportunityDetail }) {
         <dd className="mt-1 font-medium">{opportunity.version}</dd>
       </div>
     </dl>
+    </Card>
   )
 }
 
@@ -137,14 +140,13 @@ function Skills({ opportunity }: { opportunity: OpportunityDetail }) {
   return (
     <ul className="flex flex-wrap gap-2">
       {opportunity.skills.map((skill) => (
-        <li
-          className="rounded-full border border-line-strong bg-surface px-4 py-2 text-sm"
-          key={skill.canonicalName}
-        >
-          <span className="font-medium">{skill.displayName}</span>{' '}
-          <span className="text-muted">
-            {skill.requirement.toLowerCase()} · {skill.taxonomyVersion}
-          </span>
+        <li key={skill.canonicalName}>
+          <Chip className="text-body-sm">
+            <span className="font-medium">{skill.displayName}</span>
+            <span className="text-muted">
+              {skill.requirement.toLowerCase()} · {skill.taxonomyVersion}
+            </span>
+          </Chip>
         </li>
       ))}
     </ul>
@@ -179,7 +181,7 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
               raw item {occurrence.rawItemId}
             </p>
             {!occurrence.payloadRetained && (
-              <p className="mt-2 rounded-xl border border-warning-line bg-warning-surface px-3 py-2 text-xs text-warning-ink">
+              <p className="mt-2 rounded-control border border-warning-line bg-warning-surface px-3 py-2 text-xs text-warning-ink">
                 Conteúdo bruto expirado pela retenção
                 {occurrence.payloadExpiredAt
                   ? ` em ${formatDate(occurrence.payloadExpiredAt)}`
@@ -224,7 +226,7 @@ function RelevanceMark({ opportunity }: { opportunity: OpportunityDetail }) {
         </Button>
         <select
           aria-label="Motivo de não ser para mim"
-          className="rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm"
+          className="h-9 rounded-control border border-line-strong bg-surface px-3 text-sm"
           disabled={mark.isPending}
           onChange={(event) => {
             const reason = event.target.value
@@ -307,7 +309,7 @@ function DuplicateCandidateCard({
       </p>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {[opportunity, otherOpportunity].map((side) => (
-          <div className="rounded-2xl border border-line bg-surface p-4" key={side.id}>
+          <div className="rounded-control border border-line bg-surface p-4" key={side.id}>
             <p className="font-semibold">
               {side.id === survivor.id ? (
                 <Link
@@ -415,10 +417,7 @@ function Eligibility({ details }: { details: EligibilityDetail[] }) {
   return (
     <ul className="grid gap-2">
       {details.map((detail) => (
-        <li
-          className="rounded-2xl border border-line bg-surface p-4 text-sm"
-          key={detail.code}
-        >
+        <Card as="li" className="text-sm" key={detail.code}>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="font-medium">{detail.code}</span>
             <span
@@ -434,7 +433,7 @@ function Eligibility({ details }: { details: EligibilityDetail[] }) {
             </span>
           </div>
           <p className="mt-1 text-subtle">{detail.reason}</p>
-        </li>
+        </Card>
       ))}
     </ul>
   )
@@ -449,11 +448,11 @@ function Factors({ factors }: { factors: MatchFactor[] }) {
       stickyFirstColumn
     >
       {factors.map((factor) => (
-            <tr className="border-t border-divider" key={factor.factorCode}>
-              <td className="px-4 py-3 font-medium">{factor.factorCode}</td>
-              <td className="px-4 py-3">{formatNumber(factor.weight, 2)}</td>
-              <td className="px-4 py-3">{formatNumber(factor.contribution, 2)}</td>
-              <td className="px-4 py-3">
+            <tr key={factor.factorCode}>
+              <td className="font-medium">{factor.factorCode}</td>
+              <td>{formatNumber(factor.weight, 2)}</td>
+              <td>{formatNumber(factor.contribution, 2)}</td>
+              <td>
                 {factor.status}
                 {factor.status === 'UNKNOWN' && (
                   <span className="block text-xs text-muted">
@@ -461,7 +460,7 @@ function Factors({ factors }: { factors: MatchFactor[] }) {
                   </span>
                 )}
               </td>
-              <td className="px-4 py-3 text-subtle">{factor.explanation}</td>
+              <td className="text-subtle">{factor.explanation}</td>
             </tr>
       ))}
     </DataTable>
@@ -482,16 +481,16 @@ function Decision({
         <span className="text-metric-lg">
           {formatNumber(assessment.score)}
         </span>
-        <span className="rounded-full border border-line-strong bg-surface px-4 py-2 text-sm font-medium">
+        <Chip className="text-body-sm font-medium">
           {verdictLabels[assessment.verdict] ?? assessment.verdict}
-        </span>
+        </Chip>
         <span className="text-sm text-muted">
           Elegibilidade {assessment.eligibility} · confiança{' '}
           {formatNumber(assessment.confidence, 2)}
         </span>
       </div>
       {assessment.isStale && (
-        <p className="mt-3 rounded-xl border border-warning-line bg-warning-surface p-3 text-sm text-warning-ink" role="status">
+        <p className="mt-3 rounded-control border border-warning-line bg-warning-surface p-3 text-sm text-warning-ink" role="status">
           Esta decisão foi calculada com dados anteriores. Uma reavaliação está pendente;
           os detalhes abaixo permanecem disponíveis como histórico.
         </p>
@@ -533,6 +532,17 @@ export function OpportunityDetailPage() {
 
   return (
     <PageShell
+      actions={
+        opportunity.data && (
+          <Button
+            disabled={evaluate.isPending}
+            onClick={() => evaluate.mutate()}
+            variant="secondary"
+          >
+            {evaluate.isPending ? 'Avaliando…' : 'Avaliar agora'}
+          </Button>
+        )
+      }
       eyebrow="Oportunidade"
       title={opportunity.data?.title ?? 'Detalhe da oportunidade'}
       description={
@@ -592,12 +602,6 @@ export function OpportunityDetailPage() {
 
             <Section title="Decisão">
               <div className="mb-4 flex flex-wrap items-center gap-3">
-                <Button
-                  disabled={evaluate.isPending}
-                  onClick={() => evaluate.mutate()}
-                >
-                  {evaluate.isPending ? 'Avaliando…' : 'Avaliar agora'}
-                </Button>
                 {evaluate.isSuccess && <span className="text-sm text-subtle">Avaliação atualizada.</span>}
                 {evaluate.isError && <span className="text-sm text-danger-ink">Não foi possível avaliar agora.</span>}
               </div>

@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
+import { Chip } from '../components/Chip'
 import { CompanyForm } from '../components/CompanyForm'
 import { CompanySourceForm } from '../components/CompanySourceForm'
+import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
 import { EmptyState, ErrorState, LoadingState } from '../components/states'
 import {
@@ -47,7 +49,7 @@ function Revisions({ source }: { source: CompanyDetailSource }) {
       </summary>
       <ol className="mt-2 grid gap-2">
         {source.revisions.map((revision) => (
-          <li className="rounded-xl bg-panel p-3 text-xs" key={revision.version}>
+          <li className="rounded-control bg-panel p-3 text-xs" key={revision.version}>
             <p className="text-muted">
               Versão {revision.version} · {formatDate(revision.changedAt)}
             </p>
@@ -76,7 +78,7 @@ function Proposal({ companyId, source }: { companyId: string; source: CompanyDet
   const state = proposal.enabled ? 'habilitada' : 'desabilitada'
   return (
     <div
-      className={`mt-3 rounded-xl p-3 text-xs ${proposal.outdated ? 'border border-warning-line bg-warning-surface text-warning-ink' : 'bg-panel text-subtle'}`}
+      className={`mt-3 rounded-control p-3 text-xs ${proposal.outdated ? 'border border-warning-line bg-warning-surface text-warning-ink' : 'bg-panel text-subtle'}`}
     >
       <p>
         Fonte proposta: chave {proposal.externalKey ?? '—'} · {state} · evidência{' '}
@@ -173,25 +175,26 @@ function LatestOpportunities({ companyId }: { companyId: string }) {
   }
   return (
     <>
-      <ul className="grid gap-2">
+      <DataTable
+        caption="Últimas vagas desta empresa"
+        columns={['Vaga', 'Modalidade', 'Decisão', 'Score']}
+      >
         {inbox.data.items.map((item) => (
-          <li
-            className="flex flex-wrap items-baseline justify-between gap-3 rounded-2xl border border-line bg-surface p-4 text-sm"
-            key={item.opportunityId}
-          >
-            <Link
-              className="font-medium underline decoration-accent decoration-2 underline-offset-4"
-              to={`/opportunities/${item.opportunityId}`}
-            >
-              {item.title}
-            </Link>
-            <span className="text-muted">
-              {item.workMode} · {item.verdict ?? 'não avaliada'}
-              {item.score ? ` · ${Number(item.score).toFixed(1)}` : ''}
-            </span>
-          </li>
+          <tr key={item.opportunityId}>
+            <td>
+              <Link
+                className="font-medium underline decoration-accent decoration-2 underline-offset-4"
+                to={`/opportunities/${item.opportunityId}`}
+              >
+                {item.title}
+              </Link>
+            </td>
+            <td className="text-subtle">{item.workMode}</td>
+            <td className="text-subtle">{item.verdict ?? 'não avaliada'}</td>
+            <td className="text-subtle">{item.score ? Number(item.score).toFixed(1) : '—'}</td>
+          </tr>
         ))}
-      </ul>
+      </DataTable>
       {inbox.data.total > inbox.data.items.length && (
         <p className="mt-3 text-sm">
           <Link
@@ -218,6 +221,13 @@ export function CompanyDetailPage() {
 
   return (
     <PageShell
+      actions={
+        company.data && !editing ? (
+          <Button onClick={() => setEditing(true)} variant="secondary">
+            Editar empresa
+          </Button>
+        ) : undefined
+      }
       eyebrow="Catálogo local"
       title={company.data?.name ?? 'Empresa'}
       description={company.data?.domain ?? undefined}
@@ -268,9 +278,6 @@ export function CompanyDetailPage() {
         <>
           {!editing && (
             <div className="mt-6 flex flex-wrap items-center gap-3">
-              <Button onClick={() => setEditing(true)} size="sm" variant="secondary">
-                Editar empresa
-              </Button>
               {update.isSuccess && (
                 <p className="text-sm text-success-ink" role="status">
                   Empresa salva, versão {update.data.version}.
@@ -278,7 +285,8 @@ export function CompanyDetailPage() {
               )}
             </div>
           )}
-          <dl className="mt-8 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+          <Card className="mt-6">
+          <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
             <div>
               <dt className="text-muted">Prioridade</dt>
               <dd className="mt-1 font-medium">{company.data.priority}</dd>
@@ -296,8 +304,9 @@ export function CompanyDetailPage() {
               <dd className="mt-1 font-medium">{formatDate(company.data.lastVerifiedAt)}</dd>
             </div>
           </dl>
+          </Card>
 
-          <section className="mt-section">
+          <section className="mt-10">
             <h2 className="text-section">Aliases</h2>
             <div className="mt-4">
               {company.data.aliases.length === 0 ? (
@@ -305,11 +314,8 @@ export function CompanyDetailPage() {
               ) : (
                 <ul className="flex flex-wrap gap-2">
                   {company.data.aliases.map((alias) => (
-                    <li
-                      className="rounded-full border border-line-strong bg-surface px-4 py-2 text-sm"
-                      key={alias}
-                    >
-                      {alias}
+                    <li key={alias}>
+                      <Chip className="text-body-sm">{alias}</Chip>
                     </li>
                   ))}
                 </ul>
@@ -317,7 +323,7 @@ export function CompanyDetailPage() {
             </div>
           </section>
 
-          <section className="mt-section">
+          <section className="mt-10">
             <h2 className="text-section">Fontes</h2>
             <p className="mt-1 max-w-2xl text-sm text-muted">
               Registre ou corrija o ATS da empresa e proponha a fonte a partir dele. A proposta
@@ -411,7 +417,7 @@ export function CompanyDetailPage() {
             </div>
           </section>
 
-          <section className="mt-section">
+          <section className="mt-10">
             <h2 className="text-section">Últimas vagas</h2>
             <div className="mt-4">
               <LatestOpportunities companyId={company.data.id} />
