@@ -31,6 +31,15 @@ Retomada com cursor > 0 não conhece `total`; comportamento anterior preservado.
       primeira página): coleta 60 itens únicos, pedidos `[0, 20, 40]`,
       `items_announced == 60` — `test_stops_at_the_announced_total_when_workday_wraps_past_the_cap`.
 - [x] Teste antigo de página repetida com `total` não atingido continua levantando erro.
-- [ ] Re-execução da Accenture na `f20manual` com `SUCCEEDED`: **não executada** — copiar
-      o coletor corrigido para o container do worker foi negado pelo classificador da
-      sessão. Executar após rebuild/`docker cp` na `f20manual`.
+- [x] Re-execução da Accenture na `f20manual` após a correção (feita pelo coordenador):
+      `items_seen` 2000, `persisted` 1989, `PARTIAL` com `error_code` `INVALID_ITEM`
+      (11 itens inválidos). O wrap de paginação está corrigido: não há mais
+      `PARSER_SCHEMA_CHANGED`.
+
+## Itens inválidos (fora do escopo)
+
+Os 11 itens vêm de `Workday posting is missing a title`: o coletor rejeita corretamente
+postagens que a API devolve sem `title` (sem título não há oportunidade). Não é regressão
+da paginação; como o item inválido não guarda payload, não dá para inspecioná-lo depois.
+Não alterado (sem correção trivial e segura); se incomodar, tratar como item ignorado
+(`skipped`) em card próprio.

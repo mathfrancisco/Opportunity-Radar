@@ -15,6 +15,7 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
     SourceRunModel,
 )
+from opportunity_radar.companies.domain import normalize_name
 from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.opportunities.domain import DEFAULT_RECENCY_WINDOW_DAYS, CanonicalCandidate
 from opportunity_radar.opportunities.models import (
@@ -61,12 +62,24 @@ class OpportunityRepository:
         ).one_or_none()
         if row is None:
             return None
+        configuration = dict(row[4] or {})
+        company_id, company_name = row[2], row[3]
+        if company_id is None:
+            # Proposed sources (F20-53/60/71) are not linked to a CompanySource; the
+            # company they were proposed for is recorded by name in their configuration.
+            configured = configuration.get("company_name")
+            if isinstance(configured, str) and configured.strip():
+                company = self.session.scalar(
+                    select(Company).where(Company.normalized_name == normalize_name(configured))
+                )
+                if company is not None:
+                    company_id, company_name = company.id, company.canonical_name
         return RawItemEvidence(
             raw_item=row[0],
             source_type=row[1],
-            company_id=row[2],
-            company_name=row[3],
-            source_configuration=dict(row[4] or {}),
+            company_id=company_id,
+            company_name=company_name,
+            source_configuration=configuration,
         )
 
     def normalization_result(
