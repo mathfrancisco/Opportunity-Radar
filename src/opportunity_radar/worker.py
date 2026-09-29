@@ -435,12 +435,10 @@ def collect_enabled_sources(
     ) as correlation_id:
         with Session(engine) as session:
             service = service_factory(session)
-            sources, _ = service.list_sources(offset=0, limit=100)
+            # Not the paginated listing: a page cut dropped every eligible source past it (F48-01).
+            sources = service.list_collectable_sources()
             summary = {"completed": 0, "failed": 0, "skipped": 0, "blocked": 0}
             for source in sources:
-                # A disabled source is not eligible, and a manual one has no clock.
-                if not source.enabled or source.source_type == "manual":
-                    continue
                 try:
                     # Read once per source, right before it is judged: the host's shared
                     # budget (F20-38) is state committed by whichever earlier source in
