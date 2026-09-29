@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react'
+import { Chip } from './Chip'
 
 export interface StatusBadgeProps {
   /** The persisted state. `null` means the thing never reached a state at all. */
@@ -10,9 +11,10 @@ export interface StatusBadgeProps {
 }
 
 const neutralTone = 'border-line-strong bg-canvas text-neutral-ink'
+const absentTone = 'border-dashed border-line-strong bg-surface text-muted'
 
 /**
- * A state, rendered the same way everywhere.
+ * A state, rendered the same way everywhere, as an outlined `Chip`.
  *
  * The badge knows nothing about sources, runs or verdicts: it is handed the maps. A state
  * without a label shows its own code rather than a friendly word — inventing "desconhecido"
@@ -20,19 +22,7 @@ const neutralTone = 'border-line-strong bg-canvas text-neutral-ink'
  */
 export function StatusBadge({ value, labels, tones, absent }: StatusBadgeProps) {
   if (value === null) {
-    return (
-      <span className="inline-flex rounded-full border border-dashed border-line-strong px-3 py-1 text-xs text-muted">
-        {absent ?? 'Sem registro'}
-      </span>
-    )
+    return <Chip tone={absentTone}>{absent ?? 'Sem registro'}</Chip>
   }
-  return (
-    <span
-      className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${
-        tones[value] ?? neutralTone
-      }`}
-    >
-      {labels[value] ?? value}
-    </span>
-  )
+  return <Chip tone={tones[value] ?? neutralTone}>{labels[value] ?? value}</Chip>
 }

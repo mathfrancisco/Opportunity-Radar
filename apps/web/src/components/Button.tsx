@@ -10,17 +10,19 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const base =
-  'rounded-xl font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ' +
-  'focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-accent'
+  'inline-flex items-center justify-center gap-2 rounded-control text-sm transition ' +
+  'disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11'
 
+// The focus ring is the global `:focus-visible` (3px `ink`, offset 3px; SPEC 46, 9): the
+// ring sits outside the button, on the light page, so `ink` is the contrasting colour.
 const variants: Record<ButtonVariant, string> = {
-  primary: 'bg-ink text-surface hover:bg-ink-hover',
-  secondary: 'border border-line-strong font-medium hover:border-ink',
+  primary: 'bg-ink font-semibold text-surface hover:bg-ink-hover',
+  secondary: 'border border-line-strong bg-surface font-medium text-ink hover:border-ink',
 }
 
 const sizes: Record<ButtonSize, string> = {
-  md: 'px-5 py-3 text-sm',
-  sm: 'px-4 py-2 text-sm',
+  md: 'h-9 px-4',
+  sm: 'h-8 px-3',
 }
 
 /**
