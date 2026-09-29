@@ -1,6 +1,6 @@
 # CARD F20-53 — Descoberta de startups em domínios de ATS via Tavily
 
-- **Status:** Backlog
+- **Status:** Feito — `startup_discovery.py` + `scripts/discover_startups.py`; execução real na `f20manual` em 2026-09-29 (20 créditos Tavily, 23 propostas ativadas e coletadas, `evidencias/startups-f20-53-2026-09-29.md`)
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-44, F20-46, F20-27, F20-36
@@ -53,15 +53,15 @@ completa.
 
 ## Critérios de aceite
 
-- [ ] Query combina termo de startup configurado com `include_domains` restrito aos
+- [x] Query combina termo de startup configurado com `include_domains` restrito aos
       domínios de ATS já suportados; nunca inclui domínio fora dessa lista.
-- [ ] Força do sinal (`forte`/`fraco`) fica registrada no `metadata` do `CollectedItem`
+- [x] Força do sinal (`forte`/`fraco`) fica registrada no `metadata` do `CollectedItem`
       por termo usado na query.
-- [ ] Duas propostas do mesmo ciclo apontando para o mesmo nome normalizado de empresa em
+- [x] Duas propostas do mesmo ciclo apontando para o mesmo nome normalizado de empresa em
       ATS diferentes resultam em uma única proposta com os dois boards como evidência.
-- [ ] Proposta criada por esta via registra `discovery_via="tavily_startup_search"`,
+- [x] Proposta criada por esta via registra `discovery_via="tavily_startup_search"`,
       distinto da busca geral do F20-44 (`"tavily_search"`).
-- [ ] Nenhuma requisição de rede desta rotina alcança `wellfound.com`,
+- [x] Nenhuma requisição de rede desta rotina alcança `wellfound.com`,
       `ycombinator.com` ou `workatastartup.com` (teste de allowlist de domínio).
 
 ## Verificação
@@ -99,3 +99,23 @@ docker compose -p f20-53 -f compose.yaml -f compose.dev.yaml run --rm api mypy
 
 Todos os critérios de aceite estão marcados com evidência, o comando de verificação passa
 e o CI está verde.
+
+## Evidência de entrega (2026-09-29)
+
+Código: `src/opportunity_radar/acquisition/startup_discovery.py` (busca, dedupe, validação,
+proposta), `scripts/discover_startups.py` (execução manual, teto `--max-credits`, padrão 20),
+`propose_from_tavily_evidence(..., discovery_via=...)` em `service.py`,
+`detect_ats_board` estendido a Workable/Teamtailor/`job-boards.greenhouse.io`
+(`tavily.py`), `probe_direct_ats(..., slugs=, only_ats=)` (`limited_discovery.py`).
+Testes em `tests/backend/acquisition/test_startup_discovery.py` (fakes, sem rede):
+
+| Critério | Teste |
+| --- | --- |
+| Query só com domínios de ATS suportados | `test_query_combines_term_with_supported_ats_domains_only`, `test_domain_group_outside_supported_ats_is_refused` |
+| Força `forte`/`fraco` no `metadata` | `test_signal_strength_and_term_are_recorded_in_item_metadata_per_term` |
+| Mesma empresa em ATS diferentes = uma proposta, dois boards de evidência | `test_same_company_in_two_ats_becomes_one_candidate_with_both_boards`, `test_cross_ats_company_yields_single_proposal_with_both_boards_as_evidence` (a proposta é o board validado; todos os boards vão em `startup_boards`) |
+| `discovery_via="tavily_startup_search"` | `test_validated_startup_becomes_inert_proposal_tagged_startup_search` |
+| Nenhuma requisição a wellfound/ycombinator/workatastartup | `test_results_outside_supported_ats_domains_are_dropped_even_if_tavily_returns_them`, `test_no_request_of_the_routine_reaches_forbidden_hosts` |
+| Orçamento F20-43 compartilhado | `test_queries_share_the_tavily_budget_and_stop_at_the_ceiling` |
+
+Execução real: `evidencias/startups-f20-53-2026-09-29.md`.

@@ -90,6 +90,14 @@ reais).
    (LexisNexis Legal), Abbott. Slugs/tenants e resultados por fonte em
    `evidencias/early-careers-2026-09-29.md` §"Rodada 2". Depois reprocessar com o
    normalizador do F20-70 (estagiário/trainee/aprendiz/new grad ainda caem em UNKNOWN).
+9. [F20-53](fase-20/f20-53-descoberta-de-startups-em-dominios-de-ats.md) (startups): ativar
+   na pilha real, depois da janela, as 23 fontes propostas por `tavily_startup_search` e
+   ativadas na `f20manual` (nomes `Proposed <Empresa> <ats>`): Ashby Aios, ClassDojo,
+   Clipboard, Fieldguide, Jiga, Legionhealth; Greenhouse Alpaca, Daybreak Health,
+   Instawork, Postscript, Si, Swayable; Lever Emi Labs, Fampay, Tryjeeves, Weekdayworks;
+   Workable Open, Pearl Talent, Weekday, Writesonic, talentpluto; Teamtailor EWOR GmbH,
+   Supersub (113 → 136 habilitadas). Chaves, resultados por fonte e ressalvas de precisão
+   (agências de recrutamento) em `evidencias/startups-f20-53-2026-09-29.md`.
 
 ## 5. Falta — sanidade e pendências menores
 

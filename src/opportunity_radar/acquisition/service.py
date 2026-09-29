@@ -383,12 +383,19 @@ class AcquisitionService:
         return proposal, "proposed"
 
     def propose_from_tavily_evidence(
-        self, items: Iterable[CollectedItem], *, commit: bool = True
+        self,
+        items: Iterable[CollectedItem],
+        *,
+        commit: bool = True,
+        discovery_via: str = "tavily_search",
     ) -> TavilyProposalReport:
         """Turn marked, persisted Tavily results into inert ATS source proposals.
 
         Company names intentionally use exact canonical-name equality.  A Tavily search
         result is evidence of a board, not authority to guess which company owns it.
+        `discovery_via` names the route that produced the evidence (`tavily_search` for the
+        general search, `tavily_startup_search` for F20-53); a proposal is only refreshed
+        by the route that created it.
         """
         outcomes: list[TavilyProposalOutcome] = []
         for item in items:
@@ -432,6 +439,7 @@ class AcquisitionService:
                 source_type=source_type,
                 board_key=board_key,
                 item=item,
+                discovery_via=discovery_via,
             )
 
             identifier_key = IDENTIFIER_KEYS[source_type]
@@ -442,7 +450,7 @@ class AcquisitionService:
                 )
             )
             if by_board is not None:
-                if by_board.configuration.get("discovery_via") == "tavily_search":
+                if by_board.configuration.get("discovery_via") == discovery_via:
                     follow_inert_correction(
                         self.session,
                         by_board,
@@ -461,7 +469,7 @@ class AcquisitionService:
                     SourceDefinitionModel.configuration["company_name"].as_string()
                     == company.canonical_name,
                     SourceDefinitionModel.configuration["discovery_via"].as_string()
-                    == "tavily_search",
+                    == discovery_via,
                 )
                 .order_by(SourceDefinitionModel.created_at)
             )
@@ -1498,18 +1506,23 @@ def _tavily_proposal_configuration(
     source_type: str,
     board_key: str,
     item: CollectedItem,
+    discovery_via: str = "tavily_search",
 ) -> dict[str, Any]:
     metadata = item.metadata
     configuration: dict[str, Any] = {
         "company_name": company.canonical_name,
         IDENTIFIER_KEYS[source_type]: board_key,
         "discovery_evidence": item.url,
-        "discovery_via": "tavily_search",
+        "discovery_via": discovery_via,
     }
     for metadata_key, configuration_key in (
         ("query", "discovery_query"),
         ("rank", "discovery_rank"),
         ("score", "discovery_score"),
+        # F20-53: startup signal evidence, only present on the startup search route.
+        ("startup_signal_strength", "startup_signal_strength"),
+        ("startup_signal_terms", "startup_signal_terms"),
+        ("startup_boards", "startup_boards"),
     ):
         value = metadata.get(metadata_key)
         if value is not None:

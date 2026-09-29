@@ -17,7 +17,7 @@ import re
 import socket
 import zlib
 from collections import deque
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -72,7 +72,7 @@ _JOBS_LIST_KEYS: dict[str, str | None] = {
     "greenhouse": "jobs",
     "lever": None,
     "workable": "jobs",
-    "teamtailor": "data",
+    "teamtailor": "items",
 }
 
 
@@ -185,17 +185,25 @@ async def probe_direct_ats(
     sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
     max_requests: int = 6,
     now: datetime | None = None,
+    slugs: Sequence[str] | None = None,
+    only_ats: Sequence[str] | None = None,
 ) -> tuple[DiscoveredEndpoint | None, int]:
     """One request per (ATS, slug) candidate against the ATS's own public API — never the
     company's own site. Stops at the first ATS/slug pair whose board is real and populated
     (F20-36 follow-up). Skips crawling entirely on a hit, which is most of the time this
     matters: a guessable slug is common and one request is far cheaper than a crawl.
+
+    `slugs` replaces the name-derived guesses and `only_ats` narrows which ATS are tried —
+    for a caller that already knows which board it wants confirmed (F20-53: a board named
+    by a search result), so exactly that board is checked and nothing else is guessed.
     """
     moment = now or datetime.now(UTC)
-    candidates = direct_slug_candidates(company_name, seed_url)
+    candidates = tuple(slugs) if slugs else direct_slug_candidates(company_name, seed_url)
     requests_made = 0
     for slug in candidates:
         for ats, build_url in _DIRECT_ATS_ENDPOINTS:
+            if only_ats is not None and ats not in only_ats:
+                continue
             if requests_made >= max_requests:
                 return None, requests_made
             url = build_url(slug)
