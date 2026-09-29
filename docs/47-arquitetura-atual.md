@@ -940,6 +940,8 @@ prioridade sugerida, não compromisso.
 | P3-4 | Duplicatas sem `published_at` | regra exige data | Baixo | M | Médio |
 | P3-9 | Rotina de backup e retenção agendada | poda existe, variável não chega ao container, backup manual | Baixo | A | Baixo |
 
+Diagnóstico com o banco real, funil medido e cards F48 que estendem esta tabela: [SPEC 48 — mais vagas úteis](48-spec-mais-vagas.md).
+
 Ordem sugerida de ataque: **P0-1 e P0-3** (correções pequenas com efeito direto em cobertura e
 custo), **P0-4** (segurança dos dados), depois **P1-1/P1-2/P1-3** (confiabilidade da coleta),
 **P0-2 + P1-7** (qualidade do ranking) e **P1-8/P1-9** (custo de IA). O redesenho da SPEC 46

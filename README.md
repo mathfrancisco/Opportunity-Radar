@@ -137,6 +137,7 @@ Segredos ficam só no `.env` local (ignorado pelo Git e pelo Docker); somente AP
 
 - [SPEC 43 — Groq e consolidação](docs/43-spec-llm-cloud-e-consolidacao.md) e [Fase 20](docs/44-roadmap-fase-20/README.md) (cards, evidências, [validação pendente](docs/44-roadmap-fase-20/validacao-pendente.md)).
 - [SPEC 45 — descoberta de startups](docs/45-spec-descoberta-startups.md).
+- [SPEC 48 — mais vagas úteis](docs/48-spec-mais-vagas.md): funil medido na stack real, north-star, problemas priorizados e cards F48 (planejada; nada declarado entregue).
 - [SPEC 41 — Tavily](docs/41-spec-tavily.md) e [cards da fase 19](docs/42-roadmap-tavily/README.md).
 - [SPEC 39 — varredura produtiva](docs/39-spec-varredura-produtiva.md) e [cards da fase 18](docs/40-roadmap-varredura-produtiva/README.md).
 - [SPEC 37 — busca](docs/37-spec-busca.md), [roadmap de IA e busca](docs/38-roadmap-ia-e-busca.md) (fases 16 e 17).
