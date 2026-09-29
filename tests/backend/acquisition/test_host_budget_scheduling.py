@@ -400,3 +400,96 @@ def test_conditional_headers_are_not_reused_across_a_different_checkpoint_scope(
     )
 
     assert run.status == "SUCCEEDED"
+
+
+# --- F48-08: host budget keyed per tenant, ceiling per source type ---------------------
+
+
+def _typed_source(source_type: str, configuration: dict[str, object]) -> SourceDefinitionModel:
+    return SourceDefinitionModel(
+        id=uuid4(),
+        source_type=source_type,
+        name=f"{source_type} source",
+        enabled=True,
+        configuration=configuration,
+    )
+
+
+def _scheduling_service() -> AcquisitionService:
+    source = _typed_source("workday", {})
+    session = _MemorySession()
+    return AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry(()),
+        repository=_MemoryRepository(source),  # type: ignore[arg-type]
+        alerts=SourceAlertService(session, notifier=None),  # type: ignore[arg-type]
+    )
+
+
+def test_fifteen_workday_tenants_do_not_share_a_budget_bucket() -> None:
+    service = _scheduling_service()
+    sources = [
+        _typed_source(
+            "workday", {"tenant_identifier": f"tenant{number}/site", "api_region": "wd5"}
+        )
+        for number in range(15)
+    ]
+
+    hosts = {service.scheduling_state(source, timezone="UTC").host for source in sources}
+
+    assert len(hosts) == 15
+    assert "workday:tenant0/site:wd5" in hosts
+    assert "workday" not in hosts
+
+
+def test_per_tenant_types_key_on_the_tenant_and_shared_host_types_keep_the_physical_host() -> None:
+    service = _scheduling_service()
+
+    def host_of(source_type: str, configuration: dict[str, object]) -> str:
+        return service.scheduling_state(
+            _typed_source(source_type, configuration), timezone="UTC"
+        ).host
+
+    assert host_of("teamtailor", {"company_identifier": "acme"}) == "teamtailor:acme"
+    assert host_of("factorial", {"company_identifier": "acme"}) == "factorial:acme"
+    assert (
+        host_of("jobposting", {"page_url": "https://Careers.Acme.com/jobs/1"})
+        == "jobposting:careers.acme.com"
+    )
+    assert host_of("lever", {"site_identifier": "acme"}) == "api.lever.co"
+    assert host_of("greenhouse", {"board_token": "acme"}) == "boards.greenhouse.io"
+    assert host_of("hacker_news", {}) == "hacker-news.firebaseio.com"
+
+
+def test_recorded_usage_goes_to_the_tenant_row_with_the_configured_ceiling() -> None:
+    class _Counting(_ConditionalCollector):
+        source_type = "workday"
+
+        async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+            request.telemetry.record_http_attempt()
+            request.telemetry.record_http_attempt()
+            return
+            yield  # pragma: no cover - makes this an async generator
+
+    source = _typed_source(
+        "workday", {"tenant_identifier": "adobe/site", "api_region": "wd5"}
+    )
+    session = _MemorySession()
+    repository = _MemoryRepository(source)
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry(
+            (_Counting(httpx.MockTransport(lambda _: httpx.Response(200))),)
+        ),
+        repository=repository,  # type: ignore[arg-type]
+        alerts=SourceAlertService(session, notifier=None),  # type: ignore[arg-type]
+        host_request_ceilings={"workday": 321},
+    )
+
+    asyncio.run(service.execute(source.id, CollectionRequest(mode=CollectionMode.DISCOVERY)))
+
+    recorded = [
+        (call["host"], call["requests"], call["default_ceiling"])
+        for call in repository.host_budget_calls
+    ]
+    assert recorded == [("workday:adobe/site:wd5", 2, 321)]

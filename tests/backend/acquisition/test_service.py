@@ -425,6 +425,99 @@ def test_execute_fills_missing_description_via_tavily_extraction() -> None:
     assert persisted["description"] == "# Full body"
 
 
+def _extraction_service(
+    calls: list[httpx.Request], **settings: object
+) -> tuple[AcquisitionService, list[dict[str, object]]]:
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "results": [{"url": "https://example.com/jobs/1", "raw_content": "# Body"}],
+                "usage": {"credits": 1},
+            },
+        )
+
+    budget_calls: list[dict[str, object]] = []
+
+    class _Repository(_MemoryRepository):
+        def record_host_budget_usage(self, host: str, **kwargs: object) -> None:
+            budget_calls.append({"host": host, **kwargs})
+
+    source = SourceDefinitionModel(
+        id=uuid4(), source_type="example", name="Example", enabled=True, configuration={}
+    )
+    session = _MemorySession()
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((_NoDescriptionCollector(),)),
+        repository=_Repository(source),  # type: ignore[arg-type]
+        alerts=SourceAlertService(session, notifier=None),  # type: ignore[arg-type]
+        tavily_extraction=TavilyExtractionSettings(
+            client_factory=lambda: TavilyClient(
+                api_key="test-key",
+                client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+            ),
+            cache_ttl_seconds=3600,
+            credit_budget_per_run=100,
+            **settings,  # type: ignore[arg-type]
+        ),
+    )
+    return service, budget_calls
+
+
+def _execute(service: AcquisitionService):
+    return asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+        )
+    )
+
+
+def test_tavily_calls_are_not_counted_in_the_ats_host_budget() -> None:
+    calls: list[httpx.Request] = []
+    service, budget_calls = _extraction_service(calls)
+
+    run = _execute(service)
+
+    assert len(calls) == 1
+    assert run.credits_used == 1
+    # The collector made no request of its own: the Tavily call must not show up here.
+    assert budget_calls == []
+
+
+def test_extraction_skip_source_types_spends_no_tavily_call() -> None:
+    calls: list[httpx.Request] = []
+    service, _ = _extraction_service(calls, skip_source_types=frozenset({"example"}))
+
+    run = _execute(service)
+
+    assert calls == []
+    assert run.status == "SUCCEEDED"
+    assert run.credits_used == 0
+
+
+def test_extraction_stops_for_a_host_that_keeps_failing(monkeypatch: pytest.MonkeyPatch) -> None:
+    from opportunity_radar.acquisition.tavily import TavilyExtractionCache
+
+    seen: list[tuple[str, int]] = []
+
+    def failing(self: object, url: str, *, threshold: int) -> bool:
+        seen.append((url, threshold))
+        return True
+
+    monkeypatch.setattr(TavilyExtractionCache, "host_is_failing", failing)
+    calls: list[httpx.Request] = []
+    service, _ = _extraction_service(calls, host_failure_threshold=3)
+
+    run = _execute(service)
+
+    assert calls == []
+    assert seen == [("https://example.com/jobs/1", 3)]
+    assert run.status == "SUCCEEDED"
+
+
 def test_execute_leaves_description_alone_when_extraction_is_not_configured() -> None:
     """No `tavily_extraction` passed to `AcquisitionService` (the default): the run must
     still succeed, with the item's own (absent) description untouched — extraction is an
