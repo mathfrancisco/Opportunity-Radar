@@ -42,6 +42,10 @@ export interface InboxItem {
   applicationNextActionAt: string | null
   /** A `PENDING` duplicate_candidate row names this opportunity (F20-26). */
   hasPendingDuplicate: boolean
+  /** Card F20-54: startup evidence summary of the company; display/filter only. */
+  startupStrength: 'strong' | 'weak' | null
+  /** YC batch (e.g. `S24`) when a strong `yc_batch` evidence names one. */
+  startupBatch: string | null
 }
 
 export interface InboxPage {
@@ -81,6 +85,8 @@ export interface InboxParams {
    * a posting from the last 14 days, except a time-boxed entry program or one with a
    * still-open application deadline. `false` is the "mostrar tudo" toggle. */
   onlyRecent?: boolean
+  /** Card F20-54: only companies with at least one startup-evidence row. */
+  onlyStartups?: boolean
 }
 
 export interface FailingSource {
@@ -285,6 +291,11 @@ function parseInboxItem(value: unknown): InboxItem | null {
     applicationStage: text(value.application_stage),
     applicationNextActionAt: text(value.application_next_action_at),
     hasPendingDuplicate: value.has_pending_duplicate === true,
+    startupStrength:
+      value.startup_strength === 'strong' || value.startup_strength === 'weak'
+        ? value.startup_strength
+        : null,
+    startupBatch: text(value.startup_batch),
   }
 }
 
@@ -321,6 +332,7 @@ export async function getInbox({
   sourceDefinitionIds,
   allowedCountry,
   onlyRecent = true,
+  onlyStartups,
 }: InboxParams): Promise<InboxPage> {
   const params = new URLSearchParams({
     offset: String((page - 1) * pageSize),
@@ -343,6 +355,7 @@ export async function getInbox({
   sourceDefinitionIds?.forEach((value) => params.append('source_definition_id', value))
   if (allowedCountry) params.set('allowed_country', allowedCountry)
   if (!onlyRecent) params.set('only_recent', 'false')
+  if (onlyStartups) params.set('only_startups', 'true')
 
   const response = await fetch(apiUrl(`/inbox?${params.toString()}`), {
     headers: { Accept: 'application/json' },

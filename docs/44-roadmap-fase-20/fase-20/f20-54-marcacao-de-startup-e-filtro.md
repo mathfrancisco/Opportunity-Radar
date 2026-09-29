@@ -1,6 +1,6 @@
 # CARD F20-54 — Marcação "startup" com evidência e filtro na UI
 
-- **Status:** Backlog
+- **Status:** Implementado em `feature/f20-54-startup-tag` (aguardando merge/CI)
 - **Fase:** 20 — IA cloud e consolidação
 - **Bloco:** C — Busca: cobertura e precisão
 - **Depende de:** F20-53
@@ -36,6 +36,25 @@ depois, se uma vaga futura citar o sinal.
 - **Invariante:** a marca não altera elegibilidade, score, veredito nem fator do
   matching — é metadado de exibição/filtro, igual a qualquer outra marca do radar.
 
+## Decisão de implementação
+
+- **Tabela satélite** `company_radar.company_startup_evidence` (migração `20260929_0054`,
+  `down_revision` `20260928_0053`, head única): `signal` (`yc_batch`/`seed_stage`/
+  `series_a`/`other`), `strength` (`strong`/`weak`), `source_text`, `source_url`, `batch`
+  (ex.: `S24`), `captured_at`. Só insere: nada é sobrescrito.
+- **Precedência por derivação**: a força da empresa é lida de todas as linhas
+  (`companies/startup.py::summarize`) — qualquer `strong` vence, mesmo com `weak` mais
+  recente; o `batch` é o da evidência forte `yc_batch` mais recente. Sighting idêntico é
+  idempotente (`record_startup_evidence`).
+- **API**: `GET /inbox?only_startups=true` filtra por >= 1 evidência (qualquer força);
+  cada item traz `startup_strength`/`startup_batch`; `/companies` traz também a lista
+  `startup_evidence` (auditoria). UI: checkbox "Só startups" + selo (batch YC, "sinal
+  fraco") na Inbox; atalho "Ver só startups" na Overview.
+- **Interface para o F20-53**: `record_startup_evidence(session, company_id, ...)` é o
+  único ponto de escrita; este card não detecta sinal nem escreve o coletor.
+- **Sem backfill**: o card não define fonte para empresas já existentes (`f20manual`);
+  nada foi inventado. A marca aparece quando o F20-53 (ou outro coletor) gravar evidência.
+
 ## Fora de escopo
 
 - Detectar o sinal em texto — isso é do F20-53 (e de qualquer coletor futuro que emita o
@@ -44,13 +63,13 @@ depois, se uma vaga futura citar o sinal.
 
 ## Critérios de aceite
 
-- [ ] Evidência de sinal de startup fica associada à empresa com tipo, força, origem e
+- [x] Evidência de sinal de startup fica associada à empresa com tipo, força, origem e
       data — auditável, nunca um booleano sem origem.
-- [ ] Sinal forte não é sobrescrito por sinal fraco mais recente da mesma empresa.
-- [ ] Múltiplas evidências para a mesma empresa acumulam, não substituem.
-- [ ] Filtro "é startup" na Inbox/Overview (`apps/web`) mostra só empresas com pelo menos
+- [x] Sinal forte não é sobrescrito por sinal fraco mais recente da mesma empresa.
+- [x] Múltiplas evidências para a mesma empresa acumulam, não substituem.
+- [x] Filtro "é startup" na Inbox/Overview (`apps/web`) mostra só empresas com pelo menos
       uma evidência.
-- [ ] Nenhum score, veredito ou fator de matching muda em função da marca de startup
+- [x] Nenhum score, veredito ou fator de matching muda em função da marca de startup
       (teste de regressão contra o matching existente).
 
 ## Verificação

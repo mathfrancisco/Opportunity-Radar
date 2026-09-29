@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from opportunity_radar.acquisition.models import SourceDefinitionModel
 from opportunity_radar.acquisition.proposals import is_outdated, proposal_key
 from opportunity_radar.acquisition.service import AcquisitionService
-from opportunity_radar.companies.models import Company, CompanySource
+from opportunity_radar.companies.models import Company, CompanySource, CompanyStartupEvidence
 from opportunity_radar.companies.registration import (
     CompanyIdentityConflictError,
     CompanyNotFoundError,
@@ -24,6 +24,7 @@ from opportunity_radar.companies.registration import (
     CompanyVersionConflictError,
 )
 from opportunity_radar.companies.repository import CompanyRepository
+from opportunity_radar.companies.startup import summarize
 from opportunity_radar.presentation.http.dependencies import get_session
 
 router = APIRouter(prefix="/companies", tags=["companies"])
@@ -78,6 +79,16 @@ class CompanySourceResponse(BaseModel):
     proposal: ProposedSourceResponse | None = None
 
 
+class StartupEvidenceResponse(BaseModel):
+    id: UUID
+    signal: str
+    strength: str
+    source_text: str
+    source_url: str | None
+    batch: str | None
+    captured_at: datetime
+
+
 class CompanyResponse(BaseModel):
     id: UUID
     name: str
@@ -90,6 +101,10 @@ class CompanyResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     version: int
+    #: Card F20-54: display metadata only. `strong` when any evidence is strong.
+    startup_strength: str | None = None
+    startup_batch: str | None = None
+    startup_evidence: list[StartupEvidenceResponse] = Field(default_factory=list)
 
 
 class CompanyBody(BaseModel):
@@ -161,9 +176,30 @@ def proposals_for(
     return found
 
 
+def startup_evidence_for(
+    session: Session, companies: list[Company]
+) -> dict[UUID, list[CompanyStartupEvidence]]:
+    """Startup evidence of every company on a page, fetched once."""
+    if not companies:
+        return {}
+    rows = session.scalars(
+        select(CompanyStartupEvidence)
+        .where(CompanyStartupEvidence.company_id.in_([company.id for company in companies]))
+        .order_by(CompanyStartupEvidence.captured_at, CompanyStartupEvidence.id)
+    )
+    found: dict[UUID, list[CompanyStartupEvidence]] = {}
+    for row in rows:
+        found.setdefault(row.company_id, []).append(row)
+    return found
+
+
 def company_response(
-    company: Company, proposals: dict[UUID, SourceDefinitionModel] | None = None
+    company: Company,
+    proposals: dict[UUID, SourceDefinitionModel] | None = None,
+    startup: dict[UUID, list[CompanyStartupEvidence]] | None = None,
 ) -> CompanyResponse:
+    evidence = (startup or {}).get(company.id, [])
+    summary = summarize(evidence)
     return CompanyResponse(
         id=company.id,
         name=company.canonical_name,
@@ -189,6 +225,20 @@ def company_response(
         created_at=company.created_at,
         updated_at=company.updated_at,
         version=company.version,
+        startup_strength=summary.strength,
+        startup_batch=summary.batch,
+        startup_evidence=[
+            StartupEvidenceResponse(
+                id=row.id,
+                signal=row.signal,
+                strength=row.strength,
+                source_text=row.source_text,
+                source_url=row.source_url,
+                batch=row.batch,
+                captured_at=row.captured_at,
+            )
+            for row in evidence
+        ],
     )
 
 
@@ -277,8 +327,9 @@ def list_companies(
         radar_status=radar_status,
     )
     proposals = proposals_for(session, companies)
+    startup = startup_evidence_for(session, companies)
     return CompanyPageResponse(
-        items=[company_response(company, proposals) for company in companies],
+        items=[company_response(company, proposals, startup) for company in companies],
         page=page,
         page_size=page_size,
         total=total,
@@ -296,7 +347,11 @@ def get_company(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "company_not_found", "message": "Company not found."},
         )
-    return company_response(company, proposals_for(session, [company]))
+    return company_response(
+        company,
+        proposals_for(session, [company]),
+        startup_evidence_for(session, [company]),
+    )
 
 
 @router.patch("/{company_id}", response_model=CompanyResponse)

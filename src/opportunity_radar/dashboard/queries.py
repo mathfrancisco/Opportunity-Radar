@@ -27,7 +27,7 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
     SourceRunModel,
 )
-from opportunity_radar.companies.models import Company, CompanySource
+from opportunity_radar.companies.models import Company, CompanySource, CompanyStartupEvidence
 from opportunity_radar.dashboard.metrics import _is_homologated
 from opportunity_radar.dashboard.search_synonyms import synonym_variants
 from opportunity_radar.matching import currency
@@ -103,6 +103,11 @@ class InboxItem:
     #: side of the pair (F20-26). Never `True` for a `CONFIRMED`/`REJECTED` row — the
     #: badge is for a decision still owed, not a settled one.
     has_pending_duplicate: bool = False
+    #: Card F20-54: the company's startup evidence, summarized (`strong` when any row is
+    #: strong, else `weak`; `None` without evidence) and the YC batch when a strong
+    #: `yc_batch` row names one. Display only — matching never reads it.
+    startup_strength: str | None = None
+    startup_batch: str | None = None
 
     @property
     def applied(self) -> bool:
@@ -171,6 +176,9 @@ class InboxQuery:
     #: (`presentation/http/dashboard.py`), whose own `Query(default=True)` is what
     #: actually makes "no parameter" mean "filtered" for the API's callers.
     only_recent: bool = False
+    #: Card F20-54: `True` keeps only opportunities whose company has at least one
+    #: startup evidence row (any strength). Never touches score or verdict.
+    only_startups: bool = False
     recency_window_days: int = DEFAULT_RECENCY_WINDOW_DAYS
     #: The instant the recency window is measured against. A `field(default_factory=...)`
     #: rather than a fixed default so every unparametrized `InboxQuery()` still reads the
@@ -486,6 +494,8 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
             )
             .exists()
             .label("has_pending_duplicate"),
+            _startup_strength_column(),
+            _startup_batch_column(),
         )
         .select_from(OpportunityModel)
         .outerjoin(assessments, assessments.c.opportunity_id == OpportunityModel.id)
@@ -497,6 +507,38 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
         statement.where(*_inbox_filters(query, assessments, applications)),
         assessments,
         analyses,
+    )
+
+
+def _startup_evidence_rows(*conditions: Any) -> Select[Any]:
+    return select(CompanyStartupEvidence.id).where(
+        CompanyStartupEvidence.company_id == OpportunityModel.canonical_company_id,
+        *conditions,
+    )
+
+
+def _startup_strength_column() -> Any:
+    return case(
+        (_startup_evidence_rows(CompanyStartupEvidence.strength == "strong").exists(), "strong"),
+        (_startup_evidence_rows().exists(), "weak"),
+        else_=None,
+    ).label("startup_strength")
+
+
+def _startup_batch_column() -> Any:
+    return (
+        select(CompanyStartupEvidence.batch)
+        .where(
+            CompanyStartupEvidence.company_id == OpportunityModel.canonical_company_id,
+            CompanyStartupEvidence.signal == "yc_batch",
+            CompanyStartupEvidence.strength == "strong",
+            CompanyStartupEvidence.batch.is_not(None),
+        )
+        .order_by(CompanyStartupEvidence.captured_at.desc(), CompanyStartupEvidence.id)
+        .limit(1)
+        .correlate(OpportunityModel)
+        .scalar_subquery()
+        .label("startup_batch")
     )
 
 
@@ -552,6 +594,8 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
         filters.append(OpportunityModel.seniority.in_(query.seniorities))
     if query.only_recent:
         filters.append(_recency_condition(query))
+    if query.only_startups:
+        filters.append(_startup_evidence_rows().exists())
     if query.allowed_country:
         filters.append(
             OpportunityModel.allowed_countries.is_(None)
@@ -699,6 +743,8 @@ def _inbox_item(row: Any) -> InboxItem:
         application_stage=row[29],
         application_next_action_at=row[30],
         has_pending_duplicate=bool(row[31]),
+        startup_strength=row[32],
+        startup_batch=row[33],
     )
 
 

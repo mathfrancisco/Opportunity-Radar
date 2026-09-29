@@ -107,6 +107,7 @@ reais).
 | Rotacionar a chave Groq usada nas rodadas | Com o usuário |
 | [F20-61 — Filtro de recência (14 dias) com exceção para estágio/programas com prazo](fase-20/f20-61-filtro-de-recencia-14-dias.md) | Implementado em `feature/f20-61-recencia`; critérios de aceite cobertos por teste (backend + componente). Volume real de vaga junior/estágio/programa-com-prazo no acervo real ainda não foi medido (item 5 do escopo do card, nota explícita, não critério de aceite) |
 | [F20-70 — Fechar lacunas de palavra-chave do normalizador de senioridade](fase-20/f20-70-lacunas-de-palavra-chave-senioridade.md) | Regras e testes implementados em `feature/f20-61-recencia` (`seniority-v2` → `seniority-v3`); reprocessamento do acervo real (critério de aceite 4 do card) não executado por instrução explícita do coordenador desta sessão de não tocar no acervo real |
+| [F20-54 — Marcação "startup" com evidência e filtro na UI](fase-20/f20-54-marcacao-de-startup-e-filtro.md) | Implementado em `feature/f20-54-startup-tag`; critérios cobertos por teste (backend + componente). Pendente: nenhuma evidência real gravada ainda (o F20-53 produz o sinal; sem backfill, o card não define fonte para empresas existentes) — o filtro devolve vazio no acervo real até lá |
 
 ## 6. Último card
 
