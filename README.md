@@ -2,655 +2,155 @@
 
 Sistema local-first para descoberta, consolidação, avaliação e gestão de oportunidades profissionais.
 
-O Opportunity Radar transforma uma lista pesquisada de empresas em um radar operacional contínuo. O catálogo inicial reúne 222 registros documentados em `docs/pesquisas`, incluindo as 186 linhas que vieram do Notion e 36 adicionais. Neon/Databricks e receeve/InDebted são reconciliadas como aliases, resultando em 220 identidades de empresa administradas pelo sistema. A partir daí, fontes públicas e autorizadas são consultadas, vagas são preservadas em formato bruto, normalizadas para um modelo canônico, deduplicadas, filtradas por critérios objetivos, avaliadas contra o perfil profissional e apresentadas em uma dashboard local.
+O Opportunity Radar transforma uma lista pesquisada de empresas em um radar operacional contínuo. Fontes públicas e autorizadas (ATS, feeds e páginas com dados estruturados) são consultadas em agenda; cada vaga é preservada em formato bruto, normalizada para um modelo canônico, deduplicada, avaliada por regras determinísticas contra o perfil profissional, enriquecida por uma análise de IA **consultiva** e apresentada em uma dashboard web local.
 
-A inteligência artificial é executada localmente com Ollama. PostgreSQL concentra o estado transacional, a API é construída com FastAPI, o frontend usa React e a execução é padronizada por Docker Compose. O projeto começa como um monólito modular orientado a domínios e evolui de forma incremental, sem assumir microsserviços, Kubernetes ou infraestrutura distribuída antes de existir necessidade real.
+PostgreSQL concentra o estado, a API é FastAPI, o worker é APScheduler, o frontend é React e a execução é padronizada por Docker Compose. A IA roda na nuvem, **somente no Groq**, é opt-in e nunca decide elegibilidade, score ou veredito. O projeto é um monólito modular orientado a domínios, sem microsserviços, Redis, Celery ou Kubernetes.
 
-> **Status da documentação:** arquitetura de referência em evolução. O MVP representa o primeiro recorte implementável; a arquitetura final define o estado-alvo e as fronteiras que devem ser preservadas durante a evolução.
+## Status
 
----
+- **Fase 20 (Groq e consolidação das fases 16 a 19) mesclada em `main` em 2026-09-29** (PR #25). O Ollama e os embeddings locais foram removidos; a busca é full-text.
+- Na stack real de 2026-09-29: 144 fontes definidas, **137 habilitadas**, 686 oportunidades, 223 empresas. Números, limitações e melhorias priorizadas estão em [Arquitetura atual](docs/47-arquitetura-atual.md), que é a referência do estado do código.
+- **Em planejamento:** [SPEC 46 — redesenho da interface web](docs/46-spec-redesign-ui.md) (apenas apresentação; nenhuma capacidade nova declarada).
+- Pendências conhecidas da Fase 20 estão em [validacao-pendente.md](docs/44-roadmap-fase-20/validacao-pendente.md). A medição de produtividade e custo de IA foi **inconclusiva** (amostra de ~1,24 dia): ver [evidência do rebuild](docs/44-roadmap-fase-20/evidencias/rebuild-stack-real-2026-09-29.md).
 
-## 1. Problema que o sistema resolve
+## Stack
 
-Buscar vagas manualmente em múltiplas fontes produz quatro problemas principais:
-
-1. **Cobertura fragmentada:** nenhuma fonte isolada contém todas as oportunidades relevantes.
-2. **Baixa rastreabilidade:** quando uma vaga aparece em mais de um local, fica difícil identificar sua origem e saber qual versão é a mais recente.
-3. **Ruído de decisão:** muitas vagas parecem interessantes superficialmente, mas falham em critérios básicos de localização, contrato, senioridade ou autorização de trabalho.
-4. **Acompanhamento disperso:** candidaturas, contatos, follow-ups e entrevistas acabam distribuídos entre abas, planilhas, Notion, mensagens e memória pessoal.
-
-O Opportunity Radar cria uma camada única para resolver esse ciclo de ponta a ponta:
-
-```mermaid
-flowchart LR
-    A["Empresas de interesse"] --> B["Fontes consultáveis"]
-    B --> C["Coleta"]
-    C --> D["Dados brutos"]
-    D --> E["Normalização"]
-    E --> F["Deduplicação"]
-    F --> G["Elegibilidade"]
-    G --> H["Scoring"]
-    H --> I["Análise local com IA"]
-    I --> J["Dashboard"]
-    J --> K["Pipeline de candidatura"]
-```
-
----
-
-## 2. Objetivos do produto
-
-### 2.1 Objetivo principal
-
-Reduzir o esforço manual necessário para descobrir e priorizar oportunidades profissionais sem abrir mão de rastreabilidade, controle humano e explicabilidade.
-
-### 2.2 Objetivos funcionais
-
-O sistema deve ser capaz de:
-
-- manter um catálogo local de empresas e suas fontes de carreira;
-- executar buscas recorrentes em ATSs, feeds e fontes autorizadas;
-- aceitar inclusão manual de vagas por URL, texto ou arquivo;
-- preservar o payload original de cada item coletado;
-- transformar formatos externos diferentes em um modelo interno canônico;
-- identificar quando duas ocorrências representam a mesma oportunidade;
-- aplicar filtros determinísticos antes da análise por IA;
-- calcular um score reproduzível e versionado;
-- enriquecer oportunidades elegíveis com análise local via Ollama;
-- mostrar evidências, inferências, lacunas e motivos de desqualificação;
-- permitir ao usuário iniciar e acompanhar uma candidatura;
-- registrar histórico de mudanças importantes;
-- continuar útil mesmo quando uma fonte externa ou o Ollama estiver indisponível.
-
-### 2.3 Objetivos não funcionais
-
-O projeto privilegia:
-
-- execução local reproduzível;
-- baixo custo operacional;
-- privacidade dos dados profissionais;
-- idempotência;
-- isolamento de falhas;
-- observabilidade suficiente para diagnosticar problemas;
-- migrações de banco controladas;
-- testes automatizados de regras críticas;
-- capacidade de evoluir sem reescrever o núcleo.
-
----
-
-## 3. O que não é objetivo imediato
-
-O sistema **não** nasce como:
-
-- plataforma multiusuário;
-- SaaS público;
-- robô de candidatura automática em massa;
-- scraper irrestrito de sites protegidos;
-- substituto de LinkedIn, ATSs ou portais de vagas;
-- motor de decisão totalmente delegado a LLM;
-- arquitetura baseada em microsserviços desde o primeiro dia.
-
-Esses limites existem para manter o projeto implementável, confiável e coerente com o uso pessoal/local-first.
-
----
-
-## 4. Princípios arquiteturais
-
-### 4.1 Local-first
-
-Dados profissionais, configurações, modelos, histórico de matching e estado do pipeline permanecem localmente por padrão. Integrações externas são usadas apenas para obter dados necessários ou quando explicitamente configuradas.
-
-### 4.2 Automação responsável
-
-Coleta, normalização, deduplicação, scoring e preparação de conteúdo podem ser automáticos. Ações externas relevantes — especialmente candidatura, envio de mensagem e contato com recrutadores — permanecem sob confirmação humana.
-
-### 4.3 Evidência antes de inferência
-
-O sistema diferencia claramente:
-
-- **evidência:** informação obtida diretamente da fonte;
-- **inferência:** conclusão derivada por regra ou IA;
-- **desconhecido:** dado ausente que não deve ser tratado automaticamente como falso.
-
-Essa distinção precisa aparecer tanto no modelo de dados quanto na interface.
-
-### 4.4 Determinismo antes de IA
-
-Regras objetivas devem ser aplicadas antes da LLM. Exemplo: uma vaga explicitamente presencial em um país incompatível não precisa consumir inferência semântica para concluir que não atende ao perfil.
-
-### 4.5 DDD pragmático
-
-Os domínios são modelados e separados, porém permanecem dentro de um monólito modular enquanto isso for operacionalmente vantajoso. O foco é obter fronteiras claras no código, no banco e nos contratos, não multiplicar deploys.
-
-### 4.6 Evolução incremental
-
-O MVP reduz componentes físicos, mas mantém contratos alinhados com o desenho final. Assim, um worker único pode existir inicialmente sem misturar responsabilidades de domínio, permitindo posterior separação em workers especializados.
-
-### 4.7 Idempotência como requisito de base
-
-Toda operação recorrente deve assumir que pode ser repetida. Coletas, imports, normalizações, consumo de eventos e jobs não podem produzir duplicidade apenas porque foram executados novamente.
-
-### 4.8 Falhas degradam funcionalidades, não o sistema inteiro
-
-Uma fonte fora do ar não impede outras fontes de rodar. Ollama indisponível não impede coleta ou scoring determinístico. Uma projeção de leitura quebrada não deve corromper agregados transacionais.
-
----
-
-## 5. Visão arquitetural em camadas
-
-```mermaid
-flowchart TB
-    UI["Dashboard React"]
-    API["FastAPI / Presentation"]
-    APP["Application Layer"]
-    DOM["Bounded Contexts / Domain"]
-    INF["Infrastructure / Adapters"]
-    PG[("PostgreSQL")]
-    EXT["ATS, feeds e fontes autorizadas"]
-    OLL["Ollama"]
-
-    UI --> API
-    API --> APP
-    APP --> DOM
-    INF --> APP
-    INF --> DOM
-    INF --> PG
-    INF --> EXT
-    INF --> OLL
-```
-
-A regra de dependência é sempre voltada para dentro:
-
-- o domínio não conhece FastAPI;
-- o domínio não conhece SQLAlchemy;
-- o domínio não conhece Celery, Redis ou APScheduler;
-- o domínio não conhece Ollama;
-- coletores externos implementam portas internas;
-- persistence adapters convertem entre ORM e objetos de domínio.
-
----
-
-## 6. Fluxo essencial do sistema
-
-```mermaid
-flowchart TD
-    A["Importação dos estudos de fontes"] --> B["Catálogo local de empresas"]
-    B --> C["Descoberta de endpoints de carreira"]
-    C --> D["Execução de coletores autorizados"]
-    D --> E["Persistência de SourceRun e RawItem"]
-    E --> F["Normalização para modelo canônico"]
-    F --> G["Deduplicação e SourceOccurrence"]
-    G --> H["Hard filters"]
-    H --> I["Score determinístico"]
-    I --> J["Análise estruturada com Ollama"]
-    J --> K["MatchAssessment versionado"]
-    K --> L["Opportunity Inbox"]
-    L --> M["Decisão humana"]
-    M --> N["Pipeline de candidatura"]
-```
-
-### 6.1 Regras importantes desse fluxo
-
-- `RawItem` é preservado mesmo que a normalização falhe.
-- uma `Opportunity` pode possuir múltiplas `SourceOccurrence`;
-- o score não substitui os hard filters;
-- uma resposta inválida do Ollama deve ser rejeitada e reprocessável;
-- a ausência de IA não bloqueia o restante do fluxo;
-- alterações de pipeline geram histórico.
-
----
-
-## 7. MVP
-
-### 7.1 Objetivo do MVP
-
-Validar o ciclo completo com poucas fontes e poucos componentes físicos:
-
-**importar → coletar → normalizar → deduplicar → filtrar → pontuar → analisar → visualizar → acompanhar.**
-
-### 7.2 Serviços do MVP
-
-- `frontend` — dashboard React;
-- `api` — FastAPI;
-- `worker` — agenda, coleta, processamento e manutenção inicial;
-- `postgres` — persistência;
-- `ollama` — inferência local.
-
-### 7.3 Fontes mínimas
-
-- Ashby;
-- Lever;
-- Greenhouse;
-- uma fonte remota baseada em API/RSS;
-- inclusão manual por URL;
-- geração assistida de consultas Google Boolean.
-
-### 7.4 Resultado esperado
-
-O MVP está pronto quando uma máquina limpa consegue subir o ambiente, importar os 222 registros pesquisados em 220 identidades reconciliadas, coletar vagas de pelo menos três ATSs, evitar duplicidade, produzir avaliações explicáveis e manter o pipeline após reiniciar os containers. A implantação começa pelos endpoints JSON confirmados, segue pelos ATSs identificados e depois pelas páginas de carreiras; fontes dinâmicas e pendentes permanecem no backlog até serem homologadas.
-
-Detalhes: [Arquitetura do MVP](docs/02-arquitetura-mvp.md) e [Roadmap do MVP](docs/29-roadmap-mvp.md).
-
-### 7.5 Estado da coleta
-
-O importador dos estudos materializa RevenueCat, Supabase, Render e WorkOS como
-`SourceDefinition` Ashby desabilitadas, o Spotify como uma definição Lever e o
-board identificado da AssemblyAI como Greenhouse. Cada definição conserva o
-vínculo com a evidência e o identificador técnico pesquisado. Ashby e Greenhouse
-consultam uma vez a API pública do board; Lever percorre a listagem paginada nas
-regiões global ou UE. Os três adaptadores aceitam limite de itens, preservam o
-objeto original e registram tentativas e retries na execução. O intervalo mínimo
-é aplicado entre requisições e execuções da mesma fonte; a última tentativa HTTP
-e os eventos de rate limit ficam persistidos.
-
-O mesmo importador garante uma definição Remotive desabilitada, sem vínculo com
-uma empresa específica. Esse coletor aceita até dez palavras-chave por execução,
-envia o limite de itens à API e conserva a atribuição da Remotive em cada item.
-Salário e tags declarados pela API também seguem no snapshot de coleta. O coletor
-Ashby solicita os componentes públicos de compensação do próprio job board.
-O intervalo persistente padrão é de seis horas entre execuções, seguindo a
-cadência recomendada pela fonte; tentativas antecipadas falham com código
-estruturado, sem manter uma requisição aberta por horas. A definição começa como
-`unverified` e precisa dos mesmos gates operacionais antes de ser ativada.
-
-O coletor `hacker_news` (F20-55) lê o thread mensal "Ask HN: Who is hiring?": localiza o
-thread pela Algolia HN Search e lê os comentários pela API oficial Firebase (nunca o HTML
-do site; termos em `docs/pesquisas/termos-hn-who-is-hiring.md`). Cada comentário de
-primeiro nível vira uma vaga a partir do cabeçalho `Empresa | Papel | Local`; comentário
-sem empresa identificável conta como item inválido (execução `PARTIAL`), e um link para um
-board de ATS suportado gera proposta com `discovery_via="hn_who_is_hiring"`.
-
-As fontes permanecem desabilitadas até a revisão dos termos e a homologação do
-coletor. Depois desses gates, `PATCH /api/sources/{id}` ativa a definição com
-controle de versão e `POST /api/sources/{id}/runs` executa a coleta. Uma chamada
-sem `inputs` inicia uma fonte externa; uma chamada com `inputs` mantém o fluxo
-manual compatível.
-
-### 7.6 Estado da normalização
-
-Cada `RawItem` novo conserva um snapshot `collected_item_v1`, que isola o
-contexto de Opportunities dos formatos específicos de cada coletor. O worker
-processa itens pendentes em lotes e cria uma `Opportunity` canônica com
-fingerprint versionado e uma `SourceOccurrence` por origem. A resolução usa
-identidade externa da fonte, URL normalizada e fingerprint exato; candidatos
-ambíguos permanecem separados com `REVIEW_REQUIRED` e razões persistidas.
-
-`GET /api/opportunities` lista as vagas e suas ocorrências,
-`GET /api/opportunities/{id}` expõe a procedência e os resultados de
-normalização, e `PATCH /api/opportunities/{id}/status` controla o lifecycle com
-versão otimista. `POST /api/opportunities/normalizations/pending` permite
-reprocessar evidência local sem consultar a fonte novamente.
-
-O normalizador `v2` extrai somente remuneração explicitamente declarada. Cada
-ocorrência mantém seu próprio registro para que atualizações e conflitos não
-apaguem a procedência. Valores
-monetários usam `Decimal`, conservam moeda, período, bruto/líquido quando a fonte
-os fornece e mantêm a referência da evidência; conflitos entre ocorrências
-produzem `REVIEW_REQUIRED`. A taxonomia inicial `skills-v1` resolve aliases como
-`React.js` e `ReactJS` para `react`, deduplica a competência canônica e registra a
-evidência de cada ocorrência. Esses dados aparecem na listagem e no
-detalhe de oportunidades.
-
-### 7.7 Estado do matching determinístico
-
-O endpoint `POST /api/matches/evaluate` avalia uma oportunidade contra a versão
-ativa do perfil ou contra uma versão informada explicitamente. O motor aplica
-hard filters com estados `TRUE`, `FALSE` e `UNKNOWN`, calcula oito fatores com
-pesos e políticas de ausência versionados e persiste score, confiança, verdict,
-explicações e evidências. Ausência de país permitido, autorização, timezone ou
-senioridade preferida permanece desconhecida e não é convertida em reprovação.
-
-Cada `MatchAssessment` conserva os snapshots exatos usados, a versão da
-oportunidade, do perfil, das regras e da taxonomia. Um hash inclui esses dados e
-a data UTC usada na recência. Repetir a mesma combinação no mesmo dia é
-idempotente; uma mudança de conteúdo, versão ou data de referência produz um novo
-registro histórico.
-`GET /api/matches` oferece listagem paginada e filtros por oportunidade e perfil,
-enquanto `GET /api/matches/{id}` retorna todos os hard filters e fatores.
-
-### 7.8 Estado da análise semântica
-
-`POST /api/matches/{id}/analysis` acrescenta a camada consultiva do Ollama a um
-assessment que já concluiu. O prompt é um artefato versionado em
-`prompts/opportunity_analysis/v1/`, e `output.schema.json` é gerado de
-`OUTPUT_SCHEMA` por `scripts/export_prompt_schema.py`, com gate no CI: schema no
-disco e validador não podem divergir.
-
-A resposta do modelo é validada contra um schema fechado que não possui score,
-eligibility, verdict nem disqualifier. A tabela `matching.match_analysis` também
-não tem essas colunas, então a IA não sobrescreve a decisão determinística por
-construção, e não por convenção.
-
-Modelo fora do ar, timeout, JSON inválido ou resposta fora do contrato viram
-estado — `AI_FAILED` com código de falha — e não erro HTTP: o assessment continua
-completo. Análise concluída é reusada do banco, sobrevivendo a reinício;
-tentativas degradadas ficam como histórico e não bloqueiam nova execução.
-`{"refresh": true}` força nova chamada e acrescenta uma linha, sem editar a
-anterior. Com `OLLAMA_ANALYSIS_ENABLED=false` a rota continua respondendo `200`,
-com `AI_SKIPPED`.
-
-O detalhe e a listagem de assessments trazem `analysis` com o estado corrente.
-
-O harness de avaliação (`scripts/eval_analysis.py`, funções puras em
-`matching/evaluation.py`) tem o conjunto de 50 casos rotulados versionado em
-`prompts/opportunity_analysis/eval/cases/` (10 Java, 10 fullstack, 10 IA, 10 fora de
-área, 10 inelegíveis, conforme F20-21); o excedente rotulado fica em
-`eval/cases-secondary/`. A baseline real no Groq (`make eval-analysis` com
-`GROQ_API_KEY`) ainda não foi executada — pendente, fora do orçamento desta sessão.
-
-### 7.9 Estado do dashboard
-
-As telas leem por read models em `src/opportunity_radar/dashboard/`: SQL otimizado
-para a interface, sem carregar agregados e sem colocar joins de dashboard nos
-repositories de cada contexto.
-
-`GET /api/overview` resume o ciclo: novas oportunidades na janela de sete dias,
-contagem por verdict, análises degradadas, itens brutos ainda não normalizados e
-fontes cuja última execução falhou. Candidaturas e follow-ups voltam `null`, não
-`0` — o pipeline chega na fase 8, e ausência de dado não é dado zerado.
-
-`GET /api/inbox` devolve cada oportunidade com a avaliação mais recente, filtrando
-por verdict, score mínimo, empresa, modalidade, status e data, com busca por título
-ou empresa e ordenação por prioridade, recência ou score. Oportunidade ainda não
-avaliada continua na lista: escondê-la faria a tela discordar do catálogo sem dizer
-por quê.
-
-`GET /api/source-health` devolve cada fonte com o resultado do último run:
-status, duração, contadores e erro. Fonte que nunca executou reporta ausência, não
-zero. A rota não é `/sources/health` porque esse caminho já é um id de fonte.
-
-No frontend, `/` é a Visão geral, `/inbox` é a Opportunity Inbox,
-`/opportunities/{id}` é o detalhe, `/companies` e `/companies/{id}` são o
-catálogo, `/sources` são as fontes e execuções, `/profile` são os critérios de
-decisão e `/status` é a checagem de ambiente. Os cartões da Visão geral são links que já abrem a inbox
-filtrada, e os filtros vivem na URL, então uma seleção é compartilhável e
-sobrevive ao reload.
-
-O detalhe é montado sobre `GET /api/opportunities/{id}` e
-`GET /api/matches?opportunity_id=`, sem endpoint novo. Ele mostra o conteúdo
-canônico, a remuneração com a evidência textual que a originou, as skills com a
-versão da taxonomia, cada ocorrência com o item bruto correspondente, e então a
-decisão: score, verdict, confiança, filtros eliminatórios, fatores com peso e
-explicação, e a análise semântica. As versões de regras, taxonomia, perfil e
-conteúdo aparecem junto, porque é o que torna a decisão reproduzível. A análise
-pode ser disparada da tela; se o modelo falhar, o estado degradado aparece ao
-lado da decisão determinística, que continua completa.
-
-A tela de fontes mostra habilitação, evidência, termos revisados, homologação do
-collector e o último run de cada fonte, com histórico por fonte e execução
-manual. Fonte desabilitada não executa, e a tela diz o motivo em vez de esconder
-o botão.
-
-A tela de perfil edita skills, modalidades, contratos, países, janela de
-timezone, remuneração, relocação e patrocínio. Salvar encadeia criar, publicar e
-ativar carregando o lock que cada passo devolve, então uma edição concorrente
-falha com conflito em vez de vencer calada. Avaliações antigas continuam
-apontando para a versão de perfil que as produziu.
-
-O detalhe da empresa reúne aliases, domínio, fontes com método e data de
-verificação, a verificação mais recente entre elas e as últimas vagas coletadas,
-reusando a inbox filtrada por empresa em vez de uma query nova.
-
-### 7.10 Estado do pipeline de candidaturas
-
-`crm.application_process` guarda a candidatura e `crm.stage_history` guarda como
-ela chegou ao estágio atual. A candidatura é mutável; o histórico é append-only
-com trigger que bloqueia `UPDATE`. O estágio atual fica nas duas pontas de
-propósito: o histórico responde como chegamos aqui, a coluna responde onde
-estamos sem reprocessar nada.
-
-A tabela de transições vive em `pipeline/domain.py` e é pura. Estágio terminal
-não tem saída — corrigir um engano é abrir nova candidatura, não reabrir
-histórico —, e de qualquer estágio vivo é sempre possível recusar, desistir ou
-encerrar. A API devolve as transições legais junto da candidatura, então a
-interface nunca oferece um movimento que o domínio recusaria.
-
-Um índice parcial único garante uma candidatura ativa por oportunidade e versão
-de perfil. Encerrar libera a vaga para uma nova candidatura em outro ciclo, e é
-por isso que a inbox considera aplicada apenas quem tem candidatura ativa.
-Transição e próxima ação exigem `expected_version`, então edição concorrente
-falha com conflito em vez de sobrescrever.
-
-Oportunidade e candidatura seguem separadas: encerrar uma não encerra a outra.
-
-### 7.11 Operação
-
-Todo processo emite JSON em stdout, uma linha por evento. A API aceita e devolve
-`X-Correlation-ID`; quando o cliente não manda um, a API gera. O id viaja em
-context var, então um log escrito dentro de um collector carrega a requisição ou
-o lote a que pertence sem que o id precise atravessar assinaturas. Cada passada
-de normalização do worker abre o próprio id.
-
-`make doctor` responde, para cada verificação, o que foi inspecionado, o que foi
-encontrado e o que fazer. Aviso não derruba o código de saída: Ollama fora do ar
-é degradação esperada, não ambiente quebrado.
-
-`make backup` grava o dump e um manifesto com a revisão do Alembic e a contagem
-de cada tabela do fluxo vertical. `make restore-check` restaura num banco
-descartável, roda as mesmas contagens e compara com o manifesto — criar o arquivo
-não é o critério. O banco de trabalho não é tocado, e divergência sai com código
-1 dizendo qual tabela divergiu.
-
-O runbook operacional está em `docs/30-runbook.md`.
-
----
-
-## 8. Arquitetura final
-
-A versão final mantém o monólito modular, mas separa responsabilidades operacionais que passam a ter perfis de carga diferentes.
-
-### 8.1 Evoluções principais
-
-- scheduler separado;
-- Redis como broker/coordenação;
-- Celery para filas e retries;
-- worker de coleta;
-- worker de análise;
-- worker de manutenção;
-- transactional outbox;
-- projeções de leitura especializadas;
-- observabilidade mais detalhada;
-- CRM, outreach, propostas e entrevistas mais completos.
-
-### 8.2 Princípio de evolução
-
-A arquitetura final não deve ser implementada de uma vez. Cada componente adicional só entra quando resolve uma limitação observada no MVP.
-
-Detalhes: [Arquitetura da versão final](docs/03-arquitetura-final.md).
-
----
-
-## 9. Bounded contexts
-
-| Contexto | Papel no sistema | Tipo de subdomínio |
-| --- | --- | --- |
-| Profile | perfil profissional, skills, experiências e preferências | Supporting |
-| Company Radar | catálogo e identidade das empresas | Core |
-| Acquisition | fontes, execuções e coleta | Core |
-| Opportunities | vaga canônica, ocorrências e ciclo de vida | Core |
-| Matching | elegibilidade, score e explicabilidade | Core |
-| CRM | candidatura, contatos e follow-ups | Supporting |
-| Outreach | rascunhos e histórico de comunicação | Supporting |
-| Proposals | proposta, preço, escopo e versões | Supporting |
-| Interviews | preparação, sessões e feedback | Supporting |
-| Automation | jobs, locks, retries e DLQ | Generic |
-| Platform | outbox, auditoria, configuração e idempotência | Generic |
-
-O mapa detalhado de relações entre contextos está em [DDD estratégico](docs/08-ddd-estrategico.md).
-
----
-
-## 10. Dados principais
-
-O PostgreSQL é organizado por schemas alinhados aos bounded contexts. Alguns conceitos centrais:
-
-| Conceito | Finalidade |
+| Camada | Tecnologia |
 | --- | --- |
-| `CareerProfile` | snapshot versionado do perfil usado no matching |
-| `Company` | identidade canônica da empresa |
-| `CompanySource` | endpoint ou fonte associada à empresa |
-| `SourceDefinition` | configuração de um coletor |
-| `SourceRun` | execução delimitada de uma fonte |
-| `RawItem` | envelope imutável do item coletado: fonte, run, identidade e hash |
-| `RawItemPayload` | conteúdo bruto do item, sujeito à política de retenção |
-| `SourceAlertIncident` | episódio de indisponibilidade de uma fonte, do alerta ao recovery |
-| `PayloadRetentionEvent` | histórico append-only de cada expiração de conteúdo bruto |
-| `WorkerJobState` | estado operacional observado de cada job do worker |
-| `Opportunity` | vaga canônica consolidada |
-| `SourceOccurrence` | ocorrência da vaga em uma fonte |
-| `MatchAssessment` | avaliação versionada de aderência |
-| `ApplicationProcess` | acompanhamento de candidatura |
+| Backend | Python 3.12, FastAPI, SQLAlchemy 2, Alembic, APScheduler, httpx, pydantic-settings |
+| Banco | PostgreSQL 17 (imagem própria com pgvector, resíduo sem uso em produção) |
+| IA | Groq (`openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `qwen/qwen3.8-27b`), com quota persistente, breaker e fallback |
+| Busca web (opcional) | Tavily, sob orçamento de créditos por execução |
+| Frontend | React 19, react-router-dom 7, TanStack Query 5, Tailwind 4, Vite, Vitest |
+| Execução | Docker Compose (`postgres`, `migrate`, `api`, `worker`, `frontend`) |
+| Qualidade | pytest, ruff, mypy, ESLint, Vitest, Playwright, GitHub Actions |
 
-A modelagem completa está em [Visão geral da modelagem de dados](docs/11-modelagem-dados.md).
+## Como rodar
 
----
+Pré-requisito: Docker com Compose.
 
-## 11. Política de IA
+```bash
+make bootstrap    # cria .env a partir de .env.example e valida o compose
+make up           # constrói e sobe postgres, migrate, api, worker e frontend
+make doctor       # diz o que está quebrado e o que fazer a respeito
+```
 
-Ollama é um adaptador de infraestrutura, não uma autoridade de domínio.
+| Endereço | O quê |
+| --- | --- |
+| `http://localhost:3000` | dashboard (nginx; encaminha `/api/*` para a API) |
+| `http://localhost:8000/health` | estado do banco e da IA |
+| `http://localhost:8000/docs` | contrato OpenAPI |
 
-A IA pode:
+As portas 3000 e 8000 são publicadas apenas em `127.0.0.1`; o Postgres não é exposto ao host. A IA vem **desligada** (`AI_ENABLED=false`): para ligar, defina `AI_ENABLED=true` e `GROQ_API_KEY` no `.env` (nunca versionado). Sem chave a análise responde `AI_SKIPPED` e o restante do sistema segue funcionando. `TAVILY_API_KEY` também é opcional.
 
-- interpretar descrição da vaga;
-- identificar evidências de stack e experiência;
-- resumir responsabilidades;
-- apontar lacunas;
-- sugerir preparação para candidatura ou entrevista.
+### Alvos `make`
 
-A IA não pode:
+| Alvo | Para quê |
+| --- | --- |
+| `up`, `down`, `restart`, `status`, `logs`, `dev` | ciclo de vida da stack |
+| `migrate` | aplica migrações (`alembic upgrade head`) |
+| `doctor` | diagnóstico do ambiente, jobs do worker, incidentes e uso da IA |
+| `import-companies` | importa o catálogo pesquisado (`docs/pesquisas`) |
+| `enable-sources` | probe e habilitação de fontes (exige `TERMS_REVIEWED=1` após revisar os termos) |
+| `collect` | coleta sob demanda (`SOURCE_ID`, `SOURCE_TYPE`, `MODE`, `MAX_ITEMS`) |
+| `discover-ats`, `discover-sites` | descoberta de ATS por site e por sitemap (manuais, desligadas por padrão) |
+| `backup`, `restore-check` | dump com manifesto e restauração verificada em banco descartável |
+| `soak`, `eval-analysis`, `eval-search`, `export-eval-cases` | portão de 72 h simulado e avaliações |
+| `test`, `test-integration`, `check` | validação (rodar só quando solicitado) |
 
-- alterar regras de elegibilidade por conta própria;
-- retornar texto livre para operações que exigem estado estruturado;
-- apagar evidências conflitantes;
-- transformar um dado ausente em fato;
-- enviar mensagens ou candidaturas automaticamente.
+### Scripts principais (`scripts/`)
 
-Toda saída usada pelo sistema deve ser validada contra JSON Schema e vinculada à versão de prompt, modelo e configuração utilizada.
+`doctor.py`, `collect.py`, `enable_sources.py`, `discover_ats.py`, `discover_sites.py`, `discover_startups.py`, `import_research_catalog.py`, `backup.py`, `restore_check.py`, `soak_gate.py`, `eval_analysis.py`, `benchmark_report.py`, `backfill_opportunity_company.py`, `backfill_startup_evidence.py`, `reclassify_role_families.py`. Cada um tem docstring com uso e limites.
 
----
+### Testes e CI
 
-## 12. Estratégia de fontes
+- **Local:** `make test` (pytest no container), `make test-integration` (Postgres real, `RUN_DATABASE_INTEGRATION=1`), `make check` (ruff, mypy e `npm run check`). Para rodar contra a árvore de trabalho sem reconstruir imagens: `docker compose -f compose.yaml -f compose.dev.yaml run --rm api pytest -q`.
+- **CI** (`.github/workflows/pipeline.yml`, ignora mudanças só de documentação): qualidade do backend, testes e ida-e-volta de migrações com o portão de 72 h simulado, frontend (auditoria, lint, tipos, testes, build, sintaxe do nginx), E2E em Compose com stubs de Groq e de job boards (inclui jornada Playwright com falhas injetadas) e publicação das imagens no GHCR em `main`/tags.
 
-O radar combina diferentes classes de origem porque nenhuma cobre o mercado inteiro.
-
-Prioridade operacional:
-
-1. ATSs com endpoint público e formato previsível;
-2. APIs e feeds oficiais;
-3. remote boards com acesso permitido;
-4. páginas públicas estáveis quando os termos permitem;
-5. descoberta assistida por mecanismos de busca;
-6. entrada manual para qualquer caso não automatizável.
-
-LinkedIn, X e páginas protegidas não fazem parte da estratégia de scraping automatizado.
-
----
-
-## 13. Segurança e privacidade
-
-Como o sistema manipula currículo, preferências e histórico de candidatura, as seguintes regras são obrigatórias:
-
-- secrets não entram no Git;
-- `.env` local é ignorado;
-- somente serviços necessários expõem portas ao host;
-- banco e Ollama permanecem na rede Docker interna por padrão;
-- logs evitam conteúdo sensível completo;
-- backups devem ser protegidos como os dados originais;
-- dados externos são armazenados apenas quando necessários ao fluxo;
-- toda futura integração autenticada deve ter escopo mínimo.
-
----
-
-## 14. Observabilidade mínima
-
-Mesmo sendo local, o sistema precisa responder rapidamente a perguntas como:
-
-- qual fonte falhou?
-- quando foi a última execução bem-sucedida?
-- quantos itens foram coletados?
-- quantos foram novos, atualizados ou descartados?
-- qual vaga falhou na normalização?
-- por que uma vaga ficou sem análise?
-- qual versão de regra gerou determinado score?
-
-Para isso, execuções recebem identificadores de correlação, logs são estruturados e métricas operacionais são persistidas ou exportadas conforme a fase do projeto.
-
-A operação contínua entregue na Fase 13 acrescenta:
-
-- estado persistido por job do worker — tentativa, sucesso, falha, duração e próxima
-  execução — que o `scripts/doctor.py` lê para distinguir job saudável, atrasado, falho e
-  ausente, mesmo depois de um reinício;
-- incidente por fonte que abre com três falhas consecutivas, envia um único alerta e um
-  recovery no primeiro sucesso, registrado mesmo quando não há webhook configurado;
-- métricas por fonte em 24 horas e sete dias, com cobertura, taxa de erro por código,
-  dedupe, latência p95 e senioridade que mantém `UNKNOWN` visível e com procedência;
-- retenção auditável do conteúdo bruto: o payload expira em 12 meses por padrão, o
-  envelope `RawItem` permanece, e cada expiração gera histórico append-only.
-
-O detalhe operacional está no [runbook](docs/30-runbook.md).
-
----
-
-## 15. Estratégia de implementação
-
-A ordem recomendada evita construir UI ou IA sobre fundações instáveis.
+## O que o sistema faz
 
 ```mermaid
 flowchart LR
-    A["Infra local"] --> B["Perfil e empresas"]
-    B --> C["Aquisição"]
-    C --> D["Normalização"]
-    D --> E["Deduplicação"]
-    E --> F["Matching"]
-    F --> G["Ollama"]
-    G --> H["Dashboard"]
-    H --> I["Operação"]
+    A["Empresas e fontes<br/>(catálogo pesquisado)"] --> B["Coleta agendada<br/>12 tipos de coletor"]
+    B --> C["Itens brutos<br/>(evidência imutável)"]
+    C --> D["Normalização<br/>v6, seniority-v3, skills-v3"]
+    D --> E["Oportunidade canônica<br/>+ candidatos a duplicata"]
+    E --> F["Matching determinístico<br/>hard filters + 8 fatores"]
+    F --> G["Análise de IA consultiva<br/>Groq sob quota"]
+    G --> H["Inbox e detalhe"]
+    F --> H
+    H --> I["Pipeline de candidatura<br/>(decisão humana)"]
 ```
 
-Cada fase precisa terminar com um slice testável antes da próxima expansão.
+Coletores: Ashby, Greenhouse, Lever, Workable, Teamtailor, Workday, Factorial, Remotive, Hacker News ("Who is hiring?"), páginas com JSON-LD `JobPosting`, busca web via Tavily e entrada manual. Detalhes, regras e limitações por módulo estão em [Arquitetura atual](docs/47-arquitetura-atual.md).
 
----
+Telas: Visão geral (`/`), Inbox (`/inbox`), detalhe da vaga, candidaturas (`/applications`), empresas, fontes e fila de homologação, perfil e status.
 
-## 16. Mapa da documentação
+## Problema e princípios
 
-### Escopo em execução e planejado
+Buscar vagas manualmente produz cobertura fragmentada, baixa rastreabilidade, ruído de decisão e acompanhamento disperso. O radar cria uma camada única para todo o ciclo, guiada por princípios que continuam valendo:
 
-- [MVP](docs/29-roadmap-mvp.md) e [pós-MVP](docs/33-roadmap-pos-mvp.md),
-  com [cards das fases 10–13](docs/33-roadmap-pos-mvp/README.md).
-- [Interface](docs/34-roadmap-interface.md),
-  com [cards das fases 14–15](docs/34-roadmap-interface/README.md).
-- [IA local e busca](docs/38-roadmap-ia-e-busca.md),
-  [SPEC de IA](docs/36-spec-ollama.md), [SPEC de busca](docs/37-spec-busca.md)
-  e [cards das fases 16–17](docs/38-roadmap-ia-e-busca/README.md).
-- [Varredura produtiva](docs/39-spec-varredura-produtiva.md) e
-  [cards da fase 18](docs/40-roadmap-varredura-produtiva/README.md):
-  cobertura dos sites, coleta incremental e análise útil sob orçamento.
-- [Runbook](docs/30-runbook.md): operação disponível. Cards planejados não
-  significam capacidade já entregue; cada um registra status e evidência de aceite.
+- **Local-first e automação responsável:** dados e histórico ficam locais; ações externas (candidatar, escrever a recrutador) permanecem sob confirmação humana.
+- **Evidência antes de inferência:** o sistema separa evidência (da fonte), inferência (regra ou IA) e desconhecido; ausência de dado nunca vira reprovação.
+- **Determinismo antes de IA:** regras objetivas eliminam antes de qualquer inferência; a IA só acrescenta análise e nunca altera score, elegibilidade ou veredito.
+- **Idempotência e degradação isolada:** coleta, normalização e jobs podem ser repetidos sem duplicar; fonte, Groq ou Tavily fora do ar degradam só a sua função.
+- **Monólito modular:** fronteiras claras por contexto no código e no banco, sem multiplicar deploys.
 
-### Referências existentes
+Não são objetivos: plataforma multiusuário ou SaaS, candidatura automática em massa, scraping de sites protegidos ou que proíbam coleta, decisão delegada a LLM, microsserviços.
 
-- Arquitetura: [MVP](docs/02-arquitetura-mvp.md),
-  [alvo](docs/03-arquitetura-final.md), [tecnologias](docs/05-tecnologias.md).
-- Estrutura: [MVP](docs/06-estrutura-projeto-mvp.md) e
-  [alvo](docs/07-estrutura-projeto-final.md).
-- Domínio: [DDD estratégico](docs/08-ddd-estrategico.md),
-  [DDD tático](docs/09-ddd-tatico.md), [dados](docs/11-modelagem-dados.md).
-- Aquisição e análise: [coletores](docs/17-fontes-coletores.md),
-  [matching](docs/20-matching-scoring.md), [prompts](docs/21-ollama-prompts.md).
-- Execução: [Docker](docs/25-docker-execucao-local.md),
-  [rastreabilidade](docs/32-rastreabilidade-46-pontos.md),
-  [tokens de design](docs/35-design-tokens.md).
-- Catálogo: [pesquisas](docs/pesquisas/README-pesquisa.md).
+## Contextos e dados
 
-## 17. Ordem recomendada de leitura
+Um schema PostgreSQL por contexto (detalhe de tabelas na [arquitetura atual](docs/47-arquitetura-atual.md#2-dados-schemas-e-tabelas)):
 
-- Produto: este README → arquitetura MVP → matching → roadmap vigente.
-- Busca e varredura: SPEC 37 → SPEC 39 → cards 17/18.
-- IA: SPEC 36 → cards 16 → gates de qualidade e orçamento.
-- Operação: Docker → runbook; planejamento futuro fica nas specs.
+| Schema | Papel |
+| --- | --- |
+| `profile` | perfil profissional versionado (skills, experiências, preferências) |
+| `company_radar` | catálogo e identidade das empresas, descoberta de ATS, evidência de startup |
+| `acquisition` | fontes, execuções, itens brutos, checkpoints, orçamento por host |
+| `opportunities` | vaga canônica, ocorrências, normalização, duplicatas, sugestões |
+| `matching` | avaliações versionadas, fatores e análises de IA |
+| `crm` | candidaturas e histórico de estágios (append-only) |
+| `dashboard` | buscas salvas |
+| `platform` | estado dos jobs, quota e telemetria da IA |
 
----
+## Política de IA
 
-## 18. Definição resumida de sucesso
+O Groq é um adaptador de infraestrutura, não uma autoridade de domínio. A IA pode interpretar a descrição, apontar evidências e lacunas e resumir responsabilidades; não pode alterar elegibilidade, devolver texto livre onde há estado estruturado, apagar evidência conflitante, tratar dado ausente como fato nem enviar mensagens ou candidaturas. Toda saída é validada contra JSON Schema fechado, cita a evidência e fica vinculada à versão de prompt, modelo e configuração. Dados pessoais são sanitizados antes de qualquer chamada, e o consumo respeita quota persistente por modelo (com reserva para análises pedidas na tela), breaker e fallback entre modelos.
 
-O Opportunity Radar é bem-sucedido quando deixa de ser apenas um agregador de links e passa a funcionar como um sistema confiável de decisão: ele sabe **de onde a vaga veio, se já havia sido vista, por que é ou não elegível, quanto combina com o perfil, qual evidência sustenta essa conclusão e em que estágio da candidatura ela se encontra**.
+## Estratégia de fontes
+
+Prioridade: ATS com endpoint público e formato previsível; APIs e feeds oficiais; páginas públicas estáveis com dados estruturados; descoberta assistida por busca; entrada manual. Toda fonte externa só coleta depois de evidência confirmada, termos revisados e coletor testado. **Não fazem parte da coleta** Gupy, Wellfound, Y Combinator/Work at a Startup, Careerflow, Landing.jobs, LinkedIn, X e páginas protegidas; o motivo de cada uma (termos de uso ou ausência de endpoint estruturado) está na [arquitetura atual](docs/47-arquitetura-atual.md#31-aquisição-acquisition).
+
+## Segurança e privacidade
+
+Segredos ficam só no `.env` local (ignorado pelo Git e pelo Docker); somente API e frontend publicam porta, e só em `127.0.0.1`; o backup rejeita chaves no manifesto; logs são JSON estruturados sem conteúdo sensível completo; não há autenticação nem multiusuário (uso pessoal).
+
+## Mapa da documentação
+
+**Comece por aqui**
+
+- [Arquitetura atual](docs/47-arquitetura-atual.md): como o sistema funciona hoje, módulos, regras, medições, limitações e melhorias priorizadas.
+- [Runbook](docs/30-runbook.md): operar, diagnosticar, backup e restauração.
+- [SPEC 46 — redesenho da interface](docs/46-spec-redesign-ui.md) e [tokens de design](docs/35-design-tokens.md).
+
+**Especificações e roadmaps vigentes**
+
+- [SPEC 43 — Groq e consolidação](docs/43-spec-llm-cloud-e-consolidacao.md) e [Fase 20](docs/44-roadmap-fase-20/README.md) (cards, evidências, [validação pendente](docs/44-roadmap-fase-20/validacao-pendente.md)).
+- [SPEC 45 — descoberta de startups](docs/45-spec-descoberta-startups.md).
+- [SPEC 41 — Tavily](docs/41-spec-tavily.md) e [cards da fase 19](docs/42-roadmap-tavily/README.md).
+- [SPEC 39 — varredura produtiva](docs/39-spec-varredura-produtiva.md) e [cards da fase 18](docs/40-roadmap-varredura-produtiva/README.md).
+- [SPEC 37 — busca](docs/37-spec-busca.md), [roadmap de IA e busca](docs/38-roadmap-ia-e-busca.md) (fases 16 e 17).
+- [Interface](docs/34-roadmap-interface.md) (fases 14 e 15), [pós-MVP](docs/33-roadmap-pos-mvp.md) (fases 10 a 13) e [MVP](docs/29-roadmap-mvp.md).
+
+**Referências de projeto (partes históricas)**
+
+- Arquitetura: [MVP](docs/02-arquitetura-mvp.md), [alvo](docs/03-arquitetura-final.md), [tecnologias](docs/05-tecnologias.md); estrutura: [MVP](docs/06-estrutura-projeto-mvp.md), [alvo](docs/07-estrutura-projeto-final.md).
+- Domínio: [DDD estratégico](docs/08-ddd-estrategico.md), [DDD tático](docs/09-ddd-tatico.md), [modelagem de dados](docs/11-modelagem-dados.md), [coletores](docs/17-fontes-coletores.md), [matching](docs/20-matching-scoring.md), [Docker](docs/25-docker-execucao-local.md), [rastreabilidade](docs/32-rastreabilidade-46-pontos.md).
+- **Atenção:** os documentos 02, 03, 05 a 09, 11, 20, 21, 25 e 36 ainda descrevem o Ollama local, que foi removido na Fase 20; em caso de divergência, vale o código e a [arquitetura atual](docs/47-arquitetura-atual.md#6-divergências-entre-documentação-e-código). Os documentos [21](docs/21-ollama-prompts.md) e [36](docs/36-spec-ollama.md) são históricos, substituídos pela [SPEC 43](docs/43-spec-llm-cloud-e-consolidacao.md).
+- Catálogo pesquisado: [pesquisas](docs/pesquisas/README-pesquisa.md).
+
+**Ordem recomendada de leitura:** este README → arquitetura atual → runbook → SPEC 43 e cards da Fase 20 → SPEC 46 para trabalho de interface.
+
+## Definição de sucesso
+
+O Opportunity Radar é bem-sucedido quando deixa de ser um agregador de links e passa a ser um sistema confiável de decisão: sabe de onde a vaga veio, se já havia sido vista, por que é ou não aderente ao perfil, o que ainda é desconhecido, e o que fazer a seguir, sem esconder incerteza nem automatizar sem consentimento.
