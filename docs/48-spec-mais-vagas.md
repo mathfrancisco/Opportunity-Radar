@@ -716,7 +716,7 @@ Aceite:
 - [ ] `--dry-run` lista as 63 fontes e a empresa que seria criada/ligada.
 - [ ] Depois de executar, `enabled` sem vínculo = 0 e `canonical_company_id IS NULL` cai de
   1.026 para o resíduo sem empresa real.
-- [ ] `propose_company_source` cobre Workable, Teamtailor, Factorial e Workday.
+- [x] `propose_company_source` cobre Workable, Teamtailor, Factorial e Workday.
 - [ ] `backfill_startup_evidence.py` grava > 0 linhas.
 Teste: `tests/backend/companies/test_company_link.py`, `tests/backend/acquisition/test_tavily_proposals.py`.
 
@@ -733,7 +733,7 @@ Teste: `tests/backend/test_enable_sources.py`; evidência em `docs/44-roadmap-fa
 Escopo: novo módulo `acquisition/forbidden.py`, `create_source`, importadores, novos
 documentos `docs/pesquisas/termos-<ats>.md`.
 Aceite:
-- [ ] `FORBIDDEN_PLATFORMS` aplicada em `create_source`, propostas e importadores, com o motivo
+- [x] `FORBIDDEN_PLATFORMS` aplicada em `create_source`, propostas e importadores, com o motivo
   (Gupy, Wellfound, YC/Work at a Startup, Careerflow, Crossover, Braintrust, Landing.jobs).
   Braintrust entra com o motivo "sem endpoint estruturado (F20-56)", não "termos"; segue
   excluída até haver endpoint e revisão de termos próprios (decisão 8).

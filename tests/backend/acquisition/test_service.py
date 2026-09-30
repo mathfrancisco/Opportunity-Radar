@@ -1282,3 +1282,48 @@ def test_probe_recognizes_workable_source_type() -> None:
     assert outcome.ok is True
     assert outcome.items_seen == 1
     assert calls[0].url.host == "apply.workable.com"
+
+
+# --- F48-19: central forbidden-platform list ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    [
+        {"board_identifier": "acme", "careers_url": "https://acme.gupy.io/"},
+        {"board_identifier": "acme", "discovery_evidence": "https://wellfound.com/company/acme"},
+        {"board_identifier": "acme", "url": "https://www.ycombinator.com/jobs/acme"},
+    ],
+)
+def test_create_source_refuses_forbidden_platform(configuration: dict[str, str]) -> None:
+    session = _MemorySession()
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((AshbyCollector(client=httpx.AsyncClient()),)),
+    )
+
+    with pytest.raises(AcquisitionError) as refused:
+        service.create_source(source_type="ashby", name="Acme", configuration=configuration)
+
+    assert refused.value.code == AcquisitionErrorCode.INVALID_CONFIGURATION
+    assert "forbidden platform" in str(refused.value)
+    assert session.added == []
+
+
+def test_create_source_accepts_unrelated_hosts() -> None:
+    session = _MemorySession()
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((AshbyCollector(client=httpx.AsyncClient()),)),
+    )
+
+    source = service.create_source(
+        source_type="ashby",
+        name="Acme",
+        configuration={
+            "board_identifier": "acme",
+            "discovery_evidence": "https://news.ycombinator.com/item?id=1",
+        },
+    )
+
+    assert source.configuration["board_identifier"] == "acme"

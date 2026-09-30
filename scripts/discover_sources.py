@@ -8,13 +8,21 @@ import os
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.companies.models import Company
 from opportunity_radar.platform.database import create_database_engine
 
 
 def discover_sources(session: Session) -> dict[str, list[dict[str, str]]]:
-    service = AcquisitionService(session)
+    service = AcquisitionService(
+        session,
+        registry=build_collector_registry(
+            greenhouse_base_url=os.environ.get(
+                "GREENHOUSE_BASE_URL", "https://boards-api.greenhouse.io"
+            )
+        ),
+    )
     report: dict[str, list[dict[str, str]]] = {"proposals": [], "not_detected": []}
     for company in session.scalars(select(Company).order_by(Company.canonical_name)):
         proposal, result = service.propose_company_source(company.id)

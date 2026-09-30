@@ -22,6 +22,7 @@ from typing import Any
 from sqlalchemy import Select, Text, cast, func, or_, select
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.forbidden import FORBIDDEN_HOST_PATTERNS
 from opportunity_radar.acquisition.models import (
     RawItemModel,
     SourceDefinitionModel,
@@ -48,18 +49,8 @@ TECHNICAL_PROXY_FAMILIES: tuple[str, ...] = (
 #: Verdicts that mean "the ranking said something" (anything but review/ineligible).
 USEFUL_VERDICTS: tuple[str, ...] = ("HIGH_PRIORITY", "RECOMMENDED", "WATCHLIST", "LOW_MATCH")
 
-#: Hosts the project must never touch (SPEC 48 section 1.2). A local list until F48-19
-#: publishes the central one.
-FORBIDDEN_HOSTS: tuple[str, ...] = (
-    "gupy.io",
-    "wellfound.com",
-    "workatastartup.com",
-    "www.ycombinator.com/jobs",
-    "careerflow.ai",
-    "crossover.com",
-    "usebraintrust.com",
-    "landing.jobs",
-)
+#: Hosts the project must never touch (SPEC 48 section 1.2): the central F48-19 list.
+FORBIDDEN_HOSTS: tuple[str, ...] = FORBIDDEN_HOST_PATTERNS
 
 NEW_WINDOW = timedelta(hours=24)
 _COUNTRY = "BR"

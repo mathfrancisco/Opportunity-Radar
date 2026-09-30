@@ -31,6 +31,7 @@ from opportunity_radar.acquisition.domain import (
     CollectionRequest,
     CollectionTelemetry,
 )
+from opportunity_radar.acquisition.forbidden import FORBIDDEN_HOST_NAMES, is_forbidden_url
 from opportunity_radar.acquisition.limited_discovery import (
     endpoint_ats_name,
     probe_direct_ats,
@@ -69,9 +70,8 @@ ALLOWED_ATS_DOMAINS: frozenset[str] = frozenset(
     domain for group in ATS_DOMAIN_GROUPS.values() for domain in group
 )
 #: Closed non-viable sources (F20-51, F20-52): refused even if someone adds them above.
-FORBIDDEN_DOMAINS: frozenset[str] = frozenset(
-    {"wellfound.com", "ycombinator.com", "workatastartup.com"}
-)
+#: The list is the central one (F48-19).
+FORBIDDEN_DOMAINS: frozenset[str] = FORBIDDEN_HOST_NAMES
 
 #: A board key is a plain slug; anything else (encoded, spaced) would be refused by the
 #: collectors anyway, so it never becomes a candidate.
@@ -150,7 +150,7 @@ def is_allowed_ats_url(url: str) -> bool:
     host = (parts.hostname or "").casefold()
     if parts.scheme not in {"http", "https"} or not host:
         return False
-    if any(host == d or host.endswith(f".{d}") for d in FORBIDDEN_DOMAINS):
+    if is_forbidden_url(url):
         return False
     return any(host == d or host.endswith(f".{d}") for d in ALLOWED_ATS_DOMAINS)
 
