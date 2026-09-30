@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.models import SourceDefinitionModel
 from opportunity_radar.acquisition.proposals import is_outdated, proposal_key
 from opportunity_radar.acquisition.service import AcquisitionService
@@ -25,7 +26,7 @@ from opportunity_radar.companies.registration import (
 )
 from opportunity_radar.companies.repository import CompanyRepository
 from opportunity_radar.companies.startup import summarize
-from opportunity_radar.presentation.http.dependencies import get_session
+from opportunity_radar.presentation.http.dependencies import get_collector_registry, get_session
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
@@ -464,9 +465,13 @@ def _raise_registration_error(error: Exception) -> NoReturn:
 
 @router.post("/{company_id}/detect-source", response_model=SourceProposalResponse)
 def detect_source(
-    company_id: UUID, session: Session = Depends(get_session)
+    company_id: UUID,
+    session: Session = Depends(get_session),
+    registry: CollectorRegistry = Depends(get_collector_registry),
 ) -> SourceProposalResponse:
-    proposal, result = AcquisitionService(session).propose_company_source(company_id)
+    proposal, result = AcquisitionService(session, registry=registry).propose_company_source(
+        company_id
+    )
     if proposal is None:
         return SourceProposalResponse(result=result, source_id=None, evidence=None)
     evidence = proposal.configuration.get("discovery_evidence")
