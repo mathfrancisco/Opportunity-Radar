@@ -211,7 +211,7 @@ def _normalize_merged(
     monkeypatch.setattr(
         service_module, "_normalization_input", lambda _evidence: normalization_input
     )
-    monkeypatch.setattr(service_module, "build_candidate", lambda _input: candidate)
+    monkeypatch.setattr(service_module, "build_candidate", lambda _input, **_kwargs: candidate)
     monkeypatch.setattr(
         service_module,
         "seniority_classification",

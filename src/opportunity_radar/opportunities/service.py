@@ -47,6 +47,7 @@ from opportunity_radar.opportunities.role_family import (
     classify_role_family,
     departments_from_metadata,
 )
+from opportunity_radar.platform.config import get_settings
 from opportunity_radar.platform.logging import get_logger
 
 logger = get_logger("opportunity_radar.opportunities")
@@ -96,6 +97,11 @@ class OpportunityService:
         self.session = session
         self.repository = repository or OpportunityRepository(session)
 
+    @staticmethod
+    def _content_rules_enabled() -> bool:
+        # F48-15: default OFF; flipped only after the precision gate on the labelled set.
+        return get_settings().content_classification_v4_enabled
+
     def normalize(self, raw_item_id: UUID) -> NormalizationResultModel:
         existing = self.repository.normalization_result(raw_item_id, NORMALIZER_VERSION)
         if existing is not None:
@@ -128,12 +134,20 @@ class OpportunityService:
             return cosmetic_result
         try:
             normalization_input = _normalization_input(evidence)
-            candidate = build_candidate(normalization_input)
-            _, seniority_reason = seniority_classification(
-                normalization_input.title,
-                normalization_input.metadata,
-                source_type=normalization_input.source_type,
+            candidate = build_candidate(
+                normalization_input, content_rules=self._content_rules_enabled()
             )
+            if candidate.classification_reasons:
+                # F48-15: seniority-v4 first (it replaces the v3 reason), then the
+                # work-mode and allowed-countries evidence.
+                seniority_reason, *content_reasons = candidate.classification_reasons
+            else:
+                _, seniority_reason = seniority_classification(
+                    normalization_input.title,
+                    normalization_input.metadata,
+                    source_type=normalization_input.source_type,
+                )
+                content_reasons = []
         except PayloadExpiredError as error:
             result = NormalizationResultModel(
                 raw_item_id=raw_item_id,
@@ -331,7 +345,7 @@ class OpportunityService:
             status=result_status,
             normalizer_version=NORMALIZER_VERSION,
             identity_decision=decision,
-            reasons=[*reasons, seniority_reason],
+            reasons=[*reasons, seniority_reason, *content_reasons],
         )
         self.session.add(result)
         self.session.execute(

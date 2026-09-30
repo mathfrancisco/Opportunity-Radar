@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from opportunity_radar.opportunities import content_classification as content
 from opportunity_radar.opportunities.domain import (
     SKILL_TAXONOMY,
     Compensation,
@@ -25,6 +26,11 @@ from opportunity_radar.opportunities.domain import (
     normalize_title,
     normalize_url,
     seniority_classification,
+)
+from opportunity_radar.opportunities.regions import (
+    LATAM_COUNTRIES,
+    REGIONS_VERSION_V2,
+    resolve_allowed_countries_v2,
 )
 from opportunity_radar.opportunities.role_family import ROLE_FAMILY_VERSION, RoleFamily
 
@@ -222,9 +228,7 @@ def test_work_mode_from_description_avoids_known_false_positive_shapes() -> None
 
 def test_seniority_classification_records_precedence_and_conflicts() -> None:
     title_value, title_reason = seniority_classification("Junior Engineer", {})
-    structured_value, structured_reason = seniority_classification(
-        "Engineer", {"seniority": "Mid"}
-    )
+    structured_value, structured_reason = seniority_classification("Engineer", {"seniority": "Mid"})
     conflict_value, conflict_reason = seniority_classification(
         "Senior Engineer", {"seniority": "Junior"}
     )
@@ -282,9 +286,7 @@ def test_seniority_v2_covers_portuguese_titles_and_abbreviations() -> None:
         ("Graduate Software Engineer", Seniority.JUNIOR),
     ],
 )
-def test_seniority_v3_covers_entry_program_keywords(
-    title: str, expected: Seniority
-) -> None:
+def test_seniority_v3_covers_entry_program_keywords(title: str, expected: Seniority) -> None:
     assert infer_seniority(title, None, {}) is expected
 
 
@@ -320,16 +322,12 @@ def test_seniority_v3_does_not_regress_false_positives(title: str) -> None:
         ("Junior Developer", Seniority.JUNIOR),
     ],
 )
-def test_seniority_v3_does_not_regress_existing_terms(
-    title: str, expected: Seniority
-) -> None:
+def test_seniority_v3_does_not_regress_existing_terms(title: str, expected: Seniority) -> None:
     assert infer_seniority(title, None, {}) is expected
 
 
 def test_structured_seniority_conflict_keeps_candidate_unknown() -> None:
-    candidate = build_candidate(
-        _input(title="Senior Engineer", metadata={"seniority": "Junior"})
-    )
+    candidate = build_candidate(_input(title="Senior Engineer", metadata={"seniority": "Junior"}))
 
     assert candidate.seniority is Seniority.UNKNOWN
 
@@ -353,9 +351,7 @@ def test_fingerprint_matches_exact_evidence_and_separates_company_and_day() -> N
 
 def test_fingerprint_does_not_merge_unknown_companies_across_sources() -> None:
     first = build_candidate(_input(company_name=None))
-    other_source = build_candidate(
-        _input(company_name=None, source_definition_id=uuid4())
-    )
+    other_source = build_candidate(_input(company_name=None, source_definition_id=uuid4()))
 
     assert first.fingerprint != other_source.fingerprint
 
@@ -435,9 +431,7 @@ def test_extracts_structured_compensation_before_explicit_text() -> None:
 
 
 def test_explicit_text_does_not_guess_currency_or_period() -> None:
-    compensation = extract_compensation(
-        {"salary": "$80k - $100k"}, None, source_type="remotive"
-    )
+    compensation = extract_compensation({"salary": "$80k - $100k"}, None, source_type="remotive")
 
     assert compensation is not None
     assert compensation.minimum == Decimal("80000")
@@ -585,8 +579,7 @@ def test_extracts_skills_added_by_f20_02_curation() -> None:
 
     ai_alias = extract_skills(
         None,
-        "We may use artificial intelligence (AI) tools to support parts of the "
-        "hiring process.",
+        "We may use artificial intelligence (AI) tools to support parts of the hiring process.",
         {},
     )
     assert {skill.canonical_id for skill in ai_alias} == {"ai"}
@@ -630,3 +623,252 @@ def test_candidate_enrichment_does_not_change_fingerprint() -> None:
     assert candidate.compensation.currency == "USD"
     assert {skill.canonical_id for skill in candidate.skills} == {"react", "python"}
     assert candidate.fingerprint_version == "v1"
+
+
+# ---------------------------------------------------------------------------------------
+# Card F48-15: seniority-v4 / work-mode-v7 / allowed-countries-v2 (content rules).
+# Phrases below are modelled on real postings (Greenhouse/Ashby/Lever, PT and EN).
+# ---------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("description", "expected", "rule"),
+    [
+        # year ranges: 0-2 JUNIOR, 3-5 MID, 5+ SENIOR
+        (
+            "We expect 0-2 years of experience with Python.",
+            Seniority.JUNIOR,
+            "description_years_range",
+        ),
+        (
+            "Requisitos: 1 a 2 anos de experiência com backend.",
+            Seniority.JUNIOR,
+            "description_years_range",
+        ),
+        (
+            "You have 3-5 years of professional experience.",
+            Seniority.MID,
+            "description_years_range",
+        ),
+        ("Experiência de 3 a 5 anos com Java.", Seniority.MID, "description_years_range"),
+        (
+            "5-8 years of relevant experience in data engineering",
+            Seniority.SENIOR,
+            "description_years_range",
+        ),
+        ("5+ years of experience building APIs", Seniority.SENIOR, "description_years_min"),
+        (
+            "Mais de 7 anos de experiência com arquitetura",
+            Seniority.SENIOR,
+            "description_years_min",
+        ),
+        ("Minimum of 3 years experience with React", Seniority.MID, "description_years_min"),
+        ("At least 1 year of experience in support", Seniority.JUNIOR, "description_years_min"),
+        ("Pelo menos 2 anos de experiência em vendas", Seniority.JUNIOR, "description_years_min"),
+        # entry-level / no-experience phrases
+        (
+            "This is an entry-level position on our platform team.",
+            Seniority.JUNIOR,
+            "description_entry_phrase",
+        ),
+        (
+            "No prior experience required, we will train you.",
+            Seniority.JUNIOR,
+            "description_entry_phrase",
+        ),
+        (
+            "Vaga nível júnior. Sem experiência prévia necessária.",
+            Seniority.JUNIOR,
+            "description_entry_phrase",
+        ),
+        (
+            "Procuramos um júnior para o time de dados.",
+            Seniority.JUNIOR,
+            "description_entry_phrase",
+        ),
+        (
+            "Esta é uma vaga de estágio para estudantes.",
+            Seniority.INTERN,
+            "description_intern_phrase",
+        ),
+        (
+            "This is an internship for students graduating in 2027.",
+            Seniority.INTERN,
+            "description_intern_phrase",
+        ),
+    ],
+)
+def test_seniority_v4_reads_the_description_with_cited_evidence(
+    description: str, expected: Seniority, rule: str
+) -> None:
+    value, reason = content.classify_seniority_v4("Engineer", description, {})
+    assert value is expected
+    assert reason["source"] == "description"
+    assert reason["rule"] == rule
+    assert reason["mapping_version"] == "seniority-v4"
+    assert reason["evidence"]
+    # the cited snippet really comes from the description
+    assert " ".join((reason["evidence"] or "").split()) in " ".join(description.casefold().split())
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "We have 15 years of experience helping customers grow.",  # employer, not candidate
+        "Our 10 years of experience in fintech drive the product.",
+        "2-4 years of experience in a similar role.",  # straddles JUNIOR and MID
+        "1-3 years of experience.",
+        "3-6 years of experience.",
+        "Entry-level position. Requires 5+ years of experience overall.",  # rules disagree
+        "Join our internship program alumni network as a mentor.",
+        "You will mentor junior engineers and review their work.",
+        "A great place to work with a diverse team.",
+        "",
+    ],
+)
+def test_seniority_v4_stays_unknown_without_conclusive_evidence(description: str) -> None:
+    value, reason = content.classify_seniority_v4("Engineer", description, {})
+    assert value is Seniority.UNKNOWN
+    assert reason["source"] == "none"
+    assert reason["evidence"] is None
+
+
+def test_seniority_v4_boundary_five_is_senior_only_as_a_lower_bound() -> None:
+    assert content.classify_seniority_v4("E", "3-5 years of experience", {})[0] is Seniority.MID
+    assert content.classify_seniority_v4("E", "5-7 years of experience", {})[0] is Seniority.SENIOR
+    assert content.classify_seniority_v4("E", "5 years of experience", {})[0] is Seniority.SENIOR
+    assert content.classify_seniority_v4("E", "4 years of experience", {})[0] is Seniority.MID
+    assert content.classify_seniority_v4("E", "2 years of experience", {})[0] is Seniority.JUNIOR
+
+
+def test_seniority_v4_precedence_structured_then_title_then_description() -> None:
+    desc = "5+ years of experience required."
+    # title beats description
+    value, reason = content.classify_seniority_v4("Junior Engineer", desc, {})
+    assert (value, reason["source"]) == (Seniority.JUNIOR, "title")
+    # structured beats title and description
+    value, reason = content.classify_seniority_v4(
+        "Engineer", desc, {"seniority": "Mid"}, source_type="manual"
+    )
+    assert (value, reason["source"]) == (Seniority.MID, "structured")
+    # structured vs title conflict stays UNKNOWN even with a decisive description
+    value, reason = content.classify_seniority_v4(
+        "Senior Engineer", desc, {"seniority": "Junior"}, source_type="manual"
+    )
+    assert (value, reason["source"]) == (Seniority.UNKNOWN, "conflict")
+    # unmapped structured value never falls through to the description
+    value, _ = content.classify_seniority_v4(
+        "Engineer", desc, {"seniority": "Astronaut"}, source_type="manual"
+    )
+    assert value is Seniority.UNKNOWN
+
+
+@pytest.mark.parametrize(
+    ("description", "expected"),
+    [
+        ("Work Model for this Role: Remote", WorkMode.REMOTE),  # v6 phrase still works
+        ("This is a fully remote position open to the whole team.", WorkMode.REMOTE),
+        ("Vaga 100% remota, com encontros trimestrais.", WorkMode.REMOTE),
+        ("Trabalho remoto com horário flexível.", WorkMode.REMOTE),
+        ("Regime híbrido, 3 dias no escritório.", WorkMode.HYBRID),
+        ("Modelo de trabalho híbrido em São Paulo.", WorkMode.HYBRID),
+        ("This hybrid role requires 3 days per week in the office.", WorkMode.HYBRID),
+        ("Vaga presencial em Curitiba.", WorkMode.ONSITE),
+        ("Formato presencial integral.", WorkMode.ONSITE),
+        ("This is an on-site role at our Lisbon HQ.", WorkMode.ONSITE),
+    ],
+)
+def test_work_mode_v7_reads_description_phrases(description: str, expected: WorkMode) -> None:
+    value, reason = content.classify_work_mode_v7("Engineer", "São Paulo", {}, description)
+    assert value is expected
+    assert reason["source"] == "description"
+    assert reason["mapping_version"] == "work-mode-v7"
+    assert reason["evidence"]
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "Partner with senior remote engineers across the globe.",
+        "We are hiring for hybrid and remote roles across teams.",  # two modes: ambiguous
+        "Great benefits and a modern office.",
+    ],
+)
+def test_work_mode_v7_does_not_guess(description: str) -> None:
+    value, reason = content.classify_work_mode_v7("Engineer", "São Paulo", {}, description)
+    assert value is WorkMode.UNKNOWN
+    assert reason["evidence"] is None
+
+
+def test_work_mode_v7_title_wins_and_conflict_is_unknown() -> None:
+    value, reason = content.classify_work_mode_v7(
+        "Engineer (Remote)", "Anywhere", {}, "Vaga presencial em Curitiba."
+    )
+    assert value is WorkMode.UNKNOWN and reason["source"] == "conflict"
+    value, reason = content.classify_work_mode_v7("Engineer (Remote)", None, {}, "Great benefits.")
+    assert value is WorkMode.REMOTE and reason["source"] == "title"
+
+
+@pytest.mark.parametrize(
+    ("location", "description", "expected", "source"),
+    [
+        ("Remote — Brazil", "We are open to candidates in Portugal.", ("BR",), "location"),
+        (None, "This role is remote within Brazil.", ("BR",), "description"),
+        ("Remote", "You must be located in the United States.", ("US",), "description"),
+        ("Remote", "Vaga remota. Residentes no Brasil.", ("BR",), "description"),
+        ("Remoto", "Trabalho remoto no México para o time regional.", ("MX",), "description"),
+        ("Remote", "Open to candidates based in LATAM.", LATAM_COUNTRIES, "description"),
+        ("Remote", "Authorized to work in Canada is required.", ("CA",), "description"),
+    ],
+)
+def test_allowed_countries_v2_uses_location_first_then_description_phrases(
+    location: str | None,
+    description: str,
+    expected: tuple[str, ...],
+    source: str,
+) -> None:
+    countries, evidence = resolve_allowed_countries_v2(location, description)
+    assert countries == expected
+    assert evidence is not None and evidence["source"] == source and evidence["evidence"]
+
+
+@pytest.mark.parametrize(
+    ("location", "description"),
+    [
+        ("Remote", "We have customers in Brazil and offices in Portugal."),  # bare names
+        ("Remote", "Remote within Brazil, or you must be located in Portugal."),  # conflict
+        (None, None),
+        ("Remote", ""),
+    ],
+)
+def test_allowed_countries_v2_stays_unknown(location: str | None, description: str | None) -> None:
+    assert resolve_allowed_countries_v2(location, description) == ((), None)
+
+
+def test_content_rules_are_off_by_default_and_versioned_when_on() -> None:
+    item = _input(
+        title="Data Engineer",
+        location_text="Remote",
+        description="3-5 years of experience. Trabalho remoto no Brasil.",
+    )
+    off = build_candidate(item)
+    assert off.seniority is Seniority.UNKNOWN
+    assert off.allowed_countries == ()
+    assert off.allowed_countries_version == "regions-v1"
+    assert off.classification_reasons == ()
+
+    on = build_candidate(item, content_rules=True)
+    assert on.seniority is Seniority.MID
+    assert on.allowed_countries == ("BR",)
+    assert on.allowed_countries_version == REGIONS_VERSION_V2 == "allowed-countries-v2"
+    codes = {reason["code"]: reason for reason in on.classification_reasons}
+    assert codes["SENIORITY_CLASSIFICATION"]["mapping_version"] == "seniority-v4"
+    assert codes["WORK_MODE_CLASSIFICATION"]["mapping_version"] == "work-mode-v7"
+    assert codes["ALLOWED_COUNTRIES_CLASSIFICATION"]["evidence"]
+
+
+def test_precision_gate_fails_closed() -> None:
+    assert content.gate_passes({"a": (9, 10), "b": (18, 20)}) is True
+    assert content.gate_passes({"a": (9, 10), "b": (17, 20)}) is False  # 85%
+    assert content.gate_passes({"a": (9, 10), "b": (0, 0)}) is False  # no evidence
+    assert content.gate_passes({}) is False
