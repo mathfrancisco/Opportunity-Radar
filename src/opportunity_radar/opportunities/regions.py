@@ -133,3 +133,65 @@ def resolve_allowed_countries(location_text: str | None) -> tuple[str, ...]:
         return (code,)
 
     return ()
+
+
+REGIONS_VERSION_V2 = "allowed-countries-v2"
+
+_PLACE_NAMES = sorted(
+    [*_COUNTRY_NAME_TO_CODE, "latam", "americas", "emea", "worldwide", "anywhere"],
+    key=len,
+    reverse=True,
+)
+_PLACE = "|".join(re.escape(name) for name in _PLACE_NAMES)
+_THE = r"(?:the\s+)?"
+
+#: Permission phrases in a description ("must be located in Brazil", "remoto no Brasil").
+#: Deliberately phrase-anchored: a bare country name in a description is an office or a
+#: customer market, never a permission.
+_DESCRIPTION_COUNTRY_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(expression)
+    for expression in (
+        rf"\b(?:remote|remotely)\s+(?:within|from|in|across)\s+{_THE}({_PLACE})\b",
+        rf"\bmust\s+(?:be\s+)?(?:located|based|living|residing|reside)\s+in\s+{_THE}({_PLACE})\b",
+        rf"\b(?:authorized|eligible|legally entitled)\s+to\s+work\s+in\s+{_THE}({_PLACE})\b",
+        rf"\bopen\s+to\s+(?:candidates|applicants)\s+(?:located\s+|based\s+)?in\s+{_THE}({_PLACE})\b",
+        rf"\b(?:remoto|remota|home\s*office|trabalho\s+remoto)\s+(?:em|no|na|para|dentro\s+d[oa])\s+({_PLACE})\b",
+        rf"\bresidentes?\s+(?:no|na|em)\s+({_PLACE})\b",
+        rf"\b(?:apenas|somente)\s+(?:para\s+)?(?:candidatos\s+)?(?:residentes\s+)?(?:no|na|em)\s+({_PLACE})\b",
+    )
+)
+
+
+def _place_codes(place: str) -> tuple[str, ...]:
+    region = place.upper()
+    if region in REGIONS:
+        return REGIONS[region]
+    code = _COUNTRY_NAME_TO_CODE.get(place)
+    return (code,) if code else ()
+
+
+def resolve_allowed_countries_v2(
+    location_text: str | None, description: str | None
+) -> tuple[tuple[str, ...], dict[str, str] | None]:
+    """`allowed-countries-v2`: location (v1 table) first, then description phrases.
+
+    Returns `(countries, evidence)`. `()` stays "unknown". Two description phrases that
+    resolve to different country sets are ambiguous and yield `()`.
+    """
+    from_location = resolve_allowed_countries(location_text)
+    if from_location:
+        return from_location, {"source": "location", "evidence": (location_text or "").strip()}
+    text = re.sub(r"\s+", " ", (description or "").casefold()).strip()
+    if not text:
+        return (), None
+    found: dict[tuple[str, ...], str] = {}
+    for pattern in _DESCRIPTION_COUNTRY_PATTERNS:
+        for match in pattern.finditer(text):
+            codes = _place_codes(match.group(1))
+            if codes:
+                start, end = max(0, match.start() - 40), min(len(text), match.end() + 40)
+                found.setdefault(codes, text[start:end].strip())
+    if len(found) != 1:
+        return (), None
+    codes, snippet = next(iter(found.items()))
+    return codes, {"source": "description", "evidence": snippet}

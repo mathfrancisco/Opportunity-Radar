@@ -293,6 +293,8 @@ class CanonicalCandidate:
     #: and this must never be read as "no country allowed" (card F17-06).
     allowed_countries: tuple[str, ...] = ()
     allowed_countries_version: str = REGIONS_VERSION
+    #: Cited-evidence reasons of the content rules (F48-15); empty when they are off.
+    classification_reasons: tuple[dict[str, str | None], ...] = ()
     #: Explicit application-window deadline (card F20-61), threaded from the
     #: collector when it exposes one (today only `jobposting.py`). `None` otherwise —
     #: never fabricated.
@@ -1091,8 +1093,15 @@ def opportunity_fingerprint(
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
-def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
-    """Normalize one collected item without guessing omitted source fields."""
+def normalize_candidate(
+    value: NormalizationInput, *, content_rules: bool = False
+) -> CanonicalCandidate:
+    """Normalize one collected item without guessing omitted source fields.
+
+    `content_rules` switches to `seniority-v4` / `work-mode-v7` / `allowed-countries-v2`
+    (card F48-15, description-aware, evidence cited). Off by default until the precision
+    gate is met; see `content_classification`.
+    """
     original_title = _clean_text(value.title)
     normalized_title = normalize_title(value.title)
     if original_title is None or normalized_title is None:
@@ -1103,10 +1112,44 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
     normalized_company_name = normalize_company_name(company_name)
     normalized_location = normalize_location(location_text)
     normalized_url = normalize_url(source_url)
-    work_mode = infer_work_mode(original_title, location_text, value.metadata, value.description)
-    seniority, _ = seniority_classification(
-        original_title, value.metadata, source_type=value.source_type
-    )
+    classification_reasons: tuple[dict[str, str | None], ...] = ()
+    allowed_countries_version = REGIONS_VERSION
+    if content_rules:
+        from opportunity_radar.opportunities import content_classification as content
+        from opportunity_radar.opportunities.regions import (
+            REGIONS_VERSION_V2,
+            resolve_allowed_countries_v2,
+        )
+
+        work_mode, work_mode_reason = content.classify_work_mode_v7(
+            original_title, location_text, value.metadata, value.description
+        )
+        seniority, seniority_reason = content.classify_seniority_v4(
+            original_title, value.description, value.metadata, source_type=value.source_type
+        )
+        allowed_countries, countries_evidence = resolve_allowed_countries_v2(
+            location_text, value.description
+        )
+        allowed_countries_version = REGIONS_VERSION_V2
+        classification_reasons = (
+            seniority_reason,
+            work_mode_reason,
+            {
+                "code": "ALLOWED_COUNTRIES_CLASSIFICATION",
+                "mapping_version": REGIONS_VERSION_V2,
+                "source": (countries_evidence or {}).get("source", "none"),
+                "evidence": (countries_evidence or {}).get("evidence"),
+                "value": ",".join(allowed_countries) or None,
+            },
+        )
+    else:
+        work_mode = infer_work_mode(
+            original_title, location_text, value.metadata, value.description
+        )
+        seniority, _ = seniority_classification(
+            original_title, value.metadata, source_type=value.source_type
+        )
+        allowed_countries = resolve_allowed_countries(location_text)
     contract_type = infer_contract_type(original_title, location_text, value.metadata)
     recency_exempt_program = infer_recency_exempt_program(
         original_title, value.metadata, contract_type=contract_type
@@ -1116,7 +1159,6 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
         departments=departments_from_metadata(value.metadata),
         description=value.description,
     )
-    allowed_countries = resolve_allowed_countries(location_text)
     return CanonicalCandidate(
         original_title=original_title,
         normalized_title=normalized_title,
@@ -1156,14 +1198,18 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
         role_family_evidence=dict(role_family_decision.evidence),
         role_family_version=role_family_decision.version,
         allowed_countries=allowed_countries,
+        allowed_countries_version=allowed_countries_version,
+        classification_reasons=classification_reasons,
         valid_through=value.valid_through,
         recency_exempt_program=recency_exempt_program,
     )
 
 
-def build_candidate(value: NormalizationInput) -> CanonicalCandidate:
+def build_candidate(
+    value: NormalizationInput, *, content_rules: bool = False
+) -> CanonicalCandidate:
     """Compatibility entry point for the original normalization slice."""
-    return normalize_candidate(value)
+    return normalize_candidate(value, content_rules=content_rules)
 
 
 #: Card F20-61 / F48-16: the default search shows only a posting whose reference date

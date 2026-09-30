@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # own separate table.
     worker_suggest_enabled: bool = False
     worker_suggest_batch_size: int = 20
+    # Off by default (card F48-15): `seniority-v4`, `work-mode-v7` and `allowed-countries-v2`
+    # read the description. Turn on only after `scripts/measure_content_classification.py
+    # --check-gate` reports >= 90% precision per rule on the human-labelled gold set.
+    content_classification_v4_enabled: bool = False
     worker_evaluate_batch_size: int = 50
     # The local model competes with the rest of the machine for the GPU, so a pass is
     # capped well below the evaluation batch: analysis falls behind on purpose, never the
