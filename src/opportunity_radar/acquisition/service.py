@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from math import ceil, isfinite
 from typing import Any, Literal
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from sqlalchemy import func, select, update
@@ -38,6 +40,10 @@ from opportunity_radar.acquisition.domain import (
     evaluate_completeness,
     item_payload_bytes,
     newest_item_age_seconds,
+)
+from opportunity_radar.acquisition.forbidden import (
+    forbidden_platform_for_url,
+    refuse_forbidden,
 )
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.hacker_news import DISCOVERY_VIA as HN_DISCOVERY_VIA
@@ -150,7 +156,13 @@ def _conditional_headers_for(
 @dataclass(frozen=True, slots=True)
 class TavilyProposalOutcome:
     url: str
-    outcome: Literal["created", "already_proposed", "unmatched_pattern", "company_not_found"]
+    outcome: Literal[
+        "created",
+        "already_proposed",
+        "unmatched_pattern",
+        "company_not_found",
+        "forbidden_platform",
+    ]
     proposal_id: UUID | None = None
 
 
@@ -277,6 +289,8 @@ class AcquisitionService:
         source_configuration = dict(configuration or {})
         with _refusing_field("configuration"):
             _reject_secret_configuration(source_configuration)
+            # F48-19: the central forbidden-platform list, whatever route created the source.
+            refuse_forbidden(source_configuration)
         source_rate_limit_policy = dict(rate_limit_policy or {})
         with _refusing_field("rate_limit_policy"):
             resolved_network_policy = _network_policy(source_rate_limit_policy)
@@ -390,13 +404,15 @@ class AcquisitionService:
             select(CompanySource)
             .where(
                 CompanySource.company_id == company_id,
-                CompanySource.source_type.in_(("ashby", "lever", "greenhouse")),
+                CompanySource.source_type.in_(PROPOSABLE_SOURCE_TYPES),
                 CompanySource.external_key.is_not(None),
             )
             .order_by(CompanySource.id)
         )
         if candidate is None:
             return None, "not_detected"
+        if forbidden_platform_for_url(candidate.endpoint or "") is not None:
+            return None, "forbidden_platform"
         existing = self.session.scalar(
             select(SourceDefinitionModel).where(
                 SourceDefinitionModel.company_source_id == candidate.id,
@@ -405,14 +421,16 @@ class AcquisitionService:
         )
         if existing is not None:
             return existing, "already_proposed"
-        identifier_key = IDENTIFIER_KEYS[candidate.source_type]
+        identifier = _proposal_identifier(candidate)
+        if identifier is None:
+            return None, "not_detected"
         proposal = self.create_source(
             source_type=candidate.source_type,
             name=f"Proposed {company.canonical_name} {candidate.source_type}",
             company_source_id=candidate.id,
             configuration={
                 "company_name": company.canonical_name,
-                identifier_key: candidate.external_key,
+                **identifier,
                 "discovery_evidence": candidate.evidence_note or candidate.endpoint,
             },
             evidence_status="ats_identified",
@@ -439,6 +457,9 @@ class AcquisitionService:
             if item.metadata.get("source_proposal_candidate") is not True:
                 continue
             url = item.url or ""
+            if forbidden_platform_for_url(url) is not None:
+                outcomes.append(TavilyProposalOutcome(url, "forbidden_platform"))
+                continue
             detected = detect_ats_board(url)
             if detected is None:
                 outcomes.append(TavilyProposalOutcome(url, "unmatched_pattern"))
@@ -1575,6 +1596,40 @@ def _refusing_field(field: str) -> Iterator[None]:
         if error.field is None:
             error.field = field
         raise
+
+
+#: ATS types `propose_company_source` can turn into an inert proposal (F48-17).
+PROPOSABLE_SOURCE_TYPES: tuple[str, ...] = tuple(IDENTIFIER_KEYS)
+
+_WORKDAY_HOST = re.compile(r"^([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com$")
+
+
+def _proposal_identifier(record: CompanySource) -> dict[str, str] | None:
+    """The configuration keys a proposal needs for `record`, or None when unusable.
+
+    Workday needs `<tenant>/<site>` plus the pod (`api_region`); both come from the record's
+    key or its board URL (`https://<tenant>.<pod>.myworkdayjobs.com/[locale/]<site>`).
+    """
+    key = record.external_key
+    if not key:
+        return None
+    identifier_key = IDENTIFIER_KEYS[record.source_type]
+    if record.source_type != "workday":
+        return {identifier_key: key}
+    parts = urlsplit(record.endpoint or "")
+    host = _WORKDAY_HOST.match((parts.hostname or "").casefold())
+    if host is None:
+        return None
+    if "/" not in key:
+        segments = [
+            segment
+            for segment in parts.path.split("/")
+            if segment and not re.fullmatch(r"[a-z]{2}(?:-[A-Za-z]{2})?", segment)
+        ]
+        if not segments:
+            return None
+        key = f"{host.group(1)}/{segments[0]}"
+    return {identifier_key: key, "api_region": host.group(2)}
 
 
 def _required_string(configuration: Mapping[str, Any], key: str) -> str:

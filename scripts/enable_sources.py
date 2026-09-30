@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.concurrency import HostSerializer, source_host_key
+from opportunity_radar.acquisition.forbidden import forbidden_platform_in
 from opportunity_radar.acquisition.models import SourceDefinitionModel
 from opportunity_radar.acquisition.probing import (
     PROBE_TYPES,
@@ -97,6 +98,9 @@ async def _probe(
 def _probe_candidate(source: SourceDefinitionModel, *, include_remotive: bool) -> bool:
     """A configured public endpoint can be probed before it is homologated."""
     if source.enabled or source.source_type not in RESEARCHED_TYPES:
+        return False
+    # F48-19: a source that touches a forbidden platform is never probed or enabled.
+    if forbidden_platform_in(source.configuration or {}) is not None:
         return False
     if source.source_type == "remotive":
         return include_remotive

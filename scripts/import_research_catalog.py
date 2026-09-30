@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.domain import AcquisitionError
+from opportunity_radar.acquisition.forbidden import is_forbidden_url
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.models import SourceDefinitionModel
@@ -133,10 +134,12 @@ def register_researched_collectors(session: Session, *, dry_run: bool) -> int:
             ).where(SourceDefinitionModel.company_source_id.is_not(None))
         )
     }
+    # F48-19: a researched record on a forbidden platform stays as research, never a source.
     missing = [
         source
         for source in runnable_sources
         if (source.id, source.source_type) not in existing_definitions
+        and not is_forbidden_url(source.endpoint or "")
     ]
     remotive_missing = session.scalar(
         select(SourceDefinitionModel.id).where(
