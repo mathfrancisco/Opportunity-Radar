@@ -737,9 +737,9 @@ Aceite:
   (Gupy, Wellfound, YC/Work at a Startup, Careerflow, Crossover, Braintrust, Landing.jobs).
   Braintrust entra com o motivo "sem endpoint estruturado (F20-56)", não "termos"; segue
   excluída até haver endpoint e revisão de termos próprios (decisão 8).
-- [ ] Agregadores remotos com API oficial candidatos à revisão (decisão de §4.20 item 5) têm o
+- [x] Agregadores remotos com API oficial candidatos à revisão (decisão de §4.20 item 5) têm o
   mesmo documento de termos e veredito.
-- [ ] Um documento de termos por candidato (SmartRecruiters, BambooHR, Recruitee, `inhire`, e o
+- [x] Um documento de termos por candidato (SmartRecruiters, BambooHR, Recruitee, `inhire`, e o
   endpoint de detalhe do Workday) com veredito **viável / não viável / a confirmar**, cláusulas
   citadas e endpoint público documentado.
 Teste: `tests/backend/acquisition/test_service.py` (criar fonte para `gupy.io` é recusado).
