@@ -8,8 +8,7 @@ Os tokens vivem em `apps/web/src/styles.css` (`@theme`); a medição de contrast
 arquivo é a regra: corrija o que estiver errado no mesmo commit.
 
 **Referência visual:** captura de tela "Audit log" fornecida pelo usuário
-(`Captura de tela 2026-09-29 153732.png`). A imagem **ainda não está no repositório**:
-pendente de cópia pelo usuário para `docs/assets/`. Até lá, os traços abaixo (§4.1 da SPEC)
+([captura "Audit log"](docs/assets/audit-log-reference.png)). Os traços abaixo (§4.1 da SPEC)
 são a descrição normativa.
 
 ## 1. Traços a reproduzir

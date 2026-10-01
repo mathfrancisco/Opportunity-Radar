@@ -65,5 +65,16 @@ Nenhum. A jornada passou sem mudar seletor (nenhum papel/rotulo mudou de proposi
 
 ## Pendencias
 
-- Imagem de referencia (`docs/assets/`) segue ausente (nao versionada).
+- Referencia visual: `docs/assets/audit-log-reference.png`.
 - Revisao visual humana dos screenshots contra os tracos de 4.1 (D9: sem baseline de pixel).
+
+## Inspecao do assistente dos screenshots
+
+O assistente comparou com a captura de referencia os 20 screenshots (1280px e 375px) das
+10 telas. O conjunto mostra os tracos centrais: canvas neutro, painel branco com borda, sidebar agrupada
+e, onde aplicavel, tabelas densas com chips e paginacao. No mobile, o conteudo usa cartoes
+empilhados ou tabelas densas com rolagem interna. Nao foi observada divergencia visual
+bloqueante nesta inspecao; isso nao constitui comparacao pixel a pixel.
+
+Uma nova rodada E2E nao foi executada porque o daemon Docker estava indisponivel. Os
+resultados E2E registrados acima sao evidencia historica da execucao anterior.

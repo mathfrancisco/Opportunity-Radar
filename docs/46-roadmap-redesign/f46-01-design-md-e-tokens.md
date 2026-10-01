@@ -1,6 +1,6 @@
 # CARD F46-01 — DESIGN.md e tokens
 
-- **Status:** Concluído em 2026-09-29 (pendência: cópia da imagem de referência, ver abaixo)
+- **Status:** Concluído em 2026-09-29; referência visual arquivada em `docs/assets/audit-log-reference.png`.
 - **Fase:** 46 — Redesenho da interface web
 - **Depende de:** Nenhum
 - **Bloqueia:** F46-02 a F46-10
@@ -35,8 +35,8 @@ invólucro e Inter apenas declarada, sem ser carregada.
 
 - Mudança estrutural de telas, sidebar, componentes novos (F46-02 em diante).
 - Tema escuro.
-- Cópia da imagem de referência: o arquivo não está no repositório e não foi inventado.
-  **Pendente:** o usuário copia a captura para `docs/assets/`; `DESIGN.md` registra isso.
+- Referência visual: captura fornecida pelo usuário, arquivada em
+  `docs/assets/audit-log-reference.png` e apontada por `DESIGN.md`.
 
 ## Decisões de implementação
 
@@ -63,7 +63,7 @@ invólucro e Inter apenas declarada, sem ser carregada.
       `styles.test.ts` (27 casos).
 - [x] `docs/35-design-tokens.md` aponta para `DESIGN.md` e tem a tabela regenerada.
 - [x] Invólucro sem sombra; logotipo com a cor original.
-- [ ] Imagem de referência em `docs/assets/` (pendente do usuário).
+- [x] Imagem de referência em `docs/assets/audit-log-reference.png`.
 
 ## Verificação
 

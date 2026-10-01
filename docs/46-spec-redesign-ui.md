@@ -1,18 +1,16 @@
 # SPEC — Redesenho da interface web (visual "admin" claro: sidebar, painel branco, tabelas densas)
 
-- **Status:** Implementada (F46-01 a F46-10) com pendências: imagem de referência ausente em
-  `docs/assets/` e revisão visual humana dos screenshots. Evidência em
+- **Status:** Implementada (F46-01 a F46-10) com pendência de revisão visual humana dos
+  screenshots. Evidência em
   [f46-10-verificacao.md](46-roadmap-redesign/f46-10-verificacao.md)
 - **Data:** 2026-09-29
 - **Escopo:** mudar a aparência e a estrutura de layout de `apps/web` para o padrão da
   imagem de referência (fundo cinza neutro, painel branco arredondado, sidebar agrupada,
   cabeçalho de página com ação secundária, linha de filtros em pílulas, tabela densa com
   rodapé de paginação), sem alterar API, regras de domínio, rotas nem textos de negócio.
-- **Referência visual:** captura de tela fornecida pelo usuário (`Captura de tela
-  2026-09-29 153732.png`, tela "Audit log"). A imagem não está versionada; o primeiro
-  card (F46-01) a copia para `docs/assets/` como parte do `DESIGN.md`.
-- **Cards de execução:** ainda não criados; as fatias estão em §8 e viram cards `F46-xx`
-  quando esta SPEC for aceita.
+- **Referência visual:** captura de tela fornecida pelo usuário ([tela "Audit log"](assets/audit-log-reference.png)).
+- **Cards de execução:** [F46-01 a F46-10](46-roadmap-redesign/f46-01-design-md-e-tokens.md)
+  já estão registrados em `docs/46-roadmap-redesign/`.
 - **Documentos relacionados:** [Tokens de design (35)](35-design-tokens.md),
   [Roadmap de interface (34)](34-roadmap-interface.md), Fase 15 (cards F15-01 a F15-09,
   tokens, componentes, acessibilidade, responsividade),
