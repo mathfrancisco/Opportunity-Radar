@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { PrimaryText, SecondaryText, DateTimeCell } from '../components/cells'
 import { DataTable } from '../components/DataTable'
+import { FilterBar } from '../components/FilterBar'
+import { FilterPill } from '../components/FilterPill'
 import { ManualIntakePanel } from '../components/ManualIntakePanel'
 import { PageShell } from '../components/PageShell'
 import { PanelSkeleton, TableSkeleton } from '../components/skeletons'
@@ -11,6 +13,7 @@ import { SourceControlsPanel } from '../components/SourceControlsPanel'
 import { SourceCreateForm } from '../components/SourceCreateForm'
 import { StatusBadge } from '../components/StatusBadge'
 import { Unavailable } from '../components/Unavailable'
+import { SearchInput } from '../components/SearchInput'
 import { type SourceHealth, type SourceType } from '../features/sources/api'
 import { runStatusLabels, runStatusTones } from '../features/sources/states'
 import {
@@ -98,6 +101,22 @@ function RunHistory({ sourceId, id }: { sourceId: string; id: string }) {
 
 const sourceColumns = ['Fonte', 'Estado', 'Última execução', 'Itens', 'Agendamento', 'Ações']
 
+const sourceStateOptions = [
+  { value: 'all', label: 'Todas' },
+  { value: 'failing', label: 'Com falha ou parcial' },
+  { value: 'enabled', label: 'Habilitadas' },
+] as const
+
+type SourceStateFilter = (typeof sourceStateOptions)[number]['value']
+
+function matchesSourceState(source: SourceHealth, state: SourceStateFilter) {
+  if (state === 'failing') {
+    return source.lastRunStatus === 'FAILED' || source.lastRunStatus === 'PARTIAL'
+  }
+  if (state === 'enabled') return source.enabled
+  return true
+}
+
 /**
  * One source as a table row, plus a full-width row under it while a panel (controls,
  * manual intake, run history) is open. Each row owns its `useRunSource`, so the result of
@@ -174,7 +193,7 @@ function SourceRows({
           </SecondaryText>
         </td>
         <td className="align-top text-muted">{source.schedule ?? 'manual'}</td>
-        <td className="min-w-40 align-top">
+        <td className="min-w-48 align-top">
           <div className="flex flex-wrap items-center gap-2">
             {manual ? (
               <Button
@@ -197,32 +216,39 @@ function SourceRows({
                 {run.isPending ? 'Executando…' : 'Executar agora'}
               </Button>
             )}
-            <Button
-              aria-controls={controlsId}
-              aria-expanded={panel === 'controls'}
-              onClick={() => toggle('controls')}
-              size="sm"
-              variant="secondary"
-            >
-              {panel === 'controls' ? 'Fechar homologação' : 'Homologação'}
-            </Button>
-            <Button
-              aria-controls={runHistoryId}
-              aria-expanded={expanded}
-              onClick={onToggle}
-              size="sm"
-              variant="secondary"
-            >
-              {expanded ? 'Ocultar execuções' : 'Ver execuções'}
-            </Button>
+            <details className="relative">
+              <summary className="h-8 cursor-pointer rounded-control border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:border-ink max-md:min-h-11">
+                Mais ações
+              </summary>
+              <div className="mt-2 flex min-w-48 flex-wrap items-center gap-2 rounded-control border border-line bg-panel p-2">
+                <Button
+                  aria-controls={controlsId}
+                  aria-expanded={panel === 'controls'}
+                  onClick={() => toggle('controls')}
+                  size="sm"
+                  variant="secondary"
+                >
+                  {panel === 'controls' ? 'Fechar homologação' : 'Homologação'}
+                </Button>
+                <Button
+                  aria-controls={runHistoryId}
+                  aria-expanded={expanded}
+                  onClick={onToggle}
+                  size="sm"
+                  variant="secondary"
+                >
+                  {expanded ? 'Ocultar execuções' : 'Ver execuções'}
+                </Button>
+                {blocked && (
+                  <p className="w-full text-caption text-subtle">
+                    {manual
+                      ? 'Fonte desabilitada: habilite na homologação para registrar vagas.'
+                      : 'Fonte desabilitada: habilite na homologação após revisar termos e testar o collector.'}
+                  </p>
+                )}
+              </div>
+            </details>
           </div>
-          {blocked && (
-            <SecondaryText className="mt-2">
-              {manual
-                ? 'Fonte desabilitada: habilite na homologação para registrar vagas.'
-                : 'Fonte desabilitada: habilite na homologação, depois de revisar termos e testar o collector.'}
-            </SecondaryText>
-          )}
         </td>
       </tr>
       {showPanels && (
@@ -252,7 +278,19 @@ export function SourcesPage() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [creating, setCreating] = useState<SourceType | null>(null)
   const [created, setCreated] = useState<string | null>(null)
+  const [sourceState, setSourceState] = useState<SourceStateFilter>('all')
+  const [sourceSearch, setSourceSearch] = useState('')
   const hasManual = health.data?.items.some((item) => item.sourceType === 'manual') ?? true
+  const normalizedSearch = sourceSearch.trim().toLocaleLowerCase('pt-BR')
+  const visibleSources =
+    health.data?.items.filter(
+      (source) =>
+        matchesSourceState(source, sourceState) &&
+        (normalizedSearch.length === 0 ||
+          source.name.toLocaleLowerCase('pt-BR').includes(normalizedSearch) ||
+          source.sourceType.toLocaleLowerCase('pt-BR').includes(normalizedSearch)),
+    ) ?? []
+  const hasLocalFilters = sourceState !== 'all' || normalizedSearch.length > 0
 
   return (
     <PageShell
@@ -332,12 +370,50 @@ export function SourcesPage() {
         )}
         {health.data && health.data.items.length > 0 && (
           <>
+            <FilterBar
+              className="mt-0"
+              label="Filtros da lista de fontes"
+              search={
+                <SearchInput
+                  id="source-search"
+                  label="Buscar fontes"
+                  onChange={setSourceSearch}
+                  onSubmit={() => undefined}
+                  placeholder="Nome ou tipo"
+                  value={sourceSearch}
+                />
+              }
+            >
+              <FilterPill
+                defaultValue="all"
+                id="source-state"
+                label="Estado"
+                onChange={(value) => setSourceState(value as SourceStateFilter)}
+                options={sourceStateOptions}
+                value={sourceState}
+              />
+              {hasLocalFilters && (
+                <Button
+                  onClick={() => {
+                    setSourceState('all')
+                    setSourceSearch('')
+                  }}
+                  size="sm"
+                  variant="secondary"
+                >
+                  Limpar filtros
+                </Button>
+              )}
+            </FilterBar>
             <p className="text-sm text-muted">
-              {health.data.total} fonte{health.data.total === 1 ? '' : 's'} ·{' '}
-              {health.data.failing} com falha na última execução.
+              Exibindo {visibleSources.length} de {health.data.items.length} fontes carregadas.
+              {' '}{health.data.failing} com falha na última execução.
             </p>
-            <DataTable caption="Fontes" columns={sourceColumns}>
-              {health.data.items.map((source) => (
+            {visibleSources.length === 0 ? (
+              <EmptyState>Nenhuma fonte corresponde aos filtros desta lista.</EmptyState>
+            ) : (
+              <DataTable caption="Fontes" columns={sourceColumns}>
+                {visibleSources.map((source) => (
                 <SourceRows
                   expanded={expanded === source.sourceDefinitionId}
                   key={source.sourceDefinitionId}
@@ -350,8 +426,9 @@ export function SourcesPage() {
                   }
                   source={source}
                 />
-              ))}
-            </DataTable>
+                ))}
+              </DataTable>
+            )}
           </>
         )}
       </div>

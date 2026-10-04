@@ -176,6 +176,29 @@ function PreservedHistory({ version }: { version: ProfileVersion }) {
   )
 }
 
+function ProfileSectionNav() {
+  const links = [
+    ['#perfil-criterios', 'Skills e áreas'],
+    ['#perfil-trabalho', 'Trabalho e localização'],
+    ['#perfil-remuneracao', 'Remuneração'],
+    ['#profile-versions', 'Versões'],
+  ]
+
+  return (
+    <nav aria-label="Seções do perfil" className="mt-8 flex flex-wrap gap-2">
+      {links.map(([href, label]) => (
+        <a
+          className="rounded-full border border-line-strong bg-surface px-3 py-1 text-sm font-medium text-subtle hover:border-ink hover:text-ink max-md:min-h-11"
+          href={href}
+          key={href}
+        >
+          {label}
+        </a>
+      ))}
+    </nav>
+  )
+}
+
 interface ProfileDraftState {
   versionId: string | null
   skillsText: string
@@ -274,8 +297,19 @@ export function ProfilePage() {
       </div>
 
       {!active.isPending && !active.isError && (
-        <form className="mt-8 grid gap-6" onSubmit={submit}>
-          <Field label="Skills" hint="Separadas por vírgula.">
+        <form className="mt-6 grid gap-8" onSubmit={submit}>
+          <ProfileSectionNav />
+
+          <section aria-labelledby="perfil-criterios-title" className="grid gap-6 scroll-mt-6" id="perfil-criterios">
+            <div>
+              <h2 className="text-section" id="perfil-criterios-title">
+                Skills e áreas
+              </h2>
+              <p className="mt-1 text-sm text-muted">
+                Critérios que orientam o encaixe técnico e a prioridade das vagas.
+              </p>
+            </div>
+            <Field label="Skills" hint="Separadas por vírgula.">
             <input
               className={controlClassName}
               onChange={(event) => setSkillsText(event.target.value)}
@@ -349,7 +383,17 @@ export function ProfilePage() {
               value={preferences.targetTitles.join(', ')}
             />
           </Field>
+          </section>
 
+          <section aria-labelledby="perfil-trabalho-title" className="grid gap-6 scroll-mt-6" id="perfil-trabalho">
+            <div>
+              <h2 className="text-section" id="perfil-trabalho-title">
+                Trabalho e localização
+              </h2>
+              <p className="mt-1 text-sm text-muted">
+                Preferências de modalidade, contrato, país e fuso.
+              </p>
+            </div>
           <fieldset>
             <legend className="text-sm font-medium">Modalidades aceitas</legend>
             <div className="mt-2 flex flex-wrap gap-4">
@@ -423,7 +467,17 @@ export function ProfilePage() {
               />
             </Field>
           </div>
+          </section>
 
+          <section aria-labelledby="perfil-remuneracao-title" className="grid gap-6 scroll-mt-6" id="perfil-remuneracao">
+            <div>
+              <h2 className="text-section" id="perfil-remuneracao-title">
+                Remuneração
+              </h2>
+              <p className="mt-1 text-sm text-muted">
+                Faixa desejada e condições de mobilidade para avaliar a elegibilidade.
+              </p>
+            </div>
           <div className="grid gap-3 sm:grid-cols-4">
             <Field label="Remuneração mínima">
               <input
@@ -494,8 +548,9 @@ export function ProfilePage() {
               Preciso de patrocínio de visto
             </label>
           </div>
+          </section>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 border-t border-line pt-6">
             <Button disabled={save.isPending} type="submit">
               {save.isPending ? 'Salvando…' : 'Salvar como nova versão e ativar'}
             </Button>
@@ -523,8 +578,10 @@ export function ProfilePage() {
         </form>
       )}
 
-      <section className="mt-10">
-        <h2 className="text-section">Versões</h2>
+      <section aria-labelledby="profile-versions-title" className="mt-10 scroll-mt-6" id="profile-versions">
+        <h2 className="text-section" id="profile-versions-title">
+          Versões
+        </h2>
         <div className="mt-4">
           {versions.isPending && (
             <p className="text-sm text-subtle">Carregando versões…</p>

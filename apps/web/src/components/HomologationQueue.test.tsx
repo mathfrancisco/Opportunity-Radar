@@ -176,6 +176,9 @@ describe('HomologationQueue', () => {
     act(() => sequentialButton?.click())
     await flush()
 
+    expect(container.textContent).toContain('Revisão uma a uma')
+    expect(container.querySelector('progress')?.getAttribute('value')).toBe('0')
+    expect(container.querySelector('progress')?.getAttribute('max')).toBe('2')
     // The list (batch button, counters grid) is gone once in sequential mode.
     expect(
       Array.from(container.querySelectorAll('button')).some((button) =>
@@ -192,6 +195,7 @@ describe('HomologationQueue', () => {
     await flush()
 
     expect(container.textContent).toContain('Fonte source-2')
+    expect(container.querySelector('progress')?.getAttribute('value')).toBe('1')
     // Still never back at the list.
     expect(
       Array.from(container.querySelectorAll('button')).some((button) =>
@@ -240,12 +244,12 @@ describe('HomologationQueue', () => {
     const container = renderWithClient(<HomologationQueue />)
     await flush()
 
-    const checkboxes = Array.from(
-      container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
-    )
-    expect(checkboxes).toHaveLength(2)
-    act(() => checkboxes[0].click())
-    act(() => checkboxes[1].click())
+    const first = container.querySelector<HTMLInputElement>('input[aria-label="Selecionar Limitada"]')
+    const second = container.querySelector<HTMLInputElement>('input[aria-label="Selecionar Confirmada"]')
+    expect(first).not.toBeNull()
+    expect(second).not.toBeNull()
+    act(() => first?.click())
+    act(() => second?.click())
     await flush()
 
     const batchButton = Array.from(container.querySelectorAll('button')).find((button) =>
@@ -260,6 +264,29 @@ describe('HomologationQueue', () => {
     expect(rows[0].textContent).toContain('SOURCE_RATE_LIMITED')
     expect(rows[0].textContent).toContain('aguardar 0s')
     expect(rows[1].textContent).toContain('Sonda confirmada')
+  })
+
+  it('seleciona todas as propostas e destaca as linhas selecionadas', async () => {
+    stubFetch({
+      items: [
+        healthItem({ source_definition_id: 'source-1', name: 'Primeira' }),
+        healthItem({ source_definition_id: 'source-2', name: 'Segunda' }),
+      ],
+    })
+
+    const container = renderWithClient(<HomologationQueue />)
+    await flush()
+
+    const selectAll = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Selecionar todas as propostas"]',
+    )
+    expect(selectAll).not.toBeNull()
+    act(() => selectAll?.click())
+    await flush()
+
+    expect(container.textContent).toContain('2 selecionadas')
+    expect(container.querySelectorAll('tbody tr[aria-selected="true"]')).toHaveLength(2)
+    expect(selectAll?.checked).toBe(true)
   })
 
   it('termos e habilitação nunca disparam em lote', async () => {

@@ -254,12 +254,30 @@ function SourceMetricsSection() {
   const [selected, setSelected] = useState('24h')
   const windows = metrics.data?.windows ?? []
   const active = windows.find((item) => item.window === selected) ?? windows[0]
+  const generatedAt = metrics.data?.generatedAt
+
+  const metricContext = active
+    ? `Janela: ${active.window}. ${
+        generatedAt
+          ? `Consolidado em ${new Date(generatedAt).toLocaleString('pt-BR')}.`
+          : 'O horário de consolidação não foi informado.'
+      }`
+    : 'Selecione uma janela quando as métricas estiverem disponíveis.'
 
   return (
-    <section className="mt-10">
+    <section
+      aria-labelledby="metricas-operacionais-titulo"
+      className="mt-10"
+      id="metricas-operacionais"
+    >
       {/* A altura mínima é a dos botões de janela, que só existem depois da resposta. */}
       <div className="flex min-h-10 flex-wrap items-center justify-between gap-3">
-        <h2 className="text-section">Métricas operacionais por fonte</h2>
+        <div>
+          <h2 className="text-section" id="metricas-operacionais-titulo">
+            Métricas operacionais por fonte
+          </h2>
+          <p className="mt-1 text-xs text-muted">{metricContext}</p>
+        </div>
         <Toolbar
           label="Janela das métricas"
           onChange={setSelected}
@@ -497,14 +515,18 @@ function Block({
   title,
   description,
   children,
+  id,
 }: {
   title: string
   description: string
   children: ReactNode
+  id: string
 }) {
   return (
-    <section className="mt-10">
-      <h2 className="text-section">{title}</h2>
+    <section aria-labelledby={`${id}-title`} className="mt-10 scroll-mt-6" id={id}>
+      <h2 className="text-section" id={`${id}-title`}>
+        {title}
+      </h2>
       <p className="mt-1 text-sm text-muted">{description}</p>
       <div className="mt-4">{children}</div>
     </section>
@@ -570,8 +592,10 @@ function PendingDecisions({ overview }: { overview: Overview }) {
   const verdicts = verdictOrder.filter((verdict) => overview.verdictCounts[verdict] > 0)
 
   return (
-    <section className="mt-8">
-      <h2 className="text-section">Decisão de hoje</h2>
+    <section aria-labelledby="decisao-de-hoje-title" className="mt-8 scroll-mt-6" id="decisao-de-hoje">
+      <h2 className="text-section" id="decisao-de-hoje-title">
+        Decisão de hoje
+      </h2>
       {pending === 0 ? (
         <p className="mt-4 rounded-control border border-success-line bg-success-surface p-5 text-success-ink">
           Nada exige decisão agora: sem vagas novas na janela, sem recomendações abertas e
@@ -650,10 +674,26 @@ export function StartupShortcut() {
 function Summary({ overview }: { overview: Overview }) {
   return (
     <>
+      <nav aria-label="Seções da visão geral" className="mt-8 flex flex-wrap gap-2">
+        {[
+          ['#decisao-de-hoje', 'Decisão de hoje'],
+          ['#acervo', 'Acervo'],
+          ['#operacao', 'Operação'],
+        ].map(([href, label]) => (
+          <a
+            className="rounded-full border border-line-strong bg-surface px-3 py-1 text-sm font-medium text-subtle hover:border-ink hover:text-ink max-md:min-h-11"
+            href={href}
+            key={href}
+          >
+            {label}
+          </a>
+        ))}
+      </nav>
       <PendingDecisions overview={overview} />
 
       <Block
         description="O que o radar já coletou e decidiu, e que continua disponível para consulta."
+        id="acervo"
         title="Acervo"
       >
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -699,6 +739,7 @@ function Summary({ overview }: { overview: Overview }) {
 
       <Block
         description="Como o ciclo está passando quando ninguém está olhando."
+        id="operacao"
         title="Operação"
       >
         <dl className="grid gap-3 text-sm sm:grid-cols-2">

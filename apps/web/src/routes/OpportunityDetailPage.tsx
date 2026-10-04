@@ -39,6 +39,50 @@ const resultLabels: Record<string, string> = {
   UNKNOWN: 'Desconhecido',
 }
 
+const workModeLabels: Record<string, string> = {
+  REMOTE: 'Remoto',
+  HYBRID: 'Híbrido',
+  ONSITE: 'Presencial',
+  UNKNOWN: 'Não informado',
+}
+
+const seniorityLabels: Record<string, string> = {
+  INTERN: 'Estágio',
+  JUNIOR: 'Júnior',
+  MID: 'Pleno',
+  SENIOR: 'Sênior',
+  STAFF: 'Staff',
+  LEAD: 'Liderança',
+  PRINCIPAL: 'Principal',
+  UNKNOWN: 'Não informada',
+}
+
+const contractLabels: Record<string, string> = {
+  FULL_TIME: 'Tempo integral',
+  PART_TIME: 'Meio período',
+  CONTRACT: 'Contrato',
+  INTERNSHIP: 'Estágio',
+  TEMPORARY: 'Temporário',
+  UNKNOWN: 'Não informado',
+}
+
+const lifecycleLabels: Record<string, string> = {
+  DISCOVERED: 'Descoberta',
+  ACTIVE: 'Ativa',
+  STALE: 'Possivelmente encerrada',
+  CLOSED: 'Encerrada',
+}
+
+const eligibilityLabels: Record<string, string> = {
+  ELIGIBLE: 'Atende aos filtros',
+  INELIGIBLE: 'Não atende aos filtros',
+  UNKNOWN: 'Aguardando confirmação',
+}
+
+function label(value: string, labels: Record<string, string>) {
+  return labels[value] ?? value
+}
+
 function display(value: string | null) {
   return value === null || value === '' ? '—' : value
 }
@@ -55,9 +99,63 @@ function formatNumber(value: string | null, digits = 1) {
   return Number.isNaN(parsed) ? value : parsed.toFixed(digits)
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+const DESCRIPTION_BLOCK_ELEMENTS = new Set([
+  'ADDRESS', 'ARTICLE', 'BLOCKQUOTE', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'P', 'PRE',
+])
+const DESCRIPTION_IGNORED_ELEMENTS = new Set(['NOSCRIPT', 'SCRIPT', 'STYLE', 'TEMPLATE'])
+
+/**
+ * Descriptions from job boards can contain HTML. Parse it only to recover its
+ * readable text: React still receives text children, never remote markup.
+ */
+function descriptionAsPlainText(description: string) {
+  if (!/<\/?[a-z][^>]*>/i.test(description) || typeof DOMParser === 'undefined') {
+    return description
+  }
+
+  const document = new DOMParser().parseFromString(description, 'text/html')
+  let text = ''
+
+  function visit(node: Node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      text += node.textContent ?? ''
+      return
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return
+
+    const element = node as Element
+    if (DESCRIPTION_IGNORED_ELEMENTS.has(element.tagName)) return
+    if (element.tagName === 'BR') {
+      text += '\n'
+      return
+    }
+
+    const isBlock = DESCRIPTION_BLOCK_ELEMENTS.has(element.tagName)
+    if (isBlock && text && !text.endsWith('\n\n')) text += text.endsWith('\n') ? '\n' : '\n\n'
+    element.childNodes.forEach(visit)
+    if (isBlock && !text.endsWith('\n')) text += '\n'
+  }
+
+  document.body.childNodes.forEach(visit)
+  return text
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+export function OpportunityDescription({ description }: { description: string }) {
   return (
-    <section className="mt-10">
+    <p className="break-anywhere whitespace-pre-line text-body text-subtle" data-testid="opportunity-description">
+      {descriptionAsPlainText(description)}
+    </p>
+  )
+}
+
+function Section({ id, title, children }: { id?: string; title: string; children: ReactNode }) {
+  return (
+    <section className="mt-10 scroll-mt-6" id={id}>
       <h2 className="text-section">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
@@ -66,8 +164,9 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function Facts({ opportunity }: { opportunity: OpportunityDetail }) {
   return (
-    <Card className="mt-6">
-    <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+    <div className="mt-6 scroll-mt-6" id="resumo">
+    <Card>
+      <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
       <div>
         <dt className="text-muted">Empresa</dt>
         <dd className="mt-1 font-medium">{display(opportunity.companyName)}</dd>
@@ -78,19 +177,19 @@ function Facts({ opportunity }: { opportunity: OpportunityDetail }) {
       </div>
       <div>
         <dt className="text-muted">Modalidade</dt>
-        <dd className="mt-1 font-medium">{opportunity.workMode}</dd>
+        <dd className="mt-1 break-words font-medium">{label(opportunity.workMode, workModeLabels)}</dd>
       </div>
       <div>
         <dt className="text-muted">Senioridade</dt>
-        <dd className="mt-1 font-medium">{opportunity.seniority}</dd>
+        <dd className="mt-1 break-words font-medium">{label(opportunity.seniority, seniorityLabels)}</dd>
       </div>
       <div>
         <dt className="text-muted">Contrato</dt>
-        <dd className="mt-1 font-medium">{opportunity.contractType}</dd>
+        <dd className="mt-1 break-words font-medium">{label(opportunity.contractType, contractLabels)}</dd>
       </div>
       <div>
         <dt className="text-muted">Status</dt>
-        <dd className="mt-1 font-medium">{opportunity.lifecycleStatus}</dd>
+        <dd className="mt-1 break-words font-medium">{label(opportunity.lifecycleStatus, lifecycleLabels)}</dd>
       </div>
       <div>
         <dt className="text-muted">Publicada</dt>
@@ -110,8 +209,9 @@ function Facts({ opportunity }: { opportunity: OpportunityDetail }) {
         <dt className="text-muted">Versão do conteúdo</dt>
         <dd className="mt-1 font-medium">{opportunity.version}</dd>
       </div>
-    </dl>
+      </dl>
     </Card>
+    </div>
   )
 }
 
@@ -306,9 +406,9 @@ const DUPLICATE_COMPARISON_FIELDS: {
   { label: 'Título', read: (o) => o.title },
   { label: 'Empresa', read: (o) => display(o.companyName) },
   { label: 'Localização', read: (o) => display(o.location) },
-  { label: 'Modalidade', read: (o) => o.workMode },
-  { label: 'Senioridade', read: (o) => o.seniority },
-  { label: 'Contrato', read: (o) => o.contractType },
+  { label: 'Modalidade', read: (o) => label(o.workMode, workModeLabels) },
+  { label: 'Senioridade', read: (o) => label(o.seniority, seniorityLabels) },
+  { label: 'Contrato', read: (o) => label(o.contractType, contractLabels) },
   { label: 'Publicada', read: (o) => formatDate(o.publishedAt) },
 ]
 
@@ -527,7 +627,7 @@ function Decision({
           {verdictLabels[assessment.verdict] ?? assessment.verdict}
         </Chip>
         <span className="text-sm text-muted">
-          Elegibilidade {assessment.eligibility} · confiança{' '}
+          Elegibilidade {label(assessment.eligibility, eligibilityLabels)} · confiança{' '}
           {formatNumber(assessment.confidence, 2)}
         </span>
       </div>
@@ -612,6 +712,12 @@ export function OpportunityDetailPage() {
 
         {opportunity.data && (
           <>
+            <nav aria-label="Navegar nesta oportunidade" className="mt-6 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+              <a className="underline decoration-accent decoration-2 underline-offset-4" href="#resumo">Resumo</a>
+              <a className="underline decoration-accent decoration-2 underline-offset-4" href="#decisao">Decisão</a>
+              <a className="underline decoration-accent decoration-2 underline-offset-4" href="#candidatura">Candidatura</a>
+              <a className="underline decoration-accent decoration-2 underline-offset-4" href="#procedencia">Procedência</a>
+            </nav>
             <Facts opportunity={opportunity.data} />
 
             <SiblingLocations opportunity={opportunity.data} />
@@ -626,9 +732,7 @@ export function OpportunityDetailPage() {
 
             {opportunity.data.description && (
               <Section title="Descrição">
-                <p className="whitespace-pre-line text-body text-subtle">
-                  {opportunity.data.description}
-                </p>
+                <OpportunityDescription description={opportunity.data.description} />
               </Section>
             )}
 
@@ -640,11 +744,11 @@ export function OpportunityDetailPage() {
               <Skills opportunity={opportunity.data} />
             </Section>
 
-            <Section title="Procedência">
+            <Section id="procedencia" title="Procedência">
               <Provenance opportunity={opportunity.data} />
             </Section>
 
-            <Section title="Decisão">
+            <Section id="decisao" title="Decisão">
               <div className="mb-4 flex flex-wrap items-center gap-3">
                 {evaluate.isSuccess && <span className="text-sm text-subtle">Avaliação atualizada.</span>}
                 {evaluate.isError && <span className="text-sm text-danger-ink">Não foi possível avaliar agora.</span>}
@@ -666,7 +770,7 @@ export function OpportunityDetailPage() {
               )}
             </Section>
 
-            <Section title="Candidatura">
+            <Section id="candidatura" title="Candidatura">
               <ApplicationPanel opportunityId={opportunity.data.id} />
             </Section>
           </>

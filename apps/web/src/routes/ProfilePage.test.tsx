@@ -64,6 +64,49 @@ async function flush(times = 4) {
 }
 
 describe('ProfilePage', () => {
+  it('organizes the mounted form into reachable sections without losing a draft', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.endsWith('/profile/versions')) return new Response('[]')
+        return new Response(JSON.stringify(version('version-1', 3, ['backend engineer'])))
+      }),
+    )
+
+    const container = renderPage(<ProfilePage />)
+    await flush()
+
+    const navigation = [...container.querySelectorAll('nav')].find(
+      (element) => element.getAttribute('aria-label') === 'Seções do perfil',
+    )
+    expect([...navigation!.querySelectorAll('a')].map((link) => link.getAttribute('href'))).toEqual([
+      '#perfil-criterios',
+      '#perfil-trabalho',
+      '#perfil-remuneracao',
+      '#profile-versions',
+    ])
+    expect(container.querySelector('#perfil-criterios-title')?.textContent).toBe('Skills e áreas')
+    expect(container.querySelector('#perfil-trabalho-title')?.textContent).toBe('Trabalho e localização')
+    expect(container.querySelector('#perfil-remuneracao-title')?.textContent).toBe('Remuneração')
+
+    const titleField = [...container.querySelectorAll('label')].find((label) =>
+      label.textContent?.includes('Cargos-alvo'),
+    )
+    const input = titleField?.querySelector('input')
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(input, 'Backend Engineer, Engenheiro de Software')
+      input?.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    ;[...navigation!.querySelectorAll('a')]
+      .find((link) => link.getAttribute('href') === '#perfil-remuneracao')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+
+    expect(input?.value).toBe('Backend Engineer, Engenheiro de Software')
+    expect(container.querySelector('#profile-versions-title')?.textContent).toBe('Versões')
+  })
+
   it('shows and saves target titles', async () => {
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input)

@@ -192,4 +192,60 @@ describe('SourcesPage — tabela e ação de cabeçalho', () => {
     expect(toggle?.getAttribute('aria-expanded')).toBe('true')
     expect(container.querySelectorAll('tbody > tr').length).toBeGreaterThanOrEqual(2)
   })
+
+  it('filtra a lista carregada por estado e nome, e permite limpar os filtros', async () => {
+    stubFetch([
+      healthItem('workday', { last_run_status: 'SUCCEEDED' }),
+      healthItem('manual', { last_run_status: 'PARTIAL' }),
+      healthItem('greenhouse', { last_run_status: 'FAILED' }),
+    ])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    const state = container.querySelector('#source-state') as HTMLSelectElement
+    act(() => {
+      state.value = 'failing'
+      state.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(container.textContent).toContain('Exibindo 2 de 3 fontes carregadas.')
+    expect(container.textContent).not.toContain('Fonte workday')
+
+    const search = container.querySelector('#source-search') as HTMLInputElement
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(search, 'manual')
+      search.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(container.textContent).toContain('Exibindo 1 de 3 fontes carregadas.')
+    expect(container.textContent).toContain('Fonte manual')
+    expect(container.textContent).not.toContain('Fonte greenhouse')
+
+    const reset = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Limpar filtros',
+    )
+    act(() => reset?.click())
+    expect(container.textContent).toContain('Exibindo 3 de 3 fontes carregadas.')
+  })
+
+  it('mantém ações secundárias e a orientação de bloqueio em uma divulgação compacta', async () => {
+    stubFetch([healthItem('workday', { enabled: false })])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    const disclosure = container.querySelector('details') as HTMLDetailsElement
+    expect(disclosure.open).toBe(false)
+    expect(disclosure.querySelector('summary')?.textContent).toBe('Mais ações')
+    expect(disclosure.textContent).toContain('Fonte desabilitada: habilite na homologação')
+
+    const history = [...disclosure.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Ver execuções',
+    )
+    act(() => history?.click())
+    await flush()
+
+    expect(history?.getAttribute('aria-expanded')).toBe('true')
+    expect(container.querySelectorAll('tbody > tr').length).toBeGreaterThanOrEqual(2)
+  })
 })

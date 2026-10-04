@@ -744,6 +744,46 @@ describe('InboxPage table, pagination and filters', () => {
     expect(search(container).get('applied')).toBe('true')
   })
 
+  it('concentra filtros secundários no disclosure, informa os ativos e os limpa sem apagar a busca', async () => {
+    stubInbox(1, [])
+    const container = renderAt(
+      '/inbox?search=backend&work_mode=REMOTE&seniority=SENIOR&only_startups=true&page=3',
+    )
+    await flush()
+
+    const details = container.querySelector('details') as HTMLDetailsElement
+    expect(details.open).toBe(true)
+    expect(details.textContent).toContain('Filtros avançados (2 ativos)')
+    expect(container.textContent).toContain('3 filtros ativos')
+    expect((container.querySelector('#inbox-seniority') as HTMLElement).closest('details')).toBe(
+      details,
+    )
+    expect((container.querySelector('#inbox-applied') as HTMLElement).closest('details')).toBe(
+      details,
+    )
+    const startupLabel = Array.from(container.querySelectorAll('label')).find((candidate) =>
+      candidate.textContent?.includes('Só startups'),
+    )
+    expect(startupLabel?.closest('details')).toBe(details)
+
+    act(() => {
+      details.open = false
+      details.dispatchEvent(new Event('toggle', { bubbles: true }))
+    })
+    expect(details.open).toBe(false)
+
+    clickButton(container, 'Limpar filtros')
+    await flush()
+
+    const params = search(container)
+    expect(params.get('search')).toBe('backend')
+    expect(params.get('work_mode')).toBeNull()
+    expect(params.get('seniority')).toBeNull()
+    expect(params.get('only_startups')).toBeNull()
+    expect(params.get('page')).toBeNull()
+    expect(container.textContent).toContain('Nenhum filtro ativo')
+  })
+
   it('as buscas salvas ficam num menu: abre, aplica a busca e Esc fecha', async () => {
     stubInbox(1, [])
     const container = renderAt('/inbox')

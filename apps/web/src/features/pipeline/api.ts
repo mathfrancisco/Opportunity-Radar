@@ -139,9 +139,10 @@ async function send(
 }
 
 export async function listApplications(
-  params: { status?: string; stage?: string; opportunityId?: string; limit?: number } = {},
+  params: { status?: string; stage?: string; opportunityId?: string; offset?: number; limit?: number } = {},
 ): Promise<ApplicationPage> {
   const query = new URLSearchParams({ limit: String(params.limit ?? 100) })
+  if (params.offset && params.offset > 0) query.set('offset', String(params.offset))
   if (params.status) query.set('application_status', params.status)
   if (params.stage) query.set('stage', params.stage)
   if (params.opportunityId) query.set('opportunity_id', params.opportunityId)

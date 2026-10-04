@@ -595,6 +595,43 @@ export function InboxPage() {
     lensParam === 'novas' || lensParam === 'abertas' ? lensParam : ''
   // Card F20-54: display/filter only, never changes score or verdict.
   const onlyStartups = params.get('only_startups') === 'true'
+  const activeFilterCount = [
+    verdict,
+    companyId,
+    workMode,
+    lifecycleStatus,
+    minimumScore,
+    onlyAssessed,
+    appliedFilter,
+    order !== 'priority',
+    allAreas,
+    ...areaFilter,
+    seniority,
+    salaryMin,
+    salaryMax,
+    source,
+    allowedCountry,
+    !onlyRecent,
+    recencyLens,
+    onlyStartups,
+  ].filter(Boolean).length
+  const advancedFilterCount = [
+    companyId,
+    lifecycleStatus,
+    minimumScore,
+    onlyAssessed,
+    appliedFilter,
+    allAreas,
+    ...areaFilter,
+    seniority,
+    salaryMin,
+    salaryMax,
+    source,
+    allowedCountry,
+    !onlyRecent,
+    onlyStartups,
+  ].filter(Boolean).length
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(advancedFilterCount > 0)
 
   const inbox = useInbox({
     page,
@@ -662,6 +699,15 @@ export function InboxPage() {
     setParams(next)
   }
 
+  function clearFilters() {
+    const next = new URLSearchParams()
+    // The search text is an explicit lookup rather than a faceted filter, and the page size is
+    // a display preference. Retain both while returning every filter to its server default.
+    if (search) next.set('search', search)
+    if (pageSize !== defaultPageSize) next.set('size', String(pageSize))
+    setParams(next)
+  }
+
   return (
     <PageShell
       current="/inbox"
@@ -709,26 +755,6 @@ export function InboxPage() {
           value={workMode}
         />
         <FilterPill
-          id="inbox-status"
-          label="Status"
-          onChange={(value) => update({ lifecycle_status: value })}
-          options={[
-            { value: '', label: 'Todos' },
-            ...lifecycleStatuses.map((value) => ({ value, label: value })),
-          ]}
-          value={lifecycleStatus}
-        />
-        <FilterPill
-          id="inbox-seniority"
-          label="Senioridade"
-          onChange={(value) => update({ seniority: value })}
-          options={[
-            { value: '', label: 'Todas' },
-            ...seniorities.map((value) => ({ value, label: value })),
-          ]}
-          value={seniority}
-        />
-        <FilterPill
           defaultValue="priority"
           id="inbox-order"
           label="Ordenar por"
@@ -747,18 +773,65 @@ export function InboxPage() {
           ]}
           value={recencyLens}
         />
-        <FilterPill
-          id="inbox-applied"
-          label="Candidatura"
-          onChange={(value) => update({ applied: value || null })}
-          options={appliedOptions}
-          value={appliedFilter}
-        />
       </FilterBar>
 
-      <details className="mt-3">
-        <summary className="cursor-pointer text-sm font-medium text-subtle">Mais filtros</summary>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <p aria-live="polite" className="text-caption text-muted">
+          {activeFilterCount === 0
+            ? 'Nenhum filtro ativo'
+            : `${activeFilterCount} filtro${activeFilterCount === 1 ? '' : 's'} ativo${
+                activeFilterCount === 1 ? '' : 's'
+              }`}
+        </p>
+        {activeFilterCount > 0 && (
+          <button
+            className="text-caption font-medium text-subtle underline hover:text-ink"
+            onClick={clearFilters}
+            type="button"
+          >
+            Limpar filtros
+          </button>
+        )}
+      </div>
+
+      <details
+        className="mt-3 rounded-control border border-line bg-panel px-3 py-2"
+        onToggle={(event) => setAdvancedFiltersOpen(event.currentTarget.open)}
+        open={advancedFiltersOpen}
+      >
+        <summary className="cursor-pointer text-sm font-medium text-subtle">
+          Filtros avançados
+          {advancedFilterCount > 0 &&
+            ` (${advancedFilterCount} ativo${advancedFilterCount === 1 ? '' : 's'})`}
+        </summary>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <FilterPill
+            id="inbox-status"
+            label="Status"
+            onChange={(value) => update({ lifecycle_status: value })}
+            options={[
+              { value: '', label: 'Todos' },
+              ...lifecycleStatuses.map((value) => ({ value, label: value })),
+            ]}
+            value={lifecycleStatus}
+          />
+          <FilterPill
+            id="inbox-seniority"
+            label="Senioridade"
+            onChange={(value) => update({ seniority: value })}
+            options={[
+              { value: '', label: 'Todas' },
+              ...seniorities.map((value) => ({ value, label: value })),
+            ]}
+            value={seniority}
+          />
+          <FilterPill
+            id="inbox-applied"
+            label="Candidatura"
+            onChange={(value) => update({ applied: value || null })}
+            options={appliedOptions}
+            value={appliedFilter}
+          />
           <Field label="Score mínimo">
             <input
               className={controlClassName}
@@ -812,7 +885,6 @@ export function InboxPage() {
             />
           </Field>
         </div>
-      </details>
 
       <label className="mt-4 flex items-center gap-2 text-sm text-subtle">
         <input
@@ -895,6 +967,7 @@ export function InboxPage() {
           </button>
         </p>
       )}
+      </details>
 
       <div className="mt-8 grid gap-3">
         {inbox.isPending &&

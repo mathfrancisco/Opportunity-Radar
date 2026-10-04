@@ -34,6 +34,33 @@ const fieldLabels: Record<string, string> = {
   external_key: 'chave',
 }
 
+const priorityLabels: Record<string, string> = {
+  high: 'Alta',
+  normal: 'Normal',
+  low: 'Baixa',
+}
+
+const companyStatusLabels: Record<string, string> = {
+  active: 'Ativa',
+  paused: 'Pausada',
+  backlog: 'Em fila',
+}
+
+const verificationLabels: Record<string, string> = {
+  VERIFIED: 'Verificada',
+  PENDING: 'Pendente',
+  UNVERIFIED: 'Não verificada',
+  unknown: 'Não informada',
+  unverified: 'Não verificada',
+  ats_identified: 'ATS identificado',
+  careers_confirmed: 'Carreiras confirmadas',
+  backlog: 'Em fila de homologação',
+}
+
+function label(value: string, labels: Record<string, string>) {
+  return labels[value] ?? value
+}
+
 function describeChange(change: { from: unknown; to: unknown }) {
   const shown = (value: unknown) => (value === null || value === undefined ? '—' : String(value))
   return change.from === null ? shown(change.to) : `${shown(change.from)} → ${shown(change.to)}`
@@ -135,7 +162,7 @@ function Sources({
         <Card as="li" className="text-sm" key={source.id}>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="font-semibold">{source.name}</span>
-            <span className="text-muted">{source.status}</span>
+            <span className="text-muted">{label(source.status, verificationLabels)}</span>
           </div>
           {source.url && <p className="mt-1 break-all text-subtle">{source.url}</p>}
           <p className="mt-2 text-xs text-muted">
@@ -285,19 +312,27 @@ export function CompanyDetailPage() {
               )}
             </div>
           )}
-          <Card className="mt-6">
-          <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+          {!editing && (
+            <nav aria-label="Navegar nesta empresa" className="mt-6 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+              <a className="underline decoration-accent decoration-2 underline-offset-4" href="#resumo">Resumo</a>
+              <a className="underline decoration-accent decoration-2 underline-offset-4" href="#fontes">Fontes</a>
+              <a className="underline decoration-accent decoration-2 underline-offset-4" href="#vagas">Vagas</a>
+            </nav>
+          )}
+          <div className="mt-6 scroll-mt-6" id="resumo">
+          <Card>
+          <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <dt className="text-muted">Prioridade</dt>
-              <dd className="mt-1 font-medium">{company.data.priority}</dd>
+              <dd className="mt-1 break-words font-medium">{label(company.data.priority, priorityLabels)}</dd>
             </div>
             <div>
               <dt className="text-muted">Status no radar</dt>
-              <dd className="mt-1 font-medium">{company.data.status}</dd>
+              <dd className="mt-1 break-words font-medium">{label(company.data.status, companyStatusLabels)}</dd>
             </div>
             <div>
               <dt className="text-muted">Verificação</dt>
-              <dd className="mt-1 font-medium">{company.data.verificationState}</dd>
+              <dd className="mt-1 break-words font-medium">{label(company.data.verificationState, verificationLabels)}</dd>
             </div>
             <div>
               <dt className="text-muted">Última verificação</dt>
@@ -305,6 +340,7 @@ export function CompanyDetailPage() {
             </div>
           </dl>
           </Card>
+          </div>
 
           <section className="mt-10">
             <h2 className="text-section">Aliases</h2>
@@ -323,7 +359,7 @@ export function CompanyDetailPage() {
             </div>
           </section>
 
-          <section className="mt-10">
+          <section className="mt-10 scroll-mt-6" id="fontes">
             <h2 className="text-section">Fontes</h2>
             <p className="mt-1 max-w-2xl text-sm text-muted">
               Registre ou corrija o ATS da empresa e proponha a fonte a partir dele. A proposta
@@ -417,7 +453,7 @@ export function CompanyDetailPage() {
             </div>
           </section>
 
-          <section className="mt-10">
+          <section className="mt-10 scroll-mt-6" id="vagas">
             <h2 className="text-section">Últimas vagas</h2>
             <div className="mt-4">
               <LatestOpportunities companyId={company.data.id} />
