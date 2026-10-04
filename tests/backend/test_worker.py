@@ -1,7 +1,10 @@
 import logging
+from contextlib import nullcontext
+from types import SimpleNamespace
 
 import pytest
 
+from opportunity_radar import worker
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.worker import (
     FUNCTIONAL_JOB_IDS,
@@ -50,6 +53,7 @@ def test_worker_kill_switches_only_remove_functional_jobs() -> None:
             worker_match_enabled=False,
             worker_analyze_enabled=False,
             worker_retention_enabled=False,
+            worker_suggest_enabled=False,
         )
     )
 
@@ -65,6 +69,7 @@ def test_each_kill_switch_removes_only_its_own_job() -> None:
         "worker_match_enabled": "evaluate-pending",
         "worker_analyze_enabled": "analyze-pending",
         "worker_retention_enabled": "expire-raw-payloads",
+        "worker_suggest_enabled": "suggest-fields-pending",
     }
     for switch, disabled_job in switches.items():
         scheduler = build_scheduler(
@@ -115,3 +120,46 @@ def test_no_analyze_job_without_analysis_enabled() -> None:
     )
 
     assert scheduler.get_job("analyze-pending") is None
+
+
+def test_suggest_fields_batch_summary_uses_non_reserved_log_fields(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    opportunity = SimpleNamespace(id="opportunity-1")
+
+    async def suggest_fields(*_args: object) -> SimpleNamespace:
+        return SimpleNamespace(created=(), discarded_fields=())
+
+    monkeypatch.setattr(worker, "observe_job", lambda *_args, **_kwargs: nullcontext())
+    monkeypatch.setattr(worker, "Session", lambda _engine: nullcontext(object()))
+    monkeypatch.setattr(
+        worker,
+        "candidates_needing_suggestion",
+        lambda _session, limit: [opportunity],
+    )
+    monkeypatch.setattr(worker, "suggest_fields", suggest_fields)
+    router = SimpleNamespace(
+        quota_guard=None,
+        route=lambda _task: SimpleNamespace(chain=("model",)),
+    )
+
+    with caplog.at_level(logging.INFO, logger="opportunity_radar.worker"):
+        worker.suggest_fields_pending(object(), router)
+
+    record = next(
+        item
+        for item in caplog.records
+        if item.message == "suggest fields batch finished"
+    )
+    summary_fields = {
+        "job",
+        "processed",
+        "suggestions_created",
+        "discarded",
+        "skipped_budget",
+        "failed",
+    }
+
+    assert summary_fields.isdisjoint(logging.makeLogRecord({}).__dict__)
+    assert getattr(record, "suggestions_created") == 0
+    assert getattr(record, "discarded") == 0

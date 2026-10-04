@@ -365,8 +365,9 @@ class OpportunityRepository:
         )
         if not siblings:
             return []
-        urls = dict(
-            self.session.execute(
+        urls: dict[UUID, str] = {
+            opportunity_id: source_url
+            for opportunity_id, source_url in self.session.execute(
                 select(
                     SourceOccurrenceModel.opportunity_id,
                     func.min(SourceOccurrenceModel.source_url),
@@ -375,8 +376,8 @@ class OpportunityRepository:
                     SourceOccurrenceModel.opportunity_id.in_([item.id for item in siblings])
                 )
                 .group_by(SourceOccurrenceModel.opportunity_id)
-            ).all()
-        )
+            )
+        }
         return [(item, urls.get(item.id)) for item in siblings]
 
     def opportunity_is_open_at_source(self, opportunity_id: UUID) -> bool:

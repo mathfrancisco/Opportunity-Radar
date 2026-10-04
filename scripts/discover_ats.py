@@ -86,6 +86,7 @@ async def _discover_company(
             http_status=200,
             ats_found=endpoint_ats_name(endpoint),
             evidence_snippet=endpoint.evidence_excerpt,
+            ats_url=endpoint.discovered_url,
         )
     return await discover_one(company, client=client, robots_checker=robots_checker)
 

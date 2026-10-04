@@ -174,19 +174,23 @@ def _description_hits(description_text: str) -> list[RuleHit]:
             )
         )
     for pattern in _ENTRY_PHRASES:
-        match = pattern.search(description_text)
-        if match:
+        entry_match = pattern.search(description_text)
+        if entry_match:
             hits.append(
                 RuleHit(
-                    Seniority.JUNIOR, "description_entry_phrase", _snippet(description_text, match)
+                    Seniority.JUNIOR,
+                    "description_entry_phrase",
+                    _snippet(description_text, entry_match),
                 )
             )
     for pattern in _INTERN_PHRASES:
-        match = pattern.search(description_text)
-        if match:
+        intern_match = pattern.search(description_text)
+        if intern_match:
             hits.append(
                 RuleHit(
-                    Seniority.INTERN, "description_intern_phrase", _snippet(description_text, match)
+                    Seniority.INTERN,
+                    "description_intern_phrase",
+                    _snippet(description_text, intern_match),
                 )
             )
     return hits

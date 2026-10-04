@@ -26,6 +26,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from opportunity_radar.acquisition.tavily import detect_ats_board
 from opportunity_radar.companies.models import Company, CompanySource, DiscoveryAttemptModel
 
 #: Domain (or domain suffix, when it starts with ".") each ATS publishes its boards or
@@ -63,6 +64,8 @@ class DiscoveryOutcome:
     http_status: int | None
     ats_found: str | None
     evidence_snippet: str | None
+    #: The ATS board URL found in the fetched HTML, when it is a supported public board.
+    ats_url: str | None = None
 
 
 def detect_ats(html: str) -> str | None:
@@ -88,6 +91,18 @@ def _evidence_snippet(html: str, ats: str) -> str | None:
         start = max(0, index - 60)
         end = min(len(html), index + len(signature) + 60)
         return html[start:end].strip()
+    return None
+
+
+def _confirmed_ats_url(html: str, ats: str) -> str | None:
+    """Return the public board URL which supplied the ATS evidence, without fetching it."""
+    for url in _ATTRIBUTE_URL.findall(html):
+        parts = urlsplit(url)
+        if parts.scheme.casefold() not in {"http", "https"}:
+            continue
+        detected = detect_ats_board(url)
+        if detected is not None and detected[0] == ats:
+            return url
     return None
 
 
@@ -176,6 +191,7 @@ async def discover_one(
     final_url = str(response.url)
     ats_found = detect_ats(response.text) if response.status_code < 400 else None
     evidence = _evidence_snippet(response.text, ats_found) if ats_found else None
+    ats_url = _confirmed_ats_url(response.text, ats_found) if ats_found else None
     return DiscoveryOutcome(
         company_id=company.id,
         checked_url=checked_url,
@@ -183,6 +199,7 @@ async def discover_one(
         http_status=response.status_code,
         ats_found=ats_found,
         evidence_snippet=evidence,
+        ats_url=ats_url,
     )
 
 
@@ -217,6 +234,40 @@ def record_discovery_attempt(
     return attempt
 
 
+def external_key_from_confirmed_ats_url(ats: str, final_url: str) -> str | None:
+    """Return a collector identifier only when the confirmed URL proves one.
+
+    The direct ATS probe records public API URLs, whereas page discovery records public
+    board URLs.  Convert the former to the latter shape before sharing the existing
+    board parser.  A URL for a different ATS (or an unsupported ATS) is deliberately
+    ignored: evidence alone must not create a collectable proposal.
+    """
+    parts = urlsplit(final_url)
+    host = (parts.hostname or "").casefold()
+    segments = [segment for segment in parts.path.split("/") if segment]
+    board_url = final_url
+    if ats == "ashby" and host == "api.ashbyhq.com" and segments:
+        if segments[:-1] == ["posting-api", "job-board"]:
+            board_url = f"https://jobs.ashbyhq.com/{segments[-1]}"
+    elif ats == "greenhouse" and host == "boards-api.greenhouse.io":
+        if len(segments) >= 3 and segments[:2] == ["v1", "boards"]:
+            board_url = f"https://boards.greenhouse.io/{segments[2]}"
+    elif ats == "lever" and host == "api.lever.co":
+        if len(segments) >= 3 and segments[:2] == ["v0", "postings"]:
+            board_url = f"https://jobs.lever.co/{segments[2]}"
+    elif ats == "workable" and host == "apply.workable.com":
+        if (
+            len(segments) >= 5
+            and segments[:4] == ["api", "v1", "widget", "accounts"]
+        ):
+            board_url = f"https://apply.workable.com/{segments[4]}"
+
+    detected = detect_ats_board(board_url)
+    if detected is None or detected[0] != ats:
+        return None
+    return detected[1]
+
+
 def record_ats_identified(session: Session, outcome: DiscoveryOutcome) -> CompanySource | None:
     """A `CompanySource` for the discovered ATS, `discovery` method, `ats_identified`.
 
@@ -227,16 +278,47 @@ def record_ats_identified(session: Session, outcome: DiscoveryOutcome) -> Compan
     """
     if outcome.ats_found is None:
         return None
-    source = CompanySource(
-        company_id=outcome.company_id,
-        source_type=outcome.ats_found,
-        endpoint=outcome.final_url,
-        verification_method="discovery",
-        verification_status="ats_identified",
-        evidence_note=outcome.evidence_snippet,
-        last_verified_at=datetime.now(UTC),
+    external_key = external_key_from_confirmed_ats_url(
+        outcome.ats_found, outcome.ats_url or outcome.final_url
     )
-    session.add(source)
+    endpoint = outcome.ats_url or outcome.final_url
+    source = session.scalar(
+        select(CompanySource)
+        .where(
+            CompanySource.company_id == outcome.company_id,
+            CompanySource.source_type == outcome.ats_found,
+            (
+                (CompanySource.endpoint == endpoint)
+                if external_key is None
+                else (
+                    (CompanySource.endpoint == endpoint)
+                    | (CompanySource.external_key == external_key)
+                )
+            ),
+        )
+        .order_by(CompanySource.id)
+    )
+    if source is None:
+        source = CompanySource(
+            company_id=outcome.company_id,
+            source_type=outcome.ats_found,
+            endpoint=endpoint,
+            external_key=external_key,
+            verification_method="discovery",
+            verification_status="ats_identified",
+            evidence_note=outcome.evidence_snippet,
+            last_verified_at=datetime.now(UTC),
+        )
+        session.add(source)
+    else:
+        # A repeated discovery refreshes the auditable evidence without creating another
+        # CompanySource row.  Keep an existing endpoint when only the key matched: both
+        # URLs are confirmed, and changing it would obscure the original evidence.
+        source.external_key = external_key or source.external_key
+        source.verification_method = "discovery"
+        source.verification_status = "ats_identified"
+        source.evidence_note = outcome.evidence_snippet or source.evidence_note
+        source.last_verified_at = datetime.now(UTC)
     session.commit()
     session.refresh(source)
     return source

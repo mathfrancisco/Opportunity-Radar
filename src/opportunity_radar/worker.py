@@ -356,7 +356,7 @@ def suggest_fields_pending(
                     extra={
                         "job": "suggest-fields",
                         "processed": len(candidates),
-                        "created": created,
+                        "suggestions_created": created,
                         "discarded": discarded,
                         "skipped_budget": skipped_budget,
                         "failed": failed,
