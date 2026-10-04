@@ -163,6 +163,23 @@ test.describe('keyboard and focus', () => {
   test('pagination controls are real buttons or links with names, current page marked', async ({
     page,
   }) => {
+    await page.route('**/api/companies*', async (route) => {
+      const url = new URL(route.request().url())
+      const pageNumber = Number(url.searchParams.get('page') ?? '1')
+      const pageSize = Number(url.searchParams.get('page_size') ?? '25')
+      const total = 26
+      const first = (pageNumber - 1) * pageSize
+      const items = Array.from({ length: Math.max(0, Math.min(pageSize, total - first)) }, (_, index) => ({
+        id: `visual-company-${first + index + 1}`,
+        name: `Empresa visual ${first + index + 1}`,
+        domain: null,
+        priority: 'normal',
+        status: 'active',
+        verification_state: 'unverified',
+        sources: [],
+      }))
+      await route.fulfill({ json: { items, page: pageNumber, page_size: pageSize, total } })
+    })
     await page.setViewportSize({ width: 1280, height: 800 })
     await page.goto('/companies')
     await settle(page)

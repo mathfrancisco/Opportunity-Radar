@@ -83,12 +83,20 @@ etapa de UI; não fixar nota de qualidade sem examinar as vagas coletadas.
 
 - `cd apps/web && npm run check` terminou com código 0: lint, typecheck, Vitest e build
   concluídos na árvore que contém os ajustes das dez rotas e seus testes de página.
-- O frontend já em execução respondeu `HTTP 200` em `http://localhost:3000`. Seu cabeçalho
-  `Last-Modified` é de 2026-10-02; portanto, essa resposta confirma somente que o runtime
-  existente está disponível, e não que ele contém as alterações locais desta rodada.
-- A suíte E2E visual descrita em `f46-10-verificacao.md` permanece evidência histórica. Uma
-  nova execução exige acesso ao daemon Docker; esta sessão recebeu `permission denied` ao
-  conectar no pipe do Docker.
+- O container `spec46full-frontend` foi reconstruído da árvore atual; a etapa de build
+  concluiu `tsc -b && vite build`. O serviço respondeu saudável em
+  `http://localhost:3000`.
+- Antes da alteração indevida da fixture operacional, `tests/e2e/browser/specs/03-visual.spec.ts`
+  passou com **14 testes em 20,5 s** contra esse frontend: oito telas principais e dois detalhes
+  em 1280 px e 375 px, ausência de overflow horizontal em 320 px e interações de teclado/foco.
+  Os screenshots desse ensaio estão em `tests/e2e/browser/test-results/visual/` no worktree local.
+- Uma repetição posterior, com a fixture reduzida, encontrou overflow horizontal de 357 px em
+  `/companies` no viewport de 320 px e não encontrou paginação para marcar a página corrente.
+  Reexecutar a verificação visual depois de restaurar o ambiente isolado; não tratar o resultado
+  anterior como aprovação da interface atual.
+- Não usar os dados produzidos pelos cenários E2E como evidência de catálogo ou IA. A suíte
+  cria fontes e vagas sintéticas; a validação operacional do catálogo exige ambiente isolado
+  e dados restaurados.
 
 ## Pendência humana
 

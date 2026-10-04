@@ -86,7 +86,7 @@ const sourceStatusLabels: Record<string, string> = {
 function CompanyLink({ company }: { company: Company }) {
   return (
     <Link
-      className="underline decoration-accent decoration-2 underline-offset-4"
+      className="break-anywhere underline decoration-accent decoration-2 underline-offset-4"
       to={`/companies/${company.id}`}
     >
       {company.name}
