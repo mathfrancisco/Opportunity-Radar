@@ -221,10 +221,14 @@ def test_an_interrupted_batch_resumes_without_duplicating_results() -> None:
     # One opportunity per pass, as if the worker had been killed between each. Progress
     # lives in the database, so a restart re-derives the remaining work rather than
     # resuming a plan it no longer has. The queue is catalogue-wide and ordered by
-    # creation, so the loop runs until these three are done rather than a fixed count.
-    for _ in range(200):
+    # creation, and activating a profile above makes every row other tests left behind
+    # pending too, so the pass budget is the size of the queue at the start (each pass
+    # retires one row) rather than a fixed count that shared-database leftovers can exceed.
+    with _session() as session:
+        queue_size = len(MatchingService(session).pending_evaluation_ids(limit=100_000))
+    for _ in range(queue_size + 1):
         with _session() as session:
-            pending = set(MatchingService(session).pending_evaluation_ids(limit=500))
+            pending = set(MatchingService(session).pending_evaluation_ids(limit=100_000))
         if not pending.intersection(opportunities):
             break
         evaluate_pending(engine, batch_size=1)
