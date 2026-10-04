@@ -72,8 +72,10 @@ def test_each_kill_switch_removes_only_its_own_job() -> None:
         "worker_suggest_enabled": "suggest-fields-pending",
     }
     for switch, disabled_job in switches.items():
+        enabled_switches = {name: True for name in switches}
+        enabled_switches[switch] = False
         scheduler = build_scheduler(
-            Settings(database_url=_DATABASE_URL, **{switch: False})
+            Settings(database_url=_DATABASE_URL, **enabled_switches)
         )
 
         assert scheduler.get_job(disabled_job) is None
