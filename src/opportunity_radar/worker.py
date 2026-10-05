@@ -48,6 +48,7 @@ from opportunity_radar.matching.service import (
     MatchingService,
     is_reused_analysis,
 )
+from opportunity_radar.operations.assessment_retention import prune_superseded_assessments
 from opportunity_radar.operations.retention import PayloadRetentionService
 from opportunity_radar.operations.service import annotate_pass, observe_job
 from opportunity_radar.opportunities.service import OpportunityService
@@ -413,6 +414,29 @@ def expire_raw_payloads(
                         "retention_days": ai_call_record_retention_days,
                     },
                 )
+
+
+def prune_match_assessments(
+    engine: Engine,
+    *,
+    retention_days: int = 7,
+    batch_size: int = 500,
+    max_batches: int = 20,
+    interval_seconds: int = 21600,
+) -> None:
+    """Delete superseded assessments, bounded per pass (card F50-08)."""
+    with observe_job(
+        engine,
+        job_name="prune_match_assessments",
+        interval=timedelta(seconds=interval_seconds),
+    ):
+        prune_superseded_assessments(
+            engine,
+            retention_days=retention_days,
+            batch_size=batch_size,
+            max_batches=max_batches,
+            dry_run=False,
+        )
 
 
 def collect_enabled_sources(
@@ -816,6 +840,24 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             # state only appears after six hours reads to the doctor as a job that is
             # missing, which is the one thing operational state exists to rule out.
             next_run_time=first_run,
+        )
+    # Not in FUNCTIONAL_JOB_IDS: it is off by default, and that map is what the doctor and
+    # the soak gate expect to find running.
+    if settings.worker_assessment_retention_enabled:
+        scheduler.add_job(
+            prune_match_assessments,
+            "interval",
+            seconds=settings.payload_retention_interval_seconds,
+            args=(engine,),
+            kwargs={
+                "retention_days": settings.assessment_retention_days,
+                "batch_size": settings.assessment_retention_batch_size,
+                "interval_seconds": settings.payload_retention_interval_seconds,
+            },
+            id="prune-match-assessments",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
         )
     jobs = {
         name: scheduler.get_job(job_id) is not None

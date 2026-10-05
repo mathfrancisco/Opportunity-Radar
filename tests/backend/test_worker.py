@@ -165,3 +165,21 @@ def test_suggest_fields_batch_summary_uses_non_reserved_log_fields(
     assert summary_fields.isdisjoint(logging.makeLogRecord({}).__dict__)
     assert getattr(record, "suggestions_created") == 0
     assert getattr(record, "discarded") == 0
+
+
+def test_the_assessment_prune_job_is_off_unless_its_flag_is_on() -> None:
+    off = build_scheduler(Settings(database_url=_DATABASE_URL))
+    on = build_scheduler(
+        Settings(database_url=_DATABASE_URL, worker_assessment_retention_enabled=True)
+    )
+
+    assert off.get_job("prune-match-assessments") is None
+    assert on.get_job("prune-match-assessments") is not None
+    assert on.get_job("expire-raw-payloads") is not None
+
+
+def test_assessment_retention_settings_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="ASSESSMENT_RETENTION_DAYS"):
+        Settings(database_url=_DATABASE_URL, assessment_retention_days=0)
+    with pytest.raises(ValueError, match="ASSESSMENT_RETENTION_BATCH_SIZE"):
+        Settings(database_url=_DATABASE_URL, assessment_retention_batch_size=0)
