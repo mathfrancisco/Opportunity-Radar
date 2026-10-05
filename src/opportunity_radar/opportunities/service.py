@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from base64 import b64decode
 from binascii import Error as Base64Error
-from collections.abc import Mapping
+from collections import Counter
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -98,9 +99,10 @@ class OpportunityService:
         self.repository = repository or OpportunityRepository(session)
 
     @staticmethod
-    def _content_rules_enabled() -> bool:
-        # F48-15: default OFF; flipped only after the precision gate on the labelled set.
-        return get_settings().content_classification_v4_enabled
+    def _content_rules_enabled() -> bool | frozenset[str]:
+        # F48-15 / F50-02: default OFF; a rule is switched on only after it passes the
+        # precision gate on the labelled set.
+        return get_settings().content_rules
 
     def normalize(self, raw_item_id: UUID) -> NormalizationResultModel:
         existing = self.repository.normalization_result(raw_item_id, NORMALIZER_VERSION)
@@ -986,6 +988,185 @@ def reclassify_role_families(session: Session, *, batch_size: int = 500) -> dict
     return {"total": total, "updated": updated, "unknown": unknown}
 
 
+_CONTENT_FIELDS = ("seniority", "work_mode", "allowed_countries")
+_CONTENT_REASON_CODES = {
+    "SENIORITY_CLASSIFICATION": "seniority",
+    "WORK_MODE_CLASSIFICATION": "work_mode",
+    "ALLOWED_COUNTRIES_CLASSIFICATION": "allowed_countries",
+}
+_UNKNOWN_VALUE = "UNKNOWN"
+_CONTENT_EXAMPLE_LIMIT = 50
+
+
+def _content_values(
+    seniority: str, work_mode: str, allowed_countries: Collection[str] | None
+) -> dict[str, str]:
+    return {
+        "seniority": seniority,
+        "work_mode": work_mode,
+        "allowed_countries": ",".join(allowed_countries or ()) or _UNKNOWN_VALUE,
+    }
+
+
+def _content_rule(candidate: CanonicalCandidate, field: str) -> str | None:
+    """The rule (or source) the candidate's evidence names for `field`, if it carries any."""
+    for reason in candidate.classification_reasons:
+        if _CONTENT_REASON_CODES.get(str(reason.get("code"))) == field:
+            return reason.get("rule") or reason.get("source")
+    return None
+
+
+def reclassify_content(
+    session: Session,
+    *,
+    rules: bool | frozenset[str],
+    role_families: Collection[str] | None = None,
+    batch_size: int = 500,
+    limit: int | None = None,
+    apply: bool = False,
+) -> dict[str, Any]:
+    """Recompute seniority, work mode and allowed countries of existing opportunities (F50-02).
+
+    The evidence is the one normalization uses: the `collected_item_v1` snapshot of the
+    occurrence last seen, classified by `build_candidate` with the enabled `rules`. A
+    posting whose values change gets them and its content evidence (the `reasons` of that
+    raw item's normalization result) rewritten, and `version` bumped exactly once however
+    many fields moved; one that does not change is not touched, so a second run reports
+    zero changes. Each batch is its own transaction; without `apply` every batch rolls back
+    and the report only says what an apply run would do.
+
+    `allowed_countries_version` follows the value: it is rewritten only when the countries
+    change, so a version label alone never costs a posting its evaluation.
+    """
+    if batch_size < 1:
+        raise ValueError("batch size must be at least 1")
+    repository = OpportunityRepository(session)
+    query = select(OpportunityModel.id).where(OpportunityModel.description.is_not(None))
+    if role_families is not None:
+        query = query.where(OpportunityModel.role_family.in_(list(role_families)))
+    query = query.order_by(OpportunityModel.id)
+    if limit is not None:
+        query = query.limit(limit)
+    opportunity_ids = list(session.scalars(query).all())
+
+    kinds = ("unchanged", "unknown_to_value", "value_to_other_value", "value_to_unknown")
+    counts = {kind: Counter[str]() for kind in kinds}
+    examples: dict[str, list[dict[str, Any]]] = {field: [] for field in _CONTENT_FIELDS}
+    before = {field: Counter[str]() for field in _CONTENT_FIELDS}
+    after = {field: Counter[str]() for field in _CONTENT_FIELDS}
+    skipped = Counter[str]()
+    changed_postings = 0
+    evidence_rewritten = 0
+
+    for start in range(0, len(opportunity_ids), batch_size):
+        chunk = opportunity_ids[start : start + batch_size]
+        try:
+            for opportunity in session.scalars(
+                select(OpportunityModel)
+                .where(OpportunityModel.id.in_(chunk))
+                .order_by(OpportunityModel.id)
+            ).all():
+                occurrence = session.scalar(
+                    select(SourceOccurrenceModel)
+                    .where(SourceOccurrenceModel.opportunity_id == opportunity.id)
+                    .order_by(SourceOccurrenceModel.last_seen_at.desc())
+                    .limit(1)
+                )
+                evidence = (
+                    repository.raw_item_evidence(occurrence.raw_item_id) if occurrence else None
+                )
+                if occurrence is None or evidence is None:
+                    skipped["no_evidence"] += 1
+                    continue
+                try:
+                    candidate = build_candidate(
+                        _normalization_input(evidence), content_rules=rules
+                    )
+                except (NormalizationError, TypeError, ValueError):
+                    skipped["unreadable_evidence"] += 1
+                    continue
+                old = _content_values(
+                    opportunity.seniority, opportunity.work_mode, opportunity.allowed_countries
+                )
+                new = _content_values(
+                    candidate.seniority.value,
+                    candidate.work_mode.value,
+                    candidate.allowed_countries,
+                )
+                changed = False
+                for field in _CONTENT_FIELDS:
+                    before[field][old[field]] += 1
+                    after[field][new[field]] += 1
+                    if old[field] == new[field]:
+                        counts["unchanged"][field] += 1
+                        continue
+                    changed = True
+                    if old[field] == _UNKNOWN_VALUE:
+                        kind = "unknown_to_value"
+                    elif new[field] == _UNKNOWN_VALUE:
+                        kind = "value_to_unknown"
+                    else:
+                        kind = "value_to_other_value"
+                    counts[kind][field] += 1
+                    if kind != "unknown_to_value" and len(examples[field]) < _CONTENT_EXAMPLE_LIMIT:
+                        examples[field].append(
+                            {
+                                "id": str(opportunity.id),
+                                "kind": kind,
+                                "old": old[field],
+                                "new": new[field],
+                                "rule": _content_rule(candidate, field),
+                            }
+                        )
+                if not changed:
+                    continue
+                changed_postings += 1
+                if not apply:
+                    continue
+                _apply_content_fields(opportunity, candidate)
+                opportunity.version += 1
+                result = repository.normalization_result(
+                    occurrence.raw_item_id, NORMALIZER_VERSION
+                )
+                if result is not None:
+                    result.reasons = [
+                        reason
+                        for reason in result.reasons
+                        if not (
+                            isinstance(reason, Mapping)
+                            and reason.get("code") in _CONTENT_REASON_CODES
+                        )
+                    ] + list(candidate.classification_reasons)
+                    evidence_rewritten += 1
+            if apply:
+                session.commit()
+            else:
+                session.rollback()
+        except Exception:
+            session.rollback()
+            raise
+
+    return {
+        "mode": "apply" if apply else "dry-run",
+        "rules": "all" if rules is True else sorted(rules or ()),
+        "role_families": sorted(role_families) if role_families is not None else None,
+        "selected": len(opportunity_ids),
+        "skipped": dict(skipped),
+        "postings_changed": changed_postings,
+        "version_bumps": changed_postings,
+        "evidence_rewritten": evidence_rewritten if apply else None,
+        "fields": {
+            field: {
+                **{kind: counts[kind][field] for kind in kinds},
+                "examples": examples[field],
+                "distribution_before": dict(sorted(before[field].items())),
+                "distribution_after": dict(sorted(after[field].items())),
+            }
+            for field in _CONTENT_FIELDS
+        },
+    }
+
+
 def _search_skills_text(skills: list[OpportunitySkillModel]) -> str | None:
     """Denormalized skill names for `search_document` (F17-03): a generated column
     cannot read another table's rows, so this stays in sync here, on every
@@ -1071,6 +1252,17 @@ def _apply_rule_fields(opportunity: OpportunityModel, candidate: CanonicalCandid
     )
     changed |= _set_if_changed(opportunity, "role_family_version", candidate.role_family_version)
     return changed
+
+
+def _apply_content_fields(opportunity: OpportunityModel, candidate: CanonicalCandidate) -> None:
+    """Apply only the three description-aware fields (F50-02); the caller bumps `version`."""
+    _set_if_changed(opportunity, "seniority", candidate.seniority.value)
+    _set_if_changed(opportunity, "work_mode", candidate.work_mode.value)
+    countries = list(candidate.allowed_countries) or None
+    if _set_if_changed(opportunity, "allowed_countries", countries):
+        opportunity.allowed_countries_version = (
+            candidate.allowed_countries_version if countries else None
+        )
 
 
 def _apply_evidence_fields(opportunity: OpportunityModel, candidate: CanonicalCandidate) -> bool:

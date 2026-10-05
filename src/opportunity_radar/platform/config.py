@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # read the description. Turn on only after `scripts/measure_content_classification.py
     # --check-gate` reports >= 90% precision per rule on the human-labelled gold set.
     content_classification_v4_enabled: bool = False
+    # F50-02: the same rules one by one, comma separated, named as the measurement script
+    # prints them (e.g. `seniority:description_years_min,work_mode:description_phrase`).
+    # The boolean above keeps meaning "every rule". Empty and False: none runs.
+    content_classification_enabled_rules: str = ""
     worker_evaluate_batch_size: int = 50
     # The local model competes with the rest of the machine for the GPU, so a pass is
     # capped well below the evaluation batch: analysis falls behind on purpose, never the
@@ -60,6 +64,11 @@ class Settings(BaseSettings):
     payload_retention_days: int = 365
     payload_retention_batch_size: int = 500
     payload_retention_interval_seconds: int = 21600
+    # Off by default (card F50-08): it deletes data. Turn on only after
+    # `scripts/prune_assessments.py` (dry run) reports what it would delete.
+    worker_assessment_retention_enabled: bool = False
+    assessment_retention_days: int = 7
+    assessment_retention_batch_size: int = 500
     # How late a job may be before the doctor calls it late rather than merely busy.
     doctor_job_grace_seconds: int = 120
 
@@ -144,12 +153,40 @@ class Settings(BaseSettings):
         return ceilings
 
     @property
+    def content_classification_rule_set(self) -> frozenset[str]:
+        return frozenset(
+            item.strip()
+            for item in self.content_classification_enabled_rules.split(",")
+            if item.strip()
+        )
+
+    @property
+    def content_rules(self) -> bool | frozenset[str]:
+        """What `build_candidate(content_rules=...)` takes: `True` (all) or a rule set."""
+        if self.content_classification_v4_enabled:
+            return True
+        return self.content_classification_rule_set
+
+    @property
     def analysis_eligible_verdicts(self) -> tuple[str, ...]:
         return tuple(
             item.strip().upper()
             for item in self.worker_analyze_verdicts.split(",")
             if item.strip()
         )
+
+    @model_validator(mode="after")
+    def _validate_content_classification_rules(self) -> "Settings":
+        # Imported here: the opportunities package reads this module at import time.
+        from opportunity_radar.opportunities.content_classification import CONTENT_RULE_NAMES
+
+        unknown = sorted(self.content_classification_rule_set - CONTENT_RULE_NAMES)
+        if unknown:
+            raise ValueError(
+                f"CONTENT_CLASSIFICATION_ENABLED_RULES has unknown rule name(s) {unknown}; "
+                f"valid names: {sorted(CONTENT_RULE_NAMES)}"
+            )
+        return self
 
     @model_validator(mode="after")
     def _validate_ai_settings(self) -> "Settings":
@@ -184,6 +221,8 @@ class Settings(BaseSettings):
             "AI_BREAKER_FAILURES": self.ai_breaker_failures,
             "AI_BREAKER_COOLDOWN_SECONDS": self.ai_breaker_cooldown_seconds,
             "AI_CALL_RECORD_RETENTION_DAYS": self.ai_call_record_retention_days,
+            "ASSESSMENT_RETENTION_DAYS": self.assessment_retention_days,
+            "ASSESSMENT_RETENTION_BATCH_SIZE": self.assessment_retention_batch_size,
         }
         for name, value in positive_limits.items():
             if value <= 0:

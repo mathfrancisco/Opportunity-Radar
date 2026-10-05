@@ -1145,13 +1145,14 @@ def opportunity_fingerprint(
 
 
 def normalize_candidate(
-    value: NormalizationInput, *, content_rules: bool = False
+    value: NormalizationInput, *, content_rules: bool | frozenset[str] = False
 ) -> CanonicalCandidate:
     """Normalize one collected item without guessing omitted source fields.
 
     `content_rules` switches to `seniority-v4` / `work-mode-v7` / `allowed-countries-v2`
-    (card F48-15, description-aware, evidence cited). Off by default until the precision
-    gate is met; see `content_classification`.
+    (card F48-15, description-aware, evidence cited): `True` runs every rule, a set of rule
+    names runs only those (card F50-02), empty or `False` none. Off by default until the
+    precision gate is met; see `content_classification`.
     """
     original_title = _clean_text(value.title)
     normalized_title = normalize_title(value.title)
@@ -1165,7 +1166,23 @@ def normalize_candidate(
     normalized_url = normalize_url(source_url)
     classification_reasons: tuple[dict[str, str | None], ...] = ()
     allowed_countries_version = REGIONS_VERSION
-    if content_rules:
+    if isinstance(content_rules, frozenset) and content_rules:
+        from opportunity_radar.opportunities import content_classification as content
+
+        partial = content.classify_enabled_rules(
+            original_title,
+            location_text,
+            value.description,
+            value.metadata,
+            source_type=value.source_type,
+            enabled_rules=content_rules,
+        )
+        work_mode = partial.work_mode
+        seniority = partial.seniority
+        allowed_countries = partial.allowed_countries
+        allowed_countries_version = partial.allowed_countries_version
+        classification_reasons = partial.reasons
+    elif content_rules:
         from opportunity_radar.opportunities import content_classification as content
         from opportunity_radar.opportunities.regions import (
             REGIONS_VERSION_V2,
@@ -1185,13 +1202,7 @@ def normalize_candidate(
         classification_reasons = (
             seniority_reason,
             work_mode_reason,
-            {
-                "code": "ALLOWED_COUNTRIES_CLASSIFICATION",
-                "mapping_version": REGIONS_VERSION_V2,
-                "source": (countries_evidence or {}).get("source", "none"),
-                "evidence": (countries_evidence or {}).get("evidence"),
-                "value": ",".join(allowed_countries) or None,
-            },
+            content.allowed_countries_reason(allowed_countries, countries_evidence),
         )
     else:
         work_mode = infer_work_mode(
@@ -1257,7 +1268,7 @@ def normalize_candidate(
 
 
 def build_candidate(
-    value: NormalizationInput, *, content_rules: bool = False
+    value: NormalizationInput, *, content_rules: bool | frozenset[str] = False
 ) -> CanonicalCandidate:
     """Compatibility entry point for the original normalization slice."""
     return normalize_candidate(value, content_rules=content_rules)

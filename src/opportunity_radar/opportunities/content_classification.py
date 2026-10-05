@@ -6,14 +6,15 @@ produced it; when no rule fires, or two rules disagree, the answer stays `UNKNOW
 guess). Precedence, in order: structured collector field > title/location > description.
 
 These rules are **not active by default**: `Settings.content_classification_v4_enabled`
-stays off until the precision gate (`gate_passes`, measured by
-`scripts/measure_content_classification.py` on the human-labelled gold set) is met.
+(all rules) and `Settings.content_classification_enabled_rules` (rule by rule) stay off until
+the precision gate (`gate_passes`, measured by `scripts/measure_content_classification.py`
+on the human-labelled gold set) is met.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,6 +26,13 @@ from opportunity_radar.opportunities.domain import (
     infer_seniority,
     infer_work_mode,
     normalize_location,
+    seniority_classification,
+)
+from opportunity_radar.opportunities.regions import (
+    REGIONS_VERSION,
+    REGIONS_VERSION_V2,
+    resolve_allowed_countries,
+    resolve_allowed_countries_v2,
 )
 
 SENIORITY_MAPPING_VERSION_V4 = "seniority-v4"
@@ -33,6 +41,43 @@ WORK_MODE_VERSION_V7 = "work-mode-v7"
 #: Minimum precision (per rule) on the labelled gold set before the v4/v7/v2 rules may be
 #: activated (SPEC 48 decision 7 / card F48-15).
 PRECISION_GATE = 0.90
+
+#: Rule names, as `scripts/measure_content_classification.py` prints them (`field:rule`).
+_YEARS_RANGE_RULE = "description_years_range"
+_YEARS_RANGE_AMBIGUOUS_RULE = "description_years_range_ambiguous"
+_YEARS_MIN_RULE = "description_years_min"
+_ENTRY_PHRASE_RULE = "description_entry_phrase"
+_INTERN_PHRASE_RULE = "description_intern_phrase"
+_WORK_MODE_PHRASE_RULE = "description_phrase"
+
+#: The rules that read the description: the only ones `content_classification_enabled_rules`
+#: switches on and off.
+DESCRIPTION_RULES = frozenset(
+    {
+        f"seniority:{_YEARS_RANGE_RULE}",
+        f"seniority:{_YEARS_MIN_RULE}",
+        f"seniority:{_ENTRY_PHRASE_RULE}",
+        f"seniority:{_INTERN_PHRASE_RULE}",
+        f"work_mode:{_WORK_MODE_PHRASE_RULE}",
+        "allowed_countries:description",
+    }
+)
+#: Every other name the measurement script can print (structured field, title, location).
+#: They already run today, so naming one in the setting is accepted and changes nothing.
+ALWAYS_ON_RULES = frozenset(
+    {
+        "seniority:structured",
+        "seniority:title",
+        "work_mode:title_location_metadata",
+        "allowed_countries:location",
+    }
+)
+CONTENT_RULE_NAMES = DESCRIPTION_RULES | ALWAYS_ON_RULES
+
+#: Rules the repository declares safe to enable (precision >= `PRECISION_GATE` with at least
+#: `GATED_RULE_MIN_EMISSIONS` emissions on the versioned gold). Empty until a rule passes.
+GATED_RULES: tuple[str, ...] = ()
+GATED_RULE_MIN_EMISSIONS = 20
 
 _SNIPPET_RADIUS = 50
 
@@ -150,14 +195,14 @@ def _description_hits(description_text: str) -> list[RuleHit]:
         bucket = _years_bucket_range(low, high)
         if bucket is not None:
             hits.append(
-                RuleHit(bucket, "description_years_range", _snippet(description_text, match))
+                RuleHit(bucket, _YEARS_RANGE_RULE, _snippet(description_text, match))
             )
         else:
             # An ambiguous range is still evidence of *some* level: record it as a null hit
             # so a lone straddling range never lets another weaker rule decide.
             hits.append(
                 RuleHit(
-                    None, "description_years_range_ambiguous", _snippet(description_text, match)
+                    None, _YEARS_RANGE_AMBIGUOUS_RULE, _snippet(description_text, match)
                 )
             )
     for match in _YEARS_MIN.finditer(description_text):
@@ -169,7 +214,7 @@ def _description_hits(description_text: str) -> list[RuleHit]:
         hits.append(
             RuleHit(
                 _years_bucket_min(number),
-                "description_years_min",
+                _YEARS_MIN_RULE,
                 _snippet(description_text, match),
             )
         )
@@ -179,7 +224,7 @@ def _description_hits(description_text: str) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     Seniority.JUNIOR,
-                    "description_entry_phrase",
+                    _ENTRY_PHRASE_RULE,
                     _snippet(description_text, entry_match),
                 )
             )
@@ -189,23 +234,34 @@ def _description_hits(description_text: str) -> list[RuleHit]:
             hits.append(
                 RuleHit(
                     Seniority.INTERN,
-                    "description_intern_phrase",
+                    _INTERN_PHRASE_RULE,
                     _snippet(description_text, intern_match),
                 )
             )
     return hits
 
 
-def seniority_from_description(description: str | None) -> RuleHit | None:
+def seniority_from_description(
+    description: str | None, *, enabled_rules: Collection[str] | None = None
+) -> RuleHit | None:
     """Return the single description-derived level, or `None` (UNKNOWN).
 
     Every rule hit must agree on one level; an ambiguous range or two different levels
-    (`5+ years` next to `entry-level`) mean no value is written.
+    (`5+ years` next to `entry-level`) mean no value is written. `enabled_rules` (`None` =
+    all) drops the hits of rules that are switched off, so they neither decide nor veto.
     """
     text = normalize_location(description)
     if not text:
         return None
     hits = _description_hits(text)
+    if enabled_rules is not None:
+        hits = [
+            hit
+            for hit in hits
+            if "seniority:"
+            + (_YEARS_RANGE_RULE if hit.rule == _YEARS_RANGE_AMBIGUOUS_RULE else hit.rule)
+            in enabled_rules
+        ]
     if not hits or any(hit.value is None for hit in hits):
         return None
     values = {hit.value for hit in hits}
@@ -220,6 +276,7 @@ def classify_seniority_v4(
     metadata: Mapping[str, Any],
     *,
     source_type: str = "manual",
+    enabled_rules: Collection[str] | None = None,
 ) -> tuple[Seniority, dict[str, str | None]]:
     """`seniority-v4`: structured field > title > description, with cited evidence."""
     structured_keys = HOMOLOGATED_SENIORITY_FIELDS.get(source_type, ())
@@ -264,7 +321,7 @@ def classify_seniority_v4(
         return reason(structured, "structured", "structured", external)
     if title_value is not Seniority.UNKNOWN:
         return reason(title_value, "title", "title", title)
-    hit = seniority_from_description(description)
+    hit = seniority_from_description(description, enabled_rules=enabled_rules)
     if hit is not None:
         return reason(hit.value, "description", hit.rule, hit.evidence)
     return reason(Seniority.UNKNOWN, "none", None, None)
@@ -312,7 +369,7 @@ def _work_mode_description_hit(description_text: str) -> RuleHit | None:
             match = re.search(expression, description_text)
             if match:
                 found.setdefault(
-                    mode, RuleHit(mode, "description_phrase", _snippet(description_text, match))
+                    mode, RuleHit(mode, _WORK_MODE_PHRASE_RULE, _snippet(description_text, match))
                 )
     if len(found) == 1:
         return next(iter(found.values()))
@@ -324,6 +381,8 @@ def classify_work_mode_v7(
     location_text: str | None,
     metadata: Mapping[str, Any],
     description: str | None,
+    *,
+    enabled_rules: Collection[str] | None = None,
 ) -> tuple[WorkMode, dict[str, str | None]]:
     """`work-mode-v7`: structured/title/location signals > description phrases.
 
@@ -331,7 +390,14 @@ def classify_work_mode_v7(
     """
     general = infer_work_mode(title, location_text, metadata, None)
     description_text = normalize_location(description) or ""
-    hit = _work_mode_description_hit(description_text) if description_text else None
+    phrase_enabled = (
+        enabled_rules is None or f"work_mode:{_WORK_MODE_PHRASE_RULE}" in enabled_rules
+    )
+    hit = (
+        _work_mode_description_hit(description_text)
+        if description_text and phrase_enabled
+        else None
+    )
     # A description that names two different modes is ambiguous for the description rule.
     description_value = hit.value if hit else WorkMode.UNKNOWN
 
@@ -382,3 +448,93 @@ def gate_passes(
         emitted > 0 and correct / emitted >= threshold
         for correct, emitted in precision_by_rule.values()
     )
+
+
+def allowed_countries_reason(
+    countries: tuple[str, ...], evidence: Mapping[str, str] | None
+) -> dict[str, str | None]:
+    return {
+        "code": "ALLOWED_COUNTRIES_CLASSIFICATION",
+        "mapping_version": REGIONS_VERSION_V2,
+        "source": (evidence or {}).get("source", "none"),
+        "evidence": (evidence or {}).get("evidence"),
+        "value": ",".join(countries) or None,
+    }
+
+
+@dataclass(frozen=True, slots=True)
+class PartialClassification:
+    seniority: Seniority
+    work_mode: WorkMode
+    allowed_countries: tuple[str, ...]
+    allowed_countries_version: str
+    #: Seniority reason first (the normalizer reads it that way), then one per field whose
+    #: value a v7/v2 description rule produced.
+    reasons: tuple[dict[str, str | None], ...]
+
+
+def classify_enabled_rules(
+    title: str | None,
+    location_text: str | None,
+    description: str | None,
+    metadata: Mapping[str, Any],
+    *,
+    source_type: str,
+    enabled_rules: Collection[str],
+) -> PartialClassification:
+    """Run only the description rules named in `enabled_rules`; everything else stays as it was.
+
+    A field takes the v4/v7/v2 answer only when a description rule that is enabled produced
+    it, and then carries that version. Otherwise it keeps the v3/v6/regions-v1 answer and
+    version, so a stored version never names a rule set that did not decide the value.
+    """
+    seniority, seniority_reason = classify_seniority_v4(
+        title, description, metadata, source_type=source_type, enabled_rules=enabled_rules
+    )
+    if seniority_reason["source"] != "description":
+        seniority, seniority_reason = seniority_classification(
+            title, metadata, source_type=source_type
+        )
+    reasons = [seniority_reason]
+
+    work_mode, work_mode_reason = classify_work_mode_v7(
+        title, location_text, metadata, description, enabled_rules=enabled_rules
+    )
+    if work_mode_reason["source"] in ("description", "conflict"):
+        reasons.append(work_mode_reason)
+    else:
+        work_mode = infer_work_mode(title, location_text, metadata, description)
+
+    countries: tuple[str, ...] = ()
+    evidence: dict[str, str] | None = None
+    if "allowed_countries:description" in enabled_rules:
+        countries, evidence = resolve_allowed_countries_v2(location_text, description)
+    if evidence is not None and evidence["source"] == "description":
+        countries_version = REGIONS_VERSION_V2
+        reasons.append(allowed_countries_reason(countries, evidence))
+    else:
+        countries = resolve_allowed_countries(location_text)
+        countries_version = REGIONS_VERSION
+    return PartialClassification(
+        seniority, work_mode, countries, countries_version, tuple(reasons)
+    )
+
+
+def failing_gated_rules(
+    precision_by_rule: Mapping[str, tuple[int, int]],
+    gated_rules: Collection[str] = GATED_RULES,
+    *,
+    threshold: float = PRECISION_GATE,
+    min_emissions: int = GATED_RULE_MIN_EMISSIONS,
+) -> list[str]:
+    """Gated rules that do not reach `threshold` precision with `min_emissions` emissions.
+
+    `precision_by_rule` maps a rule to `(correct, emitted)` measured on the gold. A rule the
+    gold never emitted has no evidence of precision, so it fails.
+    """
+    failing: list[str] = []
+    for rule in gated_rules:
+        correct, emitted = precision_by_rule.get(rule, (0, 0))
+        if emitted < min_emissions or correct / emitted < threshold:
+            failing.append(rule)
+    return failing
