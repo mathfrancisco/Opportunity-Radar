@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     analysis_retry_attempt_window_seconds: int = 86400
     analysis_retry_max_attempts: int = 3
     analysis_claim_lease_seconds: int = 900
+    # F50-04: a source whose share of target-area items over its last three complete runs
+    # falls below this stops persisting new off-target items. 0 turns the filter off.
+    collection_target_area_floor: float = 0.30
     collection_backoff_base_seconds: int = 300
     collection_backoff_ceiling_seconds: int = 86400
     greenhouse_base_url: str = "https://boards-api.greenhouse.io"
@@ -197,6 +200,11 @@ class Settings(BaseSettings):
             raise ValueError(
                 "WORKER_ANALYZE_AGING_SAMPLE_RATIO must be between 0 and 1, got "
                 f"{self.worker_analyze_aging_sample_ratio!r}"
+            )
+        if not 0 <= self.collection_target_area_floor <= 1:
+            raise ValueError(
+                "COLLECTION_TARGET_AREA_FLOOR must be between 0 and 1, got "
+                f"{self.collection_target_area_floor!r}"
             )
         return self
 

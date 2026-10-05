@@ -259,6 +259,23 @@ class _NoDescriptionCollector(_Collector):
         )
 
 
+class _SkippedAndValidItemsCollector(_Collector):
+    """Yields valid items and records skipped items in telemetry, like Hacker News
+    when comments lack identifiable company/role."""
+
+    async def discover(
+        self, request: CollectionRequest
+    ) -> AsyncIterator[CollectedItem]:
+        # Record a skipped item
+        request.telemetry.record_skipped_item()
+        # Yield a valid item
+        yield CollectedItem(
+            source_type=self.source_type,
+            external_id="job-1",
+            raw_payload={"title": "First"},
+        )
+
+
 class _RecordingNotifier:
     def __init__(self) -> None:
         self.messages: list[dict[str, object]] = []
@@ -1327,3 +1344,259 @@ def test_create_source_accepts_unrelated_hosts() -> None:
     )
 
     assert source.configuration["board_identifier"] == "acme"
+
+
+# F50-04: target-area counters and the noise filter.
+
+
+class _MixedTitlesCollector(_Collector):
+    """One engineering, one sales and one title no rule recognises."""
+
+    async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        del request
+        for external_id, title in (
+            ("eng", "Senior Backend Engineer"),
+            ("sales", "Account Executive"),
+            ("unknown", "Wizard of Light"),
+        ):
+            yield CollectedItem(
+                source_type=self.source_type,
+                external_id=external_id,
+                title=title,
+                raw_payload={"id": external_id, "title": title},
+            )
+
+
+class _ShareRepository(_MemoryRepository):
+    """Memory repository that answers `target_area_share` and, like production, returns
+    the stored row for an item it already knows (keyed by identity key)."""
+
+    def __init__(self, source: SourceDefinitionModel, share: float | None) -> None:
+        super().__init__(source)
+        self.share = share
+        self.share_calls = 0
+        self.known: dict[str, RawItemModel] = {}
+        self.presence: list[RawItemModel] = []
+        self.presence_flags: list[tuple[RawItemModel, bool]] = []
+        self.latest: dict[str, RawItemModel] = {}
+
+    def target_area_share(self, source_id: object, *, runs: int = 3) -> float | None:
+        del source_id, runs
+        self.share_calls += 1
+        return self.share
+
+    def raw_item_by_envelope(  # type: ignore[override]
+        self,
+        *,
+        source_id: object,
+        identity_key: str,
+        payload_hash: str,
+        semantic_hash: str,
+        semantic_hash_version: str,
+    ) -> RawItemModel | None:
+        del source_id, payload_hash, semantic_hash, semantic_hash_version
+        return self.known.get(identity_key)
+
+    def latest_raw_item_by_identity(
+        self, *, source_id: object, identity_key: str
+    ) -> RawItemModel | None:
+        del source_id
+        return self.latest.get(identity_key)
+
+    def record_presence_observation(
+        self,
+        *,
+        raw_item: RawItemModel,
+        source_run_id: object,
+        observed_at: object,
+        content_hash_matched: bool,
+    ) -> None:
+        del source_run_id, observed_at
+        self.presence.append(raw_item)
+        self.presence_flags.append((raw_item, content_hash_matched))
+
+
+def _filtering_service(
+    *,
+    share: float | None,
+    families: tuple[str, ...] | None = ("SOFTWARE_ENGINEERING", "DATA"),
+    floor: float = 0.30,
+) -> tuple[AcquisitionService, _MemorySession, _ShareRepository]:
+    source = SourceDefinitionModel(
+        id=uuid4(), source_type="example", name="Example", enabled=True, configuration={}
+    )
+    session = _MemorySession()
+    repository = _ShareRepository(source, share)
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((_MixedTitlesCollector(),)),
+        repository=repository,  # type: ignore[arg-type]
+        alerts=SourceAlertService(session),  # type: ignore[arg-type]
+        target_role_families=(lambda: families) if families is not None else None,
+        target_area_floor=floor,
+    )
+    return service, session, repository
+
+
+def _persisted_ids(session: _MemorySession) -> set[str | None]:
+    return {item.external_id for item in session.added if isinstance(item, RawItemModel)}
+
+
+def _run_filtering(service: AcquisitionService):
+    return asyncio.run(
+        service.execute(
+            service.repository.source.id, CollectionRequest(mode=CollectionMode.DISCOVERY)
+        )
+    )
+
+
+def test_run_records_target_area_counts() -> None:
+    service, _, _ = _filtering_service(share=None)
+
+    run = _run_filtering(service)
+
+    assert run.items_target_area == 1
+    assert run.items_off_target == 1
+
+
+def test_source_above_floor_persists_every_item() -> None:
+    service, session, _ = _filtering_service(share=0.5)
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {"eng", "sales", "unknown"}
+    assert run.items_persisted == 3
+
+
+def test_source_below_floor_skips_new_off_target_items() -> None:
+    service, session, _ = _filtering_service(share=0.1)
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {"eng", "unknown"}
+    assert run.items_persisted == 2
+    assert run.items_skipped == 1
+    assert run.items_off_target == 1
+
+
+def test_filter_keeps_presence_of_existing_off_target_item() -> None:
+    service, session, repository = _filtering_service(share=0.1)
+    existing = RawItemModel(external_id="sales", item_metadata={})
+    repository.known["external:sales"] = existing
+
+    run = _run_filtering(service)
+
+    assert existing in repository.presence
+    assert "sales" not in _persisted_ids(session)
+    assert run.items_skipped == 1
+
+
+def test_filter_off_with_fewer_than_three_measured_runs() -> None:
+    service, session, _ = _filtering_service(share=None)
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {"eng", "sales", "unknown"}
+    assert run.items_skipped == 0
+
+
+def test_filter_off_without_target_role_families() -> None:
+    for families in ((), None):
+        service, session, repository = _filtering_service(share=0.0, families=families)
+
+        run = _run_filtering(service)
+
+        assert _persisted_ids(session) == {"eng", "sales", "unknown"}
+        assert run.items_target_area is None
+        assert run.items_off_target is None
+        assert repository.share_calls == 0
+
+
+def test_floor_zero_disables_filter() -> None:
+    service, session, repository = _filtering_service(share=0.0, floor=0.0)
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {"eng", "sales", "unknown"}
+    assert repository.share_calls == 0
+    assert run.items_off_target == 1
+
+
+def test_filtered_run_is_still_complete() -> None:
+    service, _, _ = _filtering_service(share=0.1)
+
+    run = _run_filtering(service)
+
+    assert run.items_seen == 3
+    assert run.status == "SUCCEEDED"
+    assert run.complete is True
+
+
+def test_run_succeeds_with_skipped_items_and_valid_items() -> None:
+    """F50-12.1: when a collector records only skipped items plus at least one valid item,
+    the run succeeds with items_invalid == 0."""
+    service, session = _service(_SkippedAndValidItemsCollector())
+
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,  # type: ignore[attr-defined]
+            CollectionRequest(),
+        )
+    )
+
+    assert run.status == "SUCCEEDED"
+    assert run.error_code is None
+    assert run.items_invalid == 0
+    assert run.items_skipped == 1
+    assert run.items_persisted == 1
+
+
+def test_filter_confirms_presence_of_changed_off_target_item_without_new_evidence() -> None:
+    service, session, repository = _filtering_service(share=0.1)
+    stored = RawItemModel(external_id="sales", item_metadata={})
+    # Content changed: the envelope lookup misses, the identity lookup finds the old row.
+    repository.latest["external:sales"] = stored
+
+    run = _run_filtering(service)
+
+    assert "sales" not in _persisted_ids(session)
+    assert [flag for row, flag in repository.presence_flags if row is stored] == [False]
+    assert run.items_skipped == 1
+
+
+def test_filter_records_nothing_for_a_truly_new_off_target_item() -> None:
+    service, session, repository = _filtering_service(share=0.1)
+
+    _run_filtering(service)
+
+    assert "sales" not in _persisted_ids(session)
+    assert all(row.external_id != "sales" for row, _ in repository.presence_flags)
+
+
+class _NoneMetadataCollector(_Collector):
+    async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        del request
+        yield CollectedItem(
+            source_type=self.source_type,
+            external_id="broken",
+            title="Senior Backend Engineer",
+            raw_payload={"id": "broken"},
+            metadata=None,  # type: ignore[arg-type]
+        )
+        yield CollectedItem(
+            source_type=self.source_type,
+            external_id="valid",
+            title="Senior Backend Engineer",
+            raw_payload={"id": "valid"},
+        )
+
+
+def test_classification_failure_leaves_validity_to_persistence() -> None:
+    service, session, _ = _filtering_service(share=None)
+    service.registry = CollectorRegistry((_NoneMetadataCollector(),))
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {"valid"}
+    assert run.items_invalid == 1
+    assert run.items_persisted == 1

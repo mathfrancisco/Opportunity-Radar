@@ -166,6 +166,14 @@ class MatchingService:
         """
         profile = ProfileService(self.session).get_active()
         reference_date = currency.reference_day(now or datetime.now(UTC))
+        # F50-04: with declared target areas, a posting outside them is not evaluated
+        # automatically; UNKNOWN (stored as 'UNKNOWN', never NULL) stays in.
+        target_areas = tuple(profile.snapshot.preferences.target_role_families)
+        in_target_areas = (
+            (OpportunityModel.role_family.in_((*target_areas, "UNKNOWN")),)
+            if target_areas
+            else ()
+        )
         assessment = aliased(MatchAssessmentModel)
         already_evaluated = (
             select(literal(1))
@@ -186,6 +194,7 @@ class MatchingService:
                 .where(
                     OpportunityModel.lifecycle_status.in_(("DISCOVERED", "ACTIVE")),
                     ~already_evaluated,
+                    *in_target_areas,
                 )
                 .order_by(OpportunityModel.created_at, OpportunityModel.id)
                 .limit(limit)

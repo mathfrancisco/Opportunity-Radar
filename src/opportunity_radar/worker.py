@@ -32,7 +32,10 @@ from opportunity_radar.acquisition.scheduling import (
     evaluate_gate,
     next_due_at,
 )
-from opportunity_radar.acquisition.service import AcquisitionService
+from opportunity_radar.acquisition.service import (
+    AcquisitionService,
+    active_profile_target_role_families,
+)
 from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
 from opportunity_radar.matching.adapters import build_analysis_adapter
 from opportunity_radar.matching.analysis import (
@@ -590,6 +593,8 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
             ),
             tavily_extraction=tavily_extraction,
             host_request_ceilings=settings.host_request_ceiling_map,
+            target_role_families=active_profile_target_role_families(session),
+            target_area_floor=settings.collection_target_area_floor,
         )
 
     return build

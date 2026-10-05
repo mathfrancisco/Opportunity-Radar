@@ -430,6 +430,10 @@ class SourceRun:
     #: was when the run ended (F48-07). `None` = not measured, never a guessed zero.
     bytes_received: int | None = None
     newest_item_age_seconds: int | None = None
+    #: Items seen inside / outside the active profile's target role families (F50-04).
+    #: `None` = not measured (no profile with target areas), never a guessed zero.
+    items_target_area: int | None = None
+    items_off_target: int | None = None
 
     def start(self, at: datetime | None = None) -> None:
         if self.status is not SourceRunStatus.PENDING:
@@ -453,6 +457,13 @@ class SourceRun:
         self.items_persisted += persisted
         self.items_skipped += skipped
         self.items_invalid += invalid
+
+    def record_target_area(self, *, target: int = 0, off_target: int = 0) -> None:
+        self._require_running()
+        if target < 0 or off_target < 0:
+            raise ValueError("source run counters cannot be negative")
+        self.items_target_area = (self.items_target_area or 0) + target
+        self.items_off_target = (self.items_off_target or 0) + off_target
 
     def record_http_request(self, retries: int = 0) -> None:
         self._require_running()

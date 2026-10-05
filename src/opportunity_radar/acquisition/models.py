@@ -147,6 +147,10 @@ class SourceRunModel(Base):
     bytes_received: Mapped[int | None] = mapped_column(BigInteger)
     #: Age, at the end of the run, of the newest item that carried a date (F48-07).
     newest_item_age_seconds: Mapped[int | None] = mapped_column(Integer)
+    #: Items this run saw inside / outside the active profile's target role families
+    #: (F50-04). `UNKNOWN` counts in neither; `None` = not measured, never a guessed zero.
+    items_target_area: Mapped[int | None] = mapped_column(Integer)
+    items_off_target: Mapped[int | None] = mapped_column(Integer)
     error_code: Mapped[str | None] = mapped_column(String(64))
     error_summary: Mapped[str | None] = mapped_column(Text)
     checkpoint_before: Mapped[str | None] = mapped_column(Text)

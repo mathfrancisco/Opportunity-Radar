@@ -86,7 +86,14 @@ from opportunity_radar.acquisition.tavily import (
     extract_missing_descriptions,
 )
 from opportunity_radar.companies.models import Company, CompanySource
+from opportunity_radar.opportunities.role_family import (
+    RoleFamily,
+    classify_role_family,
+    departments_from_metadata,
+)
 from opportunity_radar.platform.logging import get_logger
+from opportunity_radar.profile.domain import ProfileNotFoundError
+from opportunity_radar.profile.service import ProfileService
 
 COLLECTED_ITEM_V1_KEY = "collected_item_v1"
 
@@ -221,6 +228,19 @@ class SourceDisabledError(AcquisitionError):
         )
 
 
+def active_profile_target_role_families(session: Session) -> Callable[[], tuple[str, ...]]:
+    """Read the active profile's target areas on demand; empty when none is active (F50-04)."""
+
+    def read() -> tuple[str, ...]:
+        try:
+            profile = ProfileService(session).get_active()
+        except ProfileNotFoundError:
+            return ()
+        return tuple(profile.snapshot.preferences.target_role_families)
+
+    return read
+
+
 class AcquisitionService:
     def __init__(
         self,
@@ -232,6 +252,8 @@ class AcquisitionService:
         alerts: SourceAlertService | None = None,
         tavily_extraction: TavilyExtractionSettings | None = None,
         host_request_ceilings: Mapping[str, int] | None = None,
+        target_role_families: Callable[[], tuple[str, ...]] | None = None,
+        target_area_floor: float = 0.0,
     ) -> None:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
@@ -258,6 +280,11 @@ class AcquisitionService:
             if host_request_ceilings is None
             else host_request_ceilings
         )
+        # F50-04: areas of the active profile (read per run, so a profile change applies
+        # at once) and the share below which a source stops persisting new off-target
+        # items. No callable or a zero floor leaves the filter off.
+        self._target_role_families = target_role_families
+        self._target_area_floor = target_area_floor
 
     def create_source(
         self,
@@ -999,6 +1026,18 @@ class AcquisitionService:
         network_policy = _network_policy(source.rate_limit_policy or {})
         run_telemetry = CollectionTelemetry()
 
+        # F50-04: items are always counted against the profile's target areas; the filter
+        # only drops new off-target items from a source that has stayed below the floor.
+        targets = (
+            frozenset(self._target_role_families())
+            if self._target_role_families is not None
+            else frozenset()
+        )
+        filter_active = False
+        if targets and self._target_area_floor > 0 and source.source_type != "manual":
+            share = self.repository.target_area_share(source.id)
+            filter_active = share is not None and share < self._target_area_floor
+
         # A new collection starts at the beginning. Resumption is explicit through the
         # request cursor; a prior run's checkpoint is evidence, not an implicit cursor.
         checkpoint_before = request.cursor
@@ -1018,6 +1057,8 @@ class AcquisitionService:
             checkpoint_before=checkpoint_before,
         )
         run.start()
+        if targets:
+            run.record_target_area()
         persisted_run = SourceRunModel(
             id=run.id,
             source_definition_id=source.id,
@@ -1129,6 +1170,22 @@ class AcquisitionService:
                     run=run,
                     source_type=source.source_type,
                 )
+                off_target = False
+                if targets:
+                    try:
+                        family = classify_role_family(
+                            title=item.title,
+                            departments=departments_from_metadata(item.metadata),
+                        ).role_family
+                    except Exception:  # noqa: BLE001 - a malformed item is UNKNOWN here
+                        # Validity is `_persist_item`'s call, as before this card.
+                        family = RoleFamily.UNKNOWN
+                    # UNKNOWN is in neither count and is never dropped.
+                    if family is not RoleFamily.UNKNOWN:
+                        off_target = family.value not in targets
+                        run.record_target_area(
+                            target=0 if off_target else 1, off_target=1 if off_target else 0
+                        )
                 try:
                     created = self._persist_item(
                         source.id,
@@ -1136,6 +1193,7 @@ class AcquisitionService:
                         source.source_type,
                         item,
                         observed_at=run.started_at or datetime.now(UTC),
+                        persist_new=not (filter_active and off_target),
                     )
                 except (TypeError, ValueError) as item_error:
                     run.record_items(invalid=1)
@@ -1430,6 +1488,7 @@ class AcquisitionService:
         item: CollectedItem,
         *,
         observed_at: datetime,
+        persist_new: bool = True,
     ) -> bool:
         if item.source_type.strip().casefold() != source_type:
             raise ValueError("collected item source type does not match its source")
@@ -1468,6 +1527,24 @@ class AcquisitionService:
                     source_run_id=run_id,
                     observed_at=observed_at,
                     content_hash_matched=True,
+                )
+            return False
+        if not persist_new:
+            # An off-target posting already stored with other content is still on the
+            # board: confirm its presence on the stored row (no new evidence), or a
+            # complete run would stop seeing it and close it as absent.
+            latest_lookup = getattr(self.repository, "latest_raw_item_by_identity", None)
+            latest = (
+                latest_lookup(source_id=source_id, identity_key=identity_key)
+                if latest_lookup is not None
+                else None
+            )
+            if isinstance(latest, RawItemModel):
+                self.repository.record_presence_observation(
+                    raw_item=latest,
+                    source_run_id=run_id,
+                    observed_at=observed_at,
+                    content_hash_matched=False,
                 )
             return False
         metadata[COLLECTED_ITEM_V1_KEY] = collected_item_v1(item, metadata)
@@ -1523,6 +1600,8 @@ class AcquisitionService:
         model.credits_used = run.credits_used
         model.bytes_received = run.bytes_received
         model.newest_item_age_seconds = run.newest_item_age_seconds
+        model.items_target_area = run.items_target_area
+        model.items_off_target = run.items_off_target
 
 
 def canonical_payload_hash(payload: Mapping[str, Any]) -> str:

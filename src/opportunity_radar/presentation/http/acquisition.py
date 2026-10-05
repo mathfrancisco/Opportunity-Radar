@@ -33,7 +33,9 @@ from opportunity_radar.acquisition.service import (
     SourceNotFoundError,
     SourceProbeTooSoonError,
     SourceVersionConflictError,
+    active_profile_target_role_families,
 )
+from opportunity_radar.platform.config import get_settings
 from opportunity_radar.presentation.http.dependencies import (
     get_alert_service,
     get_collector_registry,
@@ -330,7 +332,11 @@ async def execute_source(
             correlation_id=body.correlation_id,
         )
         run = await AcquisitionService(
-            session, registry=registry, alerts=alerts
+            session,
+            registry=registry,
+            alerts=alerts,
+            target_role_families=active_profile_target_role_families(session),
+            target_area_floor=get_settings().collection_target_area_floor,
         ).execute(source_id, request)
     except AcquisitionError as error:
         _raise_acquisition_error(error)
