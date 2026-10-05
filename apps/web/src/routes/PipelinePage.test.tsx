@@ -28,6 +28,8 @@ function application(id: string, stage: string) {
   return {
     id,
     opportunity_id: `opportunity-${id}`,
+    opportunity_title: `Vaga ${id}`,
+    company_name: `Empresa ${id}`,
     profile_version_id: 'profile-1',
     current_stage: stage,
     status: stage === 'REJECTED' ? 'CLOSED' : 'ACTIVE',
@@ -70,8 +72,9 @@ describe('PipelinePage', () => {
     expect(active?.getAttribute('aria-pressed')).toBe('true')
     expect(container.textContent).toContain('Entrevista')
     expect(
-      [...container.querySelectorAll('a')].find((link) => link.textContent === 'Ver oportunidade')?.getAttribute('href'),
+      [...container.querySelectorAll('a')].find((link) => link.textContent === 'Vaga active')?.getAttribute('href'),
     ).toBe('/opportunities/opportunity-active')
+    expect(container.textContent).toContain('Empresa active')
 
     act(() => closed?.click())
     await flush()
@@ -80,7 +83,7 @@ describe('PipelinePage', () => {
     expect(active?.getAttribute('aria-pressed')).toBe('false')
     expect(container.textContent).toContain('Recusada')
     expect(
-      [...container.querySelectorAll('a')].find((link) => link.textContent === 'Ver oportunidade')?.getAttribute('href'),
+      [...container.querySelectorAll('a')].find((link) => link.textContent === 'Vaga closed')?.getAttribute('href'),
     ).toBe('/opportunities/opportunity-closed')
   })
 

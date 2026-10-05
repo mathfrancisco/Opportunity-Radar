@@ -46,8 +46,9 @@ function ApplicationCard({ application }: { application: Application }) {
         className="font-medium underline decoration-accent decoration-2 underline-offset-4"
         to={`/opportunities/${application.opportunityId}`}
       >
-        Ver oportunidade
+        {application.opportunityTitle}
       </Link>
+      <p className="mt-1 text-muted">{application.companyName ?? 'Empresa não informada'}</p>
       {application.nextAction ? (
         <p
           className={`mt-2 ${
