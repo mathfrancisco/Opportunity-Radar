@@ -144,6 +144,23 @@ def test_v2_distribution_is_pinned() -> None:
     assert distribution(load()) == {"WATCHLIST": 34, "LOW_MATCH": 6, "INELIGIBLE": 10}
 
 
+def test_eligibility_after_f50_06_holds_open_only_for_criteria_with_a_data_source() -> None:
+    """Timezone and work authorization (UNKNOWN in all 50 before F50-06) no longer block.
+
+    No labeled case carries a seniority or contract the profile accepts, so the 40 that were
+    undecided stay undecided, now only for those criteria. The verdicts do not change.
+    """
+    results = [reevaluate(case) for case in load()]
+
+    assert Counter(r.eligibility.status.value for r in results) == {
+        "UNKNOWN": 40,
+        "INELIGIBLE": 10,
+    }
+    blocking = Counter(f.code for r in results for f in r.eligibility.unknowns)
+    assert set(blocking) == {"SENIORITY_COMPATIBLE", "CONTRACT_COMPATIBLE", "WORK_MODE_COMPATIBLE"}
+    assert blocking["SENIORITY_COMPATIBLE"] == blocking["CONTRACT_COMPATIBLE"] == 50
+
+
 def test_a_hard_filter_failure_stays_ineligible_in_v2() -> None:
     recorded = [c for c in load() if c["payload"]["verdict"] == "INELIGIBLE"]
 

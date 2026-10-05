@@ -6,7 +6,7 @@ are responsible for translating their models into these value objects.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import StrEnum
@@ -313,10 +313,10 @@ DEFAULT_FACTORS: tuple[FactorRule, ...] = (
     FactorRule("RECENCY", Decimal("0.05")),
 )
 
-RULES_VERSION_V2 = "matching-v2"
+RULES_VERSION_V3 = "matching-v3"
 
 
-def default_rule_set(version: str = RULES_VERSION_V2) -> MatchingRuleSet:
+def default_rule_set(version: str = RULES_VERSION_V3) -> MatchingRuleSet:
     """Return the current explicit, fully weighted deterministic rule set.
 
     `matching-v1` assessments stay in the history under their own `rules_version`; a new
@@ -361,13 +361,30 @@ def evaluate_match(
 def evaluate_eligibility(
     opportunity: OpportunitySnapshot, profile: ProfileSnapshot
 ) -> EligibilityResult:
-    """Apply only conclusive hard filters supported by normalized snapshots."""
+    """Apply only conclusive hard filters supported by normalized snapshots.
+
+    Criteria with no source of data in the catalog (timezone, work authorization) and an
+    unknown country, unless the profile needs sponsorship, are `NOT_APPLICABLE`: they do not
+    hold eligibility open. Factor scoring keeps reading the unmodified filters.
+    """
     filters = (
         _active_filter(opportunity),
         _work_mode_filter(opportunity, profile),
-        _country_filter(opportunity, profile),
-        _work_authorization_filter(opportunity, profile),
-        _timezone_filter(opportunity),
+        _not_applicable_without_data(
+            _country_filter(opportunity, profile),
+            has_source=profile.work_authorization
+            is ProfileWorkAuthorization.REQUIRES_SPONSORSHIP,
+        ),
+        _not_applicable_without_data(
+            _work_authorization_filter(opportunity, profile),
+            has_source=opportunity.work_authorization
+            is not OpportunityWorkAuthorization.NOT_STATED,
+        ),
+        _not_applicable_without_data(
+            _timezone_filter(opportunity),
+            has_source=opportunity.timezone_overlap_hours is not None
+            or opportunity.required_timezone_overlap_hours is not None,
+        ),
         _seniority_filter(opportunity, profile),
         _contract_filter(opportunity, profile),
     )
@@ -378,6 +395,15 @@ def evaluate_eligibility(
     else:
         status = EligibilityStatus.ELIGIBLE
     return EligibilityResult(status=status, filters=filters)
+
+
+def _not_applicable_without_data(
+    result: HardFilterResult, *, has_source: bool
+) -> HardFilterResult:
+    """An unknown criterion with nothing to evaluate stops counting for eligibility."""
+    if result.result is not KnowledgeState.UNKNOWN or has_source:
+        return result
+    return replace(result, result=KnowledgeState.NOT_APPLICABLE)
 
 
 def _active_filter(opportunity: OpportunitySnapshot) -> HardFilterResult:

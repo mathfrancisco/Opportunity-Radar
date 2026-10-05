@@ -417,7 +417,7 @@ def _factor(result, code: str):
 def test_v2_is_the_current_rules_version_with_complete_weights() -> None:
     rules = default_rule_set()
 
-    assert rules.version == "matching-v2" == RULES_VERSION
+    assert rules.version == "matching-v3" == RULES_VERSION
     assert sum(item.weight for item in rules.factors) == Decimal("1")
     policies = {item.code: item.missing_policy for item in rules.factors}
     assert policies["TIMEZONE"] is MissingPolicy.EXCLUDE_AND_RENORMALIZE
@@ -569,3 +569,125 @@ def test_v2_thresholds_are_calibrated_and_descending() -> None:
         rules.recommended_threshold,
         rules.watchlist_threshold,
     ) == (Decimal("80"), Decimal("65"), Decimal("50"))
+
+
+# --- eligibility with what is known (F50-06) --------------------------------------------
+
+_NO_DATA = {
+    "work_authorization": OpportunityWorkAuthorization.NOT_STATED,
+    "timezone_overlap_hours": None,
+    "required_timezone_overlap_hours": None,
+}
+_SPONSORED = ProfileWorkAuthorization.REQUIRES_SPONSORSHIP
+_UNDECLARED = ProfileWorkAuthorization.UNKNOWN
+_NO_SPONSORSHIP = OpportunityWorkAuthorization.SPONSORSHIP_NOT_AVAILABLE
+
+
+@pytest.mark.parametrize(
+    ("opportunity_changes", "profile_changes", "expected"),
+    [
+        # every criterion with data is TRUE; timezone and work authorization have none
+        (_NO_DATA, {"work_authorization": _UNDECLARED}, EligibilityStatus.ELIGIBLE),
+        # one FALSE criterion still disqualifies
+        (
+            {**_NO_DATA, "work_mode": WorkMode.ONSITE},
+            {"work_authorization": _UNDECLARED},
+            EligibilityStatus.INELIGIBLE,
+        ),
+        # unknown country blocks only when the profile needs sponsorship
+        (
+            {**_NO_DATA, "allowed_countries": ()},
+            {"work_authorization": _SPONSORED},
+            EligibilityStatus.UNKNOWN,
+        ),
+        (
+            {**_NO_DATA, "allowed_countries": ()},
+            {"work_authorization": _UNDECLARED},
+            EligibilityStatus.ELIGIBLE,
+        ),
+        # a known-FALSE country disqualifies regardless of sponsorship
+        (
+            {**_NO_DATA, "allowed_countries": ("US",)},
+            {"work_authorization": _SPONSORED},
+            EligibilityStatus.INELIGIBLE,
+        ),
+        (
+            {**_NO_DATA, "allowed_countries": ("US",)},
+            {"work_authorization": _UNDECLARED},
+            EligibilityStatus.INELIGIBLE,
+        ),
+        # criteria with a data source still hold eligibility open
+        (
+            {**_NO_DATA, "seniority": Seniority.UNKNOWN},
+            {"work_authorization": _UNDECLARED},
+            EligibilityStatus.UNKNOWN,
+        ),
+        (
+            {**_NO_DATA, "contract_types": ()},
+            {"work_authorization": _UNDECLARED},
+            EligibilityStatus.UNKNOWN,
+        ),
+        # a posting that states the data keeps the normal evaluation
+        (
+            {"required_timezone_overlap_hours": None},
+            {},
+            EligibilityStatus.UNKNOWN,
+        ),
+        (
+            {"timezone_overlap_hours": Decimal("2")},
+            {},
+            EligibilityStatus.INELIGIBLE,
+        ),
+        (
+            {**_NO_DATA, "work_authorization": _NO_SPONSORSHIP},
+            {"work_authorization": _UNDECLARED},
+            EligibilityStatus.UNKNOWN,
+        ),
+        (
+            {**_NO_DATA, "work_authorization": _NO_SPONSORSHIP},
+            {"work_authorization": _SPONSORED},
+            EligibilityStatus.INELIGIBLE,
+        ),
+    ],
+)
+def test_eligibility_closes_on_what_is_known(
+    opportunity_changes: dict[str, object],
+    profile_changes: dict[str, object],
+    expected: EligibilityStatus,
+) -> None:
+    result = _v2(_opportunity(**opportunity_changes), _profile(**profile_changes))
+
+    assert result.eligibility.status is expected
+
+
+def test_criteria_without_data_are_not_applicable_in_the_eligibility_details() -> None:
+    result = _v2(
+        _opportunity(**_NO_DATA, allowed_countries=()), _profile(work_authorization=_UNDECLARED)
+    )
+
+    states = {item.code: item.result for item in result.eligibility.filters}
+    assert states["TIMEZONE_COMPATIBLE"] is KnowledgeState.NOT_APPLICABLE
+    assert states["WORK_AUTHORIZATION_COMPATIBLE"] is KnowledgeState.NOT_APPLICABLE
+    assert states["COUNTRY_ALLOWED"] is KnowledgeState.NOT_APPLICABLE
+    assert result.eligibility.unknowns == ()
+
+
+def test_eligibility_change_leaves_scores_untouched() -> None:
+    """Literals computed from the code before F50-06 (eligibility was UNKNOWN in the last two)."""
+    full = _v2(_opportunity(), _profile())
+    no_data = _v2(_opportunity(**_NO_DATA), _profile(work_authorization=_UNDECLARED))
+    no_country = _v2(
+        _opportunity(**_NO_DATA, allowed_countries=()),
+        _profile(work_authorization=_UNDECLARED),
+    )
+
+    assert full.score == Decimal("90.000")
+    assert no_data.score == Decimal("89.47368421052631578947368421")
+    assert no_country.score == Decimal("86.84210526315789473684210526")
+    codes = ("TECHNOLOGY_FIT", "DOMAIN_EXPERIENCE", "TIMEZONE")
+    raw = [_factor(no_data, code).raw_score for code in codes]
+    assert [str(item) for item in raw] == ["1.0", "0.5", "None"]
+    assert str(_factor(no_country, "GEOGRAPHY_CONTRACT_FIT").raw_score) == (
+        "0.8333333333333333333333333333"
+    )
+    assert no_data.eligibility.status is EligibilityStatus.ELIGIBLE
