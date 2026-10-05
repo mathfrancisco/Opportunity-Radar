@@ -7,6 +7,7 @@ import pytest
 from opportunity_radar.opportunities import content_classification as content
 from opportunity_radar.opportunities.domain import (
     SKILL_TAXONOMY,
+    SKILL_TAXONOMY_VERSION,
     Compensation,
     CompensationPeriod,
     ContractType,
@@ -476,7 +477,7 @@ def test_extracts_versioned_canonical_skills_with_conservative_classification() 
     assert set(by_id) == {"react", "python", "postgresql", "docker"}
     assert by_id["react"].classification is SkillClassification.REQUIRED
     assert by_id["docker"].classification is SkillClassification.PREFERRED
-    assert by_id["react"].taxonomy_version == "skills-v3"
+    assert by_id["react"].taxonomy_version == "skills-v4"
     assert "Required: React.js" in by_id["react"].evidence_text
 
 
@@ -609,6 +610,141 @@ def test_removes_the_bare_ci_alias_that_false_matched_the_company_name() -> None
         {},
     )
     assert "cicd" in {skill.canonical_id for skill in ci_slash_cd}
+
+
+def _skill_ids(description: str, title: str | None = None) -> set[str]:
+    return {skill.canonical_id for skill in extract_skills(title, description, {})}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Experience building LLM applications in production.",
+        "You will fine-tune LLMs for support tickets.",
+        "Work with large language models and evaluation harnesses.",
+        "Design RAG pipelines over internal documents.",
+        "Hands-on with retrieval-augmented generation and vector stores.",
+        "Solid machine learning fundamentals are required.",
+        "Build generative AI features for our product.",
+        "We are hiring for GenAI platform work.",
+        "Ship AI agents that call internal tools.",
+        "Experience with agentic workflows is a plus.",
+        "We need an AI engineer to own our model serving.",
+        "AI/ML experience preferred.",
+        "Background in ML/AI research.",
+        "Conhecimento em inteligência artificial e aprendizado de máquina.",
+        "Experiência com IA generativa.",
+        "Atuação com modelos de linguagem.",
+        "Our artificial intelligence team is growing.",
+    ],
+)
+def test_ai_skill_matches_specific_terms(text: str) -> None:
+    assert "ai" in _skill_ids(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "We are an AI-powered company.",
+        "Join our AI company and help customers.",
+        "We use AI to automate everything.",
+        "The AI revolution is changing how we work.",
+        "Our AI-first culture values curiosity.",
+        "Powered by AI, loved by teams.",
+        "Retell AI builds voice products.",
+        "Send your resume to our email address.",
+        "We maintain a large codebase.",
+        "Thai speakers are welcome to apply.",
+        "A personal aide to the CEO.",
+        "Convert the ML markup file to HTML.",
+        "Ability to work on a chain of tasks.",
+        "Join a mail-order business.",
+    ],
+)
+def test_ai_skill_ignores_the_bare_word(text: str) -> None:
+    assert "ai" not in _skill_ids(text)
+
+
+def test_llm_and_rag_are_own_skills_that_also_match_ai() -> None:
+    llm = _skill_ids("Required: LLM experience.")
+    rag = _skill_ids("Nice to have: RAG.")
+
+    assert {"llm", "ai"} <= llm and "rag" not in llm
+    assert {"rag", "ai"} <= rag and "llm" not in rag
+    assert _skill_ids("retrieval-augmented generation") == {"rag", "ai"}
+    assert _skill_ids("large language models") == {"llm", "ai"}
+
+
+@pytest.mark.parametrize(
+    ("skill", "positives", "negatives"),
+    [
+        (
+            "spring boot",
+            ["Spring Boot services", "Java with SpringBoot", "spring-boot microservices"],
+            ["Spring cleaning of the backlog", "Our spring hiring plan", "Spring is here"],
+        ),
+        (
+            "nestjs",
+            ["Backend in NestJS", "Nest.js and TypeScript", "nestjs"],
+            ["We nest tasks in epics", "Nest is a thermostat brand", "bird nest"],
+        ),
+        (
+            "vue",
+            ["Frontend in Vue", "Vue.js 3 and Pinia", "VueJS components"],
+            ["A revue of the budget", "Our Park Avenue office", "interview process"],
+        ),
+        (
+            "react native",
+            ["Mobile apps with React Native", "react-native and Expo", "ReactNative"],
+            ["Native speakers of Portuguese", "We react quickly", "reactive programming"],
+        ),
+        (
+            "rag",
+            ["Building RAG systems", "Required: RAG.", "experience with RAG and agents"],
+            [
+                "cloud storage and leverage",
+                "Do not drag your feet",
+                "a rag and a bucket",
+                "fragment and garage",
+            ],
+        ),
+        (
+            "llm",
+            ["LLM engineer", "building llms"],
+            ["The Fllm project", "llmnr protocol", "a gllm library"],
+        ),
+    ],
+)
+def test_new_skills_have_word_boundary_safe_matches(
+    skill: str, positives: list[str], negatives: list[str]
+) -> None:
+    for text in positives:
+        assert skill in _skill_ids(text), text
+    for text in negatives:
+        assert skill not in _skill_ids(text), text
+
+
+def test_rag_in_structured_tags_matches_any_case() -> None:
+    skills = extract_skills(None, None, {"tags": ["rag", "vuejs"]})
+
+    assert {skill.canonical_id for skill in skills} >= {"rag", "ai", "vue"}
+
+
+def test_react_native_does_not_lose_react_or_the_other_way_round() -> None:
+    both = _skill_ids("Required: React.js and React Native.")
+    only_native = _skill_ids("Mobile apps with React Native.")
+
+    assert {"react", "react native"} <= both
+    assert "react native" in only_native
+
+
+def test_skill_taxonomy_version_is_bumped_and_reaches_assessment_currency() -> None:
+    from opportunity_radar.matching import currency, service
+
+    assert SKILL_TAXONOMY_VERSION == "skills-v4"
+    assert currency.SKILL_TAXONOMY_VERSION == SKILL_TAXONOMY_VERSION
+    assert service.SKILL_TAXONOMY_VERSION == SKILL_TAXONOMY_VERSION
+    assert extract_skills(None, "Required: Vue.", {})[0].taxonomy_version == SKILL_TAXONOMY_VERSION
 
 
 def test_candidate_enrichment_does_not_change_fingerprint() -> None:

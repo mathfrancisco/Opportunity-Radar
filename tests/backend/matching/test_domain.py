@@ -33,6 +33,7 @@ from opportunity_radar.opportunities.domain import (
     OpportunityStatus,
     Seniority,
     WorkMode,
+    extract_skills,
 )
 
 OPPORTUNITY_ID = UUID("11111111-1111-1111-1111-111111111111")
@@ -293,6 +294,33 @@ def test_golden_case_partial_skills_uses_exact_canonical_overlap() -> None:
 
     factor = next(item for item in result.factors if item.factor_code == "TECHNOLOGY_FIT")
     assert factor.raw_score == Decimal("0.5")
+
+
+def test_profile_skills_recognise_the_f50_05_taxonomy_skills() -> None:
+    names = ("Spring Boot", "NestJS", "Vue", "React Native", "RAG", "LLM")
+    extracted = {
+        skill.canonical_id
+        for skill in extract_skills(
+            None,
+            "Required: Spring Boot, NestJS, Vue, React Native, RAG and LLM.",
+            {},
+        )
+    }
+    # The profile service stores `canonical_name` stripped and casefolded.
+    profile_skills = tuple(name.strip().casefold() for name in names)
+
+    result = evaluate_match(
+        _opportunity(required_skills=tuple(sorted(extracted)), preferred_skills=()),
+        _profile(skills=profile_skills),
+        _rules(),
+        assessed_at=ASSESSED_AT,
+    )
+
+    factor = next(item for item in result.factors if item.factor_code == "TECHNOLOGY_FIT")
+    # `llm`/`rag` also match `ai`, and "React Native" also matches `react`; the profile
+    # lists neither, so six of the eight extracted skills overlap.
+    assert extracted == set(profile_skills) | {"ai", "react"}
+    assert factor.raw_score == Decimal("0.75")
 
 
 def test_golden_case_old_job_has_explicit_recency_decay() -> None:

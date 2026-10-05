@@ -119,9 +119,12 @@ class NormalizationError(ValueError):
     """Raised when a collected item cannot form a canonical candidate."""
 
 
-SKILL_TAXONOMY_VERSION = "skills-v3"
+SKILL_TAXONOMY_VERSION = "skills-v4"
 _MAX_DATABASE_AMOUNT = Decimal("999999999999.99")
 _AMBIGUOUS_SKILL_ALIASES = frozenset({"go", "react"})
+#: Aliases that are an ordinary word when lower-case ("a rag"): in prose they only match
+#: as the acronym. Structured tags and skill lists are not prose, so any case matches.
+_UPPERCASE_PROSE_ALIASES = frozenset({"rag"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,6 +192,15 @@ class ExtractedSkill:
             raise NormalizationError("extracted skill requires an id and evidence")
 
 
+_LLM_ALIASES = (
+    "llm",
+    "llms",
+    "large language model",
+    "large language models",
+    "modelos de linguagem",
+)
+_RAG_ALIASES = ("rag", "retrieval-augmented generation", "retrieval augmented generation")
+
 SKILL_TAXONOMY: tuple[SkillTaxonomyEntry, ...] = (
     SkillTaxonomyEntry("python", ("python",)),
     SkillTaxonomyEntry("typescript", ("typescript",)),
@@ -219,10 +231,44 @@ SKILL_TAXONOMY: tuple[SkillTaxonomyEntry, ...] = (
     SkillTaxonomyEntry("graphql", ("graphql",)),
     # Added by F20-02 curation (`docs/pesquisas/curadoria-skills-v2.md`) from
     # `scripts/unmatched_skill_terms.py` over the reference-machine acervo.
+    # F50-05: the bare "ai" and "ml" aliases are gone (40% of the catalogue matched "AI"
+    # in "AI-powered company" prose). `ai` is now specific terms only, and it includes the
+    # `llm` and `rag` aliases, so a posting that matches either also matches `ai`.
     SkillTaxonomyEntry(
         "ai",
-        ("ai", "artificial intelligence", "machine learning", "ml", "agentic ai"),
+        (
+            "artificial intelligence",
+            "inteligência artificial",
+            "machine learning",
+            "aprendizado de máquina",
+            "aprendizagem de máquina",
+            "generative ai",
+            "gen ai",
+            "genai",
+            "ia generativa",
+            "agentic ai",
+            "agentic",
+            "ai agent",
+            "ai agents",
+            "ai engineer",
+            "ai engineers",
+            "ai engineering",
+            "ml engineer",
+            "ml engineers",
+            "ai/ml",
+            "ml/ai",
+            *_LLM_ALIASES,
+            *_RAG_ALIASES,
+        ),
     ),
+    # F50-05: skills of the active profile that the taxonomy lacked. Ids are the
+    # casefolded profile name, because the profile side matches ids by exact equality.
+    SkillTaxonomyEntry("llm", _LLM_ALIASES),
+    SkillTaxonomyEntry("rag", _RAG_ALIASES),
+    SkillTaxonomyEntry("spring boot", ("spring boot", "springboot", "spring-boot")),
+    SkillTaxonomyEntry("nestjs", ("nestjs", "nest.js")),
+    SkillTaxonomyEntry("vue", ("vue", "vue.js", "vuejs")),
+    SkillTaxonomyEntry("react native", ("react native", "react-native", "reactnative")),
     # F20-02 follow-up (rotulagem humana): the bare "ci" alias was removed because
     # 82% of its real-corpus occurrences come from the company name "CI&T", not
     # from CI/CD content (docs/44-roadmap-fase-20/rotulagem/f20-02-curadoria-skills-v2.md).
@@ -583,11 +629,13 @@ def extract_compensation(
     )
 
 
-def _skill_pattern(alias: str) -> re.Pattern[str]:
-    escaped = re.escape(alias.casefold())
-    dotted_variant = r"(?!\.js\b)" if alias.casefold() == "react" else ""
+def _skill_pattern(alias: str, *, uppercase_only: bool = False) -> re.Pattern[str]:
+    folded = alias.casefold()
+    escaped = re.escape(folded.upper() if uppercase_only else folded)
+    dotted_variant = r"(?!\.js\b)" if folded == "react" else ""
     return re.compile(
-        rf"(?<![\w+#]){escaped}(?![\w+#]){dotted_variant}", re.IGNORECASE
+        rf"(?<![\w+#]){escaped}(?![\w+#]){dotted_variant}",
+        0 if uppercase_only else re.IGNORECASE,
     )
 
 
@@ -696,7 +744,10 @@ def extract_skills(
     for text, structured, title_text in texts:
         for entry in SKILL_TAXONOMY:
             for alias in entry.aliases:
-                occurrence = _skill_pattern(alias).search(text)
+                occurrence = _skill_pattern(
+                    alias,
+                    uppercase_only=alias in _UPPERCASE_PROSE_ALIASES and not structured,
+                ).search(text)
                 if occurrence is not None:
                     if not _is_unambiguous_skill_use(
                         alias,
