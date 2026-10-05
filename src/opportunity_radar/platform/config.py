@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import SecretStr, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _VALID_REASONING_EFFORTS = frozenset({"low", "medium", "high"})
@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str
+    # Postgres cancels an API query running longer than this (card F50-10); 0 disables it.
+    # The worker's batch jobs do not read it.
+    api_statement_timeout_ms: int = Field(default=15000, ge=0)
     log_level: str = "INFO"
     frontend_origin: str = "http://localhost:3000"
     collection_timezone: str = "UTC"

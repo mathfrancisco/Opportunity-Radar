@@ -3,6 +3,8 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DBAPIError
 
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.logging import (
@@ -15,6 +17,22 @@ from opportunity_radar.presentation.http.routes import router
 CORRELATION_HEADER = "X-Correlation-ID"
 
 logger = get_logger("opportunity_radar.http")
+
+#: SQLSTATE of a statement Postgres cancelled (`statement_timeout`, card F50-10).
+_QUERY_CANCELED = "57014"
+
+
+async def database_error_handler(request: Request, error: DBAPIError) -> Response:
+    """A query past the API's statement timeout is a 503, any other database error a 500."""
+    if getattr(error.orig, "sqlstate", None) == _QUERY_CANCELED:
+        logger.warning("database statement timed out", extra={"path": request.url.path})
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "The database took too long to answer. Try again."},
+            headers={"Retry-After": "5"},
+        )
+    logger.error("database error", exc_info=error, extra={"path": request.url.path})
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -62,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             response.headers[CORRELATION_HEADER] = correlation_id
             return response
 
+    app.add_exception_handler(DBAPIError, database_error_handler)  # type: ignore[arg-type]
     app.dependency_overrides[get_settings] = lambda: settings
     app.include_router(router)
     return app

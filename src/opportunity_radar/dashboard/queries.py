@@ -11,7 +11,7 @@ still in the inbox: hiding it would make the screen quietly disagree with the ca
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
@@ -19,7 +19,7 @@ from functools import reduce
 from typing import Any, Literal
 from uuid import UUID
 
-from sqlalchemy import Select, case, func, literal, select
+from sqlalchemy import Select, case, func, literal, select, true
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import (
@@ -31,7 +31,7 @@ from opportunity_radar.companies.models import Company, CompanySource, CompanySt
 from opportunity_radar.dashboard.metrics import _is_homologated
 from opportunity_radar.dashboard.search_synonyms import synonym_variants
 from opportunity_radar.matching import currency
-from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
+from opportunity_radar.matching.models import CurrentAssessmentModel, MatchAnalysisModel
 from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.domain import (
     DEFAULT_RECENCY_WINDOW_DAYS,
@@ -392,41 +392,49 @@ class UsefulYieldMetric:
 
 
 def _latest_assessments(profile_version_id: UUID | None) -> Any:
-    current = currency.is_current_assessment(
-        MatchAssessmentModel.__table__, rules_version=RULES_VERSION
-    )
+    """The newest assessment per posting, read from the `current_assessment` pointers.
+
+    Currency is not stored: `is_stale` applies `currency.is_current_assessment` to the one
+    pointed row, with the same predicate the old DISTINCT ON over the whole history used.
+    Per profile version the pointer is that row. Across all of them (no profile given) the
+    same ordering as before picks one pointer per posting, current first.
+
+    The old ordering put "current" before recency, so a current older row beat a stale newer
+    one. The pointer keeps the highest posting version, then the latest `assessed_at`. A row
+    can only be current at the posting's present version, which is also the highest one any
+    row carries, and a band never decreases as `assessed_at` grows (F50-07): among rows of
+    that version, rules and taxonomy, the latest is current whenever an older one is. The
+    orders can therefore only differ when a newer row was written under other rules or
+    taxonomy versions (a rolled-back deploy), and then the newer row is what the worker
+    last decided.
+    """
+    pointer = CurrentAssessmentModel
+    current = currency.is_current_assessment(pointer.__table__, rules_version=RULES_VERSION)
     ranked = select(
-        MatchAssessmentModel.id.label("assessment_id"),
-        MatchAssessmentModel.opportunity_id.label("opportunity_id"),
-        MatchAssessmentModel.opportunity_version.label("assessment_opportunity_version"),
-        MatchAssessmentModel.profile_version_id.label("assessment_profile_version_id"),
+        pointer.assessment_id.label("assessment_id"),
+        pointer.opportunity_id.label("opportunity_id"),
+        pointer.opportunity_version.label("assessment_opportunity_version"),
+        pointer.profile_version_id.label("assessment_profile_version_id"),
         currency.active_profile_version_id().label("current_profile_version_id"),
-        MatchAssessmentModel.verdict.label("verdict"),
-        MatchAssessmentModel.eligibility.label("eligibility"),
-        MatchAssessmentModel.score.label("score"),
-        MatchAssessmentModel.confidence.label("confidence"),
-        MatchAssessmentModel.rules_version.label("rules_version"),
+        pointer.verdict.label("verdict"),
+        pointer.eligibility.label("eligibility"),
+        pointer.score.label("score"),
+        pointer.confidence.label("confidence"),
+        pointer.rules_version.label("rules_version"),
         (~current).label("is_stale"),
-        MatchAssessmentModel.assessed_at.label("assessed_at"),
-    )
+        pointer.assessed_at.label("assessed_at"),
+    ).join(OpportunityModel, OpportunityModel.id == pointer.opportunity_id)
     if profile_version_id is not None:
-        ranked = ranked.where(
-            MatchAssessmentModel.profile_version_id == profile_version_id
+        return ranked.where(pointer.profile_version_id == profile_version_id).subquery(
+            "latest_assessment"
         )
-    ranked = ranked.join(
-        OpportunityModel,
-        OpportunityModel.id == MatchAssessmentModel.opportunity_id,
-    )
-    # DISTINCT ON, not `row_number() = 1`: the planner sizes it by the number of distinct
-    # opportunities, where a filter on a window column is guessed at 0.5% of the rows and
-    # turns every join above it into a nested loop over the whole catalogue.
     return (
-        ranked.distinct(MatchAssessmentModel.opportunity_id)
+        ranked.distinct(pointer.opportunity_id)
         .order_by(
-            MatchAssessmentModel.opportunity_id,
+            pointer.opportunity_id,
             current.desc(),
-            MatchAssessmentModel.assessed_at.desc(),
-            MatchAssessmentModel.id.desc(),
+            pointer.assessed_at.desc(),
+            pointer.assessment_id.desc(),
         )
         .subquery("latest_assessment")
     )
@@ -472,8 +480,12 @@ def _priority_rank() -> Any:
     )
 
 
-def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any]:
-    """The Inbox rows for `query` and the column that puts them in the requested order."""
+def _inbox_statement(query: InboxQuery, *, totals_only: bool = False) -> tuple[Select[Any], Any]:
+    """The Inbox rows for `query`, the column that puts them in the requested order, and
+    after the item columns `total` and `broader_total` (the totals of the same pass).
+
+    With `totals_only` the statement returns one row, whatever the page holds: the way to
+    read the totals when the requested page is empty."""
     assessments = _latest_assessments(query.profile_version_id)
     analyses = _latest_analyses()
     applications = _active_applications()
@@ -538,21 +550,48 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any]:
     # One pass over the filtered rows, not a join back to them: the planner guesses a
     # filter on a window column at 0.5% of its input, and with that guess it re-ran the
     # latest-assessment subquery once per joined row.
+    #
+    # Card F50-10: the area filter is not a WHERE. Rows outside the target areas stay in the
+    # pass, flagged, and groups and positions are numbered per flag, so one execution yields
+    # the page (in-area rows), its total and the total without the area filter (the "N hidden
+    # by area" count). Windows cannot read other windows, hence the extra level.
     key = posting_group_key()
     ordering = _inbox_ordering(query.order, assessments, (query.search or "").strip())
+    in_area = (
+        OpportunityModel.role_family.in_(query.role_families)
+        if query.role_families
+        else true()
+    )
+    item_count = len(statement.selected_columns)
     rows = filtered.add_columns(
-        func.row_number().over(partition_by=key, order_by=ordering).label("group_position"),
-        func.row_number().over(order_by=ordering).label("page_position"),
-        func.count().over(partition_by=key).label("group_size"),
+        in_area.label("in_area"),
+        func.row_number()
+        .over(partition_by=[key, in_area], order_by=ordering)
+        .label("group_position"),
+        func.row_number().over(partition_by=in_area, order_by=ordering).label("page_position"),
+        func.count().over(partition_by=[key, in_area]).label("group_size"),
+        func.row_number().over(partition_by=key, order_by=ordering).label("broader_position"),
     ).subquery("inbox_rows")
-    grouped = select(
-        *(
-            column
-            for column in rows.c
-            if column is not rows.c.group_position and column is not rows.c.page_position
-        )
-    ).where(rows.c.group_position == 1)
-    return grouped, rows.c.page_position
+    counted = select(
+        *rows.c,
+        func.count().filter(rows.c.in_area & (rows.c.group_position == 1)).over().label("total"),
+        func.count().filter(rows.c.broader_position == 1).over().label("broader_total"),
+    ).subquery("inbox_counted")
+    columns = list(counted.c)
+    in_area_column, group_position, page_position, group_size, broader_position = (
+        counted.c.in_area,
+        counted.c.group_position,
+        counted.c.page_position,
+        counted.c.group_size,
+        counted.c.broader_position,
+    )
+    wanted = (
+        broader_position == 1
+        if totals_only
+        else (in_area_column & (group_position == 1))
+    )
+    grouped = select(*columns[:item_count], group_size, counted.c.total, counted.c.broader_total)
+    return grouped.where(wanted), page_position
 
 
 def _startup_evidence_rows(*conditions: Any) -> Select[Any]:
@@ -617,8 +656,6 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
         # F48-11: a closed posting is out of the default Inbox; the explicit filter
         # (`lifecycle_status=CLOSED`) still lists it.
         filters.append(OpportunityModel.lifecycle_status != OpportunityStatus.CLOSED.value)
-    if query.role_families:
-        filters.append(OpportunityModel.role_family.in_(query.role_families))
     if query.published_after is not None:
         filters.append(OpportunityModel.published_at >= query.published_after)
     if query.created_after is not None:
@@ -713,28 +750,22 @@ def _inbox_ordering(order: InboxOrder, assessments: Any, search_term: str = "") 
 
 def list_opportunity_inbox(session: Session, query: InboxQuery) -> InboxPage:
     statement, page_position = _inbox_statement(query)
-    total = (
-        session.scalar(select(func.count()).select_from(statement.subquery("inbox"))) or 0
-    )
     rows = session.execute(
         statement.order_by(page_position).offset(query.offset).limit(query.limit)
     ).all()
-    off_filter_count = 0
-    if query.role_families:
-        broader_statement, _ = _inbox_statement(replace(query, role_families=()))
-        broader_total = (
-            session.scalar(
-                select(func.count()).select_from(broader_statement.subquery("inbox_all"))
-            )
-            or 0
-        )
-        off_filter_count = max(broader_total - total, 0)
+    # The totals ride on every row of the page. An empty page (past the end, or nothing in
+    # the areas) has no row to carry them, and only then do they cost a second statement.
+    totals_row = rows[0] if rows else None
+    if totals_row is None:
+        totals_statement, _ = _inbox_statement(query, totals_only=True)
+        totals_row = session.execute(totals_statement.limit(1)).first()
+    total, broader_total = (totals_row[-2], totals_row[-1]) if totals_row else (0, 0)
     return InboxPage(
         items=tuple(_inbox_item(row) for row in rows),
         total=total,
         offset=query.offset,
         limit=query.limit,
-        off_filter_count=off_filter_count,
+        off_filter_count=max(broader_total - total, 0) if query.role_families else 0,
     )
 
 
