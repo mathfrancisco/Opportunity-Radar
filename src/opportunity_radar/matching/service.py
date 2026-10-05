@@ -11,9 +11,9 @@ from enum import StrEnum
 from typing import Any, Sequence, TypeVar
 from uuid import UUID
 
-from sqlalchemy import literal, select
+from sqlalchemy import case, literal, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session
 
 from opportunity_radar.companies.models import Company
 from opportunity_radar.matching import currency
@@ -157,15 +157,15 @@ class MatchingService:
         return loaded
 
     def pending_evaluation_ids(self, *, limit: int, now: datetime | None = None) -> list[UUID]:
-        """Eligible opportunities with no assessment for the current identity today.
+        """Eligible opportunities with no current assessment, target areas first.
 
         Asked in SQL against the identity components rather than by rebuilding a snapshot
         hash per opportunity: the read model has to ask the same question over the whole
         catalogue, and a rule that only one side can express is a rule the two sides will
-        eventually disagree on.
+        eventually disagree on. An assessment stops being current when the posting crosses
+        a RECENCY band, so a new UTC day alone queues nothing (card F50-07).
         """
         profile = ProfileService(self.session).get_active()
-        reference_date = currency.reference_day(now or datetime.now(UTC))
         # F50-04: with declared target areas, a posting outside them is not evaluated
         # automatically; UNKNOWN (stored as 'UNKNOWN', never NULL) stays in.
         target_areas = tuple(profile.snapshot.preferences.target_role_families)
@@ -174,17 +174,22 @@ class MatchingService:
             if target_areas
             else ()
         )
-        assessment = aliased(MatchAssessmentModel)
-        already_evaluated = (
+        target_first = (
+            (case((OpportunityModel.role_family.in_(target_areas), 0), else_=1),)
+            if target_areas
+            else ()
+        )
+        assessment = MatchAssessmentModel.__table__.alias("current_assessment")
+        has_current = (
             select(literal(1))
             .where(
-                assessment.opportunity_id == OpportunityModel.id,
-                assessment.opportunity_version == OpportunityModel.version,
-                assessment.profile_version_id == profile.id,
-                assessment.rules_version == RULES_VERSION,
-                assessment.taxonomy_version == currency.opportunity_taxonomy_version(),
-                currency.assessment_reference_day(assessment.assessed_at)
-                == reference_date,
+                assessment.c.opportunity_id == OpportunityModel.id,
+                currency.is_current_assessment(
+                    assessment,
+                    rules_version=RULES_VERSION,
+                    profile_version_id=profile.id,
+                    reference=now,
+                ),
             )
             .exists()
         )
@@ -193,10 +198,10 @@ class MatchingService:
                 select(OpportunityModel.id)
                 .where(
                     OpportunityModel.lifecycle_status.in_(("DISCOVERED", "ACTIVE")),
-                    ~already_evaluated,
+                    ~has_current,
                     *in_target_areas,
                 )
-                .order_by(OpportunityModel.created_at, OpportunityModel.id)
+                .order_by(*target_first, OpportunityModel.created_at, OpportunityModel.id)
                 .limit(limit)
             )
         )
@@ -216,6 +221,7 @@ class MatchingService:
             rules_version=RULES_VERSION,
             taxonomy_version=_taxonomy_version(opportunity),
             assessed_at=assessed_at,
+            published_at=opportunity.published_at,
         )
 
     def current_assessment(self, opportunity_id: UUID) -> MatchAssessmentModel | None:
