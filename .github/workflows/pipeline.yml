@@ -114,6 +114,8 @@ jobs:
           test "$(alembic current | awk '{print $1}')" = "$(alembic heads | awk '{print $1}')"
       - name: Run backend tests
         run: pytest -q
+      - name: Measure content classification on the versioned gold
+        run: python scripts/measure_content_classification.py --gold docs/50-roadmap-motor-de-busca/rotulagem/f50-01-gold.json --gold-text
       - name: Run the 72-hour soak gate against a controlled clock
         # The cloud provider is not part of this gate: with no Groq reachable, every
         # analysis pass would spend its timeout proving something the e2e job proves.

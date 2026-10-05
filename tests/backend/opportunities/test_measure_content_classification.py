@@ -22,14 +22,29 @@ GOLD = Path("docs/44-roadmap-fase-20/rotulagem/f20-23-amostra-unknown.json")
 needs_gold = pytest.mark.skipif(not GOLD.exists(), reason="docs/ is not part of the test image")
 
 
-def _case(field: str, expected: str | None, description: str, *, title: str = "Engineer") -> Case:
+VERSIONED_GOLD = Path("docs/50-roadmap-motor-de-busca/rotulagem/f50-01-gold.json")
+needs_versioned_gold = pytest.mark.skipif(
+    not VERSIONED_GOLD.exists(), reason="docs/ is not part of the test image"
+)
+
+
+def _case(
+    field: str,
+    expected: str | None,
+    description: str,
+    *,
+    title: str = "Engineer",
+    source_type: str | None = None,
+    location_text: str | None = None,
+) -> Case:
     return Case(
         opportunity_id=f"{field}-{expected}-{description}",
         field=field,
         expected=expected,
         title=title,
         description=description,
-        location_text=None,
+        location_text=location_text,
+        source_type=source_type,
     )
 
 
@@ -135,7 +150,7 @@ def test_label_sample_is_unlabelled_deterministic_and_blind() -> None:
     ]
     first = build_label_sample(rows, size=10, seed=7)
     assert first == build_label_sample(rows, size=10, seed=7)
-    assert len(first) == 20  # one entry per (opportunity, field)
+    assert len(first) == 30  # one entry per (opportunity, field)
     for item in first:
         assert item["valor_recomendado"] is None and item["recomendacao"] is None
         assert "proposta_v4" not in item  # labeller must not see the rule's answer
@@ -152,3 +167,139 @@ def test_main_offline_evidence_mode_prints_report_and_gate_exit_code(
     assert report["gate"]["threshold"] == 0.9
     assert exit_code == (0 if report["gate"]["passes"] else 1)
     assert report["mode"] == "evidence-as-text (proxy, not the real description)"
+
+
+def test_measure_reports_precision_and_coverage_per_source_type() -> None:
+    cases = [
+        _case("seniority", "MID", "3-5 years of experience a", source_type="greenhouse"),
+        _case("seniority", "MID", "3-5 years of experience b", source_type="greenhouse"),
+        _case("seniority", "SENIOR", "3-5 years of experience c", source_type="greenhouse"),
+        _case("seniority", "JUNIOR", "Nothing useful", source_type="greenhouse"),
+        _case("seniority", "MID", "3-5 years of experience d", source_type="lever"),
+        _case("seniority", "JUNIOR", "Nothing useful too", source_type="lever"),
+    ]
+    report = measure(cases, min_gold_jobs=1)
+    greenhouse = report["by_source_type"]["greenhouse"]
+    rule = greenhouse["rules"]["seniority:description_years_range"]
+    assert (rule["emitted"], rule["correct"], rule["precision"]) == (3, 2, round(2 / 3, 4))
+    assert greenhouse["fields"]["seniority"]["cases"] == 4
+    assert greenhouse["fields"]["seniority"]["coverage"] == 0.75  # (4 - 1) / 4
+    lever = report["by_source_type"]["lever"]
+    assert lever["rules"]["seniority:description_years_range"]["precision"] == 1.0
+    assert lever["fields"]["seniority"]["coverage"] == 0.5
+    assert report["fields"]["seniority"]["coverage"] == round(4 / 6, 4)
+
+
+def test_case_without_source_type_is_grouped_as_unknown() -> None:
+    report = measure([_case("seniority", "MID", "3-5 years of experience")], min_gold_jobs=1)
+    assert list(report["by_source_type"]) == ["unknown"]
+
+
+def test_allowed_countries_is_measured() -> None:
+    case = _case("allowed_countries", "BR", "This role is open to candidates based in Brazil.")
+    value, rule = classify(case)
+    assert value == "BR"
+    assert rule == "description"
+    report = measure([case], min_gold_jobs=1)
+    assert report["rules"]["allowed_countries:description"]["correct"] == 1
+    assert report["fields"]["allowed_countries"]["coverage"] == 1.0
+    assert classify(_case("allowed_countries", None, "Nothing about countries.")) == (None, None)
+
+
+def _write_gold(path: Path, entries: list[dict[str, object]]) -> Path:
+    path.write_text(json.dumps({"casos": entries}), encoding="utf-8")
+    return path
+
+
+def test_gold_text_mode_needs_no_database(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    gold = _write_gold(
+        tmp_path / "gold.json",
+        [
+            {
+                "opportunity_id": "a",
+                "field": "seniority",
+                "valor_recomendado": "MID",
+                "title": "Engineer",
+                "trecho_descricao": "3-5 years of experience",
+                "source_type": "greenhouse",
+            }
+        ],
+    )
+    assert main(["--gold", str(gold), "--gold-text"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["mode"] == "gold embedded text"
+    assert report["by_source_type"]["greenhouse"]["fields"]["seniority"]["cases"] == 1
+    assert report["unmeasurable"] == []
+
+
+def test_case_without_embedded_text_is_counted_as_unmeasurable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    gold = _write_gold(
+        tmp_path / "gold.json",
+        [
+            {"opportunity_id": "no-text", "field": "work_mode", "valor_recomendado": "REMOTE"},
+            {
+                "opportunity_id": "with-text",
+                "field": "work_mode",
+                "valor_recomendado": "HYBRID",
+                "trecho_descricao": "Regime híbrido, 3 dias.",
+            },
+        ],
+    )
+    assert main(["--gold", str(gold), "--gold-text"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["unmeasurable"] == [{"opportunity_id": "no-text", "field": "work_mode"}]
+    assert report["fields"]["work_mode"]["cases"] == 1
+
+
+def test_stratified_sample_takes_n_per_source_type() -> None:
+    rows = [
+        {
+            "opportunity_id": f"{source_type}-{i}",
+            "title": "Engineer",
+            "company": "Acme",
+            "description": "Some description",
+            "location_text": "Remote",
+            "source_type": source_type,
+        }
+        for source_type in ("greenhouse", "lever", "ashby")
+        for i in range(5)
+    ]
+    sample = build_label_sample(rows, size=999, seed=3, per_source_type=2)
+    per_type: dict[str, set[str]] = {}
+    for item in sample:
+        per_type.setdefault(item["source_type"], set()).add(item["opportunity_id"])
+        assert item["valor_recomendado"] is None
+    assert {name: len(ids) for name, ids in per_type.items()} == {
+        "greenhouse": 2,
+        "lever": 2,
+        "ashby": 2,
+    }
+
+
+def test_rules_passing_requires_precision_and_volume() -> None:
+    few = [_case("seniority", "MID", f"3-5 years of experience {i}") for i in range(19)]
+    assert measure(few, min_gold_jobs=1)["gate"]["rules_passing"] == []
+    enough = [_case("seniority", "MID", f"3-5 years of experience {i}") for i in range(18)]
+    enough += [_case("seniority", "SENIOR", f"3-5 years of experience w{i}") for i in range(2)]
+    assert measure(enough, min_gold_jobs=1)["gate"]["rules_passing"] == [
+        "seniority:description_years_range"
+    ]
+    worse = [*enough, _case("seniority", "SENIOR", "3-5 years of experience z")]
+    assert measure(worse, min_gold_jobs=1)["gate"]["rules_passing"] == []
+
+
+@needs_versioned_gold
+def test_versioned_gold_runs(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    assert main(["--gold", str(VERSIONED_GOLD), "--gold-text"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["gold_cases"] == 37
+    assert report["unmeasurable"] == []
