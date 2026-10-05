@@ -348,3 +348,40 @@ estado, se a chave está presente e o modelo por papel, sem nunca imprimir a cha
 ## Embeddings (F20-05)
 
 A coluna de embedding fica vazia até existir provedor de embedding; ver SPEC 43 §9.
+
+## Stack de desenvolvimento com a base real
+
+A stack `opportunity-radar-dev` é a base local de trabalho: roda o código do checkout sobre
+um banco com o catálogo real, em volumes próprios.
+
+- **Projeto Compose:** `opportunity-radar-dev`. Todo comando leva `-p opportunity-radar-dev`.
+  O `compose.yaml` declara o nome `opportunity-radar`; sem o `-p`, o comando atinge outro
+  projeto e outros volumes.
+- **Endereços:** API em `http://127.0.0.1:8000`, frontend em `http://127.0.0.1:3000`.
+- **Dados:** volume `opportunity-radar-dev_postgres_data`. Foi criado em 2026-10-05 a partir
+  de um `pg_dump` do volume `opportunity-radar-recovery-a7a43`, que ficou intacto e serve de
+  cópia de segurança do estado anterior à SPEC 50.
+- **Configuração:** vem do `.env` do checkout, que não é versionado.
+
+Subir, ou atualizar depois de mudar o código (as migrações rodam sozinhas):
+
+```
+docker compose -p opportunity-radar-dev -f compose.yaml up -d --build --wait
+```
+
+Parar sem perder dados:
+
+```
+docker compose -p opportunity-radar-dev -f compose.yaml stop
+```
+
+Nunca usar `down --volumes` nesse projeto: apaga o banco. Antes de uma mudança arriscada,
+fazer o backup do §5.
+
+Recriar a base a partir de outro banco: subir só o `postgres` do projeto com um volume
+vazio, restaurar o dump com `pg_restore --no-owner --exit-on-error` e subir o resto com o
+comando acima.
+
+Para experimentos que alteram dados (ligar regras de classificação, rodar a poda, testar
+uma migração), usar uma stack descartável com outro nome de projeto e uma cópia do banco, em
+vez desta.

@@ -90,7 +90,7 @@ function stubFetch(items: ReturnType<typeof healthItem>[]) {
 // generic jobposting collector) — this proves each renders its card correctly instead
 // of falling back to "unknown" or crashing the list.
 describe('SourcesPage — novos ATS', () => {
-  it.each(['workday', 'teamtailor', 'workable', 'factorial', 'jobposting'])(
+  it.each(['workday', 'teamtailor', 'workable', 'factorial', 'jobposting', 'inhire'])(
     'mostra o card da fonte %s com o tipo e o botão de execução',
     async (sourceType) => {
       stubFetch([healthItem(sourceType)])
@@ -108,7 +108,7 @@ describe('SourcesPage — novos ATS', () => {
   )
 
   it('mostra todos os ATS novos ao mesmo tempo, cada um com seu próprio card', async () => {
-    const types = ['workday', 'teamtailor', 'workable', 'factorial', 'jobposting']
+    const types = ['workday', 'teamtailor', 'workable', 'factorial', 'jobposting', 'inhire']
     stubFetch(types.map((sourceType) => healthItem(sourceType)))
 
     const container = renderPage(<SourcesPage />)

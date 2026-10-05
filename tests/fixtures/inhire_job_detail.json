@@ -1,0 +1,33 @@
+{
+  "_fixture_note": "REAL STRUCTURE (detail response of GET /job-posts/public/pages/<jobId> with X-Tenant: gx2, captured 2026-10-05: the key set, including the fields the collector must drop). SYNTHETIC CONTENT: every value was written for this test; description is short invented HTML, no contact data.",
+  "tenantName": "Acme Tecnologia",
+  "background": ["https://files.example.test/pages/career/banner_acme.png"],
+  "logo": "https://files.example.test/pages/career/logo_acme.png",
+  "bannerTitle": "",
+  "about": "<h2>About Acme</h2><p>Synthetic company text that must not be stored.</p>",
+  "bannerTitleColor": "#e6e6e6",
+  "visibility": "external",
+  "activeJobBoards": ["linkedin", "jobBoardPool"],
+  "careerPageId": "default",
+  "careerPageIds": ["default"],
+  "contractType": ["CLT"],
+  "createdAt": "2026-09-17T21:16:57.662Z",
+  "description": "<p><strong>Backend Developer</strong></p><p>Build and run the services behind our platform.</p>",
+  "displayName": "Backend Developer (Python) | Senior",
+  "jobBoardsData": {"linkedin": {"jobKey": "synthetic", "jobUrl": "https://example.test/job"}},
+  "lastPublishedAt": "2026-10-01T19:53:17.131Z",
+  "publishedAt": "2026-09-17T21:16:57.662Z",
+  "settings": {
+    "fields": ["linkedin", "salary", "curriculum"],
+    "requiredFields": ["linkedin"],
+    "email": {"senderType": "company", "subject": "Synthetic subject", "body": "Synthetic automatic e-mail body", "templateId": "synthetic", "active": true}
+  },
+  "status": "published",
+  "updatedAt": "2026-10-02T13:30:01.338Z",
+  "jobId": "11111111-1111-4111-8111-111111111111",
+  "privacyPolicyUrl": "https://example.test/privacy/",
+  "workplaceType": "Remote",
+  "location": "BR",
+  "locationComplement": "Synthetic location complement",
+  "salaryCurrency": "BRL"
+}

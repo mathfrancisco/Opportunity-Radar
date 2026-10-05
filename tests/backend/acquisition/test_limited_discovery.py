@@ -24,6 +24,8 @@ from opportunity_radar.acquisition.limited_discovery import (
     run_limited_discovery,
     upsert_ats_identified_source,
 )
+from opportunity_radar.companies import discovery
+from opportunity_radar.companies.discovery import robots_allows
 from opportunity_radar.companies.models import Company, CompanySource, DiscoveryAttemptModel
 from opportunity_radar.platform.database import create_database_engine
 from tests.e2e.fake_discovery_site import (
@@ -120,6 +122,49 @@ def test_robots_unavailable_suspends_navigation() -> None:
     assert outcome.endpoints == ()
     assert outcome.http_requests == 1  # only the failed robots.txt request
     assert outcome.next_attempt_at is not None
+
+
+# One table of robots.txt fetch outcomes, pinned to both readers (RFC 9309, as in
+# `companies.discovery.robots_allows`): the same answer means the same decision.
+_ROBOTS_OUTCOMES = [
+    ("200 with rules", lambda: httpx.Response(200, text="User-agent: *\nDisallow: /x\n"), True),
+    ("404", lambda: httpx.Response(404), True),
+    ("410", lambda: httpx.Response(410), True),
+    ("400", lambda: httpx.Response(400), True),
+    ("401", lambda: httpx.Response(401), False),
+    ("403", lambda: httpx.Response(403), False),
+    ("500", lambda: httpx.Response(500), False),
+    ("timeout", lambda: httpx.ReadTimeout("slow"), False),
+]
+
+
+@pytest.mark.parametrize(("name", "make", "allowed"), _ROBOTS_OUTCOMES)
+def test_robots_fetch_outcomes_match_the_company_discovery_reader(
+    name, make, allowed, monkeypatch
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            outcome = make()
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+        return httpx.Response(
+            200, text="<html>Careers</html>", headers={"content-type": "text/html"}
+        )
+
+    outcome = _run(handler)
+    # Allowed means the crawl went past robots.txt; a stop leaves it as the only request.
+    assert (outcome.http_requests > 1) is allowed, name
+    assert (outcome.stop_reason != DiscoveryStopReason.POLICY) is allowed, name
+
+    def fake_fetch(robots_url: str, user_agent: str) -> httpx.Response:
+        response = make()
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    monkeypatch.setattr(discovery, "_fetch_robots", fake_fetch)
+    assert robots_allows(f"{ORIGIN}/careers") is allowed, name
 
 
 def test_robots_disallow_refuses_seed() -> None:

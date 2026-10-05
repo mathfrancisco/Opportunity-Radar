@@ -48,6 +48,7 @@ _SAMPLE_HTML = {
     "workable": '<a href="https://apply.workable.com/acme/">Apply</a>',
     "workday": '<a href="https://acme.myworkdayjobs.com/en-US/careers">Jobs</a>',
     "factorial": '<script src="https://acme.factorialhr.com/jobs.js"></script>',
+    "inhire": '<a href="https://acme.inhire.app/vagas">Careers</a>',
 }
 
 
@@ -86,6 +87,8 @@ def test_detect_ats_returns_none_without_signature() -> None:
             "acme.teamtailor.com",
         ),
         ("gupy", "https://acme.gupy.io/jobs", None),
+        ("inhire", "https://gx2.inhire.app/vagas", "gx2"),
+        ("inhire", "https://api.inhire.app/job-posts/public/pages", None),
     ],
 )
 def test_external_key_from_confirmed_ats_url(

@@ -32,6 +32,7 @@ PROBE_TYPES = (
     "factorial",
     "jobposting",
     "hacker_news",
+    "inhire",
 )
 PUBLIC_ENDPOINT_REFERENCES = {
     "ashby": "https://developers.ashbyhq.com/docs/public-job-posting-api",
@@ -54,6 +55,9 @@ PUBLIC_ENDPOINT_REFERENCES = {
     # Official Firebase API + Algolia HN Search, reviewed in
     # docs/pesquisas/termos-hn-who-is-hiring.md (F20-55).
     "hacker_news": "docs/pesquisas/termos-hn-who-is-hiring.md",
+    # Documented public route of the inHire career page (no auth, `X-Tenant` header),
+    # reviewed in docs/pesquisas/termos-inhire.md.
+    "inhire": "docs/pesquisas/termos-inhire.md",
 }
 
 
@@ -102,6 +106,9 @@ def probe_request(
     elif source_type == "factorial":
         common["company_reference"] = _required(configuration, "company_identifier")
         common["company_name"] = configuration.get("company_name")
+    elif source_type == "inhire":
+        common["company_reference"] = _required(configuration, "tenant_identifier")
+        common["company_name"] = configuration.get("company_name")
     elif source_type == "jobposting":
         common["company_reference"] = _required(configuration, "page_url")
         common["company_name"] = configuration.get("company_name")
@@ -136,9 +143,12 @@ async def run_probe(
             items_seen += 1
             if items_seen >= max_items:
                 break
+        detail = "public endpoint responded and the collector parsed its schema"
+        if request.telemetry.items_announced is not None:
+            detail += f" (the board lists {request.telemetry.items_announced} items)"
         return ProbeOutcome(
             ok=True,
-            detail="public endpoint responded and the collector parsed its schema",
+            detail=detail,
             items_seen=items_seen,
             http_requests=request.telemetry.http_requests,
             last_http_attempt_at=request.telemetry.last_http_attempt_at,

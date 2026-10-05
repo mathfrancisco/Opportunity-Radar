@@ -22,6 +22,7 @@ from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.domain import AcquisitionError
 from opportunity_radar.acquisition.factorial import FactorialCollector
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
+from opportunity_radar.acquisition.inhire import InhireCollector
 from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.proposals import (
     ProposalChangedError,
@@ -57,6 +58,7 @@ SUPPORTED_ATS = (
     "teamtailor",
     "workable",
     "factorial",
+    "inhire",
 )
 
 
@@ -390,6 +392,7 @@ def _source_values(
         "teamtailor": TeamtailorCollector.validate_company_identifier,
         "workable": WorkableCollector.validate_account_identifier,
         "factorial": FactorialCollector.validate_company_identifier,
+        "inhire": InhireCollector.validate_tenant_identifier,
     }
     try:
         validators[ats](key)

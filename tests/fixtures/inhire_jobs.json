@@ -1,0 +1,39 @@
+{
+  "_fixture_note": "REAL STRUCTURE (list response of GET /job-posts/public/pages with X-Tenant: gx2, captured 2026-10-05: root keys, item keys, status and workplaceType vocabulary). SYNTHETIC CONTENT: tenant name, job ids, titles, locations, company texts and urls were written for this test; no real job or personal data.",
+  "tenantName": "Acme Tecnologia",
+  "background": ["https://files.example.test/pages/career/banner_acme.png"],
+  "logo": "https://files.example.test/pages/career/logo_acme.png",
+  "bannerTitle": "",
+  "about": "<h2>About Acme</h2><p>Synthetic company text that must not be stored.</p>",
+  "bannerTitleColor": "#e6e6e6",
+  "visibility": "external",
+  "jobsPage": [
+    {
+      "careerPageId": "default",
+      "careerPageIds": ["default"],
+      "displayName": " \ud83d\ude80 | Backend\u00a0Developer (Python) | Senior",
+      "jobId": "11111111-1111-4111-8111-111111111111",
+      "status": "published",
+      "workplaceType": "Remote",
+      "location": "BR"
+    },
+    {
+      "careerPageId": "default",
+      "careerPageIds": ["default"],
+      "displayName": "Fullstack Developer (Java + Angular) | Mid-level",
+      "jobId": "22222222-2222-4222-8222-222222222222",
+      "status": "published",
+      "workplaceType": "Hybrid",
+      "location": "Porto Alegre, RS, BR"
+    },
+    {
+      "careerPageId": "default",
+      "careerPageIds": ["default"],
+      "displayName": "Account Executive | Senior",
+      "jobId": "33333333-3333-4333-8333-333333333333",
+      "status": "published",
+      "workplaceType": "On-site",
+      "location": "São Paulo, SP, BR"
+    }
+  ]
+}

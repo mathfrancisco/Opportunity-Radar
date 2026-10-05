@@ -1052,5 +1052,14 @@ def test_search_metrics_reports_coverage_numeric_fields() -> None:
 def test_ats_coverage_counts_every_ats_with_a_collector() -> None:
     from opportunity_radar.dashboard.queries import ATS_COLLECTOR_SOURCE_TYPES
 
-    ats_types = {"ashby", "greenhouse", "lever", "workday", "teamtailor", "workable", "factorial"}
+    ats_types = {
+        "ashby",
+        "greenhouse",
+        "inhire",
+        "lever",
+        "workday",
+        "teamtailor",
+        "workable",
+        "factorial",
+    }
     assert set(ATS_COLLECTOR_SOURCE_TYPES) == ats_types
