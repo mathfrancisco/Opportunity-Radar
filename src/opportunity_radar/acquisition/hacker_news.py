@@ -10,8 +10,8 @@ docs/pesquisas/termos-hn-who-is-hiring.md — never the HTML of news.ycombinator
 
 Each top-level comment is one job. The text is free-form, so parsing is deliberately
 conservative: only the conventional `Company | Role | Location | ...` header line is read,
-and a comment whose company or role cannot be identified is reported as an invalid item
-(a pending review, run status PARTIAL) instead of being emitted as an empty job.
+and a comment whose company or role cannot be identified is skipped (not emitted and not
+counted as invalid).
 """
 
 from __future__ import annotations
@@ -267,9 +267,7 @@ class HackerNewsCollector:
             live += 1
             parsed = parse_comment(body)
             if parsed is None:
-                request.telemetry.record_invalid_item(
-                    f"Hacker News comment {kid}: company or role not identifiable"
-                )
+                request.telemetry.record_skipped_item()
                 continue
             if parsed.title is None and not any(
                 detect_ats_board(url) is not None for url in parsed.urls

@@ -179,10 +179,32 @@ def test_onsite_and_negated_remote_are_not_marked_remote() -> None:
 def test_comment_without_identifiable_company_or_role_is_a_pending_not_an_item() -> None:
     request = CollectionRequest()
     items = _run(request, _handler([]))
-    # comment 3 (free text) is reported, never emitted; deleted/dead are skipped silently.
+    # comment 3 (free text) is skipped, never emitted; deleted/dead are skipped silently.
     assert "3" not in [i.external_id for i in items]
-    assert request.telemetry.invalid_items == 1
-    assert "3" in (request.telemetry.last_invalid_item_error or "")
+    assert request.telemetry.invalid_items == 0
+    assert request.telemetry.skipped_items == 1
+
+
+def test_comment_without_company_but_with_ats_board_link_is_skipped() -> None:
+    """A comment without identifiable company is skipped, even if it links a supported ATS board,
+    because there is no company name to create an item from."""
+    comments: dict[int, Any] = {
+        1: {
+            "id": 1,
+            "type": "comment",
+            "time": 1790000000,
+            "text": (
+                "NYC | Engineer | Remote | "
+                '<a href="https://boards.greenhouse.io/acme/jobs/1">apply</a>'
+            ),
+        },
+    }
+    request = CollectionRequest()
+    items = _run(request, _handler([], comments=comments))
+    # No company identifiable (NYC is rejected), so no item emitted.
+    assert items == []
+    assert request.telemetry.skipped_items == 1
+    assert request.telemetry.invalid_items == 0
 
 
 @pytest.mark.parametrize(
@@ -419,8 +441,9 @@ def test_ats_board_comment_creates_proposal_tagged_hn_who_is_hiring(_clean: None
         run = asyncio.run(go())
 
         assert run.items_persisted == 1
-        assert run.items_invalid == 1  # the free-text comment is a pending, not a success
-        assert str(run.status) == "PARTIAL"
+        assert run.items_invalid == 0  # the free-text comment is skipped, not invalid
+        assert run.items_skipped == 1
+        assert str(run.status) == "SUCCEEDED"
         proposal = session.scalar(
             select(SourceDefinitionModel).where(
                 SourceDefinitionModel.source_type == "greenhouse",
