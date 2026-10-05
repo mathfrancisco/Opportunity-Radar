@@ -30,6 +30,7 @@ from opportunity_radar.acquisition.models import (
 )
 from opportunity_radar.acquisition.service import (
     AcquisitionService,
+    SourceLinkConflictError,
     SourceNotFoundError,
     SourceProbeTooSoonError,
     SourceVersionConflictError,
@@ -100,6 +101,11 @@ class SourceControlsBody(BaseModel):
 
 class SourceScheduleBody(BaseModel):
     schedule: str | None = Field(default=None, max_length=255)
+    expected_version: int = Field(ge=1)
+
+
+class SourceCompanyLinkBody(BaseModel):
+    company_source_id: UUID
     expected_version: int = Field(ge=1)
 
 
@@ -249,6 +255,28 @@ def update_source_schedule(
     try:
         source = AcquisitionService(session).update_source_schedule(
             source_id, schedule=body.schedule, expected_version=body.expected_version
+        )
+    except AcquisitionError as error:
+        _raise_acquisition_error(error)
+    return _source_response(source)
+
+
+@router.patch("/sources/{source_id}/company-source", response_model=SourceDefinitionResponse)
+def link_source_company_source(
+    source_id: UUID,
+    body: SourceCompanyLinkBody,
+    session: Session = Depends(get_session),
+) -> SourceDefinitionResponse:
+    """Links an unlinked source to the company source that carries its board.
+
+    The company source must have the source's type and board identifier. Nothing else on the
+    source changes; there is no unlink.
+    """
+    try:
+        source = AcquisitionService(session).link_company_source(
+            source_id,
+            company_source_id=body.company_source_id,
+            expected_version=body.expected_version,
         )
     except AcquisitionError as error:
         _raise_acquisition_error(error)
@@ -484,6 +512,15 @@ def _raise_acquisition_error(error: AcquisitionError) -> NoReturn:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "version_conflict", "message": error.summary},
+        ) from error
+    if isinstance(error, SourceLinkConflictError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": error.conflict_code,
+                "message": error.summary,
+                "field": "company_source_id",
+            },
         ) from error
     if isinstance(error, SourceNotFoundError):
         status_code = status.HTTP_404_NOT_FOUND

@@ -38,6 +38,7 @@ from opportunity_radar.acquisition.domain import (
     HealthResult,
     parse_retry_after_seconds,
 )
+from opportunity_radar.acquisition.http_client import default_collector_client
 from opportunity_radar.acquisition.http_conditional import (
     NotModifiedResponse,
     conditional_request_headers,
@@ -79,11 +80,7 @@ class TeamtailorCollector:
         if retry_after_seconds < 0:
             raise ValueError("retry_after_seconds cannot be negative")
         self._client = client
-        self._client_factory = client_factory or (
-            lambda: httpx.AsyncClient(
-                timeout=httpx.Timeout(connect=5.0, read=15.0, write=15.0, pool=5.0)
-            )
-        )
+        self._client_factory = client_factory or default_collector_client
         self._max_retries = max_retries
         self._retry_after_seconds = retry_after_seconds
         self._sleeper = sleeper

@@ -201,6 +201,23 @@ class SourceVersionConflictError(AcquisitionError):
         self.source_id = source_id
 
 
+class SourceLinkConflictError(AcquisitionError):
+    """Linking would make the source/company-source pairing ambiguous.
+
+    `conflict_code` is the stable HTTP code: `source_already_linked` (the source already
+    has a company source) or `company_source_already_linked` (another source of the same
+    type already reads that board).
+    """
+
+    def __init__(self, conflict_code: str, summary: str) -> None:
+        super().__init__(
+            AcquisitionErrorCode.INVALID_CONFIGURATION,
+            summary,
+            field="company_source_id",
+        )
+        self.conflict_code = conflict_code
+
+
 class SourceProbeTooSoonError(AcquisitionError):
     """A probe asked for before the source's spacing allows another request."""
 
@@ -692,6 +709,87 @@ class AcquisitionService:
             )
             .values(
                 schedule=schedule,
+                version=SourceDefinitionModel.version + 1,
+            )
+            .returning(SourceDefinitionModel.id)
+        )
+        if updated_id is None:
+            self.session.rollback()
+            raise SourceVersionConflictError(source_id)
+        self.session.commit()
+        self.session.refresh(source)
+        return source
+
+    def link_company_source(
+        self,
+        source_id: UUID,
+        *,
+        company_source_id: UUID,
+        expected_version: int,
+    ) -> SourceDefinitionModel:
+        """Point an unlinked source at the company source that carries its board.
+
+        Only `company_source_id` and `version` change: the source keeps its enabled flag,
+        schedule, checkpoint and runs. The company source must be of the source's type and
+        carry exactly the source's board identifier (the comparison proposals use), and no
+        other source of that type may already read that company source. Unlinking is not
+        offered.
+        """
+        source = self.repository.get_source(source_id)
+        if source is None:
+            raise SourceNotFoundError(source_id)
+        if source.version != expected_version:
+            raise SourceVersionConflictError(source_id)
+        if source.company_source_id == company_source_id:
+            return source
+        if source.company_source_id is not None:
+            raise SourceLinkConflictError(
+                "source_already_linked", "the source is already linked to another company source"
+            )
+        record = self.session.get(CompanySource, company_source_id)
+        if record is None:
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                f"company source not found: {company_source_id}",
+                field="company_source_id",
+            )
+        if record.source_type != source.source_type:
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                f"the company source is {record.source_type}, the source is {source.source_type}",
+                field="company_source_id",
+            )
+        identifier_key = IDENTIFIER_KEYS[source.source_type]
+        expected = _proposal_identifier(record)
+        configured = _optional_string(source.configuration or {}, identifier_key)
+        if expected is None or configured is None or expected[identifier_key] != configured:
+            raise AcquisitionError(
+                AcquisitionErrorCode.INVALID_CONFIGURATION,
+                f"the company source board key {record.external_key!r} does not equal the "
+                f"source's {identifier_key} {configured!r}",
+                field="company_source_id",
+            )
+        other = self.session.scalar(
+            select(SourceDefinitionModel.id).where(
+                SourceDefinitionModel.company_source_id == record.id,
+                SourceDefinitionModel.source_type == source.source_type,
+                SourceDefinitionModel.id != source.id,
+            )
+        )
+        if other is not None:
+            raise SourceLinkConflictError(
+                "company_source_already_linked",
+                f"another {source.source_type} source already reads this company source: {other}",
+            )
+        updated_id = self.session.scalar(
+            update(SourceDefinitionModel)
+            .where(
+                SourceDefinitionModel.id == source_id,
+                SourceDefinitionModel.version == expected_version,
+                SourceDefinitionModel.company_source_id.is_(None),
+            )
+            .values(
+                company_source_id=record.id,
                 version=SourceDefinitionModel.version + 1,
             )
             .returning(SourceDefinitionModel.id)

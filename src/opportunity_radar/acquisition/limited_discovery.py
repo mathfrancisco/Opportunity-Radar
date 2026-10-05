@@ -737,10 +737,13 @@ class _CrawlState:
             response = await self._get(f"{origin}/robots.txt")
         except _DiscoveryTransportError as error:
             raise _PolicyStop(str(error)) from error
-        if response.status_code == 404:
+        # Same outcomes as `companies.discovery.robots_allows` (RFC 9309): 404/410 and
+        # other 4xx mean no restrictions, 401/403 and anything not 2xx stay a stop.
+        status = response.status_code
+        if status not in {401, 403} and 400 <= status < 500:
             return None
-        if response.status_code >= 400:
-            raise _PolicyStop(f"robots.txt returned HTTP {response.status_code}")
+        if not 200 <= status < 300:
+            raise _PolicyStop(f"robots.txt returned HTTP {status}")
         return _parse_robots(response.text, user_agent=self._user_agent)
 
     async def crawl_sitemaps(self, seeds: list[str]) -> tuple[list[str], bool]:
