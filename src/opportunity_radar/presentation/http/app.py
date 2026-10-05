@@ -23,7 +23,7 @@ _QUERY_CANCELED = "57014"
 
 
 async def database_error_handler(request: Request, error: DBAPIError) -> Response:
-    """A query past the API's statement timeout is a 503, any other database error a 500."""
+    """A query past the API's statement timeout is a 503; other errors propagate untouched."""
     if getattr(error.orig, "sqlstate", None) == _QUERY_CANCELED:
         logger.warning("database statement timed out", extra={"path": request.url.path})
         return JSONResponse(
@@ -31,8 +31,8 @@ async def database_error_handler(request: Request, error: DBAPIError) -> Respons
             content={"detail": "The database took too long to answer. Try again."},
             headers={"Retry-After": "5"},
         )
-    logger.error("database error", exc_info=error, extra={"path": request.url.path})
-    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+    # Re-raise non-timeout errors so they propagate through the logging middleware.
+    raise error
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

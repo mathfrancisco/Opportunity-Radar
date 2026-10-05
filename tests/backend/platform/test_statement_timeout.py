@@ -82,14 +82,20 @@ def test_http_answers_503_when_a_query_is_cancelled() -> None:
     assert response.headers["Retry-After"]
 
 
-def test_other_database_errors_stay_a_plain_500() -> None:
+def test_other_database_errors_propagate_as_exceptions() -> None:
+    """Non-timeout DBAPIErrors are not converted by the handler; they propagate untouched."""
     app = create_app(Settings(database_url="postgresql+psycopg://u:p@h/db"))
 
     @app.get("/_broken")
     def broken() -> None:
         raise DBAPIError("SELECT 1", {}, Exception("boom"))
 
-    response = TestClient(app, raise_server_exceptions=False).get("/_broken")
+    # With raise_server_exceptions=True, the original exception is raised.
+    with pytest.raises(DBAPIError):
+        TestClient(app, raise_server_exceptions=True).get("/_broken")
 
+    # With raise_server_exceptions=False, Starlette's default exception handler
+    # returns a 500 plain text response (not JSON).
+    response = TestClient(app, raise_server_exceptions=False).get("/_broken")
     assert response.status_code == 500
-    assert response.json() == {"detail": "Internal Server Error"}
+    assert response.text == "Internal Server Error"
