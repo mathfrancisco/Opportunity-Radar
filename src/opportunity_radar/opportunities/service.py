@@ -1039,8 +1039,10 @@ def reclassify_content(
     posting whose values change gets them and its content evidence (the `reasons` of that
     raw item's normalization result) rewritten, and `version` bumped exactly once however
     many fields moved; one that does not change is not touched, so a second run reports
-    zero changes. Each batch is its own transaction; without `apply` every batch rolls back
-    and the report only says what an apply run would do.
+    zero changes. A new work mode also moves the fingerprint; if another opportunity owns the
+    new one, the posting keeps its work mode and is reported under `fingerprint_collisions`
+    (it keeps being reported on later runs). Each batch is its own transaction; without
+    `apply` every batch rolls back and the report only says what an apply run would do.
 
     `allowed_countries_version` follows the value: it is rewritten only when the countries
     change, so a version label alone never costs a posting its evaluation.
@@ -1064,6 +1066,11 @@ def reclassify_content(
     skipped = Counter[str]()
     changed_postings = 0
     evidence_rewritten = 0
+    collisions = 0
+    collision_examples: list[dict[str, Any]] = []
+    # Who owns a (version, fingerprint) key as this run moves them; a dry run writes nothing,
+    # so the run's own moves are tracked here to give both modes the same answer.
+    owners: dict[tuple[str, str], UUID | None] = {}
 
     for start in range(0, len(opportunity_ids), batch_size):
         chunk = opportunity_ids[start : start + batch_size]
@@ -1100,6 +1107,32 @@ def reclassify_content(
                     candidate.work_mode.value,
                     candidate.allowed_countries,
                 )
+                # A new work mode is a new fingerprint (F50-02 fix): refuse it when another
+                # opportunity already owns that identity, and keep the posting's work mode.
+                keep_work_mode = False
+                if old["work_mode"] != new["work_mode"]:
+                    key = (candidate.fingerprint_version, candidate.fingerprint)
+                    if key in owners:
+                        owner = owners[key]
+                    else:
+                        match = repository.opportunity_by_fingerprint(
+                            fingerprint=candidate.fingerprint,
+                            fingerprint_version=candidate.fingerprint_version,
+                        )
+                        owner = match.id if match is not None else None
+                    if owner is not None and owner != opportunity.id:
+                        keep_work_mode = True
+                        collisions += 1
+                        if len(collision_examples) < _CONTENT_EXAMPLE_LIMIT:
+                            collision_examples.append(
+                                {
+                                    "id": str(opportunity.id),
+                                    "competing_opportunity_id": str(owner),
+                                    "old": old["work_mode"],
+                                    "new": new["work_mode"],
+                                }
+                            )
+                        new["work_mode"] = old["work_mode"]
                 changed = False
                 for field in _CONTENT_FIELDS:
                     before[field][old[field]] += 1
@@ -1128,22 +1161,36 @@ def reclassify_content(
                 if not changed:
                     continue
                 changed_postings += 1
+                moves_fingerprint = old["work_mode"] != new["work_mode"]
+                if moves_fingerprint:
+                    owners[(opportunity.fingerprint_version, opportunity.fingerprint)] = None
+                    owners[(candidate.fingerprint_version, candidate.fingerprint)] = opportunity.id
                 if not apply:
                     continue
-                _apply_content_fields(opportunity, candidate)
+                _apply_content_fields(opportunity, candidate, work_mode=not keep_work_mode)
                 opportunity.version += 1
+                if moves_fingerprint:
+                    session.flush()
                 result = repository.normalization_result(
                     occurrence.raw_item_id, NORMALIZER_VERSION
                 )
                 if result is not None:
+                    # A kept work mode keeps the evidence that decided it.
+                    rewritten = {
+                        code
+                        for code in _CONTENT_REASON_CODES
+                        if not (keep_work_mode and code == "WORK_MODE_CLASSIFICATION")
+                    }
                     result.reasons = [
                         reason
                         for reason in result.reasons
-                        if not (
-                            isinstance(reason, Mapping)
-                            and reason.get("code") in _CONTENT_REASON_CODES
-                        )
-                    ] + list(candidate.classification_reasons)
+                        if not (isinstance(reason, Mapping) and reason.get("code") in rewritten)
+                    ] + [
+                        reason
+                        for reason in candidate.classification_reasons
+                        if reason.get("code") not in _CONTENT_REASON_CODES
+                        or reason.get("code") in rewritten
+                    ]
                     evidence_rewritten += 1
             if apply:
                 session.commit()
@@ -1162,6 +1209,7 @@ def reclassify_content(
         "postings_changed": changed_postings,
         "version_bumps": changed_postings,
         "evidence_rewritten": evidence_rewritten if apply else None,
+        "fingerprint_collisions": {"count": collisions, "examples": collision_examples},
         "fields": {
             field: {
                 **{kind: counts[kind][field] for kind in kinds},
@@ -1261,10 +1309,18 @@ def _apply_rule_fields(opportunity: OpportunityModel, candidate: CanonicalCandid
     return changed
 
 
-def _apply_content_fields(opportunity: OpportunityModel, candidate: CanonicalCandidate) -> None:
-    """Apply only the three description-aware fields (F50-02); the caller bumps `version`."""
+def _apply_content_fields(
+    opportunity: OpportunityModel, candidate: CanonicalCandidate, *, work_mode: bool = True
+) -> None:
+    """Apply only the three description-aware fields (F50-02); the caller bumps `version`.
+
+    Work mode is a fingerprint input, so it moves the fingerprint with it, to the value the
+    candidate (hence a later normalization) carries; `work_mode=False` leaves both alone.
+    """
     _set_if_changed(opportunity, "seniority", candidate.seniority.value)
-    _set_if_changed(opportunity, "work_mode", candidate.work_mode.value)
+    if work_mode and _set_if_changed(opportunity, "work_mode", candidate.work_mode.value):
+        opportunity.fingerprint = candidate.fingerprint
+        opportunity.fingerprint_version = candidate.fingerprint_version
     countries = list(candidate.allowed_countries) or None
     if _set_if_changed(opportunity, "allowed_countries", countries):
         opportunity.allowed_countries_version = (
