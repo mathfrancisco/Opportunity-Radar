@@ -203,18 +203,38 @@ async def discover_one(
     )
 
 
+def _fetch_robots(robots_url: str, user_agent: str) -> httpx.Response:
+    return httpx.get(
+        robots_url,
+        headers={"User-Agent": user_agent},
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+        follow_redirects=True,
+    )
+
+
 def robots_allows(url: str, *, user_agent: str = DEFAULT_USER_AGENT) -> bool:
-    """A synchronous `robots.txt` check, cacheable per host by the caller."""
+    """A synchronous `robots.txt` check, cacheable per host by the caller.
+
+    `robots.txt` is fetched with the product's own User-Agent (many sites answer 403 to
+    a library default) and evaluated for that same agent. Per RFC 9309: 2xx is parsed;
+    404/410 and other 4xx mean no restrictions; 5xx and network errors mean unreachable,
+    hence disallowed. 401/403 stay disallowed, the conservative reading the RFC permits.
+    """
     parsed = urlsplit(url)
     robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
-    parser = urllib.robotparser.RobotFileParser()
-    parser.set_url(robots_url)
     try:
-        parser.read()
-    except OSError:
-        # No reachable robots.txt: proceed, matching the RFC's own guidance that an
-        # absent robots.txt means no restriction.
+        response = _fetch_robots(robots_url, user_agent)
+    except httpx.HTTPError:
+        return False
+    status = response.status_code
+    if status in {401, 403}:
+        return False
+    if 400 <= status < 500:
         return True
+    if not 200 <= status < 300:
+        return False
+    parser = urllib.robotparser.RobotFileParser()
+    parser.parse(response.text.splitlines())
     return parser.can_fetch(user_agent, url)
 
 

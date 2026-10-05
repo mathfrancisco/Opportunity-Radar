@@ -31,7 +31,8 @@ from opportunity_radar.acquisition.http_conditional import (
     record_conditional_response,
 )
 
-_BOARD_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+# Dots are allowed inside the slug (`mistral.ai`); a leading/trailing dot or `..` is not.
+_BOARD_IDENTIFIER = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9_-]|\.(?!\.))*(?<!\.)$")
 _PARSER_VERSION = "ashby-job-board-v2"
 
 

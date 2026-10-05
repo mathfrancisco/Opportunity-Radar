@@ -13,6 +13,7 @@ from opportunity_radar.acquisition.domain import (
     CollectionRequest,
 )
 from opportunity_radar.acquisition.scheduling import ConditionalRequestHeaders
+from opportunity_radar.acquisition.tavily import detect_ats_board
 
 _FIXTURE = Path(__file__).parents[2] / "fixtures" / "ashby_job_board.json"
 
@@ -275,3 +276,68 @@ def test_bare_304_yields_no_items_and_records_not_modified_without_a_total() -> 
     assert request.telemetry.not_modified_count == 1
     assert request.telemetry.response_etag == '"abc123"'
     assert request.telemetry.items_announced is None
+
+
+@pytest.mark.parametrize("slug", ["mistral.ai", "Deepgram", "hebbia-ai", "a_b", "a.b.c"])
+def test_accepts_board_slugs_including_dots(slug: str) -> None:
+    assert AshbyCollector.validate_board_identifier(slug) == slug
+
+
+@pytest.mark.parametrize(
+    "slug",
+    [
+        None,
+        "",
+        " ",
+        "a b",
+        "mistral.ai ",
+        "a/b",
+        "a\b",
+        "a?b",
+        "a#b",
+        "a%2fb",
+        "a@b",
+        "a:b",
+        ".mistral",
+        "mistral.",
+        "mistral..ai",
+        "..",
+        "-acme",
+        "acme\n",
+    ],
+)
+def test_rejects_board_slugs_that_could_alter_the_request(slug: str | None) -> None:
+    with pytest.raises(AcquisitionError) as error:
+        AshbyCollector.validate_board_identifier(slug)
+    assert error.value.code is AcquisitionErrorCode.INVALID_CONFIGURATION
+
+
+def test_builds_the_api_url_for_a_dotted_board() -> None:
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json={"apiVersion": "1", "jobs": []})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        request = CollectionRequest(company_reference="mistral.ai")
+        asyncio.run(_collect(AshbyCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert str(calls[0].url) == (
+        "https://api.ashbyhq.com/posting-api/job-board/mistral.ai?includeCompensation=true"
+    )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://jobs.ashbyhq.com/mistral.ai",
+        "https://jobs.ashbyhq.com/mistral.ai/0b9a3a1e-5c52-4c3f-9d7e-8a1b2c3d4e5f",
+        "https://jobs.ashbyhq.com/mistral.ai?utm_source=x",
+    ],
+)
+def test_detects_a_dotted_ashby_board(url: str) -> None:
+    assert detect_ats_board(url) == ("ashby", "mistral.ai")
