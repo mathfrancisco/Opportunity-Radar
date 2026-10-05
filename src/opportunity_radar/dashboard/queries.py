@@ -19,7 +19,7 @@ from functools import reduce
 from typing import Any, Literal
 from uuid import UUID
 
-from sqlalchemy import Select, case, func, literal, select, true
+from sqlalchemy import Select, String, case, cast, func, literal, select, true
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import (
@@ -50,7 +50,6 @@ from opportunity_radar.opportunities.models import (
 from opportunity_radar.opportunities.regions import ANY_COUNTRY
 from opportunity_radar.opportunities.repository import (
     open_at_source_condition,
-    posting_group_key,
     recency_condition,
 )
 from opportunity_radar.pipeline.models import ApplicationProcessModel
@@ -409,7 +408,15 @@ def _latest_assessments(profile_version_id: UUID | None) -> Any:
     last decided.
     """
     pointer = CurrentAssessmentModel
-    current = currency.is_current_assessment(pointer.__table__, rules_version=RULES_VERSION)
+    # The taxonomy version of every posting is aggregated once and joined, not asked per
+    # pointer row by a correlated subquery (that ran once per row as soon as the rules
+    # version matched, i.e. on every row once the worker had caught up).
+    taxonomy = currency.opportunity_taxonomy_versions()
+    current = currency.is_current_assessment(
+        pointer.__table__,
+        rules_version=RULES_VERSION,
+        taxonomy_version=currency.with_taxonomy_fallback(taxonomy.c.taxonomy_version),
+    )
     ranked = select(
         pointer.assessment_id.label("assessment_id"),
         pointer.opportunity_id.label("opportunity_id"),
@@ -424,6 +431,7 @@ def _latest_assessments(profile_version_id: UUID | None) -> Any:
         (~current).label("is_stale"),
         pointer.assessed_at.label("assessed_at"),
     ).join(OpportunityModel, OpportunityModel.id == pointer.opportunity_id)
+    ranked = ranked.outerjoin(taxonomy, taxonomy.c.opportunity_id == pointer.opportunity_id)
     if profile_version_id is not None:
         return ranked.where(pointer.profile_version_id == profile_version_id).subquery(
             "latest_assessment"
@@ -472,6 +480,41 @@ def _active_applications() -> Any:
     )
 
 
+def _first_sources() -> Any:
+    """The first occurrence source (by id, as text) of every posting, aggregated once."""
+    return (
+        select(
+            SourceOccurrenceModel.opportunity_id.label("opportunity_id"),
+            func.min(cast(SourceOccurrenceModel.source_definition_id, String)).label(
+                "first_source"
+            ),
+        )
+        .group_by(SourceOccurrenceModel.opportunity_id)
+        .subquery("first_source")
+    )
+
+
+def _posting_group_key(first_source: Any) -> Any:
+    """`opportunities.repository.posting_group_key()` with the first source joined in.
+
+    The repository twin asks for it in a correlated subquery, which the Inbox would repeat
+    for every posting and in every window; here the caller joins `_first_sources()` once.
+    A test pins the two to the same value, row by row.
+    """
+    key = func.concat_ws(
+        "|",
+        func.coalesce(
+            cast(OpportunityModel.canonical_company_id, String),
+            func.concat("name:", func.lower(func.coalesce(OpportunityModel.company_name, ""))),
+        ),
+        OpportunityModel.normalized_title,
+        func.coalesce(first_source, func.concat("id:", cast(OpportunityModel.id, String))),
+    )
+    # Only ever compared for equality, by the windows' partitioning: the byte-wise "C"
+    # collation groups the same strings as the database default, several times faster.
+    return key.collate("C")
+
+
 def _priority_rank() -> Any:
     return case(
         _PRIORITY_RANK,
@@ -489,7 +532,70 @@ def _inbox_statement(query: InboxQuery, *, totals_only: bool = False) -> tuple[S
     assessments = _latest_assessments(query.profile_version_id)
     analyses = _latest_analyses()
     applications = _active_applications()
-    statement = (
+    first_sources = _first_sources()
+    # Card F48-10: one row per posting group, the best one in the requested order (the
+    # window uses the very ordering of the page, so the representative is the row the
+    # ungrouped list would have shown first). `group_size` counts the group's rows that
+    # passed every filter, so "+N locais" never names a hidden row.
+    #
+    # One pass over the filtered rows, not a join back to them: the planner guesses a
+    # filter on a window column at 0.5% of its input, and with that guess it re-ran the
+    # latest-assessment subquery once per joined row.
+    #
+    # Card F50-10: the area filter is not a WHERE. Rows outside the target areas stay in the
+    # pass, flagged, and groups and positions are numbered per flag, so one execution yields
+    # the page (in-area rows), its total and the total without the area filter (the "N hidden
+    # by area" count). Windows cannot read other windows, hence the extra level.
+    #
+    # Cost shape, measured on 25k postings: the windows sort every filtered posting, so they
+    # run over narrow rows (ids, the assessment, what the ordering reads). The wide posting
+    # columns, the company, the analysis and the per-posting lookups are attached afterwards,
+    # to the group representatives, or after the LIMIT for the lookups that only the page
+    # needs.
+    key = _posting_group_key(first_sources.c.first_source)
+    ordering = _inbox_ordering(query.order, assessments, (query.search or "").strip())
+    in_area = (
+        OpportunityModel.role_family.in_(query.role_families)
+        if query.role_families
+        else true()
+    )
+    rows = (
+        select(
+            OpportunityModel.id.label("id"),
+            *(column for column in assessments.c if column.name != "opportunity_id"),
+            applications.c.application_id,
+            applications.c.current_stage,
+            applications.c.next_action_at,
+            in_area.label("in_area"),
+            func.row_number()
+            .over(partition_by=[key, in_area], order_by=ordering)
+            .label("group_position"),
+            func.row_number()
+            .over(partition_by=in_area, order_by=ordering)
+            .label("page_position"),
+            func.count().over(partition_by=[key, in_area]).label("group_size"),
+            func.row_number()
+            .over(partition_by=key, order_by=ordering)
+            .label("broader_position"),
+        )
+        .select_from(OpportunityModel)
+        .outerjoin(assessments, assessments.c.opportunity_id == OpportunityModel.id)
+        .outerjoin(applications, applications.c.opportunity_id == OpportunityModel.id)
+        .outerjoin(first_sources, first_sources.c.opportunity_id == OpportunityModel.id)
+        .where(*_inbox_filters(query, assessments, applications))
+        .subquery("inbox_rows")
+    )
+    counted = select(
+        *rows.c,
+        func.count().filter(rows.c.in_area & (rows.c.group_position == 1)).over().label("total"),
+        func.count().filter(rows.c.broader_position == 1).over().label("broader_total"),
+    ).subquery("inbox_counted")
+    wanted = (
+        counted.c.broader_position == 1
+        if totals_only
+        else (counted.c.in_area & (counted.c.group_position == 1))
+    )
+    grouped = (
         select(
             OpportunityModel.id,
             OpportunityModel.canonical_title,
@@ -505,122 +611,87 @@ def _inbox_statement(query: InboxQuery, *, totals_only: bool = False) -> tuple[S
             OpportunityModel.published_at,
             OpportunityModel.first_seen_at,
             OpportunityModel.version,
-            assessments.c.assessment_id,
-            assessments.c.assessment_opportunity_version,
-            assessments.c.assessment_profile_version_id,
-            assessments.c.current_profile_version_id,
-            assessments.c.verdict,
-            assessments.c.eligibility,
-            assessments.c.score,
-            assessments.c.confidence,
-            assessments.c.rules_version,
-            assessments.c.is_stale,
-            assessments.c.assessed_at,
+            counted.c.assessment_id,
+            counted.c.assessment_opportunity_version,
+            counted.c.assessment_profile_version_id,
+            counted.c.current_profile_version_id,
+            counted.c.verdict,
+            counted.c.eligibility,
+            counted.c.score,
+            counted.c.confidence,
+            counted.c.rules_version,
+            counted.c.is_stale,
+            counted.c.assessed_at,
             analyses.c.status,
             analyses.c.recommended_review,
             analyses.c.summary,
-            applications.c.application_id,
-            applications.c.current_stage,
-            applications.c.next_action_at,
-            select(DuplicateCandidateModel.id)
-            .where(
-                DuplicateCandidateModel.status == "PENDING",
-                (DuplicateCandidateModel.opportunity_id == OpportunityModel.id)
-                | (DuplicateCandidateModel.duplicate_opportunity_id == OpportunityModel.id),
-            )
-            .exists()
-            .label("has_pending_duplicate"),
-            _startup_strength_column(),
-            _startup_batch_column(),
+            counted.c.application_id,
+            counted.c.current_stage,
+            counted.c.next_action_at,
+            # Lookups only the page needs: in the outermost select the planner evaluates them
+            # after the sort and the LIMIT, not for every posting that passed the filters.
+            _pending_duplicate_column(OpportunityModel.id),
+            _startup_strength_column(OpportunityModel.canonical_company_id),
+            _startup_batch_column(OpportunityModel.canonical_company_id),
             OpportunityModel.source_updated_at,
             OpportunityModel.recency_basis,
+            counted.c.group_size,
+            counted.c.total,
+            counted.c.broader_total,
         )
-        .select_from(OpportunityModel)
-        .outerjoin(assessments, assessments.c.opportunity_id == OpportunityModel.id)
+        .select_from(counted)
+        .join(OpportunityModel, OpportunityModel.id == counted.c.id)
         .outerjoin(Company, Company.id == OpportunityModel.canonical_company_id)
-        .outerjoin(analyses, analyses.c.assessment_id == assessments.c.assessment_id)
-        .outerjoin(applications, applications.c.opportunity_id == OpportunityModel.id)
+        .outerjoin(analyses, analyses.c.assessment_id == counted.c.assessment_id)
+        .where(wanted)
     )
-    filtered = statement.where(*_inbox_filters(query, assessments, applications))
-    # Card F48-10: one row per posting group, the best one in the requested order (the
-    # window uses the very ordering of the page, so the representative is the row the
-    # ungrouped list would have shown first). `group_size` counts the group's rows that
-    # passed every filter, so "+N locais" never names a hidden row.
-    #
-    # One pass over the filtered rows, not a join back to them: the planner guesses a
-    # filter on a window column at 0.5% of its input, and with that guess it re-ran the
-    # latest-assessment subquery once per joined row.
-    #
-    # Card F50-10: the area filter is not a WHERE. Rows outside the target areas stay in the
-    # pass, flagged, and groups and positions are numbered per flag, so one execution yields
-    # the page (in-area rows), its total and the total without the area filter (the "N hidden
-    # by area" count). Windows cannot read other windows, hence the extra level.
-    key = posting_group_key()
-    ordering = _inbox_ordering(query.order, assessments, (query.search or "").strip())
-    in_area = (
-        OpportunityModel.role_family.in_(query.role_families)
-        if query.role_families
-        else true()
-    )
-    item_count = len(statement.selected_columns)
-    rows = filtered.add_columns(
-        in_area.label("in_area"),
-        func.row_number()
-        .over(partition_by=[key, in_area], order_by=ordering)
-        .label("group_position"),
-        func.row_number().over(partition_by=in_area, order_by=ordering).label("page_position"),
-        func.count().over(partition_by=[key, in_area]).label("group_size"),
-        func.row_number().over(partition_by=key, order_by=ordering).label("broader_position"),
-    ).subquery("inbox_rows")
-    counted = select(
-        *rows.c,
-        func.count().filter(rows.c.in_area & (rows.c.group_position == 1)).over().label("total"),
-        func.count().filter(rows.c.broader_position == 1).over().label("broader_total"),
-    ).subquery("inbox_counted")
-    columns = list(counted.c)
-    in_area_column, group_position, page_position, group_size, broader_position = (
-        counted.c.in_area,
-        counted.c.group_position,
-        counted.c.page_position,
-        counted.c.group_size,
-        counted.c.broader_position,
-    )
-    wanted = (
-        broader_position == 1
-        if totals_only
-        else (in_area_column & (group_position == 1))
-    )
-    grouped = select(*columns[:item_count], group_size, counted.c.total, counted.c.broader_total)
-    return grouped.where(wanted), page_position
+    return grouped, counted.c.page_position
 
 
-def _startup_evidence_rows(*conditions: Any) -> Select[Any]:
+def _pending_duplicate_column(opportunity_id: Any) -> Any:
+    return (
+        select(DuplicateCandidateModel.id)
+        .where(
+            DuplicateCandidateModel.status == "PENDING",
+            (DuplicateCandidateModel.opportunity_id == opportunity_id)
+            | (DuplicateCandidateModel.duplicate_opportunity_id == opportunity_id),
+        )
+        .exists()
+        .label("has_pending_duplicate")
+    )
+
+
+def _startup_evidence_rows(company_id: Any, *conditions: Any) -> Select[Any]:
     return select(CompanyStartupEvidence.id).where(
-        CompanyStartupEvidence.company_id == OpportunityModel.canonical_company_id,
+        CompanyStartupEvidence.company_id == company_id,
         *conditions,
     )
 
 
-def _startup_strength_column() -> Any:
+def _startup_strength_column(company_id: Any) -> Any:
     return case(
-        (_startup_evidence_rows(CompanyStartupEvidence.strength == "strong").exists(), "strong"),
-        (_startup_evidence_rows().exists(), "weak"),
+        (
+            _startup_evidence_rows(
+                company_id, CompanyStartupEvidence.strength == "strong"
+            ).exists(),
+            "strong",
+        ),
+        (_startup_evidence_rows(company_id).exists(), "weak"),
         else_=None,
     ).label("startup_strength")
 
 
-def _startup_batch_column() -> Any:
+def _startup_batch_column(company_id: Any) -> Any:
     return (
         select(CompanyStartupEvidence.batch)
         .where(
-            CompanyStartupEvidence.company_id == OpportunityModel.canonical_company_id,
+            CompanyStartupEvidence.company_id == company_id,
             CompanyStartupEvidence.signal == "yc_batch",
             CompanyStartupEvidence.strength == "strong",
             CompanyStartupEvidence.batch.is_not(None),
         )
         .order_by(CompanyStartupEvidence.captured_at.desc(), CompanyStartupEvidence.id)
         .limit(1)
-        .correlate(OpportunityModel)
         .scalar_subquery()
         .label("startup_batch")
     )
@@ -667,7 +738,7 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
     elif query.only_recent:
         filters.append(_recency_condition(query))
     if query.only_startups:
-        filters.append(_startup_evidence_rows().exists())
+        filters.append(_startup_evidence_rows(OpportunityModel.canonical_company_id).exists())
     if query.allowed_country:
         filters.append(
             OpportunityModel.allowed_countries.is_(None)

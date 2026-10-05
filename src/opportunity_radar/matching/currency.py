@@ -164,6 +164,34 @@ def opportunity_taxonomy_version() -> Any:
     return func.coalesce(aggregated, literal(SKILL_TAXONOMY_VERSION))
 
 
+def opportunity_taxonomy_versions() -> Any:
+    """Every opportunity's taxonomy version, computed once, as a subquery to join.
+
+    Same value as `opportunity_taxonomy_version()` (the correlated twin), but a reader that
+    looks at thousands of rows joins this on `opportunity_id` and reads `taxonomy_version`
+    (NULL for an opportunity with no skills: wrap it in `with_taxonomy_fallback`), instead
+    of running one subquery per row.
+    """
+    return (
+        select(
+            OpportunitySkillModel.opportunity_id.label("opportunity_id"),
+            func.string_agg(
+                func.distinct(OpportunitySkillModel.taxonomy_version),
+                aggregate_order_by(
+                    literal("+", String), OpportunitySkillModel.taxonomy_version
+                ),
+            ).label("taxonomy_version"),
+        )
+        .group_by(OpportunitySkillModel.opportunity_id)
+        .subquery("opportunity_taxonomy")
+    )
+
+
+def with_taxonomy_fallback(joined_version: Any) -> Any:
+    """The joined taxonomy version, or the current taxonomy when the opportunity has no skills."""
+    return func.coalesce(joined_version, literal(SKILL_TAXONOMY_VERSION))
+
+
 def assessment_reference_day(column: Any) -> Any:
     """The UTC day of an assessment timestamp, as SQL.
 
@@ -191,12 +219,15 @@ def is_current_assessment(
     rules_version: str,
     profile_version_id: Any | None = None,
     reference: datetime | None = None,
+    taxonomy_version: Any | None = None,
 ) -> ColumnElement[bool]:
     """SQL predicate for the same components `EvaluationIdentity.describes` compares.
 
     `assessment` is any selectable exposing the assessment columns, so the read model can
     apply this to a ranked subquery rather than to the table. `reference` is the moment the
-    recency band is measured at; it defaults to now.
+    recency band is measured at; it defaults to now. `taxonomy_version` is the opportunity's
+    taxonomy version when the caller has already joined it (`opportunity_taxonomy_versions`);
+    by default it is the correlated `opportunity_taxonomy_version()`.
     """
     profile = (
         active_profile_version_id() if profile_version_id is None else profile_version_id
@@ -205,7 +236,10 @@ def is_current_assessment(
         (assessment.c.opportunity_version == OpportunityModel.version)
         & (assessment.c.profile_version_id == profile)
         & (assessment.c.rules_version == literal(rules_version))
-        & (assessment.c.taxonomy_version == opportunity_taxonomy_version())
+        & (
+            assessment.c.taxonomy_version
+            == (opportunity_taxonomy_version() if taxonomy_version is None else taxonomy_version)
+        )
         & (
             _recency_band_sql(assessment_reference_day(assessment.c.assessed_at))
             == _recency_band_sql(

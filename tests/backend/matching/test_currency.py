@@ -27,8 +27,10 @@ from opportunity_radar.matching.currency import (
     assessment_reference_day,
     is_current_assessment,
     opportunity_taxonomy_version,
+    opportunity_taxonomy_versions,
     recency_band,
     reference_day,
+    with_taxonomy_fallback,
 )
 from opportunity_radar.matching.domain import _recency_measurement
 from opportunity_radar.matching.models import MatchAssessmentModel
@@ -380,3 +382,48 @@ def test_the_reference_day_is_utc_on_both_sides() -> None:
         )
 
         assert stored_day == reference_day(late)
+
+
+def test_the_joined_taxonomy_version_agrees_with_the_correlated_one() -> None:
+    """The Inbox joins every posting's taxonomy version once; the worker asks per posting."""
+    with _session() as session:
+        profile = _profile_version(session)
+        cases = {
+            "single": ((_TAXONOMY,), _TAXONOMY),
+            "multi": (("skills-v2", "skills-v1", "skills-v2"), "skills-v1+skills-v2"),
+            "none": ((), _TAXONOMY),
+        }
+        joined_versions = opportunity_taxonomy_versions()
+        for name, (taxonomies, expected) in cases.items():
+            opportunity = _opportunity(session, taxonomies=taxonomies)
+            for assessed_with in (expected, "skills-v0"):
+                assessment = _assessment(
+                    session, opportunity, profile.id, taxonomy_version=assessed_with
+                )
+                scoped = (
+                    select(MatchAssessmentModel)
+                    .where(MatchAssessmentModel.id == assessment.id)
+                    .subquery("scoped_assessment")
+                )
+                joined_says = session.scalar(
+                    select(
+                        is_current_assessment(
+                            scoped,
+                            rules_version=RULES_VERSION,
+                            profile_version_id=profile.id,
+                            taxonomy_version=with_taxonomy_fallback(
+                                joined_versions.c.taxonomy_version
+                            ),
+                        )
+                    )
+                    .select_from(OpportunityModel)
+                    .join(scoped, scoped.c.opportunity_id == OpportunityModel.id)
+                    .outerjoin(
+                        joined_versions, joined_versions.c.opportunity_id == OpportunityModel.id
+                    )
+                    .where(OpportunityModel.id == opportunity.id)
+                )
+                assert joined_says == (assessed_with == expected), (name, assessed_with)
+                assert joined_says == _sql_says_current(
+                    session, opportunity, assessment, profile.id
+                ), (name, assessed_with)
