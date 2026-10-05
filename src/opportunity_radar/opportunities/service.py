@@ -225,7 +225,14 @@ class OpportunityService:
             if competing is not None and competing.id != opportunity.id:
                 decision = "REVIEW"
                 result_status = "REVIEW_REQUIRED"
-                reasons = [{"code": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED"}]
+                reasons = [
+                    {
+                        "code": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+                        "competing_opportunity_id": str(competing.id),
+                        "candidate_fingerprint": candidate.fingerprint,
+                        "candidate_fingerprint_version": candidate.fingerprint_version,
+                    }
+                ]
             else:
                 decision = "REFRESHED"
                 result_status = "SUCCEEDED"

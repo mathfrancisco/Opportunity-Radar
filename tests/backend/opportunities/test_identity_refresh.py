@@ -111,17 +111,49 @@ def test_two_opportunities_competing_for_the_identity_stay_review_required() -> 
             first, second, third = fixture.raw_items()
             service = OpportunityService(session)
             original = service.normalize(first.id).opportunity
-            service.normalize(second.id)
+            competing_result = service.normalize(second.id)
             assert original is not None
             fingerprint = original.fingerprint
+            competing = competing_result.opportunity
+            assert competing is not None
 
             result = service.normalize(third.id)
 
             assert result.status == "REVIEW_REQUIRED"
-            assert result.reasons[0]["code"] == "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED"
+            reason = result.reasons[0]
+            assert reason["code"] == "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED"
+            assert reason["competing_opportunity_id"] == str(competing.id)
+            assert reason["candidate_fingerprint"] == competing.fingerprint
+            assert reason["candidate_fingerprint_version"] == competing.fingerprint_version
             session.refresh(original)
             assert original.fingerprint == fingerprint
             assert original.work_mode == "UNKNOWN"
+        finally:
+            fixture.cleanup()
+
+
+def test_silent_refresh_path_has_no_competing_opportunity_id() -> None:
+    """Silent-refresh path has no competing_opportunity_id in the reason."""
+    with Session(_engine()) as session:
+        fixture = _Fixture(session)
+        try:
+            before = _posting(fixture.source_type, "job-1", company="Acme")
+            after = _posting(fixture.source_type, "job-1", remote=True, company="Acme")
+            collector = _StaticCollector(fixture.source_type, [[before], [after]])
+            _collect(fixture, collector)
+            _collect(fixture, collector)
+            first_raw, second_raw = fixture.raw_items()
+            service = OpportunityService(session)
+
+            service.normalize(first_raw.id)
+            result = service.normalize(second_raw.id)
+
+            # This path should be IDENTITY_REFRESHED_SAME_EXTERNAL_ID with no competing opportunity
+            assert result.identity_decision == "REFRESHED"
+            assert result.status == "SUCCEEDED"
+            reason = result.reasons[0]
+            assert reason["code"] == "IDENTITY_REFRESHED_SAME_EXTERNAL_ID"
+            assert "competing_opportunity_id" not in reason
         finally:
             fixture.cleanup()
 
