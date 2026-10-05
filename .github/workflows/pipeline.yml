@@ -205,7 +205,8 @@ jobs:
             python -c "import json,sys; from decimal import Decimal; data=json.load(sys.stdin); assert data['total'] == 1; item=data['items'][0]; assert item['fingerprint_version'] == 'v1'; assert item['work_mode'] == 'REMOTE'; assert item['seniority'] == 'SENIOR'; assert item['contract_type'] == 'FULL_TIME'; assert len(item['compensations']) == 2; assert all(Decimal(value['minimum']) == Decimal('100000') and value['currency'] == 'USD' for value in item['compensations']); assert {skill['canonical_name'] for skill in item['skills']} == {'python', 'react'}; assert all(skill['taxonomy_version'] == 'skills-v3' for skill in item['skills']); assert len(item['occurrences']) == 2"
       - name: Verify deterministic matching through the public API
         run: |
-          profile_payload='{"expected_profile_version":0,"skills":[{"canonical_name":"python"},{"canonical_name":"react"}],"preferences":{"work_modes":["REMOTE"],"contracts":["FULL_TIME"],"countries":["BR"],"compensation_min":100000,"compensation_currency":"USD","compensation_period":"YEAR"}}'
+          profile_lock="$(curl --fail --silent http://127.0.0.1:3000/api/profile | python -c "import json,sys; print(json.load(sys.stdin)['profile_lock_version'])")"
+          profile_payload="{\"expected_profile_version\":$profile_lock,\"skills\":[{\"canonical_name\":\"python\"},{\"canonical_name\":\"react\"}],\"preferences\":{\"work_modes\":[\"REMOTE\"],\"contracts\":[\"FULL_TIME\"],\"countries\":[\"BR\"],\"compensation_min\":100000,\"compensation_currency\":\"USD\",\"compensation_period\":\"YEAR\"}}"
           profile_draft="$(curl --fail --silent --json "$profile_payload" http://127.0.0.1:3000/api/profile/versions)"
           profile_id="$(python -c "import json,sys; print(json.load(sys.stdin)['id'])" <<< "$profile_draft")"
           profile_lock="$(python -c "import json,sys; print(json.load(sys.stdin)['profile_lock_version'])" <<< "$profile_draft")"

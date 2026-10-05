@@ -5,7 +5,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 PYTEST_COMMAND = [sys.executable, "-m", "pytest", "--collect-only", "tests/backend/test_worker.py"]
 
