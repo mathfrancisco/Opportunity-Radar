@@ -30,8 +30,8 @@
 | F50-06 | Entregue | `954cdf0` | Aceite de 50% não sai só daqui: contrato e senioridade desconhecidos ainda seguram. |
 | F50-07 | Entregue | `bce10f6` | `EXPLAIN ANALYZE` da fila em base de produção. |
 | F50-08 | Entregue, desligado no worker | ver `git log` | Rodar `scripts/prune_assessments.py` em dry-run, ler o relatório e só então ligar `WORKER_ASSESSMENT_RETENTION_ENABLED`. `EXPLAIN` em volume real. |
-| F50-09 | Entregue como `v3`, desligado | `bc6a4a3` | Rodar a avaliação `v1` contra `v3` no Groq e trocar `AI_ANALYSIS_PROMPT`. |
-| F50-10 | Entregue | `58d24a1` | Medir o p95 de `/inbox` em 25 mil vagas. |
+| F50-09 | Entregue como `v3`, desligado por padrão | `bc6a4a3`, `514ffd2` | Funciona contra o Groq, mas não reduz a saída. Falta a avaliação de qualidade `v1` contra `v3`. |
+| F50-10 | Entregue | `58d24a1`, `5ff2647` | `/inbox` em ~0,6 s na cópia de 25 mil vagas. Falta medir em produção. |
 | F50-11 | Decisão registrada na spec | — | Nada. |
 | F50-12 | Item 1 e gravação da concorrente entregues; itens 2 e 3 medidos | `51c7271`, `6f48ee2`, `0b585be` | Decisões do dono sobre duplicatas e revisões. |
 
@@ -116,6 +116,54 @@
 - Catálogo nas áreas-alvo: 27,7% (6.970 de 25.124).
 - Vagas das áreas-alvo com descrição e ao menos uma skill pela taxonomia nova: 4.279 de 5.177
   (82,7%). Isso é teto para `TECHNOLOGY_FIT` conhecido, não a taxa do fator.
+
+## Stack de teste `f50test` (2026-10-05)
+
+Stack local com o código da branch e uma cópia do banco da `spec46full` (25.267 vagas),
+migrada até `20261005_0064`. API em `127.0.0.1:8001`, frontend em `127.0.0.1:3001`. O arquivo
+de portas (`.claude/compose.f50test.yaml`) não é versionado.
+
+Ligado nela: `AI_ANALYSIS_PROMPT=v3`, `WORKER_ASSESSMENT_RETENTION_ENABLED=true`, piso de
+coleta 0,30, timeout de consulta, e as seis regras de classificação por descrição. As regras
+estão ligadas só nessa cópia, sem o portão de 90% ter passado. `fetch_detail` do Workday
+continua desligado (Q1).
+
+Medido pelo endpoint HTTP, cinco chamadas cada:
+
+| Endpoint | Antes da correção `5ff2647` | Depois |
+|---|---|---|
+| `/inbox?limit=20` | 4,0 a 6,5 s | 0,58 a 0,65 s (1,1 s na primeira) |
+| `/inbox`, todas as áreas | — | 0,45 a 0,47 s |
+| `/overview` | 4,8 a 5,4 s | 0,92 a 1,10 s |
+| `/search-metrics` | 4,6 a 4,7 s | 1,03 a 1,12 s |
+| `/funnel-metrics` | 1,25 a 1,36 s | 1,30 a 1,43 s |
+
+A causa do `/inbox` lento era compilação JIT de uma subconsulta repetida, mais três
+consultas rodando para cada linha filtrada. A tabela `matching.current_assessment` sozinha
+não resolvia.
+
+Outros resultados:
+
+- **Elegibilidade com `matching-v3`:** em 10.442 vagas reavaliadas, 990 `ELIGIBLE`, 1.329
+  `INELIGIBLE` e 8.123 `UNKNOWN`. Decidida em 22%, abaixo da meta de 50%.
+- **Hacker News:** execução `SUCCEEDED`, 204 itens vistos, nenhum inválido.
+- **Contadores de área-alvo:** gravados em toda execução. Um Workday mediu 24 vagas na área e
+  277 fora.
+- **Prompt `v3`:** uma análise pela API terminou `AI_COMPLETED`. As quatro listas vieram
+  exatamente no limite (4, 5, 3, 4), então o corte pode estar agindo em toda resposta.
+- **Poda:** o job foi registrado mas ainda não rodou; ele segue o intervalo da retenção de
+  payloads.
+- **Cota de IA:** a cota diária já estava esgotada no banco copiado, então o worker não
+  analisou nada com `v3`.
+
+Dois achados que mudam leituras anteriores:
+
+- A taxonomia `skills-v4` só vale para vagas normalizadas depois da troca. A versão fica
+  gravada nas skills de cada vaga; o catálogo existente continua `skills-v3` até ser
+  renormalizado. Os 24,1% de `ai` são uma simulação sobre título e descrição, não o estado do
+  banco.
+- O `v3` não reduz a saída: 457 a 584 tokens em chamadas reais, contra 455 a 502 do `v1`. O
+  teto subiu de 600 para 800 porque o Groq conta tokens de raciocínio no limite.
 
 ## Antes do deploy
 
