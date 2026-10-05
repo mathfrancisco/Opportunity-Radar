@@ -1600,3 +1600,127 @@ def test_classification_failure_leaves_validity_to_persistence() -> None:
     assert _persisted_ids(session) == {"valid"}
     assert run.items_invalid == 1
     assert run.items_persisted == 1
+
+
+# F50-03: Workday detail flag and what the service hands the collector.
+
+
+class _RequestCapturingCollector(_Collector):
+    def __init__(self) -> None:
+        self.requests: list[CollectionRequest] = []
+
+    async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        self.requests.append(request)
+        for item in ():
+            yield item
+
+
+def test_service_passes_target_role_families_on_the_request() -> None:
+    service, _, _ = _filtering_service(share=None, families=("DATA", "SOFTWARE_ENGINEERING"))
+    collector = _RequestCapturingCollector()
+    service.registry = CollectorRegistry((collector,))
+
+    _run_filtering(service)
+
+    assert collector.requests[0].target_role_families == ("DATA", "SOFTWARE_ENGINEERING")
+    assert collector.requests[0].fetch_detail is False
+
+
+@pytest.mark.parametrize("value", ["true", 1, None])
+def test_create_source_rejects_non_boolean_fetch_detail(value: object) -> None:
+    session = _MemorySession()
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((WorkdayCollector(client=httpx.AsyncClient()),)),
+    )
+
+    with pytest.raises(AcquisitionError) as refused:
+        service.create_source(
+            source_type="workday",
+            name="Acme",
+            configuration={
+                "tenant_identifier": "acme/site",
+                "api_region": "wd5",
+                "fetch_detail": value,
+            },
+        )
+
+    assert refused.value.code == AcquisitionErrorCode.INVALID_CONFIGURATION
+    assert session.added == []
+
+
+def _workday_detail_run(configuration: dict[str, object]):
+    postings = [
+        {
+            "title": "Senior Backend Engineer",
+            "externalPath": f"/job/Remote/Job-{number}_R{number}",
+            "locationsText": "Remote",
+        }
+        for number in range(2)
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(200, json={"total": 2, "jobPostings": postings})
+        return httpx.Response(
+            200, json={"jobPostingInfo": {"jobDescription": "<p>Synthetic.</p>"}}
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="workday",
+        name="Acme",
+        enabled=True,
+        configuration={"tenant_identifier": "acme/site", "api_region": "wd5", **configuration},
+        rate_limit_policy={"minimum_interval_seconds": 5},
+    )
+    session = _MemorySession()
+    repository = _ShareRepository(source, None)
+    budget_calls: list[int] = []
+
+    def record_usage(host: str, *, requests: int, **_: object) -> None:
+        del host
+        budget_calls.append(requests)
+
+    repository.record_host_budget_usage = record_usage  # type: ignore[method-assign]
+    sleeps: list[float] = []
+
+    async def sleeper(delay: float) -> None:
+        sleeps.append(delay)
+
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((WorkdayCollector(client=client, sleeper=sleeper),)),
+        repository=repository,  # type: ignore[arg-type]
+        alerts=SourceAlertService(session),  # type: ignore[arg-type]
+        target_role_families=lambda: ("SOFTWARE_ENGINEERING",),
+        sleeper=sleeper,
+    )
+    try:
+        run = asyncio.run(
+            service.execute(source.id, CollectionRequest(mode=CollectionMode.DISCOVERY))
+        )
+    finally:
+        asyncio.run(client.aclose())
+    return run, budget_calls, sleeps, session
+
+
+def test_workday_detail_requests_count_in_the_run_budget_and_wait_the_interval() -> None:
+    run, budget_calls, sleeps, session = _workday_detail_run({"fetch_detail": True})
+
+    assert run.items_seen == 2
+    assert budget_calls == [3]  # one listing page + two details
+    assert len(sleeps) == 2  # each detail waited out the 5 s interval
+    stored = [item for item in session.added if isinstance(item, RawItemModel)]
+    assert [row.item_metadata[COLLECTED_ITEM_V1_KEY]["description"] for row in stored] == [
+        "<p>Synthetic.</p>"
+    ] * 2
+
+
+def test_workday_without_the_flag_makes_listing_requests_only() -> None:
+    run, budget_calls, sleeps, _ = _workday_detail_run({})
+
+    assert run.items_seen == 2
+    assert budget_calls == [1]
+    assert sleeps == []

@@ -344,6 +344,9 @@ class AcquisitionService:
                 GreenhouseCollector.validate_board_token(
                     _required_string(source_configuration, "board_token")
                 )
+        if normalized_type == "workday":
+            with _refusing_field("configuration"):
+                _workday_detail_settings(source_configuration)
         if (
             enabled
             and normalized_type != "manual"
@@ -1133,8 +1136,19 @@ class AcquisitionService:
             if throttle_error is not None:
                 raise throttle_error
             company_reference, company_name, api_region = _collector_settings(source)
+            fetch_detail, detail_max_requests = (
+                _workday_detail_settings(source.configuration)
+                if source.source_type == "workday"
+                else (request.fetch_detail, request.detail_max_requests)
+            )
             collector_request = replace(
                 request,
+                target_role_families=tuple(sorted(targets)),
+                fetch_detail=fetch_detail,
+                detail_max_requests=detail_max_requests,
+                host_requests_remaining=(
+                    self._host_requests_remaining(source) if fetch_detail else None
+                ),
                 source_definition_id=source.id,
                 cursor=request.cursor,
                 company_reference=company_reference or request.company_reference,
@@ -1373,6 +1387,23 @@ class AcquisitionService:
         self.session.refresh(persisted_run)
         self._announce(source, persisted_run, max_items=request.max_items)
         return persisted_run
+
+    def _host_requests_remaining(self, source: SourceDefinitionModel) -> int | None:
+        """Requests the source's host budget still allows now, `None` without a budget row."""
+        row = self.repository.get_host_budget(
+            _budget_host_for_source(source.source_type, source.configuration)
+        )
+        if row is None:
+            return None
+        state = HostBudgetState(
+            host=row.host,
+            window_start=row.window_start,
+            requests_used=row.requests_used,
+            requests_ceiling=row.requests_ceiling,
+            cooldown_until=row.cooldown_until,
+            exploration_reserve_ratio=row.exploration_reserve_ratio,
+        ).rolled_over(now=datetime.now(UTC))
+        return max(0, state.effective_ceiling(is_low_yield=False) - state.requests_used)
 
     def _announce(
         self,
@@ -1724,6 +1755,25 @@ def _required_string(configuration: Mapping[str, Any], key: str) -> str:
 def _optional_string(configuration: Mapping[str, Any], key: str) -> str | None:
     value = configuration.get(key)
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _workday_detail_settings(configuration: Mapping[str, Any]) -> tuple[bool, int]:
+    """`fetch_detail` (default off, SPEC 50 Q1) and `detail_max_requests` (default 200)."""
+    fetch_detail = configuration.get("fetch_detail", False)
+    if not isinstance(fetch_detail, bool):
+        raise AcquisitionError(
+            AcquisitionErrorCode.INVALID_CONFIGURATION,
+            "workday configuration fetch_detail must be a boolean",
+            field="configuration.fetch_detail",
+        )
+    max_requests = configuration.get("detail_max_requests", 200)
+    if isinstance(max_requests, bool) or not isinstance(max_requests, int) or max_requests < 0:
+        raise AcquisitionError(
+            AcquisitionErrorCode.INVALID_CONFIGURATION,
+            "workday configuration detail_max_requests must be a non-negative integer",
+            field="configuration.detail_max_requests",
+        )
+    return fetch_detail, max_requests
 
 
 def _hn_proposal_item(item: CollectedItem) -> CollectedItem | None:

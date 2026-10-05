@@ -9,6 +9,10 @@ Terms review: `docs/pesquisas/termos-workday.md`. The listing endpoint does not 
 full job description (only title, location text and the detail path), so this collector
 never invents one — `description` stays `None`, same as it would for a field the endpoint
 genuinely does not carry.
+
+Detail (SPEC 50, F50-03): `GET /wday/cxs/<tenant>/<site><externalPath>` carries the
+description. It has not been through the terms review, so it is fetched only when the
+source's `fetch_detail` flag is on and only for postings in the profile's target areas.
 """
 
 from __future__ import annotations
@@ -18,9 +22,10 @@ import math
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
-from typing import Any
+from typing import Any, TypeVar
 
 import httpx
 
@@ -39,12 +44,39 @@ from opportunity_radar.acquisition.http_conditional import (
     conditional_request_headers,
     record_conditional_response,
 )
+from opportunity_radar.opportunities.role_family import (
+    classify_role_family,
+    departments_from_metadata,
+)
 
 _SLUG = r"[A-Za-z0-9][A-Za-z0-9_-]*"
 _TENANT_SITE = re.compile(rf"^({_SLUG})/({_SLUG})$")
 _POD = re.compile(r"^wd\d+$")
 _PAGE_SIZE = 20
 _PARSER_VERSION = "workday-cxs-v1"
+_T = TypeVar("_T")
+
+
+class _DetailRun:
+    """Per-run state of the optional detail fetch (SPEC 50, F50-03)."""
+
+    def __init__(self, request: CollectionRequest) -> None:
+        self.enabled = request.fetch_detail and bool(request.target_role_families)
+        self.cap = request.detail_max_requests
+        self.host_remaining = request.host_requests_remaining
+        self.requested = 0
+        #: Set by a 429 on a detail request: no further detail requests this run.
+        self.stopped = False
+
+    def has_room(self, http_requests: int) -> bool:
+        """Whether one more detail request fits the run cap and the host budget left.
+
+        `http_requests` is everything this run already sent (listing pages and retries
+        included), all of which the host budget has yet to be charged for.
+        """
+        if self.requested >= self.cap:
+            return False
+        return self.host_remaining is None or http_requests < self.host_remaining
 
 
 class WorkdayCollector:
@@ -126,6 +158,7 @@ class WorkdayCollector:
         seen_pages: set[tuple[str, ...]] = set()
         total_fetched = 0
         board_total: int | None = None
+        detail = _DetailRun(request)
         # A resumed run (F20-39 `resume_of_run_id`) supplies an explicit cursor: the offset
         # to pick up from, never derived automatically. A fresh run has no cursor and
         # starts at 0, same as before this card.
@@ -178,6 +211,10 @@ class WorkdayCollector:
                         raise
                     request.telemetry.record_invalid_item(error.summary)
                     continue
+                if detail.enabled and self._is_target(item, request):
+                    item = await self._with_detail(
+                        client, item, tenant, site, pod, request, detail
+                    )
                 yield item
                 emitted += 1
                 if request.max_items is not None and emitted >= request.max_items:
@@ -245,6 +282,45 @@ class WorkdayCollector:
         request: CollectionRequest,
     ) -> tuple[list[Mapping[str, Any]], int | None]:
         url = f"https://{tenant}.{pod}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs"
+
+        async def send() -> httpx.Response:
+            # Validators only ever describe a fresh, full read from offset 0; a
+            # resumed run's cursor picks up mid-board, a different scope a 304 for
+            # offset 0 could never speak for.
+            headers = (
+                conditional_request_headers(request)
+                if offset == 0 and request.cursor is None
+                else {}
+            )
+            return await client.post(
+                url,
+                json={"limit": limit, "offset": offset, "searchText": ""},
+                headers=headers or None,
+            )
+
+        def conditional(response: httpx.Response) -> None:
+            if response.status_code == 304:
+                record_conditional_response(request, response)
+                raise NotModifiedResponse()
+            record_conditional_response(request, response)
+
+        return await self._request(
+            request,
+            send,
+            lambda response: (self._postings(response), self._total(response)),
+            inspect=conditional,
+        )
+
+    async def _request(
+        self,
+        request: CollectionRequest,
+        send: Callable[[], Awaitable[httpx.Response]],
+        parse: Callable[[httpx.Response], _T],
+        *,
+        inspect: Callable[[httpx.Response], None] | None = None,
+    ) -> _T:
+        """One HTTP exchange under the request's network policy, shared by listing and detail:
+        minimum interval, retries with Retry-After, and the telemetry the host budget reads."""
         policy = request.network_policy
         max_retries = policy.max_retries if policy is not None else self._max_retries
         retry_delay = (
@@ -266,28 +342,14 @@ class WorkdayCollector:
             error: AcquisitionError | None = None
             try:
                 request.telemetry.record_http_attempt(retry=attempt > 0)
-                # Validators only ever describe a fresh, full read from offset 0; a
-                # resumed run's cursor picks up mid-board, a different scope a 304 for
-                # offset 0 could never speak for.
-                headers = (
-                    conditional_request_headers(request)
-                    if offset == 0 and request.cursor is None
-                    else {}
-                )
-                response = await client.post(
-                    url,
-                    json={"limit": limit, "offset": offset, "searchText": ""},
-                    headers=headers or None,
-                )
+                response = await send()
                 if response.status_code == 429:
                     request.telemetry.record_rate_limit()
-                if response.status_code == 304:
-                    record_conditional_response(request, response)
-                    raise NotModifiedResponse()
-                record_conditional_response(request, response)
+                if inspect is not None:
+                    inspect(response)
                 error = self._response_error(response)
                 if error is None:
-                    return self._postings(response), self._total(response)
+                    return parse(response)
             except httpx.TimeoutException:
                 error = AcquisitionError(
                     AcquisitionErrorCode.SOURCE_TIMEOUT,
@@ -314,6 +376,78 @@ class WorkdayCollector:
                 )
             )
         raise AssertionError("unreachable")
+
+    @staticmethod
+    def _is_target(item: CollectedItem, request: CollectionRequest) -> bool:
+        """Same classification `AcquisitionService` applies at collection time (F50-04)."""
+        try:
+            family = classify_role_family(
+                title=item.title, departments=departments_from_metadata(item.metadata)
+            ).role_family
+        except Exception:  # noqa: BLE001 - an unclassifiable posting gets no detail request
+            return False
+        return family.value in request.target_role_families
+
+    async def _with_detail(
+        self,
+        client: httpx.AsyncClient,
+        item: CollectedItem,
+        tenant: str,
+        site: str,
+        pod: str,
+        request: CollectionRequest,
+        detail: _DetailRun,
+    ) -> CollectedItem:
+        """The item with its description, or unchanged when the detail cannot be had.
+
+        Never raises: a posting is never dropped and a run never fails over its detail.
+        Identity (external id, URL) is untouched, so turning detail on creates no duplicate.
+        """
+        telemetry = request.telemetry
+        if detail.stopped or not detail.has_room(telemetry.http_requests):
+            telemetry.record_detail(skipped=True)
+            return item
+        url = (
+            f"https://{tenant}.{pod}.myworkdayjobs.com/wday/cxs/{tenant}/{site}"
+            f"{item.external_id}"
+        )
+        detail.requested += 1
+        try:
+            description = await self._request(
+                request, lambda: client.get(url), self._detail_description
+            )
+        except AcquisitionError as error:
+            telemetry.record_detail(failed=True)
+            if error.code is AcquisitionErrorCode.SOURCE_RATE_LIMITED:
+                # The 429 is already counted as a rate-limit event; stop asking.
+                detail.stopped = True
+            return item
+        telemetry.record_detail()
+        return item if description is None else replace(item, description=description)
+
+    @staticmethod
+    def _detail_description(response: httpx.Response) -> str | None:
+        try:
+            payload = response.json()
+        except ValueError as error:
+            raise AcquisitionError(
+                AcquisitionErrorCode.PARSER_SCHEMA_CHANGED, "Workday returned invalid JSON"
+            ) from error
+        info = payload.get("jobPostingInfo") if isinstance(payload, dict) else None
+        if not isinstance(info, dict):
+            raise AcquisitionError(
+                AcquisitionErrorCode.PARSER_SCHEMA_CHANGED,
+                "Workday detail is missing jobPostingInfo",
+            )
+        description = info.get("jobDescription")
+        if description is None:
+            return None
+        if not isinstance(description, str):
+            raise AcquisitionError(
+                AcquisitionErrorCode.PARSER_SCHEMA_CHANGED,
+                "Workday detail jobDescription must be a string",
+            )
+        return description.strip() or None
 
     @staticmethod
     def _response_error(response: httpx.Response) -> AcquisitionError | None:
@@ -453,7 +587,7 @@ class WorkdayCollector:
             company_name=company_name,
             location_text=WorkdayCollector._string(posting.get("locationsText")),
             # The listing endpoint never carries the full description; only the per-job
-            # detail page does, and this collector does not fetch it (see module docstring).
+            # detail does, fetched on top of this item when enabled (see module docstring).
             description=None,
             published_at=WorkdayCollector._parse_posted_on(posting.get("postedOn")),
             cursor=cursor,

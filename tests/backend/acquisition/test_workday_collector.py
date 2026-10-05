@@ -631,3 +631,229 @@ def test_500_item_workday_run_makes_zero_tavily_calls_and_finishes_pagination() 
     assert repository.budget_calls == [
         {"host": "workday:adobe/external:wd5", "requests": 25, "default_ceiling": 500}
     ]
+
+
+# --- F50-03: detail fetch, only for target areas, behind a per-source flag ---------------
+
+# SYNTHETIC: the detail fixture follows the publicly documented CXS shape
+# (`jobPostingInfo.jobDescription`, docs/pesquisas/termos-workday.md). No real endpoint was
+# called to capture it.
+_DETAIL_FIXTURE = Path(__file__).parents[2] / "fixtures" / "workday_job_detail.json"
+_TARGETS = ("SOFTWARE_ENGINEERING", "DATA")
+_ENG = "Senior Backend Engineer"
+
+
+def _detail_postings(titles: list[str]) -> list[dict[str, object]]:
+    return [
+        {
+            "title": title,
+            "externalPath": f"/job/Remote/Job-{number}_R{number}",
+            "locationsText": "Remote",
+            "bulletFields": [f"R{number}"],
+        }
+        for number, title in enumerate(titles)
+    ]
+
+
+def _detail_run(
+    titles: list[str],
+    *,
+    detail_status: dict[str, int] | None = None,
+    sleeper=None,
+    **request_fields: object,
+):
+    """Collect `titles` through a mock transport; returns items, request log, request."""
+    postings = _detail_postings(titles)
+    detail_payload = json.loads(_DETAIL_FIXTURE.read_text(encoding="utf-8"))
+    log: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        log.append(request)
+        if request.method == "POST":
+            return httpx.Response(200, json={"total": len(postings), "jobPostings": postings})
+        path = request.url.path.rsplit("/cxs/acme/ExternalCareerSite", 1)[1]
+        status = (detail_status or {}).get(path, 200)
+        if status != 200:
+            return httpx.Response(status, headers={"Retry-After": "1"} if status == 429 else {})
+        return httpx.Response(200, json=detail_payload)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    request = CollectionRequest(
+        company_reference="acme/ExternalCareerSite",
+        company_name="Acme",
+        api_region="wd5",
+        **request_fields,  # type: ignore[arg-type]
+    )
+    collector = (
+        WorkdayCollector(client=client, sleeper=sleeper)
+        if sleeper is not None
+        else WorkdayCollector(client=client)
+    )
+    try:
+        items = asyncio.run(_collect(collector, request))
+    finally:
+        asyncio.run(client.aclose())
+    return items, log, request
+
+
+def _details(log: list[httpx.Request]) -> list[httpx.Request]:
+    return [call for call in log if call.method == "GET"]
+
+
+def test_target_posting_gets_its_description_and_keeps_its_identity() -> None:
+    plain, _, _ = _detail_run([_ENG])
+    items, log, request = _detail_run([_ENG], fetch_detail=True, target_role_families=_TARGETS)
+
+    assert items[0].description == "<p>Build and run the services behind our platform.</p>"
+    assert items[0].external_id == plain[0].external_id
+    assert items[0].url == plain[0].url
+    assert items[0].title == plain[0].title
+    assert str(_details(log)[0].url) == (
+        "https://acme.wd5.myworkdayjobs.com/wday/cxs/acme/ExternalCareerSite"
+        "/job/Remote/Job-0_R0"
+    )
+    assert request.telemetry.http_requests == 2
+    assert request.telemetry.detail_requests == 1
+
+
+def test_off_target_and_unknown_postings_get_no_detail_request() -> None:
+    items, log, _ = _detail_run(
+        ["Account Executive", "Wizard of Light", _ENG],
+        fetch_detail=True,
+        target_role_families=_TARGETS,
+    )
+
+    assert [item.description is not None for item in items] == [False, False, True]
+    assert [call.url.path.rsplit("/", 1)[1] for call in _details(log)] == ["Job-2_R2"]
+
+
+@pytest.mark.parametrize("fields", [{}, {"fetch_detail": False}])
+def test_flag_absent_or_false_fetches_no_detail_and_matches_listing_only(
+    fields: dict[str, object],
+) -> None:
+    items, log, request = _detail_run(
+        [_ENG, "Data Engineer"], target_role_families=_TARGETS, **fields
+    )
+
+    assert _details(log) == []
+    assert request.telemetry.http_requests == 1
+    assert all(item.description is None for item in items)
+    assert [item.external_id for item in items] == [
+        "/job/Remote/Job-0_R0",
+        "/job/Remote/Job-1_R1",
+    ]
+
+
+def test_flag_on_without_target_role_families_fetches_no_detail() -> None:
+    items, log, _ = _detail_run([_ENG], fetch_detail=True)
+
+    assert _details(log) == []
+    assert items[0].description is None
+
+
+def test_per_run_cap_limits_detail_requests_and_is_recorded() -> None:
+    items, log, request = _detail_run(
+        [_ENG] * 5,
+        fetch_detail=True,
+        detail_max_requests=2,
+        target_role_families=_TARGETS,
+    )
+
+    assert len(_details(log)) == 2
+    assert len(items) == 5
+    assert [item.description is not None for item in items] == [True, True, False, False, False]
+    assert request.telemetry.detail_requests == 2
+    assert request.telemetry.detail_skipped == 3
+
+
+def test_host_budget_left_limits_detail_requests() -> None:
+    # One listing page already spent 1 of the 3 requests the host still allows.
+    items, log, request = _detail_run(
+        [_ENG] * 5,
+        fetch_detail=True,
+        host_requests_remaining=3,
+        target_role_families=_TARGETS,
+    )
+
+    assert len(_details(log)) == 2
+    assert len(items) == 5
+    assert request.telemetry.detail_skipped == 3
+
+
+def test_detail_failure_keeps_the_posting_and_does_not_fail_the_run() -> None:
+    items, log, request = _detail_run(
+        [_ENG] * 3,
+        detail_status={"/job/Remote/Job-1_R1": 404},
+        fetch_detail=True,
+        target_role_families=_TARGETS,
+    )
+
+    assert [item.description is not None for item in items] == [True, False, True]
+    assert len(_details(log)) == 3
+    assert request.telemetry.detail_failures == 1
+
+
+def test_detail_schema_mismatch_keeps_the_posting() -> None:
+    postings = _detail_postings([_ENG])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(200, json={"total": 1, "jobPostings": postings})
+        return httpx.Response(200, json={"unexpected": True})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    request = CollectionRequest(
+        company_reference="acme/ExternalCareerSite",
+        api_region="wd5",
+        fetch_detail=True,
+        target_role_families=_TARGETS,
+    )
+    try:
+        items = asyncio.run(_collect(WorkdayCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert len(items) == 1
+    assert items[0].description is None
+    assert request.telemetry.detail_failures == 1
+
+
+def test_detail_rate_limit_stops_further_detail_requests() -> None:
+    async def sleeper(delay: float) -> None:
+        del delay
+
+    items, log, request = _detail_run(
+        [_ENG] * 4,
+        detail_status={"/job/Remote/Job-1_R1": 429},
+        sleeper=sleeper,
+        fetch_detail=True,
+        network_policy=CollectionNetworkPolicy(max_retries=0),
+        target_role_families=_TARGETS,
+    )
+
+    assert len(items) == 4
+    assert [item.description is not None for item in items] == [True, False, False, False]
+    assert len(_details(log)) == 2  # the 429 stops the run's detail requests
+    assert request.telemetry.rate_limit_events == 1
+    assert request.telemetry.detail_skipped == 2
+
+
+def test_detail_requests_honour_the_minimum_interval() -> None:
+    delays: list[float] = []
+
+    async def sleeper(delay: float) -> None:
+        delays.append(delay)
+
+    _, log, request = _detail_run(
+        [_ENG, "Data Engineer"],
+        sleeper=sleeper,
+        fetch_detail=True,
+        network_policy=CollectionNetworkPolicy(minimum_interval_seconds=30),
+        target_role_families=_TARGETS,
+    )
+
+    assert len(_details(log)) == 2
+    # The listing set `last_http_attempt_at`, so each detail waited out the interval.
+    assert len(delays) == 2
+    assert all(0 < delay <= 30 for delay in delays)
+    assert request.telemetry.http_requests == 3
