@@ -15,6 +15,7 @@ from opportunity_radar.matching.analysis import (
     NullAnalysisAdapter,
     analysis_cache_key,
     parse_analysis,
+    reusable_payload_digest,
 )
 from opportunity_radar.matching.domain import EligibilityStatus, Verdict
 
@@ -234,3 +235,32 @@ def test_null_adapter_degrades_without_calling_anything() -> None:
     assert outcome.status is AnalysisStatus.AI_SKIPPED
     assert outcome.analysis is None
     assert outcome.degraded is True
+
+
+def _sent_payload(*, version: int, score: str, verdict: str = "RECOMMENDED") -> dict[str, object]:
+    return {
+        "deterministic_result": {"eligibility": "UNKNOWN", "verdict": verdict, "score": score},
+        "opportunity": {
+            "content_version": version,
+            "evidence_refs": [f"opportunity:{_OPPORTUNITY_ID}:version:{version}"],
+            "skill_evidence_refs": [f"raw-item:{version}:skill:python"],
+            "required_skills": ["python"],
+        },
+        "posting": {"title": "Backend Engineer", "description": "Python and PostgreSQL."},
+    }
+
+
+def test_reusable_digest_ignores_recollection_and_score_drift() -> None:
+    first = reusable_payload_digest(_sent_payload(version=1, score="70.0000"))
+
+    assert reusable_payload_digest(_sent_payload(version=5, score="69.4000")) == first
+
+
+def test_reusable_digest_changes_with_the_verdict_or_the_posting() -> None:
+    first = reusable_payload_digest(_sent_payload(version=1, score="70.0000"))
+    other_verdict = _sent_payload(version=1, score="70.0000", verdict="WATCHLIST")
+    other_posting = _sent_payload(version=1, score="70.0000")
+    other_posting["posting"] = {"title": "Backend Engineer", "description": "Go and Kafka."}
+
+    assert reusable_payload_digest(other_verdict) != first
+    assert reusable_payload_digest(other_posting) != first

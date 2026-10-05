@@ -31,7 +31,13 @@ ANALYSIS_SCHEMA_V2 = "analysis-v2"
 #: Bumped to v3 (card F20-16): `options` now carries the provider and the model chain,
 #: so an analysis under one provider/model never collides with another keyed under the
 #: same v2 digest.
-ANALYSIS_KEY_VERSION = "analysis-key-v3"
+#: Bumped to v4: the key is built from `reusable_payload_digest`, not from the row version
+#: and the raw payload hash, so a recollection that changed nothing the model reads no
+#: longer pays for the same analysis again.
+ANALYSIS_KEY_VERSION = "analysis-key-v4"
+#: Payload fields that change with every recollection or daily re-evaluation without
+#: changing the posting, the profile or the verdict the analysis comments on.
+_BOOKKEEPING_FIELDS = frozenset({"content_version", "evidence_refs", "skill_evidence_refs"})
 #: Where a quoted piece of evidence may come from in the payload that was sent.
 CLAIM_SOURCES = ("posting", "profile")
 
@@ -562,6 +568,36 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _without_bookkeeping(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            key: _without_bookkeeping(item)
+            for key, item in value.items()
+            if key not in _BOOKKEEPING_FIELDS
+        }
+    if isinstance(value, (list, tuple)):
+        return [_without_bookkeeping(item) for item in value]
+    return value
+
+
+def reusable_payload_digest(payload: Mapping[str, Any]) -> str:
+    """Digest of what the analysis is about, for the key: the payload minus bookkeeping.
+
+    The row version and the evidence references move on every recollection, and the score
+    moves with the posting's age on every daily re-evaluation. None of them changes the
+    posting, the profile or the verdict, and keying on them made the same posting be
+    analysed again each time. Eligibility and verdict stay in: an analysis written for one
+    verdict is not the answer for another.
+    """
+    reusable = _without_bookkeeping(payload)
+    result = reusable.get("deterministic_result")
+    if isinstance(result, Mapping):
+        reusable["deterministic_result"] = {
+            key: item for key, item in result.items() if key != "score"
+        }
+    return _digest(reusable)
+
+
 def analysis_key(
     request: AnalysisRequest,
     *,
@@ -574,18 +610,17 @@ def analysis_key(
 ) -> str:
     """`ANALYSIS_KEY_VERSION`: the one definition the service, the adapter and the table share.
 
-    The payload hash covers what the model read — the posting as cleaned and cut, the
-    profile history, the retrieved decisions, the deterministic result — so a different
-    cut or a changed decision is a different analysis. The prompt digest covers the
-    wording and the schema, not just the version label, and `options` every inference
-    setting that changes the answer. `keep_alive` is deliberately absent: it changes how
-    long the model stays loaded, not what it says.
+    `payload_hash` is `reusable_payload_digest` of the payload: the posting as cleaned and
+    cut, the profile history, the retrieved decisions, the eligibility and the verdict —
+    so a different cut or a changed decision is a different analysis. The prompt digest
+    covers the wording and the schema, not just the version label, and `options` every
+    inference setting that changes the answer. `keep_alive` is deliberately absent: it
+    changes how long the model stays loaded, not what it says.
     """
     return _digest(
         {
             "key_version": ANALYSIS_KEY_VERSION,
             "opportunity_id": str(request.opportunity_id),
-            "opportunity_content_version": request.opportunity_content_version,
             "profile_version_id": str(request.profile_version_id),
             "rules_version": request.rules_version,
             "taxonomy_version": request.taxonomy_version,
@@ -728,7 +763,7 @@ class NullAnalysisAdapter:
                 prompt_version=self.prompt_version,
                 schema_version=ANALYSIS_SCHEMA_VERSION,
                 prompt_digest="disabled",
-                payload_hash=payload_hash,
+                payload_hash=reusable_payload_digest(payload),
                 options={},
             ),
             payload_hash=payload_hash,
@@ -810,5 +845,6 @@ __all__: Sequence[str] = (
     "normalize_evidence",
     "parse_analysis",
     "payload_digest",
+    "reusable_payload_digest",
     "skipped_outcome",
 )

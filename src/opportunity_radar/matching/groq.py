@@ -33,6 +33,7 @@ from opportunity_radar.matching.analysis import (
     failed_outcome,
     parse_analysis,
     payload_digest,
+    reusable_payload_digest,
     skipped_outcome,
 )
 from opportunity_radar.matching.prompts import PromptArtifacts
@@ -248,7 +249,7 @@ class GroqAnalysisAdapter:
                 prompt_version=self._prompt.version,
                 schema_version=self._prompt.schema_version,
                 prompt_digest=self._prompt.digest,
-                payload_hash=payload_hash,
+                payload_hash=reusable_payload_digest(payload),
                 options=options,
             ),
             payload_hash=payload_hash,
