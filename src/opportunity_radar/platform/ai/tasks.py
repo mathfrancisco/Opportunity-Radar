@@ -59,9 +59,15 @@ def _effort_for(settings: Settings, task: AITask) -> str:
     return override or settings.ai_reasoning_effort
 
 
+#: Output ceiling of `job_match` under the analysis prompts whose schema caps each list
+#: (card F50-09); every other prompt keeps the default below.
+_JOB_MATCH_OUTPUT_BY_PROMPT = {"v3": 600}
+
+
 def default_routes(settings: Settings) -> dict[AITask, ModelRoute]:
+    job_match_output = _JOB_MATCH_OUTPUT_BY_PROMPT.get(settings.ai_analysis_prompt, 900)
     table = {
-        AITask.JOB_MATCH: ((ModelRole.REASONING, ModelRole.ALT), 5000, 900),
+        AITask.JOB_MATCH: ((ModelRole.REASONING, ModelRole.ALT), 5000, job_match_output),
         AITask.JOB_CLASSIFICATION: ((ModelRole.FAST, ModelRole.ALT), 1500, 300),
         AITask.JOB_EXTRACTION: ((ModelRole.FAST, ModelRole.REASONING), 3000, 600),
     }

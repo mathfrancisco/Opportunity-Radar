@@ -25,6 +25,8 @@ from opportunity_radar.matching.text import TokenCalibration
 ANALYSIS_SCHEMA_VERSION = "analysis-v1"
 #: Strengths and risks become `{claim, evidence, source}` objects (card F16-07).
 ANALYSIS_SCHEMA_V2 = "analysis-v2"
+#: `analysis-v1`'s plain strings with a tighter cap on each list (card F50-09).
+ANALYSIS_SCHEMA_V3 = "analysis-v3"
 #: Identity of an analysis from card F16-08: the payload actually sent, the prompt's
 #: content, the model and every option that changes the answer. Rows keyed before it
 #: have `key_version` NULL and are never reused as if they were keyed by it.
@@ -37,7 +39,8 @@ ANALYSIS_SCHEMA_V2 = "analysis-v2"
 ANALYSIS_KEY_VERSION = "analysis-key-v4"
 #: Payload fields that change with every recollection or daily re-evaluation without
 #: changing the posting, the profile or the verdict the analysis comments on.
-_BOOKKEEPING_FIELDS = frozenset({"content_version", "evidence_refs", "skill_evidence_refs"})
+_EVIDENCE_REF_FIELDS = frozenset({"evidence_refs", "skill_evidence_refs"})
+_BOOKKEEPING_FIELDS = frozenset({"content_version"}) | _EVIDENCE_REF_FIELDS
 #: Where a quoted piece of evidence may come from in the payload that was sent.
 CLAIM_SOURCES = ("posting", "profile")
 
@@ -333,10 +336,27 @@ OUTPUT_SCHEMA_V2: dict[str, Any] = {
     },
 }
 
+# `analysis-v3` (card F50-09): v1's shape with a cap per list. The v1 eval expects at most
+# five risks per case and the v1 reference examples carry at most two strengths, one
+# inference and three unknowns, so these caps leave headroom without paying for 20 items.
+V3_MAX_ITEMS = {"strengths": 4, "risks": 5, "inferences": 3, "unknowns": 4}
+
+OUTPUT_SCHEMA_V3: dict[str, Any] = {
+    **OUTPUT_SCHEMA,
+    "properties": {
+        **OUTPUT_SCHEMA["properties"],
+        **{
+            name: {**OUTPUT_SCHEMA["properties"][name], "maxItems": cap}
+            for name, cap in V3_MAX_ITEMS.items()
+        },
+    },
+}
+
 #: The schema each version validates against. A prompt declares its version in metadata.
 OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
     ANALYSIS_SCHEMA_VERSION: OUTPUT_SCHEMA,
     ANALYSIS_SCHEMA_V2: OUTPUT_SCHEMA_V2,
+    ANALYSIS_SCHEMA_V3: OUTPUT_SCHEMA_V3,
 }
 
 _ARRAY_FIELDS = ("strengths", "risks", "inferences", "unknowns")
@@ -411,13 +431,13 @@ def parse_analysis(
             retryable=True,
         )
 
-    with_claims = schema_version != ANALYSIS_SCHEMA_VERSION
+    with_claims = schema_version == ANALYSIS_SCHEMA_V2
     items: dict[str, tuple[AnalysisItem, ...]] = {}
     for name in _ARRAY_FIELDS:
         if with_claims and name in _CLAIM_FIELDS:
             items[name] = _claim_list(payload[name], name, evidence_sources or {})
         else:
-            items[name] = _string_list(payload[name], name)
+            items[name] = _string_list(payload[name], name, schema["properties"][name]["maxItems"])
     return SemanticAnalysis(
         summary=summary.strip(),
         strengths=items["strengths"],
@@ -504,17 +524,19 @@ def _claim_list(
     return tuple(claims)
 
 
-def _string_list(value: Any, field_name: str) -> tuple[str, ...]:
+def _string_list(
+    value: Any, field_name: str, max_items: int = MAX_ITEMS
+) -> tuple[str, ...]:
     if not isinstance(value, list):
         raise AnalysisError(
             AnalysisFailureCode.SCHEMA_MISMATCH,
             f"analysis {field_name} must be an array",
             retryable=True,
         )
-    if len(value) > MAX_ITEMS:
+    if len(value) > max_items:
         raise AnalysisError(
             AnalysisFailureCode.SCHEMA_MISMATCH,
-            f"analysis {field_name} exceeds {MAX_ITEMS} items",
+            f"analysis {field_name} exceeds {max_items} items",
             retryable=True,
         )
     items: list[str] = []
@@ -577,6 +599,23 @@ def _without_bookkeeping(value: Any) -> Any:
         }
     if isinstance(value, (list, tuple)):
         return [_without_bookkeeping(item) for item in value]
+    return value
+
+
+def without_evidence_refs(value: Any) -> Any:
+    """`value` minus `evidence_refs` and `skill_evidence_refs` at any depth (card F50-09).
+
+    They are row ids and hashes for the stored assessment; the model cannot quote them
+    (`evidence_sources` only knows excerpts of the posting, opportunity and profile).
+    """
+    if isinstance(value, Mapping):
+        return {
+            key: without_evidence_refs(item)
+            for key, item in value.items()
+            if key not in _EVIDENCE_REF_FIELDS
+        }
+    if isinstance(value, (list, tuple)):
+        return [without_evidence_refs(item) for item in value]
     return value
 
 

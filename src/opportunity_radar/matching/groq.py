@@ -35,6 +35,7 @@ from opportunity_radar.matching.analysis import (
     payload_digest,
     reusable_payload_digest,
     skipped_outcome,
+    without_evidence_refs,
 )
 from opportunity_radar.matching.prompts import PromptArtifacts
 from opportunity_radar.matching.text import (
@@ -162,6 +163,9 @@ class GroqAnalysisAdapter:
             profile_history = sanitize_for_llm(dict(request.profile_history or {}))
             profile.update(profile_history)
         opportunity = sanitize_for_llm(dict(request.opportunity_snapshot))
+        if self._prompt.omits_evidence_refs:
+            profile = without_evidence_refs(profile)
+            opportunity = without_evidence_refs(opportunity)
 
         def render(text: str, cut: bool, context: Sequence[Mapping[str, Any]]) -> str:
             return self._user_content(
