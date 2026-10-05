@@ -365,6 +365,64 @@ def test_only_configured_verdicts_are_queued() -> None:
         assert queued.isdisjoint(ignored.values())
 
 
+def _opportunity(session: Session, *, role_family: str) -> OpportunityModel:
+    opportunity = OpportunityModel(
+        fingerprint=uuid4().hex,
+        fingerprint_version="v1",
+        canonical_title="Analyst",
+        normalized_title="analyst",
+        work_mode="REMOTE",
+        seniority="MID",
+        contract_type="FULL_TIME",
+        lifecycle_status="ACTIVE",
+        version=1,
+        published_at=datetime.now(UTC),
+        role_family=role_family,
+    )
+    session.add(opportunity)
+    session.flush()
+    return opportunity
+
+
+def test_the_queue_keeps_to_the_requested_role_families() -> None:
+    with _session() as session:
+        inside = _seed_assessment(
+            session, opportunity=_opportunity(session, role_family="DATA")
+        )
+        outside = _seed_assessment(
+            session, opportunity=_opportunity(session, role_family="SALES")
+        )
+        repository = SqlAlchemyMatchingRepository(session)
+        now = datetime.now(UTC)
+
+        def queued(role_families: tuple[str, ...]) -> set[UUID]:
+            return set(
+                repository.pending_analysis_ids(
+                    eligible_verdicts=DEFAULT_ANALYSIS_VERDICTS,
+                    limit=1_000_000,
+                    now=now,
+                    cooldown=timedelta(hours=1),
+                    attempt_window=timedelta(hours=24),
+                    max_attempts=3,
+                    role_families=role_families,
+                )
+            )
+
+        targeted = queued(("DATA",))
+
+        assert inside in targeted
+        assert outside not in targeted
+        assert {inside, outside} <= queued(())
+        assert repository.count_pending_analysis(
+            eligible_verdicts=DEFAULT_ANALYSIS_VERDICTS,
+            now=now,
+            cooldown=timedelta(hours=1),
+            attempt_window=timedelta(hours=24),
+            max_attempts=3,
+            role_families=("DATA",),
+        ) == len(targeted)
+
+
 def test_the_queue_serves_the_most_valuable_verdict_first_then_the_newest_posting() -> None:
     now = datetime.now(UTC)
     with _session() as session:

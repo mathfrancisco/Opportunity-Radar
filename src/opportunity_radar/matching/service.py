@@ -434,6 +434,7 @@ class MatchingService:
                 attempt_window=attempt_window,
                 max_attempts=max_attempts,
                 aging_sample_ratio=aging_sample_ratio,
+                role_families=self._target_role_families(),
             )
         )
 
@@ -452,7 +453,16 @@ class MatchingService:
             cooldown=cooldown,
             attempt_window=attempt_window,
             max_attempts=max_attempts,
+            role_families=self._target_role_families(),
         )
+
+    def _target_role_families(self) -> tuple[str, ...]:
+        """Areas the active profile declared; empty (no restriction) when it declared none."""
+        try:
+            profile = ProfileService(self.session).get_active()
+        except ProfileNotFoundError:
+            return ()
+        return tuple(profile.snapshot.preferences.target_role_families)
 
     def latest_analysis(self, assessment_id: UUID) -> MatchAnalysisModel | None:
         return self.repository.latest_analysis(assessment_id)

@@ -34,7 +34,9 @@ class Settings(BaseSettings):
     # capped well below the evaluation batch: analysis falls behind on purpose, never the
     # rules.
     worker_analyze_batch_size: int = 10
-    worker_analyze_verdicts: str = "HIGH_PRIORITY,RECOMMENDED,WATCHLIST,REVIEW_REQUIRED"
+    # The day's token budget covers about a hundred analyses, so the queue takes only the
+    # verdicts worth acting on; any other posting is analysed on demand from its page.
+    worker_analyze_verdicts: str = "HIGH_PRIORITY,RECOMMENDED"
     # Fraction of the worker's batch reserved for eligible assessments the value ranking
     # (score, company priority, freshness) would otherwise never reach, to measure funnel
     # losses instead of only ever spending the model on what already ranks highest (SPEC
