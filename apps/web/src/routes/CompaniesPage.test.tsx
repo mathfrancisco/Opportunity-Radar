@@ -33,7 +33,7 @@ function company(index: number, overrides: Record<string, unknown> = {}) {
     domain: `empresa${index}.com`,
     priority: 'high',
     status: 'active',
-    verification_state: 'VERIFIED',
+    verification_state: 'careers_confirmed',
     sources: [],
     ...overrides,
   }
@@ -80,7 +80,7 @@ describe('CompaniesPage', () => {
     expect(rows).toHaveLength(3)
     expect(rows[0].querySelector('a')?.getAttribute('href')).toBe('/companies/company-1')
     const chips = [...rows[0].querySelectorAll('span.rounded-chip')].map((chip) => chip.textContent)
-    expect(chips).toEqual(['Alta', 'Ativa', 'Verificada'])
+    expect(chips).toEqual(['Alta', 'Ativa', 'Carreiras confirmadas'])
     expect(rows[0].textContent).toContain('Nenhuma fonte cadastrada')
     expect(container.textContent).toContain('3 empresas encontradas.')
   })
@@ -220,9 +220,12 @@ describe('CompaniesPage', () => {
     expect([...(status?.options ?? [])].map((option) => option.value)).toContain('backlog')
     expect([...(verification?.options ?? [])].map((option) => option.value)).toEqual([
       '',
+      'api_json_confirmed',
       'ats_identified',
       'careers_confirmed',
+      'research_recorded',
       'backlog',
+      'unverified',
     ])
 
     const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
@@ -232,6 +235,23 @@ describe('CompaniesPage', () => {
     })
     await flush()
     expect(container.querySelectorAll('tbody tr')).toHaveLength(2)
+  })
+
+  it('mostra os estados de verificação provenientes da API', async () => {
+    stubCompanies(1, { verification_state: 'api_json_confirmed' })
+    const container = renderPage(<CompaniesPage />)
+    await flush()
+
+    expect(container.textContent).toContain('API JSON confirmada')
+
+    const verification = container.querySelector<HTMLSelectElement>('#company-verification')
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+    act(() => {
+      setter?.call(verification, 'unverified')
+      verification?.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await flush()
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(0)
   })
 
   it('abaixo de md mostra cartões, sem tabela, com a mesma paginação', async () => {

@@ -35,13 +35,11 @@ const statusLabels: Record<string, string> = {
 }
 
 const verificationLabels: Record<string, string> = {
-  VERIFIED: 'Verificada',
-  PENDING: 'Pendente',
-  UNVERIFIED: 'Não verificada',
-  unknown: 'Não informada',
+  api_json_confirmed: 'API JSON confirmada',
   unverified: 'Não verificada',
   ats_identified: 'ATS identificado',
   careers_confirmed: 'Carreiras confirmadas',
+  research_recorded: 'Pesquisa registrada',
   backlog: 'Em fila de homologação',
 }
 
@@ -274,9 +272,12 @@ export function CompaniesPage() {
           value={verification}
         >
           <option value="">Qualquer verificação</option>
+          <option value="api_json_confirmed">API JSON confirmada</option>
           <option value="ats_identified">ATS identificado</option>
           <option value="careers_confirmed">Carreiras confirmadas</option>
+          <option value="research_recorded">Pesquisa registrada</option>
           <option value="backlog">Em fila de homologação</option>
+          <option value="unverified">Não verificada</option>
         </select>
         {hasLocalFilters && (
           <Button
