@@ -130,12 +130,12 @@ class Settings(BaseSettings):
     tavily_credit_budget_per_run: int = 100
     # F48-08: source types whose items never go through Tavily `/extract` (comma
     # separated). Workday pages are JS-rendered: every call failed and burned credits.
-    extraction_skip_source_types: str = "workday"
+    extraction_skip_source_types: str = "workday,inhire"
     # F48-08: stop extracting for a host after this many consecutive failures (0 = off).
     tavily_extract_host_failure_threshold: int = 5
     # F48-08: request ceiling per source type for a new host budget row, `type=ceiling`
     # comma separated. Types not listed use the scheduler default (200 per hour).
-    host_request_ceilings: str = "workday=500,hacker_news=500"
+    host_request_ceilings: str = "workday=500,hacker_news=500,inhire=300"
 
     @property
     def extraction_skip_source_type_set(self) -> frozenset[str]:

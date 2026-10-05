@@ -128,3 +128,18 @@ def test_registration_rejects_invalid_factorial_identifier() -> None:
             "found in careers footer",
         )
     assert error.value.field == "external_key"
+
+
+def test_registration_accepts_inhire_source_type_and_rejects_header_injection() -> None:
+    assert "inhire" in SUPPORTED_ATS
+    values = _source_values(
+        "inhire", "https://gx2.inhire.app/vagas", "gx2", "found in careers footer"
+    )
+    assert values["source_type"] == "inhire"
+    assert values["external_key"] == "gx2"
+    for bad in ("GX2", "gx2.inhire.app", "gx2\r\nX-Evil: 1", "gx2/vagas"):
+        with pytest.raises(CompanyRegistrationError) as error:
+            _source_values(
+                "inhire", "https://gx2.inhire.app/vagas", bad, "found in careers footer"
+            )
+        assert error.value.field == "external_key"

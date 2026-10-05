@@ -47,6 +47,7 @@ from opportunity_radar.acquisition.forbidden import (
 )
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.hacker_news import DISCOVERY_VIA as HN_DISCOVERY_VIA
+from opportunity_radar.acquisition.inhire import InhireCollector
 from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.models import (
     RawItemModel,
@@ -110,6 +111,8 @@ _PROVIDER_HOST_BY_SOURCE_TYPE: dict[str, str] = {
     "remotive": "remotive.com",
     "hacker_news": "hacker-news.firebaseio.com",
     "tavily_search": "api.tavily.com",
+    # One API host for every tenant, so tenants share one budget bucket (terms review).
+    "inhire": "api.inhire.app",
 }
 
 
@@ -123,7 +126,18 @@ _HOST_KEY_MAX_LENGTH = 255
 #: Request ceiling a new host budget row gets, per source_type (F48-08). A Workday tenant
 #: needs ~1 request per 20 postings, so one large board fits its own bucket. Overridable
 #: through `Settings.host_request_ceilings`; a persisted row keeps the ceiling it has.
-DEFAULT_HOST_CEILING_BY_SOURCE_TYPE: dict[str, int] = {"workday": 500, "hacker_news": 500}
+DEFAULT_HOST_CEILING_BY_SOURCE_TYPE: dict[str, int] = {
+    "workday": 500,
+    "hacker_news": 500,
+    "inhire": 300,
+}
+
+#: Rate-limit policy a source type gets when its own `rate_limit_policy` sets neither
+#: `minimum_interval_seconds` nor `requests_per_second`. inHire: at most one request per second
+#: (docs/pesquisas/termos-inhire.md, "Condições para operar").
+DEFAULT_RATE_LIMIT_POLICY_BY_SOURCE_TYPE: dict[str, dict[str, Any]] = {
+    "inhire": {"requests_per_second": 1}
+}
 
 
 def _host_for_source_type(source_type: str) -> str:
@@ -337,7 +351,9 @@ class AcquisitionService:
             refuse_forbidden(source_configuration)
         source_rate_limit_policy = dict(rate_limit_policy or {})
         with _refusing_field("rate_limit_policy"):
-            resolved_network_policy = _network_policy(source_rate_limit_policy)
+            resolved_network_policy = _source_network_policy(
+                normalized_type, source_rate_limit_policy
+            )
         if schedule is None and company_source_id is not None:
             schedule = self._default_schedule(company_source_id, resolved_network_policy)
         if normalized_type == "ashby":
@@ -363,7 +379,14 @@ class AcquisitionService:
                 )
         if normalized_type == "workday":
             with _refusing_field("configuration"):
-                _workday_detail_settings(source_configuration)
+                _detail_settings(source_configuration, "workday")
+        if normalized_type == "inhire":
+            with _refusing_field("configuration.tenant_identifier"):
+                InhireCollector.validate_tenant_identifier(
+                    _required_string(source_configuration, "tenant_identifier")
+                )
+            with _refusing_field("configuration"):
+                _detail_settings(source_configuration, "inhire", default_fetch_detail=True)
         if (
             enabled
             and normalized_type != "manual"
@@ -911,7 +934,7 @@ class AcquisitionService:
                 "an enabled source is proven by its own runs; disable it before probing",
                 field="enabled",
             )
-        network_policy = _network_policy(source.rate_limit_policy or {})
+        network_policy = _source_network_policy(source.source_type, source.rate_limit_policy)
         wait = self._probe_wait(source, network_policy)
         if wait > 0:
             self.session.rollback()
@@ -1044,7 +1067,7 @@ class AcquisitionService:
         throttle the job honours and the throttle `execute` enforces come from the same
         reader, and cannot disagree.
         """
-        policy = _network_policy(source.rate_limit_policy or {})
+        policy = _source_network_policy(source.source_type, source.rate_limit_policy)
         host = _budget_host_for_source(source.source_type, source.configuration)
         host_budget_row = self.repository.get_host_budget(host)
         host_budget = (
@@ -1124,7 +1147,7 @@ class AcquisitionService:
                 AcquisitionErrorCode.INVALID_CONFIGURATION,
                 f"{source.source_type} does not support location search",
             )
-        network_policy = _network_policy(source.rate_limit_policy or {})
+        network_policy = _source_network_policy(source.source_type, source.rate_limit_policy)
         run_telemetry = CollectionTelemetry()
 
         # F50-04: items are always counted against the profile's target areas; the filter
@@ -1235,8 +1258,12 @@ class AcquisitionService:
                 raise throttle_error
             company_reference, company_name, api_region = _collector_settings(source)
             fetch_detail, detail_max_requests = (
-                _workday_detail_settings(source.configuration)
+                _detail_settings(source.configuration, source.source_type)
                 if source.source_type == "workday"
+                else _detail_settings(
+                    source.configuration, source.source_type, default_fetch_detail=True
+                )
+                if source.source_type == "inhire"
                 else (request.fetch_detail, request.detail_max_requests)
             )
             collector_request = replace(
@@ -1263,6 +1290,11 @@ class AcquisitionService:
                     self.repository.enabled_ats_boards()
                     if source.source_type == "tavily_search"
                     else request.known_ats_boards
+                ),
+                known_items=(
+                    self.repository.latest_raw_payloads(source.id)
+                    if collector.capabilities.known_items
+                    else request.known_items
                 ),
             )
             async for item in collector.discover(collector_request):
@@ -1855,20 +1887,33 @@ def _optional_string(configuration: Mapping[str, Any], key: str) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
-def _workday_detail_settings(configuration: Mapping[str, Any]) -> tuple[bool, int]:
-    """`fetch_detail` (default off, SPEC 50 Q1) and `detail_max_requests` (default 200)."""
-    fetch_detail = configuration.get("fetch_detail", False)
+def _source_network_policy(
+    source_type: str, policy: Mapping[str, Any] | None
+) -> CollectionNetworkPolicy:
+    """The source's own policy, or the type's default when it sets no request pacing."""
+    own = dict(policy or {})
+    if not {"minimum_interval_seconds", "requests_per_second"} & own.keys():
+        own = {**DEFAULT_RATE_LIMIT_POLICY_BY_SOURCE_TYPE.get(source_type, {}), **own}
+    return _network_policy(own)
+
+
+def _detail_settings(
+    configuration: Mapping[str, Any], source_type: str, *, default_fetch_detail: bool = False
+) -> tuple[bool, int]:
+    """`fetch_detail` (Workday: default off, SPEC 50 Q1; inHire: default on, its detail route
+    is inside the terms review) and `detail_max_requests` (default 200)."""
+    fetch_detail = configuration.get("fetch_detail", default_fetch_detail)
     if not isinstance(fetch_detail, bool):
         raise AcquisitionError(
             AcquisitionErrorCode.INVALID_CONFIGURATION,
-            "workday configuration fetch_detail must be a boolean",
+            f"{source_type} configuration fetch_detail must be a boolean",
             field="configuration.fetch_detail",
         )
     max_requests = configuration.get("detail_max_requests", 200)
     if isinstance(max_requests, bool) or not isinstance(max_requests, int) or max_requests < 0:
         raise AcquisitionError(
             AcquisitionErrorCode.INVALID_CONFIGURATION,
-            "workday configuration detail_max_requests must be a non-negative integer",
+            f"{source_type} configuration detail_max_requests must be a non-negative integer",
             field="configuration.detail_max_requests",
         )
     return fetch_detail, max_requests
@@ -1959,6 +2004,12 @@ def _collector_settings(
     if source.source_type == "teamtailor":
         return (
             _required_string(source.configuration, "company_identifier"),
+            _optional_string(source.configuration, "company_name"),
+            None,
+        )
+    if source.source_type == "inhire":
+        return (
+            _required_string(source.configuration, "tenant_identifier"),
             _optional_string(source.configuration, "company_name"),
             None,
         )

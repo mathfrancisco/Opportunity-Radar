@@ -296,6 +296,7 @@ class OverviewSummary:
 ATS_COLLECTOR_SOURCE_TYPES = (
     "ashby",
     "greenhouse",
+    "inhire",
     "lever",
     "workday",
     "teamtailor",

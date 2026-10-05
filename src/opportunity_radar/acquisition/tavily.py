@@ -66,6 +66,12 @@ _ATS_BOARD_PATTERNS: dict[str, re.Pattern[str]] = {
     "teamtailor": re.compile(
         r"^((?!(?:www|app|career|support)\.)[a-z0-9-]+\.teamtailor\.com)(?:/|$)"
     ),
+    # inHire keys a board by the tenant subdomain (the `X-Tenant` value); the vendor's own
+    # hosts (`api`, `auth`, `embed`, `docs`, `www`, `app`) are not tenants.
+    "inhire": re.compile(
+        r"^((?!(?:www|app|api|auth|embed|docs)\.)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)"
+        r"\.inhire\.app(?:/|$)"
+    ),
 }
 
 
@@ -718,7 +724,7 @@ class TavilyExtractionSettings:
     format: str | None = None
     #: Source types whose items never go through `/extract` (F48-08): Workday pages are
     #: rendered by JavaScript, so every call failed and burned the run's credit budget.
-    skip_source_types: frozenset[str] = frozenset({"workday"})
+    skip_source_types: frozenset[str] = frozenset({"workday", "inhire"})
     #: Stop extracting for a host once this many of its most recent extractions in a row
     #: failed (F48-08). `0` disables the guard.
     host_failure_threshold: int = 0

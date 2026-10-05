@@ -96,6 +96,15 @@ const configFields: Record<SourceType, ConfigField[]> = {
     },
     { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
   ],
+  inhire: [
+    {
+      key: 'tenant_identifier',
+      label: 'Identificador do tenant',
+      required: true,
+      hint: 'O slug em <identificador>.inhire.app: minúsculas, números e hífens (sem https:// nem caminho).',
+    },
+    { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
+  ],
   manual: [],
 }
 
@@ -108,6 +117,7 @@ const typeLabels: Record<SourceType, string> = {
   remotive: 'Remotive',
   teamtailor: 'Teamtailor',
   factorial: 'Factorial',
+  inhire: 'inHire',
   manual: 'Manual (entrada avulsa de vaga)',
 }
 

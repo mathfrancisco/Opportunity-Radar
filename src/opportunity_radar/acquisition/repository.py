@@ -1,6 +1,7 @@
 """Persistence queries for Acquisition."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import case, func, select
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from opportunity_radar.acquisition.models import (
     HostBudgetStateModel,
     RawItemModel,
+    RawItemPayloadModel,
     SourceCheckpointModel,
     SourceDefinitionModel,
     SourceRunModel,
@@ -221,6 +223,25 @@ class AcquisitionRepository:
             .order_by(RawItemModel.fetched_at.desc(), RawItemModel.id.desc())
             .limit(1)
         )
+
+    def latest_raw_payloads(self, source_id: UUID) -> dict[str, dict[str, Any]]:
+        """`external_id -> payload` of each posting's newest evidence that still has a body."""
+        rows = self.session.execute(
+            select(RawItemModel.external_id, RawItemPayloadModel.payload)
+            .join(RawItemPayloadModel, RawItemPayloadModel.raw_item_id == RawItemModel.id)
+            .where(RawItemModel.source_definition_id == source_id)
+            .order_by(
+                RawItemModel.identity_key,
+                RawItemModel.fetched_at.desc(),
+                RawItemModel.id.desc(),
+            )
+            .distinct(RawItemModel.identity_key)
+        )
+        return {
+            external_id: payload
+            for external_id, payload in rows
+            if external_id is not None and payload is not None
+        }
 
     def record_presence_observation(
         self,

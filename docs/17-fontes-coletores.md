@@ -175,6 +175,49 @@ Fontes Workday aceitam `fetch_detail` (booleano, padrão `false`) e `detail_max_
 (descrição) só das vagas nas áreas-alvo do perfil. Deve permanecer desligado até que a
 revisão de termos da fonte cubra o endpoint de detalhe (SPEC 50, Q1).
 
+### 6.2 inHire (`inhire`)
+
+ATS brasileiro; revisão de termos em [`pesquisas/termos-inhire.md`](pesquisas/termos-inhire.md)
+("viável com ressalvas", escopo: o tipo inteiro). Coletor: `acquisition/inhire.py`.
+
+- **Configuração:** `tenant_identifier` (valor do cabeçalho `X-Tenant`, o início de
+  `<tenant>.inhire.app`): uma etiqueta DNS em minúsculas, números e hífens (1 a 63, sem hífen
+  nas pontas); ponto, barra, dois-pontos, espaço, CR/LF e maiúsculas são recusados.
+  Opcionais: `company_name` (senão `tenantName`), `fetch_detail` (padrão `true`) e
+  `detail_max_requests` (padrão 200 por execução).
+- **Rotas (as únicas):** lista `GET https://api.inhire.app/job-posts/public/pages` e detalhe
+  `GET .../pages/<jobId>`, ambas só com `X-Tenant` e o `User-Agent` do produto; sem
+  autenticação, sem `/forms/*`. A lista não pagina (um board de 100 vagas veio inteiro); lista
+  vazia é um board completo e vazio; `404` (`Tenant not found`) é configuração inválida da
+  fonte, não board vazio. Só `status = published` vira vaga; outro valor é pulado e contado.
+- **Limites:** política padrão do tipo de 1 requisição por segundo, em série
+  (`DEFAULT_RATE_LIMIT_POLICY_BY_SOURCE_TYPE`, vale quando a política da fonte não define
+  `minimum_interval_seconds` nem `requests_per_second`); orçamento no host compartilhado
+  `api.inhire.app` (teto padrão 300 por hora). `403`, `401` ou `429`, na lista ou num
+  detalhe, param todas as requisições da execução, sem repetição, e voltam com os códigos
+  `SOURCE_FORBIDDEN`/`SOURCE_UNAUTHORIZED`/`SOURCE_RATE_LIMITED` (as demais vagas saem sem
+  detalhe antes do erro). `5xx` e timeout seguem a política de retentativas.
+- **Detalhe só para vaga nova ou alterada:** a lista não traz `updatedAt`; o serviço entrega
+  ao coletor, em `CollectionRequest.known_items` (capacidade `known_items`), o payload bruto
+  mais recente de cada vaga já guardada. Vaga conhecida com os campos da lista iguais é
+  reemitida a partir do payload guardado (mesmo conteúdo e mesmos hashes: só registra
+  presença, sem nova versão e sem requisição). Uma segunda execução sem mudanças faz zero
+  chamadas de detalhe. Teto por execução (`detail_max_requests`) e orçamento do host como no
+  Workday: o que passar do limite sai só com a lista, conta em `detail_skipped`, e a execução
+  continua bem-sucedida; vaga já guardada com detalhe que não pôde ser atualizada sai como
+  está guardada, nunca com a descrição apagada. Limitação: uma edição só da descrição, sem
+  mudar título, local ou modelo de atuação, não é percebida (a lista não a mostra).
+- **Guardado:** `jobId`, `displayName`, `status`, `workplaceType`, `location`, e do detalhe
+  `description` (HTML), `contractType`, `publishedAt`, `lastPublishedAt`. **Descartado, nem no
+  `raw_payload`:** `settings.*`, `activeJobBoards`, `jobBoardsData`, `privacyPolicyUrl`,
+  `about`, `background`, `logo`, `banner*`, `locationComplement`, `salaryCurrency`, datas
+  internas (`createdAt`, `updatedAt`) e qualquer dado de formulário.
+- **Sinais para o normalizador:** `workplaceType` (`Remote`, `Hybrid`, `On-site`) vai em
+  `metadata.workplace_type`; `contractType` vai em `metadata.contract_type`, com `CLT` como
+  `full-time` e `PJ` como `contract`; valores desconhecidos passam como texto e ficam
+  `UNKNOWN`. Link da vaga: `https://<tenant>.inhire.app/vagas/<jobId>`.
+- A descrição vem do detalhe, então o tipo fica em `EXTRACTION_SKIP_SOURCE_TYPES`.
+
 ---
 
 ## 7. `CompanySource`

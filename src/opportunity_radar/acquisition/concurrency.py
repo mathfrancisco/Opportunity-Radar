@@ -54,7 +54,7 @@ class HostSerializer:
 #: or query rather than a per-tenant subdomain — every configured source of that type
 #: hits the same host, so keying on `source_type` alone is exact.
 _SHARED_HOST_TYPES = frozenset(
-    {"ashby", "lever", "greenhouse", "workable", "remotive", "hacker_news"}
+    {"ashby", "lever", "greenhouse", "workable", "remotive", "hacker_news", "inhire"}
 )
 #: Which configuration field(s) identify the tenant-specific host for a source type whose
 #: provider host differs per source (a subdomain or tenant path).

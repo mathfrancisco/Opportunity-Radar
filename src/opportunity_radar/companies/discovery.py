@@ -40,6 +40,7 @@ ATS_SIGNATURES: dict[str, tuple[str, ...]] = {
     "workable": ("apply.workable.com",),
     "workday": (".myworkdayjobs.com",),
     "factorial": (".factorialhr.com",),
+    "inhire": (".inhire.app",),
 }
 
 #: A company already checked within this many days is not checked again (SPEC 43).

@@ -104,6 +104,8 @@ class CollectorCapabilities:
     authentication: bool = False
     pagination: bool = False
     direct_input: bool = False
+    #: The collector reads `CollectionRequest.known_items` to skip per-item work it already did.
+    known_items: bool = False
 
 
 class CollectionMode(StrEnum):
@@ -327,6 +329,14 @@ class CollectionRequest:
     #: Requests the shared host budget still allows at the start of the run, when the
     #: service knows it (F20-38). `None` means no persisted budget, so only the cap applies.
     host_requests_remaining: int | None = None
+    #: What the source already stores, `external_id -> raw payload` of each job's newest
+    #: evidence, set by `AcquisitionService` only for collectors with
+    #: `CollectorCapabilities.known_items` (inHire). Lets a collector fetch per-item detail
+    #: only for new or changed jobs and re-emit the unchanged ones identically. `None` means
+    #: nothing is known, so every item is treated as new.
+    known_items: Mapping[str, Mapping[str, Any]] | None = field(
+        default=None, compare=False, repr=False
+    )
 
     def __post_init__(self) -> None:
         if self.max_items is not None and self.max_items < 1:
