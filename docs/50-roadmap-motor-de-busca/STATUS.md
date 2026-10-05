@@ -4,7 +4,7 @@
 - **Branch:** `f50-motor-de-busca`, criada de `75d688b`. Nada foi enviado ao remoto nem aplicado
   na stack `spec46full`.
 - **Verificação:** suíte completa com integração em banco `_test` descartável:
-  `1579 passed, 10 skipped`, sem o arquivo de teste do F50-08, que depende da migração
+  `1585 passed, 10 skipped`, sem o arquivo de teste do F50-08, que depende da migração
   bloqueada. Ida e volta da migração `20261005_0063`, `ruff check .`, `mypy` e
   `export_prompt_schema.py --check` sem erros.
 
@@ -62,9 +62,11 @@ Com a migração no lugar, ainda falta:
 ## Pontos abertos por card
 
 **F50-02**
-- O script de reclassificação não recalcula o `fingerprint`, que inclui modo de trabalho. Na
-  normalização seguinte do item a vaga ganha um segundo incremento de versão, e pode cair em
-  revisão se outra vaga já tiver a identidade nova. Corrigir antes de usar `--apply`.
+- O script de reclassificação move o `fingerprint` junto com o modo de trabalho. Se outra
+  vaga já tiver a identidade nova, o modo de trabalho daquela vaga fica como estava e o caso
+  sai em `fingerprint_collisions` no relatório; o script não mescla nem cria revisão.
+- O `fingerprint` novo vem da evidência bruta, não dos campos gravados. Se título ou empresa
+  gravados estiverem defasados em relação à evidência, a identidade segue a evidência.
 - Sem teste para o escopo padrão a partir das áreas-alvo do perfil ativo.
 
 **F50-03**
@@ -107,8 +109,6 @@ Com a migração no lugar, ainda falta:
 **F50-10**
 - `connect_args` com `options` sobrescreve um `options=` que já esteja na `DATABASE_URL`, e
   um pooler em modo transação pode recusar esse parâmetro.
-- O tratador de `DBAPIError` pega todo erro de banco que escapa de uma rota e devolve 500 em
-  JSON. Antes, esses erros subiam pelo Starlette.
 - Página vazia do Inbox usa uma segunda consulta para os totais.
 - A API passa a ter um segundo pool de conexões, ao lado do que o adapter de análise usa.
 
@@ -130,7 +130,8 @@ Com a migração no lugar, ainda falta:
 ## Antes do deploy
 
 1. Resolver o F50-08: criar a migração `0064` e concluir, ou tirar o job da branch.
-2. Corrigir o `fingerprint` no script do F50-02 antes de qualquer `--apply`.
+2. Rodar `scripts/reclassify_content.py` em dry-run e ler `fingerprint_collisions` antes de
+   qualquer `--apply`.
 3. Aplicar as migrações `0062` e `0063`. A `0063` faz o backfill dos ponteiros.
 4. Esperar uma reavaliação completa do catálogo (taxonomia e regras mudaram).
 5. Depois de três execuções completas por fonte, repetir as consultas do §2 da spec e
