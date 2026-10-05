@@ -11,7 +11,6 @@ import pytest
 from opportunity_radar.matching.analysis import (
     ANALYSIS_SCHEMA_V3,
     V3_MAX_ITEMS,
-    AnalysisError,
     AnalysisRequest,
     analysis_key,
     parse_analysis,
@@ -84,19 +83,28 @@ def test_v3_payload_has_no_evidence_refs_and_v1_is_unchanged() -> None:
     assert set(v1.payload) == set(v3.payload)
 
 
-def test_v3_schema_accepts_the_cap_and_rejects_one_over() -> None:
+def test_v3_accepts_the_cap_and_truncates_one_over_instead_of_failing() -> None:
     for name, cap in V3_MAX_ITEMS.items():
         at_cap = parse_analysis(
             _output(**{name: cap}), model_id="m", prompt_version="v3",
             schema_version=ANALYSIS_SCHEMA_V3,
         )
+        over = parse_analysis(
+            _output(**{name: cap + 3}), model_id="m", prompt_version="v3",
+            schema_version=ANALYSIS_SCHEMA_V3,
+        )
         assert len(getattr(at_cap, name)) == cap
-        with pytest.raises(AnalysisError):
-            parse_analysis(
-                _output(**{name: cap + 1}), model_id="m", prompt_version="v3",
-                schema_version=ANALYSIS_SCHEMA_V3,
-            )
+        # The model cannot be forced to respect the cap: the first `cap` items are kept.
+        assert getattr(over, name) == getattr(at_cap, name)
     assert load_prompt("v3").output_schema["properties"]["risks"]["maxItems"] == 5
+
+
+def test_v1_still_accepts_more_items_than_the_v3_cap() -> None:
+    analysis = parse_analysis(
+        _output(risks=6), model_id="m", prompt_version="v1", schema_version="analysis-v1"
+    )
+
+    assert len(analysis.risks) == 6
 
 
 def test_v3_estimated_input_tokens_are_lower_than_v1() -> None:
@@ -115,12 +123,13 @@ def test_v3_estimated_input_tokens_are_lower_than_v1() -> None:
 
 
 def test_output_ceiling_only_changes_for_v3() -> None:
+    # 600 failed against Groq: reasoning tokens count and one call used 584 of them.
     ceiling = {
         name: default_routes(_settings(name))[AITask.JOB_MATCH].budget.max_output_tokens
         for name in ("v1", "v2", "v3")
     }
 
-    assert ceiling == {"v1": 900, "v2": 900, "v3": 600}
+    assert ceiling == {"v1": 900, "v2": 900, "v3": 800}
 
 
 def _request() -> AnalysisRequest:

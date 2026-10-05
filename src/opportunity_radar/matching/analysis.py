@@ -437,7 +437,13 @@ def parse_analysis(
         if with_claims and name in _CLAIM_FIELDS:
             items[name] = _claim_list(payload[name], name, evidence_sources or {})
         else:
-            items[name] = _string_list(payload[name], name, schema["properties"][name]["maxItems"])
+            cap = schema["properties"][name]["maxItems"]
+            value = payload[name]
+            if schema_version == ANALYSIS_SCHEMA_V3 and isinstance(value, list):
+                # The model cannot be forced to respect a cap, and an answer one item
+                # over it is still a good answer: keep the first `cap` items.
+                value = value[:cap]
+            items[name] = _string_list(value, name, cap)
     return SemanticAnalysis(
         summary=summary.strip(),
         strengths=items["strengths"],

@@ -61,7 +61,11 @@ def _effort_for(settings: Settings, task: AITask) -> str:
 
 #: Output ceiling of `job_match` under the analysis prompts whose schema caps each list
 #: (card F50-09); every other prompt keeps the default below.
-_JOB_MATCH_OUTPUT_BY_PROMPT = {"v3": 600}
+#: Groq counts reasoning tokens in the ceiling and rejects an answer that hits it with a 400
+#: (`max completion tokens reached before generating a valid document`). A v3 call on
+#: openai/gpt-oss-120b produced 584 completion tokens, 125 of them reasoning; a 600
+#: ceiling failed in production, so this keeps real headroom above that.
+_JOB_MATCH_OUTPUT_BY_PROMPT = {"v3": 800}
 
 
 def default_routes(settings: Settings) -> dict[AITask, ModelRoute]:
