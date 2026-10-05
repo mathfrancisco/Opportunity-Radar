@@ -301,7 +301,7 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
       <ul className="grid gap-3">
         {opportunity.occurrences.map((occurrence) => (
           <Card as="li" className="text-sm" key={occurrence.id}>
-            <p className="font-medium">
+            <p className="break-anywhere font-medium">
               {occurrence.sourceUrl ? (
                 <a
                   className="break-anywhere underline decoration-accent decoration-2 underline-offset-4"

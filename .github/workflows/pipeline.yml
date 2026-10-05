@@ -207,7 +207,9 @@ jobs:
             python -c "import json,sys; from decimal import Decimal; data=json.load(sys.stdin); assert data['total'] == 1; item=data['items'][0]; assert item['fingerprint_version'] == 'v1'; assert item['work_mode'] == 'REMOTE'; assert item['seniority'] == 'SENIOR'; assert item['contract_type'] == 'FULL_TIME'; assert len(item['compensations']) == 2; assert all(Decimal(value['minimum']) == Decimal('100000') and value['currency'] == 'USD' for value in item['compensations']); assert {skill['canonical_name'] for skill in item['skills']} == {'python', 'react'}; assert all(skill['taxonomy_version'] == 'skills-v4' for skill in item['skills']); assert len(item['occurrences']) == 2"
       - name: Verify deterministic matching through the public API
         run: |
-          profile_lock="$(curl --fail --silent http://127.0.0.1:3000/api/profile | python -c "import json,sys; print(json.load(sys.stdin)['profile_lock_version'])")"
+          # A fresh database has no profile yet (GET /profile answers 404), so the first
+          # write is made against lock 0.
+          profile_lock=0
           profile_payload="{\"expected_profile_version\":$profile_lock,\"skills\":[{\"canonical_name\":\"python\"},{\"canonical_name\":\"react\"}],\"preferences\":{\"work_modes\":[\"REMOTE\"],\"contracts\":[\"FULL_TIME\"],\"countries\":[\"BR\"],\"compensation_min\":100000,\"compensation_currency\":\"USD\",\"compensation_period\":\"YEAR\"}}"
           profile_draft="$(curl --fail --silent --json "$profile_payload" http://127.0.0.1:3000/api/profile/versions)"
           profile_id="$(python -c "import json,sys; print(json.load(sys.stdin)['id'])" <<< "$profile_draft")"
@@ -219,7 +221,7 @@ jobs:
           opportunity_id="$(curl --fail --silent http://127.0.0.1:3000/api/opportunities | python -c "import json,sys; print(json.load(sys.stdin)['items'][0]['id'])")"
           match_payload="{\"opportunity_id\":\"$opportunity_id\"}"
           first_match="$(curl --fail --silent --json "$match_payload" http://127.0.0.1:3000/api/matches/evaluate)"
-          first_match_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['rules_version'] == 'matching-v1'; assert data['taxonomy_version'] == 'skills-v4'; assert data['eligibility'] == 'UNKNOWN'; assert data['verdict'] == 'REVIEW_REQUIRED'; assert len(data['input_hash']) == 64; assert len(data['eligibility_details']) == 7; assert len(data['factors']) == 8; print(data['id'])" <<< "$first_match")"
+          first_match_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['rules_version'] == 'matching-v3'; assert data['taxonomy_version'] == 'skills-v4'; assert data['eligibility'] == 'ELIGIBLE'; assert data['verdict'] == 'RECOMMENDED'; assert len(data['input_hash']) == 64; assert len(data['eligibility_details']) == 7; assert len(data['factors']) == 8; print(data['id'])" <<< "$first_match")"
           second_match_id="$(curl --fail --silent --json "$match_payload" http://127.0.0.1:3000/api/matches/evaluate | python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
           test "$first_match_id" = "$second_match_id"
           curl --fail --silent "http://127.0.0.1:3000/api/matches?opportunity_id=$opportunity_id" | \
@@ -234,7 +236,7 @@ jobs:
           curl --fail --retry 10 --retry-all-errors --retry-delay 3 --silent --request POST "http://127.0.0.1:3000/api/matches/$MATCH_ID/analysis" | \
             python -c "import json,sys; assert json.load(sys.stdin)['id'] == '$first_analysis_id'"
           curl --fail --silent "http://127.0.0.1:3000/api/matches/$MATCH_ID" | \
-            python -c "import json,sys; data=json.load(sys.stdin); assert data['verdict'] == 'REVIEW_REQUIRED'; assert data['eligibility'] == 'UNKNOWN'; assert len(data['factors']) == 8; assert data['analysis']['id'] == '$first_analysis_id'; assert data['analysis']['status'] == 'AI_COMPLETED'"
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['verdict'] == 'RECOMMENDED'; assert data['eligibility'] == 'ELIGIBLE'; assert len(data['factors']) == 8; assert data['analysis']['id'] == '$first_analysis_id'; assert data['analysis']['status'] == 'AI_COMPLETED'"
           unknown_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST \
             http://127.0.0.1:3000/api/matches/00000000-0000-0000-0000-000000000000/analysis)"
           test "$unknown_status" = "404"
@@ -244,9 +246,9 @@ jobs:
       - name: Verify the dashboard read models
         run: |
           curl --fail --silent http://127.0.0.1:3000/api/overview | \
-            python -c "import json,sys; data=json.load(sys.stdin); assert data['opportunities_total'] == 1; assert data['assessed_opportunities'] == 1; assert data['verdict_counts']['REVIEW_REQUIRED'] == 1; assert data['analyses_degraded'] == 0; assert data['sources_total'] == 17; assert data['sources_failing'] == 0; assert data['pending_normalizations'] == 0; assert data['applications_active'] == 0; assert data['applications_by_stage'] == {}; assert data['follow_ups_due'] == 0"
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['opportunities_total'] == 1; assert data['assessed_opportunities'] == 1; assert data['verdict_counts']['RECOMMENDED'] == 1; assert data['analyses_degraded'] == 0; assert data['sources_total'] == 17; assert data['sources_failing'] == 0; assert data['pending_normalizations'] == 0; assert data['applications_active'] == 0; assert data['applications_by_stage'] == {}; assert data['follow_ups_due'] == 0"
           curl --fail --silent 'http://127.0.0.1:3000/api/inbox?order=score' | \
-            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 1; assert data['order'] == 'score'; item=data['items'][0]; assert item['verdict'] == 'REVIEW_REQUIRED'; assert item['analysis_status'] == 'AI_COMPLETED'; assert item['company_name'] == 'Example'; assert float(item['score']) >= 0"
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 1; assert data['order'] == 'score'; item=data['items'][0]; assert item['verdict'] == 'RECOMMENDED'; assert item['analysis_status'] == 'AI_COMPLETED'; assert item['company_name'] == 'Example'; assert float(item['score']) >= 0"
           curl --fail --silent 'http://127.0.0.1:3000/api/inbox?only_assessed=true' | \
             python -c "import json,sys; assert json.load(sys.stdin)['total'] == 1"
           curl --fail --silent 'http://127.0.0.1:3000/api/inbox?verdict=HIGH_PRIORITY' | \
