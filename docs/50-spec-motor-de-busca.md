@@ -1,7 +1,8 @@
 # SPEC — Motor de busca e análise: vagas classificadas, menos ruído, menos IA (cards F50)
 
-- **Status:** Planejada. Nenhum card abaixo está feito. As correções já entregues nesta
-  rodada estão no §2 e não fazem parte do escopo.
+- **Status:** Em implementação na branch `f50-motor-de-busca`, ainda sem deploy. O estado de
+  cada card está em [STATUS](50-roadmap-motor-de-busca/STATUS.md). As correções entregues
+  antes desta spec estão no §2 e não fazem parte do escopo.
 - **Data:** 2026-10-05
 - **Base verificada:** branch `spec-46-redesign-ui` (`75d688b`) e o banco da stack
   `spec46full` (volume `opportunity-radar-recovery-a7a43`), lido em 2026-10-05 entre 01:00Z e
@@ -43,6 +44,19 @@ se candidatar. Hoje o catálogo tem 25 mil vagas e o motor não consegue dizer, 
 
 As metas de preenchimento são propostas; o card F50-01 mede a linha de base por fonte antes
 de qualquer mudança e ajusta as metas se o gold set mostrar que são inalcançáveis.
+
+**Revisão de 2026-10-05.** A coluna "Hoje" continua valendo: o código da branch não foi
+aplicado na stack, então nenhuma métrica mudou. O que as medições já dizem sobre as metas:
+
+- `allowed_countries` ≥ 60% não é alcançável com as regras atuais. Elas cobrem 11,5% das
+  vagas com descrição
+  ([linha de base](pesquisas/f50-01-linha-de-base-classificacao.md)). A meta fica em aberto
+  até o gold rotulado existir.
+- `seniority` ≥ 70% é alcançável (62,2% de cobertura); `work_mode` ≥ 70% é incerta (39,3%).
+- Elegibilidade decidida ≥ 50% não sai só do F50-06: depois dele, quem segura a elegibilidade
+  é senioridade e contrato desconhecidos. Contrato ficou fora da Q3.
+- A skill `ai` cai de 40% para 24,1% do catálogo com a taxonomia `skills-v4`, acima da meta
+  de 15%.
 
 ---
 
@@ -284,6 +298,11 @@ Ordem de execução no §4. Cada card é entregue sozinho, com teste, e medido c
   2026-09-25 e decidir (Q4) se volta. Se voltar, gerar embeddings só para as áreas-alvo.
 - **Aceite:** decisão registrada; se ligado, ≥ 95% das vagas das áreas-alvo com embedding.
 - **Esforço / risco:** P para investigar; o resto depende da Q4.
+- **Decisão (2026-10-05):** o job não parou por falha. Ele foi removido de propósito no
+  commit `9f54964` (F20-05), porque o Groq não oferece modelo de embedding
+  ([SPEC 43 §9](43-spec-llm-cloud-e-consolidacao.md)). A tabela `opportunity_embedding` e a
+  extensão pgvector ficaram. Q4 respondida: embeddings continuam desligados. Voltar exige um
+  provedor de embedding aprovado e um adapter novo.
 
 ### F50-12 — Pendências de dados
 

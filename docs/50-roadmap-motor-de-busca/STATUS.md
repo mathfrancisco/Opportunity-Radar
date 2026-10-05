@@ -4,35 +4,75 @@
 - **Branch:** `f50-motor-de-busca`, criada de `75d688b`. Nada foi enviado ao remoto nem aplicado
   na stack `spec46full`.
 - **Verificação:** suíte completa com integração em banco `_test` descartável:
-  `1498 passed, 10 skipped`. `ruff check .`, `mypy` e `export_prompt_schema.py --check` sem erros.
+  `1579 passed, 10 skipped`, sem o arquivo de teste do F50-08, que depende da migração
+  bloqueada. Ida e volta da migração `20261005_0063`, `ruff check .`, `mypy` e
+  `export_prompt_schema.py --check` sem erros.
 
 ## Decisões do dono (2026-10-05)
 
-- **Q1:** detalhe do Workday não revisado; adiado.
+- **Q1:** detalhe do Workday não revisado; construído atrás de flag por fonte, desligada.
 - **Q2:** piso de 30%, medido nas três últimas execuções completas.
 - **Q3:** sim, como na spec. Fuso e autorização de trabalho viram `NOT_APPLICABLE`; país
   desconhecido só bloqueia se o perfil marcar `sponsorship_required`.
-- **Q4:** embeddings só investigados; o job continua desligado.
+- **Q4:** embeddings continuam desligados (registro no card F50-11 da spec).
 - **Q5:** áreas-alvo `SOFTWARE_ENGINEERING` e `DATA`, contrato `full-time`.
+- **F50-08:** liberar `DELETE` de avaliações para o job de poda foi aprovado.
+- **F50-12.3:** gravar a vaga concorrente no motivo de revisão foi aprovado.
 
 ## Cards
 
 | Card | Estado | Commit | Falta |
 |---|---|---|---|
 | F50-01 | Script e linha de base entregues | `06199c0`, `55a5adf` | Gold rotulado por pessoa: 200 vagas, 50 por fonte. Precisão não medida. |
-| F50-02 | Não iniciado | — | Bloqueado pelo gold. Mecânica a fazer: ligar por regra e reclassificar em lote. |
-| F50-03 | Adiado (Q1) | — | A classificação pelo título na coleta entrou com o F50-04. |
+| F50-02 | Mecânica entregue, nada ligado | `846fd74` | Gold passar no portão; depois preencher `GATED_RULES`, ligar as regras e reclassificar. |
+| F50-03 | Entregue atrás de flag desligada | `8e8b82b` | Revisão de termos por fonte; captura real da resposta de detalhe. |
 | F50-04 | Entregue | `6e85c93` | Medir o aceite depois de três execuções completas por fonte. |
-| F50-05 | Entregue | `3248382` | `ai` medido em 24,1% do catálogo, contra a meta de menos de 15%. Amostra rotulada de 100 vagas. |
-| F50-06 | Não iniciado | — | Decisão Q3 tomada. Incrementa `RULES_VERSION`. |
+| F50-05 | Entregue | `3248382` | `ai` em 24,1% do catálogo, contra a meta de menos de 15%. Amostra rotulada de 100 vagas. |
+| F50-06 | Entregue | `954cdf0` | Aceite de 50% não sai só daqui: contrato e senioridade desconhecidos ainda seguram. |
 | F50-07 | Entregue | `bce10f6` | `EXPLAIN ANALYZE` da fila em base de produção. |
-| F50-08 | Não iniciado | — | Depende do F50-07, já entregue. |
+| F50-08 | **Bloqueado**, sem commit | — | Migração `20261005_0064` recusada pelo sistema de permissões. Ver abaixo. |
 | F50-09 | Entregue como `v3`, desligado | `bc6a4a3` | Rodar a avaliação `v1` contra `v3` no Groq e trocar `AI_ANALYSIS_PROMPT`. |
-| F50-10 | Não iniciado | — | Depende do F50-07, já entregue. |
-| F50-11 | Investigado | — | Registrar na spec: embeddings removidos de propósito em `9f54964` (F20-05, SPEC 43 §9). |
-| F50-12 | Item 1 entregue | `51c7271` | Itens 2 e 3: medir e decidir. |
+| F50-10 | Entregue | `58d24a1` | Medir o p95 de `/inbox` em 25 mil vagas. |
+| F50-11 | Decisão registrada na spec | — | Nada. |
+| F50-12 | Item 1 e gravação da concorrente entregues; itens 2 e 3 medidos | `51c7271`, `6f48ee2`, `0b585be` | Decisões do dono sobre duplicatas e revisões. |
+
+## F50-08: o que está bloqueado
+
+O job, o script (`scripts/prune_assessments.py`) e 12 testes de integração estão no working
+tree, sem commit, junto com a ligação em `worker.py` e dois testes em
+`tests/backend/test_worker.py`. As configurações já estão em `config.py`.
+
+`match_assessment` e `match_factor` têm triggers que recusam todo `UPDATE` e `DELETE`
+(migração `20260916_0007`). A poda precisa da migração `20261005_0064`, que libera só
+`DELETE` e só em transação que ligue `matching.allow_prune`. O classificador de permissões do
+Claude Code recusou a escrita desse arquivo duas vezes ("Security Weaken"), inclusive depois
+da aprovação do dono na conversa. O arquivo precisa ser criado pelo dono, ou a regra de
+permissão ajustada.
+
+Com a migração no lugar, ainda falta:
+
+- Excluir da poda toda avaliação apontada por `matching.current_assessment`. O ponteiro
+  escolhe a mais recente por versão da vaga e `assessed_at`; a poda usa `created_at`. Se as
+  duas ordens discordarem, o `ON DELETE RESTRICT` do ponteiro derruba o lote a cada passada.
+- Testes: `UPDATE` sempre recusado; `DELETE` recusado sem a opção; a opção não vaza entre
+  transações; ida e volta da migração; ponteiros intactos depois de podar.
+- Rodar os 12 testes em banco recém-migrado. Até aqui eles só passaram com o trigger
+  alterado à mão.
 
 ## Pontos abertos por card
+
+**F50-02**
+- O script de reclassificação não recalcula o `fingerprint`, que inclui modo de trabalho. Na
+  normalização seguinte do item a vaga ganha um segundo incremento de versão, e pode cair em
+  revisão se outra vaga já tiver a identidade nova. Corrigir antes de usar `--apply`.
+- Sem teste para o escopo padrão a partir das áreas-alvo do perfil ativo.
+
+**F50-03**
+- A fixture de detalhe é sintética. Se um tenant responder em outro formato, os detalhes
+  contam como falha e as vagas ficam só com a listagem.
+- Um 429 no detalhe interrompe os detalhes da execução, mas não grava cooldown do host.
+- O cálculo do orçamento restante ignora um cooldown em vigor.
+- Os contadores de detalhe ficam só na telemetria em memória.
 
 **F50-04**
 - A parcela por fonte usa as três últimas execuções completas, mesmo medidas com áreas-alvo
@@ -47,36 +87,51 @@
 - Os identificadores novos têm espaço (`spring boot`, `react native`); um perfil que grave
   `springboot` não casa.
 
+**F50-06**
+- `RULES_VERSION` é `matching-v3`. Junto com `skills-v4`, invalida as avaliações uma vez.
+- Na regressão, a elegibilidade continua 40 `UNKNOWN` e 10 `INELIGIBLE` em 50 casos.
+
 **F50-07**
 - Faixas de recência: até 3, 7, 14 e 30 dias, copiadas de `_recency_measurement`.
 - `input_hash` ainda inclui o dia; uma avaliação manual em outro dia grava uma linha nova.
-- A fila roda um `NOT EXISTS` por vaga elegível a cada passada (cerca de 25 mil). Custo não
-  medido.
-- No primeiro ciclo depois do deploy, toda vaga que cruzou uma faixa desde a última avaliação
-  volta à fila uma vez.
+- A fila roda um `NOT EXISTS` por vaga elegível a cada passada. Custo não medido.
+- No primeiro ciclo depois do deploy, toda vaga que cruzou uma faixa volta à fila uma vez.
 
 **F50-09**
 - Já existia um prompt `v2` (F20-18); o novo é `v3`, com base no `v1`.
 - Tokens de entrada estimados: 1.058 no `v1`, 865 no `v3`, redução de 18%. A meta de 800 não
-  foi atingida. O que resta é o prompt de sistema, o snapshot da vaga e `deterministic_result`.
-- Limites de itens: `strengths` 4, `risks` 5, `inferences` 3, `unknowns` 4.
-- Teto de saída de 600 tokens só com `v3`. Risco: resposta truncada se o modelo gastar tokens
-  de raciocínio; uma lista acima do limite falha em vez de ser cortada. Nenhum dos dois foi
-  testado contra o provedor.
+  foi atingida.
+- Teto de saída de 600 tokens só com `v3`, não testado contra o provedor. Uma lista acima do
+  limite falha em vez de ser cortada.
+
+**F50-10**
+- `connect_args` com `options` sobrescreve um `options=` que já esteja na `DATABASE_URL`, e
+  um pooler em modo transação pode recusar esse parâmetro.
+- O tratador de `DBAPIError` pega todo erro de banco que escapa de uma rota e devolve 500 em
+  JSON. Antes, esses erros subiam pelo Starlette.
+- Página vazia do Inbox usa uma segunda consulta para os totais.
+- A API passa a ter um segundo pool de conexões, ao lado do que o adapter de análise usa.
+
+**F50-12**
+- Duplicatas `title_location_window`: 0 de 108 pares parece republicação; a regra não deve
+  confirmar sozinha.
+- `EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED` responde por 503 linhas. O grosso da fila são
+  4.367 de `SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY`, não medidas.
+- Detalhes em [f50-12-duplicatas-e-identidade](../pesquisas/f50-12-duplicatas-e-identidade.md).
 
 ## Medições no `spec46full` (somente leitura, 2026-10-05)
 
 - Cobertura das regras de conteúdo em 14.593 vagas com descrição: `seniority` 62,2%,
-  `work_mode` 39,3%, `allowed_countries` 11,5%. A meta de 60% para país não é alcançável com
-  as regras atuais.
+  `work_mode` 39,3%, `allowed_countries` 11,5%.
 - Catálogo nas áreas-alvo: 27,7% (6.970 de 25.124).
 - Vagas das áreas-alvo com descrição e ao menos uma skill pela taxonomia nova: 4.279 de 5.177
   (82,7%). Isso é teto para `TECHNOLOGY_FIT` conhecido, não a taxa do fator.
 
-## Ordem sugerida para o que falta
+## Antes do deploy
 
-1. F50-06, F50-08 e F50-10. F50-08 e F50-10 tocam leitura e escrita de avaliações; fazer o
-   F50-10 depois do F50-08.
-2. Mecânica do F50-02, com a flag desligada.
-3. F50-12 itens 2 e 3 e o registro do F50-11 na spec.
-4. Atualizar o §1 e o status da SPEC 50.
+1. Resolver o F50-08: criar a migração `0064` e concluir, ou tirar o job da branch.
+2. Corrigir o `fingerprint` no script do F50-02 antes de qualquer `--apply`.
+3. Aplicar as migrações `0062` e `0063`. A `0063` faz o backfill dos ponteiros.
+4. Esperar uma reavaliação completa do catálogo (taxonomia e regras mudaram).
+5. Depois de três execuções completas por fonte, repetir as consultas do §2 da spec e
+   atualizar a tabela do §1.
