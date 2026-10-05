@@ -313,6 +313,7 @@ class SourceOccurrenceModel(Base):
         ),
         Index("ix_source_occurrence_source_url", "source_url"),
         Index("ix_source_occurrence_normalized_url", "normalized_source_url"),
+        Index("ix_source_occurrence_opportunity", "opportunity_id"),
         {"schema": SCHEMA},
     )
 

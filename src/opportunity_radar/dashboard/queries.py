@@ -408,16 +408,6 @@ def _latest_assessments(profile_version_id: UUID | None) -> Any:
         MatchAssessmentModel.rules_version.label("rules_version"),
         (~current).label("is_stale"),
         MatchAssessmentModel.assessed_at.label("assessed_at"),
-        func.row_number()
-        .over(
-            partition_by=MatchAssessmentModel.opportunity_id,
-            order_by=(
-                current.desc(),
-                MatchAssessmentModel.assessed_at.desc(),
-                MatchAssessmentModel.id.desc(),
-            ),
-        )
-        .label("position"),
     )
     if profile_version_id is not None:
         ranked = ranked.where(
@@ -427,27 +417,37 @@ def _latest_assessments(profile_version_id: UUID | None) -> Any:
         OpportunityModel,
         OpportunityModel.id == MatchAssessmentModel.opportunity_id,
     )
-    numbered = ranked.subquery("ranked_assessments")
-    return select(numbered).where(numbered.c.position == 1).subquery("latest_assessment")
+    # DISTINCT ON, not `row_number() = 1`: the planner sizes it by the number of distinct
+    # opportunities, where a filter on a window column is guessed at 0.5% of the rows and
+    # turns every join above it into a nested loop over the whole catalogue.
+    return (
+        ranked.distinct(MatchAssessmentModel.opportunity_id)
+        .order_by(
+            MatchAssessmentModel.opportunity_id,
+            current.desc(),
+            MatchAssessmentModel.assessed_at.desc(),
+            MatchAssessmentModel.id.desc(),
+        )
+        .subquery("latest_assessment")
+    )
 
 
 def _latest_analyses() -> Any:
-    ranked = select(
-        MatchAnalysisModel.assessment_id.label("assessment_id"),
-        MatchAnalysisModel.status.label("status"),
-        MatchAnalysisModel.recommended_review.label("recommended_review"),
-        MatchAnalysisModel.summary.label("summary"),
-        func.row_number()
-        .over(
-            partition_by=MatchAnalysisModel.assessment_id,
-            order_by=(
-                MatchAnalysisModel.analyzed_at.desc(),
-                MatchAnalysisModel.id.desc(),
-            ),
+    return (
+        select(
+            MatchAnalysisModel.assessment_id.label("assessment_id"),
+            MatchAnalysisModel.status.label("status"),
+            MatchAnalysisModel.recommended_review.label("recommended_review"),
+            MatchAnalysisModel.summary.label("summary"),
         )
-        .label("position"),
-    ).subquery("ranked_analyses")
-    return select(ranked).where(ranked.c.position == 1).subquery("latest_analysis")
+        .distinct(MatchAnalysisModel.assessment_id)
+        .order_by(
+            MatchAnalysisModel.assessment_id,
+            MatchAnalysisModel.analyzed_at.desc(),
+            MatchAnalysisModel.id.desc(),
+        )
+        .subquery("latest_analysis")
+    )
 
 
 def _active_applications() -> Any:
@@ -472,7 +472,8 @@ def _priority_rank() -> Any:
     )
 
 
-def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
+def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any]:
+    """The Inbox rows for `query` and the column that puts them in the requested order."""
     assessments = _latest_assessments(query.profile_version_id)
     analyses = _latest_analyses()
     applications = _active_applications()
@@ -533,25 +534,25 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
     # window uses the very ordering of the page, so the representative is the row the
     # ungrouped list would have shown first). `group_size` counts the group's rows that
     # passed every filter, so "+N locais" never names a hidden row.
+    #
+    # One pass over the filtered rows, not a join back to them: the planner guesses a
+    # filter on a window column at 0.5% of its input, and with that guess it re-ran the
+    # latest-assessment subquery once per joined row.
     key = posting_group_key()
-    ranked = filtered.with_only_columns(
-        OpportunityModel.id.label("id"),
-        func.row_number()
-        .over(
-            partition_by=key,
-            order_by=_inbox_ordering(
-                query.order, assessments, (query.search or "").strip()
-            ),
-        )
-        .label("position"),
+    ordering = _inbox_ordering(query.order, assessments, (query.search or "").strip())
+    rows = filtered.add_columns(
+        func.row_number().over(partition_by=key, order_by=ordering).label("group_position"),
+        func.row_number().over(order_by=ordering).label("page_position"),
         func.count().over(partition_by=key).label("group_size"),
-    ).subquery("inbox_ranked")
-    grouped = (
-        filtered.join(ranked, ranked.c.id == OpportunityModel.id)
-        .where(ranked.c.position == 1)
-        .add_columns(ranked.c.group_size)
-    )
-    return grouped, assessments, analyses
+    ).subquery("inbox_rows")
+    grouped = select(
+        *(
+            column
+            for column in rows.c
+            if column is not rows.c.group_position and column is not rows.c.page_position
+        )
+    ).where(rows.c.group_position == 1)
+    return grouped, rows.c.page_position
 
 
 def _startup_evidence_rows(*conditions: Any) -> Select[Any]:
@@ -711,22 +712,16 @@ def _inbox_ordering(order: InboxOrder, assessments: Any, search_term: str = "") 
 
 
 def list_opportunity_inbox(session: Session, query: InboxQuery) -> InboxPage:
-    statement, assessments, _ = _inbox_statement(query)
+    statement, page_position = _inbox_statement(query)
     total = (
         session.scalar(select(func.count()).select_from(statement.subquery("inbox"))) or 0
     )
     rows = session.execute(
-        statement.order_by(
-            *_inbox_ordering(
-                query.order, assessments, (query.search or "").strip()
-            )
-        )
-        .offset(query.offset)
-        .limit(query.limit)
+        statement.order_by(page_position).offset(query.offset).limit(query.limit)
     ).all()
     off_filter_count = 0
     if query.role_families:
-        broader_statement, _, _ = _inbox_statement(replace(query, role_families=()))
+        broader_statement, _ = _inbox_statement(replace(query, role_families=()))
         broader_total = (
             session.scalar(
                 select(func.count()).select_from(broader_statement.subquery("inbox_all"))
