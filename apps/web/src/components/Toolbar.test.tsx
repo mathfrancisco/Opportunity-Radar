@@ -48,4 +48,14 @@ describe('Toolbar', () => {
     container.querySelectorAll('button')[1].click()
     expect(change).toHaveBeenCalledWith('true')
   })
+
+  it('desenha as opções numa pílula única, sem bloco escuro', () => {
+    const container = render(
+      <Toolbar label="Janela" onChange={() => {}} options={options} value="true" />,
+    )
+    const group = container.querySelector('[role="group"]')
+
+    expect(group?.className).toContain('rounded-full')
+    expect(container.innerHTML).not.toContain('bg-ink')
+  })
 })

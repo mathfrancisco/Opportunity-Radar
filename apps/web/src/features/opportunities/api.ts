@@ -32,6 +32,13 @@ export interface SourceOccurrence {
   payloadExpiredAt: string | null
 }
 
+/** Card F48-10: another posting of the same company, title and source (other city). */
+export interface SiblingLocation {
+  opportunityId: string
+  location: string | null
+  sourceUrl: string | null
+}
+
 export interface NormalizationResult {
   id: string
   rawItemId: string
@@ -65,6 +72,9 @@ export interface OpportunityDetail {
   description: string | null
   lifecycleStatus: string
   publishedAt: string | null
+  /** Card F48-16: `published_at ?? source_updated_at ?? first_seen_at`, and which one. */
+  recencyEffectiveDate: string | null
+  recencyBasis: 'published' | 'updated' | 'first_seen'
   /** When this opportunity was first persisted (F20-26): the older `createdAt` of a
    * duplicate pair is the one `confirm_duplicate` keeps as the survivor. */
   createdAt: string
@@ -73,6 +83,7 @@ export interface OpportunityDetail {
   skills: OpportunitySkill[]
   occurrences: SourceOccurrence[]
   normalizationResults: NormalizationResult[]
+  siblingLocations: SiblingLocation[]
   relevanceMark: RelevanceMark | null
 }
 
@@ -160,6 +171,15 @@ function parseOccurrence(value: unknown): SourceOccurrence | null {
   }
 }
 
+function parseSiblingLocation(value: unknown): SiblingLocation | null {
+  if (!isRecord(value) || typeof value.opportunity_id !== 'string') return null
+  return {
+    opportunityId: value.opportunity_id,
+    location: text(value.location),
+    sourceUrl: text(value.source_url),
+  }
+}
+
 function parseNormalization(value: unknown): NormalizationResult | null {
   if (!isRecord(value) || typeof value.id !== 'string') return null
   return {
@@ -198,6 +218,13 @@ export async function getOpportunity(opportunityId: string): Promise<Opportunity
     description: text(body.description),
     lifecycleStatus: required(body.lifecycle_status, 'UNKNOWN'),
     publishedAt: text(body.published_at),
+    recencyEffectiveDate: text(body.recency_effective_date) ?? text(body.published_at),
+    recencyBasis:
+      body.recency_basis === 'updated' || body.recency_basis === 'first_seen'
+        ? body.recency_basis
+        : body.date_is_estimated === true
+          ? 'first_seen'
+          : 'published',
     createdAt: required(body.created_at),
     version: typeof body.version === 'number' ? body.version : 1,
     compensations: list(body.compensations)
@@ -212,6 +239,9 @@ export async function getOpportunity(opportunityId: string): Promise<Opportunity
     normalizationResults: list(body.normalization_results)
       .map(parseNormalization)
       .filter((item): item is NormalizationResult => item !== null),
+    siblingLocations: list(body.sibling_locations)
+      .map(parseSiblingLocation)
+      .filter((item): item is SiblingLocation => item !== null),
     relevanceMark: parseRelevanceMark(body.relevance_mark),
   }
 }

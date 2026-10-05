@@ -264,6 +264,7 @@ class ProfileService:
             sponsorship_required=preferences.sponsorship_required,
             target_role_families=list(preferences.target_role_families),
             target_titles=list(preferences.target_titles),
+            accepted_seniorities=list(preferences.accepted_seniorities),
         )
 
     @staticmethod
@@ -314,6 +315,7 @@ class ProfileService:
                 sponsorship_required=preference.sponsorship_required,
                 target_role_families=tuple(preference.target_role_families),
                 target_titles=tuple(preference.target_titles),
+                accepted_seniorities=tuple(preference.accepted_seniorities),
             ),
         )
         return ProfileVersion(

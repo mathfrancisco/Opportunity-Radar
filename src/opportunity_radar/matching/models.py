@@ -18,11 +18,14 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
     func,
     text,
+    tuple_,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from opportunity_radar.platform.database import Base
@@ -293,3 +296,91 @@ class MatchAnalysisClaimModel(Base):
     owner: Mapped[str] = mapped_column(String(64), nullable=False)
     claimed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CurrentAssessmentModel(Base):
+    """Pointer to the newest assessment of a posting under one profile version (F50-10).
+
+    Copies only what the Inbox orders, filters and tests for currency by. Whether the
+    pointed assessment is still current is a read-time question, so it is not stored.
+    """
+
+    __tablename__ = "current_assessment"
+    __table_args__ = (
+        Index("ix_current_assessment_assessment", "assessment_id"),
+        Index("ix_current_assessment_profile_verdict", "profile_version_id", "verdict"),
+        Index("ix_current_assessment_profile_score", "profile_version_id", text("score DESC")),
+        {"schema": SCHEMA},
+    )
+
+    opportunity_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("opportunities.opportunity.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    profile_version_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("profile.profile_version.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    assessment_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.match_assessment.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    opportunity_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    rules_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    taxonomy_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    verdict: Mapped[str] = mapped_column(String(16), nullable=False)
+    eligibility: Mapped[str] = mapped_column(String(16), nullable=False)
+    score: Mapped[Decimal] = mapped_column(Numeric(7, 4), nullable=False)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3), nullable=False)
+    assessed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+_POINTER_KEY = ("opportunity_id", "profile_version_id")
+
+
+@event.listens_for(MatchAssessmentModel, "after_insert")
+def _move_current_assessment_pointer(
+    mapper: Any, connection: Any, assessment: MatchAssessmentModel
+) -> None:
+    """Keep `current_assessment` in step with every assessment written, in its transaction.
+
+    The newest row wins by `(opportunity_version, assessed_at, id)`: a rewritten posting's
+    assessment supersedes the old one, and an older assessment written late (a backfill, a
+    replay) leaves a newer pointer where it is.
+    Hooked on the insert, not on one repository method, so no write path can forget it.
+    """
+    del mapper
+    values = {
+        "opportunity_id": assessment.opportunity_id,
+        "profile_version_id": assessment.profile_version_id,
+        "assessment_id": assessment.id,
+        "opportunity_version": assessment.opportunity_version,
+        "rules_version": assessment.rules_version,
+        "taxonomy_version": assessment.taxonomy_version,
+        "verdict": assessment.verdict,
+        "eligibility": assessment.eligibility,
+        "score": assessment.score,
+        "confidence": assessment.confidence,
+        "assessed_at": assessment.assessed_at,
+    }
+    table = CurrentAssessmentModel.__table__
+    statement = postgres_insert(table).values(**values)
+    connection.execute(
+        statement.on_conflict_do_update(
+            index_elements=list(_POINTER_KEY),
+            set_={
+                name: statement.excluded[name] for name in values if name not in _POINTER_KEY
+            },
+            where=tuple_(
+                table.c.opportunity_version, table.c.assessed_at, table.c.assessment_id
+            )
+            < tuple_(
+                statement.excluded.opportunity_version,
+                statement.excluded.assessed_at,
+                statement.excluded.assessment_id,
+            ),
+        )
+    )

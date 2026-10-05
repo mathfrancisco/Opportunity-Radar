@@ -23,6 +23,7 @@ from typing import Any, Protocol
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.domain import (
@@ -718,6 +719,12 @@ class TavilyExtractionSettings:
     credit_budget_per_run: int
     extract_depth: str | None = None
     format: str | None = None
+    #: Source types whose items never go through `/extract` (F48-08): Workday pages are
+    #: rendered by JavaScript, so every call failed and burned the run's credit budget.
+    skip_source_types: frozenset[str] = frozenset({"workday"})
+    #: Stop extracting for a host once this many of its most recent extractions in a row
+    #: failed (F48-08). `0` disables the guard.
+    host_failure_threshold: int = 0
 
 
 class ExtractionCachePort(Protocol):
@@ -771,6 +778,30 @@ class TavilyExtractionCache:
         row.error = result.error
         row.extracted_at = now
         row.expires_at = now + timedelta(seconds=self._ttl_seconds)
+
+    def host_is_failing(self, url: str, *, threshold: int) -> bool:
+        """True when the `threshold` most recent cached extractions for `url`'s host all
+        failed (F48-08). Reads the cache itself, so the streak survives a restart and is
+        shared by every run; a success anywhere in that window breaks it."""
+        host = (urlsplit(url).hostname or "").casefold()
+        if threshold <= 0 or not host:
+            return False
+        escaped = host.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        column = TavilyExtractCacheModel.canonical_url
+        statuses = list(
+            self._session.scalars(
+                select(TavilyExtractCacheModel.status)
+                .where(
+                    or_(
+                        column.like(f"%://{escaped}/%", escape="\\"),
+                        column.like(f"%://{escaped}", escape="\\"),
+                    )
+                )
+                .order_by(TavilyExtractCacheModel.extracted_at.desc())
+                .limit(threshold)
+            )
+        )
+        return len(statuses) >= threshold and all(status == "failed" for status in statuses)
 
     @staticmethod
     def _hash(url: str) -> str:

@@ -119,9 +119,12 @@ class NormalizationError(ValueError):
     """Raised when a collected item cannot form a canonical candidate."""
 
 
-SKILL_TAXONOMY_VERSION = "skills-v3"
+SKILL_TAXONOMY_VERSION = "skills-v4"
 _MAX_DATABASE_AMOUNT = Decimal("999999999999.99")
 _AMBIGUOUS_SKILL_ALIASES = frozenset({"go", "react"})
+#: Aliases that are an ordinary word when lower-case ("a rag"): in prose they only match
+#: as the acronym. Structured tags and skill lists are not prose, so any case matches.
+_UPPERCASE_PROSE_ALIASES = frozenset({"rag"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,6 +192,15 @@ class ExtractedSkill:
             raise NormalizationError("extracted skill requires an id and evidence")
 
 
+_LLM_ALIASES = (
+    "llm",
+    "llms",
+    "large language model",
+    "large language models",
+    "modelos de linguagem",
+)
+_RAG_ALIASES = ("rag", "retrieval-augmented generation", "retrieval augmented generation")
+
 SKILL_TAXONOMY: tuple[SkillTaxonomyEntry, ...] = (
     SkillTaxonomyEntry("python", ("python",)),
     SkillTaxonomyEntry("typescript", ("typescript",)),
@@ -219,10 +231,44 @@ SKILL_TAXONOMY: tuple[SkillTaxonomyEntry, ...] = (
     SkillTaxonomyEntry("graphql", ("graphql",)),
     # Added by F20-02 curation (`docs/pesquisas/curadoria-skills-v2.md`) from
     # `scripts/unmatched_skill_terms.py` over the reference-machine acervo.
+    # F50-05: the bare "ai" and "ml" aliases are gone (40% of the catalogue matched "AI"
+    # in "AI-powered company" prose). `ai` is now specific terms only, and it includes the
+    # `llm` and `rag` aliases, so a posting that matches either also matches `ai`.
     SkillTaxonomyEntry(
         "ai",
-        ("ai", "artificial intelligence", "machine learning", "ml", "agentic ai"),
+        (
+            "artificial intelligence",
+            "inteligência artificial",
+            "machine learning",
+            "aprendizado de máquina",
+            "aprendizagem de máquina",
+            "generative ai",
+            "gen ai",
+            "genai",
+            "ia generativa",
+            "agentic ai",
+            "agentic",
+            "ai agent",
+            "ai agents",
+            "ai engineer",
+            "ai engineers",
+            "ai engineering",
+            "ml engineer",
+            "ml engineers",
+            "ai/ml",
+            "ml/ai",
+            *_LLM_ALIASES,
+            *_RAG_ALIASES,
+        ),
     ),
+    # F50-05: skills of the active profile that the taxonomy lacked. Ids are the
+    # casefolded profile name, because the profile side matches ids by exact equality.
+    SkillTaxonomyEntry("llm", _LLM_ALIASES),
+    SkillTaxonomyEntry("rag", _RAG_ALIASES),
+    SkillTaxonomyEntry("spring boot", ("spring boot", "springboot", "spring-boot")),
+    SkillTaxonomyEntry("nestjs", ("nestjs", "nest.js")),
+    SkillTaxonomyEntry("vue", ("vue", "vue.js", "vuejs")),
+    SkillTaxonomyEntry("react native", ("react native", "react-native", "reactnative")),
     # F20-02 follow-up (rotulagem humana): the bare "ci" alias was removed because
     # 82% of its real-corpus occurrences come from the company name "CI&T", not
     # from CI/CD content (docs/44-roadmap-fase-20/rotulagem/f20-02-curadoria-skills-v2.md).
@@ -293,6 +339,8 @@ class CanonicalCandidate:
     #: and this must never be read as "no country allowed" (card F17-06).
     allowed_countries: tuple[str, ...] = ()
     allowed_countries_version: str = REGIONS_VERSION
+    #: Cited-evidence reasons of the content rules (F48-15); empty when they are off.
+    classification_reasons: tuple[dict[str, str | None], ...] = ()
     #: Explicit application-window deadline (card F20-61), threaded from the
     #: collector when it exposes one (today only `jobposting.py`). `None` otherwise —
     #: never fabricated.
@@ -581,11 +629,13 @@ def extract_compensation(
     )
 
 
-def _skill_pattern(alias: str) -> re.Pattern[str]:
-    escaped = re.escape(alias.casefold())
-    dotted_variant = r"(?!\.js\b)" if alias.casefold() == "react" else ""
+def _skill_pattern(alias: str, *, uppercase_only: bool = False) -> re.Pattern[str]:
+    folded = alias.casefold()
+    escaped = re.escape(folded.upper() if uppercase_only else folded)
+    dotted_variant = r"(?!\.js\b)" if folded == "react" else ""
     return re.compile(
-        rf"(?<![\w+#]){escaped}(?![\w+#]){dotted_variant}", re.IGNORECASE
+        rf"(?<![\w+#]){escaped}(?![\w+#]){dotted_variant}",
+        0 if uppercase_only else re.IGNORECASE,
     )
 
 
@@ -694,7 +744,10 @@ def extract_skills(
     for text, structured, title_text in texts:
         for entry in SKILL_TAXONOMY:
             for alias in entry.aliases:
-                occurrence = _skill_pattern(alias).search(text)
+                occurrence = _skill_pattern(
+                    alias,
+                    uppercase_only=alias in _UPPERCASE_PROSE_ALIASES and not structured,
+                ).search(text)
                 if occurrence is not None:
                     if not _is_unambiguous_skill_use(
                         alias,
@@ -1091,8 +1144,16 @@ def opportunity_fingerprint(
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
-def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
-    """Normalize one collected item without guessing omitted source fields."""
+def normalize_candidate(
+    value: NormalizationInput, *, content_rules: bool | frozenset[str] = False
+) -> CanonicalCandidate:
+    """Normalize one collected item without guessing omitted source fields.
+
+    `content_rules` switches to `seniority-v4` / `work-mode-v7` / `allowed-countries-v2`
+    (card F48-15, description-aware, evidence cited): `True` runs every rule, a set of rule
+    names runs only those (card F50-02), empty or `False` none. Off by default until the
+    precision gate is met; see `content_classification`.
+    """
     original_title = _clean_text(value.title)
     normalized_title = normalize_title(value.title)
     if original_title is None or normalized_title is None:
@@ -1103,10 +1164,54 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
     normalized_company_name = normalize_company_name(company_name)
     normalized_location = normalize_location(location_text)
     normalized_url = normalize_url(source_url)
-    work_mode = infer_work_mode(original_title, location_text, value.metadata, value.description)
-    seniority, _ = seniority_classification(
-        original_title, value.metadata, source_type=value.source_type
-    )
+    classification_reasons: tuple[dict[str, str | None], ...] = ()
+    allowed_countries_version = REGIONS_VERSION
+    if isinstance(content_rules, frozenset) and content_rules:
+        from opportunity_radar.opportunities import content_classification as content
+
+        partial = content.classify_enabled_rules(
+            original_title,
+            location_text,
+            value.description,
+            value.metadata,
+            source_type=value.source_type,
+            enabled_rules=content_rules,
+        )
+        work_mode = partial.work_mode
+        seniority = partial.seniority
+        allowed_countries = partial.allowed_countries
+        allowed_countries_version = partial.allowed_countries_version
+        classification_reasons = partial.reasons
+    elif content_rules:
+        from opportunity_radar.opportunities import content_classification as content
+        from opportunity_radar.opportunities.regions import (
+            REGIONS_VERSION_V2,
+            resolve_allowed_countries_v2,
+        )
+
+        work_mode, work_mode_reason = content.classify_work_mode_v7(
+            original_title, location_text, value.metadata, value.description
+        )
+        seniority, seniority_reason = content.classify_seniority_v4(
+            original_title, value.description, value.metadata, source_type=value.source_type
+        )
+        allowed_countries, countries_evidence = resolve_allowed_countries_v2(
+            location_text, value.description
+        )
+        allowed_countries_version = REGIONS_VERSION_V2
+        classification_reasons = (
+            seniority_reason,
+            work_mode_reason,
+            content.allowed_countries_reason(allowed_countries, countries_evidence),
+        )
+    else:
+        work_mode = infer_work_mode(
+            original_title, location_text, value.metadata, value.description
+        )
+        seniority, _ = seniority_classification(
+            original_title, value.metadata, source_type=value.source_type
+        )
+        allowed_countries = resolve_allowed_countries(location_text)
     contract_type = infer_contract_type(original_title, location_text, value.metadata)
     recency_exempt_program = infer_recency_exempt_program(
         original_title, value.metadata, contract_type=contract_type
@@ -1116,7 +1221,6 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
         departments=departments_from_metadata(value.metadata),
         description=value.description,
     )
-    allowed_countries = resolve_allowed_countries(location_text)
     return CanonicalCandidate(
         original_title=original_title,
         normalized_title=normalized_title,
@@ -1156,31 +1260,74 @@ def normalize_candidate(value: NormalizationInput) -> CanonicalCandidate:
         role_family_evidence=dict(role_family_decision.evidence),
         role_family_version=role_family_decision.version,
         allowed_countries=allowed_countries,
+        allowed_countries_version=allowed_countries_version,
+        classification_reasons=classification_reasons,
         valid_through=value.valid_through,
         recency_exempt_program=recency_exempt_program,
     )
 
 
-def build_candidate(value: NormalizationInput) -> CanonicalCandidate:
+def build_candidate(
+    value: NormalizationInput, *, content_rules: bool | frozenset[str] = False
+) -> CanonicalCandidate:
     """Compatibility entry point for the original normalization slice."""
-    return normalize_candidate(value)
+    return normalize_candidate(value, content_rules=content_rules)
 
 
-#: Card F20-61: the default search shows only a posting from the last 14 days. Not a
-#: matching/scoring parameter — never read by `score`, eligibility or verdict (same
-#: Phase 20 invariant `opportunity_fingerprint`/role-family classification follow).
-DEFAULT_RECENCY_WINDOW_DAYS = 14
+#: Card F20-61 / F48-16: the default search shows only a posting whose reference date
+#: (`recency_reference`) is inside this window. Not a matching/scoring parameter — never
+#: read by `score`, eligibility or verdict (same Phase 20 invariant
+#: `opportunity_fingerprint`/role-family classification follow). Decision 3 (spec 48 §9)
+#: moved the default from 14 to 30 days; 14 stays available as the "Novas" lens.
+DEFAULT_RECENCY_WINDOW_DAYS = 30
+NEW_RECENCY_WINDOW_DAYS = 14
+
+
+class RecencyBasis(StrEnum):
+    """Which date the recency reference came from (persisted as `recency_basis`)."""
+
+    PUBLISHED = "published"
+    UPDATED = "updated"
+    FIRST_SEEN = "first_seen"
+
+
+def recency_reference(
+    *,
+    published_at: datetime | None,
+    source_updated_at: datetime | None,
+    first_seen_at: datetime | None,
+) -> tuple[datetime | None, RecencyBasis]:
+    """The single recency rule (card F48-16): `published_at ?? source_updated_at ??
+    first_seen_at`, plus which of the three won.
+
+    SQL mirror: `dashboard.queries._recency_reference_expression` (COALESCE in the same
+    order); `tests/backend/opportunities/test_recency_filter.py` locks the two together.
+    """
+    if published_at is not None:
+        return published_at, RecencyBasis.PUBLISHED
+    if source_updated_at is not None:
+        return source_updated_at, RecencyBasis.UPDATED
+    return first_seen_at, RecencyBasis.FIRST_SEEN
+
+
+def recency_basis_of(
+    *, published_at: datetime | None, source_updated_at: datetime | None
+) -> RecencyBasis:
+    """The persisted basis. `first_seen_at` always exists, so it never affects the basis."""
+    return recency_reference(
+        published_at=published_at, source_updated_at=source_updated_at, first_seen_at=None
+    )[1]
 
 
 @dataclass(frozen=True, slots=True)
 class RecencyDecision:
     """Whether one opportunity belongs in the default (recency-filtered) listing.
 
-    `effective_date` is `published_at` when the source provided one, else
-    `first_seen_at` (`date_is_estimated=True` in that case) — never a fabricated date.
-    `visible` is `True` when any of three independent conditions holds: the effective
-    date is inside the window, the posting is a time-boxed entry program (estágio/
-    trainee/early-careers/residência), or `valid_through` names an application
+    `effective_date` is `published_at ?? source_updated_at ?? first_seen_at` with
+    `basis` telling which (`date_is_estimated` whenever it is not `published`) — never a
+    fabricated date. `visible` is `True` when any of three independent conditions holds:
+    the effective date is inside the window, the posting is a time-boxed entry program
+    (estágio/trainee/early-careers/residência), or `valid_through` names an application
     deadline still in the future. Toggling the filter off (card F20-61 scope item 3)
     is the caller's job — this always answers "would the filter show it", regardless
     of whether the caller applies that answer.
@@ -1189,6 +1336,7 @@ class RecencyDecision:
     visible: bool
     effective_date: datetime | None
     date_is_estimated: bool
+    basis: RecencyBasis = RecencyBasis.FIRST_SEEN
 
 
 def recency_decision(
@@ -1199,18 +1347,19 @@ def recency_decision(
     recency_exempt_program: bool,
     now: datetime,
     window_days: int = DEFAULT_RECENCY_WINDOW_DAYS,
+    source_updated_at: datetime | None = None,
 ) -> RecencyDecision:
-    """Pure, deterministic recency calculation (card F20-61, scope item 3).
+    """Pure, deterministic recency calculation (cards F20-61 and F48-16).
 
     `now` is always supplied by the caller — this function never reads the clock, so
     tests can freeze time and cover both sides of the window boundary exactly.
     """
-    if published_at is not None:
-        effective_date: datetime | None = published_at
-        date_is_estimated = False
-    else:
-        effective_date = first_seen_at
-        date_is_estimated = first_seen_at is not None
+    effective_date, basis = recency_reference(
+        published_at=published_at,
+        source_updated_at=source_updated_at,
+        first_seen_at=first_seen_at,
+    )
+    date_is_estimated = basis is not RecencyBasis.PUBLISHED and effective_date is not None
     within_window = (
         effective_date is not None and effective_date >= now - timedelta(days=window_days)
     )
@@ -1220,4 +1369,5 @@ def recency_decision(
         visible=visible,
         effective_date=effective_date,
         date_is_estimated=date_is_estimated,
+        basis=basis,
     )

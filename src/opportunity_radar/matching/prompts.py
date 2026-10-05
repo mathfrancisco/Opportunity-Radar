@@ -80,6 +80,11 @@ class PromptArtifacts:
         return self.metadata.get("profile_history") is True
 
     @property
+    def omits_evidence_refs(self) -> bool:
+        """Whether the payload leaves out the row ids and hashes the model cannot use."""
+        return self.metadata.get("omit_evidence_refs") is True
+
+    @property
     def digest(self) -> str:
         """The prompt's content, not its label: a reworded file under the same version
         must not reuse answers produced by the old wording."""
@@ -90,6 +95,7 @@ class PromptArtifacts:
                 "schema": self.output_schema,
                 "sampling": self.sampling,
                 "profile_history": self.reads_profile_history,
+                **({"omit_evidence_refs": True} if self.omits_evidence_refs else {}),
             },
             ensure_ascii=False,
             sort_keys=True,

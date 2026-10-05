@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { ApplicationPanel } from '../components/ApplicationPanel'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
+import { Chip } from '../components/Chip'
 import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
 import { EmptyState, ErrorState, LoadingState } from '../components/states'
@@ -18,6 +19,7 @@ import {
   useLatestAssessment,
 } from '../features/matching/useAssessment'
 import { type DuplicateCandidate, type OpportunityDetail } from '../features/opportunities/api'
+import { estimatedDateHint } from '../features/dashboard/api'
 import { verdictLabels } from '../features/matching/verdicts'
 import {
   useConfirmDuplicate,
@@ -37,6 +39,50 @@ const resultLabels: Record<string, string> = {
   UNKNOWN: 'Desconhecido',
 }
 
+const workModeLabels: Record<string, string> = {
+  REMOTE: 'Remoto',
+  HYBRID: 'Híbrido',
+  ONSITE: 'Presencial',
+  UNKNOWN: 'Não informado',
+}
+
+const seniorityLabels: Record<string, string> = {
+  INTERN: 'Estágio',
+  JUNIOR: 'Júnior',
+  MID: 'Pleno',
+  SENIOR: 'Sênior',
+  STAFF: 'Staff',
+  LEAD: 'Liderança',
+  PRINCIPAL: 'Principal',
+  UNKNOWN: 'Não informada',
+}
+
+const contractLabels: Record<string, string> = {
+  FULL_TIME: 'Tempo integral',
+  PART_TIME: 'Meio período',
+  CONTRACT: 'Contrato',
+  INTERNSHIP: 'Estágio',
+  TEMPORARY: 'Temporário',
+  UNKNOWN: 'Não informado',
+}
+
+const lifecycleLabels: Record<string, string> = {
+  DISCOVERED: 'Descoberta',
+  ACTIVE: 'Ativa',
+  STALE: 'Possivelmente encerrada',
+  CLOSED: 'Encerrada',
+}
+
+const eligibilityLabels: Record<string, string> = {
+  ELIGIBLE: 'Atende aos filtros',
+  INELIGIBLE: 'Não atende aos filtros',
+  UNKNOWN: 'Aguardando confirmação',
+}
+
+function label(value: string, labels: Record<string, string>) {
+  return labels[value] ?? value
+}
+
 function display(value: string | null) {
   return value === null || value === '' ? '—' : value
 }
@@ -53,9 +99,63 @@ function formatNumber(value: string | null, digits = 1) {
   return Number.isNaN(parsed) ? value : parsed.toFixed(digits)
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+const DESCRIPTION_BLOCK_ELEMENTS = new Set([
+  'ADDRESS', 'ARTICLE', 'BLOCKQUOTE', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'P', 'PRE',
+])
+const DESCRIPTION_IGNORED_ELEMENTS = new Set(['NOSCRIPT', 'SCRIPT', 'STYLE', 'TEMPLATE'])
+
+/**
+ * Descriptions from job boards can contain HTML. Parse it only to recover its
+ * readable text: React still receives text children, never remote markup.
+ */
+function descriptionAsPlainText(description: string) {
+  if (!/<\/?[a-z][^>]*>/i.test(description) || typeof DOMParser === 'undefined') {
+    return description
+  }
+
+  const document = new DOMParser().parseFromString(description, 'text/html')
+  let text = ''
+
+  function visit(node: Node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      text += node.textContent ?? ''
+      return
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return
+
+    const element = node as Element
+    if (DESCRIPTION_IGNORED_ELEMENTS.has(element.tagName)) return
+    if (element.tagName === 'BR') {
+      text += '\n'
+      return
+    }
+
+    const isBlock = DESCRIPTION_BLOCK_ELEMENTS.has(element.tagName)
+    if (isBlock && text && !text.endsWith('\n\n')) text += text.endsWith('\n') ? '\n' : '\n\n'
+    element.childNodes.forEach(visit)
+    if (isBlock && !text.endsWith('\n')) text += '\n'
+  }
+
+  document.body.childNodes.forEach(visit)
+  return text
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+export function OpportunityDescription({ description }: { description: string }) {
   return (
-    <section className="mt-section">
+    <p className="break-anywhere whitespace-pre-line text-body text-subtle" data-testid="opportunity-description">
+      {descriptionAsPlainText(description)}
+    </p>
+  )
+}
+
+function Section({ id, title, children }: { id?: string; title: string; children: ReactNode }) {
+  return (
+    <section className="mt-10 scroll-mt-6" id={id}>
       <h2 className="text-section">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
@@ -64,7 +164,9 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function Facts({ opportunity }: { opportunity: OpportunityDetail }) {
   return (
-    <dl className="mt-8 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+    <div className="mt-6 scroll-mt-6" id="resumo">
+    <Card>
+      <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
       <div>
         <dt className="text-muted">Empresa</dt>
         <dd className="mt-1 font-medium">{display(opportunity.companyName)}</dd>
@@ -75,29 +177,41 @@ function Facts({ opportunity }: { opportunity: OpportunityDetail }) {
       </div>
       <div>
         <dt className="text-muted">Modalidade</dt>
-        <dd className="mt-1 font-medium">{opportunity.workMode}</dd>
+        <dd className="mt-1 break-words font-medium">{label(opportunity.workMode, workModeLabels)}</dd>
       </div>
       <div>
         <dt className="text-muted">Senioridade</dt>
-        <dd className="mt-1 font-medium">{opportunity.seniority}</dd>
+        <dd className="mt-1 break-words font-medium">{label(opportunity.seniority, seniorityLabels)}</dd>
       </div>
       <div>
         <dt className="text-muted">Contrato</dt>
-        <dd className="mt-1 font-medium">{opportunity.contractType}</dd>
+        <dd className="mt-1 break-words font-medium">{label(opportunity.contractType, contractLabels)}</dd>
       </div>
       <div>
         <dt className="text-muted">Status</dt>
-        <dd className="mt-1 font-medium">{opportunity.lifecycleStatus}</dd>
+        <dd className="mt-1 break-words font-medium">{label(opportunity.lifecycleStatus, lifecycleLabels)}</dd>
       </div>
       <div>
         <dt className="text-muted">Publicada</dt>
-        <dd className="mt-1 font-medium">{formatDate(opportunity.publishedAt)}</dd>
+        <dd className="mt-1 font-medium">
+          {formatDate(opportunity.recencyEffectiveDate)}
+          {opportunity.recencyBasis !== 'published' && (
+            <span
+              className="ml-1 text-xs font-normal text-subtle"
+              title={estimatedDateHint(opportunity.recencyBasis)}
+            >
+              (estimada)
+            </span>
+          )}
+        </dd>
       </div>
       <div>
         <dt className="text-muted">Versão do conteúdo</dt>
         <dd className="mt-1 font-medium">{opportunity.version}</dd>
       </div>
-    </dl>
+      </dl>
+    </Card>
+    </div>
   )
 }
 
@@ -137,17 +251,47 @@ function Skills({ opportunity }: { opportunity: OpportunityDetail }) {
   return (
     <ul className="flex flex-wrap gap-2">
       {opportunity.skills.map((skill) => (
-        <li
-          className="rounded-full border border-line-strong bg-surface px-4 py-2 text-sm"
-          key={skill.canonicalName}
-        >
-          <span className="font-medium">{skill.displayName}</span>{' '}
-          <span className="text-muted">
-            {skill.requirement.toLowerCase()} · {skill.taxonomyVersion}
-          </span>
+        <li key={skill.canonicalName}>
+          <Chip className="text-body-sm">
+            <span className="font-medium">{skill.displayName}</span>
+            <span className="text-muted">
+              {skill.requirement.toLowerCase()} · {skill.taxonomyVersion}
+            </span>
+          </Chip>
         </li>
       ))}
     </ul>
+  )
+}
+
+/** Card F48-10: the other cities of the same job, each still its own opportunity. */
+export function SiblingLocations({ opportunity }: { opportunity: OpportunityDetail }) {
+  if (opportunity.siblingLocations.length === 0) return null
+  return (
+    <Section title={`Outros locais (${opportunity.siblingLocations.length})`}>
+      <ul className="grid gap-2 text-sm" data-testid="sibling-locations">
+        {opportunity.siblingLocations.map((sibling) => (
+          <li className="flex flex-wrap gap-x-3" key={sibling.opportunityId}>
+            <Link
+              className="underline decoration-accent decoration-2 underline-offset-4"
+              to={`/opportunities/${sibling.opportunityId}`}
+            >
+              {sibling.location ?? 'Local não informado'}
+            </Link>
+            {sibling.sourceUrl && (
+              <a
+                className="break-anywhere text-muted underline underline-offset-4"
+                href={sibling.sourceUrl}
+                rel="noreferrer"
+                target="_blank"
+              >
+                vaga original
+              </a>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Section>
   )
 }
 
@@ -157,7 +301,7 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
       <ul className="grid gap-3">
         {opportunity.occurrences.map((occurrence) => (
           <Card as="li" className="text-sm" key={occurrence.id}>
-            <p className="font-medium">
+            <p className="break-anywhere font-medium">
               {occurrence.sourceUrl ? (
                 <a
                   className="break-anywhere underline decoration-accent decoration-2 underline-offset-4"
@@ -179,7 +323,7 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
               raw item {occurrence.rawItemId}
             </p>
             {!occurrence.payloadRetained && (
-              <p className="mt-2 rounded-xl border border-warning-line bg-warning-surface px-3 py-2 text-xs text-warning-ink">
+              <p className="mt-2 rounded-control border border-warning-line bg-warning-surface px-3 py-2 text-xs text-warning-ink">
                 Conteúdo bruto expirado pela retenção
                 {occurrence.payloadExpiredAt
                   ? ` em ${formatDate(occurrence.payloadExpiredAt)}`
@@ -224,7 +368,7 @@ function RelevanceMark({ opportunity }: { opportunity: OpportunityDetail }) {
         </Button>
         <select
           aria-label="Motivo de não ser para mim"
-          className="rounded-xl border border-line-strong bg-surface px-3 py-2 text-sm"
+          className="h-9 rounded-control border border-line-strong bg-surface px-3 text-sm"
           disabled={mark.isPending}
           onChange={(event) => {
             const reason = event.target.value
@@ -262,9 +406,9 @@ const DUPLICATE_COMPARISON_FIELDS: {
   { label: 'Título', read: (o) => o.title },
   { label: 'Empresa', read: (o) => display(o.companyName) },
   { label: 'Localização', read: (o) => display(o.location) },
-  { label: 'Modalidade', read: (o) => o.workMode },
-  { label: 'Senioridade', read: (o) => o.seniority },
-  { label: 'Contrato', read: (o) => o.contractType },
+  { label: 'Modalidade', read: (o) => label(o.workMode, workModeLabels) },
+  { label: 'Senioridade', read: (o) => label(o.seniority, seniorityLabels) },
+  { label: 'Contrato', read: (o) => label(o.contractType, contractLabels) },
   { label: 'Publicada', read: (o) => formatDate(o.publishedAt) },
 ]
 
@@ -307,7 +451,7 @@ function DuplicateCandidateCard({
       </p>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {[opportunity, otherOpportunity].map((side) => (
-          <div className="rounded-2xl border border-line bg-surface p-4" key={side.id}>
+          <div className="rounded-control border border-line bg-surface p-4" key={side.id}>
             <p className="font-semibold">
               {side.id === survivor.id ? (
                 <Link
@@ -415,10 +559,7 @@ function Eligibility({ details }: { details: EligibilityDetail[] }) {
   return (
     <ul className="grid gap-2">
       {details.map((detail) => (
-        <li
-          className="rounded-2xl border border-line bg-surface p-4 text-sm"
-          key={detail.code}
-        >
+        <Card as="li" className="text-sm" key={detail.code}>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="font-medium">{detail.code}</span>
             <span
@@ -434,7 +575,7 @@ function Eligibility({ details }: { details: EligibilityDetail[] }) {
             </span>
           </div>
           <p className="mt-1 text-subtle">{detail.reason}</p>
-        </li>
+        </Card>
       ))}
     </ul>
   )
@@ -449,11 +590,11 @@ function Factors({ factors }: { factors: MatchFactor[] }) {
       stickyFirstColumn
     >
       {factors.map((factor) => (
-            <tr className="border-t border-divider" key={factor.factorCode}>
-              <td className="px-4 py-3 font-medium">{factor.factorCode}</td>
-              <td className="px-4 py-3">{formatNumber(factor.weight, 2)}</td>
-              <td className="px-4 py-3">{formatNumber(factor.contribution, 2)}</td>
-              <td className="px-4 py-3">
+            <tr key={factor.factorCode}>
+              <td className="font-medium">{factor.factorCode}</td>
+              <td>{formatNumber(factor.weight, 2)}</td>
+              <td>{formatNumber(factor.contribution, 2)}</td>
+              <td>
                 {factor.status}
                 {factor.status === 'UNKNOWN' && (
                   <span className="block text-xs text-muted">
@@ -461,7 +602,7 @@ function Factors({ factors }: { factors: MatchFactor[] }) {
                   </span>
                 )}
               </td>
-              <td className="px-4 py-3 text-subtle">{factor.explanation}</td>
+              <td className="text-subtle">{factor.explanation}</td>
             </tr>
       ))}
     </DataTable>
@@ -482,16 +623,16 @@ function Decision({
         <span className="text-metric-lg">
           {formatNumber(assessment.score)}
         </span>
-        <span className="rounded-full border border-line-strong bg-surface px-4 py-2 text-sm font-medium">
+        <Chip className="text-body-sm font-medium">
           {verdictLabels[assessment.verdict] ?? assessment.verdict}
-        </span>
+        </Chip>
         <span className="text-sm text-muted">
-          Elegibilidade {assessment.eligibility} · confiança{' '}
+          Elegibilidade {label(assessment.eligibility, eligibilityLabels)} · confiança{' '}
           {formatNumber(assessment.confidence, 2)}
         </span>
       </div>
       {assessment.isStale && (
-        <p className="mt-3 rounded-xl border border-warning-line bg-warning-surface p-3 text-sm text-warning-ink" role="status">
+        <p className="mt-3 rounded-control border border-warning-line bg-warning-surface p-3 text-sm text-warning-ink" role="status">
           Esta decisão foi calculada com dados anteriores. Uma reavaliação está pendente;
           os detalhes abaixo permanecem disponíveis como histórico.
         </p>
@@ -533,6 +674,17 @@ export function OpportunityDetailPage() {
 
   return (
     <PageShell
+      actions={
+        opportunity.data && (
+          <Button
+            disabled={evaluate.isPending}
+            onClick={() => evaluate.mutate()}
+            variant="secondary"
+          >
+            {evaluate.isPending ? 'Avaliando…' : 'Avaliar agora'}
+          </Button>
+        )
+      }
       eyebrow="Oportunidade"
       title={opportunity.data?.title ?? 'Detalhe da oportunidade'}
       description={
@@ -560,7 +712,15 @@ export function OpportunityDetailPage() {
 
         {opportunity.data && (
           <>
+            <nav aria-label="Navegar nesta oportunidade" className="mt-6 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+              <a className="underline decoration-accent decoration-2 underline-offset-4" href="#resumo">Resumo</a>
+              <a className="underline decoration-accent decoration-2 underline-offset-4" href="#decisao">Decisão</a>
+              <a className="underline decoration-accent decoration-2 underline-offset-4" href="#candidatura">Candidatura</a>
+              <a className="underline decoration-accent decoration-2 underline-offset-4" href="#procedencia">Procedência</a>
+            </nav>
             <Facts opportunity={opportunity.data} />
+
+            <SiblingLocations opportunity={opportunity.data} />
 
             <Section title="Relevância">
               <RelevanceMark opportunity={opportunity.data} />
@@ -572,9 +732,7 @@ export function OpportunityDetailPage() {
 
             {opportunity.data.description && (
               <Section title="Descrição">
-                <p className="whitespace-pre-line text-body text-subtle">
-                  {opportunity.data.description}
-                </p>
+                <OpportunityDescription description={opportunity.data.description} />
               </Section>
             )}
 
@@ -586,18 +744,12 @@ export function OpportunityDetailPage() {
               <Skills opportunity={opportunity.data} />
             </Section>
 
-            <Section title="Procedência">
+            <Section id="procedencia" title="Procedência">
               <Provenance opportunity={opportunity.data} />
             </Section>
 
-            <Section title="Decisão">
+            <Section id="decisao" title="Decisão">
               <div className="mb-4 flex flex-wrap items-center gap-3">
-                <Button
-                  disabled={evaluate.isPending}
-                  onClick={() => evaluate.mutate()}
-                >
-                  {evaluate.isPending ? 'Avaliando…' : 'Avaliar agora'}
-                </Button>
                 {evaluate.isSuccess && <span className="text-sm text-subtle">Avaliação atualizada.</span>}
                 {evaluate.isError && <span className="text-sm text-danger-ink">Não foi possível avaliar agora.</span>}
               </div>
@@ -618,7 +770,7 @@ export function OpportunityDetailPage() {
               )}
             </Section>
 
-            <Section title="Candidatura">
+            <Section id="candidatura" title="Candidatura">
               <ApplicationPanel opportunityId={opportunity.data.id} />
             </Section>
           </>

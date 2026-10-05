@@ -22,6 +22,7 @@ from opportunity_radar.companies.discovery import (
     detect_ats,
     discover_one,
     eligible_companies,
+    external_key_from_confirmed_ats_url,
     record_ats_identified,
     record_discovery_attempt,
 )
@@ -59,6 +60,38 @@ def test_detect_ats_matches_each_signature(ats: str) -> None:
 def test_detect_ats_returns_none_without_signature() -> None:
     html = "<html><body><a href='https://acme.example.com/careers'>Jobs</a></body></html>"
     assert detect_ats(html) is None
+
+
+@pytest.mark.parametrize(
+    ("ats", "url", "expected"),
+    [
+        ("ashby", "https://jobs.ashbyhq.com/acme/jobs/123", "acme"),
+        ("ashby", "https://api.ashbyhq.com/posting-api/job-board/acme", "acme"),
+        ("greenhouse", "https://boards.greenhouse.io/acme/jobs/123", "acme"),
+        (
+            "greenhouse",
+            "https://boards-api.greenhouse.io/v1/boards/acme/jobs",
+            "acme",
+        ),
+        ("lever", "https://jobs.lever.co/acme/123", "acme"),
+        ("lever", "https://api.lever.co/v0/postings/acme?mode=json", "acme"),
+        (
+            "workable",
+            "https://apply.workable.com/api/v1/widget/accounts/acme",
+            "acme",
+        ),
+        (
+            "teamtailor",
+            "https://acme.teamtailor.com/jobs.json",
+            "acme.teamtailor.com",
+        ),
+        ("gupy", "https://acme.gupy.io/jobs", None),
+    ],
+)
+def test_external_key_from_confirmed_ats_url(
+    ats: str, url: str, expected: str | None
+) -> None:
+    assert external_key_from_confirmed_ats_url(ats, url) == expected
 
 
 def _company(session: Session, *, marker: str) -> Company:
@@ -232,6 +265,7 @@ def test_discover_one_records_final_url_on_redirect() -> None:
             assert outcome.http_status == 200
             assert outcome.final_url == final_url
             assert outcome.ats_found == "ashby"
+            assert outcome.ats_url == f"https://jobs.ashbyhq.com/{marker}"
         finally:
             _cleanup(session, [company.id])
 
@@ -241,12 +275,16 @@ def test_record_ats_identified_creates_company_source_with_discovery_method() ->
     with Session(engine) as session:
         marker = uuid4().hex[:8]
         company = _company(session, marker=marker)
-        _careers_source(session, company, marker=marker)
+        source = _careers_source(session, company, marker=marker)
         session.commit()
         try:
-            outcome_html = _SAMPLE_HTML["lever"]
+            outcome_html = f'<a href="https://jobs.lever.co/{marker}">Jobs</a>'
 
             def handler(request: httpx.Request) -> httpx.Response:
+                if str(request.url) == source.endpoint:
+                    return httpx.Response(
+                        302, headers={"Location": f"https://jobs.lever.co/{marker}"}
+                    )
                 return httpx.Response(200, html=f"<html><body>{outcome_html}</body></html>")
 
             client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -267,6 +305,19 @@ def test_record_ats_identified_creates_company_source_with_discovery_method() ->
             assert created.verification_method == "discovery"
             assert created.verification_status == "ats_identified"
             assert created.evidence_note is not None
+            assert created.external_key == marker
+            repeated = record_ats_identified(session, outcome)
+            assert repeated is not None
+            assert repeated.id == created.id
+            assert (
+                session.query(CompanySource)
+                .filter(
+                    CompanySource.company_id == company.id,
+                    CompanySource.source_type == "lever",
+                )
+                .count()
+                == 1
+            )
 
             attempts = session.query(DiscoveryAttemptModel).filter(
                 DiscoveryAttemptModel.company_id == company.id

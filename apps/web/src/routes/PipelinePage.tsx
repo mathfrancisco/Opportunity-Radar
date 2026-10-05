@@ -1,5 +1,10 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Button } from '../components/Button'
+import { Card } from '../components/Card'
+import { Chip } from '../components/Chip'
 import { PageShell } from '../components/PageShell'
+import { Pagination } from '../components/Pagination'
 import { Bone, Skeleton } from '../components/skeletons'
 import { EmptyState, ErrorState } from '../components/states'
 import {
@@ -19,6 +24,7 @@ const activeStages: ApplicationStage[] = [
   'FINAL',
   'OFFER',
 ]
+const pageSize = 12
 
 function formatDate(value: string | null) {
   if (!value) return null
@@ -32,16 +38,17 @@ function isOverdue(value: string | null) {
   return !Number.isNaN(parsed.getTime()) && parsed.getTime() <= Date.now()
 }
 
-function Card({ application }: { application: Application }) {
+function ApplicationCard({ application }: { application: Application }) {
   const due = formatDate(application.nextActionAt)
   return (
-    <li className="rounded-2xl border border-line bg-surface p-4 text-sm">
+    <Card as="li" className="text-sm">
       <Link
         className="font-medium underline decoration-accent decoration-2 underline-offset-4"
         to={`/opportunities/${application.opportunityId}`}
       >
-        Ver oportunidade
+        {application.opportunityTitle}
       </Link>
+      <p className="mt-1 text-muted">{application.companyName ?? 'Empresa não informada'}</p>
       {application.nextAction ? (
         <p
           className={`mt-2 ${
@@ -58,7 +65,7 @@ function Card({ application }: { application: Application }) {
         {application.history.length} movimento
         {application.history.length === 1 ? '' : 's'} no histórico
       </p>
-    </li>
+    </Card>
   )
 }
 
@@ -75,7 +82,7 @@ function BoardSkeleton() {
             </div>
             <div className="mt-3 grid gap-2">
               {[0, 1].map((card) => (
-                <div className="rounded-2xl border border-line bg-surface p-4" key={card}>
+                <div className="rounded-control border border-line bg-surface p-5" key={card}>
                   <Bone className="w-24" />
                   <Bone className="mt-3 w-4/5" />
                   <Bone className="mt-3 w-1/2" />
@@ -89,7 +96,15 @@ function BoardSkeleton() {
   )
 }
 
-function Board({ applications }: { applications: Application[] }) {
+function Board({
+  applications,
+  stages,
+  emptyMessage,
+}: {
+  applications: Application[]
+  stages: ApplicationStage[]
+  emptyMessage: string
+}) {
   const byStage = new Map<string, Application[]>()
   for (const application of applications) {
     byStage.set(application.currentStage, [
@@ -97,12 +112,11 @@ function Board({ applications }: { applications: Application[] }) {
       application,
     ])
   }
-  const columns = activeStages.filter((stage) => (byStage.get(stage) ?? []).length > 0)
+  const columns = stages.filter((stage) => (byStage.get(stage) ?? []).length > 0)
 
   if (columns.length === 0) {
     return (
-      <EmptyState>Nenhuma candidatura ativa. Comece pela inbox: abra uma oportunidade e registre o
-        interesse.</EmptyState>
+      <EmptyState>{emptyMessage}</EmptyState>
     )
   }
 
@@ -116,7 +130,7 @@ function Board({ applications }: { applications: Application[] }) {
           </h2>
           <ul className="mt-3 grid gap-2">
             {(byStage.get(stage) ?? []).map((application) => (
-              <Card application={application} key={application.id} />
+              <ApplicationCard application={application} key={application.id} />
             ))}
           </ul>
         </section>
@@ -125,37 +139,30 @@ function Board({ applications }: { applications: Application[] }) {
   )
 }
 
-function Closed({ applications }: { applications: Application[] }) {
-  if (applications.length === 0) return null
-  const counts = applicationStages
-    .filter((stage) => !activeStages.includes(stage))
-    .map((stage) => ({
-      stage,
-      total: applications.filter((item) => item.currentStage === stage).length,
-    }))
-    .filter((entry) => entry.total > 0)
-
-  return (
-    <section className="mt-section">
-      <h2 className="text-section">Encerradas</h2>
-      <ul className="mt-4 flex flex-wrap gap-3">
-        {counts.map((entry) => (
-          <li
-            className="rounded-full border border-line-strong bg-surface px-4 py-2 text-sm"
-            key={entry.stage}
-          >
-            <span className="text-subtle">{stageLabels[entry.stage]}</span>{' '}
-            <span className="font-semibold">{entry.total}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  )
-}
+const closedStages = applicationStages.filter((stage) => !activeStages.includes(stage))
 
 export function PipelinePage() {
-  const active = useApplications({ status: 'ACTIVE' })
-  const closed = useApplications({ status: 'CLOSED' })
+  const [activePage, setActivePage] = useState(1)
+  const [closedPage, setClosedPage] = useState(1)
+  const active = useApplications({
+    status: 'ACTIVE',
+    limit: pageSize,
+    offset: (activePage - 1) * pageSize,
+  })
+  const closed = useApplications({
+    status: 'CLOSED',
+    limit: pageSize,
+    offset: (closedPage - 1) * pageSize,
+  })
+  const [view, setView] = useState<'active' | 'closed'>('active')
+  const selected = view === 'active' ? active : closed
+  const selectedPage = view === 'active' ? activePage : closedPage
+  const setSelectedPage = view === 'active' ? setActivePage : setClosedPage
+  const selectedStages = view === 'active' ? activeStages : closedStages
+  const selectedDescription =
+    view === 'active'
+      ? 'Candidaturas em andamento, organizadas pela etapa atual.'
+      : 'Candidaturas finalizadas, preservadas para consulta do histórico.'
 
   return (
     <PageShell
@@ -164,17 +171,62 @@ export function PipelinePage() {
       title="Candidaturas"
       description="Cada candidatura com o estágio em que está e o que você deve fazer a seguir. A oportunidade segue o ciclo dela; a candidatura segue o seu."
     >
-      <div className="mt-8">
-        {active.isPending && (
-          <BoardSkeleton />
-        )}
-        {active.isError && (
-          <ErrorState onRetry={() => void active.refetch()}>Não foi possível carregar as candidaturas.</ErrorState>
-        )}
-        {active.data && <Board applications={active.data.items} />}
+      <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
+        <div aria-label="Visão das candidaturas" className="flex flex-wrap gap-2" role="group">
+          <Button
+            aria-pressed={view === 'active'}
+            onClick={() => setView('active')}
+            size="sm"
+            variant={view === 'active' ? 'primary' : 'secondary'}
+          >
+            Em andamento{active.data ? ` (${active.data.total})` : ''}
+          </Button>
+          <Button
+            aria-pressed={view === 'closed'}
+            onClick={() => setView('closed')}
+            size="sm"
+            variant={view === 'closed' ? 'primary' : 'secondary'}
+          >
+            Encerradas{closed.data ? ` (${closed.data.total})` : ''}
+          </Button>
+        </div>
+        {selected.data && <Chip>{selected.data.total} no total</Chip>}
       </div>
 
-      {closed.data && <Closed applications={closed.data.items} />}
+      <section aria-live="polite" className="mt-5" id="pipeline-view">
+        <h2 className="text-section">{view === 'active' ? 'Em andamento' : 'Encerradas'}</h2>
+        <p className="mt-1 text-sm text-muted">{selectedDescription}</p>
+        <div className="mt-5">
+          {selected.isPending && <BoardSkeleton />}
+          {selected.isError && (
+            <ErrorState onRetry={() => void selected.refetch()}>
+              Não foi possível carregar as candidaturas {view === 'active' ? 'em andamento' : 'encerradas'}.
+            </ErrorState>
+          )}
+          {selected.data && (
+            <>
+              <Board
+                applications={selected.data.items}
+                emptyMessage={
+                  view === 'active'
+                    ? 'Nenhuma candidatura em andamento. Comece pela inbox: abra uma oportunidade e registre o interesse.'
+                    : 'Nenhuma candidatura encerrada até agora.'
+                }
+                stages={selectedStages}
+              />
+              <Pagination
+                className="mt-6"
+                itemLabel="candidaturas"
+                label={`Paginação de candidaturas ${view === 'active' ? 'em andamento' : 'encerradas'}`}
+                onPageChange={setSelectedPage}
+                page={selectedPage}
+                pageSize={selected.data.limit || pageSize}
+                total={selected.data.total}
+              />
+            </>
+          )}
+        </div>
+      </section>
     </PageShell>
   )
 }

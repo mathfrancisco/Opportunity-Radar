@@ -18,7 +18,14 @@ from opportunity_radar.matching.domain import (
     ProfileSnapshot,
     ProfileWorkAuthorization,
     Verdict,
+    default_rule_set,
     evaluate_match,
+)
+from opportunity_radar.matching.service import (
+    RULES_VERSION,
+    _allowed_countries,
+    _known_contracts,
+    _optional_enum,
 )
 from opportunity_radar.opportunities.domain import (
     CompensationPeriod,
@@ -26,6 +33,7 @@ from opportunity_radar.opportunities.domain import (
     OpportunityStatus,
     Seniority,
     WorkMode,
+    extract_skills,
 )
 
 OPPORTUNITY_ID = UUID("11111111-1111-1111-1111-111111111111")
@@ -238,7 +246,7 @@ def test_empty_accepted_seniorities_never_hides_any_level(seniority: Seniority) 
     assert result.eligibility.status is not EligibilityStatus.INELIGIBLE
 
 
-def test_explicit_seniority_preference_is_symmetric_across_levels() -> None:
+def test_explicit_seniority_preference_excludes_levels_below_the_senior_tier() -> None:
     accepted = (Seniority.SENIOR,)
     for excluded in (Seniority.JUNIOR, Seniority.INTERN, Seniority.MID):
         seniority_filter, result = _seniority_result(excluded, accepted)
@@ -248,6 +256,32 @@ def test_explicit_seniority_preference_is_symmetric_across_levels() -> None:
         Seniority.JUNIOR, (Seniority.JUNIOR, Seniority.INTERN)
     )
     assert seniority_filter.result is KnowledgeState.TRUE
+
+
+_DEFAULT_ACCEPTED = (Seniority.INTERN, Seniority.JUNIOR, Seniority.MID, Seniority.UNKNOWN)
+
+
+@pytest.mark.parametrize(
+    "seniority",
+    [Seniority.SENIOR, Seniority.STAFF, Seniority.LEAD, Seniority.MANAGER, Seniority.DIRECTOR],
+)
+def test_senior_or_above_is_below_the_preference_never_excluded(seniority: Seniority) -> None:
+    # F48-13, decision 2: SENIOR+ outside the accepted levels ranks lower, never INELIGIBLE.
+    seniority_filter, result = _seniority_result(seniority, _DEFAULT_ACCEPTED)
+
+    assert seniority_filter.result is not KnowledgeState.FALSE
+    assert result.eligibility.status is not EligibilityStatus.INELIGIBLE
+
+
+def test_senior_scores_below_an_accepted_level_on_the_seniority_factor() -> None:
+    def factor_score(seniority: Seniority) -> Decimal:
+        _, result = _seniority_result(seniority, _DEFAULT_ACCEPTED)
+        factor = next(item for item in result.factors if item.factor_code == "SENIORITY_SCOPE")
+        assert factor.raw_score is not None
+        return factor.raw_score
+
+    assert factor_score(Seniority.SENIOR) < factor_score(Seniority.JUNIOR)
+    assert factor_score(Seniority.SENIOR) > Decimal("0")
 
 
 def test_golden_case_partial_skills_uses_exact_canonical_overlap() -> None:
@@ -260,6 +294,33 @@ def test_golden_case_partial_skills_uses_exact_canonical_overlap() -> None:
 
     factor = next(item for item in result.factors if item.factor_code == "TECHNOLOGY_FIT")
     assert factor.raw_score == Decimal("0.5")
+
+
+def test_profile_skills_recognise_the_f50_05_taxonomy_skills() -> None:
+    names = ("Spring Boot", "NestJS", "Vue", "React Native", "RAG", "LLM")
+    extracted = {
+        skill.canonical_id
+        for skill in extract_skills(
+            None,
+            "Required: Spring Boot, NestJS, Vue, React Native, RAG and LLM.",
+            {},
+        )
+    }
+    # The profile service stores `canonical_name` stripped and casefolded.
+    profile_skills = tuple(name.strip().casefold() for name in names)
+
+    result = evaluate_match(
+        _opportunity(required_skills=tuple(sorted(extracted)), preferred_skills=()),
+        _profile(skills=profile_skills),
+        _rules(),
+        assessed_at=ASSESSED_AT,
+    )
+
+    factor = next(item for item in result.factors if item.factor_code == "TECHNOLOGY_FIT")
+    # `llm`/`rag` also match `ai`, and "React Native" also matches `react`; the profile
+    # lists neither, so six of the eight extracted skills overlap.
+    assert extracted == set(profile_skills) | {"ai", "react"}
+    assert factor.raw_score == Decimal("0.75")
 
 
 def test_golden_case_old_job_has_explicit_recency_decay() -> None:
@@ -305,3 +366,328 @@ def test_rule_set_requires_versioned_complete_weights_and_aware_assessment_time(
         )
     with pytest.raises(MatchingError, match="timezone-aware"):
         evaluate_match(_opportunity(), _profile(), _rules(), assessed_at=datetime(2026, 9, 15))
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [
+        ("full-time", ContractType.FULL_TIME),
+        ("FULL_TIME", ContractType.FULL_TIME),
+        (" Full Time ", ContractType.FULL_TIME),
+        ("part-time", ContractType.PART_TIME),
+        ("internship", ContractType.INTERNSHIP),
+        ("contract", ContractType.CONTRACT),
+        ("freelance-ish", None),
+    ],
+)
+def test_profile_contract_spellings_resolve_to_the_same_enum(
+    stored: str, expected: ContractType | None
+) -> None:
+    # F48-04: the profile stores `full-time`, which used to become `FULL-TIME` and miss.
+    assert _optional_enum(ContractType, stored) is expected
+
+
+def test_a_hyphenated_profile_contract_makes_contract_compatible_known() -> None:
+    accepted = _known_contracts(("full-time",))
+    assert accepted == (ContractType.FULL_TIME,)
+
+    result = evaluate_match(
+        _opportunity(contract_types=(ContractType.FULL_TIME,)),
+        _profile(accepted_contract_types=accepted),
+        _rules(),
+        assessed_at=ASSESSED_AT,
+    )
+
+    contract = next(
+        item for item in result.eligibility.filters if item.code == "CONTRACT_COMPATIBLE"
+    )
+    assert contract.result is KnowledgeState.TRUE
+
+# --- matching-v2 (F48-12) ---------------------------------------------------------------
+
+
+def _v2(opportunity: OpportunitySnapshot, profile: ProfileSnapshot):
+    return evaluate_match(opportunity, profile, default_rule_set(), assessed_at=ASSESSED_AT)
+
+
+def _factor(result, code: str):
+    return next(item for item in result.factors if item.factor_code == code)
+
+
+def test_v2_is_the_current_rules_version_with_complete_weights() -> None:
+    rules = default_rule_set()
+
+    assert rules.version == "matching-v3" == RULES_VERSION
+    assert sum(item.weight for item in rules.factors) == Decimal("1")
+    policies = {item.code: item.missing_policy for item in rules.factors}
+    assert policies["TIMEZONE"] is MissingPolicy.EXCLUDE_AND_RENORMALIZE
+    assert policies["CONTRACT_COMPENSATION"] is MissingPolicy.EXCLUDE_AND_RENORMALIZE
+    assert MissingPolicy.REQUIRE_REVIEW not in policies.values()
+
+
+def test_allowed_countries_reach_the_snapshot_normalized_and_deduplicated() -> None:
+    assert _allowed_countries(["br", "BR", " us "]) == ("BR", "US")
+    assert _allowed_countries(None) == ()
+    assert _allowed_countries([]) == ()
+
+
+@pytest.mark.parametrize("work_mode_known", [True, False])
+@pytest.mark.parametrize("country_known", [True, False])
+@pytest.mark.parametrize("contract_known", [True, False])
+def test_geography_knowledge_matrix_never_forces_review(
+    work_mode_known: bool, country_known: bool, contract_known: bool
+) -> None:
+    opportunity = _opportunity(
+        work_mode=WorkMode.REMOTE if work_mode_known else WorkMode.UNKNOWN,
+        allowed_countries=("BR",) if country_known else (),
+        contract_types=(ContractType.FULL_TIME,) if contract_known else (),
+    )
+
+    result = _v2(opportunity, _profile())
+    factor = _factor(result, "GEOGRAPHY_CONTRACT_FIT")
+    known = sum([work_mode_known, country_known, contract_known])
+
+    assert result.review_required is False
+    assert result.verdict is not Verdict.REVIEW_REQUIRED
+    if known == 0:
+        assert factor.status.value == "UNKNOWN"
+        assert factor.raw_score == Decimal("0.5")
+        assert factor.confidence == Decimal("0")
+    else:
+        assert factor.status.value == "KNOWN"
+        assert factor.confidence == Decimal(known) / Decimal(3)
+        assert factor.raw_score == (Decimal(known) + Decimal("0.5") * (3 - known)) / 3
+
+
+def test_unknown_geography_lowers_confidence_but_keeps_the_score_neutral() -> None:
+    known = _v2(_opportunity(), _profile())
+    unknown = _v2(
+        _opportunity(work_mode=WorkMode.UNKNOWN, allowed_countries=(), contract_types=()),
+        _profile(),
+    )
+
+    assert unknown.confidence < known.confidence
+    assert unknown.score < known.score
+
+
+def test_a_known_geography_mismatch_is_still_ineligible() -> None:
+    result = _v2(_opportunity(work_mode=WorkMode.ONSITE), _profile())
+
+    assert result.verdict is Verdict.INELIGIBLE
+    assert _factor(result, "GEOGRAPHY_CONTRACT_FIT").status.value == "KNOWN"
+    assert _factor(result, "GEOGRAPHY_CONTRACT_FIT").raw_score == Decimal("0")
+
+
+def test_work_authorization_and_timezone_are_not_collected_not_review() -> None:
+    result = _v2(
+        _opportunity(
+            work_authorization=OpportunityWorkAuthorization.NOT_STATED,
+            timezone_overlap_hours=None,
+            required_timezone_overlap_hours=None,
+        ),
+        _profile(work_authorization=ProfileWorkAuthorization.UNKNOWN),
+    )
+
+    assert result.review_required is False
+    assert result.verdict is not Verdict.REVIEW_REQUIRED
+
+
+def test_v2_compensation_conflict_still_requires_review() -> None:
+    result = _v2(_opportunity(compensation=None, compensation_conflict=True), _profile())
+
+    assert result.review_required is True
+    assert result.verdict is Verdict.REVIEW_REQUIRED
+
+
+def test_timezone_and_compensation_without_data_leave_the_denominator() -> None:
+    result = _v2(
+        _opportunity(
+            timezone_overlap_hours=None,
+            required_timezone_overlap_hours=None,
+            compensation=None,
+        ),
+        _profile(compensation=None),
+    )
+
+    for code in ("TIMEZONE", "CONTRACT_COMPENSATION"):
+        factor = _factor(result, code)
+        assert factor.status.value == "UNKNOWN"
+        assert factor.raw_score is None
+        assert factor.contribution == Decimal("0")
+    contributions = sum(item.contribution for item in result.factors)
+    assert result.score == contributions / Decimal("0.90")
+
+
+@pytest.mark.parametrize(
+    ("opportunity_family", "profile_families", "state", "raw"),
+    [
+        ("DATA", ("DATA", "SOFTWARE_ENGINEERING"), "KNOWN", Decimal("1")),
+        ("SALES", ("DATA", "SOFTWARE_ENGINEERING"), "KNOWN", Decimal("0.25")),
+        ("UNKNOWN", ("DATA",), "UNKNOWN", Decimal("0.5")),
+        (None, ("DATA",), "UNKNOWN", Decimal("0.5")),
+        ("DATA", (), "UNKNOWN", Decimal("0.5")),
+    ],
+)
+def test_domain_experience_is_the_role_family_intersection(
+    opportunity_family: str | None,
+    profile_families: tuple[str, ...],
+    state: str,
+    raw: Decimal,
+) -> None:
+    result = _v2(
+        _opportunity(role_family=opportunity_family),
+        _profile(role_families=profile_families),
+    )
+
+    factor = _factor(result, "DOMAIN_EXPERIENCE")
+    assert factor.status.value == state
+    assert factor.raw_score == raw
+
+
+def test_v2_strong_known_evidence_reaches_the_positive_verdicts() -> None:
+    profile = _profile(role_families=("SOFTWARE_ENGINEERING",))
+    strong = _v2(_opportunity(role_family="SOFTWARE_ENGINEERING"), profile)
+    partial = _v2(
+        _opportunity(
+            role_family="SOFTWARE_ENGINEERING",
+            required_skills=("python", "rust", "go", "kafka"),
+            preferred_skills=(),
+            company_priority=CompanyPriority.LOW,
+        ),
+        profile,
+    )
+
+    assert strong.verdict is Verdict.HIGH_PRIORITY
+    assert partial.verdict in {Verdict.RECOMMENDED, Verdict.WATCHLIST}
+
+
+def test_v2_thresholds_are_calibrated_and_descending() -> None:
+    rules = default_rule_set()
+
+    assert (
+        rules.high_priority_threshold,
+        rules.recommended_threshold,
+        rules.watchlist_threshold,
+    ) == (Decimal("80"), Decimal("65"), Decimal("50"))
+
+
+# --- eligibility with what is known (F50-06) --------------------------------------------
+
+_NO_DATA = {
+    "work_authorization": OpportunityWorkAuthorization.NOT_STATED,
+    "timezone_overlap_hours": None,
+    "required_timezone_overlap_hours": None,
+}
+_SPONSORED = ProfileWorkAuthorization.REQUIRES_SPONSORSHIP
+_UNDECLARED = ProfileWorkAuthorization.UNKNOWN
+_NO_SPONSORSHIP = OpportunityWorkAuthorization.SPONSORSHIP_NOT_AVAILABLE
+
+
+@pytest.mark.parametrize(
+    ("opportunity_changes", "profile_changes", "expected"),
+    [
+        # every criterion with data is TRUE; timezone and work authorization have none
+        (_NO_DATA, {"work_authorization": _UNDECLARED}, EligibilityStatus.ELIGIBLE),
+        # one FALSE criterion still disqualifies
+        (
+            {**_NO_DATA, "work_mode": WorkMode.ONSITE},
+            {"work_authorization": _UNDECLARED},
+            EligibilityStatus.INELIGIBLE,
+        ),
+        # unknown country blocks only when the profile needs sponsorship
+        (
+            {**_NO_DATA, "allowed_countries": ()},
+            {"work_authorization": _SPONSORED},
+            EligibilityStatus.UNKNOWN,
+        ),
+        (
+            {**_NO_DATA, "allowed_countries": ()},
+            {"work_authorization": _UNDECLARED},
+            EligibilityStatus.ELIGIBLE,
+        ),
+        # a known-FALSE country disqualifies regardless of sponsorship
+        (
+            {**_NO_DATA, "allowed_countries": ("US",)},
+            {"work_authorization": _SPONSORED},
+            EligibilityStatus.INELIGIBLE,
+        ),
+        (
+            {**_NO_DATA, "allowed_countries": ("US",)},
+            {"work_authorization": _UNDECLARED},
+            EligibilityStatus.INELIGIBLE,
+        ),
+        # criteria with a data source still hold eligibility open
+        (
+            {**_NO_DATA, "seniority": Seniority.UNKNOWN},
+            {"work_authorization": _UNDECLARED},
+            EligibilityStatus.UNKNOWN,
+        ),
+        (
+            {**_NO_DATA, "contract_types": ()},
+            {"work_authorization": _UNDECLARED},
+            EligibilityStatus.UNKNOWN,
+        ),
+        # a posting that states the data keeps the normal evaluation
+        (
+            {"required_timezone_overlap_hours": None},
+            {},
+            EligibilityStatus.UNKNOWN,
+        ),
+        (
+            {"timezone_overlap_hours": Decimal("2")},
+            {},
+            EligibilityStatus.INELIGIBLE,
+        ),
+        (
+            {**_NO_DATA, "work_authorization": _NO_SPONSORSHIP},
+            {"work_authorization": _UNDECLARED},
+            EligibilityStatus.UNKNOWN,
+        ),
+        (
+            {**_NO_DATA, "work_authorization": _NO_SPONSORSHIP},
+            {"work_authorization": _SPONSORED},
+            EligibilityStatus.INELIGIBLE,
+        ),
+    ],
+)
+def test_eligibility_closes_on_what_is_known(
+    opportunity_changes: dict[str, object],
+    profile_changes: dict[str, object],
+    expected: EligibilityStatus,
+) -> None:
+    result = _v2(_opportunity(**opportunity_changes), _profile(**profile_changes))
+
+    assert result.eligibility.status is expected
+
+
+def test_criteria_without_data_are_not_applicable_in_the_eligibility_details() -> None:
+    result = _v2(
+        _opportunity(**_NO_DATA, allowed_countries=()), _profile(work_authorization=_UNDECLARED)
+    )
+
+    states = {item.code: item.result for item in result.eligibility.filters}
+    assert states["TIMEZONE_COMPATIBLE"] is KnowledgeState.NOT_APPLICABLE
+    assert states["WORK_AUTHORIZATION_COMPATIBLE"] is KnowledgeState.NOT_APPLICABLE
+    assert states["COUNTRY_ALLOWED"] is KnowledgeState.NOT_APPLICABLE
+    assert result.eligibility.unknowns == ()
+
+
+def test_eligibility_change_leaves_scores_untouched() -> None:
+    """Literals computed from the code before F50-06 (eligibility was UNKNOWN in the last two)."""
+    full = _v2(_opportunity(), _profile())
+    no_data = _v2(_opportunity(**_NO_DATA), _profile(work_authorization=_UNDECLARED))
+    no_country = _v2(
+        _opportunity(**_NO_DATA, allowed_countries=()),
+        _profile(work_authorization=_UNDECLARED),
+    )
+
+    assert full.score == Decimal("90.000")
+    assert no_data.score == Decimal("89.47368421052631578947368421")
+    assert no_country.score == Decimal("86.84210526315789473684210526")
+    codes = ("TECHNOLOGY_FIT", "DOMAIN_EXPERIENCE", "TIMEZONE")
+    raw = [_factor(no_data, code).raw_score for code in codes]
+    assert [str(item) for item in raw] == ["1.0", "0.5", "None"]
+    assert str(_factor(no_country, "GEOGRAPHY_CONTRACT_FIT").raw_score) == (
+        "0.8333333333333333333333333333"
+    )
+    assert no_data.eligibility.status is EligibilityStatus.ELIGIBLE

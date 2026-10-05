@@ -105,7 +105,7 @@ export function CompanyForm({
   return (
     <form
       aria-labelledby={titleId}
-      className="rounded-2xl border border-line bg-surface p-5"
+      className="rounded-control border border-line bg-surface p-5"
       noValidate
       onSubmit={submit}
     >

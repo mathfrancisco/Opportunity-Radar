@@ -62,6 +62,12 @@ def test_import_research_file_is_idempotent_for_completed_file(tmp_path: Path) -
             .where(Company.canonical_name == company_name)
         )
 
+    with Session(engine) as session:
+        imported = session.scalar(
+            select(Company).where(Company.canonical_name == company_name)
+        )
+        assert imported is not None
+        assert (imported.priority, imported.research_confidence) == ("normal", "normal")
     assert first["status"] == "completed"
     assert second["status"] == "already_completed"
     assert company_count == 1
@@ -113,7 +119,8 @@ def test_maps_confirmed_json_before_ats_and_careers() -> None:
         ("ashby", "https://api.example.com/jobs"),
         ("careers", "https://example.com/careers"),
     ]
-    assert row.source_priority == "high"
+    assert row.research_confidence == "high"
+    assert row.as_candidate().priority == "normal"
     assert row.source_status == "api_json_confirmed"
 
 
@@ -129,7 +136,8 @@ def test_maps_dynamic_and_redirected_companies_to_backlog() -> None:
 
     assert row.is_backlog is True
     assert row.source_status == "backlog"
-    assert row.source_priority == "low"
+    assert row.research_confidence == "low"
+    assert row.as_candidate().priority == "normal"
     identities = [
         (source.source_type, source.endpoint)
         for source in row.source_candidates()

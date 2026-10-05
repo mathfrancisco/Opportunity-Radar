@@ -1,10 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render } from '../components/testing'
 import { type OpportunityDetail } from '../features/opportunities/api'
-import { DuplicateCandidates } from './OpportunityDetailPage'
+import {
+  DuplicateCandidates,
+  OpportunityDescription,
+  OpportunityDetailPage,
+  SiblingLocations,
+} from './OpportunityDetailPage'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -16,13 +21,13 @@ async function flush(times = 4) {
   }
 }
 
-function renderWithProviders(element: ReactElement): HTMLElement {
+function renderWithProviders(element: ReactElement, withRouter = true): HTMLElement {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>{element}</MemoryRouter>
+      {withRouter ? <MemoryRouter>{element}</MemoryRouter> : element}
     </QueryClientProvider>,
   )
 }
@@ -42,12 +47,15 @@ function opportunity(overrides: Partial<OpportunityDetail> = {}): OpportunityDet
     description: null,
     lifecycleStatus: 'ACTIVE',
     publishedAt: '2026-09-10T00:00:00Z',
+    recencyEffectiveDate: '2026-09-10T00:00:00Z',
+    recencyBasis: 'published',
     createdAt: '2026-09-05T00:00:00Z',
     version: 1,
     compensations: [],
     skills: [],
     occurrences: [],
     normalizationResults: [],
+    siblingLocations: [],
     relevanceMark: null,
     ...overrides,
   }
@@ -302,5 +310,116 @@ describe('DuplicateCandidates', () => {
     await flush()
 
     expect(rejectedBody).toEqual({ decided_by: 'web-operator' })
+  })
+})
+
+describe('SiblingLocations (F48-10)', () => {
+  it('lists the other cities with links to each opportunity', () => {
+    const container = renderWithProviders(
+      <SiblingLocations
+        opportunity={opportunity({
+          siblingLocations: [
+            { opportunityId: 'opp-b', location: 'Recife', sourceUrl: 'https://jobs.example/b' },
+            { opportunityId: 'opp-c', location: null, sourceUrl: null },
+          ],
+        })}
+      />,
+    )
+    const links = Array.from(container.querySelectorAll('a')).map((a) => [
+      a.textContent,
+      a.getAttribute('href'),
+    ])
+    expect(links).toEqual([
+      ['Recife', '/opportunities/opp-b'],
+      ['vaga original', 'https://jobs.example/b'],
+      ['Local não informado', '/opportunities/opp-c'],
+    ])
+  })
+
+  it('renders nothing without siblings', () => {
+    const container = renderWithProviders(<SiblingLocations opportunity={opportunity()} />)
+    expect(container.querySelector('[data-testid="sibling-locations"]')).toBeNull()
+  })
+})
+
+describe('OpportunityDescription', () => {
+  it('converts job-board HTML into safe, readable text with paragraph breaks', () => {
+    const container = renderWithProviders(
+      <OpportunityDescription
+        description={'<p>Build <strong>reliable</strong> systems.</p><p>Apply with CV.<br>Remote &amp; flexible.</p><script>window.executed = true</script>'}
+      />,
+      false,
+    )
+
+    const description = container.querySelector('[data-testid="opportunity-description"]')
+    expect(description?.textContent).toBe(
+      'Build reliable systems.\n\nApply with CV.\nRemote & flexible.',
+    )
+    expect(description?.querySelector('script')).toBeNull()
+  })
+})
+
+describe('OpportunityDetailPage', () => {
+  it('keeps the decision and application actions reachable from the local section navigation', async () => {
+    const detail = opportunity()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.includes('/duplicate-candidates')) return new Response(JSON.stringify({ items: [] }))
+        if (url.includes('/matches?')) return new Response(JSON.stringify({ items: [] }))
+        if (url.includes('/applications?')) {
+          return new Response(JSON.stringify({ items: [], total: 0, offset: 0, limit: 1 }))
+        }
+        if (url.endsWith('/opportunities/opportunity-1')) {
+          return new Response(JSON.stringify({
+            id: detail.id,
+            fingerprint: detail.fingerprint,
+            fingerprint_version: detail.fingerprintVersion,
+            title: detail.title,
+            company_id: detail.companyId,
+            company_name: detail.companyName,
+            location: detail.location,
+            work_mode: detail.workMode,
+            seniority: detail.seniority,
+            contract_type: detail.contractType,
+            description: detail.description,
+            lifecycle_status: detail.lifecycleStatus,
+            published_at: detail.publishedAt,
+            recency_effective_date: detail.recencyEffectiveDate,
+            recency_basis: detail.recencyBasis,
+            created_at: detail.createdAt,
+            version: detail.version,
+            compensations: [],
+            skills: [],
+            occurrences: [],
+            normalization_results: [],
+            sibling_locations: [],
+            relevance_mark: null,
+          }))
+        }
+        return new Response('{}', { status: 404 })
+      }),
+    )
+
+    const container = renderWithProviders(
+      <MemoryRouter initialEntries={['/opportunities/opportunity-1']}>
+        <Routes>
+          <Route path="/opportunities/:opportunityId" element={<OpportunityDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+      false,
+    )
+    await flush(6)
+
+    const navigation = container.querySelector('nav[aria-label="Navegar nesta oportunidade"]')
+    expect(navigation?.querySelector('a[href="#resumo"]')?.textContent).toBe('Resumo')
+    expect(navigation?.querySelector('a[href="#decisao"]')?.textContent).toBe('Decisão')
+    expect(navigation?.querySelector('a[href="#candidatura"]')?.textContent).toBe('Candidatura')
+    expect(container.querySelector('#decisao')).not.toBeNull()
+    expect(container.querySelector('#candidatura')).not.toBeNull()
+    expect(container.textContent).toContain('Remoto')
+    expect(container.textContent).toContain('Tempo integral')
+    expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent === 'Registrar interesse')).toBe(true)
   })
 })

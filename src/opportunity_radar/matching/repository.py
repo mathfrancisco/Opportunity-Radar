@@ -317,6 +317,7 @@ class SqlAlchemyMatchingRepository:
         attempt_window: timedelta,
         max_attempts: int,
         aging_sample_ratio: float = 0.0,
+        role_families: Sequence[str] = (),
         # `Sequence` rather than `list`: the class already binds `list` to a method above,
         # which shadows the builtin for every annotation declared after it.
     ) -> Sequence[UUID]:
@@ -352,6 +353,7 @@ class SqlAlchemyMatchingRepository:
                     cooldown=cooldown,
                     attempt_window=attempt_window,
                     max_attempts=max_attempts,
+                    role_families=role_families,
                 )
             )
         )
@@ -387,6 +389,7 @@ class SqlAlchemyMatchingRepository:
         cooldown: timedelta,
         attempt_window: timedelta,
         max_attempts: int,
+        role_families: Sequence[str] = (),
     ) -> int:
         """How far behind the queue is: the same selection, without the batch cap."""
         if not eligible_verdicts or max_attempts <= 0:
@@ -401,6 +404,7 @@ class SqlAlchemyMatchingRepository:
                     cooldown=cooldown,
                     attempt_window=attempt_window,
                     max_attempts=max_attempts,
+                    role_families=role_families,
                 )
             )
         )
@@ -414,6 +418,7 @@ class SqlAlchemyMatchingRepository:
         cooldown: timedelta,
         attempt_window: timedelta,
         max_attempts: int,
+        role_families: Sequence[str] = (),
     ) -> tuple[Any, ...]:
         completed = aliased(MatchAnalysisModel)
         cooling = aliased(MatchAnalysisModel)
@@ -458,13 +463,27 @@ class SqlAlchemyMatchingRepository:
             )
             .scalar_subquery()
         )
-        return (
+        conditions: tuple[Any, ...] = (
             MatchAssessmentModel.verdict.in_(tuple(eligible_verdicts)),
             ~has_completed,
             ~is_superseded,
             ~in_cooldown,
             attempts < max_attempts,
         )
+        if not role_families:
+            return conditions
+        # The queue spends the model only on the areas the profile asked for; a posting
+        # outside them can still be analysed on demand from its own page.
+        targeted = aliased(OpportunityModel)
+        in_target_area = (
+            select(literal(1))
+            .where(
+                targeted.id == MatchAssessmentModel.opportunity_id,
+                targeted.role_family.in_(tuple(role_families)),
+            )
+            .exists()
+        )
+        return (*conditions, in_target_area)
 
     def acquire_analysis_claim(
         self,

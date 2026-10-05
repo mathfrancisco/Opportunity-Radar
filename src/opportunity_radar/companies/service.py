@@ -52,6 +52,7 @@ class CompanyService:
             normalized_name=candidate.normalized_name,
             domain=candidate.normalized_domain,
             priority=candidate.priority,
+            research_confidence=candidate.research_confidence,
         )
         self.repository.session.add(company)
         self.repository.session.flush()

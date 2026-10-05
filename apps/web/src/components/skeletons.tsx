@@ -51,7 +51,7 @@ export function CardListSkeleton({ label, count = 4 }: { label: string; count?: 
       <div className="grid gap-3">
         <Bone className="my-1 w-40" />
         {range(count).map((index) => (
-          <div className="rounded-2xl border border-line bg-surface p-5" key={index}>
+          <div className="rounded-panel border border-line bg-surface p-5" key={index}>
             <Bone className="h-4 w-2/3" />
             <Bone className="mt-3 w-1/3" />
             <Bone className="mt-4 w-5/6" />
@@ -74,14 +74,14 @@ export function TableSkeleton({
 }) {
   return (
     <Skeleton label={label}>
-      <div className="overflow-hidden rounded-2xl border border-line">
-        <div className="flex gap-6 bg-canvas px-4 py-3">
+      <div className="overflow-hidden rounded-control border border-line">
+        <div className="flex h-10 items-center gap-6 bg-panel px-4">
           {range(columns).map((column) => (
             <Bone className="h-2.5 flex-1" key={column} />
           ))}
         </div>
         {range(rows).map((row) => (
-          <div className="flex gap-6 border-t border-divider bg-surface px-4 py-4" key={row}>
+          <div className="flex h-11 items-center gap-6 border-t border-line bg-surface px-4" key={row}>
             {range(columns).map((column) => (
               <Bone className={column === 0 ? 'flex-1' : 'flex-1 opacity-60'} key={column} />
             ))}
@@ -96,7 +96,7 @@ export function TableSkeleton({
 export function PanelSkeleton({ label, columns = 3 }: { label: string; columns?: number }) {
   return (
     <Skeleton label={label}>
-      <div className="grid gap-3 rounded-2xl border border-line bg-panel p-5 text-sm sm:grid-cols-3">
+      <div className="grid gap-3 rounded-panel border border-line bg-panel p-5 text-sm sm:grid-cols-3">
         {range(columns).map((column) => (
           <div className="py-1" key={column}>
             <Bone className="w-24" />

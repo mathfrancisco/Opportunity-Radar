@@ -25,13 +25,22 @@ from opportunity_radar.matching.text import TokenCalibration
 ANALYSIS_SCHEMA_VERSION = "analysis-v1"
 #: Strengths and risks become `{claim, evidence, source}` objects (card F16-07).
 ANALYSIS_SCHEMA_V2 = "analysis-v2"
+#: `analysis-v1`'s plain strings with a tighter cap on each list (card F50-09).
+ANALYSIS_SCHEMA_V3 = "analysis-v3"
 #: Identity of an analysis from card F16-08: the payload actually sent, the prompt's
 #: content, the model and every option that changes the answer. Rows keyed before it
 #: have `key_version` NULL and are never reused as if they were keyed by it.
 #: Bumped to v3 (card F20-16): `options` now carries the provider and the model chain,
 #: so an analysis under one provider/model never collides with another keyed under the
 #: same v2 digest.
-ANALYSIS_KEY_VERSION = "analysis-key-v3"
+#: Bumped to v4: the key is built from `reusable_payload_digest`, not from the row version
+#: and the raw payload hash, so a recollection that changed nothing the model reads no
+#: longer pays for the same analysis again.
+ANALYSIS_KEY_VERSION = "analysis-key-v4"
+#: Payload fields that change with every recollection or daily re-evaluation without
+#: changing the posting, the profile or the verdict the analysis comments on.
+_EVIDENCE_REF_FIELDS = frozenset({"evidence_refs", "skill_evidence_refs"})
+_BOOKKEEPING_FIELDS = frozenset({"content_version"}) | _EVIDENCE_REF_FIELDS
 #: Where a quoted piece of evidence may come from in the payload that was sent.
 CLAIM_SOURCES = ("posting", "profile")
 
@@ -327,10 +336,27 @@ OUTPUT_SCHEMA_V2: dict[str, Any] = {
     },
 }
 
+# `analysis-v3` (card F50-09): v1's shape with a cap per list. The v1 eval expects at most
+# five risks per case and the v1 reference examples carry at most two strengths, one
+# inference and three unknowns, so these caps leave headroom without paying for 20 items.
+V3_MAX_ITEMS = {"strengths": 4, "risks": 5, "inferences": 3, "unknowns": 4}
+
+OUTPUT_SCHEMA_V3: dict[str, Any] = {
+    **OUTPUT_SCHEMA,
+    "properties": {
+        **OUTPUT_SCHEMA["properties"],
+        **{
+            name: {**OUTPUT_SCHEMA["properties"][name], "maxItems": cap}
+            for name, cap in V3_MAX_ITEMS.items()
+        },
+    },
+}
+
 #: The schema each version validates against. A prompt declares its version in metadata.
 OUTPUT_SCHEMAS: dict[str, dict[str, Any]] = {
     ANALYSIS_SCHEMA_VERSION: OUTPUT_SCHEMA,
     ANALYSIS_SCHEMA_V2: OUTPUT_SCHEMA_V2,
+    ANALYSIS_SCHEMA_V3: OUTPUT_SCHEMA_V3,
 }
 
 _ARRAY_FIELDS = ("strengths", "risks", "inferences", "unknowns")
@@ -405,13 +431,19 @@ def parse_analysis(
             retryable=True,
         )
 
-    with_claims = schema_version != ANALYSIS_SCHEMA_VERSION
+    with_claims = schema_version == ANALYSIS_SCHEMA_V2
     items: dict[str, tuple[AnalysisItem, ...]] = {}
     for name in _ARRAY_FIELDS:
         if with_claims and name in _CLAIM_FIELDS:
             items[name] = _claim_list(payload[name], name, evidence_sources or {})
         else:
-            items[name] = _string_list(payload[name], name)
+            cap = schema["properties"][name]["maxItems"]
+            value = payload[name]
+            if schema_version == ANALYSIS_SCHEMA_V3 and isinstance(value, list):
+                # The model cannot be forced to respect a cap, and an answer one item
+                # over it is still a good answer: keep the first `cap` items.
+                value = value[:cap]
+            items[name] = _string_list(value, name, cap)
     return SemanticAnalysis(
         summary=summary.strip(),
         strengths=items["strengths"],
@@ -498,17 +530,19 @@ def _claim_list(
     return tuple(claims)
 
 
-def _string_list(value: Any, field_name: str) -> tuple[str, ...]:
+def _string_list(
+    value: Any, field_name: str, max_items: int = MAX_ITEMS
+) -> tuple[str, ...]:
     if not isinstance(value, list):
         raise AnalysisError(
             AnalysisFailureCode.SCHEMA_MISMATCH,
             f"analysis {field_name} must be an array",
             retryable=True,
         )
-    if len(value) > MAX_ITEMS:
+    if len(value) > max_items:
         raise AnalysisError(
             AnalysisFailureCode.SCHEMA_MISMATCH,
-            f"analysis {field_name} exceeds {MAX_ITEMS} items",
+            f"analysis {field_name} exceeds {max_items} items",
             retryable=True,
         )
     items: list[str] = []
@@ -562,6 +596,53 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _without_bookkeeping(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            key: _without_bookkeeping(item)
+            for key, item in value.items()
+            if key not in _BOOKKEEPING_FIELDS
+        }
+    if isinstance(value, (list, tuple)):
+        return [_without_bookkeeping(item) for item in value]
+    return value
+
+
+def without_evidence_refs(value: Any) -> Any:
+    """`value` minus `evidence_refs` and `skill_evidence_refs` at any depth (card F50-09).
+
+    They are row ids and hashes for the stored assessment; the model cannot quote them
+    (`evidence_sources` only knows excerpts of the posting, opportunity and profile).
+    """
+    if isinstance(value, Mapping):
+        return {
+            key: without_evidence_refs(item)
+            for key, item in value.items()
+            if key not in _EVIDENCE_REF_FIELDS
+        }
+    if isinstance(value, (list, tuple)):
+        return [without_evidence_refs(item) for item in value]
+    return value
+
+
+def reusable_payload_digest(payload: Mapping[str, Any]) -> str:
+    """Digest of what the analysis is about, for the key: the payload minus bookkeeping.
+
+    The row version and the evidence references move on every recollection, and the score
+    moves with the posting's age on every daily re-evaluation. None of them changes the
+    posting, the profile or the verdict, and keying on them made the same posting be
+    analysed again each time. Eligibility and verdict stay in: an analysis written for one
+    verdict is not the answer for another.
+    """
+    reusable = _without_bookkeeping(payload)
+    result = reusable.get("deterministic_result")
+    if isinstance(result, Mapping):
+        reusable["deterministic_result"] = {
+            key: item for key, item in result.items() if key != "score"
+        }
+    return _digest(reusable)
+
+
 def analysis_key(
     request: AnalysisRequest,
     *,
@@ -574,18 +655,17 @@ def analysis_key(
 ) -> str:
     """`ANALYSIS_KEY_VERSION`: the one definition the service, the adapter and the table share.
 
-    The payload hash covers what the model read — the posting as cleaned and cut, the
-    profile history, the retrieved decisions, the deterministic result — so a different
-    cut or a changed decision is a different analysis. The prompt digest covers the
-    wording and the schema, not just the version label, and `options` every inference
-    setting that changes the answer. `keep_alive` is deliberately absent: it changes how
-    long the model stays loaded, not what it says.
+    `payload_hash` is `reusable_payload_digest` of the payload: the posting as cleaned and
+    cut, the profile history, the retrieved decisions, the eligibility and the verdict —
+    so a different cut or a changed decision is a different analysis. The prompt digest
+    covers the wording and the schema, not just the version label, and `options` every
+    inference setting that changes the answer. `keep_alive` is deliberately absent: it
+    changes how long the model stays loaded, not what it says.
     """
     return _digest(
         {
             "key_version": ANALYSIS_KEY_VERSION,
             "opportunity_id": str(request.opportunity_id),
-            "opportunity_content_version": request.opportunity_content_version,
             "profile_version_id": str(request.profile_version_id),
             "rules_version": request.rules_version,
             "taxonomy_version": request.taxonomy_version,
@@ -728,7 +808,7 @@ class NullAnalysisAdapter:
                 prompt_version=self.prompt_version,
                 schema_version=ANALYSIS_SCHEMA_VERSION,
                 prompt_digest="disabled",
-                payload_hash=payload_hash,
+                payload_hash=reusable_payload_digest(payload),
                 options={},
             ),
             payload_hash=payload_hash,
@@ -810,5 +890,6 @@ __all__: Sequence[str] = (
     "normalize_evidence",
     "parse_analysis",
     "payload_digest",
+    "reusable_payload_digest",
     "skipped_outcome",
 )

@@ -56,6 +56,11 @@ services:
       # retried within it rather than a real five-minute backoff later.
       COLLECTION_BACKOFF_BASE_SECONDS: 5
       COLLECTION_BACKOFF_CEILING_SECONDS: 30
+      # The fake board's posting names no contract, so it scores WATCHLIST (about 62), under
+      # the production default of HIGH_PRIORITY,RECOMMENDED (SPEC 50: no model time below
+      # that). The autonomous-cycle gate proves the worker's own analysis wiring, not that
+      # threshold, so the gate's queue also takes WATCHLIST.
+      WORKER_ANALYZE_VERDICTS: HIGH_PRIORITY,RECOMMENDED,WATCHLIST,REVIEW_REQUIRED
     depends_on:
       jobboard:
         condition: service_started

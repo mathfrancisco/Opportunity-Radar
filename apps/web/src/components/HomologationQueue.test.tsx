@@ -127,11 +127,35 @@ describe('HomologationQueue', () => {
     const container = renderWithClient(<HomologationQueue />)
     await flush()
 
-    const names = Array.from(container.querySelectorAll('li')).map((item) => item.textContent)
+    const names = Array.from(container.querySelectorAll('tbody tr')).map((item) => item.textContent)
     expect(names[0]).toContain('Alta prioridade')
     expect(names[0]).toContain('Sem sonda')
     expect(names[1]).toContain('Confirmada')
     expect(names[1]).toContain('Evidência confirmada')
+  })
+
+  it('usa DataTable, chip de estado e "Homologar" sm abre o modo sequencial na linha', async () => {
+    stubFetch({
+      items: [
+        healthItem({ source_definition_id: 'source-1', name: 'Primeira' }),
+        healthItem({ source_definition_id: 'source-2', name: 'Segunda' }),
+      ],
+    })
+
+    const container = renderWithClient(<HomologationQueue />)
+    await flush()
+
+    expect(container.querySelector('table')).not.toBeNull()
+    expect(container.querySelector('tbody tr span.rounded-chip')?.textContent).toBe('Sem sonda')
+    const second = container.querySelectorAll('tbody tr')[1]
+    const button = second.querySelector('button')
+    expect(button?.textContent).toBe('Homologar')
+    expect(button?.className).toContain('h-8')
+    act(() => button?.click())
+    await flush()
+
+    expect(container.textContent).toContain('2 de 2')
+    expect(container.textContent).toContain('Fonte source-2')
   })
 
   it('modo sequencial avança sem voltar à lista', async () => {
@@ -152,6 +176,9 @@ describe('HomologationQueue', () => {
     act(() => sequentialButton?.click())
     await flush()
 
+    expect(container.textContent).toContain('Revisão uma a uma')
+    expect(container.querySelector('progress')?.getAttribute('value')).toBe('0')
+    expect(container.querySelector('progress')?.getAttribute('max')).toBe('2')
     // The list (batch button, counters grid) is gone once in sequential mode.
     expect(
       Array.from(container.querySelectorAll('button')).some((button) =>
@@ -168,6 +195,7 @@ describe('HomologationQueue', () => {
     await flush()
 
     expect(container.textContent).toContain('Fonte source-2')
+    expect(container.querySelector('progress')?.getAttribute('value')).toBe('1')
     // Still never back at the list.
     expect(
       Array.from(container.querySelectorAll('button')).some((button) =>
@@ -216,12 +244,12 @@ describe('HomologationQueue', () => {
     const container = renderWithClient(<HomologationQueue />)
     await flush()
 
-    const checkboxes = Array.from(
-      container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
-    )
-    expect(checkboxes).toHaveLength(2)
-    act(() => checkboxes[0].click())
-    act(() => checkboxes[1].click())
+    const first = container.querySelector<HTMLInputElement>('input[aria-label="Selecionar Limitada"]')
+    const second = container.querySelector<HTMLInputElement>('input[aria-label="Selecionar Confirmada"]')
+    expect(first).not.toBeNull()
+    expect(second).not.toBeNull()
+    act(() => first?.click())
+    act(() => second?.click())
     await flush()
 
     const batchButton = Array.from(container.querySelectorAll('button')).find((button) =>
@@ -232,10 +260,33 @@ describe('HomologationQueue', () => {
     await flush()
     await flush()
 
-    const rows = Array.from(container.querySelectorAll('li'))
+    const rows = Array.from(container.querySelectorAll('tbody tr'))
     expect(rows[0].textContent).toContain('SOURCE_RATE_LIMITED')
     expect(rows[0].textContent).toContain('aguardar 0s')
     expect(rows[1].textContent).toContain('Sonda confirmada')
+  })
+
+  it('seleciona todas as propostas e destaca as linhas selecionadas', async () => {
+    stubFetch({
+      items: [
+        healthItem({ source_definition_id: 'source-1', name: 'Primeira' }),
+        healthItem({ source_definition_id: 'source-2', name: 'Segunda' }),
+      ],
+    })
+
+    const container = renderWithClient(<HomologationQueue />)
+    await flush()
+
+    const selectAll = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Selecionar todas as propostas"]',
+    )
+    expect(selectAll).not.toBeNull()
+    act(() => selectAll?.click())
+    await flush()
+
+    expect(container.textContent).toContain('2 selecionadas')
+    expect(container.querySelectorAll('tbody tr[aria-selected="true"]')).toHaveLength(2)
+    expect(selectAll?.checked).toBe(true)
   })
 
   it('termos e habilitação nunca disparam em lote', async () => {

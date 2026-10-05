@@ -11,7 +11,7 @@ still in the inbox: hiding it would make the screen quietly disagree with the ca
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
@@ -19,7 +19,7 @@ from functools import reduce
 from typing import Any, Literal
 from uuid import UUID
 
-from sqlalchemy import Select, and_, case, func, literal, or_, select
+from sqlalchemy import Select, String, case, cast, func, literal, select, true
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import (
@@ -31,9 +31,14 @@ from opportunity_radar.companies.models import Company, CompanySource, CompanySt
 from opportunity_radar.dashboard.metrics import _is_homologated
 from opportunity_radar.dashboard.search_synonyms import synonym_variants
 from opportunity_radar.matching import currency
-from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
+from opportunity_radar.matching.models import CurrentAssessmentModel, MatchAnalysisModel
 from opportunity_radar.matching.service import RULES_VERSION
-from opportunity_radar.opportunities.domain import DEFAULT_RECENCY_WINDOW_DAYS
+from opportunity_radar.opportunities.domain import (
+    DEFAULT_RECENCY_WINDOW_DAYS,
+    OpportunityStatus,
+    RecencyBasis,
+    recency_reference,
+)
 from opportunity_radar.opportunities.models import (
     DuplicateCandidateModel,
     NormalizationResultModel,
@@ -43,6 +48,10 @@ from opportunity_radar.opportunities.models import (
     SourceOccurrenceModel,
 )
 from opportunity_radar.opportunities.regions import ANY_COUNTRY
+from opportunity_radar.opportunities.repository import (
+    open_at_source_condition,
+    recency_condition,
+)
 from opportunity_radar.pipeline.models import ApplicationProcessModel
 
 NEW_OPPORTUNITY_WINDOW_DAYS = 7
@@ -73,14 +82,16 @@ class InboxItem:
     lifecycle_status: str
     role_family: str
     published_at: datetime | None
-    #: Card F20-61: `published_at` when the source has one, else `first_seen_at`
+    #: Cards F20-61/F48-16: `published_at ?? source_updated_at ?? first_seen_at`
     #: (never a fabricated real date) — the date the recency filter actually compared
     #: against.
     recency_effective_date: datetime | None
-    #: `True` when `recency_effective_date` came from `first_seen_at` (the radar's own
-    #: "first seen" fallback), never presented to the client as a real publication
-    #: date without this flag.
+    #: `True` whenever `recency_effective_date` is not the source's own `published_at`
+    #: (an update stamp or the radar's own "first seen"), never presented to the client
+    #: as a real publication date without this flag.
     date_is_estimated: bool
+    #: Persisted `opportunity.recency_basis`: `published`, `updated` or `first_seen`.
+    recency_basis: str
     opportunity_version: int
     assessment_id: UUID | None = None
     assessment_opportunity_version: int | None = None
@@ -108,6 +119,10 @@ class InboxItem:
     #: `yc_batch` row names one. Display only — matching never reads it.
     startup_strength: str | None = None
     startup_batch: str | None = None
+    #: Card F48-10: other postings of the same `(company, normalized title, source)`
+    #: group (e.g. the same job in other cities), folded into this row. Nothing is
+    #: merged: each is still its own opportunity, listed in this one's detail.
+    sibling_count: int = 0
 
     @property
     def applied(self) -> bool:
@@ -166,8 +181,9 @@ class InboxQuery:
     order: InboxOrder = InboxOrder.PRIORITY
     offset: int = 0
     limit: int = 50
-    #: Card F20-61. `True` shows only a posting from the last `recency_window_days`
-    #: days (`published_at` or, as a marked estimate, `first_seen_at`), except a
+    #: Cards F20-61/F48-16. `True` shows only a posting whose reference date
+    #: (`published_at ?? source_updated_at ?? first_seen_at`) is inside the last
+    #: `recency_window_days` days, except a
     #: time-boxed entry program (`recency_exempt_program`) or one with a still-open
     #: `valid_through`. Defaults to `False` *here* (an unfiltered query object, so an
     #: existing or future direct caller of `list_opportunity_inbox` is never silently
@@ -180,6 +196,10 @@ class InboxQuery:
     #: startup evidence row (any strength). Never touches score or verdict.
     only_startups: bool = False
     recency_window_days: int = DEFAULT_RECENCY_WINDOW_DAYS
+    #: Card F48-16 lens "Abertas na fonte": keeps what the last complete run of the
+    #: occurrence's source still saw, with no date limit (replaces the window; the
+    #: window and its program/deadline exceptions are then irrelevant).
+    open_at_source: bool = False
     #: The instant the recency window is measured against. A `field(default_factory=...)`
     #: rather than a fixed default so every unparametrized `InboxQuery()` still reads the
     #: real clock exactly once, at construction — never re-reading it later — while a
@@ -209,6 +229,8 @@ class SourceHealth:
     last_run_items_persisted: int | None = None
     last_run_items_skipped: int | None = None
     last_run_items_invalid: int | None = None
+    last_run_bytes_received: int | None = None
+    last_run_newest_item_age_seconds: int | None = None
     seniority_counts: dict[str, int] = field(default_factory=dict)
     #: The optimistic-concurrency version (F20-25): a batch probe over several proposals
     #: needs each one's own version, not the id it started the batch with.
@@ -369,62 +391,79 @@ class UsefulYieldMetric:
 
 
 def _latest_assessments(profile_version_id: UUID | None) -> Any:
+    """The newest assessment per posting, read from the `current_assessment` pointers.
+
+    Currency is not stored: `is_stale` applies `currency.is_current_assessment` to the one
+    pointed row, with the same predicate the old DISTINCT ON over the whole history used.
+    Per profile version the pointer is that row. Across all of them (no profile given) the
+    same ordering as before picks one pointer per posting, current first.
+
+    The old ordering put "current" before recency, so a current older row beat a stale newer
+    one. The pointer keeps the highest posting version, then the latest `assessed_at`. A row
+    can only be current at the posting's present version, which is also the highest one any
+    row carries, and a band never decreases as `assessed_at` grows (F50-07): among rows of
+    that version, rules and taxonomy, the latest is current whenever an older one is. The
+    orders can therefore only differ when a newer row was written under other rules or
+    taxonomy versions (a rolled-back deploy), and then the newer row is what the worker
+    last decided.
+    """
+    pointer = CurrentAssessmentModel
+    # The taxonomy version of every posting is aggregated once and joined, not asked per
+    # pointer row by a correlated subquery (that ran once per row as soon as the rules
+    # version matched, i.e. on every row once the worker had caught up).
+    taxonomy = currency.opportunity_taxonomy_versions()
     current = currency.is_current_assessment(
-        MatchAssessmentModel.__table__, rules_version=RULES_VERSION
+        pointer.__table__,
+        rules_version=RULES_VERSION,
+        taxonomy_version=currency.with_taxonomy_fallback(taxonomy.c.taxonomy_version),
     )
     ranked = select(
-        MatchAssessmentModel.id.label("assessment_id"),
-        MatchAssessmentModel.opportunity_id.label("opportunity_id"),
-        MatchAssessmentModel.opportunity_version.label("assessment_opportunity_version"),
-        MatchAssessmentModel.profile_version_id.label("assessment_profile_version_id"),
+        pointer.assessment_id.label("assessment_id"),
+        pointer.opportunity_id.label("opportunity_id"),
+        pointer.opportunity_version.label("assessment_opportunity_version"),
+        pointer.profile_version_id.label("assessment_profile_version_id"),
         currency.active_profile_version_id().label("current_profile_version_id"),
-        MatchAssessmentModel.verdict.label("verdict"),
-        MatchAssessmentModel.eligibility.label("eligibility"),
-        MatchAssessmentModel.score.label("score"),
-        MatchAssessmentModel.confidence.label("confidence"),
-        MatchAssessmentModel.rules_version.label("rules_version"),
+        pointer.verdict.label("verdict"),
+        pointer.eligibility.label("eligibility"),
+        pointer.score.label("score"),
+        pointer.confidence.label("confidence"),
+        pointer.rules_version.label("rules_version"),
         (~current).label("is_stale"),
-        MatchAssessmentModel.assessed_at.label("assessed_at"),
-        func.row_number()
-        .over(
-            partition_by=MatchAssessmentModel.opportunity_id,
-            order_by=(
-                current.desc(),
-                MatchAssessmentModel.assessed_at.desc(),
-                MatchAssessmentModel.id.desc(),
-            ),
-        )
-        .label("position"),
-    )
+        pointer.assessed_at.label("assessed_at"),
+    ).join(OpportunityModel, OpportunityModel.id == pointer.opportunity_id)
+    ranked = ranked.outerjoin(taxonomy, taxonomy.c.opportunity_id == pointer.opportunity_id)
     if profile_version_id is not None:
-        ranked = ranked.where(
-            MatchAssessmentModel.profile_version_id == profile_version_id
+        return ranked.where(pointer.profile_version_id == profile_version_id).subquery(
+            "latest_assessment"
         )
-    ranked = ranked.join(
-        OpportunityModel,
-        OpportunityModel.id == MatchAssessmentModel.opportunity_id,
+    return (
+        ranked.distinct(pointer.opportunity_id)
+        .order_by(
+            pointer.opportunity_id,
+            current.desc(),
+            pointer.assessed_at.desc(),
+            pointer.assessment_id.desc(),
+        )
+        .subquery("latest_assessment")
     )
-    numbered = ranked.subquery("ranked_assessments")
-    return select(numbered).where(numbered.c.position == 1).subquery("latest_assessment")
 
 
 def _latest_analyses() -> Any:
-    ranked = select(
-        MatchAnalysisModel.assessment_id.label("assessment_id"),
-        MatchAnalysisModel.status.label("status"),
-        MatchAnalysisModel.recommended_review.label("recommended_review"),
-        MatchAnalysisModel.summary.label("summary"),
-        func.row_number()
-        .over(
-            partition_by=MatchAnalysisModel.assessment_id,
-            order_by=(
-                MatchAnalysisModel.analyzed_at.desc(),
-                MatchAnalysisModel.id.desc(),
-            ),
+    return (
+        select(
+            MatchAnalysisModel.assessment_id.label("assessment_id"),
+            MatchAnalysisModel.status.label("status"),
+            MatchAnalysisModel.recommended_review.label("recommended_review"),
+            MatchAnalysisModel.summary.label("summary"),
         )
-        .label("position"),
-    ).subquery("ranked_analyses")
-    return select(ranked).where(ranked.c.position == 1).subquery("latest_analysis")
+        .distinct(MatchAnalysisModel.assessment_id)
+        .order_by(
+            MatchAnalysisModel.assessment_id,
+            MatchAnalysisModel.analyzed_at.desc(),
+            MatchAnalysisModel.id.desc(),
+        )
+        .subquery("latest_analysis")
+    )
 
 
 def _active_applications() -> Any:
@@ -441,6 +480,41 @@ def _active_applications() -> Any:
     )
 
 
+def _first_sources() -> Any:
+    """The first occurrence source (by id, as text) of every posting, aggregated once."""
+    return (
+        select(
+            SourceOccurrenceModel.opportunity_id.label("opportunity_id"),
+            func.min(cast(SourceOccurrenceModel.source_definition_id, String)).label(
+                "first_source"
+            ),
+        )
+        .group_by(SourceOccurrenceModel.opportunity_id)
+        .subquery("first_source")
+    )
+
+
+def _posting_group_key(first_source: Any) -> Any:
+    """`opportunities.repository.posting_group_key()` with the first source joined in.
+
+    The repository twin asks for it in a correlated subquery, which the Inbox would repeat
+    for every posting and in every window; here the caller joins `_first_sources()` once.
+    A test pins the two to the same value, row by row.
+    """
+    key = func.concat_ws(
+        "|",
+        func.coalesce(
+            cast(OpportunityModel.canonical_company_id, String),
+            func.concat("name:", func.lower(func.coalesce(OpportunityModel.company_name, ""))),
+        ),
+        OpportunityModel.normalized_title,
+        func.coalesce(first_source, func.concat("id:", cast(OpportunityModel.id, String))),
+    )
+    # Only ever compared for equality, by the windows' partitioning: the byte-wise "C"
+    # collation groups the same strings as the database default, several times faster.
+    return key.collate("C")
+
+
 def _priority_rank() -> Any:
     return case(
         _PRIORITY_RANK,
@@ -449,11 +523,79 @@ def _priority_rank() -> Any:
     )
 
 
-def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
+def _inbox_statement(query: InboxQuery, *, totals_only: bool = False) -> tuple[Select[Any], Any]:
+    """The Inbox rows for `query`, the column that puts them in the requested order, and
+    after the item columns `total` and `broader_total` (the totals of the same pass).
+
+    With `totals_only` the statement returns one row, whatever the page holds: the way to
+    read the totals when the requested page is empty."""
     assessments = _latest_assessments(query.profile_version_id)
     analyses = _latest_analyses()
     applications = _active_applications()
-    statement = (
+    first_sources = _first_sources()
+    # Card F48-10: one row per posting group, the best one in the requested order (the
+    # window uses the very ordering of the page, so the representative is the row the
+    # ungrouped list would have shown first). `group_size` counts the group's rows that
+    # passed every filter, so "+N locais" never names a hidden row.
+    #
+    # One pass over the filtered rows, not a join back to them: the planner guesses a
+    # filter on a window column at 0.5% of its input, and with that guess it re-ran the
+    # latest-assessment subquery once per joined row.
+    #
+    # Card F50-10: the area filter is not a WHERE. Rows outside the target areas stay in the
+    # pass, flagged, and groups and positions are numbered per flag, so one execution yields
+    # the page (in-area rows), its total and the total without the area filter (the "N hidden
+    # by area" count). Windows cannot read other windows, hence the extra level.
+    #
+    # Cost shape, measured on 25k postings: the windows sort every filtered posting, so they
+    # run over narrow rows (ids, the assessment, what the ordering reads). The wide posting
+    # columns, the company, the analysis and the per-posting lookups are attached afterwards,
+    # to the group representatives, or after the LIMIT for the lookups that only the page
+    # needs.
+    key = _posting_group_key(first_sources.c.first_source)
+    ordering = _inbox_ordering(query.order, assessments, (query.search or "").strip())
+    in_area = (
+        OpportunityModel.role_family.in_(query.role_families)
+        if query.role_families
+        else true()
+    )
+    rows = (
+        select(
+            OpportunityModel.id.label("id"),
+            *(column for column in assessments.c if column.name != "opportunity_id"),
+            applications.c.application_id,
+            applications.c.current_stage,
+            applications.c.next_action_at,
+            in_area.label("in_area"),
+            func.row_number()
+            .over(partition_by=[key, in_area], order_by=ordering)
+            .label("group_position"),
+            func.row_number()
+            .over(partition_by=in_area, order_by=ordering)
+            .label("page_position"),
+            func.count().over(partition_by=[key, in_area]).label("group_size"),
+            func.row_number()
+            .over(partition_by=key, order_by=ordering)
+            .label("broader_position"),
+        )
+        .select_from(OpportunityModel)
+        .outerjoin(assessments, assessments.c.opportunity_id == OpportunityModel.id)
+        .outerjoin(applications, applications.c.opportunity_id == OpportunityModel.id)
+        .outerjoin(first_sources, first_sources.c.opportunity_id == OpportunityModel.id)
+        .where(*_inbox_filters(query, assessments, applications))
+        .subquery("inbox_rows")
+    )
+    counted = select(
+        *rows.c,
+        func.count().filter(rows.c.in_area & (rows.c.group_position == 1)).over().label("total"),
+        func.count().filter(rows.c.broader_position == 1).over().label("broader_total"),
+    ).subquery("inbox_counted")
+    wanted = (
+        counted.c.broader_position == 1
+        if totals_only
+        else (counted.c.in_area & (counted.c.group_position == 1))
+    )
+    grouped = (
         select(
             OpportunityModel.id,
             OpportunityModel.canonical_title,
@@ -469,99 +611,96 @@ def _inbox_statement(query: InboxQuery) -> tuple[Select[Any], Any, Any]:
             OpportunityModel.published_at,
             OpportunityModel.first_seen_at,
             OpportunityModel.version,
-            assessments.c.assessment_id,
-            assessments.c.assessment_opportunity_version,
-            assessments.c.assessment_profile_version_id,
-            assessments.c.current_profile_version_id,
-            assessments.c.verdict,
-            assessments.c.eligibility,
-            assessments.c.score,
-            assessments.c.confidence,
-            assessments.c.rules_version,
-            assessments.c.is_stale,
-            assessments.c.assessed_at,
+            counted.c.assessment_id,
+            counted.c.assessment_opportunity_version,
+            counted.c.assessment_profile_version_id,
+            counted.c.current_profile_version_id,
+            counted.c.verdict,
+            counted.c.eligibility,
+            counted.c.score,
+            counted.c.confidence,
+            counted.c.rules_version,
+            counted.c.is_stale,
+            counted.c.assessed_at,
             analyses.c.status,
             analyses.c.recommended_review,
             analyses.c.summary,
-            applications.c.application_id,
-            applications.c.current_stage,
-            applications.c.next_action_at,
-            select(DuplicateCandidateModel.id)
-            .where(
-                DuplicateCandidateModel.status == "PENDING",
-                (DuplicateCandidateModel.opportunity_id == OpportunityModel.id)
-                | (DuplicateCandidateModel.duplicate_opportunity_id == OpportunityModel.id),
-            )
-            .exists()
-            .label("has_pending_duplicate"),
-            _startup_strength_column(),
-            _startup_batch_column(),
+            counted.c.application_id,
+            counted.c.current_stage,
+            counted.c.next_action_at,
+            # Lookups only the page needs: in the outermost select the planner evaluates them
+            # after the sort and the LIMIT, not for every posting that passed the filters.
+            _pending_duplicate_column(OpportunityModel.id),
+            _startup_strength_column(OpportunityModel.canonical_company_id),
+            _startup_batch_column(OpportunityModel.canonical_company_id),
+            OpportunityModel.source_updated_at,
+            OpportunityModel.recency_basis,
+            counted.c.group_size,
+            counted.c.total,
+            counted.c.broader_total,
         )
-        .select_from(OpportunityModel)
-        .outerjoin(assessments, assessments.c.opportunity_id == OpportunityModel.id)
+        .select_from(counted)
+        .join(OpportunityModel, OpportunityModel.id == counted.c.id)
         .outerjoin(Company, Company.id == OpportunityModel.canonical_company_id)
-        .outerjoin(analyses, analyses.c.assessment_id == assessments.c.assessment_id)
-        .outerjoin(applications, applications.c.opportunity_id == OpportunityModel.id)
+        .outerjoin(analyses, analyses.c.assessment_id == counted.c.assessment_id)
+        .where(wanted)
     )
+    return grouped, counted.c.page_position
+
+
+def _pending_duplicate_column(opportunity_id: Any) -> Any:
     return (
-        statement.where(*_inbox_filters(query, assessments, applications)),
-        assessments,
-        analyses,
+        select(DuplicateCandidateModel.id)
+        .where(
+            DuplicateCandidateModel.status == "PENDING",
+            (DuplicateCandidateModel.opportunity_id == opportunity_id)
+            | (DuplicateCandidateModel.duplicate_opportunity_id == opportunity_id),
+        )
+        .exists()
+        .label("has_pending_duplicate")
     )
 
 
-def _startup_evidence_rows(*conditions: Any) -> Select[Any]:
+def _startup_evidence_rows(company_id: Any, *conditions: Any) -> Select[Any]:
     return select(CompanyStartupEvidence.id).where(
-        CompanyStartupEvidence.company_id == OpportunityModel.canonical_company_id,
+        CompanyStartupEvidence.company_id == company_id,
         *conditions,
     )
 
 
-def _startup_strength_column() -> Any:
+def _startup_strength_column(company_id: Any) -> Any:
     return case(
-        (_startup_evidence_rows(CompanyStartupEvidence.strength == "strong").exists(), "strong"),
-        (_startup_evidence_rows().exists(), "weak"),
+        (
+            _startup_evidence_rows(
+                company_id, CompanyStartupEvidence.strength == "strong"
+            ).exists(),
+            "strong",
+        ),
+        (_startup_evidence_rows(company_id).exists(), "weak"),
         else_=None,
     ).label("startup_strength")
 
 
-def _startup_batch_column() -> Any:
+def _startup_batch_column(company_id: Any) -> Any:
     return (
         select(CompanyStartupEvidence.batch)
         .where(
-            CompanyStartupEvidence.company_id == OpportunityModel.canonical_company_id,
+            CompanyStartupEvidence.company_id == company_id,
             CompanyStartupEvidence.signal == "yc_batch",
             CompanyStartupEvidence.strength == "strong",
             CompanyStartupEvidence.batch.is_not(None),
         )
         .order_by(CompanyStartupEvidence.captured_at.desc(), CompanyStartupEvidence.id)
         .limit(1)
-        .correlate(OpportunityModel)
         .scalar_subquery()
         .label("startup_batch")
     )
 
 
 def _recency_condition(query: InboxQuery) -> Any:
-    """SQL mirror of `opportunities.domain.recency_decision` (card F20-61).
-
-    Kept as a plain column comparison (no correlated subquery) so it runs at listing
-    scale: `published_at` when the source has one, else the denormalized
-    `first_seen_at`, compared against the window; OR'd with the two independent
-    exceptions (time-boxed program, still-open `valid_through`). Any change to the
-    pure function's rule must be mirrored here — `tests/backend/dashboard/
-    test_queries.py` covers this condition directly against both fallback paths.
-    """
-    cutoff = query.now - timedelta(days=query.recency_window_days)
-    within_window = or_(
-        and_(OpportunityModel.published_at.is_not(None), OpportunityModel.published_at >= cutoff),
-        and_(OpportunityModel.published_at.is_(None), OpportunityModel.first_seen_at >= cutoff),
-    )
-    has_open_deadline = and_(
-        OpportunityModel.valid_through.is_not(None),
-        OpportunityModel.valid_through > query.now,
-    )
-    return or_(within_window, OpportunityModel.recency_exempt_program.is_(True), has_open_deadline)
+    """Inbox recency window (cards F20-61, F48-16): the shared SQL rule of
+    `opportunities.repository.recency_condition` (mirror of `recency_decision`)."""
+    return recency_condition(now=query.now, window_days=query.recency_window_days)
 
 
 def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> list[Any]:
@@ -584,18 +723,22 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
         filters.append(OpportunityModel.work_mode == query.work_mode)
     if query.lifecycle_status:
         filters.append(OpportunityModel.lifecycle_status == query.lifecycle_status)
-    if query.role_families:
-        filters.append(OpportunityModel.role_family.in_(query.role_families))
+    else:
+        # F48-11: a closed posting is out of the default Inbox; the explicit filter
+        # (`lifecycle_status=CLOSED`) still lists it.
+        filters.append(OpportunityModel.lifecycle_status != OpportunityStatus.CLOSED.value)
     if query.published_after is not None:
         filters.append(OpportunityModel.published_at >= query.published_after)
     if query.created_after is not None:
         filters.append(OpportunityModel.created_at > query.created_after)
     if query.seniorities:
         filters.append(OpportunityModel.seniority.in_(query.seniorities))
-    if query.only_recent:
+    if query.open_at_source:
+        filters.append(open_at_source_condition())
+    elif query.only_recent:
         filters.append(_recency_condition(query))
     if query.only_startups:
-        filters.append(_startup_evidence_rows().exists())
+        filters.append(_startup_evidence_rows(OpportunityModel.canonical_company_id).exists())
     if query.allowed_country:
         filters.append(
             OpportunityModel.allowed_countries.is_(None)
@@ -672,39 +815,28 @@ def _inbox_ordering(order: InboxOrder, assessments: Any, search_term: str = "") 
         return [recency, score, OpportunityModel.id]
     if order is InboxOrder.SCORE:
         return [score, recency, OpportunityModel.id]
-    return [_priority_rank().desc(), score, recency, OpportunityModel.id]
+    # F48-14: company priority is a factor of the score (COMPANY_PRIORITY), not a sort key.
+    return [score, recency, OpportunityModel.id]
 
 
 def list_opportunity_inbox(session: Session, query: InboxQuery) -> InboxPage:
-    statement, assessments, _ = _inbox_statement(query)
-    total = (
-        session.scalar(select(func.count()).select_from(statement.subquery("inbox"))) or 0
-    )
+    statement, page_position = _inbox_statement(query)
     rows = session.execute(
-        statement.order_by(
-            *_inbox_ordering(
-                query.order, assessments, (query.search or "").strip()
-            )
-        )
-        .offset(query.offset)
-        .limit(query.limit)
+        statement.order_by(page_position).offset(query.offset).limit(query.limit)
     ).all()
-    off_filter_count = 0
-    if query.role_families:
-        broader_statement, _, _ = _inbox_statement(replace(query, role_families=()))
-        broader_total = (
-            session.scalar(
-                select(func.count()).select_from(broader_statement.subquery("inbox_all"))
-            )
-            or 0
-        )
-        off_filter_count = max(broader_total - total, 0)
+    # The totals ride on every row of the page. An empty page (past the end, or nothing in
+    # the areas) has no row to carry them, and only then do they cost a second statement.
+    totals_row = rows[0] if rows else None
+    if totals_row is None:
+        totals_statement, _ = _inbox_statement(query, totals_only=True)
+        totals_row = session.execute(totals_statement.limit(1)).first()
+    total, broader_total = (totals_row[-2], totals_row[-1]) if totals_row else (0, 0)
     return InboxPage(
         items=tuple(_inbox_item(row) for row in rows),
         total=total,
         offset=query.offset,
         limit=query.limit,
-        off_filter_count=off_filter_count,
+        off_filter_count=max(broader_total - total, 0) if query.role_families else 0,
     )
 
 
@@ -722,8 +854,11 @@ def _inbox_item(row: Any) -> InboxItem:
         lifecycle_status=row[9],
         role_family=row[10],
         published_at=row[11],
-        recency_effective_date=row[11] if row[11] is not None else row[12],
-        date_is_estimated=row[11] is None and row[12] is not None,
+        recency_effective_date=recency_reference(
+            published_at=row[11], source_updated_at=row[34], first_seen_at=row[12]
+        )[0],
+        date_is_estimated=row[35] != RecencyBasis.PUBLISHED.value,
+        recency_basis=row[35],
         opportunity_version=row[13],
         assessment_id=row[14],
         assessment_opportunity_version=row[15],
@@ -745,6 +880,7 @@ def _inbox_item(row: Any) -> InboxItem:
         has_pending_duplicate=bool(row[31]),
         startup_strength=row[32],
         startup_batch=row[33],
+        sibling_count=max(int(row[36]) - 1, 0),
     )
 
 
@@ -855,6 +991,8 @@ def _latest_runs() -> Any:
         SourceRunModel.items_persisted.label("items_persisted"),
         SourceRunModel.items_skipped.label("items_skipped"),
         SourceRunModel.items_invalid.label("items_invalid"),
+        SourceRunModel.bytes_received.label("bytes_received"),
+        SourceRunModel.newest_item_age_seconds.label("newest_item_age_seconds"),
         func.row_number()
         .over(
             partition_by=SourceRunModel.source_definition_id,
@@ -902,6 +1040,8 @@ def list_source_health(
             latest.c.items_persisted,
             latest.c.items_skipped,
             latest.c.items_invalid,
+            latest.c.bytes_received,
+            latest.c.newest_item_age_seconds,
         )
         .select_from(SourceDefinitionModel)
         .outerjoin(latest, latest.c.source_definition_id == SourceDefinitionModel.id)
@@ -954,6 +1094,8 @@ def list_source_health(
             last_run_items_persisted=row[16],
             last_run_items_skipped=row[17],
             last_run_items_invalid=row[18],
+            last_run_bytes_received=row[19],
+            last_run_newest_item_age_seconds=row[20],
             seniority_counts=seniority_by_source.get(row[0], {}),
         )
         for row in rows

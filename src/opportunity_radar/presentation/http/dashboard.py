@@ -17,6 +17,7 @@ from opportunity_radar.dashboard.analysis_metrics import (
     ModelAnalysisMetrics,
     analysis_metrics,
 )
+from opportunity_radar.dashboard.funnel import funnel_report
 from opportunity_radar.dashboard.metrics import (
     METRIC_WINDOWS,
     SourceMetricsWindow,
@@ -54,7 +55,13 @@ from opportunity_radar.dashboard.saved_searches import (
 )
 from opportunity_radar.matching.analysis import SemanticAnalysisPort
 from opportunity_radar.matching.service import MatchingService
-from opportunity_radar.opportunities.domain import OpportunityStatus, Seniority, WorkMode
+from opportunity_radar.operations.collection_alarm import collection_gap_report
+from opportunity_radar.opportunities.domain import (
+    DEFAULT_RECENCY_WINDOW_DAYS,
+    OpportunityStatus,
+    Seniority,
+    WorkMode,
+)
 from opportunity_radar.platform.ai.config import ai_status
 from opportunity_radar.platform.ai.metrics import ModelAIMetrics, ai_metrics
 from opportunity_radar.platform.config import Settings, get_settings
@@ -78,12 +85,14 @@ class InboxItemResponse(BaseModel):
     lifecycle_status: str
     role_family: str
     published_at: datetime | None
-    #: Card F20-61: `published_at` when the source has one, else `first_seen_at`
+    #: Cards F20-61/F48-16: `published_at ?? source_updated_at ?? first_seen_at`
     #: (never a fabricated real date).
     recency_effective_date: datetime | None
-    #: `True` when `recency_effective_date` came from the `first_seen_at` fallback,
-    #: never presented as a real publication date without this flag.
+    #: `True` when `recency_effective_date` is not the source's `published_at`, never
+    #: presented as a real publication date without this flag.
     date_is_estimated: bool
+    #: `published`, `updated` or `first_seen` (persisted `recency_basis`).
+    recency_basis: str
     opportunity_version: int
     assessment_id: UUID | None
     assessment_opportunity_version: int | None
@@ -107,6 +116,8 @@ class InboxItemResponse(BaseModel):
     #: Card F20-54: startup evidence summary; `None` when the company has none.
     startup_strength: str | None = None
     startup_batch: str | None = None
+    #: Card F48-10: other postings of the same company/title/source folded into this row.
+    sibling_count: int = 0
 
 
 class InboxPageResponse(BaseModel):
@@ -163,13 +174,61 @@ class SourceHealthResponse(BaseModel):
     last_run_items_persisted: int | None
     last_run_items_skipped: int | None
     last_run_items_invalid: int | None
+    last_run_bytes_received: int | None = None
+    last_run_newest_item_age_seconds: int | None = None
+    #: F48-07: scheduled but no scheduled run in more than twice its cadence.
+    collection_overdue: bool = False
     seniority_counts: dict[str, int]
+
+
+class CollectionGapResponse(BaseModel):
+    """F48-07: `alarming` is the one field a screen needs; the rest says why."""
+
+    alarming: bool
+    global_overdue: bool
+    factor: float
+    evaluated_sources: int
+    global_cadence_seconds: float | None
+    last_scheduled_run_at: datetime | None
+    overdue_sources: int
+
+
+class FunnelStageResponse(BaseModel):
+    key: str
+    label: str
+    count: int
+    lost: int | None
+
+
+class RatioResponse(BaseModel):
+    count: int
+    total: int
+    ratio: float | None
+
+
+class NorthStarResponse(BaseModel):
+    role_families: list[str]
+    proxy: bool
+    stock: int
+    new_in_window: int
+    window_hours: int
+    stack: dict[str, int]
+
+
+class FunnelReportResponse(BaseModel):
+    generated_at: datetime
+    stages: list[FunnelStageResponse]
+    north_star: NorthStarResponse
+    guards: dict[str, RatioResponse]
+    forbidden_hosts_touched: int
+    not_measured: list[str]
 
 
 class SourceHealthListResponse(BaseModel):
     items: list[SourceHealthResponse]
     total: int
     failing: int
+    collection_gap: CollectionGapResponse | None = None
 
 
 class SourceCoverageResponse(BaseModel):
@@ -501,6 +560,12 @@ def list_inbox(
     #: Card F20-61: the server's own default, absent this parameter, is filtered.
     #: The client's "mostrar tudo" toggle passes `only_recent=false`.
     only_recent: bool = Query(default=True),
+    #: Card F48-16: window over the reference date (default 30 days; the "Novas" lens
+    #: sends 14).
+    recency_window_days: int = Query(default=DEFAULT_RECENCY_WINDOW_DAYS, ge=1, le=365),
+    #: Card F48-16 lens "Abertas na fonte": seen in the last complete run of the
+    #: occurrence's source, no date limit.
+    open_at_source: bool = False,
     #: Card F20-54: only companies with at least one startup-evidence row.
     only_startups: bool = False,
     session: Session = Depends(get_session),
@@ -535,6 +600,8 @@ def list_inbox(
             offset=offset,
             limit=limit,
             only_recent=only_recent,
+            recency_window_days=recency_window_days,
+            open_at_source=open_at_source,
             only_startups=only_startups,
         ),
     )
@@ -557,10 +624,24 @@ def list_sources_health(
     """Named `/source-health` rather than `/sources/health`: that path is a source id."""
     items = list_source_health(session, only_failing=only_failing, status=status_filter)
     failing = sum(1 for item in items if item.last_run_status in FAILING_RUN_STATUSES)
+    gap = collection_gap_report(session)
+    overdue = gap.overdue_source_ids
     return SourceHealthListResponse(
-        items=[_source_response(item) for item in items],
+        items=[
+            _source_response(item, overdue=item.source_definition_id in overdue)
+            for item in items
+        ],
         total=len(items),
         failing=failing,
+        collection_gap=CollectionGapResponse(
+            alarming=gap.alarming,
+            global_overdue=gap.global_overdue,
+            factor=gap.factor,
+            evaluated_sources=gap.evaluated_sources,
+            global_cadence_seconds=gap.global_cadence_seconds,
+            last_scheduled_run_at=gap.last_scheduled_run_at,
+            overdue_sources=len(overdue),
+        ),
     )
 
 
@@ -586,6 +667,38 @@ def get_source_metrics(
     return SourceMetricsReportResponse(
         generated_at=report.generated_at,
         windows=[_metrics_window_response(item) for item in report.windows],
+    )
+
+
+@router.get("/funnel-metrics", response_model=FunnelReportResponse)
+def get_funnel_metrics(session: Session = Depends(get_session)) -> FunnelReportResponse:
+    """F48-06: the SPEC 48 funnel, the north-star and its guards, from persisted rows."""
+    try:
+        active = ProfileService(session).get_active()
+        families = tuple(active.snapshot.preferences.target_role_families)
+    except ProfileNotFoundError:
+        families = ()
+    report = funnel_report(session, target_role_families=families)
+    return FunnelReportResponse(
+        generated_at=report.generated_at,
+        stages=[
+            FunnelStageResponse(key=item.key, label=item.label, count=item.count, lost=item.lost)
+            for item in report.stages
+        ],
+        north_star=NorthStarResponse(
+            role_families=list(report.north_star.role_families),
+            proxy=report.north_star.proxy,
+            stock=report.north_star.stock,
+            new_in_window=report.north_star.new_in_window,
+            window_hours=report.north_star.window_hours,
+            stack=dict(report.north_star.stack),
+        ),
+        guards={
+            name: RatioResponse(count=value.count, total=value.total, ratio=value.ratio)
+            for name, value in report.guards.items()
+        },
+        forbidden_hosts_touched=report.forbidden_hosts_touched,
+        not_measured=list(report.not_measured),
     )
 
 
@@ -747,6 +860,7 @@ def _inbox_item_response(item: InboxItem) -> InboxItemResponse:
         published_at=item.published_at,
         recency_effective_date=item.recency_effective_date,
         date_is_estimated=item.date_is_estimated,
+        recency_basis=item.recency_basis,
         opportunity_version=item.opportunity_version,
         assessment_id=item.assessment_id,
         assessment_opportunity_version=item.assessment_opportunity_version,
@@ -769,6 +883,7 @@ def _inbox_item_response(item: InboxItem) -> InboxItemResponse:
         has_pending_duplicate=item.has_pending_duplicate,
         startup_strength=item.startup_strength,
         startup_batch=item.startup_batch,
+        sibling_count=item.sibling_count,
     )
 
 
@@ -936,7 +1051,7 @@ def _search_metrics_response(
     )
 
 
-def _source_response(source: SourceHealth) -> SourceHealthResponse:
+def _source_response(source: SourceHealth, *, overdue: bool = False) -> SourceHealthResponse:
     return SourceHealthResponse(
         source_definition_id=source.source_definition_id,
         name=source.name,
@@ -958,6 +1073,9 @@ def _source_response(source: SourceHealth) -> SourceHealthResponse:
         last_run_items_persisted=source.last_run_items_persisted,
         last_run_items_skipped=source.last_run_items_skipped,
         last_run_items_invalid=source.last_run_items_invalid,
+        last_run_bytes_received=source.last_run_bytes_received,
+        last_run_newest_item_age_seconds=source.last_run_newest_item_age_seconds,
+        collection_overdue=overdue,
         seniority_counts=source.seniority_counts,
     )
 

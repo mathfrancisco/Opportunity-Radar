@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from base64 import b64decode
 from binascii import Error as Base64Error
-from collections.abc import Mapping
+from collections import Counter
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -24,6 +25,7 @@ from opportunity_radar.opportunities.domain import (
     OpportunityStatus,
     SkillClassification,
     build_candidate,
+    recency_basis_of,
     seniority_classification,
 )
 from opportunity_radar.opportunities.duplicates import find_title_location_window_candidates
@@ -46,6 +48,10 @@ from opportunity_radar.opportunities.role_family import (
     classify_role_family,
     departments_from_metadata,
 )
+from opportunity_radar.platform.config import get_settings
+from opportunity_radar.platform.logging import get_logger
+
+logger = get_logger("opportunity_radar.opportunities")
 
 NORMALIZER_VERSION = "v6"
 
@@ -92,6 +98,12 @@ class OpportunityService:
         self.session = session
         self.repository = repository or OpportunityRepository(session)
 
+    @staticmethod
+    def _content_rules_enabled() -> bool | frozenset[str]:
+        # F48-15 / F50-02: default OFF; a rule is switched on only after it passes the
+        # precision gate on the labelled set.
+        return get_settings().content_rules
+
     def normalize(self, raw_item_id: UUID) -> NormalizationResultModel:
         existing = self.repository.normalization_result(raw_item_id, NORMALIZER_VERSION)
         if existing is not None:
@@ -124,12 +136,20 @@ class OpportunityService:
             return cosmetic_result
         try:
             normalization_input = _normalization_input(evidence)
-            candidate = build_candidate(normalization_input)
-            _, seniority_reason = seniority_classification(
-                normalization_input.title,
-                normalization_input.metadata,
-                source_type=normalization_input.source_type,
+            candidate = build_candidate(
+                normalization_input, content_rules=self._content_rules_enabled()
             )
+            if candidate.classification_reasons:
+                # F48-15: seniority-v4 first (it replaces the v3 reason), then the
+                # work-mode and allowed-countries evidence.
+                seniority_reason, *content_reasons = candidate.classification_reasons
+            else:
+                _, seniority_reason = seniority_classification(
+                    normalization_input.title,
+                    normalization_input.metadata,
+                    source_type=normalization_input.source_type,
+                )
+                content_reasons = []
         except PayloadExpiredError as error:
             result = NormalizationResultModel(
                 raw_item_id=raw_item_id,
@@ -177,6 +197,7 @@ class OpportunityService:
             normalized_url=candidate.normalized_url,
         )
         content_is_current = True
+        created_opportunity = False
         if occurrence is not None:
             opportunity = occurrence.opportunity
             current_raw_item = self.session.get(RawItemModel, occurrence.raw_item_id)
@@ -184,19 +205,51 @@ class OpportunityService:
                 current_raw_item is None
                 or raw_item.fetched_at >= current_raw_item.fetched_at
             )
-            if (
-                opportunity.fingerprint == candidate.fingerprint
-                and opportunity.fingerprint_version == candidate.fingerprint_version
-            ):
-                decision = "REFRESHED"
-                result_status = "SUCCEEDED"
-                reasons: list[dict[str, Any]] = [{"code": "SAME_SOURCE_EXTERNAL_IDENTITY"}]
-                if content_is_current:
-                    refresh_changed = _refresh_opportunity(opportunity, candidate)
-            else:
+            previous_fingerprint = opportunity.fingerprint
+            identity_changed = (
+                previous_fingerprint != candidate.fingerprint
+                or opportunity.fingerprint_version != candidate.fingerprint_version
+            )
+            # F48-09: the source's `external_id` *is* the identity. A new fingerprint for it
+            # refreshes the opportunity; only another opportunity already owning that
+            # fingerprint is a real dispute (the unique index would refuse it anyway).
+            competing = (
+                self.repository.opportunity_by_fingerprint(
+                    fingerprint=candidate.fingerprint,
+                    fingerprint_version=candidate.fingerprint_version,
+                )
+                if identity_changed
+                else None
+            )
+            reasons: list[dict[str, Any]]
+            if competing is not None and competing.id != opportunity.id:
                 decision = "REVIEW"
                 result_status = "REVIEW_REQUIRED"
-                reasons = [{"code": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED"}]
+                reasons = [
+                    {
+                        "code": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+                        "competing_opportunity_id": str(competing.id),
+                        "candidate_fingerprint": candidate.fingerprint,
+                        "candidate_fingerprint_version": candidate.fingerprint_version,
+                    }
+                ]
+            else:
+                decision = "REFRESHED"
+                result_status = "SUCCEEDED"
+                reasons = [{"code": "SAME_SOURCE_EXTERNAL_IDENTITY"}]
+                if content_is_current:
+                    refresh_changed = _refresh_opportunity(opportunity, candidate)
+                    if opportunity.fingerprint != previous_fingerprint:
+                        reasons = [{"code": "IDENTITY_REFRESHED_SAME_EXTERNAL_ID"}]
+                        opportunity.closure_evidence = {
+                            **(opportunity.closure_evidence or {}),
+                            "identity_refresh": {
+                                "previous_fingerprint": previous_fingerprint,
+                                "fingerprint": opportunity.fingerprint,
+                                "raw_item_id": str(raw_item.id),
+                                "at": raw_item.fetched_at.isoformat(),
+                            },
+                        }
             if content_is_current:
                 occurrence.raw_item_id = raw_item.id
                 occurrence.source_url = candidate.source_url
@@ -227,6 +280,7 @@ class OpportunityService:
                     review_candidates = self.repository.identity_review_candidates(candidate)
                     opportunity = _new_opportunity(candidate, first_seen_at=raw_item.fetched_at)
                     self.session.add(opportunity)
+                    created_opportunity = True
                     if review_candidates:
                         decision = "REVIEW"
                         result_status = "REVIEW_REQUIRED"
@@ -286,10 +340,11 @@ class OpportunityService:
         ):
             opportunity.version += 1
 
-        if decision == "NEW":
-            # F20-26: a brand-new opportunity is the only case that can introduce a fresh
-            # duplicate pair — REFRESHED/MERGED reuse an existing opportunity, which was
-            # already checked when it was first created.
+        if created_opportunity:
+            # F20-26 / F48-09: a brand-new opportunity is the only case that introduces a
+            # fresh duplicate pair — REFRESHED/MERGED reuse one already checked when created.
+            # `REVIEW` (same company and title, other identity) also creates one and is where
+            # a republished pair arrives; candidates stay PENDING, never auto-merged.
             find_title_location_window_candidates(self.session, opportunity)
 
         result = NormalizationResultModel(
@@ -299,7 +354,7 @@ class OpportunityService:
             status=result_status,
             normalizer_version=NORMALIZER_VERSION,
             identity_decision=decision,
-            reasons=[*reasons, seniority_reason],
+            reasons=[*reasons, seniority_reason, *content_reasons],
         )
         self.session.add(result)
         self.session.execute(
@@ -455,6 +510,12 @@ class OpportunityService:
                 if current_status is OpportunityStatus.CLOSED:
                     continue
                 if not current_status.can_transition_to(OpportunityStatus.CLOSED):
+                    continue
+                # F48-11: a vanished occurrence closes nothing while another one
+                # (in this or any source) is still live in its own source's latest
+                # complete run.
+                self.session.flush()
+                if self.repository.opportunity_is_open_at_source(opportunity.id):
                     continue
                 opportunity.lifecycle_status = OpportunityStatus.CLOSED.value
                 opportunity.closure_evidence = {
@@ -853,7 +914,14 @@ def _optional_datetime(value: Mapping[str, Any], key: str) -> datetime | None:
     except ValueError as error:
         raise NormalizationError(f"collected_item_v1 {key} must be an ISO datetime") from error
     if parsed.tzinfo is None:
-        raise NormalizationError(f"collected_item_v1 {key} must include a timezone")
+        # Card F48-03 (decision 9): a date without a timezone is not evidence of a moment,
+        # and inventing UTC would shift it by hours. The item keeps every other field and
+        # recency falls back to the collection date, instead of failing the whole item.
+        logger.warning(
+            "collected_item_v1 datetime without timezone dropped",
+            extra={"field": key},
+        )
+        return None
     return parsed
 
 
@@ -927,6 +995,233 @@ def reclassify_role_families(session: Session, *, batch_size: int = 500) -> dict
     return {"total": total, "updated": updated, "unknown": unknown}
 
 
+_CONTENT_FIELDS = ("seniority", "work_mode", "allowed_countries")
+_CONTENT_REASON_CODES = {
+    "SENIORITY_CLASSIFICATION": "seniority",
+    "WORK_MODE_CLASSIFICATION": "work_mode",
+    "ALLOWED_COUNTRIES_CLASSIFICATION": "allowed_countries",
+}
+_UNKNOWN_VALUE = "UNKNOWN"
+_CONTENT_EXAMPLE_LIMIT = 50
+
+
+def _content_values(
+    seniority: str, work_mode: str, allowed_countries: Collection[str] | None
+) -> dict[str, str]:
+    return {
+        "seniority": seniority,
+        "work_mode": work_mode,
+        "allowed_countries": ",".join(allowed_countries or ()) or _UNKNOWN_VALUE,
+    }
+
+
+def _content_rule(candidate: CanonicalCandidate, field: str) -> str | None:
+    """The rule (or source) the candidate's evidence names for `field`, if it carries any."""
+    for reason in candidate.classification_reasons:
+        if _CONTENT_REASON_CODES.get(str(reason.get("code"))) == field:
+            return reason.get("rule") or reason.get("source")
+    return None
+
+
+def reclassify_content(
+    session: Session,
+    *,
+    rules: bool | frozenset[str],
+    role_families: Collection[str] | None = None,
+    batch_size: int = 500,
+    limit: int | None = None,
+    apply: bool = False,
+) -> dict[str, Any]:
+    """Recompute seniority, work mode and allowed countries of existing opportunities (F50-02).
+
+    The evidence is the one normalization uses: the `collected_item_v1` snapshot of the
+    occurrence last seen, classified by `build_candidate` with the enabled `rules`. A
+    posting whose values change gets them and its content evidence (the `reasons` of that
+    raw item's normalization result) rewritten, and `version` bumped exactly once however
+    many fields moved; one that does not change is not touched, so a second run reports
+    zero changes. A new work mode also moves the fingerprint; if another opportunity owns the
+    new one, the posting keeps its work mode and is reported under `fingerprint_collisions`
+    (it keeps being reported on later runs). Each batch is its own transaction; without
+    `apply` every batch rolls back and the report only says what an apply run would do.
+
+    `allowed_countries_version` follows the value: it is rewritten only when the countries
+    change, so a version label alone never costs a posting its evaluation.
+    """
+    if batch_size < 1:
+        raise ValueError("batch size must be at least 1")
+    repository = OpportunityRepository(session)
+    query = select(OpportunityModel.id).where(OpportunityModel.description.is_not(None))
+    if role_families is not None:
+        query = query.where(OpportunityModel.role_family.in_(list(role_families)))
+    query = query.order_by(OpportunityModel.id)
+    if limit is not None:
+        query = query.limit(limit)
+    opportunity_ids = list(session.scalars(query).all())
+
+    kinds = ("unchanged", "unknown_to_value", "value_to_other_value", "value_to_unknown")
+    counts = {kind: Counter[str]() for kind in kinds}
+    examples: dict[str, list[dict[str, Any]]] = {field: [] for field in _CONTENT_FIELDS}
+    before = {field: Counter[str]() for field in _CONTENT_FIELDS}
+    after = {field: Counter[str]() for field in _CONTENT_FIELDS}
+    skipped = Counter[str]()
+    changed_postings = 0
+    evidence_rewritten = 0
+    collisions = 0
+    collision_examples: list[dict[str, Any]] = []
+    # Who owns a (version, fingerprint) key as this run moves them; a dry run writes nothing,
+    # so the run's own moves are tracked here to give both modes the same answer.
+    owners: dict[tuple[str, str], UUID | None] = {}
+
+    for start in range(0, len(opportunity_ids), batch_size):
+        chunk = opportunity_ids[start : start + batch_size]
+        try:
+            for opportunity in session.scalars(
+                select(OpportunityModel)
+                .where(OpportunityModel.id.in_(chunk))
+                .order_by(OpportunityModel.id)
+            ).all():
+                occurrence = session.scalar(
+                    select(SourceOccurrenceModel)
+                    .where(SourceOccurrenceModel.opportunity_id == opportunity.id)
+                    .order_by(SourceOccurrenceModel.last_seen_at.desc())
+                    .limit(1)
+                )
+                evidence = (
+                    repository.raw_item_evidence(occurrence.raw_item_id) if occurrence else None
+                )
+                if occurrence is None or evidence is None:
+                    skipped["no_evidence"] += 1
+                    continue
+                try:
+                    candidate = build_candidate(
+                        _normalization_input(evidence), content_rules=rules
+                    )
+                except (NormalizationError, TypeError, ValueError):
+                    skipped["unreadable_evidence"] += 1
+                    continue
+                old = _content_values(
+                    opportunity.seniority, opportunity.work_mode, opportunity.allowed_countries
+                )
+                new = _content_values(
+                    candidate.seniority.value,
+                    candidate.work_mode.value,
+                    candidate.allowed_countries,
+                )
+                # A new work mode is a new fingerprint (F50-02 fix): refuse it when another
+                # opportunity already owns that identity, and keep the posting's work mode.
+                keep_work_mode = False
+                if old["work_mode"] != new["work_mode"]:
+                    key = (candidate.fingerprint_version, candidate.fingerprint)
+                    if key in owners:
+                        owner = owners[key]
+                    else:
+                        match = repository.opportunity_by_fingerprint(
+                            fingerprint=candidate.fingerprint,
+                            fingerprint_version=candidate.fingerprint_version,
+                        )
+                        owner = match.id if match is not None else None
+                    if owner is not None and owner != opportunity.id:
+                        keep_work_mode = True
+                        collisions += 1
+                        if len(collision_examples) < _CONTENT_EXAMPLE_LIMIT:
+                            collision_examples.append(
+                                {
+                                    "id": str(opportunity.id),
+                                    "competing_opportunity_id": str(owner),
+                                    "old": old["work_mode"],
+                                    "new": new["work_mode"],
+                                }
+                            )
+                        new["work_mode"] = old["work_mode"]
+                changed = False
+                for field in _CONTENT_FIELDS:
+                    before[field][old[field]] += 1
+                    after[field][new[field]] += 1
+                    if old[field] == new[field]:
+                        counts["unchanged"][field] += 1
+                        continue
+                    changed = True
+                    if old[field] == _UNKNOWN_VALUE:
+                        kind = "unknown_to_value"
+                    elif new[field] == _UNKNOWN_VALUE:
+                        kind = "value_to_unknown"
+                    else:
+                        kind = "value_to_other_value"
+                    counts[kind][field] += 1
+                    if kind != "unknown_to_value" and len(examples[field]) < _CONTENT_EXAMPLE_LIMIT:
+                        examples[field].append(
+                            {
+                                "id": str(opportunity.id),
+                                "kind": kind,
+                                "old": old[field],
+                                "new": new[field],
+                                "rule": _content_rule(candidate, field),
+                            }
+                        )
+                if not changed:
+                    continue
+                changed_postings += 1
+                moves_fingerprint = old["work_mode"] != new["work_mode"]
+                if moves_fingerprint:
+                    owners[(opportunity.fingerprint_version, opportunity.fingerprint)] = None
+                    owners[(candidate.fingerprint_version, candidate.fingerprint)] = opportunity.id
+                if not apply:
+                    continue
+                _apply_content_fields(opportunity, candidate, work_mode=not keep_work_mode)
+                opportunity.version += 1
+                if moves_fingerprint:
+                    session.flush()
+                result = repository.normalization_result(
+                    occurrence.raw_item_id, NORMALIZER_VERSION
+                )
+                if result is not None:
+                    # A kept work mode keeps the evidence that decided it.
+                    rewritten = {
+                        code
+                        for code in _CONTENT_REASON_CODES
+                        if not (keep_work_mode and code == "WORK_MODE_CLASSIFICATION")
+                    }
+                    result.reasons = [
+                        reason
+                        for reason in result.reasons
+                        if not (isinstance(reason, Mapping) and reason.get("code") in rewritten)
+                    ] + [
+                        reason
+                        for reason in candidate.classification_reasons
+                        if reason.get("code") not in _CONTENT_REASON_CODES
+                        or reason.get("code") in rewritten
+                    ]
+                    evidence_rewritten += 1
+            if apply:
+                session.commit()
+            else:
+                session.rollback()
+        except Exception:
+            session.rollback()
+            raise
+
+    return {
+        "mode": "apply" if apply else "dry-run",
+        "rules": "all" if rules is True else sorted(rules or ()),
+        "role_families": sorted(role_families) if role_families is not None else None,
+        "selected": len(opportunity_ids),
+        "skipped": dict(skipped),
+        "postings_changed": changed_postings,
+        "version_bumps": changed_postings,
+        "evidence_rewritten": evidence_rewritten if apply else None,
+        "fingerprint_collisions": {"count": collisions, "examples": collision_examples},
+        "fields": {
+            field: {
+                **{kind: counts[kind][field] for kind in kinds},
+                "examples": examples[field],
+                "distribution_before": dict(sorted(before[field].items())),
+                "distribution_after": dict(sorted(after[field].items())),
+            }
+            for field in _CONTENT_FIELDS
+        },
+    }
+
+
 def _search_skills_text(skills: list[OpportunitySkillModel]) -> str | None:
     """Denormalized skill names for `search_document` (F17-03): a generated column
     cannot read another table's rows, so this stays in sync here, on every
@@ -953,6 +1248,10 @@ def _new_opportunity(candidate: CanonicalCandidate, *, first_seen_at: datetime) 
         lifecycle_status=OpportunityStatus.DISCOVERED.value,
         published_at=candidate.published_at,
         source_updated_at=candidate.source_updated_at,
+        recency_basis=recency_basis_of(
+            published_at=candidate.published_at,
+            source_updated_at=candidate.source_updated_at,
+        ).value,
         # Card F20-61: set once, from the same instant that seeds this opportunity's
         # first `SourceOccurrenceModel.first_seen_at` — never updated afterwards, so
         # it stays "when the radar first saw this", not "when it was last touched".
@@ -1010,6 +1309,25 @@ def _apply_rule_fields(opportunity: OpportunityModel, candidate: CanonicalCandid
     return changed
 
 
+def _apply_content_fields(
+    opportunity: OpportunityModel, candidate: CanonicalCandidate, *, work_mode: bool = True
+) -> None:
+    """Apply only the three description-aware fields (F50-02); the caller bumps `version`.
+
+    Work mode is a fingerprint input, so it moves the fingerprint with it, to the value the
+    candidate (hence a later normalization) carries; `work_mode=False` leaves both alone.
+    """
+    _set_if_changed(opportunity, "seniority", candidate.seniority.value)
+    if work_mode and _set_if_changed(opportunity, "work_mode", candidate.work_mode.value):
+        opportunity.fingerprint = candidate.fingerprint
+        opportunity.fingerprint_version = candidate.fingerprint_version
+    countries = list(candidate.allowed_countries) or None
+    if _set_if_changed(opportunity, "allowed_countries", countries):
+        opportunity.allowed_countries_version = (
+            candidate.allowed_countries_version if countries else None
+        )
+
+
 def _apply_evidence_fields(opportunity: OpportunityModel, candidate: CanonicalCandidate) -> bool:
     """Apply the evidence-based fields (title, company, location, description,
     `published_at`/`source_updated_at`, fingerprint), gated by source freshness.
@@ -1040,6 +1358,14 @@ def _apply_evidence_fields(opportunity: OpportunityModel, candidate: CanonicalCa
     changed |= _set_if_changed(opportunity, "description", candidate.description)
     changed |= _set_if_changed(opportunity, "published_at", candidate.published_at)
     changed |= _set_if_changed(opportunity, "source_updated_at", candidate.source_updated_at)
+    changed |= _set_if_changed(
+        opportunity,
+        "recency_basis",
+        recency_basis_of(
+            published_at=candidate.published_at,
+            source_updated_at=candidate.source_updated_at,
+        ).value,
+    )
     changed |= _set_if_changed(opportunity, "valid_through", candidate.valid_through)
     changed |= _set_if_changed(opportunity, "fingerprint", candidate.fingerprint)
     changed |= _set_if_changed(opportunity, "fingerprint_version", candidate.fingerprint_version)

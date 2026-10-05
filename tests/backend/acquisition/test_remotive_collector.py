@@ -58,7 +58,8 @@ def test_queries_maps_and_preserves_public_payload() -> None:
     assert item.company_name == "Acme Remote"
     assert item.location_text == "Brazil"
     assert item.description == payload["jobs"][0]["description"]
-    assert item.published_at is not None
+    # The fixture's date is "2026-09-13T12:30:00": no timezone, so none is invented (F48-03).
+    assert item.published_at is None
     assert item.raw_payload == payload["jobs"][0]
     assert item.metadata["category"] == "Software Development"
     assert item.metadata["attribution"] == "Remotive"
@@ -290,3 +291,10 @@ def test_bare_304_yields_no_items_and_records_not_modified_without_a_total() -> 
     assert request.telemetry.not_modified is True
     assert request.telemetry.response_etag == '"abc123"'
     assert request.telemetry.items_announced is None
+
+
+def test_publication_date_keeps_an_explicit_timezone_and_drops_a_naive_one() -> None:
+    aware = RemotiveCollector._published_at("2026-09-12T10:00:00Z")
+    assert aware is not None and aware.utcoffset() is not None
+    assert RemotiveCollector._published_at("2026-09-29T08:00:00") is None
+    assert RemotiveCollector._published_at(None) is None

@@ -41,6 +41,8 @@ export interface StageHistoryEntry {
 export interface Application {
   id: string
   opportunityId: string
+  opportunityTitle: string
+  companyName: string | null
   profileVersionId: string
   currentStage: string
   status: string
@@ -97,6 +99,8 @@ function parseApplication(value: unknown): Application | null {
   return {
     id: value.id,
     opportunityId: required(value.opportunity_id),
+    opportunityTitle: required(value.opportunity_title, 'Oportunidade sem título'),
+    companyName: text(value.company_name),
     profileVersionId: required(value.profile_version_id),
     currentStage: required(value.current_stage, 'INTERESTED'),
     status: required(value.status, 'ACTIVE'),
@@ -139,9 +143,10 @@ async function send(
 }
 
 export async function listApplications(
-  params: { status?: string; stage?: string; opportunityId?: string; limit?: number } = {},
+  params: { status?: string; stage?: string; opportunityId?: string; offset?: number; limit?: number } = {},
 ): Promise<ApplicationPage> {
   const query = new URLSearchParams({ limit: String(params.limit ?? 100) })
+  if (params.offset && params.offset > 0) query.set('offset', String(params.offset))
   if (params.status) query.set('application_status', params.status)
   if (params.stage) query.set('stage', params.stage)
   if (params.opportunityId) query.set('opportunity_id', params.opportunityId)

@@ -420,3 +420,81 @@ def test_cache_expired_row_reads_as_miss_against_real_schema() -> None:
         session.commit()
 
         assert cache.get("https://example.com/jobs/2") is None
+
+
+# --- F48-08: stop extracting for a host after N consecutive failures -------------------
+
+
+class _StatusSession:
+    """Answers the host-streak query with the given most-recent-first statuses."""
+
+    def __init__(self, statuses: list[str]) -> None:
+        self._statuses = statuses
+
+    def scalars(self, statement: object) -> list[str]:
+        del statement
+        return self._statuses
+
+
+@pytest.mark.parametrize(
+    ("statuses", "expected"),
+    [
+        (["failed", "failed", "failed"], True),
+        (["failed", "failed", "success"], False),
+        (["failed", "failed"], False),
+        ([], False),
+    ],
+)
+def test_host_is_failing_only_after_n_consecutive_failures(
+    statuses: list[str], expected: bool
+) -> None:
+    cache = TavilyExtractionCache(session=_StatusSession(statuses), ttl_seconds=60)  # type: ignore[arg-type]
+
+    assert cache.host_is_failing("https://jobs.example.com/a", threshold=3) is expected
+
+
+def test_host_failure_guard_is_off_when_threshold_is_zero() -> None:
+    cache = TavilyExtractionCache(session=_StatusSession(["failed"] * 9), ttl_seconds=60)  # type: ignore[arg-type]
+
+    assert cache.host_is_failing("https://jobs.example.com/a", threshold=0) is False
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("RUN_DATABASE_INTEGRATION") != "1",
+    reason="database integration is enabled only in the isolated CI database",
+)
+def test_host_failure_streak_is_read_from_the_real_cache_table() -> None:
+    from sqlalchemy.orm import sessionmaker
+
+    from opportunity_radar.platform.database import create_database_engine
+
+    host = f"h{uuid4().hex[:8]}.example.com"
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with sessionmaker(bind=engine)() as session:
+        cache = TavilyExtractionCache(session=session, ttl_seconds=3600)
+        for number in range(3):
+            cache.put(
+                f"https://{host}/jobs/{number}",
+                ExtractionResult(
+                    url=f"https://{host}/jobs/{number}",
+                    raw_content=None,
+                    error="Failed to fetch url",
+                    from_cache=False,
+                ),
+            )
+        session.flush()
+
+        assert cache.host_is_failing(f"https://{host}/jobs/9", threshold=3)
+        assert not cache.host_is_failing(f"https://other-{host}/jobs/9", threshold=3)
+
+        cache.put(
+            f"https://{host}/jobs/ok",
+            ExtractionResult(
+                url=f"https://{host}/jobs/ok", raw_content="# Ok", error=None, from_cache=False
+            ),
+        )
+        session.flush()
+
+        assert not cache.host_is_failing(f"https://{host}/jobs/9", threshold=3)
+        session.rollback()

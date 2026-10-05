@@ -1,18 +1,26 @@
 import asyncio
 import json
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import uuid4
 
 import httpx
 import pytest
 
+from opportunity_radar.acquisition.alerts import SourceAlertService
+from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
     AcquisitionErrorCode,
+    CollectionMode,
     CollectionNetworkPolicy,
     CollectionRequest,
 )
-from opportunity_radar.acquisition.scheduling import ConditionalRequestHeaders
+from opportunity_radar.acquisition.models import SourceDefinitionModel
+from opportunity_radar.acquisition.scheduling import ConditionalRequestHeaders, SourceRunHistory
+from opportunity_radar.acquisition.service import AcquisitionService
+from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
 from opportunity_radar.acquisition.workday import WorkdayCollector
 
 _FIXTURE = Path(__file__).parents[2] / "fixtures" / "workday_jobs.json"
@@ -484,3 +492,368 @@ def test_parse_posted_on_reads_the_relative_age(
 @pytest.mark.parametrize("posted_on", [None, "", "Applications closing soon", 42])
 def test_parse_posted_on_returns_none_for_unknown_shapes(posted_on: object) -> None:
     assert WorkdayCollector._parse_posted_on(posted_on) is None
+
+
+# --- F48-08: a big Workday board never touches Tavily nor a shared budget bucket --------
+
+
+class _RunMemorySession:
+    def __init__(self) -> None:
+        self.added: list[object] = []
+
+    def add(self, model: object) -> None:
+        self.added.append(model)
+
+    def flush(self) -> None:
+        return None
+
+    def begin_nested(self):
+        return nullcontext()
+
+    def rollback(self) -> None:
+        return None
+
+    def commit(self) -> None:
+        return None
+
+    def refresh(self, model: object, attribute_names: object = None) -> None:
+        del model, attribute_names
+
+    def scalar(self, statement: object) -> None:
+        del statement
+        return None
+
+    def get(self, model: type, primary_key: object) -> None:
+        del model, primary_key
+        return None
+
+
+class _RunMemoryRepository:
+    def __init__(self, source: SourceDefinitionModel) -> None:
+        self.source = source
+        self.budget_calls: list[dict[str, object]] = []
+
+    def run_history(self, source_id: object, *, sample: int = 32) -> SourceRunHistory:
+        del source_id, sample
+        return SourceRunHistory()
+
+    def get_source(self, source_id: object) -> SourceDefinitionModel | None:
+        return self.source if source_id == self.source.id else None
+
+    def identical_raw_item_exists(self, **_: object) -> bool:
+        return False
+
+    def raw_item_by_envelope(self, **_: object) -> bool:
+        return False
+
+    def get_host_budget(self, host: str) -> None:
+        del host
+        return None
+
+    def record_host_budget_usage(
+        self,
+        host: str,
+        *,
+        now: object,
+        requests: int,
+        default_ceiling: int,
+        cooldown_until: object = None,
+    ) -> None:
+        del now, cooldown_until
+        self.budget_calls.append(
+            {"host": host, "requests": requests, "default_ceiling": default_ceiling}
+        )
+
+
+def _large_workday_run(items: int):
+    tavily_calls: list[httpx.Request] = []
+
+    def workday_handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        offset, limit = body["offset"], body["limit"]
+        postings = [
+            {
+                "title": f"Engineer {number}",
+                "externalPath": f"/job/Remote/Engineer-{number}_R{number}",
+                "locationsText": "Remote",
+                "bulletFields": [f"R{number}"],
+            }
+            for number in range(offset, min(offset + limit, items))
+        ]
+        return httpx.Response(200, json={"total": items, "jobPostings": postings})
+
+    def tavily_handler(request: httpx.Request) -> httpx.Response:
+        tavily_calls.append(request)
+        return httpx.Response(200, json={"results": [], "usage": {"credits": 1}})
+
+    workday_client = httpx.AsyncClient(transport=httpx.MockTransport(workday_handler))
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="workday",
+        name="Adobe",
+        enabled=True,
+        configuration={"tenant_identifier": "adobe/external", "api_region": "wd5"},
+    )
+    session = _RunMemorySession()
+    repository = _RunMemoryRepository(source)
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((WorkdayCollector(client=workday_client),)),
+        repository=repository,  # type: ignore[arg-type]
+        alerts=SourceAlertService(session, notifier=None),  # type: ignore[arg-type]
+        tavily_extraction=TavilyExtractionSettings(
+            client_factory=lambda: TavilyClient(
+                api_key="test-key",
+                client=httpx.AsyncClient(transport=httpx.MockTransport(tavily_handler)),
+            ),
+            cache_ttl_seconds=3600,
+            credit_budget_per_run=100,
+        ),
+    )
+    try:
+        run = asyncio.run(
+            service.execute(source.id, CollectionRequest(mode=CollectionMode.DISCOVERY))
+        )
+    finally:
+        asyncio.run(workday_client.aclose())
+    return run, tavily_calls, repository
+
+
+def test_500_item_workday_run_makes_zero_tavily_calls_and_finishes_pagination() -> None:
+    run, tavily_calls, repository = _large_workday_run(500)
+
+    assert tavily_calls == []
+    assert run.items_seen == 500
+    assert run.status == "SUCCEEDED"
+    assert run.error_code != AcquisitionErrorCode.CREDIT_BUDGET_EXCEEDED.value
+    assert run.credits_used == 0
+    # Only the 25 listing pages count against the tenant's own bucket.
+    assert repository.budget_calls == [
+        {"host": "workday:adobe/external:wd5", "requests": 25, "default_ceiling": 500}
+    ]
+
+
+# --- F50-03: detail fetch, only for target areas, behind a per-source flag ---------------
+
+# SYNTHETIC: the detail fixture follows the publicly documented CXS shape
+# (`jobPostingInfo.jobDescription`, docs/pesquisas/termos-workday.md). No real endpoint was
+# called to capture it.
+_DETAIL_FIXTURE = Path(__file__).parents[2] / "fixtures" / "workday_job_detail.json"
+_TARGETS = ("SOFTWARE_ENGINEERING", "DATA")
+_ENG = "Senior Backend Engineer"
+
+
+def _detail_postings(titles: list[str]) -> list[dict[str, object]]:
+    return [
+        {
+            "title": title,
+            "externalPath": f"/job/Remote/Job-{number}_R{number}",
+            "locationsText": "Remote",
+            "bulletFields": [f"R{number}"],
+        }
+        for number, title in enumerate(titles)
+    ]
+
+
+def _detail_run(
+    titles: list[str],
+    *,
+    detail_status: dict[str, int] | None = None,
+    sleeper=None,
+    **request_fields: object,
+):
+    """Collect `titles` through a mock transport; returns items, request log, request."""
+    postings = _detail_postings(titles)
+    detail_payload = json.loads(_DETAIL_FIXTURE.read_text(encoding="utf-8"))
+    log: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        log.append(request)
+        if request.method == "POST":
+            return httpx.Response(200, json={"total": len(postings), "jobPostings": postings})
+        path = request.url.path.rsplit("/cxs/acme/ExternalCareerSite", 1)[1]
+        status = (detail_status or {}).get(path, 200)
+        if status != 200:
+            return httpx.Response(status, headers={"Retry-After": "1"} if status == 429 else {})
+        return httpx.Response(200, json=detail_payload)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    request = CollectionRequest(
+        company_reference="acme/ExternalCareerSite",
+        company_name="Acme",
+        api_region="wd5",
+        **request_fields,  # type: ignore[arg-type]
+    )
+    collector = (
+        WorkdayCollector(client=client, sleeper=sleeper)
+        if sleeper is not None
+        else WorkdayCollector(client=client)
+    )
+    try:
+        items = asyncio.run(_collect(collector, request))
+    finally:
+        asyncio.run(client.aclose())
+    return items, log, request
+
+
+def _details(log: list[httpx.Request]) -> list[httpx.Request]:
+    return [call for call in log if call.method == "GET"]
+
+
+def test_target_posting_gets_its_description_and_keeps_its_identity() -> None:
+    plain, _, _ = _detail_run([_ENG])
+    items, log, request = _detail_run([_ENG], fetch_detail=True, target_role_families=_TARGETS)
+
+    assert items[0].description == "<p>Build and run the services behind our platform.</p>"
+    assert items[0].external_id == plain[0].external_id
+    assert items[0].url == plain[0].url
+    assert items[0].title == plain[0].title
+    assert str(_details(log)[0].url) == (
+        "https://acme.wd5.myworkdayjobs.com/wday/cxs/acme/ExternalCareerSite"
+        "/job/Remote/Job-0_R0"
+    )
+    assert request.telemetry.http_requests == 2
+    assert request.telemetry.detail_requests == 1
+
+
+def test_off_target_and_unknown_postings_get_no_detail_request() -> None:
+    items, log, _ = _detail_run(
+        ["Account Executive", "Wizard of Light", _ENG],
+        fetch_detail=True,
+        target_role_families=_TARGETS,
+    )
+
+    assert [item.description is not None for item in items] == [False, False, True]
+    assert [call.url.path.rsplit("/", 1)[1] for call in _details(log)] == ["Job-2_R2"]
+
+
+@pytest.mark.parametrize("fields", [{}, {"fetch_detail": False}])
+def test_flag_absent_or_false_fetches_no_detail_and_matches_listing_only(
+    fields: dict[str, object],
+) -> None:
+    items, log, request = _detail_run(
+        [_ENG, "Data Engineer"], target_role_families=_TARGETS, **fields
+    )
+
+    assert _details(log) == []
+    assert request.telemetry.http_requests == 1
+    assert all(item.description is None for item in items)
+    assert [item.external_id for item in items] == [
+        "/job/Remote/Job-0_R0",
+        "/job/Remote/Job-1_R1",
+    ]
+
+
+def test_flag_on_without_target_role_families_fetches_no_detail() -> None:
+    items, log, _ = _detail_run([_ENG], fetch_detail=True)
+
+    assert _details(log) == []
+    assert items[0].description is None
+
+
+def test_per_run_cap_limits_detail_requests_and_is_recorded() -> None:
+    items, log, request = _detail_run(
+        [_ENG] * 5,
+        fetch_detail=True,
+        detail_max_requests=2,
+        target_role_families=_TARGETS,
+    )
+
+    assert len(_details(log)) == 2
+    assert len(items) == 5
+    assert [item.description is not None for item in items] == [True, True, False, False, False]
+    assert request.telemetry.detail_requests == 2
+    assert request.telemetry.detail_skipped == 3
+
+
+def test_host_budget_left_limits_detail_requests() -> None:
+    # One listing page already spent 1 of the 3 requests the host still allows.
+    items, log, request = _detail_run(
+        [_ENG] * 5,
+        fetch_detail=True,
+        host_requests_remaining=3,
+        target_role_families=_TARGETS,
+    )
+
+    assert len(_details(log)) == 2
+    assert len(items) == 5
+    assert request.telemetry.detail_skipped == 3
+
+
+def test_detail_failure_keeps_the_posting_and_does_not_fail_the_run() -> None:
+    items, log, request = _detail_run(
+        [_ENG] * 3,
+        detail_status={"/job/Remote/Job-1_R1": 404},
+        fetch_detail=True,
+        target_role_families=_TARGETS,
+    )
+
+    assert [item.description is not None for item in items] == [True, False, True]
+    assert len(_details(log)) == 3
+    assert request.telemetry.detail_failures == 1
+
+
+def test_detail_schema_mismatch_keeps_the_posting() -> None:
+    postings = _detail_postings([_ENG])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(200, json={"total": 1, "jobPostings": postings})
+        return httpx.Response(200, json={"unexpected": True})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    request = CollectionRequest(
+        company_reference="acme/ExternalCareerSite",
+        api_region="wd5",
+        fetch_detail=True,
+        target_role_families=_TARGETS,
+    )
+    try:
+        items = asyncio.run(_collect(WorkdayCollector(client=client), request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert len(items) == 1
+    assert items[0].description is None
+    assert request.telemetry.detail_failures == 1
+
+
+def test_detail_rate_limit_stops_further_detail_requests() -> None:
+    async def sleeper(delay: float) -> None:
+        del delay
+
+    items, log, request = _detail_run(
+        [_ENG] * 4,
+        detail_status={"/job/Remote/Job-1_R1": 429},
+        sleeper=sleeper,
+        fetch_detail=True,
+        network_policy=CollectionNetworkPolicy(max_retries=0),
+        target_role_families=_TARGETS,
+    )
+
+    assert len(items) == 4
+    assert [item.description is not None for item in items] == [True, False, False, False]
+    assert len(_details(log)) == 2  # the 429 stops the run's detail requests
+    assert request.telemetry.rate_limit_events == 1
+    assert request.telemetry.detail_skipped == 2
+
+
+def test_detail_requests_honour_the_minimum_interval() -> None:
+    delays: list[float] = []
+
+    async def sleeper(delay: float) -> None:
+        delays.append(delay)
+
+    _, log, request = _detail_run(
+        [_ENG, "Data Engineer"],
+        sleeper=sleeper,
+        fetch_detail=True,
+        network_policy=CollectionNetworkPolicy(minimum_interval_seconds=30),
+        target_role_families=_TARGETS,
+    )
+
+    assert len(_details(log)) == 2
+    # The listing set `last_http_attempt_at`, so each detail waited out the interval.
+    assert len(delays) == 2
+    assert all(0 < delay <= 30 for delay in delays)
+    assert request.telemetry.http_requests == 3

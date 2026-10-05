@@ -215,3 +215,130 @@ def test_reappearing_reopens_a_closed_opportunity() -> None:
             assert reopened.closure_evidence["reopened_by_run_id"] == str(fourth.id)
         finally:
             fixture.cleanup()
+
+
+def _second_source_occurrence(
+    session: Session, fixture: _Fixture, *, seen_in_latest_complete: bool
+) -> tuple[UUID, list[UUID], UUID]:
+    """A second source whose occurrence of the same opportunity is (not) still live."""
+    other = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="manual",
+        name=f"closure probe other {uuid4().hex[:8]}",
+        enabled=True,
+        configuration={},
+        rate_limit_policy={},
+    )
+    session.add(other)
+    session.commit()
+    runs = []
+    for offset in range(2):
+        moment = NOW + timedelta(seconds=offset)
+        run = SourceRunModel(
+            id=uuid4(),
+            source_definition_id=other.id,
+            execution_trigger="SCHEDULED",
+            status="SUCCEEDED",
+            started_at=moment,
+            finished_at=moment + timedelta(seconds=1),
+            complete=True,
+        )
+        session.add(run)
+        runs.append(run)
+    session.commit()
+    raw_item = RawItemModel(
+        id=uuid4(),
+        source_run_id=runs[0].id,
+        source_definition_id=other.id,
+        external_id=f"probe-{uuid4().hex[:8]}",
+        identity_key=f"external:probe-{uuid4().hex[:8]}",
+        payload_hash=uuid4().hex + uuid4().hex,
+        item_metadata={},
+    )
+    session.add(raw_item)
+    session.flush()
+    fixture.raw_item_ids.append(raw_item.id)
+    seen_run = runs[1] if seen_in_latest_complete else runs[0]
+    session.add(
+        SourceOccurrenceModel(
+            id=uuid4(),
+            opportunity_id=fixture.opportunity_id,
+            raw_item_id=raw_item.id,
+            source_definition_id=other.id,
+            external_id=raw_item.external_id,
+            first_seen_at=runs[0].started_at,
+            last_seen_at=seen_run.started_at,
+            last_seen_run_id=seen_run.id,
+        )
+    )
+    session.commit()
+    return other.id, [run.id for run in runs], raw_item.id
+
+
+def _cleanup_other(session: Session, other_id: UUID, run_ids: list[UUID]) -> None:
+    session.execute(
+        delete(SourceOccurrenceModel).where(
+            SourceOccurrenceModel.source_definition_id == other_id
+        )
+    )
+    session.execute(delete(RawItemModel).where(RawItemModel.source_definition_id == other_id))
+    session.execute(delete(SourceRunModel).where(SourceRunModel.id.in_(run_ids)))
+    session.execute(
+        delete(SourceDefinitionModel).where(SourceDefinitionModel.id == other_id)
+    )
+    session.commit()
+
+
+def test_an_occurrence_live_in_another_source_keeps_the_opportunity_open() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        service = OpportunityService(session)
+        other_id: UUID | None = None
+        other_runs: list[UUID] = []
+        try:
+            first = fixture.run(complete=True)
+            fixture.opportunity_seen_in(first)
+            other_id, other_runs, _ = _second_source_occurrence(
+                session, fixture, seen_in_latest_complete=True
+            )
+
+            second = fixture.run(complete=True)
+            service.reconcile_run_closures(second.id)
+            third = fixture.run(complete=True)
+            service.reconcile_run_closures(third.id)
+
+            # Source A dropped it for two runs, source B still lists it.
+            assert fixture.opportunity().lifecycle_status == "ACTIVE"
+        finally:
+            session.rollback()
+            if other_id is not None:
+                _cleanup_other(session, other_id, other_runs)
+            fixture.cleanup()
+
+
+def test_closes_when_every_source_dropped_the_opportunity() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        service = OpportunityService(session)
+        other_id: UUID | None = None
+        other_runs: list[UUID] = []
+        try:
+            first = fixture.run(complete=True)
+            fixture.opportunity_seen_in(first)
+            other_id, other_runs, _ = _second_source_occurrence(
+                session, fixture, seen_in_latest_complete=False
+            )
+
+            second = fixture.run(complete=True)
+            service.reconcile_run_closures(second.id)
+            third = fixture.run(complete=True)
+            service.reconcile_run_closures(third.id)
+
+            assert fixture.opportunity().lifecycle_status == "CLOSED"
+        finally:
+            session.rollback()
+            if other_id is not None:
+                _cleanup_other(session, other_id, other_runs)
+            fixture.cleanup()

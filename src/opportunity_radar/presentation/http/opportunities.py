@@ -16,7 +16,9 @@ from opportunity_radar.matching.currency import active_profile_version_id
 from opportunity_radar.opportunities.domain import (
     NormalizationError,
     OpportunityStatus,
+    RecencyBasis,
     WorkMode,
+    recency_reference,
 )
 from opportunity_radar.opportunities.duplicates import (
     DuplicateCandidateNotFoundError,
@@ -161,11 +163,13 @@ class OpportunityResponse(BaseModel):
     role_family_version: str | None
     published_at: datetime | None
     source_updated_at: datetime | None
-    #: Card F20-61: `published_at` when the source has one, else `first_seen_at`
+    #: Cards F20-61/F48-16: `published_at ?? source_updated_at ?? first_seen_at`
     #: (never a fabricated real date).
     recency_effective_date: datetime | None
-    #: `True` when `recency_effective_date` came from the `first_seen_at` fallback.
+    #: `True` when `recency_effective_date` is not the source's `published_at`.
     date_is_estimated: bool
+    #: `published`, `updated` or `first_seen` (persisted `recency_basis`).
+    recency_basis: str
     valid_through: datetime | None
     recency_exempt_program: bool
     #: When this opportunity was first persisted. Exposed so the duplicate-candidate
@@ -179,8 +183,17 @@ class OpportunityResponse(BaseModel):
     relevance_mark: RelevanceMarkResponse | None = None
 
 
+class SiblingLocationResponse(BaseModel):
+    """Card F48-10: another posting of the same company, title and source."""
+
+    opportunity_id: UUID
+    location: str | None
+    source_url: str | None
+
+
 class OpportunityDetailResponse(OpportunityResponse):
     normalization_results: list[NormalizationResultResponse]
+    sibling_locations: list[SiblingLocationResponse] = []
 
 
 class OpportunityPageResponse(BaseModel):
@@ -382,6 +395,16 @@ def get_opportunity(
         normalization_results=[
             _normalization_response(item)
             for item in opportunity.normalization_results
+        ],
+        sibling_locations=[
+            SiblingLocationResponse(
+                opportunity_id=sibling.id,
+                location=sibling.location_text,
+                source_url=url,
+            )
+            for sibling, url in OpportunityRepository(session).posting_group_siblings(
+                opportunity
+            )
         ],
     )
 
@@ -700,8 +723,13 @@ def _opportunity_response(
         role_family_version=opportunity.role_family_version,
         published_at=opportunity.published_at,
         source_updated_at=opportunity.source_updated_at,
-        recency_effective_date=opportunity.published_at or opportunity.first_seen_at,
-        date_is_estimated=opportunity.published_at is None,
+        recency_effective_date=recency_reference(
+            published_at=opportunity.published_at,
+            source_updated_at=opportunity.source_updated_at,
+            first_seen_at=opportunity.first_seen_at,
+        )[0],
+        date_is_estimated=opportunity.recency_basis != RecencyBasis.PUBLISHED.value,
+        recency_basis=opportunity.recency_basis,
         valid_through=opportunity.valid_through,
         recency_exempt_program=opportunity.recency_exempt_program,
         created_at=opportunity.created_at,

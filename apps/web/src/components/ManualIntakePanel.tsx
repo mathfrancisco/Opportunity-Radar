@@ -127,7 +127,7 @@ export function ManualIntakePanel({ sourceId }: { sourceId: string }) {
   const result = intake.data
 
   return (
-    <section aria-labelledby={headingId} className="mt-4 rounded-2xl border border-line bg-panel p-4">
+    <section aria-labelledby={headingId} className="mt-4 rounded-panel border border-line bg-panel p-4">
       <h3 className="font-semibold" id={headingId}>
         Registrar vaga avulsa
       </h3>
@@ -139,7 +139,7 @@ export function ManualIntakePanel({ sourceId }: { sourceId: string }) {
 
       <form className="mt-4 grid gap-4" noValidate onSubmit={(event) => void submit(event)}>
         {entries.map((entry, index) => (
-          <fieldset className="rounded-2xl border border-line bg-surface p-4" key={entry.id}>
+          <fieldset className="rounded-panel border border-line bg-surface p-4" key={entry.id}>
             <legend className="px-1 text-sm font-semibold">Vaga {index + 1}</legend>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Forma de entrada">
@@ -289,7 +289,7 @@ export function ManualIntakePanel({ sourceId }: { sourceId: string }) {
             <ul className="mt-3 grid gap-2">
               {result.items.map((item) => (
                 <li
-                  className="break-anywhere rounded-2xl border border-line bg-surface p-3 text-sm"
+                  className="break-anywhere rounded-panel border border-line bg-surface p-3 text-sm"
                   key={item.rawItemId}
                 >
                   <p className="font-medium">

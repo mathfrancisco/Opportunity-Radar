@@ -7,7 +7,9 @@ import {
   transitionApplication,
 } from './api'
 
-export function useApplications(params: { status?: string } = {}) {
+export function useApplications(
+  params: { status?: string; stage?: string; opportunityId?: string; offset?: number; limit?: number } = {},
+) {
   return useQuery({
     queryKey: ['applications', params],
     queryFn: () => listApplications(params),

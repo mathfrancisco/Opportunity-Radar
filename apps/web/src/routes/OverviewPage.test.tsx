@@ -275,6 +275,38 @@ describe('OverviewPage — novos ATS', () => {
   })
 })
 
+describe('OverviewPage — orientação', () => {
+  it('oferece saltos para as três seções e identifica cada destino', async () => {
+    stubOverviewFetch(overviewBody(), [])
+
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    const navigation = [...container.querySelectorAll('nav')].find(
+      (element) => element.getAttribute('aria-label') === 'Seções da visão geral',
+    )
+    expect(navigation).toBeDefined()
+    expect([...navigation!.querySelectorAll('a')].map((link) => link.getAttribute('href'))).toEqual([
+      '#decisao-de-hoje',
+      '#acervo',
+      '#operacao',
+    ])
+    expect(container.querySelector('#decisao-de-hoje-title')?.textContent).toBe('Decisão de hoje')
+    expect(container.querySelector('#acervo-title')?.textContent).toBe('Acervo')
+    expect(container.querySelector('#operacao-title')?.textContent).toBe('Operação')
+  })
+
+  it('explica a janela e o instante que consolidou as métricas', async () => {
+    stubOverviewFetch(overviewBody(), ['greenhouse'])
+
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    expect(container.textContent).toContain('Janela: 24h.')
+    expect(container.textContent).toContain('Consolidado em')
+  })
+})
+
 // Card F20-54: the Overview links to the Inbox filtered to startups.
 describe('StartupShortcut', () => {
   it('leva para a Inbox filtrada por only_startups', () => {

@@ -37,6 +37,17 @@ def test_probe_candidate_keeps_enabled_or_unconfigured_sources_out() -> None:
     assert _probe_candidate(incomplete, include_remotive=True) is False
 
 
+def test_probe_candidate_refuses_a_source_on_a_forbidden_platform() -> None:
+    source = SourceDefinitionModel(
+        source_type="ashby",
+        name="Proposed board",
+        enabled=False,
+        configuration={"board_identifier": "example", "careers_url": "https://x.gupy.io/"},
+    )
+
+    assert _probe_candidate(source, include_remotive=True) is False
+
+
 def test_homologation_audit_keeps_terms_gate_and_probe_evidence() -> None:
     reviewed_at = datetime(2026, 9, 22, 12, 30, tzinfo=UTC)
 

@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react'
 import { Button } from '../components/Button'
+import { Field, controlClassName } from '../components/Field'
 import { PageShell } from '../components/PageShell'
 import { ConflictNotice, EmptyState, ErrorState, LoadingState } from '../components/states'
 import { ConflictError } from '../lib/api'
@@ -19,6 +20,17 @@ import {
 const workModes = ['REMOTE', 'HYBRID', 'ONSITE']
 const contracts = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP']
 const periods = ['YEAR', 'MONTH', 'HOUR']
+const seniorities = [
+  { code: 'INTERN', label: 'Estágio' },
+  { code: 'JUNIOR', label: 'Júnior' },
+  { code: 'MID', label: 'Pleno' },
+  { code: 'SENIOR', label: 'Sênior' },
+  { code: 'STAFF', label: 'Staff' },
+  { code: 'LEAD', label: 'Lead' },
+  { code: 'MANAGER', label: 'Gestão' },
+  { code: 'DIRECTOR', label: 'Direção' },
+  { code: 'UNKNOWN', label: 'Não informada' },
+]
 
 
 function toList(value: string): string[] {
@@ -52,6 +64,30 @@ function period(startedOn: string | null, endedOn: string | null): string | null
   return `${month(startedOn)} – ${endedOn === null ? 'atual' : month(endedOn)}`
 }
 
+/** Empty areas or skills leave the profile unable to rank (F48-13): say so, and what it costs. */
+function EmptyProfileWarning({ noAreas, noSkills }: { noAreas: boolean; noSkills: boolean }) {
+  if (!noAreas && !noSkills) return null
+  return (
+    <div
+      className="grid gap-1 rounded-control border border-warning-line bg-warning-surface p-4 text-sm text-warning-ink"
+      role="status"
+    >
+      {noAreas && (
+        <p>
+          Nenhuma área de interesse marcada: o Inbox não filtra por área e mostra vagas de
+          qualquer área.
+        </p>
+      )}
+      {noSkills && (
+        <p>
+          Nenhuma skill informada: o encaixe tecnológico das vagas fica desconhecido e pesa
+          pouco no ranking.
+        </p>
+      )}
+    </div>
+  )
+}
+
 function Versions({ versions }: { versions: ProfileVersion[] }) {
   if (versions.length === 0) {
     return <p className="text-sm text-subtle">Nenhuma versão registrada.</p>
@@ -62,7 +98,7 @@ function Versions({ versions }: { versions: ProfileVersion[] }) {
         .sort((left, right) => right.number - left.number)
         .map((version) => (
           <li
-            className="flex flex-wrap items-baseline justify-between gap-3 rounded-2xl border border-line bg-surface p-4 text-sm"
+            className="flex flex-wrap items-baseline justify-between gap-3 rounded-control border border-line bg-surface p-4 text-sm"
             key={version.id}
           >
             <span className="font-medium">Versão {version.number}</span>
@@ -102,7 +138,7 @@ function PreservedHistory({ version }: { version: ProfileVersion }) {
             <ul className="mt-2 grid gap-2">
               {version.experiences.map((experience, index) => (
                 <li
-                  className="rounded-2xl border border-line bg-surface p-4"
+                  className="rounded-control border border-line bg-surface p-4"
                   key={`${experience.companyName}-${experience.startedOn}-${index}`}
                 >
                   <span className="font-medium">{experience.title}</span>
@@ -124,7 +160,7 @@ function PreservedHistory({ version }: { version: ProfileVersion }) {
                 const dates = period(project.startedOn, project.endedOn)
                 return (
                   <li
-                    className="rounded-2xl border border-line bg-surface p-4"
+                    className="rounded-control border border-line bg-surface p-4"
                     key={`${project.name}-${index}`}
                   >
                     <span className="font-medium">{project.name}</span>
@@ -137,6 +173,29 @@ function PreservedHistory({ version }: { version: ProfileVersion }) {
         </div>
       </div>
     </section>
+  )
+}
+
+function ProfileSectionNav() {
+  const links = [
+    ['#perfil-criterios', 'Skills e áreas'],
+    ['#perfil-trabalho', 'Trabalho e localização'],
+    ['#perfil-remuneracao', 'Remuneração'],
+    ['#profile-versions', 'Versões'],
+  ]
+
+  return (
+    <nav aria-label="Seções do perfil" className="mt-8 flex flex-wrap gap-2">
+      {links.map(([href, label]) => (
+        <a
+          className="rounded-full border border-line-strong bg-surface px-3 py-1 text-sm font-medium text-subtle hover:border-ink hover:text-ink max-md:min-h-11"
+          href={href}
+          key={href}
+        >
+          {label}
+        </a>
+      ))}
+    </nav>
   )
 }
 
@@ -238,17 +297,31 @@ export function ProfilePage() {
       </div>
 
       {!active.isPending && !active.isError && (
-        <form className="mt-8 grid gap-6" onSubmit={submit}>
-          <label className="text-sm">
-            <span className="font-medium">Skills</span>
-            <span className="block text-muted">Separadas por vírgula.</span>
+        <form className="mt-6 grid gap-8" onSubmit={submit}>
+          <ProfileSectionNav />
+
+          <section aria-labelledby="perfil-criterios-title" className="grid gap-6 scroll-mt-6" id="perfil-criterios">
+            <div>
+              <h2 className="text-section" id="perfil-criterios-title">
+                Skills e áreas
+              </h2>
+              <p className="mt-1 text-sm text-muted">
+                Critérios que orientam o encaixe técnico e a prioridade das vagas.
+              </p>
+            </div>
+            <Field label="Skills" hint="Separadas por vírgula.">
             <input
-              className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
+              className={controlClassName}
               onChange={(event) => setSkillsText(event.target.value)}
               placeholder="python, react, postgresql"
               value={skillsText}
             />
-          </label>
+          </Field>
+
+          <EmptyProfileWarning
+            noAreas={preferences.targetRoleFamilies.length === 0}
+            noSkills={toList(skillsText).length === 0}
+          />
 
           {active.data && <PreservedHistory version={active.data} />}
 
@@ -276,19 +349,51 @@ export function ProfilePage() {
             </div>
           </fieldset>
 
-          <label className="text-sm">
-            <span className="font-medium">Cargos-alvo</span>
-            <span className="block text-muted">Separados por vírgula.</span>
+          <fieldset aria-describedby="seniorities-hint">
+            <legend className="text-sm font-medium">Senioridades aceitas</legend>
+            <p className="text-sm text-muted" id="seniorities-hint">
+              Níveis fora da seleção ficam abaixo no ranking, nunca escondidos. Nenhuma marcada
+              vale como não informado: nenhum nível perde posição.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-4">
+              {seniorities.map((level) => (
+                <label className="flex items-center gap-2 text-sm" key={level.code}>
+                  <input
+                    checked={preferences.acceptedSeniorities.includes(level.code)}
+                    onChange={() =>
+                      updatePreferences({
+                        acceptedSeniorities: toggle(preferences.acceptedSeniorities, level.code),
+                      })
+                    }
+                    type="checkbox"
+                  />
+                  {level.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <Field label="Cargos-alvo" hint="Separados por vírgula.">
             <input
-              className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
+              className={controlClassName}
               onChange={(event) =>
                 updatePreferences({ targetTitles: toList(event.target.value) })
               }
               placeholder="backend engineer, engenheiro de software"
               value={preferences.targetTitles.join(', ')}
             />
-          </label>
+          </Field>
+          </section>
 
+          <section aria-labelledby="perfil-trabalho-title" className="grid gap-6 scroll-mt-6" id="perfil-trabalho">
+            <div>
+              <h2 className="text-section" id="perfil-trabalho-title">
+                Trabalho e localização
+              </h2>
+              <p className="mt-1 text-sm text-muted">
+                Preferências de modalidade, contrato, país e fuso.
+              </p>
+            </div>
           <fieldset>
             <legend className="text-sm font-medium">Modalidades aceitas</legend>
             <div className="mt-2 flex flex-wrap gap-4">
@@ -325,27 +430,21 @@ export function ProfilePage() {
             </div>
           </fieldset>
 
-          <label className="text-sm">
-            <span className="font-medium">Países</span>
-            <span className="block text-muted">
-              Códigos ISO separados por vírgula. Lista vazia mantém o país da vaga como
-              desconhecido, e desconhecido não reprova.
-            </span>
+          <Field label="Países" hint="Códigos ISO separados por vírgula. Lista vazia mantém o país da vaga como desconhecido, e desconhecido não reprova.">
             <input
-              className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
+              className={controlClassName}
               onChange={(event) =>
                 updatePreferences({ countries: toList(event.target.value.toUpperCase()) })
               }
               placeholder="BR, PT"
               value={preferences.countries.join(', ')}
             />
-          </label>
+          </Field>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-sm">
-              <span className="font-medium">Início da janela de timezone</span>
+            <Field label="Início da janela de timezone">
               <input
-                className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
+                className={controlClassName}
                 max={23}
                 min={0}
                 onChange={(event) =>
@@ -354,11 +453,10 @@ export function ProfilePage() {
                 type="number"
                 value={preferences.timezoneStartHour ?? ''}
               />
-            </label>
-            <label className="text-sm">
-              <span className="font-medium">Fim da janela de timezone</span>
+            </Field>
+            <Field label="Fim da janela de timezone">
               <input
-                className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
+                className={controlClassName}
                 max={23}
                 min={0}
                 onChange={(event) =>
@@ -367,14 +465,23 @@ export function ProfilePage() {
                 type="number"
                 value={preferences.timezoneEndHour ?? ''}
               />
-            </label>
+            </Field>
           </div>
+          </section>
 
+          <section aria-labelledby="perfil-remuneracao-title" className="grid gap-6 scroll-mt-6" id="perfil-remuneracao">
+            <div>
+              <h2 className="text-section" id="perfil-remuneracao-title">
+                Remuneração
+              </h2>
+              <p className="mt-1 text-sm text-muted">
+                Faixa desejada e condições de mobilidade para avaliar a elegibilidade.
+              </p>
+            </div>
           <div className="grid gap-3 sm:grid-cols-4">
-            <label className="text-sm">
-              <span className="font-medium">Remuneração mínima</span>
+            <Field label="Remuneração mínima">
               <input
-                className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
+                className={controlClassName}
                 min={0}
                 onChange={(event) =>
                   updatePreferences({ compensationMin: event.target.value || null })
@@ -382,11 +489,10 @@ export function ProfilePage() {
                 type="number"
                 value={preferences.compensationMin ?? ''}
               />
-            </label>
-            <label className="text-sm">
-              <span className="font-medium">Remuneração máxima</span>
+            </Field>
+            <Field label="Remuneração máxima">
               <input
-                className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
+                className={controlClassName}
                 min={0}
                 onChange={(event) =>
                   updatePreferences({ compensationMax: event.target.value || null })
@@ -394,11 +500,10 @@ export function ProfilePage() {
                 type="number"
                 value={preferences.compensationMax ?? ''}
               />
-            </label>
-            <label className="text-sm">
-              <span className="font-medium">Moeda</span>
+            </Field>
+            <Field label="Moeda">
               <input
-                className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
+                className={controlClassName}
                 maxLength={3}
                 onChange={(event) =>
                   updatePreferences({ compensationCurrency: event.target.value.toUpperCase() || null })
@@ -406,11 +511,10 @@ export function ProfilePage() {
                 placeholder="USD"
                 value={preferences.compensationCurrency ?? ''}
               />
-            </label>
-            <label className="text-sm">
-              <span className="font-medium">Período</span>
+            </Field>
+            <Field label="Período">
               <select
-                className="mt-2 w-full rounded-xl border border-line-strong bg-surface px-4 py-3"
+                className={controlClassName}
                 onChange={(event) =>
                   updatePreferences({ compensationPeriod: event.target.value || null })
                 }
@@ -423,7 +527,7 @@ export function ProfilePage() {
                   </option>
                 ))}
               </select>
-            </label>
+            </Field>
           </div>
 
           <div className="flex flex-wrap gap-4 text-sm">
@@ -444,8 +548,9 @@ export function ProfilePage() {
               Preciso de patrocínio de visto
             </label>
           </div>
+          </section>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 border-t border-line pt-6">
             <Button disabled={save.isPending} type="submit">
               {save.isPending ? 'Salvando…' : 'Salvar como nova versão e ativar'}
             </Button>
@@ -473,8 +578,10 @@ export function ProfilePage() {
         </form>
       )}
 
-      <section className="mt-section">
-        <h2 className="text-section">Versões</h2>
+      <section aria-labelledby="profile-versions-title" className="mt-10 scroll-mt-6" id="profile-versions">
+        <h2 className="text-section" id="profile-versions-title">
+          Versões
+        </h2>
         <div className="mt-4">
           {versions.isPending && (
             <p className="text-sm text-subtle">Carregando versões…</p>

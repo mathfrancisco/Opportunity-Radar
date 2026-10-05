@@ -60,6 +60,14 @@ class Project:
     url: str | None = None
 
 
+#: Levels a profile accepts when it never said anything (F48-13, decision 2). SENIOR and above
+#: are not listed on purpose: they rank lower, they are never excluded.
+DEFAULT_ACCEPTED_SENIORITIES: tuple[str, ...] = ("INTERN", "JUNIOR", "MID", "UNKNOWN")
+VALID_SENIORITIES: frozenset[str] = frozenset(
+    {"INTERN", "JUNIOR", "MID", "SENIOR", "STAFF", "LEAD", "MANAGER", "DIRECTOR", "UNKNOWN"}
+)
+
+
 @dataclass(frozen=True)
 class EmploymentPreference:
     work_modes: tuple[str, ...] = ()
@@ -77,6 +85,9 @@ class EmploymentPreference:
     #: area, which is what a profile meant before the preference existed.
     target_role_families: tuple[str, ...] = ()
     target_titles: tuple[str, ...] = ()
+    #: `Seniority` values the profile prefers. Empty means "not stated": no level is ranked
+    #: down or hidden (F20-72).
+    accepted_seniorities: tuple[str, ...] = DEFAULT_ACCEPTED_SENIORITIES
 
 
 @dataclass(frozen=True)
@@ -131,6 +142,11 @@ class ProfileSnapshot:
             raise InvalidProfileSnapshotError("target role families must be unique")
         if len(set(preferences.target_titles)) != len(preferences.target_titles):
             raise InvalidProfileSnapshotError("target titles must be unique")
+        seniorities = preferences.accepted_seniorities
+        if len(set(seniorities)) != len(seniorities):
+            raise InvalidProfileSnapshotError("accepted seniorities must be unique")
+        if not set(seniorities) <= VALID_SENIORITIES:
+            raise InvalidProfileSnapshotError("accepted seniorities must be known levels")
 
 
 @dataclass(frozen=True)

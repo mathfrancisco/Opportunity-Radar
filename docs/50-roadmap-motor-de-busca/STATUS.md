@@ -1,0 +1,176 @@
+# SPEC 50 — estado da implementação
+
+- **Atualizado em:** 2026-10-05
+- **Branch:** commits enviados para `spec-46-redesign-ui` (PR #26), sobre `75d688b`. Nada foi
+  aplicado na stack `spec46full`.
+- **Verificação:** suíte completa com integração em banco `_test` descartável, migrado até
+  `20261005_0064`: `1602 passed, 10 skipped`. `ruff check .`, `mypy` e
+  `export_prompt_schema.py --check` sem erros.
+
+## Decisões do dono (2026-10-05)
+
+- **Q1:** detalhe do Workday não revisado; construído atrás de flag por fonte, desligada.
+- **Q2:** piso de 30%, medido nas três últimas execuções completas.
+- **Q3:** sim, como na spec. Fuso e autorização de trabalho viram `NOT_APPLICABLE`; país
+  desconhecido só bloqueia se o perfil marcar `sponsorship_required`.
+- **Q4:** embeddings continuam desligados (registro no card F50-11 da spec).
+- **Q5:** áreas-alvo `SOFTWARE_ENGINEERING` e `DATA`, contrato `full-time`.
+- **F50-08:** liberar `DELETE` de avaliações para o job de poda foi aprovado.
+- **F50-12.3:** gravar a vaga concorrente no motivo de revisão foi aprovado.
+
+## Cards
+
+| Card | Estado | Commit | Falta |
+|---|---|---|---|
+| F50-01 | Script e linha de base entregues | `06199c0`, `55a5adf` | Gold rotulado por pessoa: 200 vagas, 50 por fonte. Precisão não medida. |
+| F50-02 | Mecânica entregue, nada ligado | `846fd74` | Gold passar no portão; depois preencher `GATED_RULES`, ligar as regras e reclassificar. |
+| F50-03 | Entregue atrás de flag desligada | `8e8b82b` | Revisão de termos por fonte; captura real da resposta de detalhe. |
+| F50-04 | Entregue | `6e85c93` | Medir o aceite depois de três execuções completas por fonte. |
+| F50-05 | Entregue | `3248382` | `ai` em 24,1% do catálogo, contra a meta de menos de 15%. Amostra rotulada de 100 vagas. |
+| F50-06 | Entregue | `954cdf0` | Aceite de 50% não sai só daqui: contrato e senioridade desconhecidos ainda seguram. |
+| F50-07 | Entregue | `bce10f6` | `EXPLAIN ANALYZE` da fila em base de produção. |
+| F50-08 | Entregue, desligado no worker | ver `git log` | Rodar `scripts/prune_assessments.py` em dry-run, ler o relatório e só então ligar `WORKER_ASSESSMENT_RETENTION_ENABLED`. `EXPLAIN` em volume real. |
+| F50-09 | Entregue como `v3`, desligado por padrão | `bc6a4a3`, `514ffd2` | Funciona contra o Groq, mas não reduz a saída. Falta a avaliação de qualidade `v1` contra `v3`. |
+| F50-10 | Entregue | `58d24a1`, `5ff2647` | `/inbox` em ~0,6 s na cópia de 25 mil vagas. Falta medir em produção. |
+| F50-11 | Decisão registrada na spec | — | Nada. |
+| F50-12 | Item 1 e gravação da concorrente entregues; itens 2 e 3 medidos | `51c7271`, `6f48ee2`, `0b585be` | Decisões do dono sobre duplicatas e revisões. |
+
+## F50-08: como ficou
+
+- A migração `20261005_0064` libera só `DELETE` em `match_assessment` e `match_factor`, e só
+  em transação que ligue `matching.allow_prune`. `UPDATE` continua sempre recusado. Só o job
+  de poda liga a opção.
+- O job preserva: a avaliação mais recente por vaga e versão de perfil, toda avaliação
+  apontada por `matching.current_assessment`, toda avaliação com análise de IA ou análise em
+  andamento, e todas as avaliações de um par vaga e versão de perfil que tenha candidatura.
+- O ponteiro escolhe a mais recente por versão da vaga e `assessed_at`; a poda usa
+  `created_at`. Quando as duas ordens discordam, uma linha a mais fica guardada por vaga.
+- Padrões: desligado no worker, 7 dias de retenção, lotes de 500. O script só apaga com
+  `--apply`.
+- Não medido: plano da consulta em volume real; o job nunca rodou contra dados reais.
+
+## Pontos abertos por card
+
+**F50-02**
+- O script de reclassificação move o `fingerprint` junto com o modo de trabalho. Se outra
+  vaga já tiver a identidade nova, o modo de trabalho daquela vaga fica como estava e o caso
+  sai em `fingerprint_collisions` no relatório; o script não mescla nem cria revisão.
+- O `fingerprint` novo vem da evidência bruta, não dos campos gravados. Se título ou empresa
+  gravados estiverem defasados em relação à evidência, a identidade segue a evidência.
+- Sem teste para o escopo padrão a partir das áreas-alvo do perfil ativo.
+
+**F50-03**
+- A fixture de detalhe é sintética. Se um tenant responder em outro formato, os detalhes
+  contam como falha e as vagas ficam só com a listagem.
+- Um 429 no detalhe interrompe os detalhes da execução, mas não grava cooldown do host.
+- O cálculo do orçamento restante ignora um cooldown em vigor.
+- Os contadores de detalhe ficam só na telemetria em memória.
+
+**F50-04**
+- A parcela por fonte usa as três últimas execuções completas, mesmo medidas com áreas-alvo
+  antigas. Depois de trocar as áreas do perfil, o filtro leva até três execuções para refletir.
+- As execuções do Hacker News agora terminam completas, então a fonte passa a poder fechar
+  vagas que somem do tópico.
+
+**F50-05**
+- A palavra solta `ml` também saiu da regra de `ai`.
+- Uma vaga que só cita LLM ou RAG recebe também `ai`.
+- "React Native" também conta como `react`.
+- Os identificadores novos têm espaço (`spring boot`, `react native`); um perfil que grave
+  `springboot` não casa.
+
+**F50-06**
+- `RULES_VERSION` é `matching-v3`. Junto com `skills-v4`, invalida as avaliações uma vez.
+- Na regressão, a elegibilidade continua 40 `UNKNOWN` e 10 `INELIGIBLE` em 50 casos.
+
+**F50-07**
+- Faixas de recência: até 3, 7, 14 e 30 dias, copiadas de `_recency_measurement`.
+- `input_hash` ainda inclui o dia; uma avaliação manual em outro dia grava uma linha nova.
+- A fila roda um `NOT EXISTS` por vaga elegível a cada passada. Custo não medido.
+- No primeiro ciclo depois do deploy, toda vaga que cruzou uma faixa volta à fila uma vez.
+
+**F50-09**
+- Já existia um prompt `v2` (F20-18); o novo é `v3`, com base no `v1`.
+- Tokens de entrada estimados: 1.058 no `v1`, 865 no `v3`, redução de 18%. A meta de 800 não
+  foi atingida.
+- Teto de saída de 600 tokens só com `v3`, não testado contra o provedor. Uma lista acima do
+  limite falha em vez de ser cortada.
+
+**F50-10**
+- `connect_args` com `options` sobrescreve um `options=` que já esteja na `DATABASE_URL`, e
+  um pooler em modo transação pode recusar esse parâmetro.
+- Página vazia do Inbox usa uma segunda consulta para os totais.
+- A API passa a ter um segundo pool de conexões, ao lado do que o adapter de análise usa.
+
+**F50-12**
+- Duplicatas `title_location_window`: 0 de 108 pares parece republicação; a regra não deve
+  confirmar sozinha.
+- `EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED` responde por 503 linhas. O grosso da fila são
+  4.367 de `SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY`, não medidas.
+- Detalhes em [f50-12-duplicatas-e-identidade](../pesquisas/f50-12-duplicatas-e-identidade.md).
+
+## Medições no `spec46full` (somente leitura, 2026-10-05)
+
+- Cobertura das regras de conteúdo em 14.593 vagas com descrição: `seniority` 62,2%,
+  `work_mode` 39,3%, `allowed_countries` 11,5%.
+- Catálogo nas áreas-alvo: 27,7% (6.970 de 25.124).
+- Vagas das áreas-alvo com descrição e ao menos uma skill pela taxonomia nova: 4.279 de 5.177
+  (82,7%). Isso é teto para `TECHNOLOGY_FIT` conhecido, não a taxa do fator.
+
+## Stack de teste `f50test` (2026-10-05)
+
+Stack local com o código da branch e uma cópia do banco da `spec46full` (25.267 vagas),
+migrada até `20261005_0064`. API em `127.0.0.1:8001`, frontend em `127.0.0.1:3001`. O arquivo
+de portas (`.claude/compose.f50test.yaml`) não é versionado.
+
+Ligado nela: `AI_ANALYSIS_PROMPT=v3`, `WORKER_ASSESSMENT_RETENTION_ENABLED=true`, piso de
+coleta 0,30, timeout de consulta, e as seis regras de classificação por descrição. As regras
+estão ligadas só nessa cópia, sem o portão de 90% ter passado. `fetch_detail` do Workday
+continua desligado (Q1).
+
+Medido pelo endpoint HTTP, cinco chamadas cada:
+
+| Endpoint | Antes da correção `5ff2647` | Depois |
+|---|---|---|
+| `/inbox?limit=20` | 4,0 a 6,5 s | 0,58 a 0,65 s (1,1 s na primeira) |
+| `/inbox`, todas as áreas | — | 0,45 a 0,47 s |
+| `/overview` | 4,8 a 5,4 s | 0,92 a 1,10 s |
+| `/search-metrics` | 4,6 a 4,7 s | 1,03 a 1,12 s |
+| `/funnel-metrics` | 1,25 a 1,36 s | 1,30 a 1,43 s |
+
+A causa do `/inbox` lento era compilação JIT de uma subconsulta repetida, mais três
+consultas rodando para cada linha filtrada. A tabela `matching.current_assessment` sozinha
+não resolvia.
+
+Outros resultados:
+
+- **Elegibilidade com `matching-v3`:** em 10.442 vagas reavaliadas, 990 `ELIGIBLE`, 1.329
+  `INELIGIBLE` e 8.123 `UNKNOWN`. Decidida em 22%, abaixo da meta de 50%.
+- **Hacker News:** execução `SUCCEEDED`, 204 itens vistos, nenhum inválido.
+- **Contadores de área-alvo:** gravados em toda execução. Um Workday mediu 24 vagas na área e
+  277 fora.
+- **Prompt `v3`:** uma análise pela API terminou `AI_COMPLETED`. As quatro listas vieram
+  exatamente no limite (4, 5, 3, 4), então o corte pode estar agindo em toda resposta.
+- **Poda:** o job foi registrado mas ainda não rodou; ele segue o intervalo da retenção de
+  payloads.
+- **Cota de IA:** a cota diária já estava esgotada no banco copiado, então o worker não
+  analisou nada com `v3`.
+
+Dois achados que mudam leituras anteriores:
+
+- A taxonomia `skills-v4` só vale para vagas normalizadas depois da troca. A versão fica
+  gravada nas skills de cada vaga; o catálogo existente continua `skills-v3` até ser
+  renormalizado. Os 24,1% de `ai` são uma simulação sobre título e descrição, não o estado do
+  banco.
+- O `v3` não reduz a saída: 457 a 584 tokens em chamadas reais, contra 455 a 502 do `v1`. O
+  teto subiu de 600 para 800 porque o Groq conta tokens de raciocínio no limite.
+
+## Antes do deploy
+
+1. Aplicar as migrações `0062`, `0063` e `0064`. A `0063` faz o backfill dos ponteiros.
+2. Esperar uma reavaliação completa do catálogo (taxonomia e regras mudaram).
+3. Rodar `scripts/prune_assessments.py` em dry-run e ler o relatório antes de ligar a poda.
+4. Rodar `scripts/reclassify_content.py` em dry-run e ler `fingerprint_collisions` antes de
+   qualquer `--apply`. Isso só faz sentido depois de o gold passar no portão.
+5. Depois de três execuções completas por fonte, repetir as consultas do §2 da spec e
+   atualizar a tabela do §1.

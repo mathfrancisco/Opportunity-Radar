@@ -23,6 +23,7 @@ from opportunity_radar.acquisition.domain import (
 )
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.models import RawItemModel, SourceDefinitionModel, SourceRunModel
+from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.acquisition.tavily import TavilyClient, TavilySearchCollector
 from opportunity_radar.companies.models import Company, CompanySource
@@ -459,3 +460,128 @@ def test_proposal_failure_keeps_raw_evidence_and_records_partial_run(
         assert session.scalar(
             select(RawItemModel.id).where(RawItemModel.source_definition_id == source.id)
         ) is not None
+
+
+# --- F48-19: forbidden platforms never become proposals -----------------------------
+
+
+def test_tavily_result_on_a_forbidden_platform_is_refused() -> None:
+    with Session(_engine()) as session:
+        company = _company(session)
+        item = _candidate(company, "https://acme.gupy.io/vagas/1")
+
+        report = AcquisitionService(session).propose_from_tavily_evidence((item,))
+
+        assert report.outcomes[0].outcome == "forbidden_platform"
+        assert session.scalar(
+            select(func.count()).select_from(SourceDefinitionModel).where(
+                SourceDefinitionModel.configuration["company_name"].as_string()
+                == company.canonical_name
+            )
+        ) == 0
+
+
+def test_detect_source_refuses_a_record_on_a_forbidden_platform() -> None:
+    with Session(_engine()) as session:
+        company = _company(session)
+        session.add(
+            CompanySource(
+                company_id=company.id,
+                source_type="greenhouse",
+                endpoint="https://acme.gupy.io/greenhouse",
+                external_key="acme",
+            )
+        )
+        session.commit()
+
+        proposal, result = AcquisitionService(session).propose_company_source(company.id)
+
+        assert (proposal, result) == (None, "forbidden_platform")
+
+
+# --- F48-17: proposals for every ATS the collectors support -------------------------
+
+
+@pytest.mark.parametrize(
+    ("source_type", "endpoint", "key", "expected"),
+    [
+        (
+            "workable",
+            "https://apply.workable.com/acme",
+            "acme",
+            {"account_identifier": "acme"},
+        ),
+        (
+            "teamtailor",
+            "https://acme.teamtailor.com",
+            "acme.teamtailor.com",
+            {"company_identifier": "acme.teamtailor.com"},
+        ),
+        (
+            "factorial",
+            "https://acme.factorialhr.com/",
+            "acme",
+            {"company_identifier": "acme"},
+        ),
+        (
+            "workday",
+            "https://acme.wd5.myworkdayjobs.com/en-US/Careers",
+            "acme",
+            {"tenant_identifier": "acme/Careers", "api_region": "wd5"},
+        ),
+        (
+            "workday",
+            "https://acme.wd1.myworkdayjobs.com/External",
+            "acme/External",
+            {"tenant_identifier": "acme/External", "api_region": "wd1"},
+        ),
+    ],
+)
+def test_detect_source_proposes_every_supported_ats(
+    source_type: str, endpoint: str, key: str, expected: dict[str, str]
+) -> None:
+    with Session(_engine()) as session:
+        company = _company(session)
+        session.add(
+            CompanySource(
+                company_id=company.id,
+                source_type=source_type,
+                endpoint=endpoint,
+                external_key=key,
+            )
+        )
+        session.commit()
+        service = AcquisitionService(
+            session,
+            registry=build_collector_registry(greenhouse_base_url="https://greenhouse.test"),
+        )
+
+        proposal, result = service.propose_company_source(company.id)
+
+        assert result == "proposed"
+        assert proposal is not None
+        assert proposal.source_type == source_type
+        assert proposal.enabled is False
+        assert proposal.evidence_status == "ats_identified"
+        for name, value in expected.items():
+            assert proposal.configuration[name] == value
+        assert proposal.configuration["company_name"] == company.canonical_name
+        assert service.propose_company_source(company.id)[1] == "already_proposed"
+
+
+def test_detect_source_skips_a_workday_record_without_a_usable_board_url() -> None:
+    with Session(_engine()) as session:
+        company = _company(session)
+        session.add(
+            CompanySource(
+                company_id=company.id,
+                source_type="workday",
+                endpoint="https://careers.acme.example/",
+                external_key="acme",
+            )
+        )
+        session.commit()
+
+        proposal, result = AcquisitionService(session).propose_company_source(company.id)
+
+        assert (proposal, result) == (None, "not_detected")

@@ -10,8 +10,8 @@ docs/pesquisas/termos-hn-who-is-hiring.md — never the HTML of news.ycombinator
 
 Each top-level comment is one job. The text is free-form, so parsing is deliberately
 conservative: only the conventional `Company | Role | Location | ...` header line is read,
-and a comment whose company or role cannot be identified is reported as an invalid item
-(a pending review, run status PARTIAL) instead of being emitted as an empty job.
+and a comment whose company or role cannot be identified is skipped (not emitted and not
+counted as invalid).
 """
 
 from __future__ import annotations
@@ -267,9 +267,16 @@ class HackerNewsCollector:
             live += 1
             parsed = parse_comment(body)
             if parsed is None:
-                request.telemetry.record_invalid_item(
-                    f"Hacker News comment {kid}: company or role not identifiable"
-                )
+                request.telemetry.record_skipped_item()
+                continue
+            if parsed.title is None and not any(
+                detect_ats_board(url) is not None for url in parsed.urls
+            ):
+                # Card F48-03 (same family as F20-75): a header that names no role is not an
+                # opportunity. Skipped, not persisted as a raw item the normalizer would
+                # then record as FAILED. A comment that still links a supported ATS board
+                # is persisted: it feeds the source-proposal queue (F20-55).
+                request.telemetry.record_skipped_item()
                 continue
             if keywords and not any(k in parsed.text.casefold() for k in keywords):
                 continue

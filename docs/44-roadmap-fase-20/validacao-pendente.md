@@ -116,27 +116,39 @@ status do `README.md`; documentação final; CI verde; depois, merge do PR #25 n
 
 ## 7. Backlog para a próxima fase
 
-Itens que sobraram da fase (F20-60, medição parcial, senioridade, vínculo de empresas) e não bloqueiam o F20-50 nem o merge do PR #25:
+Itens que sobraram da fase (F20-60, medição parcial, senioridade, vínculo de empresas) e não bloqueiam o F20-50 nem o merge do PR #25. **Decisões de 2026-09-29:** o usuário delegou a escolha; cada item foi absorvido pelo card F48 correspondente da [SPEC 48](../48-spec-mais-vagas.md) (o que é medição continua aberto, com o passo que a fecha):
 
 - `discover_sites.py` nas 13 empresas sem ATS, em ou depois de `2026-10-28` (fim do lock de
-  30 dias), **antes** de `discover_ats.py`; Crossover excluído.
+  30 dias), **antes** de `discover_ats.py`; Crossover excluído. Decidido: executar na data, sob
+  o F48-21.
 - 9 empresas `probe` sem decisão (Mercado Livre, Nuvemshop, FullStack, AgileEngine,
   Cognizant, TCS, Infosys, Terminal, AI/R Avenue Code): páginas dinâmicas ou bloqueio a bot
   impediram confirmar JSON-LD/ATS; não ativar os boards homônimos (`fullstack`, `terminal`,
   `tcs`, `aircompany`). Detalhes em `evidencias/careers-backlog-f20-60-2026-09-29.md`.
+  Decidido: sem confirmação de JSON-LD/ATS em 2026-10-28 a empresa fica `no-site`, sem burlar bloqueio
+  de bot (F48-21).
 - Medição completa de 7 dias (F20-35, F20-38, F20-49): a de 2026-09-29 cobriu ~1,24 dia
-  válido. Refazer com a stack real estável (`restart: unless-stopped`) e agenda em todas as
-  fontes; medir bytes evitados por ETag (hoje `source_run` não guarda bytes), custo de IA e
-  cobertura, e investigar a cadência abaixo do esperado (6 blocos em ~30 h em vez de ~10) e
-  o buraco de ~12 h de 2026-09-29.
+  válido. Decidido: refazer **depois** de F48-06 (funil no `doctor`) e F48-07 (bytes por run e
+  alarme de buraco), com 7 dias de agenda estável e o host sem suspensão. Ainda aberto (medição):
+  bytes evitados por ETag, custo de IA, cobertura, a cadência abaixo do esperado (6 blocos em
+  ~30 h em vez de ~10) e o buraco de ~12 h de 2026-09-29.
 - [F20-76](fase-20/f20-76-senioridade-por-conteudo.md): classificar senioridade pelo corpo da
-  vaga e/ou sugestões do F20-23 (com gabarito maior) quando a cota do Groq permitir; meta de
-  UNKNOWN ~25% (hoje 49,42%).
+  vaga. Decidido: absorvido pelo F48-15 (`seniority-v4` com evidência citada, precisão ≥ 90 %
+  em gabarito de ≥ 200 vagas antes de gravar; meta ≤ 30 % nas vagas com descrição). Sugestões
+  do F20-23 seguem desligadas.
 - Empresas sem vínculo: 61 fontes importadas na stack real estão sem `company_source`/empresa
   (21 "Proposed ..." e fontes criadas só com `company_name`), e as 21 propostas do
   `backfill_startup_evidence.py` foram `skipped: company not found` (0 linhas em
-  `company_startup_evidence`). Criar/ligar as empresas e reexecutar o backfill (dry-run antes).
+  `company_startup_evidence`). Decidido: F48-17 (criar/ligar empresas e reexecutar o backfill,
+  dry-run antes). Contagem de 2026-09-29 ~20:04Z: 63 fontes habilitadas sem vínculo.
 - F20-61: medir o volume real de vaga junior/estágio/programa-com-prazo no acervo real (item 5
-  do card).
+  do card). Aberto (medição): entra no relatório do F48-06 depois da mudança de janela do
+  F48-16 (30 dias, lente de 14).
 - Restore-check do dump `pre-rebuild-2026-09-29` (`scripts/restore_check.py`; só o TOC foi
   listado) e revisão de pertencimento das fontes importadas (herdado da `f20manual`).
+  Decidido: o restore-check roda **antes de qualquer reprocessamento em massa** do F48
+  (F48-03 script, F48-09, F48-14, F48-15); a revisão de pertencimento fica no P2-2 do doc 47.
+- Rotação da chave Groq usada nas rodadas (§5): continua com o usuário; é ação sobre segredo
+  e não foi decidida aqui.
+- Números de oportunidades desta página (686) são do rebuild de 2026-09-29, antes da importação
+  de 120 fontes; o snapshot atual (11.267, ~20:04Z) está na SPEC 48 §2.

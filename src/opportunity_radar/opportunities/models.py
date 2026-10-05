@@ -62,6 +62,10 @@ class OpportunityModel(Base):
         ),
         CheckConstraint("version > 0", name="ck_opportunity_version_positive"),
         CheckConstraint(
+            "recency_basis IN ('published', 'updated', 'first_seen')",
+            name="ck_opportunity_recency_basis",
+        ),
+        CheckConstraint(
             "role_family IN ('SOFTWARE_ENGINEERING', 'DATA', 'INFRASTRUCTURE', "
             "'SECURITY', 'QA', 'PRODUCT', 'DESIGN', 'SALES', 'MARKETING', "
             "'OPERATIONS', 'PEOPLE', 'FINANCE', 'LEGAL', 'SUPPORT', 'OTHER', "
@@ -119,6 +123,13 @@ class OpportunityModel(Base):
     #: estimate of "seen", never presented as a real publication date.
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=func.now(), server_default=func.now()
+    )
+    #: Card F48-16: which date the recency reference came from — `published` when
+    #: `published_at` exists, `updated` when only `source_updated_at` does, `first_seen`
+    #: otherwise. Kept in step with those two columns by the normalizer; the UI marks the
+    #: date "estimada" whenever it is not `published`.
+    recency_basis: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="first_seen", server_default="first_seen"
     )
     #: Explicit application-window deadline (schema.org `JobPosting.validThrough`,
     #: card F20-61), threaded from the collector when it exposes one (today only
@@ -302,6 +313,7 @@ class SourceOccurrenceModel(Base):
         ),
         Index("ix_source_occurrence_source_url", "source_url"),
         Index("ix_source_occurrence_normalized_url", "normalized_source_url"),
+        Index("ix_source_occurrence_opportunity", "opportunity_id"),
         {"schema": SCHEMA},
     )
 

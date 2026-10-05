@@ -5,9 +5,10 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from opportunity_radar.acquisition.models import (
@@ -33,6 +34,81 @@ class RawItemEvidence:
     company_id: UUID | None
     company_name: str | None
     source_configuration: dict[str, object]
+
+
+def recency_reference_expression() -> Any:
+    """SQL side of `domain.recency_reference` (card F48-16): the same
+    `published_at ?? source_updated_at ?? first_seen_at` order, as a COALESCE."""
+    return func.coalesce(
+        OpportunityModel.published_at,
+        OpportunityModel.source_updated_at,
+        OpportunityModel.first_seen_at,
+    )
+
+
+def posting_group_key() -> Any:
+    """Card F48-10: `(company, normalized title, source)` of one posting, as one string.
+
+    The same job listed once per city has one row per city (each with its own URL), so
+    the Inbox shows the group once while nothing is merged, closed or rewritten. The
+    source is the opportunity's first occurrence source (by id); an opportunity with no
+    occurrence is its own group, so nothing ever collapses without evidence of a shared
+    source. A company without a canonical id groups by its lower-cased name.
+    """
+    source = (
+        select(func.min(cast(SourceOccurrenceModel.source_definition_id, String)))
+        .where(SourceOccurrenceModel.opportunity_id == OpportunityModel.id)
+        .correlate(OpportunityModel)
+        .scalar_subquery()
+    )
+    return func.concat_ws(
+        "|",
+        func.coalesce(
+            cast(OpportunityModel.canonical_company_id, String),
+            func.concat("name:", func.lower(func.coalesce(OpportunityModel.company_name, ""))),
+        ),
+        OpportunityModel.normalized_title,
+        func.coalesce(source, func.concat("id:", cast(OpportunityModel.id, String))),
+    )
+
+
+def open_at_source_condition() -> Any:
+    """Some occurrence of the opportunity was seen in the latest complete run of *its own*
+    source (`last_seen_run_id` equals that run), whatever its age. Shared by the Inbox
+    "Abertas na fonte" lens (F48-16) and run closures (F48-11)."""
+    latest_complete_run = (
+        select(SourceRunModel.id)
+        .where(
+            SourceRunModel.source_definition_id == SourceOccurrenceModel.source_definition_id,
+            SourceRunModel.complete.is_(True),
+        )
+        .order_by(SourceRunModel.started_at.desc())
+        .limit(1)
+        .correlate(SourceOccurrenceModel)
+        .scalar_subquery()
+    )
+    return (
+        select(SourceOccurrenceModel.id)
+        .where(
+            SourceOccurrenceModel.opportunity_id == OpportunityModel.id,
+            SourceOccurrenceModel.last_seen_run_id == latest_complete_run,
+        )
+        .exists()
+    )
+
+
+def recency_condition(*, now: datetime, window_days: int) -> Any:
+    """SQL side of `domain.recency_decision` (cards F20-61, F48-16): reference date inside
+    the window, OR a time-boxed program, OR a still-open `valid_through`. One definition,
+    shared by `/opportunities` and the Inbox (`dashboard.queries._recency_condition`);
+    `tests/backend/dashboard/test_recency_mirror_integration.py` compares it with the
+    pure function over the same input grid."""
+    within_window = recency_reference_expression() >= now - timedelta(days=window_days)
+    has_open_deadline = and_(
+        OpportunityModel.valid_through.is_not(None),
+        OpportunityModel.valid_through > now,
+    )
+    return or_(within_window, OpportunityModel.recency_exempt_program.is_(True), has_open_deadline)
 
 
 class OpportunityRepository:
@@ -266,6 +342,54 @@ class OpportunityRepository:
             )
         )
 
+    def posting_group_siblings(
+        self, opportunity: OpportunityModel
+    ) -> list[tuple[OpportunityModel, str | None]]:
+        """Other postings in this opportunity's `posting_group_key()`, each with the URL of
+        its first occurrence. Read only (F48-10): siblings are never merged or closed."""
+        key = (
+            select(posting_group_key())
+            .where(OpportunityModel.id == opportunity.id)
+            .scalar_subquery()
+        )
+        siblings = list(
+            self.session.scalars(
+                select(OpportunityModel)
+                .where(
+                    OpportunityModel.id != opportunity.id,
+                    OpportunityModel.normalized_title == opportunity.normalized_title,
+                    posting_group_key() == key,
+                )
+                .order_by(OpportunityModel.location_text.nulls_last(), OpportunityModel.id)
+            )
+        )
+        if not siblings:
+            return []
+        urls: dict[UUID, str] = {
+            opportunity_id: source_url
+            for opportunity_id, source_url in self.session.execute(
+                select(
+                    SourceOccurrenceModel.opportunity_id,
+                    func.min(SourceOccurrenceModel.source_url),
+                )
+                .where(
+                    SourceOccurrenceModel.opportunity_id.in_([item.id for item in siblings])
+                )
+                .group_by(SourceOccurrenceModel.opportunity_id)
+            )
+        }
+        return [(item, urls.get(item.id)) for item in siblings]
+
+    def opportunity_is_open_at_source(self, opportunity_id: UUID) -> bool:
+        """Whether any occurrence was seen in the latest complete run of its own source."""
+        return bool(
+            self.session.scalar(
+                select(OpportunityModel.id).where(
+                    OpportunityModel.id == opportunity_id, open_at_source_condition()
+                )
+            )
+        )
+
     def occurrences_seen_in_run(
         self, source_definition_id: UUID, run_id: UUID
     ) -> list[SourceOccurrenceModel]:
@@ -358,27 +482,9 @@ class OpportunityRepository:
         if company_id:
             filters.append(OpportunityModel.canonical_company_id == company_id)
         if only_recent:
-            reference = now or datetime.now(UTC)
-            cutoff = reference - timedelta(days=recency_window_days)
-            within_window = or_(
-                and_(
-                    OpportunityModel.published_at.is_not(None),
-                    OpportunityModel.published_at >= cutoff,
-                ),
-                and_(
-                    OpportunityModel.published_at.is_(None),
-                    OpportunityModel.first_seen_at >= cutoff,
-                ),
-            )
-            has_open_deadline = and_(
-                OpportunityModel.valid_through.is_not(None),
-                OpportunityModel.valid_through > reference,
-            )
             filters.append(
-                or_(
-                    within_window,
-                    OpportunityModel.recency_exempt_program.is_(True),
-                    has_open_deadline,
+                recency_condition(
+                    now=now or datetime.now(UTC), window_days=recency_window_days
                 )
             )
         items = list(

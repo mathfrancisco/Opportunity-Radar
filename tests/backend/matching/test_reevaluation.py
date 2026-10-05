@@ -77,7 +77,12 @@ def _activate_new_profile(
     return stored
 
 
-def _opportunity(session: Session, *, with_skill: bool = False) -> OpportunityModel:
+def _opportunity(
+    session: Session,
+    *,
+    with_skill: bool = False,
+    published_at: datetime | None = None,
+) -> OpportunityModel:
     opportunity = OpportunityModel(
         fingerprint=uuid4().hex,
         fingerprint_version="v1",
@@ -88,6 +93,7 @@ def _opportunity(session: Session, *, with_skill: bool = False) -> OpportunityMo
         contract_type="FULL_TIME",
         lifecycle_status="ACTIVE",
         version=1,
+        published_at=published_at,
     )
     session.add(opportunity)
     session.flush()
@@ -182,12 +188,12 @@ def test_a_ruleset_bump_requeues_without_touching_the_previous_result(
 
         # The bump is detected by comparing the persisted version with the active
         # constant, so no migration or event is needed to notice it.
-        monkeypatch.setattr(matching_service, "RULES_VERSION", "matching-v2")
+        monkeypatch.setattr(matching_service, "RULES_VERSION", "matching-v4")
 
         assert opportunity.id in service.pending_evaluation_ids(limit=500)
         second = service.evaluate(opportunity.id)
-        assert second.rules_version == "matching-v2"
-        assert service.get(first.id).rules_version == "matching-v1"
+        assert second.rules_version == "matching-v4"
+        assert service.get(first.id).rules_version == "matching-v3"
 
 
 def test_a_taxonomy_bump_requeues_the_opportunity() -> None:
@@ -221,10 +227,14 @@ def test_an_interrupted_batch_resumes_without_duplicating_results() -> None:
     # One opportunity per pass, as if the worker had been killed between each. Progress
     # lives in the database, so a restart re-derives the remaining work rather than
     # resuming a plan it no longer has. The queue is catalogue-wide and ordered by
-    # creation, so the loop runs until these three are done rather than a fixed count.
-    for _ in range(200):
+    # creation, and activating a profile above makes every row other tests left behind
+    # pending too, so the pass budget is the size of the queue at the start (each pass
+    # retires one row) rather than a fixed count that shared-database leftovers can exceed.
+    with _session() as session:
+        queue_size = len(MatchingService(session).pending_evaluation_ids(limit=100_000))
+    for _ in range(queue_size + 1):
         with _session() as session:
-            pending = set(MatchingService(session).pending_evaluation_ids(limit=500))
+            pending = set(MatchingService(session).pending_evaluation_ids(limit=100_000))
         if not pending.intersection(opportunities):
             break
         evaluate_pending(engine, batch_size=1)
@@ -315,18 +325,43 @@ def test_the_current_assessment_is_the_one_matching_the_active_inputs() -> None:
         assert current.id != stale.id
 
 
-def test_the_next_utc_day_lifts_the_cap_without_making_the_score_stale() -> None:
+def test_a_posting_that_crossed_a_recency_band_is_queued_and_scored_lower() -> None:
     with _session() as session:
         _activate_new_profile(session)
-        opportunity = _opportunity(session)
+        today = datetime.now(UTC)
+        tomorrow = today + timedelta(days=1)
+        # Three days old today (best band), four tomorrow (next band).
+        opportunity = _opportunity(session, published_at=today - timedelta(days=3))
         service = MatchingService(session)
-        service.evaluate(opportunity.id)
+        first = service.evaluate(opportunity.id)
         assert opportunity.id not in service.pending_evaluation_ids(limit=500)
 
-        tomorrow = datetime.now(UTC) + timedelta(days=1)
-
-        # The queue offers it again because the cap is per UTC day...
-        assert opportunity.id in service.pending_evaluation_ids(limit=500, now=tomorrow)
-        # ...but the stored assessment still describes the current inputs, so nothing in
-        # the Inbox should start calling it out of date at midnight.
+        # The next UTC day alone queues nothing: the band is the same.
+        sameband = _opportunity(session, published_at=today - timedelta(days=10))
+        service.evaluate(sameband.id)
+        queued = service.pending_evaluation_ids(limit=5000, now=tomorrow)
+        assert sameband.id not in queued
+        # The posting that crossed the band is offered again, and its stored assessment
+        # no longer describes the inputs, so the Inbox may call it out of date.
+        assert opportunity.id in queued
         assert service.current_assessment(opportunity.id) is not None
+
+        class _Tomorrow(datetime):
+            @classmethod
+            def now(cls, tz=None):  # type: ignore[no-untyped-def]
+                return tomorrow
+
+        original = matching_service.datetime
+        matching_service.datetime = _Tomorrow  # type: ignore[misc,assignment]
+        try:
+            second = service.evaluate(opportunity.id)
+        finally:
+            matching_service.datetime = original  # type: ignore[misc]
+
+        def recency(assessment: MatchAssessmentModel) -> object:
+            return next(f.raw_score for f in assessment.factors if f.factor_code == "RECENCY")
+
+        assert second.id != first.id
+        assert recency(second) < recency(first)  # type: ignore[operator]
+        assert second.score < first.score
+        assert opportunity.id not in service.pending_evaluation_ids(limit=5000, now=tomorrow)

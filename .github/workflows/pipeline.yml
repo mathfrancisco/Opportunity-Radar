@@ -61,21 +61,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      DATABASE_URL: postgresql+psycopg://opportunity_radar:ci-password@127.0.0.1:5432/opportunity_radar
+      DATABASE_URL: postgresql+psycopg://opportunity_radar:ci-password@127.0.0.1:5432/opportunity_radar_test
       RUN_DATABASE_INTEGRATION: "1"
+      DATABASE_INTEGRATION_ISOLATED: "1"
     services:
       postgres:
         # Always an empty database here, so the official pgvector image is safe to use; the
         # compose job builds the project's alpine image with pgvector, as production does.
         image: pgvector/pgvector:0.8.6-pg17
         env:
-          POSTGRES_DB: opportunity_radar
+          POSTGRES_DB: opportunity_radar_test
           POSTGRES_USER: opportunity_radar
           POSTGRES_PASSWORD: ci-password
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U opportunity_radar -d opportunity_radar"
+          --health-cmd "pg_isready -U opportunity_radar -d opportunity_radar_test"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 12
@@ -113,6 +114,8 @@ jobs:
           test "$(alembic current | awk '{print $1}')" = "$(alembic heads | awk '{print $1}')"
       - name: Run backend tests
         run: pytest -q
+      - name: Measure content classification on the versioned gold
+        run: python scripts/measure_content_classification.py --gold docs/50-roadmap-motor-de-busca/rotulagem/f50-01-gold.json --gold-text
       - name: Run the 72-hour soak gate against a controlled clock
         # The cloud provider is not part of this gate: with no Groq reachable, every
         # analysis pass would spend its timeout proving something the e2e job proves.
@@ -201,10 +204,13 @@ jobs:
           curl --fail --silent --request POST \
             "http://127.0.0.1:3000/api/opportunities/normalizations/pending?limit=10"
           curl --fail --silent http://127.0.0.1:3000/api/opportunities | \
-            python -c "import json,sys; from decimal import Decimal; data=json.load(sys.stdin); assert data['total'] == 1; item=data['items'][0]; assert item['fingerprint_version'] == 'v1'; assert item['work_mode'] == 'REMOTE'; assert item['seniority'] == 'SENIOR'; assert item['contract_type'] == 'FULL_TIME'; assert len(item['compensations']) == 2; assert all(Decimal(value['minimum']) == Decimal('100000') and value['currency'] == 'USD' for value in item['compensations']); assert {skill['canonical_name'] for skill in item['skills']} == {'python', 'react'}; assert all(skill['taxonomy_version'] == 'skills-v3' for skill in item['skills']); assert len(item['occurrences']) == 2"
+            python -c "import json,sys; from decimal import Decimal; data=json.load(sys.stdin); assert data['total'] == 1; item=data['items'][0]; assert item['fingerprint_version'] == 'v1'; assert item['work_mode'] == 'REMOTE'; assert item['seniority'] == 'SENIOR'; assert item['contract_type'] == 'FULL_TIME'; assert len(item['compensations']) == 2; assert all(Decimal(value['minimum']) == Decimal('100000') and value['currency'] == 'USD' for value in item['compensations']); assert {skill['canonical_name'] for skill in item['skills']} == {'python', 'react'}; assert all(skill['taxonomy_version'] == 'skills-v4' for skill in item['skills']); assert len(item['occurrences']) == 2"
       - name: Verify deterministic matching through the public API
         run: |
-          profile_payload='{"expected_profile_version":0,"skills":[{"canonical_name":"python"},{"canonical_name":"react"}],"preferences":{"work_modes":["REMOTE"],"contracts":["FULL_TIME"],"countries":["BR"],"compensation_min":100000,"compensation_currency":"USD","compensation_period":"YEAR"}}'
+          # A fresh database has no profile yet (GET /profile answers 404), so the first
+          # write is made against lock 0.
+          profile_lock=0
+          profile_payload="{\"expected_profile_version\":$profile_lock,\"skills\":[{\"canonical_name\":\"python\"},{\"canonical_name\":\"react\"}],\"preferences\":{\"work_modes\":[\"REMOTE\"],\"contracts\":[\"FULL_TIME\"],\"countries\":[\"BR\"],\"compensation_min\":100000,\"compensation_currency\":\"USD\",\"compensation_period\":\"YEAR\"}}"
           profile_draft="$(curl --fail --silent --json "$profile_payload" http://127.0.0.1:3000/api/profile/versions)"
           profile_id="$(python -c "import json,sys; print(json.load(sys.stdin)['id'])" <<< "$profile_draft")"
           profile_lock="$(python -c "import json,sys; print(json.load(sys.stdin)['profile_lock_version'])" <<< "$profile_draft")"
@@ -215,7 +221,7 @@ jobs:
           opportunity_id="$(curl --fail --silent http://127.0.0.1:3000/api/opportunities | python -c "import json,sys; print(json.load(sys.stdin)['items'][0]['id'])")"
           match_payload="{\"opportunity_id\":\"$opportunity_id\"}"
           first_match="$(curl --fail --silent --json "$match_payload" http://127.0.0.1:3000/api/matches/evaluate)"
-          first_match_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['rules_version'] == 'matching-v1'; assert data['taxonomy_version'] == 'skills-v3'; assert data['eligibility'] == 'UNKNOWN'; assert data['verdict'] == 'REVIEW_REQUIRED'; assert len(data['input_hash']) == 64; assert len(data['eligibility_details']) == 7; assert len(data['factors']) == 8; print(data['id'])" <<< "$first_match")"
+          first_match_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['rules_version'] == 'matching-v3'; assert data['taxonomy_version'] == 'skills-v4'; assert data['eligibility'] == 'ELIGIBLE'; assert data['verdict'] == 'RECOMMENDED'; assert len(data['input_hash']) == 64; assert len(data['eligibility_details']) == 7; assert len(data['factors']) == 8; print(data['id'])" <<< "$first_match")"
           second_match_id="$(curl --fail --silent --json "$match_payload" http://127.0.0.1:3000/api/matches/evaluate | python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
           test "$first_match_id" = "$second_match_id"
           curl --fail --silent "http://127.0.0.1:3000/api/matches?opportunity_id=$opportunity_id" | \
@@ -230,7 +236,7 @@ jobs:
           curl --fail --retry 10 --retry-all-errors --retry-delay 3 --silent --request POST "http://127.0.0.1:3000/api/matches/$MATCH_ID/analysis" | \
             python -c "import json,sys; assert json.load(sys.stdin)['id'] == '$first_analysis_id'"
           curl --fail --silent "http://127.0.0.1:3000/api/matches/$MATCH_ID" | \
-            python -c "import json,sys; data=json.load(sys.stdin); assert data['verdict'] == 'REVIEW_REQUIRED'; assert data['eligibility'] == 'UNKNOWN'; assert len(data['factors']) == 8; assert data['analysis']['id'] == '$first_analysis_id'; assert data['analysis']['status'] == 'AI_COMPLETED'"
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['verdict'] == 'RECOMMENDED'; assert data['eligibility'] == 'ELIGIBLE'; assert len(data['factors']) == 8; assert data['analysis']['id'] == '$first_analysis_id'; assert data['analysis']['status'] == 'AI_COMPLETED'"
           unknown_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST \
             http://127.0.0.1:3000/api/matches/00000000-0000-0000-0000-000000000000/analysis)"
           test "$unknown_status" = "404"
@@ -240,9 +246,9 @@ jobs:
       - name: Verify the dashboard read models
         run: |
           curl --fail --silent http://127.0.0.1:3000/api/overview | \
-            python -c "import json,sys; data=json.load(sys.stdin); assert data['opportunities_total'] == 1; assert data['assessed_opportunities'] == 1; assert data['verdict_counts']['REVIEW_REQUIRED'] == 1; assert data['analyses_degraded'] == 0; assert data['sources_total'] == 17; assert data['sources_failing'] == 0; assert data['pending_normalizations'] == 0; assert data['applications_active'] == 0; assert data['applications_by_stage'] == {}; assert data['follow_ups_due'] == 0"
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['opportunities_total'] == 1; assert data['assessed_opportunities'] == 1; assert data['verdict_counts']['RECOMMENDED'] == 1; assert data['analyses_degraded'] == 0; assert data['sources_total'] == 17; assert data['sources_failing'] == 0; assert data['pending_normalizations'] == 0; assert data['applications_active'] == 0; assert data['applications_by_stage'] == {}; assert data['follow_ups_due'] == 0"
           curl --fail --silent 'http://127.0.0.1:3000/api/inbox?order=score' | \
-            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 1; assert data['order'] == 'score'; item=data['items'][0]; assert item['verdict'] == 'REVIEW_REQUIRED'; assert item['analysis_status'] == 'AI_COMPLETED'; assert item['company_name'] == 'Example'; assert float(item['score']) >= 0"
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 1; assert data['order'] == 'score'; item=data['items'][0]; assert item['verdict'] == 'RECOMMENDED'; assert item['analysis_status'] == 'AI_COMPLETED'; assert item['company_name'] == 'Example'; assert float(item['score']) >= 0"
           curl --fail --silent 'http://127.0.0.1:3000/api/inbox?only_assessed=true' | \
             python -c "import json,sys; assert json.load(sys.stdin)['total'] == 1"
           curl --fail --silent 'http://127.0.0.1:3000/api/inbox?verdict=HIGH_PRIORITY' | \
@@ -451,7 +457,7 @@ jobs:
           compose="docker compose -f compose.yaml -f compose.ci.yaml"
           WORKER_COLLECT_ENABLED=false WORKER_NORMALIZE_ENABLED=false \
             WORKER_MATCH_ENABLED=false WORKER_ANALYZE_ENABLED=false \
-            WORKER_RETENTION_ENABLED=false \
+            WORKER_RETENTION_ENABLED=false WORKER_SUGGEST_ENABLED=true \
             $compose up --detach --force-recreate worker
           # The container reports "Started" before the interpreter has booted. Waiting for
           # the ready file is what makes the startup log readable: the worker touches it
@@ -463,7 +469,7 @@ jobs:
           done
           test "$status" = "healthy"
           $compose logs --no-color --no-log-prefix worker | \
-            python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; configured=[line for line in lines if line.get('message') == 'worker jobs configured']; assert configured, 'the worker never reported its job configuration'; jobs=configured[-1]['jobs']; assert jobs == {'collect_enabled_sources': False, 'normalize_opportunities': False, 'evaluate_pending': False, 'analyze_pending': False, 'expire_raw_payloads': False, 'suggest_fields_pending': False}, jobs"
+            python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; configured=[line for line in lines if line.get('message') == 'worker jobs configured']; assert configured, 'the worker never reported its job configuration'; jobs=configured[-1]['jobs']; assert jobs == {'collect_enabled_sources': False, 'normalize_opportunities': False, 'evaluate_pending': False, 'analyze_pending': False, 'expire_raw_payloads': False, 'suggest_fields_pending': True}, jobs"
       - name: Verify catalogue curation through the public API
         run: |
           api="http://127.0.0.1:3000/api"

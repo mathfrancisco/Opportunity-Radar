@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render } from '../components/testing'
 import { type SavedSearchFilters } from '../features/saved-searches/api'
@@ -310,7 +310,7 @@ describe('InboxPage recency toggle', () => {
     await flush()
 
     const toggle = Array.from(container.querySelectorAll('label')).find((label) =>
-      label.textContent?.includes('Mostrar só vagas dos últimos 14 dias'),
+      label.textContent?.includes('Mostrar só vagas dos últimos 30 dias'),
     )
     const checkbox = toggle?.querySelector('input') as HTMLInputElement
     expect(checkbox.checked).toBe(true)
@@ -355,13 +355,118 @@ describe('InboxPage recency toggle', () => {
     expect(container.textContent).toContain('(estimada)')
 
     const toggle = Array.from(container.querySelectorAll('label')).find((label) =>
-      label.textContent?.includes('Mostrar só vagas dos últimos 14 dias'),
+      label.textContent?.includes('Mostrar só vagas dos últimos 30 dias'),
     )
     const checkbox = toggle?.querySelector('input') as HTMLInputElement
     act(() => checkbox.click())
     await flush()
 
     expect(calledUrls.some((url) => url.includes('/inbox') && url.includes('only_recent=false'))).toBe(
+      true,
+    )
+  })
+})
+
+/** Card F48-16: the recency lens is a FilterPill, sends the window/lens parameters, and
+ * a date that is not the source's own publication date reads "(estimada)" with a hint. */
+describe('InboxPage recency lenses', () => {
+  function stubInbox(items: unknown[], calledUrls: string[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        calledUrls.push(url)
+        if (url.includes('/inbox')) {
+          return new Response(
+            JSON.stringify({
+              items,
+              total: items.length,
+              offset: 0,
+              limit: 25,
+              order: 'priority',
+              off_filter_count: 0,
+            }),
+            { status: 200 },
+          )
+        }
+        return new Response(JSON.stringify([]), { status: 200 })
+      }),
+    )
+  }
+
+  function choose(select: HTMLSelectElement, value: string) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+    act(() => {
+      setter?.call(select, value)
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+  }
+
+  it('oferece as lentes como FilterPill e envia recency_window_days / open_at_source', async () => {
+    const calledUrls: string[] = []
+    stubInbox([inboxItem()], calledUrls)
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush()
+
+    const lens = container.querySelector('#inbox-recency-lens') as HTMLSelectElement
+    expect(lens).not.toBeNull()
+    expect(Array.from(lens.options).map((option) => option.textContent)).toEqual([
+      'Últimos 30 dias',
+      'Novas (14 dias)',
+      'Abertas na fonte',
+    ])
+    expect(calledUrls.every((url) => !url.includes('recency_window_days'))).toBe(true)
+
+    choose(lens, 'novas')
+    await flush()
+    expect(
+      calledUrls.some((url) => url.includes('/inbox') && url.includes('recency_window_days=14')),
+    ).toBe(true)
+
+    choose(container.querySelector('#inbox-recency-lens') as HTMLSelectElement, 'abertas')
+    await flush()
+    expect(
+      calledUrls.some((url) => url.includes('/inbox') && url.includes('open_at_source=true')),
+    ).toBe(true)
+  })
+
+  it('marca "(estimada)" quando a base é atualização da fonte, não quando é publicação', async () => {
+    const calledUrls: string[] = []
+    stubInbox(
+      [
+        inboxItem({
+          opportunity_id: 'opp-upd',
+          title: 'Atualizada na fonte',
+          published_at: null,
+          recency_effective_date: '2026-09-25T00:00:00Z',
+          date_is_estimated: true,
+          recency_basis: 'updated',
+        }),
+        inboxItem({
+          opportunity_id: 'opp-pub',
+          title: 'Publicada de verdade',
+          recency_basis: 'published',
+        }),
+      ],
+      calledUrls,
+    )
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush()
+
+    const hints = Array.from(container.querySelectorAll('[title]')).filter((node) =>
+      node.textContent?.includes('(estimada)'),
+    )
+    expect(hints.length).toBeGreaterThan(0)
+    expect(hints.every((node) => node.getAttribute('title')?.includes('última atualização'))).toBe(
+      true,
+    )
+    // Only the "updated" item is estimated: the published one adds no "(estimada)".
+    const rowsWithEstimate = Array.from(container.querySelectorAll('tr')).filter((row) =>
+      row.textContent?.includes('(estimada)'),
+    )
+    expect(rowsWithEstimate.every((row) => row.textContent?.includes('Atualizada na fonte'))).toBe(
       true,
     )
   })
@@ -444,5 +549,268 @@ describe('InboxPage startup filter', () => {
       (badge) => badge.textContent?.replace(/\s+/g, ' ').trim(),
     )
     expect(badges).toEqual(['Startup · YC S24', 'Startup (sinal fraco)'])
+  })
+
+  it('mostra "+N locais" só na vaga agrupada (F48-10)', async () => {
+    const calledUrls: string[] = []
+    stubInbox(
+      [
+        inboxItem({ sibling_count: 99 }),
+        inboxItem({ opportunity_id: 'opp-2', sibling_count: 1 }),
+        inboxItem({ opportunity_id: 'opp-3' }),
+      ],
+      calledUrls,
+    )
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush()
+
+    const chips = Array.from(container.querySelectorAll('[data-testid="sibling-chip"]')).map(
+      (chip) => chip.textContent?.replace(/\s+/g, ' ').trim(),
+    )
+    expect(chips).toContain('+99 locais')
+    expect(chips).toContain('+1 local')
+    expect(chips.some((text) => text?.startsWith('+0'))).toBe(false)
+  })
+})
+
+/** Card F46-07: table rows, pagination, page size and the "Buscas salvas" dropdown. */
+describe('InboxPage table, pagination and filters', () => {
+  function stubInbox(total: number, calledUrls: string[], items = [inboxItem()]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        calledUrls.push(url)
+        if (url.includes('/inbox')) {
+          return new Response(
+            JSON.stringify({
+              items,
+              total,
+              offset: 0,
+              limit: 25,
+              order: 'priority',
+              off_filter_count: 0,
+            }),
+            { status: 200 },
+          )
+        }
+        if (url.includes('/saved-searches')) {
+          return new Response(JSON.stringify([savedSearch()]), { status: 200 })
+        }
+        return new Response(JSON.stringify([]), { status: 200 })
+      }),
+    )
+  }
+
+  function Probe() {
+    const location = useLocation()
+    return <output data-testid="location">{location.search}</output>
+  }
+
+  function renderAt(path: string): HTMLElement {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[path]}>
+          <InboxPage />
+          <Probe />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  function search(container: HTMLElement): URLSearchParams {
+    return new URLSearchParams(container.querySelector('[data-testid="location"]')?.textContent ?? '')
+  }
+
+  function choose(select: HTMLSelectElement, value: string) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+    act(() => {
+      setter?.call(select, value)
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+  }
+
+  it('desenha a oportunidade como linha de tabela com decisão, duplicata e selo de startup', async () => {
+    const urls: string[] = []
+    stubInbox(
+      1,
+      urls,
+      [
+        inboxItem({
+          verdict: 'STRONG_MATCH',
+          has_pending_duplicate: true,
+          startup_strength: 'strong',
+          startup_batch: 'S24',
+        }),
+      ],
+    )
+    const container = renderAt('/inbox')
+    await flush()
+
+    const row = container.querySelector('tbody tr') as HTMLElement
+    expect(row).not.toBeNull()
+    expect(row.textContent).toContain('Backend Engineer')
+    expect(row.textContent).toContain('Acme · Remote')
+    expect(row.textContent).toContain('Possível duplicata')
+    expect(row.querySelector('[data-testid="startup-badge"]')).not.toBeNull()
+    expect(row.textContent).toContain('Não é para mim')
+    expect(container.textContent).toContain('1 oportunidade encontrada.')
+  })
+
+  it('abaixo de md mantém a visão em cartões', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({
+        matches: false,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })),
+    )
+    stubInbox(1, [])
+    const container = renderAt('/inbox')
+    await flush()
+
+    expect(container.querySelector('table')).toBeNull()
+    expect(container.querySelector('article')).not.toBeNull()
+  })
+
+  it('pagina pelo Pagination, preserva ?page= e envia a página à API', async () => {
+    const urls: string[] = []
+    stubInbox(60, urls)
+    const container = renderAt('/inbox?page=2')
+    await flush()
+
+    expect(urls.some((url) => url.includes('/inbox') && url.includes('offset=25'))).toBe(true)
+    expect(container.textContent).toContain('Exibindo 26 a 50 de 60 oportunidades')
+
+    const next = container.querySelector('button[aria-label="Próxima página"]') as HTMLButtonElement
+    act(() => next.click())
+    await flush()
+    expect(search(container).get('page')).toBe('3')
+
+    const first = container.querySelector('button[aria-label="Página 1"]') as HTMLButtonElement
+    act(() => first.click())
+    await flush()
+    expect(search(container).get('page')).toBeNull()
+  })
+
+  it('trocar o tamanho da página o coloca na URL e volta para a página 1', async () => {
+    const urls: string[] = []
+    stubInbox(300, urls)
+    const container = renderAt('/inbox?page=3')
+    await flush()
+
+    const select = container.querySelector('#inbox-page-size') as HTMLSelectElement
+    expect(select.value).toBe('25')
+    choose(select, '50')
+    await flush()
+
+    expect(search(container).get('size')).toBe('50')
+    expect(search(container).get('page')).toBeNull()
+    expect(urls.some((url) => url.includes('/inbox') && url.includes('limit=50'))).toBe(
+      true,
+    )
+
+    choose(container.querySelector('#inbox-page-size') as HTMLSelectElement, '25')
+    await flush()
+    expect(search(container).get('size')).toBeNull()
+  })
+
+  it('mudar um filtro volta para a página 1 e mantém o tamanho', async () => {
+    stubInbox(300, [])
+    const container = renderAt('/inbox?page=4&size=50')
+    await flush()
+
+    choose(container.querySelector('#inbox-work-mode') as HTMLSelectElement, 'REMOTE')
+    await flush()
+
+    const params = search(container)
+    expect(params.get('work_mode')).toBe('REMOTE')
+    expect(params.get('page')).toBeNull()
+    expect(params.get('size')).toBe('50')
+  })
+
+  it('a Candidatura é um FilterPill e filtra por applied', async () => {
+    stubInbox(1, [])
+    const container = renderAt('/inbox')
+    await flush()
+
+    choose(container.querySelector('#inbox-applied') as HTMLSelectElement, 'true')
+    await flush()
+    expect(search(container).get('applied')).toBe('true')
+  })
+
+  it('concentra filtros secundários no disclosure, informa os ativos e os limpa sem apagar a busca', async () => {
+    stubInbox(1, [])
+    const container = renderAt(
+      '/inbox?search=backend&work_mode=REMOTE&seniority=SENIOR&only_startups=true&page=3',
+    )
+    await flush()
+
+    const details = container.querySelector('details') as HTMLDetailsElement
+    expect(details.open).toBe(true)
+    expect(details.textContent).toContain('Filtros avançados (2 ativos)')
+    expect(container.textContent).toContain('3 filtros ativos')
+    expect((container.querySelector('#inbox-seniority') as HTMLElement).closest('details')).toBe(
+      details,
+    )
+    expect((container.querySelector('#inbox-applied') as HTMLElement).closest('details')).toBe(
+      details,
+    )
+    const startupLabel = Array.from(container.querySelectorAll('label')).find((candidate) =>
+      candidate.textContent?.includes('Só startups'),
+    )
+    expect(startupLabel?.closest('details')).toBe(details)
+
+    act(() => {
+      details.open = false
+      details.dispatchEvent(new Event('toggle', { bubbles: true }))
+    })
+    expect(details.open).toBe(false)
+
+    clickButton(container, 'Limpar filtros')
+    await flush()
+
+    const params = search(container)
+    expect(params.get('search')).toBe('backend')
+    expect(params.get('work_mode')).toBeNull()
+    expect(params.get('seniority')).toBeNull()
+    expect(params.get('only_startups')).toBeNull()
+    expect(params.get('page')).toBeNull()
+    expect(container.textContent).toContain('Nenhum filtro ativo')
+  })
+
+  it('as buscas salvas ficam num menu: abre, aplica a busca e Esc fecha', async () => {
+    stubInbox(1, [])
+    const container = renderAt('/inbox')
+    await flush()
+
+    const button = Array.from(container.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent === 'Buscas salvas',
+    ) as HTMLButtonElement
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+    expect(container.textContent).not.toContain('Backend remoto')
+
+    act(() => button.click())
+    await flush()
+    expect(button.getAttribute('aria-expanded')).toBe('true')
+    expect(container.textContent).toContain('Backend remoto')
+    expect(container.textContent).toContain('Salvar esta busca')
+
+    act(() => {
+      button.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+
+    act(() => button.click())
+    await flush()
+    clickButton(container, 'Backend remoto')
+    await flush()
+    expect(search(container).get('work_mode')).toBe('REMOTE')
+    expect(button.getAttribute('aria-expanded')).toBe('false')
   })
 })

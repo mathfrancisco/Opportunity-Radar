@@ -32,7 +32,10 @@ from opportunity_radar.acquisition.scheduling import (
     evaluate_gate,
     next_due_at,
 )
-from opportunity_radar.acquisition.service import AcquisitionService
+from opportunity_radar.acquisition.service import (
+    AcquisitionService,
+    active_profile_target_role_families,
+)
 from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
 from opportunity_radar.matching.adapters import build_analysis_adapter
 from opportunity_radar.matching.analysis import (
@@ -45,8 +48,9 @@ from opportunity_radar.matching.service import (
     MatchingService,
     is_reused_analysis,
 )
+from opportunity_radar.operations.assessment_retention import prune_superseded_assessments
 from opportunity_radar.operations.retention import PayloadRetentionService
-from opportunity_radar.operations.service import observe_job
+from opportunity_radar.operations.service import annotate_pass, observe_job
 from opportunity_radar.opportunities.service import OpportunityService
 from opportunity_radar.opportunities.suggestions import (
     candidates_needing_suggestion,
@@ -180,8 +184,9 @@ def analyze_pending(
 
     `worker_requests_ceiling`, when given, is a day-request budget lower than the
     adapter's own `QuotaGuard` limit (`settings.ai_daily_requests_soft_limit -
-    ai_interactive_reserve_requests`, card F20-24): before each call, a zero-token probe
-    reservation checks the day counter against it and is released immediately either way,
+    ai_interactive_reserve_requests`, card F20-24): before each call, a probe
+    reservation of the primary model's per-call token estimate (F48-02) checks the day
+    counter against it and is released immediately either way,
     so the check never itself consumes quota. An assessment that fails the probe is
     skipped with no attempt recorded — the retry budget never counts a budget defer, and
     the opportunity is back in the next pass, not lost.
@@ -210,11 +215,15 @@ def analyze_pending(
                         extra={"job": "warm-up", "reason": "idle", "load_ms": metrics.load_ms},
                     )
             quota_guard = getattr(adapter, "quota_guard", None)
+            # The probe reserves what one call of the primary model can cost (0 for an
+            # adapter that does not say): a zero-token probe passes with 100 tokens left
+            # and the real call then fails as QUOTA_EXHAUSTED, one wasted attempt each.
+            probe_tokens = int(getattr(adapter, "probe_tokens", 0) or 0)
             completed = reused = degraded = claimed_elsewhere = failed = skipped_budget = 0
             for assessment_id in pending:
                 if worker_requests_ceiling is not None and quota_guard is not None:
                     probe = quota_guard.reserve(
-                        adapter.model, 0, ceiling_requests=worker_requests_ceiling
+                        adapter.model, probe_tokens, ceiling_requests=worker_requests_ceiling
                     )
                     if probe is None:
                         skipped_budget += 1
@@ -351,7 +360,7 @@ def suggest_fields_pending(
                     extra={
                         "job": "suggest-fields",
                         "processed": len(candidates),
-                        "created": created,
+                        "suggestions_created": created,
                         "discarded": discarded,
                         "skipped_budget": skipped_budget,
                         "failed": failed,
@@ -407,6 +416,29 @@ def expire_raw_payloads(
                 )
 
 
+def prune_match_assessments(
+    engine: Engine,
+    *,
+    retention_days: int = 7,
+    batch_size: int = 500,
+    max_batches: int = 20,
+    interval_seconds: int = 21600,
+) -> None:
+    """Delete superseded assessments, bounded per pass (card F50-08)."""
+    with observe_job(
+        engine,
+        job_name="prune_match_assessments",
+        interval=timedelta(seconds=interval_seconds),
+    ):
+        prune_superseded_assessments(
+            engine,
+            retention_days=retention_days,
+            batch_size=batch_size,
+            max_batches=max_batches,
+            dry_run=False,
+        )
+
+
 def collect_enabled_sources(
     engine: Engine,
     *,
@@ -430,12 +462,10 @@ def collect_enabled_sources(
     ) as correlation_id:
         with Session(engine) as session:
             service = service_factory(session)
-            sources, _ = service.list_sources(offset=0, limit=100)
+            # Not the paginated listing: a page cut dropped every eligible source past it (F48-01).
+            sources = service.list_collectable_sources()
             summary = {"completed": 0, "failed": 0, "skipped": 0, "blocked": 0}
             for source in sources:
-                # A disabled source is not eligible, and a manual one has no clock.
-                if not source.enabled or source.source_type == "manual":
-                    continue
                 try:
                     # Read once per source, right before it is judged: the host's shared
                     # budget (F20-38) is state committed by whichever earlier source in
@@ -530,6 +560,13 @@ def collect_enabled_sources(
                         "items_persisted": run.items_persisted,
                     },
                 )
+            # F48-07: DUE sources = the ones that reached execution (or failed doing so).
+            annotate_pass(
+                engine,
+                correlation_id,
+                due_sources=summary["completed"] + summary["failed"],
+                **summary,
+            )
             if any(summary.values()):
                 logger.info(
                     "collection batch finished", extra={"job": "collect", **summary}
@@ -562,6 +599,8 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
             credit_budget_per_run=settings.tavily_credit_budget_per_run,
             extract_depth=settings.tavily_extract_depth,
             format=settings.tavily_extract_format,
+            skip_source_types=settings.extraction_skip_source_type_set,
+            host_failure_threshold=settings.tavily_extract_host_failure_threshold,
         )
         if settings.tavily_api_key
         else None
@@ -577,6 +616,9 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
                 threshold=settings.source_alert_failure_threshold,
             ),
             tavily_extraction=tavily_extraction,
+            host_request_ceilings=settings.host_request_ceiling_map,
+            target_role_families=active_profile_target_role_families(session),
+            target_area_floor=settings.collection_target_area_floor,
         )
 
     return build
@@ -798,6 +840,24 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             # state only appears after six hours reads to the doctor as a job that is
             # missing, which is the one thing operational state exists to rule out.
             next_run_time=first_run,
+        )
+    # Not in FUNCTIONAL_JOB_IDS: it is off by default, and that map is what the doctor and
+    # the soak gate expect to find running.
+    if settings.worker_assessment_retention_enabled:
+        scheduler.add_job(
+            prune_match_assessments,
+            "interval",
+            seconds=settings.payload_retention_interval_seconds,
+            args=(engine,),
+            kwargs={
+                "retention_days": settings.assessment_retention_days,
+                "batch_size": settings.assessment_retention_batch_size,
+                "interval_seconds": settings.payload_retention_interval_seconds,
+            },
+            id="prune-match-assessments",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
         )
     jobs = {
         name: scheduler.get_job(job_id) is not None

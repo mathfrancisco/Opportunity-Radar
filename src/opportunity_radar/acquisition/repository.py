@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -18,7 +18,7 @@ from opportunity_radar.acquisition.scheduling import (
     DEFAULT_HOST_BUDGET_WINDOW,
     SourceRunHistory,
 )
-from opportunity_radar.companies.models import CompanySource
+from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.opportunities.models import (
     SourceOccurrenceModel,
     SourceOccurrenceObservationModel,
@@ -60,6 +60,41 @@ class AcquisitionRepository:
         sources = list(self.session.scalars(statement.offset(offset).limit(limit)))
         total = self.session.scalar(select(func.count(SourceDefinitionModel.id))) or 0
         return sources, total
+
+    def list_collectable_sources(self) -> list[SourceDefinitionModel]:
+        """Every source the scheduled pass may run: enabled and not `manual`, no limit.
+
+        Never-collected sources come first, so a freshly imported batch is not stuck
+        behind slow ones; then the company's priority (high first, and a source with no
+        company counts as normal), then name.
+        """
+        last_started_at = (
+            select(func.max(SourceRunModel.started_at))
+            .where(SourceRunModel.source_definition_id == SourceDefinitionModel.id)
+            .correlate(SourceDefinitionModel)
+            .scalar_subquery()
+        )
+        priority_rank = case(
+            (Company.priority == "high", 0),
+            (Company.priority == "low", 2),
+            (Company.priority == "blocked", 3),
+            else_=1,
+        )
+        statement = (
+            select(SourceDefinitionModel)
+            .outerjoin(CompanySource, CompanySource.id == SourceDefinitionModel.company_source_id)
+            .outerjoin(Company, Company.id == CompanySource.company_id)
+            .where(
+                SourceDefinitionModel.enabled.is_(True),
+                SourceDefinitionModel.source_type != "manual",
+            )
+            .order_by(
+                last_started_at.asc().nulls_first(),
+                priority_rank,
+                SourceDefinitionModel.name,
+            )
+        )
+        return list(self.session.scalars(statement))
 
     def get_run(self, run_id: UUID) -> SourceRunModel | None:
         return self.session.scalar(
@@ -118,6 +153,30 @@ class AcquisitionRepository:
             last_failure_at=last_failure_at,
         )
 
+    def target_area_share(self, source_id: UUID, *, runs: int = 3) -> float | None:
+        """Share of items inside the target areas over the source's last complete runs.
+
+        Only runs that read the whole board and carry both counters count; `None` when
+        fewer than `runs` of them exist or none of them saw a classified item. `UNKNOWN`
+        items are in neither counter, so they weigh on neither side.
+        """
+        rows = self.session.execute(
+            select(SourceRunModel.items_target_area, SourceRunModel.items_off_target)
+            .where(
+                SourceRunModel.source_definition_id == source_id,
+                SourceRunModel.complete.is_(True),
+                SourceRunModel.items_target_area.is_not(None),
+                SourceRunModel.items_off_target.is_not(None),
+            )
+            .order_by(SourceRunModel.started_at.desc(), SourceRunModel.id.desc())
+            .limit(runs)
+        ).all()
+        if len(rows) < runs:
+            return None
+        target = sum(row.items_target_area for row in rows)
+        total = target + sum(row.items_off_target for row in rows)
+        return target / total if total else None
+
     def identical_raw_item_exists(
         self, *, source_id: UUID, identity_key: str, payload_hash: str
     ) -> RawItemModel | None:
@@ -147,6 +206,20 @@ class AcquisitionRepository:
                 RawItemModel.semantic_hash == semantic_hash,
                 RawItemModel.semantic_hash_version == semantic_hash_version,
             )
+        )
+
+    def latest_raw_item_by_identity(
+        self, *, source_id: UUID, identity_key: str
+    ) -> RawItemModel | None:
+        """The newest evidence of one posting, whatever its content was."""
+        return self.session.scalar(
+            select(RawItemModel)
+            .where(
+                RawItemModel.source_definition_id == source_id,
+                RawItemModel.identity_key == identity_key,
+            )
+            .order_by(RawItemModel.fetched_at.desc(), RawItemModel.id.desc())
+            .limit(1)
         )
 
     def record_presence_observation(

@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from math import ceil, isfinite
 from typing import Any, Literal
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from sqlalchemy import func, select, update
@@ -23,6 +25,7 @@ from opportunity_radar.acquisition.alerts import (
 )
 from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.collectors import CollectorRegistry, ManualCollector
+from opportunity_radar.acquisition.concurrency import source_host_key
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
     AcquisitionErrorCode,
@@ -35,6 +38,12 @@ from opportunity_radar.acquisition.domain import (
     SourceRunStatus,
     content_hashes,
     evaluate_completeness,
+    item_payload_bytes,
+    newest_item_age_seconds,
+)
+from opportunity_radar.acquisition.forbidden import (
+    forbidden_platform_for_url,
+    refuse_forbidden,
 )
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.hacker_news import DISCOVERY_VIA as HN_DISCOVERY_VIA
@@ -77,7 +86,14 @@ from opportunity_radar.acquisition.tavily import (
     extract_missing_descriptions,
 )
 from opportunity_radar.companies.models import Company, CompanySource
+from opportunity_radar.opportunities.role_family import (
+    RoleFamily,
+    classify_role_family,
+    departments_from_metadata,
+)
 from opportunity_radar.platform.logging import get_logger
+from opportunity_radar.profile.domain import ProfileNotFoundError
+from opportunity_radar.profile.service import ProfileService
 
 COLLECTED_ITEM_V1_KEY = "collected_item_v1"
 
@@ -97,8 +113,29 @@ _PROVIDER_HOST_BY_SOURCE_TYPE: dict[str, str] = {
 }
 
 
+#: Source types whose provider host is one tenant/site among many (F48-08): their budget is
+#: keyed per tenant via `source_host_key`, so fifteen Workday tenants are fifteen buckets,
+#: not one shared row that a single run can exhaust for everybody.
+_TENANT_BUDGET_TYPES = frozenset({"workday", "teamtailor", "factorial", "jobposting"})
+
+_HOST_KEY_MAX_LENGTH = 255
+
+#: Request ceiling a new host budget row gets, per source_type (F48-08). A Workday tenant
+#: needs ~1 request per 20 postings, so one large board fits its own bucket. Overridable
+#: through `Settings.host_request_ceilings`; a persisted row keeps the ceiling it has.
+DEFAULT_HOST_CEILING_BY_SOURCE_TYPE: dict[str, int] = {"workday": 500, "hacker_news": 500}
+
+
 def _host_for_source_type(source_type: str) -> str:
     return _PROVIDER_HOST_BY_SOURCE_TYPE.get(source_type, source_type)
+
+
+def _budget_host_for_source(source_type: str, configuration: dict[str, Any] | None) -> str:
+    """Persisted budget key of one source: the tenant for per-tenant types (F48-08), the
+    physical provider host for shared-host types, `source_type` for anything else."""
+    if source_type in _TENANT_BUDGET_TYPES:
+        return source_host_key(source_type, configuration)[:_HOST_KEY_MAX_LENGTH]
+    return _host_for_source_type(source_type)
 
 
 def _conditional_headers_for(
@@ -126,7 +163,13 @@ def _conditional_headers_for(
 @dataclass(frozen=True, slots=True)
 class TavilyProposalOutcome:
     url: str
-    outcome: Literal["created", "already_proposed", "unmatched_pattern", "company_not_found"]
+    outcome: Literal[
+        "created",
+        "already_proposed",
+        "unmatched_pattern",
+        "company_not_found",
+        "forbidden_platform",
+    ]
     proposal_id: UUID | None = None
 
 
@@ -185,6 +228,19 @@ class SourceDisabledError(AcquisitionError):
         )
 
 
+def active_profile_target_role_families(session: Session) -> Callable[[], tuple[str, ...]]:
+    """Read the active profile's target areas on demand; empty when none is active (F50-04)."""
+
+    def read() -> tuple[str, ...]:
+        try:
+            profile = ProfileService(session).get_active()
+        except ProfileNotFoundError:
+            return ()
+        return tuple(profile.snapshot.preferences.target_role_families)
+
+    return read
+
+
 class AcquisitionService:
     def __init__(
         self,
@@ -195,6 +251,9 @@ class AcquisitionService:
         alert_notifier: SourceAlertNotifier | None = None,
         alerts: SourceAlertService | None = None,
         tavily_extraction: TavilyExtractionSettings | None = None,
+        host_request_ceilings: Mapping[str, int] | None = None,
+        target_role_families: Callable[[], tuple[str, ...]] | None = None,
+        target_area_floor: float = 0.0,
     ) -> None:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
@@ -214,6 +273,18 @@ class AcquisitionService:
         # disables it — the same "absent is a supported deployment" treatment
         # `tavily_api_key` gets elsewhere.
         self._tavily_extraction = tavily_extraction
+        # F48-08: request ceiling per source_type for a host budget row created by this
+        # service (an existing row keeps the ceiling it was persisted with).
+        self._host_request_ceilings: Mapping[str, int] = (
+            DEFAULT_HOST_CEILING_BY_SOURCE_TYPE
+            if host_request_ceilings is None
+            else host_request_ceilings
+        )
+        # F50-04: areas of the active profile (read per run, so a profile change applies
+        # at once) and the share below which a source stops persisting new off-target
+        # items. No callable or a zero floor leaves the filter off.
+        self._target_role_families = target_role_families
+        self._target_area_floor = target_area_floor
 
     def create_source(
         self,
@@ -245,6 +316,8 @@ class AcquisitionService:
         source_configuration = dict(configuration or {})
         with _refusing_field("configuration"):
             _reject_secret_configuration(source_configuration)
+            # F48-19: the central forbidden-platform list, whatever route created the source.
+            refuse_forbidden(source_configuration)
         source_rate_limit_policy = dict(rate_limit_policy or {})
         with _refusing_field("rate_limit_policy"):
             resolved_network_policy = _network_policy(source_rate_limit_policy)
@@ -271,6 +344,9 @@ class AcquisitionService:
                 GreenhouseCollector.validate_board_token(
                     _required_string(source_configuration, "board_token")
                 )
+        if normalized_type == "workday":
+            with _refusing_field("configuration"):
+                _workday_detail_settings(source_configuration)
         if (
             enabled
             and normalized_type != "manual"
@@ -340,6 +416,9 @@ class AcquisitionService:
     def list_sources(self, *, offset: int, limit: int) -> tuple[list[SourceDefinitionModel], int]:
         return self.repository.list_sources(offset=offset, limit=limit)
 
+    def list_collectable_sources(self) -> list[SourceDefinitionModel]:
+        return self.repository.list_collectable_sources()
+
     def get_source(self, source_id: UUID) -> SourceDefinitionModel | None:
         return self.repository.get_source(source_id)
 
@@ -355,13 +434,15 @@ class AcquisitionService:
             select(CompanySource)
             .where(
                 CompanySource.company_id == company_id,
-                CompanySource.source_type.in_(("ashby", "lever", "greenhouse")),
+                CompanySource.source_type.in_(PROPOSABLE_SOURCE_TYPES),
                 CompanySource.external_key.is_not(None),
             )
             .order_by(CompanySource.id)
         )
         if candidate is None:
             return None, "not_detected"
+        if forbidden_platform_for_url(candidate.endpoint or "") is not None:
+            return None, "forbidden_platform"
         existing = self.session.scalar(
             select(SourceDefinitionModel).where(
                 SourceDefinitionModel.company_source_id == candidate.id,
@@ -370,14 +451,16 @@ class AcquisitionService:
         )
         if existing is not None:
             return existing, "already_proposed"
-        identifier_key = IDENTIFIER_KEYS[candidate.source_type]
+        identifier = _proposal_identifier(candidate)
+        if identifier is None:
+            return None, "not_detected"
         proposal = self.create_source(
             source_type=candidate.source_type,
             name=f"Proposed {company.canonical_name} {candidate.source_type}",
             company_source_id=candidate.id,
             configuration={
                 "company_name": company.canonical_name,
-                identifier_key: candidate.external_key,
+                **identifier,
                 "discovery_evidence": candidate.evidence_note or candidate.endpoint,
             },
             evidence_status="ats_identified",
@@ -404,6 +487,9 @@ class AcquisitionService:
             if item.metadata.get("source_proposal_candidate") is not True:
                 continue
             url = item.url or ""
+            if forbidden_platform_for_url(url) is not None:
+                outcomes.append(TavilyProposalOutcome(url, "forbidden_platform"))
+                continue
             detected = detect_ats_board(url)
             if detected is None:
                 outcomes.append(TavilyProposalOutcome(url, "unmatched_pattern"))
@@ -861,7 +947,7 @@ class AcquisitionService:
         reader, and cannot disagree.
         """
         policy = _network_policy(source.rate_limit_policy or {})
-        host = _host_for_source_type(source.source_type)
+        host = _budget_host_for_source(source.source_type, source.configuration)
         host_budget_row = self.repository.get_host_budget(host)
         host_budget = (
             HostBudgetState(
@@ -943,6 +1029,18 @@ class AcquisitionService:
         network_policy = _network_policy(source.rate_limit_policy or {})
         run_telemetry = CollectionTelemetry()
 
+        # F50-04: items are always counted against the profile's target areas; the filter
+        # only drops new off-target items from a source that has stayed below the floor.
+        targets = (
+            frozenset(self._target_role_families())
+            if self._target_role_families is not None
+            else frozenset()
+        )
+        filter_active = False
+        if targets and self._target_area_floor > 0 and source.source_type != "manual":
+            share = self.repository.target_area_share(source.id)
+            filter_active = share is not None and share < self._target_area_floor
+
         # A new collection starts at the beginning. Resumption is explicit through the
         # request cursor; a prior run's checkpoint is evidence, not an implicit cursor.
         checkpoint_before = request.cursor
@@ -962,6 +1060,8 @@ class AcquisitionService:
             checkpoint_before=checkpoint_before,
         )
         run.start()
+        if targets:
+            run.record_target_area()
         persisted_run = SourceRunModel(
             id=run.id,
             source_definition_id=source.id,
@@ -1009,6 +1109,8 @@ class AcquisitionService:
 
         error: AcquisitionError | None = None
         last_cursor: str | None = None
+        received_bytes = 0
+        newest_dated_item: datetime | None = None
         tavily_proposal_items: list[CollectedItem] = []
         hn_proposal_items: list[CollectedItem] = []
         # Built once per run, not per item: reused by `_fill_missing_description` below
@@ -1022,6 +1124,9 @@ class AcquisitionService:
             if self._tavily_extraction is not None
             else None
         )
+        # F48-08: Tavily `/extract` calls are counted here, never in `run_telemetry` —
+        # that one feeds the ATS host budget, and extraction is a different provider.
+        tavily_telemetry = CollectionTelemetry()
         extraction_budget = (
             TavilyCreditBudget(limit=self._tavily_extraction.credit_budget_per_run)
             if self._tavily_extraction is not None
@@ -1031,8 +1136,19 @@ class AcquisitionService:
             if throttle_error is not None:
                 raise throttle_error
             company_reference, company_name, api_region = _collector_settings(source)
+            fetch_detail, detail_max_requests = (
+                _workday_detail_settings(source.configuration)
+                if source.source_type == "workday"
+                else (request.fetch_detail, request.detail_max_requests)
+            )
             collector_request = replace(
                 request,
+                target_role_families=tuple(sorted(targets)),
+                fetch_detail=fetch_detail,
+                detail_max_requests=detail_max_requests,
+                host_requests_remaining=(
+                    self._host_requests_remaining(source) if fetch_detail else None
+                ),
                 source_definition_id=source.id,
                 cursor=request.cursor,
                 company_reference=company_reference or request.company_reference,
@@ -1053,14 +1169,37 @@ class AcquisitionService:
             )
             async for item in collector.discover(collector_request):
                 run.record_items(seen=1)
+                received_bytes += item_payload_bytes(item)
+                item_date = item.published_at or item.updated_at
+                if item_date is not None and (
+                    newest_dated_item is None or item_date > newest_dated_item
+                ):
+                    newest_dated_item = item_date
                 item = await self._fill_missing_description(
                     item,
                     client=extraction_client,
                     budget=extraction_budget,
-                    telemetry=run_telemetry,
+                    telemetry=tavily_telemetry,
                     network_policy=network_policy,
                     run=run,
+                    source_type=source.source_type,
                 )
+                off_target = False
+                if targets:
+                    try:
+                        family = classify_role_family(
+                            title=item.title,
+                            departments=departments_from_metadata(item.metadata),
+                        ).role_family
+                    except Exception:  # noqa: BLE001 - a malformed item is UNKNOWN here
+                        # Validity is `_persist_item`'s call, as before this card.
+                        family = RoleFamily.UNKNOWN
+                    # UNKNOWN is in neither count and is never dropped.
+                    if family is not RoleFamily.UNKNOWN:
+                        off_target = family.value not in targets
+                        run.record_target_area(
+                            target=0 if off_target else 1, off_target=1 if off_target else 0
+                        )
                 try:
                     created = self._persist_item(
                         source.id,
@@ -1068,6 +1207,7 @@ class AcquisitionService:
                         source.source_type,
                         item,
                         observed_at=run.started_at or datetime.now(UTC),
+                        persist_new=not (filter_active and off_target),
                     )
                 except (TypeError, ValueError) as item_error:
                     run.record_items(invalid=1)
@@ -1163,6 +1303,10 @@ class AcquisitionService:
             checkpoint_after=(last_cursor if final_status is SourceRunStatus.SUCCEEDED else None),
         )
         run.items_announced = run_telemetry.items_announced
+        run.bytes_received = received_bytes
+        run.newest_item_age_seconds = newest_item_age_seconds(
+            newest_dated_item, run.finished_at or datetime.now(UTC)
+        )
         run.complete = evaluate_completeness(
             status=run.status,
             max_items=request.max_items,
@@ -1231,16 +1375,35 @@ class AcquisitionService:
         )
         if run_telemetry.http_requests or cooldown_until is not None:
             self.repository.record_host_budget_usage(
-                _host_for_source_type(source.source_type),
+                _budget_host_for_source(source.source_type, source.configuration),
                 now=datetime.now(UTC),
                 requests=run_telemetry.http_requests,
-                default_ceiling=DEFAULT_HOST_REQUESTS_CEILING,
+                default_ceiling=self._host_request_ceilings.get(
+                    source.source_type, DEFAULT_HOST_REQUESTS_CEILING
+                ),
                 cooldown_until=cooldown_until,
             )
         self.session.commit()
         self.session.refresh(persisted_run)
         self._announce(source, persisted_run, max_items=request.max_items)
         return persisted_run
+
+    def _host_requests_remaining(self, source: SourceDefinitionModel) -> int | None:
+        """Requests the source's host budget still allows now, `None` without a budget row."""
+        row = self.repository.get_host_budget(
+            _budget_host_for_source(source.source_type, source.configuration)
+        )
+        if row is None:
+            return None
+        state = HostBudgetState(
+            host=row.host,
+            window_start=row.window_start,
+            requests_used=row.requests_used,
+            requests_ceiling=row.requests_ceiling,
+            cooldown_until=row.cooldown_until,
+            exploration_reserve_ratio=row.exploration_reserve_ratio,
+        ).rolled_over(now=datetime.now(UTC))
+        return max(0, state.effective_ceiling(is_low_yield=False) - state.requests_used)
 
     def _announce(
         self,
@@ -1298,6 +1461,7 @@ class AcquisitionService:
         telemetry: CollectionTelemetry,
         network_policy: CollectionNetworkPolicy,
         run: SourceRun,
+        source_type: str | None = None,
     ) -> CollectedItem:
         """Extracts a body for `item` when it has none, from any source, not only
         `tavily_search`'s own results (F20-45). A no-op when extraction is not configured
@@ -1319,10 +1483,19 @@ class AcquisitionService:
             return item
         if (item.description or "").strip():
             return item
+        settings = self._tavily_extraction
+        # F48-08: a source type whose pages Tavily cannot read (Workday is JS) never spends
+        # a call, and a host that failed N times in a row stops being tried.
+        if source_type is not None and source_type in settings.skip_source_types:
+            return item
         cache = TavilyExtractionCache(
             session=self.session,
-            ttl_seconds=self._tavily_extraction.cache_ttl_seconds,
+            ttl_seconds=settings.cache_ttl_seconds,
         )
+        if settings.host_failure_threshold > 0 and cache.host_is_failing(
+            item.url, threshold=settings.host_failure_threshold
+        ):
+            return item
         results = await extract_missing_descriptions(
             client,
             cache,
@@ -1346,6 +1519,7 @@ class AcquisitionService:
         item: CollectedItem,
         *,
         observed_at: datetime,
+        persist_new: bool = True,
     ) -> bool:
         if item.source_type.strip().casefold() != source_type:
             raise ValueError("collected item source type does not match its source")
@@ -1384,6 +1558,24 @@ class AcquisitionService:
                     source_run_id=run_id,
                     observed_at=observed_at,
                     content_hash_matched=True,
+                )
+            return False
+        if not persist_new:
+            # An off-target posting already stored with other content is still on the
+            # board: confirm its presence on the stored row (no new evidence), or a
+            # complete run would stop seeing it and close it as absent.
+            latest_lookup = getattr(self.repository, "latest_raw_item_by_identity", None)
+            latest = (
+                latest_lookup(source_id=source_id, identity_key=identity_key)
+                if latest_lookup is not None
+                else None
+            )
+            if isinstance(latest, RawItemModel):
+                self.repository.record_presence_observation(
+                    raw_item=latest,
+                    source_run_id=run_id,
+                    observed_at=observed_at,
+                    content_hash_matched=False,
                 )
             return False
         metadata[COLLECTED_ITEM_V1_KEY] = collected_item_v1(item, metadata)
@@ -1437,6 +1629,10 @@ class AcquisitionService:
         model.items_announced = run.items_announced
         model.complete = run.complete
         model.credits_used = run.credits_used
+        model.bytes_received = run.bytes_received
+        model.newest_item_age_seconds = run.newest_item_age_seconds
+        model.items_target_area = run.items_target_area
+        model.items_off_target = run.items_off_target
 
 
 def canonical_payload_hash(payload: Mapping[str, Any]) -> str:
@@ -1512,6 +1708,40 @@ def _refusing_field(field: str) -> Iterator[None]:
         raise
 
 
+#: ATS types `propose_company_source` can turn into an inert proposal (F48-17).
+PROPOSABLE_SOURCE_TYPES: tuple[str, ...] = tuple(IDENTIFIER_KEYS)
+
+_WORKDAY_HOST = re.compile(r"^([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com$")
+
+
+def _proposal_identifier(record: CompanySource) -> dict[str, str] | None:
+    """The configuration keys a proposal needs for `record`, or None when unusable.
+
+    Workday needs `<tenant>/<site>` plus the pod (`api_region`); both come from the record's
+    key or its board URL (`https://<tenant>.<pod>.myworkdayjobs.com/[locale/]<site>`).
+    """
+    key = record.external_key
+    if not key:
+        return None
+    identifier_key = IDENTIFIER_KEYS[record.source_type]
+    if record.source_type != "workday":
+        return {identifier_key: key}
+    parts = urlsplit(record.endpoint or "")
+    host = _WORKDAY_HOST.match((parts.hostname or "").casefold())
+    if host is None:
+        return None
+    if "/" not in key:
+        segments = [
+            segment
+            for segment in parts.path.split("/")
+            if segment and not re.fullmatch(r"[a-z]{2}(?:-[A-Za-z]{2})?", segment)
+        ]
+        if not segments:
+            return None
+        key = f"{host.group(1)}/{segments[0]}"
+    return {identifier_key: key, "api_region": host.group(2)}
+
+
 def _required_string(configuration: Mapping[str, Any], key: str) -> str:
     value = configuration.get(key)
     if not isinstance(value, str) or not value.strip():
@@ -1525,6 +1755,25 @@ def _required_string(configuration: Mapping[str, Any], key: str) -> str:
 def _optional_string(configuration: Mapping[str, Any], key: str) -> str | None:
     value = configuration.get(key)
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _workday_detail_settings(configuration: Mapping[str, Any]) -> tuple[bool, int]:
+    """`fetch_detail` (default off, SPEC 50 Q1) and `detail_max_requests` (default 200)."""
+    fetch_detail = configuration.get("fetch_detail", False)
+    if not isinstance(fetch_detail, bool):
+        raise AcquisitionError(
+            AcquisitionErrorCode.INVALID_CONFIGURATION,
+            "workday configuration fetch_detail must be a boolean",
+            field="configuration.fetch_detail",
+        )
+    max_requests = configuration.get("detail_max_requests", 200)
+    if isinstance(max_requests, bool) or not isinstance(max_requests, int) or max_requests < 0:
+        raise AcquisitionError(
+            AcquisitionErrorCode.INVALID_CONFIGURATION,
+            "workday configuration detail_max_requests must be a non-negative integer",
+            field="configuration.detail_max_requests",
+        )
+    return fetch_detail, max_requests
 
 
 def _hn_proposal_item(item: CollectedItem) -> CollectedItem | None:

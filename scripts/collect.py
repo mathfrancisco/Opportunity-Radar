@@ -22,7 +22,10 @@ from opportunity_radar.acquisition.domain import (
 )
 from opportunity_radar.acquisition.models import SourceDefinitionModel
 from opportunity_radar.acquisition.registry import build_collector_registry
-from opportunity_radar.acquisition.service import AcquisitionService
+from opportunity_radar.acquisition.service import (
+    AcquisitionService,
+    active_profile_target_role_families,
+)
 from opportunity_radar.companies.models import CompanySource  # noqa: F401
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
@@ -94,7 +97,12 @@ async def _collect_one(
     reported as `ERROR`, so one bad source never sinks the batch."""
     try:
         with Session(engine) as session:
-            service = AcquisitionService(session, registry=_registry(settings))
+            service = AcquisitionService(
+                session,
+                registry=_registry(settings),
+                target_role_families=active_profile_target_role_families(session),
+                target_area_floor=settings.collection_target_area_floor,
+            )
             collector = service.registry.resolve(source.source_type)
             supported_keywords = keywords if collector.capabilities.keyword_search else ()
             run = await service.execute(

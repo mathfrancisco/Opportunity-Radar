@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import SecretStr, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _VALID_REASONING_EFFORTS = frozenset({"low", "medium", "high"})
@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str
+    # Postgres cancels an API query running longer than this (card F50-10); 0 disables it.
+    # The worker's batch jobs do not read it.
+    api_statement_timeout_ms: int = Field(default=15000, ge=0)
     log_level: str = "INFO"
     frontend_origin: str = "http://localhost:3000"
     collection_timezone: str = "UTC"
@@ -25,12 +28,22 @@ class Settings(BaseSettings):
     # own separate table.
     worker_suggest_enabled: bool = False
     worker_suggest_batch_size: int = 20
+    # Off by default (card F48-15): `seniority-v4`, `work-mode-v7` and `allowed-countries-v2`
+    # read the description. Turn on only after `scripts/measure_content_classification.py
+    # --check-gate` reports >= 90% precision per rule on the human-labelled gold set.
+    content_classification_v4_enabled: bool = False
+    # F50-02: the same rules one by one, comma separated, named as the measurement script
+    # prints them (e.g. `seniority:description_years_min,work_mode:description_phrase`).
+    # The boolean above keeps meaning "every rule". Empty and False: none runs.
+    content_classification_enabled_rules: str = ""
     worker_evaluate_batch_size: int = 50
     # The local model competes with the rest of the machine for the GPU, so a pass is
     # capped well below the evaluation batch: analysis falls behind on purpose, never the
     # rules.
     worker_analyze_batch_size: int = 10
-    worker_analyze_verdicts: str = "HIGH_PRIORITY,RECOMMENDED,WATCHLIST,REVIEW_REQUIRED"
+    # The day's token budget covers about a hundred analyses, so the queue takes only the
+    # verdicts worth acting on; any other posting is analysed on demand from its page.
+    worker_analyze_verdicts: str = "HIGH_PRIORITY,RECOMMENDED"
     # Fraction of the worker's batch reserved for eligible assessments the value ranking
     # (score, company priority, freshness) would otherwise never reach, to measure funnel
     # losses instead of only ever spending the model on what already ranks highest (SPEC
@@ -40,6 +53,9 @@ class Settings(BaseSettings):
     analysis_retry_attempt_window_seconds: int = 86400
     analysis_retry_max_attempts: int = 3
     analysis_claim_lease_seconds: int = 900
+    # F50-04: a source whose share of target-area items over its last three complete runs
+    # falls below this stops persisting new off-target items. 0 turns the filter off.
+    collection_target_area_floor: float = 0.30
     collection_backoff_base_seconds: int = 300
     collection_backoff_ceiling_seconds: int = 86400
     greenhouse_base_url: str = "https://boards-api.greenhouse.io"
@@ -51,6 +67,11 @@ class Settings(BaseSettings):
     payload_retention_days: int = 365
     payload_retention_batch_size: int = 500
     payload_retention_interval_seconds: int = 21600
+    # Off by default (card F50-08): it deletes data. Turn on only after
+    # `scripts/prune_assessments.py` (dry run) reports what it would delete.
+    worker_assessment_retention_enabled: bool = False
+    assessment_retention_days: int = 7
+    assessment_retention_batch_size: int = 500
     # How late a job may be before the doctor calls it late rather than merely busy.
     doctor_job_grace_seconds: int = 120
 
@@ -107,6 +128,47 @@ class Settings(BaseSettings):
     # monthly ceiling is a concern, until real usage is measured (docs/41-spec-tavily.md,
     # section 9).
     tavily_credit_budget_per_run: int = 100
+    # F48-08: source types whose items never go through Tavily `/extract` (comma
+    # separated). Workday pages are JS-rendered: every call failed and burned credits.
+    extraction_skip_source_types: str = "workday"
+    # F48-08: stop extracting for a host after this many consecutive failures (0 = off).
+    tavily_extract_host_failure_threshold: int = 5
+    # F48-08: request ceiling per source type for a new host budget row, `type=ceiling`
+    # comma separated. Types not listed use the scheduler default (200 per hour).
+    host_request_ceilings: str = "workday=500,hacker_news=500"
+
+    @property
+    def extraction_skip_source_type_set(self) -> frozenset[str]:
+        return frozenset(
+            item.strip().lower()
+            for item in self.extraction_skip_source_types.split(",")
+            if item.strip()
+        )
+
+    @property
+    def host_request_ceiling_map(self) -> dict[str, int]:
+        ceilings: dict[str, int] = {}
+        for entry in self.host_request_ceilings.split(","):
+            if not entry.strip():
+                continue
+            source_type, _, value = entry.partition("=")
+            ceilings[source_type.strip()] = int(value)
+        return ceilings
+
+    @property
+    def content_classification_rule_set(self) -> frozenset[str]:
+        return frozenset(
+            item.strip()
+            for item in self.content_classification_enabled_rules.split(",")
+            if item.strip()
+        )
+
+    @property
+    def content_rules(self) -> bool | frozenset[str]:
+        """What `build_candidate(content_rules=...)` takes: `True` (all) or a rule set."""
+        if self.content_classification_v4_enabled:
+            return True
+        return self.content_classification_rule_set
 
     @property
     def analysis_eligible_verdicts(self) -> tuple[str, ...]:
@@ -115,6 +177,19 @@ class Settings(BaseSettings):
             for item in self.worker_analyze_verdicts.split(",")
             if item.strip()
         )
+
+    @model_validator(mode="after")
+    def _validate_content_classification_rules(self) -> "Settings":
+        # Imported here: the opportunities package reads this module at import time.
+        from opportunity_radar.opportunities.content_classification import CONTENT_RULE_NAMES
+
+        unknown = sorted(self.content_classification_rule_set - CONTENT_RULE_NAMES)
+        if unknown:
+            raise ValueError(
+                f"CONTENT_CLASSIFICATION_ENABLED_RULES has unknown rule name(s) {unknown}; "
+                f"valid names: {sorted(CONTENT_RULE_NAMES)}"
+            )
+        return self
 
     @model_validator(mode="after")
     def _validate_ai_settings(self) -> "Settings":
@@ -149,6 +224,8 @@ class Settings(BaseSettings):
             "AI_BREAKER_FAILURES": self.ai_breaker_failures,
             "AI_BREAKER_COOLDOWN_SECONDS": self.ai_breaker_cooldown_seconds,
             "AI_CALL_RECORD_RETENTION_DAYS": self.ai_call_record_retention_days,
+            "ASSESSMENT_RETENTION_DAYS": self.assessment_retention_days,
+            "ASSESSMENT_RETENTION_BATCH_SIZE": self.assessment_retention_batch_size,
         }
         for name, value in positive_limits.items():
             if value <= 0:
@@ -165,6 +242,11 @@ class Settings(BaseSettings):
             raise ValueError(
                 "WORKER_ANALYZE_AGING_SAMPLE_RATIO must be between 0 and 1, got "
                 f"{self.worker_analyze_aging_sample_ratio!r}"
+            )
+        if not 0 <= self.collection_target_area_floor <= 1:
+            raise ValueError(
+                "COLLECTION_TARGET_AREA_FLOOR must be between 0 and 1, got "
+                f"{self.collection_target_area_floor!r}"
             )
         return self
 

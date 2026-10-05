@@ -6,7 +6,7 @@ are responsible for translating their models into these value objects.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import StrEnum
@@ -145,6 +145,8 @@ class OpportunitySnapshot:
     timezone_overlap_hours: Decimal | None = None
     required_timezone_overlap_hours: Decimal | None = None
     published_at: datetime | None = None
+    #: `role-family-v1` area of the posting; `None` or `UNKNOWN` when not classified.
+    role_family: str | None = None
     evidence_refs: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -173,6 +175,8 @@ class ProfileSnapshot:
     accepted_seniorities: tuple[Seniority, ...] = ()
     compensation: CompensationSnapshot | None = None
     work_authorization: ProfileWorkAuthorization = ProfileWorkAuthorization.UNKNOWN
+    #: `role-family-v1` areas the profile's experiences and projects evidence.
+    role_families: tuple[str, ...] = ()
     evidence_refs: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -227,9 +231,16 @@ class MatchingRuleSet:
         (CompanyPriority.LOW, Decimal("0.4")),
         (CompanyPriority.BLOCKED, ZERO),
     )
+    # matching-v2 calibration (card F48-12). A posting whose factors are all unknown scores
+    # about 55 (every neutral factor is 0.5), so:
+    # - WATCHLIST (45 -> 50) needs at least neutral evidence: a posting dragged to the low 40s
+    #   by a known mismatch (e.g. seniority above the preference) is LOW_MATCH;
+    # - RECOMMENDED (65) needs one strong known signal on top of the neutral baseline
+    #   (full technology overlap alone adds about 12 points);
+    # - HIGH_PRIORITY (80) needs several (technology, area and seniority together).
     high_priority_threshold: Decimal = Decimal("80")
     recommended_threshold: Decimal = Decimal("65")
-    watchlist_threshold: Decimal = Decimal("45")
+    watchlist_threshold: Decimal = Decimal("50")
 
     def __post_init__(self) -> None:
         if not self.version.strip():
@@ -280,24 +291,37 @@ class MatchResult:
     review_required: bool
 
 
+#: `matching-v2` weights (card F48-12). Rationale, against `matching-v1`:
+#: - `DOMAIN_EXPERIENCE` (0.15 -> 0.20) and `SENIORITY_SCOPE` (0.10 -> 0.15) now have evaluators
+#:   (role-family intersection; F48-13 accepted seniorities), so they carry signal instead of 0.5.
+#: - `GEOGRAPHY_CONTRACT_FIT` (0.20 -> 0.15) is a coarse three-dimension gate; hard failures
+#:   already make the posting INELIGIBLE, so the soft part needs less weight.
+#: - `COMPANY_PRIORITY` (0.15 -> 0.10): the catalog priority is a weak proxy of user interest
+#:   (V05) and must not outweigh fit.
+#: - `TIMEZONE` and `CONTRACT_COMPENSATION` stay at 0.05 but leave the denominator while there
+#:   is no data (`EXCLUDE_AND_RENORMALIZE`) instead of counting 0.5.
 DEFAULT_FACTORS: tuple[FactorRule, ...] = (
-    FactorRule(
-        "GEOGRAPHY_CONTRACT_FIT",
-        Decimal("0.20"),
-        MissingPolicy.REQUIRE_REVIEW,
-    ),
+    FactorRule("GEOGRAPHY_CONTRACT_FIT", Decimal("0.15")),
     FactorRule("TECHNOLOGY_FIT", Decimal("0.25")),
-    FactorRule("COMPANY_PRIORITY", Decimal("0.15")),
-    FactorRule("DOMAIN_EXPERIENCE", Decimal("0.15")),
-    FactorRule("SENIORITY_SCOPE", Decimal("0.10")),
-    FactorRule("CONTRACT_COMPENSATION", Decimal("0.05")),
-    FactorRule("TIMEZONE", Decimal("0.05")),
+    FactorRule("COMPANY_PRIORITY", Decimal("0.10")),
+    FactorRule("DOMAIN_EXPERIENCE", Decimal("0.20")),
+    FactorRule("SENIORITY_SCOPE", Decimal("0.15")),
+    FactorRule(
+        "CONTRACT_COMPENSATION", Decimal("0.05"), MissingPolicy.EXCLUDE_AND_RENORMALIZE
+    ),
+    FactorRule("TIMEZONE", Decimal("0.05"), MissingPolicy.EXCLUDE_AND_RENORMALIZE),
     FactorRule("RECENCY", Decimal("0.05")),
 )
 
+RULES_VERSION_V3 = "matching-v3"
 
-def default_rule_set(version: str = "matching-v1") -> MatchingRuleSet:
-    """Return the first explicit, fully weighted deterministic rule set."""
+
+def default_rule_set(version: str = RULES_VERSION_V3) -> MatchingRuleSet:
+    """Return the current explicit, fully weighted deterministic rule set.
+
+    `matching-v1` assessments stay in the history under their own `rules_version`; a new
+    evaluation is a new row, never an in-place edit.
+    """
     return MatchingRuleSet(version=version, factors=DEFAULT_FACTORS)
 
 
@@ -337,13 +361,30 @@ def evaluate_match(
 def evaluate_eligibility(
     opportunity: OpportunitySnapshot, profile: ProfileSnapshot
 ) -> EligibilityResult:
-    """Apply only conclusive hard filters supported by normalized snapshots."""
+    """Apply only conclusive hard filters supported by normalized snapshots.
+
+    Criteria with no source of data in the catalog (timezone, work authorization) and an
+    unknown country, unless the profile needs sponsorship, are `NOT_APPLICABLE`: they do not
+    hold eligibility open. Factor scoring keeps reading the unmodified filters.
+    """
     filters = (
         _active_filter(opportunity),
         _work_mode_filter(opportunity, profile),
-        _country_filter(opportunity, profile),
-        _work_authorization_filter(opportunity, profile),
-        _timezone_filter(opportunity),
+        _not_applicable_without_data(
+            _country_filter(opportunity, profile),
+            has_source=profile.work_authorization
+            is ProfileWorkAuthorization.REQUIRES_SPONSORSHIP,
+        ),
+        _not_applicable_without_data(
+            _work_authorization_filter(opportunity, profile),
+            has_source=opportunity.work_authorization
+            is not OpportunityWorkAuthorization.NOT_STATED,
+        ),
+        _not_applicable_without_data(
+            _timezone_filter(opportunity),
+            has_source=opportunity.timezone_overlap_hours is not None
+            or opportunity.required_timezone_overlap_hours is not None,
+        ),
         _seniority_filter(opportunity, profile),
         _contract_filter(opportunity, profile),
     )
@@ -354,6 +395,15 @@ def evaluate_eligibility(
     else:
         status = EligibilityStatus.ELIGIBLE
     return EligibilityResult(status=status, filters=filters)
+
+
+def _not_applicable_without_data(
+    result: HardFilterResult, *, has_source: bool
+) -> HardFilterResult:
+    """An unknown criterion with nothing to evaluate stops counting for eligibility."""
+    if result.result is not KnowledgeState.UNKNOWN or has_source:
+        return result
+    return replace(result, result=KnowledgeState.NOT_APPLICABLE)
 
 
 def _active_filter(opportunity: OpportunitySnapshot) -> HardFilterResult:
@@ -428,6 +478,14 @@ def _seniority_filter(
             "SENIORITY_COMPATIBLE", "Seniority compatibility is not stated."
         )
     compatible = opportunity.seniority in profile.accepted_seniorities
+    if not compatible and _is_senior_tier(opportunity.seniority):
+        # F48-13: SENIOR and above outside the preference rank lower, they are not excluded.
+        return HardFilterResult(
+            code="SENIORITY_COMPATIBLE",
+            result=KnowledgeState.TRUE,
+            reason="Seniority is above the profile preference; ranked lower, not excluded.",
+            evidence_refs=opportunity.evidence_refs + profile.evidence_refs,
+        )
     return _binary_filter(
         "SENIORITY_COMPATIBLE",
         compatible,
@@ -436,6 +494,41 @@ def _seniority_filter(
         opportunity,
         profile,
     )
+
+
+_SENIOR_TIER = frozenset(
+    {
+        Seniority.SENIOR,
+        Seniority.STAFF,
+        Seniority.LEAD,
+        Seniority.MANAGER,
+        Seniority.DIRECTOR,
+    }
+)
+#: Raw score of the seniority factor for a level above the preference: low, not zero.
+SENIORITY_ABOVE_PREFERENCE_SCORE = Decimal("0.25")
+
+
+def _is_senior_tier(seniority: Seniority) -> bool:
+    return seniority in _SENIOR_TIER
+
+
+def _seniority_measurement(
+    opportunity: OpportunitySnapshot, profile: ProfileSnapshot
+) -> tuple[KnowledgeState, Decimal | None, str, tuple[str, ...]]:
+    result = _seniority_filter(opportunity, profile)
+    if (
+        result.result is KnowledgeState.TRUE
+        and _is_senior_tier(opportunity.seniority)
+        and opportunity.seniority not in profile.accepted_seniorities
+    ):
+        return (
+            KnowledgeState.TRUE,
+            SENIORITY_ABOVE_PREFERENCE_SCORE,
+            result.reason,
+            result.evidence_refs,
+        )
+    return _filter_measurement(result)
 
 
 def _work_authorization_filter(
@@ -553,13 +646,20 @@ def _evaluate_factor(
         raw = _missing_score(rule.missing_policy)
         status = FactorStatus.UNKNOWN
     contribution = ZERO if raw is None else HUNDRED * rule.weight * raw
+    confidence = ONE if status is FactorStatus.KNOWN else ZERO
+    if rule.code == "GEOGRAPHY_CONTRACT_FIT" and state is KnowledgeState.TRUE:
+        # Partial knowledge: confidence is the share of dimensions actually known.
+        dimensions = _geography_dimensions(opportunity, profile)
+        confidence = Decimal(
+            sum(item.result is KnowledgeState.TRUE for item in dimensions)
+        ) / Decimal(len(dimensions))
     return MatchFactor(
         factor_code=rule.code,
         weight=rule.weight,
         raw_score=raw,
         contribution=contribution,
         status=status,
-        confidence=ONE if status is FactorStatus.KNOWN else ZERO,
+        confidence=confidence,
         missing_policy=rule.missing_policy,
         explanation=explanation,
         evidence_refs=evidence_refs,
@@ -574,27 +674,35 @@ def _factor_measurement(
     assessed_at: datetime | None,
 ) -> tuple[KnowledgeState, Decimal | None, str, tuple[str, ...]]:
     if code == "GEOGRAPHY_CONTRACT_FIT":
-        filters = evaluate_eligibility(opportunity, profile).filters
-        states = (filters[1], filters[2], filters[3], filters[4], filters[6])
+        dimensions = _geography_dimensions(opportunity, profile)
         evidence_refs = opportunity.evidence_refs + profile.evidence_refs
-        if any(item.result is KnowledgeState.FALSE for item in states):
+        if any(item.result is KnowledgeState.FALSE for item in dimensions):
             return (
                 KnowledgeState.FALSE,
                 ZERO,
                 "A hard compatibility constraint failed.",
                 evidence_refs,
             )
-        if any(item.result is KnowledgeState.UNKNOWN for item in states):
+        known = [item for item in dimensions if item.result is KnowledgeState.TRUE]
+        if not known:
             return (
                 KnowledgeState.UNKNOWN,
                 None,
-                "Geography or contract data is incomplete.",
-                evidence_refs,
+                "Work mode, country and contract are not stated; neutral.",
+                (),
             )
+        # An unknown dimension is neutral (0.5), never a reason to require review.
+        raw = sum(
+            (
+                ONE if item.result is KnowledgeState.TRUE else HALF
+                for item in dimensions
+            ),
+            ZERO,
+        ) / Decimal(len(dimensions))
         return (
             KnowledgeState.TRUE,
-            ONE,
-            "Geography and contract are compatible.",
+            raw,
+            "Work mode, country and contract are compatible where stated.",
             evidence_refs,
         )
     if code == "TECHNOLOGY_FIT":
@@ -612,8 +720,7 @@ def _factor_measurement(
             opportunity.evidence_refs,
         )
     if code == "SENIORITY_SCOPE":
-        result = _seniority_filter(opportunity, profile)
-        return _filter_measurement(result)
+        return _seniority_measurement(opportunity, profile)
     if code == "CONTRACT_COMPENSATION":
         return _contract_compensation_measurement(opportunity, profile)
     if code == "RECENCY":
@@ -621,17 +728,66 @@ def _factor_measurement(
     if code == "TIMEZONE":
         return _filter_measurement(_timezone_filter(opportunity))
     if code == "DOMAIN_EXPERIENCE":
-        return (
-            KnowledgeState.UNKNOWN,
-            None,
-            "No normalized evidence is available for this factor.",
-            (),
-        )
+        return _domain_measurement(opportunity, profile)
     return (
         KnowledgeState.UNKNOWN,
         None,
         "This rule has no deterministic evaluator.",
         (),
+    )
+
+
+def _geography_dimensions(
+    opportunity: OpportunitySnapshot, profile: ProfileSnapshot
+) -> tuple[HardFilterResult, ...]:
+    """Only the dimensions the system knows how to fill: mode, country, contract.
+
+    Work authorization and timezone are "not collected" (F48-12), so they take no part.
+    """
+    return (
+        _work_mode_filter(opportunity, profile),
+        _country_filter(opportunity, profile),
+        _contract_filter(opportunity, profile),
+    )
+
+
+#: Raw score of the domain factor when the profile evidences other areas but not this one.
+DOMAIN_NO_OVERLAP_SCORE = Decimal("0.25")
+
+
+def _domain_measurement(
+    opportunity: OpportunitySnapshot, profile: ProfileSnapshot
+) -> tuple[KnowledgeState, Decimal | None, str, tuple[str, ...]]:
+    family = (opportunity.role_family or "").strip().upper()
+    profile_families = _normalized_families(profile.role_families)
+    if not family or family == "UNKNOWN":
+        return KnowledgeState.UNKNOWN, None, "Opportunity area is not classified.", ()
+    if not profile_families:
+        return (
+            KnowledgeState.UNKNOWN,
+            None,
+            "The profile's experiences and projects evidence no area.",
+            (),
+        )
+    evidence_refs = opportunity.evidence_refs + profile.evidence_refs
+    if family in profile_families:
+        return (
+            KnowledgeState.TRUE,
+            ONE,
+            "Opportunity area matches an area of the profile's experience or projects.",
+            evidence_refs,
+        )
+    return (
+        KnowledgeState.TRUE,
+        DOMAIN_NO_OVERLAP_SCORE,
+        "Opportunity area is outside the profile's evidenced areas.",
+        evidence_refs,
+    )
+
+
+def _normalized_families(values: tuple[str, ...]) -> frozenset[str]:
+    return frozenset(
+        item for value in values if (item := value.strip().upper()) and item != "UNKNOWN"
     )
 
 

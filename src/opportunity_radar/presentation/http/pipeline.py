@@ -8,8 +8,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.pipeline.domain import (
     ALLOWED_TRANSITIONS,
     MAX_NEXT_ACTION_LENGTH,
@@ -70,6 +72,8 @@ class StageHistoryResponse(BaseModel):
 class ApplicationResponse(BaseModel):
     id: UUID
     opportunity_id: UUID
+    opportunity_title: str
+    company_name: str | None
     profile_version_id: UUID
     current_stage: str
     status: str
@@ -122,7 +126,7 @@ def start_application(
         ) from error
     except PipelineError as error:
         _raise_pipeline_error(error)
-    return _application_response(application)
+    return _application_responses([application], session)[0]
 
 
 @router.get("", response_model=ApplicationPageResponse)
@@ -146,7 +150,7 @@ def list_applications(
         limit=limit,
     )
     return ApplicationPageResponse(
-        items=[_application_response(item) for item in items],
+        items=_application_responses(items, session),
         total=total,
         offset=offset,
         limit=limit,
@@ -159,7 +163,7 @@ def get_application(
     session: Session = Depends(get_session),
 ) -> ApplicationResponse:
     try:
-        return _application_response(PipelineService(session).get(application_id))
+        return _application_responses([PipelineService(session).get(application_id)], session)[0]
     except ApplicationNotFoundError as error:
         _raise_pipeline_error(error)
 
@@ -180,7 +184,7 @@ def transition_application(
         )
     except PipelineError as error:
         _raise_pipeline_error(error)
-    return _application_response(application)
+    return _application_responses([application], session)[0]
 
 
 @router.patch("/{application_id}/next-action", response_model=ApplicationResponse)
@@ -199,14 +203,38 @@ def set_next_action(
         )
     except PipelineError as error:
         _raise_pipeline_error(error)
-    return _application_response(application)
+    return _application_responses([application], session)[0]
 
 
-def _application_response(application: ApplicationProcessModel) -> ApplicationResponse:
+def _application_responses(
+    applications: list[ApplicationProcessModel], session: Session
+) -> list[ApplicationResponse]:
+    opportunity_ids = {application.opportunity_id for application in applications}
+    summaries = {
+        opportunity_id: (title, company_name)
+        for opportunity_id, title, company_name in session.execute(
+            select(
+                OpportunityModel.id,
+                OpportunityModel.canonical_title,
+                OpportunityModel.company_name,
+            ).where(OpportunityModel.id.in_(opportunity_ids))
+        )
+    }
+    return [
+        _application_response(application, *summaries[application.opportunity_id])
+        for application in applications
+    ]
+
+
+def _application_response(
+    application: ApplicationProcessModel, opportunity_title: str, company_name: str | None
+) -> ApplicationResponse:
     stage = ApplicationStage(application.current_stage)
     return ApplicationResponse(
         id=application.id,
         opportunity_id=application.opportunity_id,
+        opportunity_title=opportunity_title,
+        company_name=company_name,
         profile_version_id=application.profile_version_id,
         current_stage=application.current_stage,
         status=application.status,

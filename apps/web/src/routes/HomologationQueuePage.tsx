@@ -20,7 +20,7 @@ export function HomologationQueuePage() {
       description="Teste, revise os termos e habilite as propostas em sequência, sem abrir fonte por fonte."
     >
       {!profile.isPending && !hasInterestAreas && (
-        <p className="mt-4 rounded-2xl border border-warning-line bg-warning-surface p-4 text-sm text-warning-ink">
+        <p className="mt-4 rounded-panel border border-warning-line bg-warning-surface p-4 text-sm text-warning-ink">
           O perfil ainda não tem áreas de interesse. Fontes habilitadas em massa só devem
           ir ao ar depois disso, para a Inbox conseguir filtrar por área.{' '}
           <Link className="underline decoration-2 underline-offset-4" to="/profile">

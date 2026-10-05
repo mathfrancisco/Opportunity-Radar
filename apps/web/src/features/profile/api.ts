@@ -40,6 +40,8 @@ export interface ProfilePreferences {
   /** `role-family-v1` codes. Empty means every area. */
   targetRoleFamilies: string[]
   targetTitles: string[]
+  /** `Seniority` codes. SENIOR and above left out rank lower; they are never hidden. */
+  acceptedSeniorities: string[]
 }
 
 export interface ProfileVersion {
@@ -61,6 +63,8 @@ export interface ProfileDraft {
   preferences: ProfilePreferences
 }
 
+export const defaultAcceptedSeniorities = ['INTERN', 'JUNIOR', 'MID', 'UNKNOWN']
+
 export const emptyPreferences: ProfilePreferences = {
   workModes: [],
   contracts: [],
@@ -75,6 +79,7 @@ export const emptyPreferences: ProfilePreferences = {
   sponsorshipRequired: false,
   targetRoleFamilies: [],
   targetTitles: [],
+  acceptedSeniorities: defaultAcceptedSeniorities,
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -156,6 +161,11 @@ function parsePreferences(value: unknown): ProfilePreferences {
     sponsorshipRequired: value.sponsorship_required === true,
     targetRoleFamilies: stringList(value.target_role_families),
     targetTitles: stringList(value.target_titles),
+    // A response without the field predates the preference; an empty list is "not stated".
+    acceptedSeniorities:
+      'accepted_seniorities' in value
+        ? stringList(value.accepted_seniorities)
+        : defaultAcceptedSeniorities,
   }
 }
 
@@ -188,6 +198,7 @@ function serializePreferences(preferences: ProfilePreferences) {
     sponsorship_required: preferences.sponsorshipRequired,
     target_role_families: preferences.targetRoleFamilies,
     target_titles: preferences.targetTitles,
+    accepted_seniorities: preferences.acceptedSeniorities,
   }
 }
 

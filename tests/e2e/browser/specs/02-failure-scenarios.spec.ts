@@ -99,7 +99,7 @@ test.describe.serial('injected failures', () => {
     await setBoardMode('partial')
 
     await page.goto('/sources')
-    const sourceCard = page.locator('article', { hasText: sourceName })
+    const sourceCard = page.locator('tr', { hasText: sourceName })
     await sourceCard.getByRole('button', { name: 'Executar agora' }).click()
     await expect(sourceCard.getByText(/Execução SUCCEEDED/)).toBeVisible({ timeout: 30_000 })
 
@@ -116,7 +116,7 @@ test.describe.serial('injected failures', () => {
     await setBoardMode('304')
 
     await page.goto('/sources')
-    const sourceCard = page.locator('article', { hasText: sourceName })
+    const sourceCard = page.locator('tr', { hasText: sourceName })
     await sourceCard.getByRole('button', { name: 'Executar agora' }).click()
     await expect(sourceCard.getByText(/Execução SUCCEEDED/)).toBeVisible({ timeout: 30_000 })
 
@@ -133,7 +133,7 @@ test.describe.serial('injected failures', () => {
     page,
   }) => {
     await page.goto('/sources')
-    const sourceCard = page.locator('article', { hasText: sourceName })
+    const sourceCard = page.locator('tr', { hasText: sourceName })
     const run = sourceCard.getByRole('button', { name: 'Executar agora' }).click()
     await restartWorkerMidCollection()
     await run

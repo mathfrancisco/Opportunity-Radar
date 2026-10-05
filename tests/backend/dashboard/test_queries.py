@@ -11,7 +11,11 @@ import pytest
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from opportunity_radar.acquisition.models import SourceDefinitionModel, SourceRunModel
+from opportunity_radar.acquisition.models import (
+    RawItemModel,
+    SourceDefinitionModel,
+    SourceRunModel,
+)
 from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.dashboard.queries import (
     InboxOrder,
@@ -23,8 +27,13 @@ from opportunity_radar.dashboard.queries import (
     summarize_overview,
 )
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
+from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.domain import SKILL_TAXONOMY_VERSION
-from opportunity_radar.opportunities.models import DuplicateCandidateModel, OpportunityModel
+from opportunity_radar.opportunities.models import (
+    DuplicateCandidateModel,
+    OpportunityModel,
+    SourceOccurrenceModel,
+)
 from opportunity_radar.pipeline.domain import ApplicationStage
 from opportunity_radar.pipeline.service import PipelineService
 from opportunity_radar.platform.database import create_database_engine
@@ -133,7 +142,7 @@ def _assessment(
         opportunity_version=opportunity.version,
         profile_version_id=profile_version_id,
         input_hash=uuid4().hex + uuid4().hex,
-        rules_version="matching-v1",
+        rules_version=RULES_VERSION,
         taxonomy_version=SKILL_TAXONOMY_VERSION,
         opportunity_snapshot={"work_mode": opportunity.work_mode},
         profile_snapshot={"skills": ["python"]},
@@ -404,7 +413,7 @@ def test_inbox_query_filters_by_created_after() -> None:
         assert [item.opportunity_id for item in page.items] == [after.id]
 
 
-def test_inbox_orders_by_priority_recency_and_score() -> None:
+def test_inbox_default_order_is_score_then_recency_not_company_priority() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         profile_version = _profile_version(session)
@@ -449,7 +458,8 @@ def test_inbox_orders_by_priority_recency_and_score() -> None:
                 if item.opportunity_id in {old_high.id, new_low.id}
             ]
 
-        assert ids(InboxOrder.PRIORITY) == [old_high.id, new_low.id]
+        # F48-14: a `high` company no longer outranks a better-scored `low` one.
+        assert ids(InboxOrder.PRIORITY) == [new_low.id, old_high.id]
         assert ids(InboxOrder.RECENCY) == [new_low.id, old_high.id]
         assert ids(InboxOrder.SCORE) == [new_low.id, old_high.id]
 
@@ -555,6 +565,193 @@ def test_inbox_flags_opportunities_with_a_pending_duplicate_candidate() -> None:
         assert by_id[untouched.id].has_pending_duplicate is False
         assert by_id[resolved_a.id].has_pending_duplicate is False
         assert by_id[resolved_b.id].has_pending_duplicate is False
+
+
+def _source_with_run(session: Session, *, complete: bool = True) -> tuple[UUID, UUID]:
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="manual",
+        name=f"group probe {uuid4().hex[:8]}",
+        enabled=True,
+        configuration={},
+        rate_limit_policy={},
+    )
+    session.add(source)
+    session.flush()
+    run = SourceRunModel(
+        id=uuid4(),
+        source_definition_id=source.id,
+        execution_trigger="SCHEDULED",
+        status="SUCCEEDED",
+        started_at=NOW,
+        finished_at=NOW + timedelta(seconds=1),
+        complete=complete,
+    )
+    session.add(run)
+    session.flush()
+    return source.id, run.id
+
+
+def _occurrence(
+    session: Session,
+    opportunity: OpportunityModel,
+    source_id: UUID,
+    run_id: UUID,
+    *,
+    seen: bool = True,
+) -> None:
+    raw_item = RawItemModel(
+        id=uuid4(),
+        source_run_id=run_id,
+        source_definition_id=source_id,
+        external_id=uuid4().hex[:12],
+        identity_key=f"external:{uuid4().hex}",
+        payload_hash=uuid4().hex + uuid4().hex,
+        item_metadata={},
+    )
+    session.add(raw_item)
+    session.flush()
+    session.add(
+        SourceOccurrenceModel(
+            id=uuid4(),
+            opportunity_id=opportunity.id,
+            raw_item_id=raw_item.id,
+            source_definition_id=source_id,
+            external_id=raw_item.external_id,
+            source_url=f"https://jobs.example/{raw_item.external_id}",
+            first_seen_at=NOW,
+            last_seen_at=NOW,
+            last_seen_run_id=run_id if seen else None,
+        )
+    )
+    session.flush()
+
+
+def test_inbox_groups_the_same_posting_in_many_cities_into_one_item() -> None:
+    """F48-10: one row per (company, normalized title, source) with the sibling count;
+    total, source filter, search by location and pagination all count the group once."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company = _company(session, "normal")
+        source_id, run_id = _source_with_run(session)
+        other_source_id, other_run_id = _source_with_run(session)
+        cities = []
+        for index in range(100):
+            opportunity = _opportunity(
+                session,
+                company,
+                title="Support Engineer",
+                published_at=NOW - timedelta(minutes=index),
+            )
+            opportunity.location_text = f"Zurich{index:03d}"
+            _occurrence(session, opportunity, source_id, run_id)
+            cities.append(opportunity)
+        other_title = _opportunity(
+            session, company, title="Data Analyst", published_at=NOW - timedelta(days=1)
+        )
+        _occurrence(session, other_title, source_id, run_id)
+        # Same company and title but another source: a separate group.
+        elsewhere = _opportunity(
+            session, company, title="Support Engineer", published_at=NOW - timedelta(days=2)
+        )
+        _occurrence(session, elsewhere, other_source_id, other_run_id)
+        session.commit()
+
+        everything = list_opportunity_inbox(
+            session,
+            InboxQuery(company_id=company.id, order=InboxOrder.RECENCY, limit=50),
+        )
+        assert everything.total == 3
+        assert len(everything.items) == 3
+        by_id = {item.opportunity_id: item for item in everything.items}
+        # The representative is the first row in the requested order (most recent).
+        assert cities[0].id in by_id
+        assert by_id[cities[0].id].sibling_count == 99
+        assert by_id[other_title.id].sibling_count == 0
+        assert by_id[elsewhere.id].sibling_count == 0
+        assert [item.opportunity_id for item in everything.items] == [
+            cities[0].id,
+            other_title.id,
+            elsewhere.id,
+        ]
+
+        by_source = list_opportunity_inbox(
+            session,
+            InboxQuery(company_id=company.id, source_definition_ids=(source_id,)),
+        )
+        assert by_source.total == 2
+
+        by_location = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search="zurich042")
+        )
+        assert by_location.total == 1
+        assert by_location.items[0].opportunity_id == cities[42].id
+        assert by_location.items[0].sibling_count == 0
+
+        first_page = list_opportunity_inbox(
+            session,
+            InboxQuery(company_id=company.id, order=InboxOrder.RECENCY, limit=2),
+        )
+        second_page = list_opportunity_inbox(
+            session,
+            InboxQuery(company_id=company.id, order=InboxOrder.RECENCY, limit=2, offset=2),
+        )
+        seen = [item.opportunity_id for item in (*first_page.items, *second_page.items)]
+        assert first_page.total == second_page.total == 3
+        assert seen == [cities[0].id, other_title.id, elsewhere.id]
+
+
+def test_posting_group_siblings_list_the_other_cities_read_only() -> None:
+    """F48-10: the detail lists the group's other postings; nothing is merged."""
+    from opportunity_radar.opportunities.repository import OpportunityRepository
+
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company = _company(session, "normal")
+        source_id, run_id = _source_with_run(session)
+        rows = []
+        for city in ("Recife", "Belem", "Natal"):
+            opportunity = _opportunity(
+                session, company, title="Support Engineer", published_at=NOW
+            )
+            opportunity.location_text = city
+            _occurrence(session, opportunity, source_id, run_id)
+            rows.append(opportunity)
+        alone = _opportunity(session, company, title="Data Analyst", published_at=NOW)
+        _occurrence(session, alone, source_id, run_id)
+        session.commit()
+
+        siblings = OpportunityRepository(session).posting_group_siblings(rows[0])
+
+        assert [item.location_text for item, _ in siblings] == ["Belem", "Natal"]
+        assert all(url and url.startswith("https://jobs.example/") for _, url in siblings)
+        assert OpportunityRepository(session).posting_group_siblings(alone) == []
+        assert {item.lifecycle_status for item, _ in siblings} == {"ACTIVE"}
+
+
+def test_inbox_excludes_closed_by_default_but_an_explicit_status_still_lists_them() -> None:
+    """F48-11: `CLOSED` leaves the default Inbox; the explicit lifecycle filter stays."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company = _company(session, "normal")
+        live = _opportunity(session, company, title="Live role", published_at=NOW)
+        closed = _opportunity(
+            session,
+            company,
+            title="Closed role",
+            published_at=NOW,
+            lifecycle_status="CLOSED",
+        )
+        session.commit()
+
+        default = list_opportunity_inbox(session, InboxQuery(company_id=company.id))
+        assert {item.opportunity_id for item in default.items} == {live.id}
+        assert default.total == 1
+
+        explicit = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, lifecycle_status="CLOSED")
+        )
+        assert {item.opportunity_id for item in explicit.items} == {closed.id}
 
 
 def test_source_health_reports_the_last_run_and_keeps_never_run_sources() -> None:

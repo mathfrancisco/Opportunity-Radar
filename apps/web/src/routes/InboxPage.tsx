@@ -1,20 +1,33 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useId, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
+import { Chip } from '../components/Chip'
+import { PrimaryText, SecondaryText } from '../components/cells'
+import { DataTable } from '../components/DataTable'
+import { FilterBar } from '../components/FilterBar'
+import { FilterPill } from '../components/FilterPill'
+import { ChevronDownIcon } from '../components/icons'
+import { PageSizeSelect } from '../components/PageSizeSelect'
+import { Pagination } from '../components/Pagination'
 import { Field, controlClassName } from '../components/Field'
 import { PageShell } from '../components/PageShell'
-import { CardListSkeleton } from '../components/skeletons'
+import { CardListSkeleton, TableSkeleton } from '../components/skeletons'
 import { EmptyState, ErrorState } from '../components/states'
-import { SearchBar } from '../components/SearchBar'
+import { SearchInput } from '../components/SearchInput'
 import { StatusBadge } from '../components/StatusBadge'
-import { Toolbar } from '../components/Toolbar'
-import { type InboxItem, type InboxOrder, inboxOrders } from '../features/dashboard/api'
+import {
+  type InboxItem,
+  type InboxOrder,
+  estimatedDateHint,
+  inboxOrders,
+} from '../features/dashboard/api'
 import { useInbox } from '../features/dashboard/useInbox'
 import { verdictLabels, verdictTones } from '../features/matching/verdicts'
 import { useMarkRelevance } from '../features/opportunities/useOpportunity'
 import { type ApplicationStage, stageLabels } from '../features/pipeline/api'
 import { roleFamilies } from '../features/dashboard/roleFamilies'
+import { useMediaQuery } from '../lib/useMediaQuery'
 import type { SavedSearch, SavedSearchFilters } from '../features/saved-searches/api'
 import {
   useCreateSavedSearch,
@@ -24,7 +37,8 @@ import {
   useSavedSearches,
 } from '../features/saved-searches/useSavedSearches'
 
-const pageSize = 25
+const defaultPageSize = 25
+const pageSizeOptions = [10, 25, 50, 100] as const
 
 const orderLabels: Record<InboxOrder, string> = {
   priority: 'Prioridade',
@@ -116,6 +130,14 @@ function ItemCard({ item }: { item: InboxItem }) {
           </h2>
           <p className="mt-1 text-sm text-muted">
             {display(item.companyName)} · {display(item.location)}
+            {item.siblingCount > 0 && (
+              <span
+                className="ml-2 inline-flex rounded-full border border-line px-2 py-0.5 text-xs font-medium"
+                data-testid="sibling-chip"
+              >
+                +{item.siblingCount} {item.siblingCount === 1 ? 'local' : 'locais'}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -164,14 +186,19 @@ function ItemCard({ item }: { item: InboxItem }) {
           <dd className="mt-1 font-medium">
             {formatDate(item.recencyEffectiveDate)}
             {item.dateIsEstimated && (
-              <span className="ml-1 text-xs font-normal text-subtle">(estimada)</span>
+              <span
+                className="ml-1 text-xs font-normal text-subtle"
+                title={estimatedDateHint(item.recencyBasis)}
+              >
+                (estimada)
+              </span>
             )}
           </dd>
         </div>
       </dl>
 
       {item.isStale && (
-        <p className="mt-4 rounded-xl border border-warning-line bg-warning-surface p-3 text-sm text-warning-ink" role="status">
+        <p className="mt-4 rounded-control border border-warning-line bg-warning-surface p-3 text-sm text-warning-ink" role="status">
           Esta avaliação usa uma versão anterior do perfil ou da oportunidade. A
           reavaliação está pendente; o resultado anterior continua disponível.
           {item.assessmentProfileVersionId && item.currentProfileVersionId && (
@@ -199,10 +226,139 @@ function ItemCard({ item }: { item: InboxItem }) {
   )
 }
 
+const duplicateTone = 'border-warning-line bg-warning-surface text-warning-ink'
+const appliedTone = 'border-success-line bg-success-surface text-success-ink'
+
+function StartupChip({ item }: { item: InboxItem }) {
+  if (!item.startupStrength) return null
+  return (
+    <span data-testid="startup-badge">
+      <Chip tone="border-accent bg-surface text-ink">
+        Startup{item.startupBatch ? ` · YC ${item.startupBatch}` : ''}
+        {item.startupStrength === 'weak' ? ' (sinal fraco)' : ''}
+      </Chip>
+    </span>
+  )
+}
+
+/** One row of the desktop table. Everything that decides (verdict, duplicate, startup) stays in the row. */
+function ItemRow({ item }: { item: InboxItem }) {
+  const mark = useMarkRelevance(item.opportunityId)
+  return (
+    <tr className="align-top">
+      <td className="min-w-72">
+        <PrimaryText>
+          <Link
+            className="underline decoration-accent decoration-2 underline-offset-4"
+            to={`/opportunities/${item.opportunityId}`}
+          >
+            {item.title}
+          </Link>
+        </PrimaryText>
+        <SecondaryText>
+          {display(item.companyName)} · {display(item.location)}
+        </SecondaryText>
+        {(item.hasPendingDuplicate || item.startupStrength || item.siblingCount > 0) && (
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {item.siblingCount > 0 && (
+              <span data-testid="sibling-chip">
+                <Chip tone="border-line bg-surface text-ink">
+                  +{item.siblingCount} {item.siblingCount === 1 ? 'local' : 'locais'}
+                </Chip>
+              </span>
+            )}
+            {item.hasPendingDuplicate && <Chip tone={duplicateTone}>Possível duplicata</Chip>}
+            <StartupChip item={item} />
+          </div>
+        )}
+        {item.isStale && (
+          <SecondaryText className="mt-1.5 text-warning-ink">
+            <span role="status">
+              Esta avaliação usa uma versão anterior do perfil ou da oportunidade. A
+              reavaliação está pendente; o resultado anterior continua disponível.
+              {item.assessmentProfileVersionId && item.currentProfileVersionId && (
+                <> Perfil avaliado: {item.assessmentProfileVersionId.slice(0, 8)} · perfil atual: {item.currentProfileVersionId.slice(0, 8)}.</>
+              )}
+            </span>
+          </SecondaryText>
+        )}
+        {item.analysisStatus && item.analysisStatus !== 'AI_COMPLETED' && (
+          <SecondaryText className="mt-1.5 text-warning-ink">
+            Análise semântica indisponível ({item.analysisStatus}). A decisão determinística
+            permanece completa.
+          </SecondaryText>
+        )}
+        {item.analysisSummary && (
+          <SecondaryText className="mt-1.5 text-subtle">{item.analysisSummary}</SecondaryText>
+        )}
+        {item.analysisRecommendedReview === true && (
+          <SecondaryText className="mt-1 font-medium text-warning-ink">
+            A análise sugere revisão humana antes de aplicar.
+          </SecondaryText>
+        )}
+      </td>
+      <td>
+        <div className="flex flex-col items-start gap-1.5">
+          <VerdictBadge verdict={item.verdict} />
+          {item.applied && (
+            <Chip tone={appliedTone}>
+              Candidatura: {stageLabels[item.applicationStage as ApplicationStage] ??
+                item.applicationStage}
+            </Chip>
+          )}
+        </div>
+      </td>
+      <td className="font-semibold tabular-nums">{formatScore(item.score)}</td>
+      <td>
+        <PrimaryText className="font-medium">{item.workMode}</PrimaryText>
+        <SecondaryText>{item.seniority}</SecondaryText>
+      </td>
+      <td>{item.lifecycleStatus}</td>
+      <td className="whitespace-nowrap">
+        {formatDate(item.recencyEffectiveDate)}
+        {item.dateIsEstimated && (
+          <span title={estimatedDateHint(item.recencyBasis)}>
+            <SecondaryText>(estimada)</SecondaryText>
+          </span>
+        )}
+      </td>
+      <td>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            disabled={mark.isPending}
+            onClick={() => mark.mutate({ relevant: true })}
+            size="sm"
+          >
+            Relevante
+          </Button>
+          <Button
+            disabled={mark.isPending}
+            onClick={() => mark.mutate({ relevant: false })}
+            size="sm"
+            variant="secondary"
+          >
+            Não é para mim
+          </Button>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+const tableColumns = [
+  'Oportunidade',
+  'Decisão',
+  'Score',
+  'Modalidade',
+  'Status',
+  'Publicada',
+  'Ações',
+]
+
 function filtersFromParams(params: URLSearchParams): SavedSearchFilters {
   const filters: SavedSearchFilters = {}
   for (const key of new Set(params.keys())) {
-    if (key === 'page') continue
+    if (key === 'page' || key === 'size') continue
     const values = params.getAll(key)
     filters[key] = values.length > 1 ? values : values[0]
   }
@@ -330,6 +486,76 @@ export function SavedSearches({ onApply }: { onApply: (filters: SavedSearchFilte
   )
 }
 
+/**
+ * "Buscas salvas" (D12): a disclosure button at the right of the filter bar. Esc closes it
+ * and hands the focus back to the button; a press outside closes it too.
+ */
+export function SavedSearchesMenu({
+  filters,
+  term,
+  onApply,
+}: {
+  filters: SavedSearchFilters
+  term: string
+  onApply: (filters: SavedSearchFilters) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  const button = useRef<HTMLButtonElement>(null)
+  const panelId = useId()
+
+  useEffect(() => {
+    if (!open) return
+    function outside(event: MouseEvent) {
+      if (root.current && !root.current.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', outside)
+    return () => document.removeEventListener('mousedown', outside)
+  }, [open])
+
+  return (
+    <div
+      className="relative"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && open) {
+          setOpen(false)
+          button.current?.focus()
+        }
+      }}
+      ref={root}
+    >
+      <button
+        aria-controls={panelId}
+        aria-expanded={open}
+        className="inline-flex h-8 items-center gap-1.5 rounded-control border border-line-strong bg-surface px-3 text-body-sm font-medium text-ink hover:border-ink max-md:h-11"
+        onClick={() => setOpen((value) => !value)}
+        ref={button}
+        type="button"
+      >
+        Buscas salvas
+        <ChevronDownIcon />
+      </button>
+      <div
+        className="absolute right-0 z-10 mt-1 w-80 max-w-[calc(100vw-2rem)] rounded-control border border-line bg-surface p-4"
+        hidden={!open}
+        id={panelId}
+      >
+        {open && (
+          <>
+            <SavedSearches
+              onApply={(next) => {
+                onApply(next)
+                setOpen(false)
+              }}
+            />
+            <SaveSearchForm filters={filters} term={term} />
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function InboxPage() {
   const [params, setParams] = useSearchParams()
   const verdict = params.get('verdict') ?? ''
@@ -345,6 +571,11 @@ export function InboxPage() {
     ? (rawOrder as InboxOrder)
     : 'priority'
   const page = Math.max(1, Number(params.get('page') ?? '1') || 1)
+  const rawSize = Number(params.get('size'))
+  const pageSize = (pageSizeOptions as readonly number[]).includes(rawSize)
+    ? rawSize
+    : defaultPageSize
+  const isDesktop = useMediaQuery('(min-width: 768px)')
   const [searchInput, setSearchInput] = useState(search)
   const allAreas = params.get('all_areas') === 'true'
   const areaFilter = params.getAll('area')
@@ -357,8 +588,50 @@ export function InboxPage() {
   // default — only an explicit `only_recent=false` (the "mostrar tudo" click) turns
   // the filter off.
   const onlyRecent = params.get('only_recent') !== 'false'
+  // Card F48-16: window lens. '' is the 30-day default; `novas` narrows it to 14 days;
+  // `abertas` shows whatever the source's last complete run still saw, no date limit.
+  const lensParam = params.get('lens')
+  const recencyLens: '' | 'novas' | 'abertas' =
+    lensParam === 'novas' || lensParam === 'abertas' ? lensParam : ''
   // Card F20-54: display/filter only, never changes score or verdict.
   const onlyStartups = params.get('only_startups') === 'true'
+  const activeFilterCount = [
+    verdict,
+    companyId,
+    workMode,
+    lifecycleStatus,
+    minimumScore,
+    onlyAssessed,
+    appliedFilter,
+    order !== 'priority',
+    allAreas,
+    ...areaFilter,
+    seniority,
+    salaryMin,
+    salaryMax,
+    source,
+    allowedCountry,
+    !onlyRecent,
+    recencyLens,
+    onlyStartups,
+  ].filter(Boolean).length
+  const advancedFilterCount = [
+    companyId,
+    lifecycleStatus,
+    minimumScore,
+    onlyAssessed,
+    appliedFilter,
+    allAreas,
+    ...areaFilter,
+    seniority,
+    salaryMin,
+    salaryMax,
+    source,
+    allowedCountry,
+    !onlyRecent,
+    onlyStartups,
+  ].filter(Boolean).length
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(advancedFilterCount > 0)
 
   const inbox = useInbox({
     page,
@@ -380,9 +653,10 @@ export function InboxPage() {
     sourceDefinitionIds: source ? [source] : undefined,
     allowedCountry: allowedCountry || undefined,
     onlyRecent,
+    recencyWindowDays: recencyLens === 'novas' ? 14 : undefined,
+    openAtSource: recencyLens === 'abertas',
     onlyStartups,
   })
-  const totalPages = inbox.data ? Math.max(1, Math.ceil(inbox.data.total / pageSize)) : 0
 
   function update(changes: Record<string, string | null>) {
     const next = new URLSearchParams(params)
@@ -415,14 +689,22 @@ export function InboxPage() {
     setParams(next)
   }
 
-  function submitSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  function submitSearch() {
     update({ search: searchInput.trim() })
   }
 
   function applySavedSearch(filters: SavedSearchFilters) {
     const next = paramsFromFilters(filters)
     setSearchInput(next.get('search') ?? '')
+    setParams(next)
+  }
+
+  function clearFilters() {
+    const next = new URLSearchParams()
+    // The search text is an explicit lookup rather than a faceted filter, and the page size is
+    // a display preference. Retain both while returning every filter to its server default.
+    if (search) next.set('search', search)
+    if (pageSize !== defaultPageSize) next.set('size', String(pageSize))
     setParams(next)
   }
 
@@ -433,146 +715,176 @@ export function InboxPage() {
       title="Oportunidades"
       description="Tudo que o radar encontrou, com a decisão determinística mais recente de cada vaga. Oportunidades ainda não avaliadas continuam visíveis."
     >
-      <SearchBar
-        id="inbox-search"
-        label="Buscar oportunidades"
-        onChange={setSearchInput}
-        onSubmit={submitSearch}
-        placeholder="Título ou empresa"
-        value={searchInput}
-      />
+      <FilterBar
+        search={
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchInput
+              id="inbox-search"
+              label="Buscar oportunidades"
+              onChange={setSearchInput}
+              onSubmit={submitSearch}
+              placeholder="Título ou empresa"
+              value={searchInput}
+            />
+            <SavedSearchesMenu
+              filters={filtersFromParams(params)}
+              onApply={applySavedSearch}
+              term={search}
+            />
+          </div>
+        }
+      >
+        <FilterPill
+          id="inbox-verdict"
+          label="Decisão"
+          onChange={(value) => update({ verdict: value })}
+          options={[
+            { value: '', label: 'Todas' },
+            ...Object.entries(verdictLabels).map(([value, label]) => ({ value, label })),
+          ]}
+          value={verdict}
+        />
+        <FilterPill
+          id="inbox-work-mode"
+          label="Modalidade"
+          onChange={(value) => update({ work_mode: value })}
+          options={[
+            { value: '', label: 'Todas' },
+            ...workModes.map((value) => ({ value, label: value })),
+          ]}
+          value={workMode}
+        />
+        <FilterPill
+          defaultValue="priority"
+          id="inbox-order"
+          label="Ordenar por"
+          onChange={(value) => update({ order: value })}
+          options={inboxOrders.map((value) => ({ value, label: orderLabels[value] }))}
+          value={order}
+        />
+        <FilterPill
+          id="inbox-recency-lens"
+          label="Recência"
+          onChange={(value) => update({ lens: value || null })}
+          options={[
+            { value: '', label: 'Últimos 30 dias' },
+            { value: 'novas', label: 'Novas (14 dias)' },
+            { value: 'abertas', label: 'Abertas na fonte' },
+          ]}
+          value={recencyLens}
+        />
+      </FilterBar>
 
-      <SavedSearches onApply={applySavedSearch} />
-      <SaveSearchForm filters={filtersFromParams(params)} term={search} />
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <Field label="Verdict">
-          <select
-            className={controlClassName}
-            onChange={(event) => update({ verdict: event.target.value })}
-            value={verdict}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <p aria-live="polite" className="text-caption text-muted">
+          {activeFilterCount === 0
+            ? 'Nenhum filtro ativo'
+            : `${activeFilterCount} filtro${activeFilterCount === 1 ? '' : 's'} ativo${
+                activeFilterCount === 1 ? '' : 's'
+              }`}
+        </p>
+        {activeFilterCount > 0 && (
+          <button
+            className="text-caption font-medium text-subtle underline hover:text-ink"
+            onClick={clearFilters}
+            type="button"
           >
-            <option value="">Todos</option>
-            {Object.entries(verdictLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="Modalidade">
-          <select
-            className={controlClassName}
-            onChange={(event) => update({ work_mode: event.target.value })}
-            value={workMode}
-          >
-            <option value="">Todas</option>
-            {workModes.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="Status">
-          <select
-            className={controlClassName}
-            onChange={(event) => update({ lifecycle_status: event.target.value })}
-            value={lifecycleStatus}
-          >
-            <option value="">Todos</option>
-            {lifecycleStatuses.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="Score mínimo">
-          <input
-            className={controlClassName}
-            max={100}
-            min={0}
-            onChange={(event) => update({ minimum_score: event.target.value })}
-            type="number"
-            value={minimumScore}
-          />
-        </Field>
-
-        <Field label="Senioridade">
-          <select
-            className={controlClassName}
-            onChange={(event) => update({ seniority: event.target.value })}
-            value={seniority}
-          >
-            <option value="">Todas</option>
-            {seniorities.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="Remuneração mínima">
-          <input
-            className={controlClassName}
-            min={0}
-            onChange={(event) => update({ salary_min: event.target.value })}
-            type="number"
-            value={salaryMin}
-          />
-        </Field>
-
-        <Field label="Remuneração máxima">
-          <input
-            className={controlClassName}
-            min={0}
-            onChange={(event) => update({ salary_max: event.target.value })}
-            type="number"
-            value={salaryMax}
-          />
-        </Field>
-
-        <Field label="Fonte (id)">
-          <input
-            className={controlClassName}
-            onChange={(event) => update({ source: event.target.value })}
-            placeholder="uuid da fonte"
-            type="text"
-            value={source}
-          />
-        </Field>
-
-        <Field label="País permitido">
-          <input
-            className={controlClassName}
-            onChange={(event) =>
-              update({ allowed_country: event.target.value.trim().toUpperCase() })
-            }
-            placeholder="ISO, ex.: BR"
-            type="text"
-            value={allowedCountry}
-          />
-        </Field>
-
-        <Field label="Ordenar por">
-          <select
-            className={controlClassName}
-            onChange={(event) => update({ order: event.target.value })}
-            value={order}
-          >
-            {inboxOrders.map((value) => (
-              <option key={value} value={value}>
-                {orderLabels[value]}
-              </option>
-            ))}
-          </select>
-        </Field>
+            Limpar filtros
+          </button>
+        )}
       </div>
+
+      <details
+        className="mt-3 rounded-control border border-line bg-panel px-3 py-2"
+        onToggle={(event) => setAdvancedFiltersOpen(event.currentTarget.open)}
+        open={advancedFiltersOpen}
+      >
+        <summary className="cursor-pointer text-sm font-medium text-subtle">
+          Filtros avançados
+          {advancedFilterCount > 0 &&
+            ` (${advancedFilterCount} ativo${advancedFilterCount === 1 ? '' : 's'})`}
+        </summary>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <FilterPill
+            id="inbox-status"
+            label="Status"
+            onChange={(value) => update({ lifecycle_status: value })}
+            options={[
+              { value: '', label: 'Todos' },
+              ...lifecycleStatuses.map((value) => ({ value, label: value })),
+            ]}
+            value={lifecycleStatus}
+          />
+          <FilterPill
+            id="inbox-seniority"
+            label="Senioridade"
+            onChange={(value) => update({ seniority: value })}
+            options={[
+              { value: '', label: 'Todas' },
+              ...seniorities.map((value) => ({ value, label: value })),
+            ]}
+            value={seniority}
+          />
+          <FilterPill
+            id="inbox-applied"
+            label="Candidatura"
+            onChange={(value) => update({ applied: value || null })}
+            options={appliedOptions}
+            value={appliedFilter}
+          />
+          <Field label="Score mínimo">
+            <input
+              className={controlClassName}
+              max={100}
+              min={0}
+              onChange={(event) => update({ minimum_score: event.target.value })}
+              type="number"
+              value={minimumScore}
+            />
+          </Field>
+
+          <Field label="Remuneração mínima">
+            <input
+              className={controlClassName}
+              min={0}
+              onChange={(event) => update({ salary_min: event.target.value })}
+              type="number"
+              value={salaryMin}
+            />
+          </Field>
+
+          <Field label="Remuneração máxima">
+            <input
+              className={controlClassName}
+              min={0}
+              onChange={(event) => update({ salary_max: event.target.value })}
+              type="number"
+              value={salaryMax}
+            />
+          </Field>
+
+          <Field label="Fonte (id)">
+            <input
+              className={controlClassName}
+              onChange={(event) => update({ source: event.target.value })}
+              placeholder="uuid da fonte"
+              type="text"
+              value={source}
+            />
+          </Field>
+
+          <Field label="País permitido">
+            <input
+              className={controlClassName}
+              onChange={(event) =>
+                update({ allowed_country: event.target.value.trim().toUpperCase() })
+              }
+              placeholder="ISO, ex.: BR"
+              type="text"
+              value={allowedCountry}
+            />
+          </Field>
+        </div>
 
       <label className="mt-4 flex items-center gap-2 text-sm text-subtle">
         <input
@@ -593,7 +905,7 @@ export function InboxPage() {
           }
           type="checkbox"
         />
-        Mostrar só vagas dos últimos 14 dias (estágio, trainee e vagas com prazo de
+        Mostrar só vagas dos últimos 30 dias (estágio, trainee e vagas com prazo de
         candidatura continuam visíveis)
       </label>
 
@@ -655,20 +967,15 @@ export function InboxPage() {
           </button>
         </p>
       )}
-
-      <Toolbar
-        className="mt-4"
-        label="Candidatura"
-        onChange={(value) => update({ applied: value || null })}
-        options={appliedOptions}
-        showLabel
-        value={appliedFilter}
-      />
+      </details>
 
       <div className="mt-8 grid gap-3">
-        {inbox.isPending && (
-          <CardListSkeleton count={5} label="Carregando oportunidades…" />
-        )}
+        {inbox.isPending &&
+          (isDesktop ? (
+            <TableSkeleton columns={tableColumns.length} label="Carregando oportunidades…" />
+          ) : (
+            <CardListSkeleton count={5} label="Carregando oportunidades…" />
+          ))}
         {inbox.isError && (
           <ErrorState onRetry={() => void inbox.refetch()}>Não foi possível carregar a inbox.</ErrorState>
         )}
@@ -681,35 +988,34 @@ export function InboxPage() {
               {inbox.data.total} oportunidade{inbox.data.total === 1 ? '' : 's'} encontrada
               {inbox.data.total === 1 ? '' : 's'}.
             </p>
-            {inbox.data.items.map((item) => (
-              <ItemCard item={item} key={item.opportunityId} />
-            ))}
-            {totalPages > 1 && (
-              <nav
-                aria-label="Paginação de oportunidades"
-                className="mt-2 flex items-center justify-between gap-4"
-              >
-                <Button
-                  disabled={page === 1}
-                  onClick={() => update({ page: String(page - 1) })}
-                  size="sm"
-                  variant="secondary"
-                >
-                  Anterior
-                </Button>
-                <span className="text-sm text-muted">
-                  Página {page} de {totalPages}
-                </span>
-                <Button
-                  disabled={page >= totalPages}
-                  onClick={() => update({ page: String(page + 1) })}
-                  size="sm"
-                  variant="secondary"
-                >
-                  Próxima
-                </Button>
-              </nav>
+            {isDesktop ? (
+              <DataTable caption="Oportunidades" columns={tableColumns}>
+                {inbox.data.items.map((item) => (
+                  <ItemRow item={item} key={item.opportunityId} />
+                ))}
+              </DataTable>
+            ) : (
+              inbox.data.items.map((item) => <ItemCard item={item} key={item.opportunityId} />)
             )}
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+              <Pagination
+                className="min-w-0 flex-1"
+                itemLabel="oportunidades"
+                label="Paginação de oportunidades"
+                onPageChange={(next) => update({ page: next === 1 ? null : String(next) })}
+                page={page}
+                pageSize={pageSize}
+                total={inbox.data.total}
+              />
+              <PageSizeSelect
+                id="inbox-page-size"
+                onChange={(size) =>
+                  update({ size: size === defaultPageSize ? null : String(size) })
+                }
+                options={pageSizeOptions}
+                value={pageSize}
+              />
+            </div>
           </>
         )}
       </div>

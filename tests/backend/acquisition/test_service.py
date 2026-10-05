@@ -259,6 +259,23 @@ class _NoDescriptionCollector(_Collector):
         )
 
 
+class _SkippedAndValidItemsCollector(_Collector):
+    """Yields valid items and records skipped items in telemetry, like Hacker News
+    when comments lack identifiable company/role."""
+
+    async def discover(
+        self, request: CollectionRequest
+    ) -> AsyncIterator[CollectedItem]:
+        # Record a skipped item
+        request.telemetry.record_skipped_item()
+        # Yield a valid item
+        yield CollectedItem(
+            source_type=self.source_type,
+            external_id="job-1",
+            raw_payload={"title": "First"},
+        )
+
+
 class _RecordingNotifier:
     def __init__(self) -> None:
         self.messages: list[dict[str, object]] = []
@@ -423,6 +440,99 @@ def test_execute_fills_missing_description_via_tavily_extraction() -> None:
     assert len(raw_items) == 1
     persisted = raw_items[0].item_metadata[COLLECTED_ITEM_V1_KEY]
     assert persisted["description"] == "# Full body"
+
+
+def _extraction_service(
+    calls: list[httpx.Request], **settings: object
+) -> tuple[AcquisitionService, list[dict[str, object]]]:
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "results": [{"url": "https://example.com/jobs/1", "raw_content": "# Body"}],
+                "usage": {"credits": 1},
+            },
+        )
+
+    budget_calls: list[dict[str, object]] = []
+
+    class _Repository(_MemoryRepository):
+        def record_host_budget_usage(self, host: str, **kwargs: object) -> None:
+            budget_calls.append({"host": host, **kwargs})
+
+    source = SourceDefinitionModel(
+        id=uuid4(), source_type="example", name="Example", enabled=True, configuration={}
+    )
+    session = _MemorySession()
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((_NoDescriptionCollector(),)),
+        repository=_Repository(source),  # type: ignore[arg-type]
+        alerts=SourceAlertService(session, notifier=None),  # type: ignore[arg-type]
+        tavily_extraction=TavilyExtractionSettings(
+            client_factory=lambda: TavilyClient(
+                api_key="test-key",
+                client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+            ),
+            cache_ttl_seconds=3600,
+            credit_budget_per_run=100,
+            **settings,  # type: ignore[arg-type]
+        ),
+    )
+    return service, budget_calls
+
+
+def _execute(service: AcquisitionService):
+    return asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+        )
+    )
+
+
+def test_tavily_calls_are_not_counted_in_the_ats_host_budget() -> None:
+    calls: list[httpx.Request] = []
+    service, budget_calls = _extraction_service(calls)
+
+    run = _execute(service)
+
+    assert len(calls) == 1
+    assert run.credits_used == 1
+    # The collector made no request of its own: the Tavily call must not show up here.
+    assert budget_calls == []
+
+
+def test_extraction_skip_source_types_spends_no_tavily_call() -> None:
+    calls: list[httpx.Request] = []
+    service, _ = _extraction_service(calls, skip_source_types=frozenset({"example"}))
+
+    run = _execute(service)
+
+    assert calls == []
+    assert run.status == "SUCCEEDED"
+    assert run.credits_used == 0
+
+
+def test_extraction_stops_for_a_host_that_keeps_failing(monkeypatch: pytest.MonkeyPatch) -> None:
+    from opportunity_radar.acquisition.tavily import TavilyExtractionCache
+
+    seen: list[tuple[str, int]] = []
+
+    def failing(self: object, url: str, *, threshold: int) -> bool:
+        seen.append((url, threshold))
+        return True
+
+    monkeypatch.setattr(TavilyExtractionCache, "host_is_failing", failing)
+    calls: list[httpx.Request] = []
+    service, _ = _extraction_service(calls, host_failure_threshold=3)
+
+    run = _execute(service)
+
+    assert calls == []
+    assert seen == [("https://example.com/jobs/1", 3)]
+    assert run.status == "SUCCEEDED"
 
 
 def test_execute_leaves_description_alone_when_extraction_is_not_configured() -> None:
@@ -1189,3 +1299,428 @@ def test_probe_recognizes_workable_source_type() -> None:
     assert outcome.ok is True
     assert outcome.items_seen == 1
     assert calls[0].url.host == "apply.workable.com"
+
+
+# --- F48-19: central forbidden-platform list ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    "configuration",
+    [
+        {"board_identifier": "acme", "careers_url": "https://acme.gupy.io/"},
+        {"board_identifier": "acme", "discovery_evidence": "https://wellfound.com/company/acme"},
+        {"board_identifier": "acme", "url": "https://www.ycombinator.com/jobs/acme"},
+    ],
+)
+def test_create_source_refuses_forbidden_platform(configuration: dict[str, str]) -> None:
+    session = _MemorySession()
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((AshbyCollector(client=httpx.AsyncClient()),)),
+    )
+
+    with pytest.raises(AcquisitionError) as refused:
+        service.create_source(source_type="ashby", name="Acme", configuration=configuration)
+
+    assert refused.value.code == AcquisitionErrorCode.INVALID_CONFIGURATION
+    assert "forbidden platform" in str(refused.value)
+    assert session.added == []
+
+
+def test_create_source_accepts_unrelated_hosts() -> None:
+    session = _MemorySession()
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((AshbyCollector(client=httpx.AsyncClient()),)),
+    )
+
+    source = service.create_source(
+        source_type="ashby",
+        name="Acme",
+        configuration={
+            "board_identifier": "acme",
+            "discovery_evidence": "https://news.ycombinator.com/item?id=1",
+        },
+    )
+
+    assert source.configuration["board_identifier"] == "acme"
+
+
+# F50-04: target-area counters and the noise filter.
+
+
+class _MixedTitlesCollector(_Collector):
+    """One engineering, one sales and one title no rule recognises."""
+
+    async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        del request
+        for external_id, title in (
+            ("eng", "Senior Backend Engineer"),
+            ("sales", "Account Executive"),
+            ("unknown", "Wizard of Light"),
+        ):
+            yield CollectedItem(
+                source_type=self.source_type,
+                external_id=external_id,
+                title=title,
+                raw_payload={"id": external_id, "title": title},
+            )
+
+
+class _ShareRepository(_MemoryRepository):
+    """Memory repository that answers `target_area_share` and, like production, returns
+    the stored row for an item it already knows (keyed by identity key)."""
+
+    def __init__(self, source: SourceDefinitionModel, share: float | None) -> None:
+        super().__init__(source)
+        self.share = share
+        self.share_calls = 0
+        self.known: dict[str, RawItemModel] = {}
+        self.presence: list[RawItemModel] = []
+        self.presence_flags: list[tuple[RawItemModel, bool]] = []
+        self.latest: dict[str, RawItemModel] = {}
+
+    def target_area_share(self, source_id: object, *, runs: int = 3) -> float | None:
+        del source_id, runs
+        self.share_calls += 1
+        return self.share
+
+    def raw_item_by_envelope(  # type: ignore[override]
+        self,
+        *,
+        source_id: object,
+        identity_key: str,
+        payload_hash: str,
+        semantic_hash: str,
+        semantic_hash_version: str,
+    ) -> RawItemModel | None:
+        del source_id, payload_hash, semantic_hash, semantic_hash_version
+        return self.known.get(identity_key)
+
+    def latest_raw_item_by_identity(
+        self, *, source_id: object, identity_key: str
+    ) -> RawItemModel | None:
+        del source_id
+        return self.latest.get(identity_key)
+
+    def record_presence_observation(
+        self,
+        *,
+        raw_item: RawItemModel,
+        source_run_id: object,
+        observed_at: object,
+        content_hash_matched: bool,
+    ) -> None:
+        del source_run_id, observed_at
+        self.presence.append(raw_item)
+        self.presence_flags.append((raw_item, content_hash_matched))
+
+
+def _filtering_service(
+    *,
+    share: float | None,
+    families: tuple[str, ...] | None = ("SOFTWARE_ENGINEERING", "DATA"),
+    floor: float = 0.30,
+) -> tuple[AcquisitionService, _MemorySession, _ShareRepository]:
+    source = SourceDefinitionModel(
+        id=uuid4(), source_type="example", name="Example", enabled=True, configuration={}
+    )
+    session = _MemorySession()
+    repository = _ShareRepository(source, share)
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((_MixedTitlesCollector(),)),
+        repository=repository,  # type: ignore[arg-type]
+        alerts=SourceAlertService(session),  # type: ignore[arg-type]
+        target_role_families=(lambda: families) if families is not None else None,
+        target_area_floor=floor,
+    )
+    return service, session, repository
+
+
+def _persisted_ids(session: _MemorySession) -> set[str | None]:
+    return {item.external_id for item in session.added if isinstance(item, RawItemModel)}
+
+
+def _run_filtering(service: AcquisitionService):
+    return asyncio.run(
+        service.execute(
+            service.repository.source.id, CollectionRequest(mode=CollectionMode.DISCOVERY)
+        )
+    )
+
+
+def test_run_records_target_area_counts() -> None:
+    service, _, _ = _filtering_service(share=None)
+
+    run = _run_filtering(service)
+
+    assert run.items_target_area == 1
+    assert run.items_off_target == 1
+
+
+def test_source_above_floor_persists_every_item() -> None:
+    service, session, _ = _filtering_service(share=0.5)
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {"eng", "sales", "unknown"}
+    assert run.items_persisted == 3
+
+
+def test_source_below_floor_skips_new_off_target_items() -> None:
+    service, session, _ = _filtering_service(share=0.1)
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {"eng", "unknown"}
+    assert run.items_persisted == 2
+    assert run.items_skipped == 1
+    assert run.items_off_target == 1
+
+
+def test_filter_keeps_presence_of_existing_off_target_item() -> None:
+    service, session, repository = _filtering_service(share=0.1)
+    existing = RawItemModel(external_id="sales", item_metadata={})
+    repository.known["external:sales"] = existing
+
+    run = _run_filtering(service)
+
+    assert existing in repository.presence
+    assert "sales" not in _persisted_ids(session)
+    assert run.items_skipped == 1
+
+
+def test_filter_off_with_fewer_than_three_measured_runs() -> None:
+    service, session, _ = _filtering_service(share=None)
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {"eng", "sales", "unknown"}
+    assert run.items_skipped == 0
+
+
+def test_filter_off_without_target_role_families() -> None:
+    for families in ((), None):
+        service, session, repository = _filtering_service(share=0.0, families=families)
+
+        run = _run_filtering(service)
+
+        assert _persisted_ids(session) == {"eng", "sales", "unknown"}
+        assert run.items_target_area is None
+        assert run.items_off_target is None
+        assert repository.share_calls == 0
+
+
+def test_floor_zero_disables_filter() -> None:
+    service, session, repository = _filtering_service(share=0.0, floor=0.0)
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {"eng", "sales", "unknown"}
+    assert repository.share_calls == 0
+    assert run.items_off_target == 1
+
+
+def test_filtered_run_is_still_complete() -> None:
+    service, _, _ = _filtering_service(share=0.1)
+
+    run = _run_filtering(service)
+
+    assert run.items_seen == 3
+    assert run.status == "SUCCEEDED"
+    assert run.complete is True
+
+
+def test_run_succeeds_with_skipped_items_and_valid_items() -> None:
+    """F50-12.1: when a collector records only skipped items plus at least one valid item,
+    the run succeeds with items_invalid == 0."""
+    service, session = _service(_SkippedAndValidItemsCollector())
+
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,  # type: ignore[attr-defined]
+            CollectionRequest(),
+        )
+    )
+
+    assert run.status == "SUCCEEDED"
+    assert run.error_code is None
+    assert run.items_invalid == 0
+    assert run.items_skipped == 1
+    assert run.items_persisted == 1
+
+
+def test_filter_confirms_presence_of_changed_off_target_item_without_new_evidence() -> None:
+    service, session, repository = _filtering_service(share=0.1)
+    stored = RawItemModel(external_id="sales", item_metadata={})
+    # Content changed: the envelope lookup misses, the identity lookup finds the old row.
+    repository.latest["external:sales"] = stored
+
+    run = _run_filtering(service)
+
+    assert "sales" not in _persisted_ids(session)
+    assert [flag for row, flag in repository.presence_flags if row is stored] == [False]
+    assert run.items_skipped == 1
+
+
+def test_filter_records_nothing_for_a_truly_new_off_target_item() -> None:
+    service, session, repository = _filtering_service(share=0.1)
+
+    _run_filtering(service)
+
+    assert "sales" not in _persisted_ids(session)
+    assert all(row.external_id != "sales" for row, _ in repository.presence_flags)
+
+
+class _NoneMetadataCollector(_Collector):
+    async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        del request
+        yield CollectedItem(
+            source_type=self.source_type,
+            external_id="broken",
+            title="Senior Backend Engineer",
+            raw_payload={"id": "broken"},
+            metadata=None,  # type: ignore[arg-type]
+        )
+        yield CollectedItem(
+            source_type=self.source_type,
+            external_id="valid",
+            title="Senior Backend Engineer",
+            raw_payload={"id": "valid"},
+        )
+
+
+def test_classification_failure_leaves_validity_to_persistence() -> None:
+    service, session, _ = _filtering_service(share=None)
+    service.registry = CollectorRegistry((_NoneMetadataCollector(),))
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {"valid"}
+    assert run.items_invalid == 1
+    assert run.items_persisted == 1
+
+
+# F50-03: Workday detail flag and what the service hands the collector.
+
+
+class _RequestCapturingCollector(_Collector):
+    def __init__(self) -> None:
+        self.requests: list[CollectionRequest] = []
+
+    async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        self.requests.append(request)
+        for item in ():
+            yield item
+
+
+def test_service_passes_target_role_families_on_the_request() -> None:
+    service, _, _ = _filtering_service(share=None, families=("DATA", "SOFTWARE_ENGINEERING"))
+    collector = _RequestCapturingCollector()
+    service.registry = CollectorRegistry((collector,))
+
+    _run_filtering(service)
+
+    assert collector.requests[0].target_role_families == ("DATA", "SOFTWARE_ENGINEERING")
+    assert collector.requests[0].fetch_detail is False
+
+
+@pytest.mark.parametrize("value", ["true", 1, None])
+def test_create_source_rejects_non_boolean_fetch_detail(value: object) -> None:
+    session = _MemorySession()
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((WorkdayCollector(client=httpx.AsyncClient()),)),
+    )
+
+    with pytest.raises(AcquisitionError) as refused:
+        service.create_source(
+            source_type="workday",
+            name="Acme",
+            configuration={
+                "tenant_identifier": "acme/site",
+                "api_region": "wd5",
+                "fetch_detail": value,
+            },
+        )
+
+    assert refused.value.code == AcquisitionErrorCode.INVALID_CONFIGURATION
+    assert session.added == []
+
+
+def _workday_detail_run(configuration: dict[str, object]):
+    postings = [
+        {
+            "title": "Senior Backend Engineer",
+            "externalPath": f"/job/Remote/Job-{number}_R{number}",
+            "locationsText": "Remote",
+        }
+        for number in range(2)
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(200, json={"total": 2, "jobPostings": postings})
+        return httpx.Response(
+            200, json={"jobPostingInfo": {"jobDescription": "<p>Synthetic.</p>"}}
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="workday",
+        name="Acme",
+        enabled=True,
+        configuration={"tenant_identifier": "acme/site", "api_region": "wd5", **configuration},
+        rate_limit_policy={"minimum_interval_seconds": 5},
+    )
+    session = _MemorySession()
+    repository = _ShareRepository(source, None)
+    budget_calls: list[int] = []
+
+    def record_usage(host: str, *, requests: int, **_: object) -> None:
+        del host
+        budget_calls.append(requests)
+
+    repository.record_host_budget_usage = record_usage  # type: ignore[method-assign]
+    sleeps: list[float] = []
+
+    async def sleeper(delay: float) -> None:
+        sleeps.append(delay)
+
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((WorkdayCollector(client=client, sleeper=sleeper),)),
+        repository=repository,  # type: ignore[arg-type]
+        alerts=SourceAlertService(session),  # type: ignore[arg-type]
+        target_role_families=lambda: ("SOFTWARE_ENGINEERING",),
+        sleeper=sleeper,
+    )
+    try:
+        run = asyncio.run(
+            service.execute(source.id, CollectionRequest(mode=CollectionMode.DISCOVERY))
+        )
+    finally:
+        asyncio.run(client.aclose())
+    return run, budget_calls, sleeps, session
+
+
+def test_workday_detail_requests_count_in_the_run_budget_and_wait_the_interval() -> None:
+    run, budget_calls, sleeps, session = _workday_detail_run({"fetch_detail": True})
+
+    assert run.items_seen == 2
+    assert budget_calls == [3]  # one listing page + two details
+    assert len(sleeps) == 2  # each detail waited out the 5 s interval
+    stored = [item for item in session.added if isinstance(item, RawItemModel)]
+    assert [row.item_metadata[COLLECTED_ITEM_V1_KEY]["description"] for row in stored] == [
+        "<p>Synthetic.</p>"
+    ] * 2
+
+
+def test_workday_without_the_flag_makes_listing_requests_only() -> None:
+    run, budget_calls, sleeps, _ = _workday_detail_run({})
+
+    assert run.items_seen == 2
+    assert budget_calls == [1]
+    assert sleeps == []

@@ -98,7 +98,7 @@ describe('SourcesPage — novos ATS', () => {
       const container = renderPage(<SourcesPage />)
       await flush()
 
-      expect(container.textContent).toContain(`(${sourceType})`)
+      expect(container.textContent).toContain(sourceType)
       const runButton = [...container.querySelectorAll('button')].find(
         (button) => button.textContent === 'Executar agora',
       )
@@ -115,9 +115,9 @@ describe('SourcesPage — novos ATS', () => {
     await flush()
 
     for (const sourceType of types) {
-      expect(container.textContent).toContain(`(${sourceType})`)
+      expect(container.textContent).toContain(sourceType)
     }
-    expect(container.querySelectorAll('article').length).toBe(types.length)
+    expect(container.querySelectorAll('tbody tr').length).toBe(types.length)
   })
 
   it('desabilita a execução de uma fonte não homologada, independente do ATS', async () => {
@@ -131,5 +131,121 @@ describe('SourcesPage — novos ATS', () => {
     )
     expect(runButton?.disabled).toBe(true)
     expect(container.textContent).toContain('Fonte desabilitada')
+  })
+})
+
+describe('SourcesPage — tabela e ação de cabeçalho', () => {
+  it('põe "Adicionar fonte" no cabeçalho, secundário, e abre o formulário de criação', async () => {
+    stubFetch([healthItem('greenhouse')])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    const add = [...container.querySelectorAll('header button')].find(
+      (button) => button.textContent === 'Adicionar fonte',
+    )
+    expect(add).toBeDefined()
+    expect(add?.className).toContain('border-line-strong')
+    expect(add?.className).not.toContain('bg-ink')
+
+    act(() => (add as HTMLButtonElement | undefined)?.click())
+    await flush()
+
+    expect(container.textContent).toContain('Nova fonte')
+    // A ação sai do cabeçalho enquanto o formulário está aberto.
+    expect(
+      [...container.querySelectorAll('header button')].some(
+        (button) => button.textContent === 'Adicionar fonte',
+      ),
+    ).toBe(false)
+  })
+
+  it('mostra nome em destaque, tipo em texto secundário e "Executar agora" secundário sm', async () => {
+    stubFetch([healthItem('workday')])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    const row = container.querySelector('tbody tr')
+    expect(row?.querySelector('.font-semibold')?.textContent).toBe('Fonte workday')
+    expect(row?.querySelector('.text-muted')?.textContent).toBe('workday')
+    const run = [...(row?.querySelectorAll('button') ?? [])].find(
+      (button) => button.textContent === 'Executar agora',
+    )
+    expect(run?.className).toContain('h-8')
+    expect(run?.className).toContain('border-line-strong')
+  })
+
+  it('abre o histórico numa linha logo abaixo da fonte', async () => {
+    stubFetch([healthItem('workday')])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(1)
+
+    const toggle = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Ver execuções',
+    )
+    act(() => toggle?.click())
+    await flush()
+
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true')
+    expect(container.querySelectorAll('tbody > tr').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('filtra a lista carregada por estado e nome, e permite limpar os filtros', async () => {
+    stubFetch([
+      healthItem('workday', { last_run_status: 'SUCCEEDED' }),
+      healthItem('manual', { last_run_status: 'PARTIAL' }),
+      healthItem('greenhouse', { last_run_status: 'FAILED' }),
+    ])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    const state = container.querySelector('#source-state') as HTMLSelectElement
+    act(() => {
+      state.value = 'failing'
+      state.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(container.textContent).toContain('Exibindo 2 de 3 fontes carregadas.')
+    expect(container.textContent).not.toContain('Fonte workday')
+
+    const search = container.querySelector('#source-search') as HTMLInputElement
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(search, 'manual')
+      search.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(container.textContent).toContain('Exibindo 1 de 3 fontes carregadas.')
+    expect(container.textContent).toContain('Fonte manual')
+    expect(container.textContent).not.toContain('Fonte greenhouse')
+
+    const reset = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Limpar filtros',
+    )
+    act(() => reset?.click())
+    expect(container.textContent).toContain('Exibindo 3 de 3 fontes carregadas.')
+  })
+
+  it('mantém ações secundárias e a orientação de bloqueio em uma divulgação compacta', async () => {
+    stubFetch([healthItem('workday', { enabled: false })])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    const disclosure = container.querySelector('details') as HTMLDetailsElement
+    expect(disclosure.open).toBe(false)
+    expect(disclosure.querySelector('summary')?.textContent).toBe('Mais ações')
+    expect(disclosure.textContent).toContain('Fonte desabilitada: habilite na homologação')
+
+    const history = [...disclosure.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Ver execuções',
+    )
+    act(() => history?.click())
+    await flush()
+
+    expect(history?.getAttribute('aria-expanded')).toBe('true')
+    expect(container.querySelectorAll('tbody > tr').length).toBeGreaterThanOrEqual(2)
   })
 })

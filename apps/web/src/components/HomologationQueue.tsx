@@ -11,6 +11,8 @@ import {
 import { ConflictError } from '../lib/api'
 import { Button } from './Button'
 import { Card } from './Card'
+import { PrimaryText, SecondaryText } from './cells'
+import { DataTable, RowSelect } from './DataTable'
 import { controlClassName } from './Field'
 import { CardListSkeleton } from './skeletons'
 import { ConflictNotice, EmptyState, ErrorState, LoadingState } from './states'
@@ -172,9 +174,9 @@ function SequentialCard({
           <ErrorState className="mt-4">{update.error.message}</ErrorState>
         ))}
 
-      <div className="mt-4 flex gap-3">
+      <div className="mt-5 flex flex-wrap gap-3 max-md:[&_button]:flex-1">
         <Button onClick={() => onAdvance(false)} variant="secondary">
-          Pular
+          Pular fonte
         </Button>
         <Button onClick={() => onAdvance(false)}>Próxima</Button>
       </div>
@@ -215,6 +217,10 @@ export function HomologationQueue() {
     })
   }
 
+  function toggleAll(selected: boolean) {
+    setSelected(selected ? new Set(items.map((item) => item.sourceDefinitionId)) : new Set())
+  }
+
   function runBatch() {
     const targets = items
       .filter((item) => selected.has(item.sourceDefinitionId))
@@ -252,11 +258,29 @@ export function HomologationQueue() {
 
   if (mode === 'sequential') {
     const current = items[cursor]
+    const completed = Math.min(cursor, items.length)
     return (
-      <div>
-        <p className="text-sm text-muted">
-          {Math.min(cursor + 1, items.length)} de {items.length}
-        </p>
+      <div aria-live="polite">
+        <div className="rounded-control border border-line bg-panel p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <div>
+              <p className="text-sm font-semibold">Revisão uma a uma</p>
+              <p className="mt-1 text-sm text-subtle">
+                Teste o collector, registre a revisão dos termos e habilite somente quando os
+                requisitos estiverem concluídos.
+              </p>
+            </div>
+            <p className="text-sm font-medium text-ink">
+              {current ? `${cursor + 1} de ${items.length}` : `${items.length} de ${items.length}`}
+            </p>
+          </div>
+          <progress
+            aria-label={`${completed} de ${items.length} propostas percorridas`}
+            className="mt-3 h-2 w-full accent-ink"
+            max={items.length}
+            value={completed}
+          />
+        </div>
         {current ? (
           <div className="mt-3">
             <SequentialCard onAdvance={advance} sourceId={current.sourceDefinitionId} />
@@ -275,80 +299,132 @@ export function HomologationQueue() {
 
   return (
     <div>
-      <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-        <div>
+      <div className="rounded-control border border-line bg-panel p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <div>
+            <h2 className="text-sm font-semibold">Propostas aguardando homologação</h2>
+            <p className="mt-1 text-sm text-subtle">
+              Selecione fontes para testar em lote ou revise uma fonte por vez antes de habilitar.
+            </p>
+          </div>
+          <p aria-live="polite" className="text-sm font-medium text-ink">
+            {selected.size} selecionada{selected.size === 1 ? '' : 's'}
+          </p>
+        </div>
+      </div>
+
+      <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+        <div className="rounded-control border border-line bg-surface p-3">
           <dt className="text-muted">Sem sonda</dt>
           <dd className="mt-1 text-lg font-semibold">{counters.withoutProbe}</dd>
         </div>
-        <div>
+        <div className="rounded-control border border-line bg-surface p-3">
           <dt className="text-muted">Sonda falhou</dt>
           <dd className="mt-1 text-lg font-semibold">{counters.probeFailed}</dd>
         </div>
-        <div>
+        <div className="rounded-control border border-line bg-surface p-3">
           <dt className="text-muted">Confirmadas</dt>
           <dd className="mt-1 text-lg font-semibold">{counters.confirmed}</dd>
         </div>
-        <div>
+        <div className="rounded-control border border-line bg-surface p-3">
           <dt className="text-muted">Habilitadas</dt>
           <dd className="mt-1 text-lg font-semibold">{counters.enabled}</dd>
         </div>
       </dl>
 
-      <div className="mt-4 flex flex-wrap gap-3">
-        <Button
-          onClick={() => {
-            setCursor(0)
-            setMode('sequential')
-          }}
-        >
-          Modo sequencial
-        </Button>
-        <Button
-          disabled={selected.size === 0 || batch.isPending}
-          onClick={runBatch}
-          variant="secondary"
-        >
-          {batch.isPending ? 'Testando…' : `Testar selecionadas (${selected.size})`}
-        </Button>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <section aria-labelledby="batch-mode-title" className="rounded-control border border-line bg-surface p-4">
+          <h3 className="text-sm font-semibold" id="batch-mode-title">Teste em lote</h3>
+          <p className="mt-1 text-sm text-subtle">Confirma se os collectors respondem; termos e habilitação continuam individuais.</p>
+          <Button
+            className="mt-3 w-full sm:w-auto"
+            disabled={selected.size === 0 || batch.isPending}
+            onClick={runBatch}
+            variant="secondary"
+          >
+            {batch.isPending ? 'Testando…' : `Testar selecionadas (${selected.size})`}
+          </Button>
+        </section>
+        <section aria-labelledby="sequential-mode-title" className="rounded-control border border-line bg-surface p-4">
+          <h3 className="text-sm font-semibold" id="sequential-mode-title">Revisão uma a uma</h3>
+          <p className="mt-1 text-sm text-subtle">Conduz cada fonte pela sonda, revisão de termos e habilitação.</p>
+          <Button
+            className="mt-3 w-full sm:w-auto"
+            onClick={() => {
+              setCursor(0)
+              setMode('sequential')
+            }}
+          >
+            Modo sequencial
+          </Button>
+        </section>
       </div>
 
-      <ul className="mt-4 grid gap-3">
-        {items.map((item) => {
+      <DataTable
+        caption="Propostas aguardando homologação"
+        className="mt-4"
+        columns={['Fonte', 'Estado', 'Ações']}
+        selectable
+        allSelected={selected.size === items.length}
+        someSelected={selected.size > 0}
+        onToggleAll={toggleAll}
+        selectAllLabel="Selecionar todas as propostas"
+      >
+        {items.map((item, index) => {
           const state = stateFor(item, failedProbes.has(item.sourceDefinitionId))
           const result = batch.data?.find((row) => row.sourceId === item.sourceDefinitionId)
           return (
-            <Card as="li" key={item.sourceDefinitionId}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <label className="flex items-center gap-2">
-                  <input
-                    checked={selected.has(item.sourceDefinitionId)}
-                    className="h-4 w-4"
-                    onChange={() => toggleSelected(item.sourceDefinitionId)}
-                    type="checkbox"
-                  />
-                  <span className="font-medium">{item.name}</span>
-                  <span className="text-sm text-muted">({item.sourceType})</span>
-                </label>
+            <tr
+              aria-selected={selected.has(item.sourceDefinitionId)}
+              className={selected.has(item.sourceDefinitionId) ? 'bg-accent-surface' : undefined}
+              key={item.sourceDefinitionId}
+            >
+              <td className="w-10">
+                <RowSelect
+                  checked={selected.has(item.sourceDefinitionId)}
+                  label={`Selecionar ${item.name}`}
+                  onChange={() => toggleSelected(item.sourceDefinitionId)}
+                />
+              </td>
+              <td className="min-w-28">
+                <PrimaryText>{item.name}</PrimaryText>
+                <SecondaryText>{item.sourceType}</SecondaryText>
+                {result && (
+                  <p
+                    className={`mt-1 text-caption ${result.ok ? 'text-success-ink' : 'text-danger-ink'}`}
+                    role="status"
+                  >
+                    {result.ok
+                      ? 'Sonda confirmada.'
+                      : `Falhou: ${result.errorCode ?? 'erro'}${
+                          result.retryAfterSeconds !== null
+                            ? ` — aguardar ${result.retryAfterSeconds}s`
+                            : ''
+                        }`}
+                  </p>
+                )}
+              </td>
+              <td>
                 <StatusBadge labels={stateLabels} tones={stateTones} value={state} />
-              </div>
-              {result && (
-                <p
-                  className={`mt-2 text-sm ${result.ok ? 'text-success-ink' : 'text-danger-ink'}`}
-                  role="status"
+              </td>
+              <td className="min-w-28">
+                <Button
+                  aria-label={`Homologar ${item.name}`}
+                  className="max-md:w-full"
+                  onClick={() => {
+                    setCursor(index)
+                    setMode('sequential')
+                  }}
+                  size="sm"
+                  variant="secondary"
                 >
-                  {result.ok
-                    ? 'Sonda confirmada.'
-                    : `Falhou: ${result.errorCode ?? 'erro'}${
-                        result.retryAfterSeconds !== null
-                          ? ` — aguardar ${result.retryAfterSeconds}s`
-                          : ''
-                      }`}
-                </p>
-              )}
-            </Card>
+                  Homologar
+                </Button>
+              </td>
+            </tr>
           )
         })}
-      </ul>
+      </DataTable>
     </div>
   )
 }

@@ -170,6 +170,11 @@ Pode conter dados não secretos como:
 
 Credenciais, quando existirem, devem ser referenciadas por mecanismo de configuração/secret apropriado.
 
+Fontes Workday aceitam `fetch_detail` (booleano, padrão `false`) e `detail_max_requests`
+(inteiro, padrão 200 por execução). Com `fetch_detail` ligado, o coletor busca o detalhe
+(descrição) só das vagas nas áreas-alvo do perfil. Deve permanecer desligado até que a
+revisão de termos da fonte cubra o endpoint de detalhe (SPEC 50, Q1).
+
 ---
 
 ## 7. `CompanySource`

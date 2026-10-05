@@ -1,14 +1,17 @@
 """Which opportunities the automatic evaluation pass picks up, and how often.
 
 The identity that makes an assessment "current" is the contract here: same opportunity
-version, same active profile, same rules, same taxonomy, same UTC day. Every test below is
-about one component of it changing, or not changing.
+version, same active profile, same rules, same taxonomy, same RECENCY band. The UTC day is
+not part of it (card F50-07). Every test below is about one component of it changing, or
+not changing.
 """
 
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
@@ -70,7 +73,11 @@ def _ensure_active_profile(session: Session) -> UUID:
 
 
 def _opportunity(
-    session: Session, *, lifecycle_status: str = "ACTIVE", version: int = 1
+    session: Session,
+    *,
+    lifecycle_status: str = "ACTIVE",
+    version: int = 1,
+    published_at: datetime | None = None,
 ) -> OpportunityModel:
     opportunity = OpportunityModel(
         fingerprint=uuid4().hex,
@@ -82,6 +89,7 @@ def _opportunity(
         contract_type="FULL_TIME",
         lifecycle_status=lifecycle_status,
         version=version,
+        published_at=published_at,
     )
     session.add(opportunity)
     session.commit()
@@ -106,7 +114,7 @@ def test_only_discovered_and_active_opportunities_are_queued() -> None:
         assert queued.isdisjoint(excluded.values())
 
 
-def test_an_evaluated_opportunity_leaves_the_queue_for_the_rest_of_the_day() -> None:
+def test_an_evaluated_opportunity_leaves_the_queue_until_its_inputs_change() -> None:
     with _session() as session:
         _ensure_active_profile(session)
         opportunity = _opportunity(session)
@@ -206,7 +214,7 @@ def test_a_pass_without_an_active_profile_is_a_degraded_state_not_a_crash() -> N
             pytest.skip("another test left an active profile version in place")
 
 
-def test_the_evaluation_identity_covers_the_reference_day() -> None:
+def test_the_evaluation_identity_is_stored_as_a_hash_of_the_inputs() -> None:
     with _session() as session:
         _ensure_active_profile(session)
         opportunity = _opportunity(session)
@@ -219,3 +227,92 @@ def test_the_evaluation_identity_covers_the_reference_day() -> None:
         assert len(assessment.input_hash) == 64
         assert assessment.assessed_at.date() == datetime.now(UTC).date()
         assert opportunity.id not in service.pending_evaluation_ids(limit=500)
+
+
+def _queue_with_target_areas(
+    monkeypatch: pytest.MonkeyPatch, session: Session, areas: tuple[str, ...]
+) -> list[UUID]:
+    """Queue as seen by an active profile declaring `areas`, whatever the database holds."""
+    active_id = _ensure_active_profile(session)
+    real = ProfileService.get_active(ProfileService(session))
+    preferences = replace(real.snapshot.preferences, target_role_families=areas)
+    stub = SimpleNamespace(
+        id=active_id, snapshot=replace(real.snapshot, preferences=preferences)
+    )
+    monkeypatch.setattr(ProfileService, "get_active", lambda self: stub)
+    return MatchingService(session).pending_evaluation_ids(limit=5000)
+
+
+def test_target_areas_keep_sales_out_of_the_queue_but_not_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _session() as session:
+        _ensure_active_profile(session)
+        by_family = {}
+        for family in ("SOFTWARE_ENGINEERING", "SALES", "UNKNOWN"):
+            opportunity = _opportunity(session)
+            opportunity.role_family = family
+            by_family[family] = opportunity.id
+        session.commit()
+
+        queued = set(
+            _queue_with_target_areas(monkeypatch, session, ("SOFTWARE_ENGINEERING", "DATA"))
+        )
+
+        assert by_family["SOFTWARE_ENGINEERING"] in queued
+        assert by_family["UNKNOWN"] in queued
+        assert by_family["SALES"] not in queued
+
+
+def test_a_profile_without_target_areas_queues_every_area(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _session() as session:
+        _ensure_active_profile(session)
+        opportunity = _opportunity(session)
+        opportunity.role_family = "SALES"
+        session.commit()
+
+        assert opportunity.id in _queue_with_target_areas(monkeypatch, session, ())
+
+
+def test_the_next_utc_day_queues_only_postings_that_crossed_a_recency_band() -> None:
+    with _session() as session:
+        _ensure_active_profile(session)
+        today = datetime.now(UTC)
+        tomorrow = today + timedelta(days=1)
+        service = MatchingService(session)
+        # Ten ages, none of them on a band edge tomorrow (age 9 becomes 10, all in 8-14).
+        steady = [
+            _opportunity(session, published_at=today - timedelta(days=9)) for _ in range(10)
+        ]
+        edge = _opportunity(session, published_at=today - timedelta(days=7))
+        undated = _opportunity(session)
+        for opportunity in (*steady, edge, undated):
+            service.evaluate(opportunity.id)
+
+        queued = service.pending_evaluation_ids(limit=5000, now=tomorrow)
+
+        # Evaluated today, nothing to do today; tomorrow only the band crosser comes back.
+        assert not {o.id for o in (*steady, undated)} & set(queued)
+        assert edge.id in queued
+        assert not {o.id for o in (*steady, edge, undated)} & set(
+            service.pending_evaluation_ids(limit=5000)
+        )
+
+
+def test_target_area_postings_are_queued_before_unknown_ones(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with _session() as session:
+        _ensure_active_profile(session)
+        # Created first, so the plain created_at order would put it ahead.
+        unknown = _opportunity(session)
+        unknown.role_family = "UNKNOWN"
+        target = _opportunity(session)
+        target.role_family = "DATA"
+        session.commit()
+
+        queued = _queue_with_target_areas(monkeypatch, session, ("SOFTWARE_ENGINEERING", "DATA"))
+
+        assert queued.index(target.id) < queued.index(unknown.id)

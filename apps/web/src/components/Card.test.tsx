@@ -8,6 +8,8 @@ describe('Card', () => {
 
     expect(container.firstElementChild?.tagName).toBe('DIV')
     expect(container.firstElementChild?.className).toContain('border-line')
+    expect(container.firstElementChild?.className).toContain('rounded-control')
+    expect(container.firstElementChild?.className).not.toContain('shadow')
   })
 
   it('assume o elemento que a lista em volta exige', () => {

@@ -33,7 +33,9 @@ from opportunity_radar.matching.analysis import (
     failed_outcome,
     parse_analysis,
     payload_digest,
+    reusable_payload_digest,
     skipped_outcome,
+    without_evidence_refs,
 )
 from opportunity_radar.matching.prompts import PromptArtifacts
 from opportunity_radar.matching.text import (
@@ -89,6 +91,16 @@ class GroqAnalysisAdapter:
     @property
     def model(self) -> str:
         return self._route.chain[0]
+
+    @property
+    def probe_tokens(self) -> int:
+        """Worst-case tokens of one call to the primary model (input plus output budget).
+
+        What the worker's admission probe reserves (card F48-02), so a day counter too
+        close to its ceiling defers the batch instead of failing the real call.
+        """
+        budget = self._route.budget
+        return budget.max_input_tokens + budget.max_output_tokens
 
     @property
     def prompt_version(self) -> str:
@@ -151,6 +163,9 @@ class GroqAnalysisAdapter:
             profile_history = sanitize_for_llm(dict(request.profile_history or {}))
             profile.update(profile_history)
         opportunity = sanitize_for_llm(dict(request.opportunity_snapshot))
+        if self._prompt.omits_evidence_refs:
+            profile = without_evidence_refs(profile)
+            opportunity = without_evidence_refs(opportunity)
 
         def render(text: str, cut: bool, context: Sequence[Mapping[str, Any]]) -> str:
             return self._user_content(
@@ -238,7 +253,7 @@ class GroqAnalysisAdapter:
                 prompt_version=self._prompt.version,
                 schema_version=self._prompt.schema_version,
                 prompt_digest=self._prompt.digest,
-                payload_hash=payload_hash,
+                payload_hash=reusable_payload_digest(payload),
                 options=options,
             ),
             payload_hash=payload_hash,

@@ -41,6 +41,7 @@ class CompanyCandidate:
     aliases: tuple[str, ...] = ()
     sources: tuple[CompanySourceCandidate, ...] = ()
     priority: str = "normal"
+    research_confidence: str = "normal"
 
     @property
     def normalized_name(self) -> str:

@@ -568,7 +568,10 @@ def test_candidates_needing_suggestion_skips_opportunities_already_suggested() -
         )
         session.commit()
         try:
-            candidates = candidates_needing_suggestion(session, limit=10)
+            # The query is catalogue-wide and ordered by creation; rows other tests left
+            # in the shared database would push this test's rows out of a small window,
+            # so the limit must cover every candidate that could exist.
+            candidates = candidates_needing_suggestion(session, limit=100_000)
             candidate_ids = {opportunity.id for opportunity in candidates}
             assert needs_suggestion.id in candidate_ids
             assert already_suggested.id not in candidate_ids

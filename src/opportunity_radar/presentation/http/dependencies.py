@@ -20,7 +20,9 @@ from opportunity_radar.platform.database import create_database_engine, open_ses
 
 
 def get_session(settings: Settings = Depends(get_settings)) -> Iterator[Session]:
-    yield from open_session(settings.database_url)
+    yield from open_session(
+        settings.database_url, statement_timeout_ms=settings.api_statement_timeout_ms
+    )
 
 
 @lru_cache

@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.domain import AcquisitionError
+from opportunity_radar.acquisition.forbidden import is_forbidden_url
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.models import SourceDefinitionModel
@@ -133,10 +134,12 @@ def register_researched_collectors(session: Session, *, dry_run: bool) -> int:
             ).where(SourceDefinitionModel.company_source_id.is_not(None))
         )
     }
+    # F48-19: a researched record on a forbidden platform stays as research, never a source.
     missing = [
         source
         for source in runnable_sources
         if (source.id, source.source_type) not in existing_definitions
+        and not is_forbidden_url(source.endpoint or "")
     ]
     remotive_missing = session.scalar(
         select(SourceDefinitionModel.id).where(
@@ -228,7 +231,11 @@ class ResearchRow:
         return any(state in normalized for state in BACKLOG_STATES)
 
     @property
-    def source_priority(self) -> str:
+    def research_confidence(self) -> str:
+        """How mature the catalogue's knowledge of the company is (F48-14).
+
+        Operational only. It is not the user's interest, so it never becomes `priority`.
+        """
         normalized = self.situation.casefold()
         if "api json" in normalized:
             return "high"
@@ -269,7 +276,8 @@ class ResearchRow:
             domain=None,
             aliases=RESEARCH_ALIASES.get(self.name, ()),
             sources=self.source_candidates(),
-            priority=self.source_priority,
+            priority="normal",
+            research_confidence=self.research_confidence,
         )
 
 
@@ -397,10 +405,12 @@ def _update_company_state(
     *,
     created: bool,
 ) -> None:
-    if created or PRIORITY_RANK[row.source_priority] > PRIORITY_RANK.get(
-        company.priority, -1
+    # `priority` is the user's interest (F48-14): a new company starts at `normal` (set by
+    # the candidate) and an existing one is never touched. Only maturity is recorded.
+    if created or PRIORITY_RANK[row.research_confidence] > PRIORITY_RANK.get(
+        company.research_confidence, -1
     ):
-        company.priority = row.source_priority
+        company.research_confidence = row.research_confidence
     if created:
         company.radar_status = "backlog" if row.is_backlog else "active"
     elif not row.is_backlog:

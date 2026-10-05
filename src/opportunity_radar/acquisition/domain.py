@@ -181,6 +181,13 @@ class CollectionTelemetry:
     #: a bare 304 with no manifest can never prove full coverage, only that the one
     #: representation it touched is unchanged.
     manifest_size: int | None = None
+    #: Per-posting detail fetches (SPEC 50, F50-03). Detail requests also count in
+    #: `http_requests`, so the host budget sees them; these say what they were spent on.
+    detail_requests: int = 0
+    detail_failures: int = 0
+    #: Detail fetches skipped because the per-run cap or the host budget ran out, or a 429
+    #: stopped them; the item is still emitted with the listing only.
+    detail_skipped: int = 0
 
     def record_conditional_response(
         self,
@@ -221,6 +228,14 @@ class CollectionTelemetry:
 
     def record_rate_limit(self) -> None:
         self.rate_limit_events += 1
+
+    def record_detail(self, *, failed: bool = False, skipped: bool = False) -> None:
+        if skipped:
+            self.detail_skipped += 1
+            return
+        self.detail_requests += 1
+        if failed:
+            self.detail_failures += 1
 
     def record_credits(self, amount: int) -> None:
         if amount < 0:
@@ -301,6 +316,17 @@ class CollectionRequest:
     #: automatically. The caller supplies both together: the id of the persisted prefix it
     #: is resuming, and the explicit cursor to resume it from.
     resume_of_run_id: UUID | None = None
+    #: The active profile's target role families, set by `AcquisitionService` (F50-03).
+    #: Empty means unknown: a collector that fetches per-posting detail only for target
+    #: areas then fetches none. Collectors that do not read it ignore it.
+    target_role_families: tuple[str, ...] = ()
+    #: Workday only: per-source `fetch_detail` flag and `detail_max_requests` run cap. Off
+    #: by default; the detail endpoint is outside the terms review (SPEC 50, Q1).
+    fetch_detail: bool = False
+    detail_max_requests: int = 200
+    #: Requests the shared host budget still allows at the start of the run, when the
+    #: service knows it (F20-38). `None` means no persisted budget, so only the cap applies.
+    host_requests_remaining: int | None = None
 
     def __post_init__(self) -> None:
         if self.max_items is not None and self.max_items < 1:
@@ -318,6 +344,20 @@ class CollectionRequest:
             raise ValueError("manual inputs require manual collection mode")
         if self.resume_of_run_id is not None and self.cursor is None:
             raise ValueError("resuming a run requires an explicit cursor")
+
+
+def item_payload_bytes(item: CollectedItem) -> int:
+    """UTF-8 size of the item's raw payload as serialized, the run's received-bytes unit."""
+    return len(json.dumps(item.raw_payload, ensure_ascii=False, default=str).encode("utf-8"))
+
+
+def newest_item_age_seconds(newest: datetime | None, at: datetime) -> int | None:
+    """Age of the newest dated item at `at`; `None` when no item carried a date."""
+    if newest is None:
+        return None
+    if newest.tzinfo is None:
+        newest = newest.replace(tzinfo=timezone.utc)
+    return max(0, int((at - newest).total_seconds()))
 
 
 @dataclass(frozen=True, slots=True)
@@ -412,6 +452,14 @@ class SourceRun:
     #: (when a total is known) `items_seen` reached it. Only a complete run may close a
     #: job that stopped appearing — see `evaluate_completeness`.
     complete: bool = False
+    #: Serialized size of the items this run received, and how old its newest dated item
+    #: was when the run ended (F48-07). `None` = not measured, never a guessed zero.
+    bytes_received: int | None = None
+    newest_item_age_seconds: int | None = None
+    #: Items seen inside / outside the active profile's target role families (F50-04).
+    #: `None` = not measured (no profile with target areas), never a guessed zero.
+    items_target_area: int | None = None
+    items_off_target: int | None = None
 
     def start(self, at: datetime | None = None) -> None:
         if self.status is not SourceRunStatus.PENDING:
@@ -435,6 +483,13 @@ class SourceRun:
         self.items_persisted += persisted
         self.items_skipped += skipped
         self.items_invalid += invalid
+
+    def record_target_area(self, *, target: int = 0, off_target: int = 0) -> None:
+        self._require_running()
+        if target < 0 or off_target < 0:
+            raise ValueError("source run counters cannot be negative")
+        self.items_target_area = (self.items_target_area or 0) + target
+        self.items_off_target = (self.items_off_target or 0) + off_target
 
     def record_http_request(self, retries: int = 0) -> None:
         self._require_running()

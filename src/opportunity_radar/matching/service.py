@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from typing import Any, Sequence, TypeVar
 from uuid import UUID
 
-from sqlalchemy import literal, select
+from sqlalchemy import case, literal, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session
 
 from opportunity_radar.companies.models import Company
 from opportunity_radar.matching import currency
@@ -62,10 +63,11 @@ from opportunity_radar.opportunities.models import (
     OpportunitySkillModel,
 )
 from opportunity_radar.opportunities.repository import OpportunityRepository
+from opportunity_radar.opportunities.role_family import classify_role_family
 from opportunity_radar.profile.domain import ProfileNotFoundError, ProfileVersion
 from opportunity_radar.profile.service import ProfileService
 
-RULES_VERSION = "matching-v1"
+RULES_VERSION = "matching-v3"
 
 # Section 50: the semantic layer is spent where it can still change a decision. A verdict
 # the rules already settled downwards gets no model time.
@@ -155,26 +157,39 @@ class MatchingService:
         return loaded
 
     def pending_evaluation_ids(self, *, limit: int, now: datetime | None = None) -> list[UUID]:
-        """Eligible opportunities with no assessment for the current identity today.
+        """Eligible opportunities with no current assessment, target areas first.
 
         Asked in SQL against the identity components rather than by rebuilding a snapshot
         hash per opportunity: the read model has to ask the same question over the whole
         catalogue, and a rule that only one side can express is a rule the two sides will
-        eventually disagree on.
+        eventually disagree on. An assessment stops being current when the posting crosses
+        a RECENCY band, so a new UTC day alone queues nothing (card F50-07).
         """
         profile = ProfileService(self.session).get_active()
-        reference_date = currency.reference_day(now or datetime.now(UTC))
-        assessment = aliased(MatchAssessmentModel)
-        already_evaluated = (
+        # F50-04: with declared target areas, a posting outside them is not evaluated
+        # automatically; UNKNOWN (stored as 'UNKNOWN', never NULL) stays in.
+        target_areas = tuple(profile.snapshot.preferences.target_role_families)
+        in_target_areas = (
+            (OpportunityModel.role_family.in_((*target_areas, "UNKNOWN")),)
+            if target_areas
+            else ()
+        )
+        target_first = (
+            (case((OpportunityModel.role_family.in_(target_areas), 0), else_=1),)
+            if target_areas
+            else ()
+        )
+        assessment = MatchAssessmentModel.__table__.alias("current_assessment")
+        has_current = (
             select(literal(1))
             .where(
-                assessment.opportunity_id == OpportunityModel.id,
-                assessment.opportunity_version == OpportunityModel.version,
-                assessment.profile_version_id == profile.id,
-                assessment.rules_version == RULES_VERSION,
-                assessment.taxonomy_version == currency.opportunity_taxonomy_version(),
-                currency.assessment_reference_day(assessment.assessed_at)
-                == reference_date,
+                assessment.c.opportunity_id == OpportunityModel.id,
+                currency.is_current_assessment(
+                    assessment,
+                    rules_version=RULES_VERSION,
+                    profile_version_id=profile.id,
+                    reference=now,
+                ),
             )
             .exists()
         )
@@ -183,9 +198,10 @@ class MatchingService:
                 select(OpportunityModel.id)
                 .where(
                     OpportunityModel.lifecycle_status.in_(("DISCOVERED", "ACTIVE")),
-                    ~already_evaluated,
+                    ~has_current,
+                    *in_target_areas,
                 )
-                .order_by(OpportunityModel.created_at, OpportunityModel.id)
+                .order_by(*target_first, OpportunityModel.created_at, OpportunityModel.id)
                 .limit(limit)
             )
         )
@@ -205,6 +221,7 @@ class MatchingService:
             rules_version=RULES_VERSION,
             taxonomy_version=_taxonomy_version(opportunity),
             assessed_at=assessed_at,
+            published_at=opportunity.published_at,
         )
 
     def current_assessment(self, opportunity_id: UUID) -> MatchAssessmentModel | None:
@@ -432,6 +449,7 @@ class MatchingService:
                 attempt_window=attempt_window,
                 max_attempts=max_attempts,
                 aging_sample_ratio=aging_sample_ratio,
+                role_families=self._target_role_families(),
             )
         )
 
@@ -450,7 +468,16 @@ class MatchingService:
             cooldown=cooldown,
             attempt_window=attempt_window,
             max_attempts=max_attempts,
+            role_families=self._target_role_families(),
         )
+
+    def _target_role_families(self) -> tuple[str, ...]:
+        """Areas the active profile declared; empty (no restriction) when it declared none."""
+        try:
+            profile = ProfileService(self.session).get_active()
+        except ProfileNotFoundError:
+            return ()
+        return tuple(profile.snapshot.preferences.target_role_families)
 
     def latest_analysis(self, assessment_id: UUID) -> MatchAnalysisModel | None:
         return self.repository.latest_analysis(assessment_id)
@@ -492,6 +519,8 @@ def _opportunity_snapshot(
         status=OpportunityStatus(opportunity.lifecycle_status),
         work_mode=WorkMode(opportunity.work_mode),
         seniority=Seniority(opportunity.seniority),
+        allowed_countries=_allowed_countries(opportunity.allowed_countries),
+        role_family=opportunity.role_family,
         contract_types=_known_contracts((opportunity.contract_type,)),
         required_skills=tuple(
             item.canonical_name for item in skills if item.requirement == "REQUIRED"
@@ -534,7 +563,13 @@ def _profile_snapshot(profile: ProfileVersion) -> ProfileSnapshot:
         countries=tuple(sorted(preferences.countries)),
         accepted_work_modes=_known_work_modes(preferences.work_modes),
         accepted_contract_types=_known_contracts(preferences.contracts),
+        accepted_seniorities=tuple(
+            Seniority(item)
+            for item in preferences.accepted_seniorities
+            if item in Seniority._value2member_map_
+        ),
         compensation=profile_compensation,
+        role_families=_profile_role_families(profile),
         work_authorization=(
             ProfileWorkAuthorization.REQUIRES_SPONSORSHIP
             if preferences.sponsorship_required
@@ -542,6 +577,31 @@ def _profile_snapshot(profile: ProfileVersion) -> ProfileSnapshot:
         ),
         evidence_refs=(f"profile-version:{profile.id}",),
     )
+
+
+def _allowed_countries(values: Sequence[str] | None) -> tuple[str, ...]:
+    """Countries the posting allows (`allowed_countries`, F17); empty when never derived."""
+    seen: dict[str, None] = {}
+    for value in values or ():
+        code = value.strip().upper()
+        if code:
+            seen.setdefault(code)
+    return tuple(seen)
+
+
+def _profile_role_families(profile: ProfileVersion) -> tuple[str, ...]:
+    """Areas the profile's experiences and projects evidence, by the posting classifier."""
+    families: set[str] = set()
+    for experience in profile.snapshot.experiences:
+        decision = classify_role_family(
+            title=experience.title, description=experience.summary
+        )
+        families.add(decision.role_family.value)
+    for project in profile.snapshot.projects:
+        decision = classify_role_family(title=project.name, description=project.description)
+        families.add(decision.role_family.value)
+    families.discard("UNKNOWN")
+    return tuple(sorted(families))
 
 
 def _opportunity_compensation(opportunity: OpportunityModel) -> tuple[
@@ -941,6 +1001,7 @@ def _snapshot_dict(snapshot: OpportunitySnapshot | ProfileSnapshot) -> dict[str,
             "work_mode": snapshot.work_mode.value,
             "seniority": snapshot.seniority.value,
             "allowed_countries": list(snapshot.allowed_countries),
+            "role_family": snapshot.role_family,
             "contract_types": [item.value for item in snapshot.contract_types],
             "required_skills": list(snapshot.required_skills),
             "preferred_skills": list(snapshot.preferred_skills),
@@ -979,6 +1040,7 @@ def _snapshot_dict(snapshot: OpportunitySnapshot | ProfileSnapshot) -> dict[str,
             item.value for item in snapshot.accepted_contract_types
         ],
         "accepted_seniorities": [item.value for item in snapshot.accepted_seniorities],
+        "role_families": list(snapshot.role_families),
         "compensation": _compensation_dict(snapshot.compensation),
         "work_authorization": snapshot.work_authorization.value,
         "evidence_refs": list(snapshot.evidence_refs),
@@ -1019,7 +1081,8 @@ def _optional_enum(enum_type: type[EnumType], value: str | None) -> EnumType | N
     if value is None:
         return None
     try:
-        return enum_type(value.strip().upper())
+        # The profile stores ull-time; enum members use FULL_TIME (F48-04).
+        return enum_type(re.sub(r"[-\s]+", "_", value.strip()).upper())
     except ValueError:
         return None
 
