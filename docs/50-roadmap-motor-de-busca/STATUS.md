@@ -1,11 +1,10 @@
 # SPEC 50 — estado da implementação
 
 - **Atualizado em:** 2026-10-05
-- **Branch:** `f50-motor-de-busca`, criada de `75d688b`. Nada foi enviado ao remoto nem aplicado
-  na stack `spec46full`.
-- **Verificação:** suíte completa com integração em banco `_test` descartável:
-  `1585 passed, 10 skipped`, sem o arquivo de teste do F50-08, que depende da migração
-  bloqueada. Ida e volta da migração `20261005_0063`, `ruff check .`, `mypy` e
+- **Branch:** commits enviados para `spec-46-redesign-ui` (PR #26), sobre `75d688b`. Nada foi
+  aplicado na stack `spec46full`.
+- **Verificação:** suíte completa com integração em banco `_test` descartável, migrado até
+  `20261005_0064`: `1602 passed, 10 skipped`. `ruff check .`, `mypy` e
   `export_prompt_schema.py --check` sem erros.
 
 ## Decisões do dono (2026-10-05)
@@ -30,34 +29,25 @@
 | F50-05 | Entregue | `3248382` | `ai` em 24,1% do catálogo, contra a meta de menos de 15%. Amostra rotulada de 100 vagas. |
 | F50-06 | Entregue | `954cdf0` | Aceite de 50% não sai só daqui: contrato e senioridade desconhecidos ainda seguram. |
 | F50-07 | Entregue | `bce10f6` | `EXPLAIN ANALYZE` da fila em base de produção. |
-| F50-08 | **Bloqueado**, sem commit | — | Migração `20261005_0064` recusada pelo sistema de permissões. Ver abaixo. |
+| F50-08 | Entregue, desligado no worker | ver `git log` | Rodar `scripts/prune_assessments.py` em dry-run, ler o relatório e só então ligar `WORKER_ASSESSMENT_RETENTION_ENABLED`. `EXPLAIN` em volume real. |
 | F50-09 | Entregue como `v3`, desligado | `bc6a4a3` | Rodar a avaliação `v1` contra `v3` no Groq e trocar `AI_ANALYSIS_PROMPT`. |
 | F50-10 | Entregue | `58d24a1` | Medir o p95 de `/inbox` em 25 mil vagas. |
 | F50-11 | Decisão registrada na spec | — | Nada. |
 | F50-12 | Item 1 e gravação da concorrente entregues; itens 2 e 3 medidos | `51c7271`, `6f48ee2`, `0b585be` | Decisões do dono sobre duplicatas e revisões. |
 
-## F50-08: o que está bloqueado
+## F50-08: como ficou
 
-O job, o script (`scripts/prune_assessments.py`) e 12 testes de integração estão no working
-tree, sem commit, junto com a ligação em `worker.py` e dois testes em
-`tests/backend/test_worker.py`. As configurações já estão em `config.py`.
-
-`match_assessment` e `match_factor` têm triggers que recusam todo `UPDATE` e `DELETE`
-(migração `20260916_0007`). A poda precisa da migração `20261005_0064`, que libera só
-`DELETE` e só em transação que ligue `matching.allow_prune`. O classificador de permissões do
-Claude Code recusou a escrita desse arquivo duas vezes ("Security Weaken"), inclusive depois
-da aprovação do dono na conversa. O arquivo precisa ser criado pelo dono, ou a regra de
-permissão ajustada.
-
-Com a migração no lugar, ainda falta:
-
-- Excluir da poda toda avaliação apontada por `matching.current_assessment`. O ponteiro
-  escolhe a mais recente por versão da vaga e `assessed_at`; a poda usa `created_at`. Se as
-  duas ordens discordarem, o `ON DELETE RESTRICT` do ponteiro derruba o lote a cada passada.
-- Testes: `UPDATE` sempre recusado; `DELETE` recusado sem a opção; a opção não vaza entre
-  transações; ida e volta da migração; ponteiros intactos depois de podar.
-- Rodar os 12 testes em banco recém-migrado. Até aqui eles só passaram com o trigger
-  alterado à mão.
+- A migração `20261005_0064` libera só `DELETE` em `match_assessment` e `match_factor`, e só
+  em transação que ligue `matching.allow_prune`. `UPDATE` continua sempre recusado. Só o job
+  de poda liga a opção.
+- O job preserva: a avaliação mais recente por vaga e versão de perfil, toda avaliação
+  apontada por `matching.current_assessment`, toda avaliação com análise de IA ou análise em
+  andamento, e todas as avaliações de um par vaga e versão de perfil que tenha candidatura.
+- O ponteiro escolhe a mais recente por versão da vaga e `assessed_at`; a poda usa
+  `created_at`. Quando as duas ordens discordam, uma linha a mais fica guardada por vaga.
+- Padrões: desligado no worker, 7 dias de retenção, lotes de 500. O script só apaga com
+  `--apply`.
+- Não medido: plano da consulta em volume real; o job nunca rodou contra dados reais.
 
 ## Pontos abertos por card
 
@@ -129,10 +119,10 @@ Com a migração no lugar, ainda falta:
 
 ## Antes do deploy
 
-1. Resolver o F50-08: criar a migração `0064` e concluir, ou tirar o job da branch.
-2. Rodar `scripts/reclassify_content.py` em dry-run e ler `fingerprint_collisions` antes de
-   qualquer `--apply`.
-3. Aplicar as migrações `0062` e `0063`. A `0063` faz o backfill dos ponteiros.
-4. Esperar uma reavaliação completa do catálogo (taxonomia e regras mudaram).
+1. Aplicar as migrações `0062`, `0063` e `0064`. A `0063` faz o backfill dos ponteiros.
+2. Esperar uma reavaliação completa do catálogo (taxonomia e regras mudaram).
+3. Rodar `scripts/prune_assessments.py` em dry-run e ler o relatório antes de ligar a poda.
+4. Rodar `scripts/reclassify_content.py` em dry-run e ler `fingerprint_collisions` antes de
+   qualquer `--apply`. Isso só faz sentido depois de o gold passar no portão.
 5. Depois de três execuções completas por fonte, repetir as consultas do §2 da spec e
    atualizar a tabela do §1.
