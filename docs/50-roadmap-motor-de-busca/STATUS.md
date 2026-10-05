@@ -1,11 +1,13 @@
 # SPEC 50 — estado da implementação
 
 - **Atualizado em:** 2026-10-05
-- **Branch:** commits enviados para `spec-46-redesign-ui` (PR #26), sobre `75d688b`. Nada foi
-  aplicado na stack `spec46full`.
-- **Verificação:** suíte completa com integração em banco `_test` descartável, migrado até
-  `20261005_0064`: `1602 passed, 10 skipped`. `ruff check .`, `mypy` e
-  `export_prompt_schema.py --check` sem erros.
+- **Branch:** a SPEC 50 entrou em `main` pelo PR #26, mesclado em 2026-10-05 (`46ebbed`). A
+  continuação está no PR #31 (`f50-fontes-e-inhire`, base `main`); ver "PR #31" abaixo. Nada
+  foi aplicado na stack `spec46full`.
+- **Verificação:** suíte completa do backend na branch do PR #31 (`196319f`), com integração em
+  banco `_test` de um projeto Compose descartável, migrado até `20261005_0064`:
+  `1769 passed, 16 skipped`. `ruff`, `mypy` e os testes do frontend rodaram no CI do PR #31, que
+  passou nesse commit. No PR #26 a suíte tinha dado `1602 passed, 10 skipped`.
 
 ## Decisões do dono (2026-10-05)
 
@@ -117,16 +119,52 @@
 - Vagas das áreas-alvo com descrição e ao menos uma skill pela taxonomia nova: 4.279 de 5.177
   (82,7%). Isso é teto para `TECHNOLOGY_FIT` conhecido, não a taxa do fator.
 
-## Stack de teste `f50test` (2026-10-05)
+## PR #31: fontes e coletor inHire (2026-10-05)
 
-Stack local com o código da branch e uma cópia do banco da `spec46full` (25.267 vagas),
-migrada até `20261005_0064`. API em `127.0.0.1:8001`, frontend em `127.0.0.1:3001`. O arquivo
-de portas (`.claude/compose.f50test.yaml`) não é versionado.
+Branch `f50-fontes-e-inhire`, base `main`. Não muda o esquema do banco; a última migração
+continua `20261005_0064`.
 
-Ligado nela: `AI_ANALYSIS_PROMPT=v3`, `WORKER_ASSESSMENT_RETENTION_ENABLED=true`, piso de
-coleta 0,30, timeout de consulta, e as seis regras de classificação por descrição. As regras
-estão ligadas só nessa cópia, sem o portão de 90% ter passado. `fetch_detail` do Workday
-continua desligado (Q1).
+- `robots.txt` lido com o `User-Agent` do produto, em `companies/discovery.py` e em
+  `limited_discovery.py`; boards do Ashby com ponto no nome passam na validação.
+- Todo coletor envia o `User-Agent` do produto.
+- Rota `PATCH /sources/{id}/company-source`, que vincula uma fonte existente à fonte da
+  empresa do mesmo tipo e board.
+- Coletor `inhire`, com teto de 300 requisições por hora no host `api.inhire.app`.
+- Revisões de termos de Ashby, Greenhouse e Lever, e fechamento da do inHire como "viável
+  com ressalvas".
+
+Fontes criadas, lote do inHire e pendências:
+[f50-fontes-2026-10-05](../pesquisas/f50-fontes-2026-10-05.md).
+
+## Stack de desenvolvimento `opportunity-radar-dev`
+
+É a base local de trabalho: o código do checkout sobre o catálogo real, em volumes próprios.
+API em `127.0.0.1:8000`, frontend em `127.0.0.1:3000`. Todo comando leva
+`-p opportunity-radar-dev -f compose.yaml`. Operação em
+[30-runbook](../30-runbook.md), seção "Stack de desenvolvimento com a base real".
+
+- O banco foi criado em 2026-10-05 a partir de um `pg_dump` do volume
+  `opportunity-radar-recovery-a7a43`, que ficou intacto como cópia do estado anterior à
+  SPEC 50.
+- As fontes novas de 2026-10-05 entraram nessa base, pela API do produto.
+- Continuam desligados nela: as regras de classificação por descrição, a poda de avaliações e
+  o `fetch_detail` do Workday.
+- Experimentos que alteram dados vão para uma stack descartável com outro nome de projeto,
+  não para esta.
+
+## Medições na stack de teste `f50test` (2026-10-05, stack removida)
+
+A `f50test` foi removida em 2026-10-05, depois de as fontes entrarem na base de dev. Os
+números desta seção ficam como registro; não dá mais para repeti-los nela.
+
+Era uma stack local com o código da branch e uma cópia do banco da `spec46full` (25.267
+vagas), migrada até `20261005_0064`, com API em `127.0.0.1:8001` e frontend em
+`127.0.0.1:3001`.
+
+Estavam ligados nela: `AI_ANALYSIS_PROMPT=v3`, `WORKER_ASSESSMENT_RETENTION_ENABLED=true`,
+piso de coleta 0,30, timeout de consulta, e as seis regras de classificação por descrição. As
+regras foram ligadas só nessa cópia, sem o portão de 90% ter passado. O `fetch_detail` do
+Workday ficou desligado (Q1).
 
 Medido pelo endpoint HTTP, cinco chamadas cada:
 
@@ -151,8 +189,8 @@ Outros resultados:
   277 fora.
 - **Prompt `v3`:** uma análise pela API terminou `AI_COMPLETED`. As quatro listas vieram
   exatamente no limite (4, 5, 3, 4), então o corte pode estar agindo em toda resposta.
-- **Poda:** o job foi registrado mas ainda não rodou; ele segue o intervalo da retenção de
-  payloads.
+- **Poda:** o job foi registrado mas não chegou a rodar; ele segue o intervalo da retenção
+  de payloads.
 - **Cota de IA:** a cota diária já estava esgotada no banco copiado, então o worker não
   analisou nada com `v3`.
 
