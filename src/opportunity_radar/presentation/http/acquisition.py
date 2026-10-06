@@ -30,6 +30,7 @@ from opportunity_radar.acquisition.models import (
 )
 from opportunity_radar.acquisition.service import (
     AcquisitionService,
+    SourceClaimedElsewhereError,
     SourceLinkConflictError,
     SourceNotFoundError,
     SourceProbeTooSoonError,
@@ -365,6 +366,7 @@ async def execute_source(
             alerts=alerts,
             target_role_families=active_profile_target_role_families(session),
             target_area_floor=get_settings().collection_target_area_floor,
+            claims_enabled=get_settings().collection_claim_enabled,
         ).execute(source_id, request)
     except AcquisitionError as error:
         _raise_acquisition_error(error)
@@ -521,6 +523,11 @@ def _raise_acquisition_error(error: AcquisitionError) -> NoReturn:
                 "message": error.summary,
                 "field": "company_source_id",
             },
+        ) from error
+    if isinstance(error, SourceClaimedElsewhereError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": error.outcome, "message": error.summary},
         ) from error
     if isinstance(error, SourceNotFoundError):
         status_code = status.HTTP_404_NOT_FOUND

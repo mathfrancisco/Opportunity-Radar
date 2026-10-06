@@ -68,7 +68,13 @@ from opportunity_radar.acquisition.proposals import (
     follow_inert_correction,
 )
 from opportunity_radar.acquisition.remotive import RemotiveCollector
-from opportunity_radar.acquisition.repository import AcquisitionRepository
+from opportunity_radar.acquisition.repository import (
+    SOURCE_CLAIM_LEASE,
+    AcquisitionRepository,
+    FencedWriteRejected,
+    SourceClaimUnavailable,
+    SourceExecutionClaim,
+)
 from opportunity_radar.acquisition.scheduling import (
     DEFAULT_HOST_REQUESTS_CEILING,
     ConditionalRequestHeaders,
@@ -251,6 +257,124 @@ PROBE_MIN_INTERVAL_SECONDS = 60
 PROBE_MAX_ITEMS = 1
 
 
+class SourceClaimedElsewhereError(AcquisitionError):
+    """Another execution (worker, CLI or API) holds this source's unexpired claim.
+
+    Retryable and HTTP-free by construction: the claim is taken before the collector runs.
+    """
+
+    outcome = "claimed_elsewhere"
+
+    def __init__(self, source_id: UUID) -> None:
+        super().__init__(
+            AcquisitionErrorCode.INVALID_CONFIGURATION,
+            f"source is claimed by another execution: {source_id}",
+            retryable=True,
+        )
+        self.source_id = source_id
+
+
+class _ClaimScope:
+    """One execution's claim on its source: acquire, keep the lease alive, fence, release.
+
+    The renewal task and every fenced write run on the event loop's thread, and a fenced
+    write holds the claim row lock only between `fence` and the caller's commit with no
+    `await` in between, so the renewal can never wait on a lock this same thread holds.
+    """
+
+    def __init__(self, repository: AcquisitionRepository, renew_interval: float) -> None:
+        self._repository = repository
+        self._renew_interval = renew_interval
+        self.claim: SourceExecutionClaim | None = None
+        self._heartbeat: asyncio.Task[None] | None = None
+        self._lost = False
+
+    def acquire(self, source_id: UUID, run_id: UUID) -> SourceExecutionClaim:
+        try:
+            claim = self._repository.claim_source_execution(source_id=source_id, run_id=run_id)
+        except SourceClaimUnavailable as unavailable:
+            self._log("claim_contended", source_id=source_id, run_id=run_id)
+            raise SourceClaimedElsewhereError(source_id) from unavailable
+        self.claim = claim
+        self._log("claim_acquired", claim=claim)
+        if claim.recovered:
+            self._log("claim_recovered", claim=claim, recovered_run_id=claim.recovered_run_id)
+        self._heartbeat = asyncio.create_task(self._renew_loop(claim))
+        return claim
+
+    def attach(self) -> bool:
+        """Bind the committed RUNNING row to the claim; False when the lease is already lost."""
+        assert self.claim is not None
+        return self._repository.attach_source_execution_run(self.claim)
+
+    def fence(self, session: Session) -> None:
+        """Reject the write about to happen unless this execution still owns the claim."""
+        claim = self.claim
+        assert claim is not None
+        try:
+            if self._lost:
+                raise FencedWriteRejected(f"source {claim.source_id} lease was lost")
+            self._repository.assert_current_fence(
+                session,
+                source_id=claim.source_id,
+                fencing_token=claim.fencing_token,
+                owner_id=claim.owner_id,
+                task_key=claim.task_key,
+            )
+        except FencedWriteRejected:
+            session.rollback()
+            self._log("fence_rejected", claim=claim)
+            raise
+
+    async def _renew_loop(self, claim: SourceExecutionClaim) -> None:
+        while True:
+            await asyncio.sleep(self._renew_interval)
+            try:
+                renewed = self._repository.renew_source_execution_claim(claim)
+            except Exception:  # noqa: BLE001 - the next tick retries; the lease still runs
+                logger.exception("source claim renewal failed", extra={"job": "collect"})
+                continue
+            if not renewed:
+                self._lost = True
+                self._log("fence_rejected", claim=claim, reason="lease_lost")
+                return
+            self._log("lease_renewed", claim=claim)
+
+    async def stop_renewal(self) -> None:
+        heartbeat, self._heartbeat = self._heartbeat, None
+        if heartbeat is not None:
+            heartbeat.cancel()
+            await asyncio.gather(heartbeat, return_exceptions=True)
+
+    async def close(self) -> None:
+        await self.stop_renewal()
+        if self.claim is not None:
+            # Conditional on token and owner: a no-op for a lease someone else recovered.
+            self._repository.release_source_execution_claim(self.claim)
+
+    @staticmethod
+    def _log(
+        event: str,
+        *,
+        claim: SourceExecutionClaim | None = None,
+        source_id: UUID | None = None,
+        run_id: UUID | None = None,
+        **extra: object,
+    ) -> None:
+        # The fencing token is a per-source ordinal, safe to audit; the owner id is not logged.
+        logger.info(
+            f"source claim {event}",
+            extra={
+                "job": "collect",
+                "event": event,
+                "source_id": str(claim.source_id if claim is not None else source_id),
+                "run_id": str(claim.run_id if claim is not None else run_id),
+                "fencing_token": claim.fencing_token if claim is not None else None,
+                **{key: str(value) for key, value in extra.items()},
+            },
+        )
+
+
 class SourceDisabledError(AcquisitionError):
     def __init__(self, source_id: UUID) -> None:
         super().__init__(
@@ -285,6 +409,8 @@ class AcquisitionService:
         host_request_ceilings: Mapping[str, int] | None = None,
         target_role_families: Callable[[], tuple[str, ...]] | None = None,
         target_area_floor: float = 0.0,
+        claims_enabled: bool = False,
+        claim_renew_interval_seconds: float | None = None,
     ) -> None:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
@@ -316,6 +442,14 @@ class AcquisitionService:
         # items. No callable or a zero floor leaves the filter off.
         self._target_role_families = target_role_families
         self._target_area_floor = target_area_floor
+        # F51-07: off keeps the unclaimed behaviour (the active-run unique index stays the
+        # only single-flight); on needs a repository that can claim, i.e. a real database.
+        self._claims_enabled = claims_enabled
+        self._claim_renew_interval = (
+            claim_renew_interval_seconds
+            if claim_renew_interval_seconds is not None
+            else SOURCE_CLAIM_LEASE.total_seconds() / 3
+        )
 
     def create_source(
         self,
@@ -1113,6 +1247,29 @@ class AcquisitionService:
         *,
         deadline_seconds: float | None = None,
     ) -> SourceRunModel:
+        scope = (
+            _ClaimScope(self.repository, self._claim_renew_interval)
+            if self._claims_enabled
+            else None
+        )
+        try:
+            return await self._execute(
+                source_id, request, deadline_seconds=deadline_seconds, scope=scope
+            )
+        finally:
+            # After the run's terminal commit, or after F51-06 awaited a live transport's
+            # cleanup: ownership is never released while work for the source is alive.
+            if scope is not None:
+                await scope.close()
+
+    async def _execute(
+        self,
+        source_id: UUID,
+        request: CollectionRequest,
+        *,
+        deadline_seconds: float | None,
+        scope: _ClaimScope | None,
+    ) -> SourceRunModel:
         deadline_at = (
             asyncio.get_running_loop().time() + deadline_seconds
             if deadline_seconds is not None
@@ -1194,6 +1351,9 @@ class AcquisitionService:
         run.start()
         if targets:
             run.record_target_area()
+        # Before the run row and before any HTTP: a contended source costs no request, and
+        # taking over an expired lease closes the abandoned run that would block this one.
+        claim = scope.acquire(source.id, run.id) if scope is not None else None
         persisted_run = SourceRunModel(
             id=run.id,
             source_definition_id=source.id,
@@ -1203,6 +1363,7 @@ class AcquisitionService:
             checkpoint_before=checkpoint_before,
             correlation_id=request.correlation_id,
             resumed_from_run_id=request.resume_of_run_id,
+            fencing_token=claim.fencing_token if claim is not None else None,
         )
         self.session.add(persisted_run)
         try:
@@ -1218,6 +1379,16 @@ class AcquisitionService:
                 "source already has an active run",
                 retryable=True,
             ) from conflict
+        if scope is not None and not scope.attach():
+            # The lease lapsed between claim and attach, so nobody knows this RUNNING row:
+            # end it here or it would block the next run through the active-run index.
+            persisted_run.status = SourceRunStatus.PARTIAL.value
+            persisted_run.finished_at = datetime.now(UTC)
+            persisted_run.complete = False
+            persisted_run.error_code = "FENCE_REJECTED"
+            persisted_run.error_summary = "execution lease lost before the run was attached"
+            self.session.commit()
+            raise FencedWriteRejected(f"source {source.id} lease was lost before the run started")
 
         logger.info(
             "source collection run started",
@@ -1426,6 +1597,8 @@ class AcquisitionService:
                                         target=0 if off_target else 1,
                                         off_target=1 if off_target else 0,
                                     )
+                            if scope is not None:
+                                scope.fence(self.session)
                             try:
                                 created = self._persist_item(
                                     source.id,
@@ -1443,6 +1616,11 @@ class AcquisitionService:
                                     retryable=False,
                                 )
                                 continue
+                            finally:
+                                # One mutation unit per item: evidence, occurrence and
+                                # presence commit together and release the claim row lock.
+                                if scope is not None:
+                                    self.session.commit()
                             if created:
                                 run.record_items(persisted=1)
                             else:
@@ -1509,6 +1687,10 @@ class AcquisitionService:
                         AcquisitionErrorCode.INVALID_CONFIGURATION,
                         f"hacker news source proposal failed: {proposal_error}",
                     )
+        except FencedWriteRejected:
+            # This execution lost its lease: nothing more of it may be written. The
+            # recovering execution already closed this run as PARTIAL/FENCE_REJECTED.
+            raise
         except TimeoutError:
             error = AcquisitionError(
                 AcquisitionErrorCode.SOURCE_TIMEOUT,
@@ -1530,6 +1712,11 @@ class AcquisitionService:
             if extraction_client is not None:
                 await extraction_client.aclose()
 
+        if scope is not None:
+            # No await from the fence to the terminal commit below: the claim row lock this
+            # takes is released by that commit, and the renewal task must not run meanwhile.
+            await scope.stop_renewal()
+            scope.fence(self.session)
         if run_telemetry.skipped_items:
             run.record_items(
                 seen=run_telemetry.skipped_items, skipped=run_telemetry.skipped_items
