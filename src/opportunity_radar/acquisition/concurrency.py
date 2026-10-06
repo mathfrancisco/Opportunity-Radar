@@ -84,6 +84,12 @@ def source_host_key(source_type: str, configuration: dict[str, Any] | None) -> s
         return f"jobposting:{host or page_url}"
     tenant_keys = _TENANT_CONFIG_KEYS.get(source_type)
     if tenant_keys:
+        if source_type == "workday":
+            tenant_site = str(config.get("tenant_identifier") or "")
+            tenant = tenant_site.split("/", 1)[0]
+            pod = str(config.get("api_region") or "")
+            if tenant and pod:
+                return f"{tenant}.{pod}.myworkdayjobs.com"
         tenant = ":".join(str(config.get(key) or "") for key in tenant_keys)
         return f"{source_type}:{tenant}"
     return source_type

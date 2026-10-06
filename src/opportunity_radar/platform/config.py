@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     collection_target_area_floor: float = 0.30
     collection_backoff_base_seconds: int = 300
     collection_backoff_ceiling_seconds: int = 86400
+    # F51-06 deadlines are opt-in until a deployment has observed its source durations.
+    collection_source_deadline_seconds: int = Field(default=0, ge=0)
+    collection_pass_deadline_seconds: int = Field(default=0, ge=0)
     greenhouse_base_url: str = "https://boards-api.greenhouse.io"
     # An empty webhook is a supported deployment: incidents are still opened and closed,
     # and the absent channel is reported by the doctor instead of failing collection.

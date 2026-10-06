@@ -1,10 +1,13 @@
 """Persistence queries for Acquisition."""
 
-from datetime import datetime
-from typing import Any
-from uuid import UUID
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import Any, cast
+from uuid import UUID, uuid4
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -14,6 +17,7 @@ from opportunity_radar.acquisition.models import (
     RawItemPayloadModel,
     SourceCheckpointModel,
     SourceDefinitionModel,
+    SourceExecutionClaimModel,
     SourceRunModel,
 )
 from opportunity_radar.acquisition.scheduling import (
@@ -27,11 +31,181 @@ from opportunity_radar.opportunities.models import (
 )
 
 _UNFINISHED_RUN_STATUSES = ("PENDING", "RUNNING")
+SOURCE_CLAIM_LEASE = timedelta(minutes=3)
+
+
+class SourceClaimUnavailable(RuntimeError):
+    """Another unexpired execution currently owns this source."""
+
+
+class FencedWriteRejected(RuntimeError):
+    """This execution's fencing generation is no longer current."""
+
+
+@dataclass(frozen=True, slots=True)
+class SourceExecutionClaim:
+    source_id: UUID
+    run_id: UUID
+    owner_id: UUID
+    fencing_token: int
+    task_key: str = "collect"
 
 
 class AcquisitionRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
+
+    def claim_source_execution(
+        self,
+        *,
+        source_id: UUID,
+        run_id: UUID,
+        task_key: str = "collect",
+        now: datetime | None = None,
+    ) -> SourceExecutionClaim:
+        """Acquire/steal an expired source lease in a short committed transaction."""
+        now = now or datetime.now(UTC)
+        owner_id = uuid4()
+        bind = self.session.get_bind()
+        with Session(bind=bind) as claim_session, claim_session.begin():
+            claim_session.execute(
+                pg_insert(SourceExecutionClaimModel)
+                .values(
+                    source_definition_id=source_id,
+                    task_key=task_key,
+                    fencing_token=0,
+                    owner_id=None,
+                    lease_expires_at=None,
+                )
+                .on_conflict_do_nothing(
+                    index_elements=[
+                        SourceExecutionClaimModel.source_definition_id,
+                        SourceExecutionClaimModel.task_key,
+                    ]
+                )
+            )
+            claim = claim_session.scalar(
+                select(SourceExecutionClaimModel)
+                .where(
+                    SourceExecutionClaimModel.source_definition_id == source_id,
+                    SourceExecutionClaimModel.task_key == task_key,
+                )
+                .with_for_update()
+            )
+            if claim is None:  # pragma: no cover - the insert/select share a transaction
+                raise RuntimeError("source execution claim row disappeared")
+            if claim.owner_id is not None and claim.lease_expires_at is not None:
+                expires_at = claim.lease_expires_at
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=UTC)
+                if expires_at > now:
+                    raise SourceClaimUnavailable(f"source {source_id} is already claimed")
+            previous_run_id = claim.run_id
+            if previous_run_id is not None:
+                old_run = claim_session.get(SourceRunModel, previous_run_id)
+                if old_run is not None and old_run.status in _UNFINISHED_RUN_STATUSES:
+                    old_run.status = "PARTIAL"
+                    old_run.finished_at = now
+                    old_run.complete = False
+                    old_run.error_code = "FENCE_REJECTED"
+                    old_run.error_summary = "execution lease expired and was recovered"
+            claim.fencing_token += 1
+            claim.owner_id = owner_id
+            claim.lease_expires_at = now + SOURCE_CLAIM_LEASE
+            # The run is inserted only after this independent lease transaction commits.
+            # Keeping this FK null here avoids a second session seeing an uncommitted run.
+            claim.run_id = None
+            claim.updated_at = now
+            token = claim.fencing_token
+        return SourceExecutionClaim(source_id, run_id, owner_id, token, task_key)
+
+    def attach_source_execution_run(self, claim: SourceExecutionClaim) -> bool:
+        """Bind a committed RUNNING row to its already-acquired lease."""
+        with Session(bind=self.session.get_bind()) as claim_session, claim_session.begin():
+            result = claim_session.execute(
+                update(SourceExecutionClaimModel)
+                .where(
+                    SourceExecutionClaimModel.source_definition_id == claim.source_id,
+                    SourceExecutionClaimModel.task_key == claim.task_key,
+                    SourceExecutionClaimModel.fencing_token == claim.fencing_token,
+                    SourceExecutionClaimModel.owner_id == claim.owner_id,
+                    SourceExecutionClaimModel.lease_expires_at > datetime.now(UTC),
+                )
+                .values(run_id=claim.run_id, updated_at=datetime.now(UTC))
+            )
+            return cast(CursorResult[Any], result).rowcount == 1
+
+    def renew_source_execution_claim(
+        self, claim: SourceExecutionClaim, *, now: datetime | None = None
+    ) -> bool:
+        now = now or datetime.now(UTC)
+        with Session(bind=self.session.get_bind()) as claim_session, claim_session.begin():
+            row = claim_session.scalar(
+                select(SourceExecutionClaimModel)
+                .where(
+                    SourceExecutionClaimModel.source_definition_id == claim.source_id,
+                    SourceExecutionClaimModel.task_key == claim.task_key,
+                )
+                .with_for_update()
+            )
+            if (
+                row is None
+                or row.fencing_token != claim.fencing_token
+                or row.owner_id != claim.owner_id
+                or row.lease_expires_at is None
+                or row.lease_expires_at <= now
+            ):
+                return False
+            row.lease_expires_at = now + SOURCE_CLAIM_LEASE
+            row.updated_at = now
+            return True
+
+    def release_source_execution_claim(self, claim: SourceExecutionClaim) -> bool:
+        with Session(bind=self.session.get_bind()) as claim_session, claim_session.begin():
+            result = claim_session.execute(
+                update(SourceExecutionClaimModel)
+                .where(
+                    SourceExecutionClaimModel.source_definition_id == claim.source_id,
+                    SourceExecutionClaimModel.task_key == claim.task_key,
+                    SourceExecutionClaimModel.fencing_token == claim.fencing_token,
+                    SourceExecutionClaimModel.owner_id == claim.owner_id,
+                )
+                .values(owner_id=None, lease_expires_at=None, updated_at=datetime.now(UTC))
+            )
+            return cast(CursorResult[Any], result).rowcount == 1
+
+    @staticmethod
+    def assert_current_fence(
+        session: Session,
+        *,
+        source_id: UUID,
+        fencing_token: int,
+        owner_id: UUID,
+        task_key: str = "collect",
+    ) -> None:
+        """Lock the claim only until the caller commits its one mutation unit."""
+        claim = session.scalar(
+            select(SourceExecutionClaimModel)
+            .where(
+                SourceExecutionClaimModel.source_definition_id == source_id,
+                SourceExecutionClaimModel.task_key == task_key,
+            )
+            .with_for_update()
+        )
+        now = datetime.now(UTC)
+        expires_at = claim.lease_expires_at if claim is not None else None
+        if expires_at is not None and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        if (
+            claim is None
+            or claim.fencing_token != fencing_token
+            or claim.owner_id != owner_id
+            or expires_at is None
+            or expires_at <= now
+        ):
+            raise FencedWriteRejected(
+                f"source {source_id} fencing token {fencing_token} is no longer current"
+            )
 
     def get_source(self, source_id: UUID) -> SourceDefinitionModel | None:
         return self.session.scalar(
@@ -358,6 +532,90 @@ class AcquisitionRepository:
             row.window_start = now
             row.requests_used = 0
         row.requests_used += requests
-        if cooldown_until is not None:
+        if cooldown_until is not None and (
+            row.cooldown_until is None or row.cooldown_until < cooldown_until
+        ):
             row.cooldown_until = cooldown_until
         self.session.flush()
+
+    def reserve_host_request(
+        self,
+        host: str,
+        *,
+        now: datetime,
+        default_ceiling: int,
+        run_id: UUID,
+        detail: bool = False,
+    ) -> str | None:
+        """Atomically consume one unit and commit it before its HTTP transport starts."""
+        if default_ceiling <= 0:
+            return "quota"
+        model = HostBudgetStateModel
+        rollover = model.window_start <= now - DEFAULT_HOST_BUDGET_WINDOW
+        statement = pg_insert(model).values(
+            host=host,
+            window_start=now,
+            requests_used=1,
+            requests_ceiling=default_ceiling,
+            exploration_reserve_ratio=0.10,
+        ).on_conflict_do_update(
+            index_elements=[model.host],
+            set_={
+                "window_start": case((rollover, now), else_=model.window_start),
+                "requests_used": case((rollover, 1), else_=model.requests_used + 1),
+                "updated_at": now,
+            },
+            where=(
+                (model.cooldown_until.is_(None) | (model.cooldown_until <= now))
+                & case(
+                    (rollover, model.requests_ceiling > 0),
+                    else_=(model.requests_used < model.requests_ceiling),
+                )
+            ),
+        ).returning(model.host)
+        accepted = self.session.execute(statement).scalar_one_or_none()
+        if accepted is None:
+            current = self.session.get(model, host)
+            if (
+                current is not None
+                and current.cooldown_until is not None
+                and current.cooldown_until > now
+            ):
+                return "cooldown"
+            return "quota"
+        counters = {"http_requests": SourceRunModel.http_requests + 1}
+        if detail:
+            counters["detail_requests"] = func.coalesce(SourceRunModel.detail_requests, 0) + 1
+        self.session.execute(
+            update(SourceRunModel).where(SourceRunModel.id == run_id).values(**counters)
+        )
+        self.session.commit()
+        return None
+
+    def persist_host_cooldown(self, host: str, until: datetime) -> None:
+        """Extend, never shorten, the host cooldown from a provider response."""
+        self.session.execute(
+            update(HostBudgetStateModel)
+            .where(HostBudgetStateModel.host == host)
+            .values(
+                cooldown_until=case(
+                    (HostBudgetStateModel.cooldown_until.is_(None), until),
+                    (HostBudgetStateModel.cooldown_until < until, until),
+                    else_=HostBudgetStateModel.cooldown_until,
+                ),
+                updated_at=func.now(),
+            )
+        )
+        self.session.commit()
+
+    def persist_detail_counters(self, run_id: UUID, telemetry: Any) -> None:
+        self.session.execute(
+            update(SourceRunModel)
+            .where(SourceRunModel.id == run_id)
+            .values(
+                detail_failures=telemetry.detail_failures,
+                detail_skipped=telemetry.detail_skipped,
+                detail_skip_reasons=telemetry.detail_skip_reasons,
+            )
+        )
+        self.session.commit()

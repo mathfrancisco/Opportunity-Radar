@@ -764,6 +764,7 @@ class SemanticAnalysisPort(Protocol):
         *,
         prepared: PreparedAnalysis | None = None,
         use_cache: bool = True,
+        quota_ceiling_requests: int | None = None,
     ) -> AnalysisOutcome:
         ...
 
@@ -823,8 +824,9 @@ class NullAnalysisAdapter:
         *,
         prepared: PreparedAnalysis | None = None,
         use_cache: bool = True,
+        quota_ceiling_requests: int | None = None,
     ) -> AnalysisOutcome:
-        del request, prepared, use_cache
+        del request, prepared, use_cache, quota_ceiling_requests
         return AnalysisOutcome(
             status=AnalysisStatus.AI_SKIPPED,
             detail="semantic analysis is disabled",

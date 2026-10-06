@@ -4,6 +4,7 @@ client in the project -- no provider SDK.
 
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from collections.abc import Callable
@@ -77,25 +78,67 @@ class GroqProvider:
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
         started = self._clock()
+        transport_started = False
         try:
             async with self._client_factory() as client:
+                headers = self._headers()
+                body = self._body(request)
+
+                async def mark_transport_started(_request: httpx.Request) -> None:
+                    nonlocal transport_started
+                    if request.on_transport_start is not None:
+                        await request.on_transport_start()
+                    transport_started = True
+
+                # The request hook runs after request construction and client-open
+                # checks, immediately before HTTPX hands it to the transport.
+                client.event_hooks.setdefault("request", []).append(mark_transport_started)
                 response = await client.post(
                     f"{self._base_url}{_CHAT_COMPLETIONS_PATH}",
-                    headers=self._headers(),
-                    json=self._body(request),
+                    headers=headers,
+                    json=body,
                 )
         except httpx.TimeoutException as error:
             raise ProviderError(
-                ErrorKind.TRANSIENT, "groq request timed out", model=request.model
+                ErrorKind.TRANSIENT, "groq request timed out", model=request.model,
+                latency_ms=round((self._clock() - started) * 1000),
+                transport_started=transport_started,
             ) from error
         except httpx.TransportError as error:
             raise ProviderError(
-                ErrorKind.TRANSIENT, "could not connect to groq", model=request.model
+                ErrorKind.TRANSIENT, "could not connect to groq", model=request.model,
+                latency_ms=round((self._clock() - started) * 1000),
+                transport_started=transport_started,
             ) from error
+        except asyncio.CancelledError as error:
+            error.transport_started = transport_started  # type: ignore[attr-defined]
+            error.latency_ms = round((self._clock() - started) * 1000)  # type: ignore[attr-defined]
+            raise
         latency_ms = round((self._clock() - started) * 1000)
         rate_limit = self._rate_limit(response.headers)
-        self._raise_for_status(response, rate_limit=rate_limit, model=request.model)
-        return self._response(response, rate_limit=rate_limit, latency_ms=latency_ms)
+        self._raise_for_status(
+            response, rate_limit=rate_limit, model=request.model,
+            latency_ms=latency_ms, transport_started=transport_started,
+        )
+        try:
+            return self._response(response, rate_limit=rate_limit, latency_ms=latency_ms)
+        except ProviderError as error:
+            error.transport_started = transport_started
+            error.latency_ms = latency_ms
+            error.status = response.status_code
+            raise
+        except (ValueError, TypeError, AttributeError, IndexError) as error:
+            usage = _error_usage(response)
+            raise ProviderError(
+                ErrorKind.INVALID_OUTPUT,
+                "groq response body was malformed",
+                model=request.model,
+                status=response.status_code,
+                latency_ms=latency_ms,
+                transport_started=transport_started,
+                **usage,
+                rate_limit=rate_limit,
+            ) from error
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -143,17 +186,28 @@ class GroqProvider:
         )
 
     def _raise_for_status(
-        self, response: httpx.Response, *, rate_limit: RateLimit, model: str
+        self, response: httpx.Response, *, rate_limit: RateLimit, model: str,
+        latency_ms: int, transport_started: bool,
     ) -> None:
         status = response.status_code
         if 200 <= status < 300:
             return
         summary = self._summary(status, response)
+        usage_payload = _error_usage(response)
+        common = {
+            "latency_ms": latency_ms,
+            "transport_started": transport_started,
+            "rate_limit": rate_limit,
+        }
         if status in (400, 413, 422):
-            raise ProviderError(ErrorKind.REQUEST, summary, status=status, model=model)
+            raise ProviderError(
+                ErrorKind.REQUEST, summary, status=status, model=model,
+                **usage_payload, **common,
+            )
         if status in (401, 403, 404):
             raise ProviderError(
-                ErrorKind.CONFIGURATION, summary, status=status, model=model
+                ErrorKind.CONFIGURATION, summary, status=status, model=model,
+                **usage_payload, **common,
             )
         if status == 429:
             raise ProviderError(
@@ -162,9 +216,13 @@ class GroqProvider:
                 status=status,
                 retry_after_seconds=_float_header(response.headers.get("retry-after")),
                 model=model,
+                **usage_payload, **common,
             )
         # 5xx and anything else unclassified are treated as transient.
-        raise ProviderError(ErrorKind.TRANSIENT, summary, status=status, model=model)
+        raise ProviderError(
+            ErrorKind.TRANSIENT, summary, status=status, model=model,
+            **usage_payload, **common,
+        )
 
     def _summary(self, status: int, response: httpx.Response) -> str:
         body = response.text[:_SUMMARY_BODY_CHARS].replace(self._api_key, "<redacted>")
@@ -205,6 +263,22 @@ def _int_header(value: str | None) -> int | None:
         return int(value) if value is not None else None
     except ValueError:
         return None
+
+
+def _error_usage(response: httpx.Response) -> dict[str, int | None]:
+    """Retain only numeric token usage reported on an HTTP error response."""
+    try:
+        payload = response.json()
+        usage = payload.get("usage") if isinstance(payload, dict) else None
+    except (ValueError, TypeError):
+        usage = None
+    if not isinstance(usage, dict):
+        usage = {}
+    values = {}
+    for name in ("prompt_tokens", "completion_tokens"):
+        value = usage.get(name)
+        values[name] = value if isinstance(value, int) and not isinstance(value, bool) else None
+    return values
 
 
 def _float_header(value: str | None) -> float | None:

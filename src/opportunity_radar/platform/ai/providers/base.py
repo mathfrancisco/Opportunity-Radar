@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Awaitable, Callable, Protocol
 
 
 @dataclass(frozen=True)
@@ -46,6 +46,7 @@ class LLMRequest:
     temperature: float | None = None
     seed: int | None = None
     reasoning_effort: str | None = None
+    on_transport_start: Callable[[], Awaitable[None]] | None = None
 
 
 @dataclass(frozen=True)

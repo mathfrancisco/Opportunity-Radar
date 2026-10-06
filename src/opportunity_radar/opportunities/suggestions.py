@@ -22,10 +22,12 @@ Everything here is defensive rather than authoritative:
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -41,21 +43,32 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    and_,
+    exists,
     func,
     or_,
     select,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from opportunity_radar.opportunities.domain import RoleFamily, Seniority, WorkMode
 from opportunity_radar.opportunities.models import SCHEMA, OpportunityModel
 from opportunity_radar.opportunities.role_family import ROLE_FAMILY_VERSION
 from opportunity_radar.platform.ai.budget import fits
-from opportunity_radar.platform.ai.errors import ProviderError
-from opportunity_radar.platform.ai.router import AIRouter
+from opportunity_radar.platform.ai.errors import ErrorKind, ProviderError
+from opportunity_radar.platform.ai.providers.base import LLMResponse
+from opportunity_radar.platform.ai.router import AIRouter, Attempt
 from opportunity_radar.platform.ai.sanitizer import sanitize_for_llm
-from opportunity_radar.platform.ai.tasks import AITask
+from opportunity_radar.platform.ai.tasks import AITask, ModelRoute
+from opportunity_radar.platform.ai.telemetry import (
+    finish_operation,
+    record_calls,
+    records_from_attempts,
+    record_attempt_started,
+    start_operation,
+)
 from opportunity_radar.platform.database import Base
 from opportunity_radar.platform.logging import get_logger
 
@@ -139,6 +152,31 @@ class OpportunitySuggestionModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class SuggestionDeferModel(Base):
+    """Retry schedule scoped to sanitized content, prompt, and model route."""
+
+    __tablename__ = "ai_suggestion_defer"
+    __table_args__ = (
+        Index("ix_ai_suggestion_defer_next_attempt", "next_attempt_at"),
+        {"schema": "platform"},
+    )
+
+    opportunity_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.opportunity.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    content_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    prompt_version: Mapped[str] = mapped_column(String(32), primary_key=True)
+    route_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    reason: Mapped[str] = mapped_column(String(32), nullable=False)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class SuggestionNotFoundError(LookupError):
     pass
 
@@ -208,32 +246,105 @@ def existing_suggestion_fields(session: Session, opportunity: OpportunityModel) 
 
 
 def candidates_needing_suggestion(
-    session: Session, *, limit: int, over_fetch_factor: int = 5
+    session: Session,
+    *,
+    limit: int,
+    over_fetch_factor: int = 5,
+    after: tuple[datetime, UUID] | None = None,
+    prompt_version: str | None = None,
+    route_hash: str | None = None,
+    prompt: ClassificationPrompt | None = None,
+    route: ModelRoute | None = None,
+    now: datetime | None = None,
 ) -> list[OpportunityModel]:
-    """Opportunities with at least one `UNKNOWN` field lacking a suggestion for the
-    current version, up to `limit`. Over-fetches from the database because whether a
-    row still needs a call depends on suggestion rows already keyed by its version,
-    which the query itself does not filter by (three different columns, one row)."""
-    rows = session.scalars(
-        select(OpportunityModel)
-        .where(
-            or_(
-                OpportunityModel.role_family == RoleFamily.UNKNOWN.value,
-                OpportunityModel.seniority == Seniority.UNKNOWN.value,
-                OpportunityModel.work_mode == WorkMode.UNKNOWN.value,
+    """Return pending rows in stable `(created_at, id)` order.
+
+    Eligibility stays in SQL so resolved rows cannot consume the page before newer
+    candidates. `after` is the last row from the prior page for keyset pagination.
+    `over_fetch_factor` remains accepted for callers using the previous signature.
+    """
+    del over_fetch_factor
+    pending_fields = (
+        and_(
+            OpportunityModel.role_family == RoleFamily.UNKNOWN.value,
+            ~exists().where(
+                OpportunitySuggestionModel.opportunity_id == OpportunityModel.id,
+                OpportunitySuggestionModel.opportunity_version == OpportunityModel.version,
+                OpportunitySuggestionModel.field == SuggestibleField.ROLE_FAMILY.value,
+            ),
+        ),
+        and_(
+            OpportunityModel.seniority == Seniority.UNKNOWN.value,
+            ~exists().where(
+                OpportunitySuggestionModel.opportunity_id == OpportunityModel.id,
+                OpportunitySuggestionModel.opportunity_version == OpportunityModel.version,
+                OpportunitySuggestionModel.field == SuggestibleField.SENIORITY.value,
+            ),
+        ),
+        and_(
+            OpportunityModel.work_mode == WorkMode.UNKNOWN.value,
+            ~exists().where(
+                OpportunitySuggestionModel.opportunity_id == OpportunityModel.id,
+                OpportunitySuggestionModel.opportunity_version == OpportunityModel.version,
+                OpportunitySuggestionModel.field == SuggestibleField.WORK_MODE.value,
+            ),
+        ),
+    )
+    query = select(OpportunityModel).where(or_(*pending_fields))
+    rows: list[OpportunityModel] = []
+    cursor = after
+    page_size = max(limit, 100)
+    moment = now or datetime.now(UTC)
+    while len(rows) < limit:
+        page_query = query
+        if cursor is not None:
+            created_at, opportunity_id = cursor
+            page_query = page_query.where(
+                or_(
+                    OpportunityModel.created_at > created_at,
+                    and_(OpportunityModel.created_at == created_at,
+                         OpportunityModel.id > opportunity_id),
+                )
             )
-        )
-        .order_by(OpportunityModel.created_at)
-        .limit(limit * over_fetch_factor)
-    ).all()
-    selected: list[OpportunityModel] = []
-    for opportunity in rows:
-        pending = {field.value for field in unknown_fields(opportunity)}
-        if pending - existing_suggestion_fields(session, opportunity):
-            selected.append(opportunity)
-        if len(selected) >= limit:
+        page = list(session.scalars(
+            page_query.order_by(OpportunityModel.created_at, OpportunityModel.id)
+            .limit(page_size)
+        ).all())
+        if not page:
             break
-    return selected
+        cursor = (page[-1].created_at, page[-1].id)
+        ids = [item.id for item in page]
+        defers = session.scalars(
+            select(SuggestionDeferModel).where(
+                SuggestionDeferModel.opportunity_id.in_(ids),
+                SuggestionDeferModel.next_attempt_at > moment,
+                *([SuggestionDeferModel.prompt_version == prompt_version]
+                  if prompt_version is not None else []),
+                *([SuggestionDeferModel.route_hash == route_hash]
+                  if route_hash is not None else []),
+            )
+        ).all()
+        deferred_keys = {(item.opportunity_id, item.content_hash) for item in defers}
+        for item in page:
+            fields = [field for field in unknown_fields(item)
+                      if field.value not in existing_suggestion_fields(session, item)]
+            sanitized = sanitize_for_llm({
+                "title": item.canonical_title or "", "description": item.description or ""
+            })
+            title = str(sanitized.get("title") or "")
+            description = str(sanitized.get("description") or "")
+            if prompt is not None and route is not None:
+                title, description, _ = _fit_submission(
+                    prompt, route, fields, title, description
+                )
+            digest = _suggestion_content_hash(title, description, fields)
+            if (item.id, digest) not in deferred_keys:
+                rows.append(item)
+                if len(rows) == limit:
+                    break
+        if len(page) < page_size:
+            break
+    return rows
 
 
 def _render_user_content(
@@ -256,11 +367,38 @@ def _render_user_content(
     return rendered
 
 
+def _fit_submission(
+    prompt: ClassificationPrompt,
+    route: ModelRoute,
+    pending: Sequence[SuggestibleField],
+    title: str,
+    description: str,
+) -> tuple[str, str, str | None]:
+    """Return the exact sanitized/truncated description represented in the request."""
+    while description and not fits(
+        prompt.system,
+        _render_user_content(
+            prompt, pending_fields=pending, title=title, description=description
+        ),
+        route.budget,
+    ):
+        description = description[:max(0, len(description) - 200)]
+    user_content = _render_user_content(
+        prompt, pending_fields=pending, title=title, description=description
+    )
+    if not fits(prompt.system, user_content, route.budget):
+        return title, description, None
+    return title, description, user_content
+
+
 @dataclass(frozen=True, slots=True)
 class SuggestionOutcome:
     created: tuple[OpportunitySuggestionModel, ...] = ()
     discarded_fields: tuple[str, ...] = ()  # value/evidence rejected (no literal match)
     called: bool = False
+    state: str = "not_needed"
+    error_kind: str | None = None
+    next_attempt_at: datetime | None = None
 
 
 async def suggest_fields(
@@ -269,42 +407,93 @@ async def suggest_fields(
     opportunity: OpportunityModel,
     *,
     prompt: ClassificationPrompt | None = None,
+    quota_ceiling_requests: int | None = None,
+    ai_enabled: bool = True,
 ) -> SuggestionOutcome:
     """Ask the `job_classification` task for the fields still `UNKNOWN`, and persist
     what survives the evidence check. Never raises for a provider failure: the caller
     (the worker job) must keep going through its batch."""
+    operation_id = uuid4()
+    bind = session.get_bind()
+    engine = bind.engine if isinstance(bind, Connection) else bind
+    try:
+        prompt = prompt or load_classification_prompt()
+    except Exception:
+        _start_suggestion_operation(engine, operation_id, None)
+        _finish_suggestion_operation(engine, operation_id, "internal_error", "prompt_error")
+        raise
+    _start_suggestion_operation(engine, operation_id, prompt.version)
+    if not ai_enabled:
+        _finish_suggestion_operation(engine, operation_id, "preflight", "ai_disabled")
+        return SuggestionOutcome(state="preflight", error_kind="ai_disabled")
+
     pending = [
         field
         for field in unknown_fields(opportunity)
         if field.value not in existing_suggestion_fields(session, opportunity)
     ]
     if not pending:
-        return SuggestionOutcome()
+        _finish_suggestion_operation(engine, operation_id, "preflight", "no_pending_fields")
+        return SuggestionOutcome(state="preflight")
 
-    prompt = prompt or load_classification_prompt()
     sanitized = sanitize_for_llm(
         {"title": opportunity.canonical_title or "", "description": opportunity.description or ""}
     )
     title = str(sanitized.get("title") or "")
     description = str(sanitized.get("description") or "")
-    submitted_text = f"{title}\n{description}"
+    if not title.strip() or not description.strip():
+        _finish_suggestion_operation(engine, operation_id, "preflight", "insufficient_content")
+        return SuggestionOutcome(state="preflight", error_kind="insufficient_content")
 
-    route = router.route(AITask.JOB_CLASSIFICATION)
-    while description and not fits(prompt.system, _render_user_content(
-        prompt, pending_fields=pending, title=title, description=description
-    ), route.budget):
-        description = description[: max(0, len(description) - 200)]
-    submitted_text = f"{title}\n{description}"
-    user_content = _render_user_content(
-        prompt, pending_fields=pending, title=title, description=description
+    try:
+        route = router.route(AITask.JOB_CLASSIFICATION)
+    except Exception:
+        _finish_suggestion_operation(engine, operation_id, "internal_error", "route_error")
+        raise
+    title, description, user_content = _fit_submission(
+        prompt, route, pending, title, description
     )
-    if not fits(prompt.system, user_content, route.budget):
+    if user_content is None:
         logger.info(
             "job_classification prompt does not fit the task budget even without a "
             "description; skipping",
             extra={"opportunity_id": str(opportunity.id)},
         )
-        return SuggestionOutcome()
+        _finish_suggestion_operation(engine, operation_id, "preflight", "context_overflow")
+        return SuggestionOutcome(state="preflight", error_kind="context_overflow")
+
+    submitted_text = f"{title}\n{description}"
+    content_hash = _suggestion_content_hash(title, description, pending)
+    route_hash = hashlib.sha256("\0".join(route.chain).encode()).hexdigest()
+    now = datetime.now(UTC)
+    deferred = session.get(SuggestionDeferModel, (
+        opportunity.id, content_hash, prompt.version, route_hash,
+    ))
+    if deferred is not None and deferred.next_attempt_at > now:
+        _finish_suggestion_operation(engine, operation_id, "deferred", deferred.reason)
+        return SuggestionOutcome(
+            state="deferred", error_kind=deferred.reason,
+            next_attempt_at=deferred.next_attempt_at,
+        )
+
+    async def on_attempt_started(
+        op_id: UUID, ordinal: int, model: str, attempt: int
+    ) -> None:
+        try:
+            await asyncio.to_thread(
+                record_attempt_started,
+                engine,
+                operation_id=op_id,
+                operation_ordinal=ordinal,
+                task=AITask.JOB_CLASSIFICATION.value,
+                provider="groq",
+                model=model,
+                attempt=attempt,
+                prompt_version=prompt.version,
+                fallback_used=model != route.chain[0],
+            )
+        except Exception:  # telemetry must never prevent the provider request
+            logger.warning("AI suggestion attempt telemetry start failed", exc_info=True)
 
     try:
         result = await router.run(
@@ -314,22 +503,72 @@ async def suggest_fields(
             schema_name=prompt.schema_version.replace("-", "_"),
             json_schema=prompt.output_schema,
             temperature=0,
+            operation_id=operation_id,
+            quota_ceiling_requests=quota_ceiling_requests,
+            on_attempt_started=on_attempt_started,
         )
     except ProviderError as error:
         logger.warning(
             "job_classification call failed",
-            extra={"opportunity_id": str(opportunity.id), "error": error.summary},
+            extra={"opportunity_id": str(opportunity.id), "error_kind": error.kind.value},
         )
-        return SuggestionOutcome()
+        _record_suggestion_operation(
+            engine, operation_id, attempts=error.attempts, state=(
+                "provider_error" if error.attempts else (
+                    "deferred" if error.quota_exhausted else "preflight"
+                )
+            ), error_kind=error.kind.value, prompt_version=prompt.version,
+            fallback_used=any(
+                attempt.model != route.chain[0] for attempt in error.attempts
+            ),
+        )
+        retry_after = error.retry_after_seconds or min(
+            6 * 60 * 60, 60 * (2 ** min(deferred.attempt_count if deferred else 0, 8))
+        )
+        next_attempt_at = now + timedelta(seconds=retry_after)
+        _save_suggestion_defer(
+            session, opportunity_id=opportunity.id, content_hash=content_hash,
+            prompt_version=prompt.version, route_hash=route_hash,
+            prior=deferred, reason=("quota" if error.kind is ErrorKind.QUOTA else error.kind.value),
+            next_attempt_at=next_attempt_at,
+        )
+        return SuggestionOutcome(
+            called=bool(error.attempts),
+            state=("deferred" if error.quota_exhausted else "provider_error")
+            if error.attempts else ("deferred" if error.quota_exhausted else "preflight"),
+            error_kind=error.kind.value,
+            next_attempt_at=next_attempt_at,
+        )
+    except asyncio.CancelledError as cancellation:
+        cancelled_attempts = getattr(cancellation, "attempts", ())
+        _record_suggestion_operation(
+            engine, operation_id, attempts=cancelled_attempts,
+            fallback_used=any(attempt.model != route.chain[0] for attempt in cancelled_attempts),
+            state="cancelled", error_kind="cancelled", prompt_version=prompt.version,
+        )
+        raise
+    except Exception:
+        _record_suggestion_operation(
+            engine, operation_id, attempts=(), state="internal_error",
+            error_kind="internal_error", prompt_version=prompt.version,
+        )
+        raise
 
     try:
         payload = json.loads(result.response.content)
+        if not isinstance(payload, Mapping):
+            raise ValueError("response root must be an object")
     except (json.JSONDecodeError, TypeError, ValueError):
         logger.warning(
             "job_classification response is not valid JSON",
             extra={"opportunity_id": str(opportunity.id)},
         )
-        return SuggestionOutcome()
+        _record_suggestion_operation(
+            engine, operation_id, attempts=result.attempts,
+            fallback_used=result.fallback_used, response=result.response,
+            state="parse_error", error_kind="parse_error", prompt_version=prompt.version,
+        )
+        return SuggestionOutcome(called=True, state="parse_error", error_kind="parse_error")
 
     created: list[OpportunitySuggestionModel] = []
     discarded: list[str] = []
@@ -368,7 +607,106 @@ async def suggest_fields(
         session.commit()
         for suggestion in created:
             session.refresh(suggestion)
-    return SuggestionOutcome(created=tuple(created), discarded_fields=tuple(discarded), called=True)
+    if deferred is not None:
+        session.delete(deferred)
+        session.commit()
+    _record_suggestion_operation(
+        engine, operation_id, attempts=result.attempts,
+        fallback_used=result.fallback_used, response=result.response,
+        state="success", prompt_version=prompt.version,
+    )
+    return SuggestionOutcome(
+        created=tuple(created), discarded_fields=tuple(discarded), called=True, state="success"
+    )
+
+
+def _suggestion_content_hash(
+    title: str, description: str, pending: Sequence[SuggestibleField]
+) -> str:
+    material = json.dumps(
+        {"title": title, "description": description,
+         "fields": [field.value for field in pending]},
+        ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def _save_suggestion_defer(
+    session: Session,
+    *,
+    opportunity_id: UUID,
+    content_hash: str,
+    prompt_version: str,
+    route_hash: str,
+    prior: SuggestionDeferModel | None,
+    reason: str,
+    next_attempt_at: datetime,
+) -> None:
+    defer = prior or SuggestionDeferModel(
+        opportunity_id=opportunity_id,
+        content_hash=content_hash,
+        prompt_version=prompt_version,
+        route_hash=route_hash,
+        attempt_count=0,
+        reason=reason,
+        next_attempt_at=next_attempt_at,
+    )
+    defer.attempt_count += 1
+    defer.reason = reason
+    defer.next_attempt_at = next_attempt_at
+    defer.updated_at = datetime.now(UTC)
+    session.add(defer)
+    session.commit()
+
+
+def _start_suggestion_operation(
+    engine: Engine, operation_id: UUID, prompt_version: str | None
+) -> None:
+    try:
+        start_operation(
+            engine, operation_id=operation_id, task=AITask.JOB_CLASSIFICATION.value,
+            prompt_version=prompt_version,
+        )
+    except Exception:  # telemetry must never block deterministic classification
+        logger.warning("AI suggestion operation start telemetry failed", exc_info=True)
+
+
+def _finish_suggestion_operation(
+    engine: Engine, operation_id: UUID, state: str, error_kind: str | None = None
+) -> None:
+    try:
+        finish_operation(engine, operation_id=operation_id, state=state, error_kind=error_kind)
+    except Exception:  # telemetry must never block deterministic classification
+        logger.warning("AI suggestion operation finish telemetry failed", exc_info=True)
+
+
+def _record_suggestion_operation(
+    engine: Engine,
+    operation_id: UUID,
+    *,
+    attempts: Sequence[Attempt],
+    state: str,
+    error_kind: str | None = None,
+    prompt_version: str | None = None,
+    fallback_used: bool = False,
+    response: LLMResponse | None = None,
+) -> None:
+    try:
+        if attempts:
+            records = records_from_attempts(
+                attempts,
+                task=AITask.JOB_CLASSIFICATION.value,
+                provider="groq",
+                fallback_used=fallback_used,
+                prompt_version=prompt_version,
+                prompt_tokens=response.usage.prompt_tokens if response else None,
+                completion_tokens=response.usage.completion_tokens if response else None,
+                operation_id=operation_id,
+            )
+            record_calls(engine, records)
+        finish_operation(engine, operation_id=operation_id, state=state, error_kind=error_kind)
+    except Exception:  # telemetry must never block deterministic classification
+        logger.warning("AI suggestion operation telemetry write failed", exc_info=True)
 
 
 def accept_suggestion(

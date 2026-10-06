@@ -14,6 +14,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID, uuid4
 
 from opportunity_radar.platform.ai.breaker import CircuitBreaker
 from opportunity_radar.platform.ai.errors import ErrorKind, ProviderError
@@ -36,6 +37,11 @@ class Attempt:
     error_kind: ErrorKind | None
     latency_ms: int | None
     http_status: int | None = None
+    operation_id: UUID | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    operation_ordinal: int = 0
+    transport_started: bool = False
 
 
 @dataclass(frozen=True)
@@ -43,6 +49,7 @@ class RouterResult:
     response: LLMResponse
     attempts: tuple[Attempt, ...]
     fallback_used: bool  # True when the answering model is not chain[0]
+    operation_id: UUID
 
 
 class AIRouter:
@@ -96,10 +103,15 @@ class AIRouter:
         seconds = (2 ** (attempt - 1)) * (1 + self._jitter() / 4)
         await self._sleeper(seconds)
 
-    async def _reserve(self, model: str, estimated_tokens: int) -> Reservation | None:
+    async def _reserve(
+        self, model: str, estimated_tokens: int, ceiling_requests: int | None
+    ) -> Reservation | None:
         if self._quota_guard is None:
             return None
-        return await asyncio.to_thread(self._quota_guard.reserve, model, estimated_tokens)
+        return await asyncio.to_thread(
+            self._quota_guard.reserve, model, estimated_tokens,
+            ceiling_requests=ceiling_requests,
+        )
 
     async def _settle(
         self, reservation: Reservation | None, response: LLMResponse | None
@@ -120,6 +132,18 @@ class AIRouter:
             return
         await asyncio.to_thread(self._quota_guard.release, reservation)
 
+    async def _settle_error(
+        self, reservation: Reservation | None, error: ProviderError
+    ) -> None:
+        if self._quota_guard is None or reservation is None:
+            return
+        actual_tokens = None
+        if error.prompt_tokens is not None and error.completion_tokens is not None:
+            actual_tokens = error.prompt_tokens + error.completion_tokens
+        await asyncio.to_thread(
+            self._quota_guard.settle, reservation, actual_tokens, error.rate_limit
+        )
+
     async def run(
         self,
         task: AITask,
@@ -131,7 +155,11 @@ class AIRouter:
         temperature: float | None = None,
         seed: int | None = None,
         estimated_input_tokens: int | None = None,
+        operation_id: UUID | None = None,
+        quota_ceiling_requests: int | None = None,
+        on_attempt_started: Callable[[UUID, int, str, int], Awaitable[None]] | None = None,
     ) -> RouterResult:
+        operation_id = operation_id or uuid4()
         route = self.route(task)
         chain = route.chain if self._fallback_enabled else route.chain[:1]
         estimated_input = (
@@ -141,8 +169,10 @@ class AIRouter:
         )
         estimated_total = estimated_input + route.budget.max_output_tokens
         attempts: list[Attempt] = []
+        operation_ordinal = 0
         last_error: ProviderError | None = None
         any_model_tried = False
+        quota_exhausted = False
         for model in chain:
             if self._is_blocked(model) or not self._breaker.allow(model):
                 continue
@@ -151,14 +181,18 @@ class AIRouter:
             repaired_once = False
             attempt_index = 0
             while True:
-                reservation = await self._reserve(model, estimated_total)
+                reservation = await self._reserve(model, estimated_total, quota_ceiling_requests)
                 if reservation is None and self._quota_guard is not None:
                     self._blocked_until[model] = self._clock_to_deadline(model)
-                    last_error = ProviderError(
-                        ErrorKind.QUOTA, "no quota balance", model=model
+                    last_error = ProviderError(ErrorKind.QUOTA, "no quota balance", model=model)
+                    last_error.quota_exhausted = quota_ceiling_requests is not None
+                    last_error.retry_after_seconds = max(
+                        0.0, self._blocked_until[model] - self._clock()
                     )
+                    quota_exhausted = quota_ceiling_requests is not None
                     break
                 try:
+                    response: LLMResponse | None = None
                     request = LLMRequest(
                         model=model,
                         system=system,
@@ -169,34 +203,94 @@ class AIRouter:
                         temperature=temperature,
                         seed=seed,
                         reasoning_effort=route.budget.reasoning_effort,
+                        on_transport_start=(
+                            (lambda: on_attempt_started(
+                                operation_id, operation_ordinal, model, attempt_index
+                            )) if on_attempt_started is not None else None
+                        ),
                     )
                     response = await self._provider.complete(request)
                     if self._validator is not None:
                         self._validator(response.content)
-                except ProviderError as error:
-                    attempts.append(
-                        Attempt(model, attempt_index, error.kind, None, error.status)
+                except asyncio.CancelledError as cancellation:
+                    attempt_started = (
+                        response is not None
+                        or getattr(cancellation, "transport_started", False)
                     )
-                    last_error = error
-                    if error.kind is ErrorKind.CONFIGURATION or error.kind is ErrorKind.REQUEST:
+                    if attempt_started:
+                        attempts.append(Attempt(
+                            model, attempt_index, ErrorKind.CANCELLED,
+                            getattr(cancellation, "latency_ms", None), None,
+                            operation_id=operation_id, operation_ordinal=operation_ordinal,
+                            prompt_tokens=response.usage.prompt_tokens if response else None,
+                            completion_tokens=(
+                                response.usage.completion_tokens if response else None
+                            ),
+                            transport_started=True,
+                        ))
+                        operation_ordinal += 1
+                    if attempt_started:
+                        await asyncio.to_thread(
+                            self._quota_guard.settle, reservation, None, None
+                        ) if self._quota_guard is not None and reservation is not None else None
+                    else:
                         await self._release(reservation)
+                    cancellation.attempts = tuple(attempts)  # type: ignore[attr-defined]
+                    raise
+                except ProviderError as error:
+                    if response is not None and not error.transport_started:
+                        error.transport_started = True
+                        error.latency_ms = response.latency_ms
+                    if error.transport_started:
+                        attempts.append(Attempt(
+                            model, attempt_index, error.kind,
+                            response.latency_ms if response else error.latency_ms,
+                            200 if response else error.status,
+                            operation_id=operation_id, operation_ordinal=operation_ordinal,
+                            prompt_tokens=(
+                                response.usage.prompt_tokens if response else error.prompt_tokens
+                            ),
+                            completion_tokens=(
+                                response.usage.completion_tokens
+                                if response else error.completion_tokens
+                            ),
+                            transport_started=True,
+                        ))
+                        operation_ordinal += 1
+                    last_error = error
+                    if error.kind in (ErrorKind.CONFIGURATION, ErrorKind.REQUEST):
+                        if error.transport_started:
+                            await self._settle_error(reservation, error)
+                        else:
+                            await self._release(reservation)
                         error.attempts = tuple(attempts)
                         raise
                     if error.kind is ErrorKind.TRANSIENT:
                         self._breaker.record_failure(model)
-                        await self._release(reservation)
+                        if error.transport_started:
+                            await self._settle_error(reservation, error)
+                        else:
+                            await self._release(reservation)
                         if attempt_index >= self._max_retries:
                             break
                         attempt_index += 1
                         await self._wait_before_retry(attempt_index)
                         continue
                     if error.kind is ErrorKind.QUOTA:
-                        await self._settle(reservation, None)
+                        if error.transport_started:
+                            await self._settle_error(reservation, error)
+                        else:
+                            await self._release(reservation)
                         retry_after = error.retry_after_seconds or _DEFAULT_QUOTA_COOLDOWN_SECONDS
                         self._blocked_until[model] = self._clock() + retry_after
                         break
                     if error.kind is ErrorKind.INVALID_OUTPUT:
-                        await self._settle(reservation, None)
+                        if response is not None:
+                            await self._settle(reservation, response)
+                        elif error.transport_started:
+                            await self._settle_error(reservation, error)
+                        else:
+                            await self._release(reservation)
                         if repaired_once:
                             break
                         repaired_once = True
@@ -204,13 +298,25 @@ class AIRouter:
                         attempt_index += 1
                         continue
                     raise
+                except Exception:
+                    await self._release(reservation)
+                    raise
                 else:
                     self._breaker.record_success(model)
                     await self._settle(reservation, response)
-                    attempts.append(
-                        Attempt(model, attempt_index, None, response.latency_ms, 200)
+                    attempts.append(Attempt(
+                        model, attempt_index, None, response.latency_ms, 200,
+                        operation_id=operation_id, operation_ordinal=operation_ordinal,
+                        prompt_tokens=response.usage.prompt_tokens,
+                        completion_tokens=response.usage.completion_tokens,
+                        transport_started=True,
+                    ))
+                    operation_ordinal += 1
+                    return RouterResult(
+                        response, tuple(attempts), model != route.chain[0], operation_id
                     )
-                    return RouterResult(response, tuple(attempts), model != route.chain[0])
+            if quota_exhausted:
+                break
         if not any_model_tried:
             soonest = min(self._blocked_until.values(), default=self._clock())
             no_quota_error = ProviderError(

@@ -776,6 +776,82 @@ def test_revisits_before_normalization_keep_per_run_observations() -> None:
             fixture.cleanup()
 
 
+def test_source_deadline_commits_positive_prefix_without_closing_absent_occurrence() -> None:
+    """A timed-out DB-backed run keeps its positive observation but cannot prove absence."""
+    import asyncio
+
+    class _StalledAfterPrefixCollector(_StaticCollector):
+        async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+            del request
+            yield _item(
+                fixture.source_type,
+                external_id="deadline-present",
+                title="Still listed",
+            )
+            await asyncio.Event().wait()
+
+    engine = _engine()
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        opportunities = OpportunityService(session)
+        try:
+            present = _item(
+                fixture.source_type, external_id="deadline-present", title="Still listed"
+            )
+            absent = _item(
+                fixture.source_type, external_id="deadline-absent", title="Not listed"
+            )
+            first = asyncio.run(
+                fixture.service(_StaticCollector(fixture.source_type, [[present, absent]])).execute(
+                    fixture.source.id,
+                    CollectionRequest(mode=CollectionMode.DISCOVERY),
+                )
+            )
+            assert first.complete is True
+            for raw_item in fixture.raw_items():
+                opportunities.normalize(raw_item.id)
+            absent_raw = next(
+                item for item in fixture.raw_items() if item.external_id == "deadline-absent"
+            )
+            absent_occurrence = fixture.occurrence_for(absent_raw.id)
+            assert absent_occurrence is not None
+
+            second = asyncio.run(
+                fixture.service(_StaticCollector(fixture.source_type, [[present]])).execute(
+                    fixture.source.id,
+                    CollectionRequest(mode=CollectionMode.DISCOVERY),
+                )
+            )
+            assert second.complete is True
+            opportunities.reconcile_run_closures(second.id)
+
+            partial = asyncio.run(
+                fixture.service(_StalledAfterPrefixCollector(fixture.source_type, [])).execute(
+                    fixture.source.id,
+                    CollectionRequest(mode=CollectionMode.DISCOVERY),
+                    deadline_seconds=0.05,
+                )
+            )
+            assert partial.status == "PARTIAL"
+            assert partial.complete is False
+            refreshed_present = fixture.occurrence_for(
+                next(
+                    item.id
+                    for item in fixture.raw_items()
+                    if item.external_id == "deadline-present"
+                )
+            )
+            assert refreshed_present is not None
+            assert refreshed_present.last_seen_run_id == partial.id
+
+            opportunities.reconcile_run_closures(partial.id)
+            session.refresh(absent_occurrence)
+            assert absent_occurrence.opportunity.lifecycle_status == "ACTIVE"
+            assert absent_occurrence.opportunity.closure_evidence is None
+        finally:
+            fixture.cleanup()
+
+
 def test_manifest_fully_revalidated_304_reuses_prior_complete_inventory() -> None:
     """Every declared representation revalidating 304, after a prior complete read,
     is the one thing SPEC 39 §7 lets a 304 reuse (F20-39 manifest check)."""

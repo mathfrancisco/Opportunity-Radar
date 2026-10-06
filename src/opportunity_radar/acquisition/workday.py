@@ -63,21 +63,25 @@ class _DetailRun:
 
     def __init__(self, request: CollectionRequest) -> None:
         self.enabled = request.fetch_detail and bool(request.target_role_families)
+        self.approved = request.detail_approval_valid
+        self.approval_skip_reason = (
+            request.detail_approval_skip_reason
+            if self.enabled
+            else "disabled"
+            if not request.fetch_detail
+            else "no_target_roles"
+        )
         self.cap = request.detail_max_requests
         self.host_remaining = request.host_requests_remaining
-        self.requested = 0
         #: Set by a 429 on a detail request: no further detail requests this run.
         self.stopped = False
 
     def has_room(self, http_requests: int) -> bool:
-        """Whether one more detail request fits the run cap and the host budget left.
+        """Whether another real detail transport fits the per-run cap.
 
-        `http_requests` is everything this run already sent (listing pages and retries
-        included), all of which the host budget has yet to be charged for.
+        Shared host capacity is checked atomically immediately before each transport.
         """
-        if self.requested >= self.cap:
-            return False
-        return self.host_remaining is None or http_requests < self.host_remaining
+        return self.cap > http_requests
 
 
 class WorkdayCollector:
@@ -306,6 +310,7 @@ class WorkdayCollector:
             send,
             lambda response: (self._postings(response), self._total(response)),
             inspect=conditional,
+            detail=False,
         )
 
     async def _request(
@@ -315,6 +320,7 @@ class WorkdayCollector:
         parse: Callable[[httpx.Response], _T],
         *,
         inspect: Callable[[httpx.Response], None] | None = None,
+        detail: bool = False,
     ) -> _T:
         """One HTTP exchange under the request's network policy, shared by listing and detail:
         minimum interval, retries with Retry-After, and the telemetry the host budget reads."""
@@ -338,12 +344,42 @@ class WorkdayCollector:
             response: httpx.Response | None = None
             error: AcquisitionError | None = None
             try:
+                if detail and request.telemetry.detail_requests >= request.detail_max_requests:
+                    raise AcquisitionError(
+                        AcquisitionErrorCode.SOURCE_RATE_LIMITED,
+                        "per-run detail request cap exhausted",
+                        retryable=False,
+                    )
+                if request.reserve_http_request is not None:
+                    denied = request.reserve_http_request(detail)
+                    if denied is not None:
+                        raise AcquisitionError(
+                            AcquisitionErrorCode.SOURCE_RATE_LIMITED,
+                            f"Workday host request blocked by {denied}",
+                            retryable=False,
+                        )
+                elif (
+                    request.host_requests_remaining is not None
+                    and request.telemetry.http_requests >= request.host_requests_remaining
+                ):
+                    raise AcquisitionError(
+                        AcquisitionErrorCode.SOURCE_RATE_LIMITED,
+                        "Workday host quota exhausted",
+                    )
                 request.telemetry.record_http_attempt(retry=attempt > 0)
+                if detail:
+                    request.telemetry.detail_requests += 1
                 response = await send()
                 if response.status_code == 429:
                     request.telemetry.record_rate_limit()
+                    retry_after = parse_retry_after_seconds(response.headers.get("Retry-After"))
+                    wait = retry_after if retry_after is not None else max_retry_delay
+                    if request.persist_cooldown is not None:
+                        request.persist_cooldown(datetime.now(UTC) + timedelta(seconds=wait))
                 if inspect is not None:
                     inspect(response)
+                if detail and response.status_code == 304:
+                    return parse(response)
                 error = self._response_error(response)
                 if error is None:
                     return parse(response)
@@ -401,29 +437,61 @@ class WorkdayCollector:
         Identity (external id, URL) is untouched, so turning detail on creates no duplicate.
         """
         telemetry = request.telemetry
-        if detail.stopped or not detail.has_room(telemetry.http_requests):
-            telemetry.record_detail(skipped=True)
+        if not detail.enabled:
+            telemetry.record_detail(skipped=True, reason=detail.approval_skip_reason)
+            if request.persist_detail_counters is not None:
+                request.persist_detail_counters(telemetry)
+            return item
+        if not detail.approved:
+            telemetry.record_detail(skipped=True, reason=detail.approval_skip_reason)
+            if request.persist_detail_counters is not None:
+                request.persist_detail_counters(telemetry)
+            return item
+        if detail.stopped or not detail.has_room(telemetry.detail_requests):
+            reason = "cooldown" if detail.stopped else "cap"
+            telemetry.record_detail(skipped=True, reason=reason)
+            if request.persist_detail_counters is not None:
+                request.persist_detail_counters(telemetry)
             return item
         url = (
             f"https://{tenant}.{pod}.myworkdayjobs.com/wday/cxs/{tenant}/{site}"
             f"{item.external_id}"
         )
-        detail.requested += 1
+        requests_before = telemetry.detail_requests
         try:
             description = await self._request(
-                request, lambda: client.get(url), self._detail_description
+                request, lambda: client.get(url), self._detail_description, detail=True
             )
         except AcquisitionError as error:
-            telemetry.record_detail(failed=True)
+            denied = (
+                "cap"
+                if "detail request cap" in error.summary
+                else "quota"
+                if "quota" in error.summary
+                else "cooldown"
+                if "cooldown" in error.summary
+                else None
+            )
+            if denied:
+                if denied == "cap" and telemetry.detail_requests > requests_before:
+                    telemetry.detail_failures += 1
+                telemetry.record_detail(skipped=True, reason=denied)
+            else:
+                telemetry.detail_failures += 1
             if error.code is AcquisitionErrorCode.SOURCE_RATE_LIMITED:
                 # The 429 is already counted as a rate-limit event; stop asking.
                 detail.stopped = True
+            if request.persist_detail_counters is not None:
+                request.persist_detail_counters(telemetry)
             return item
-        telemetry.record_detail()
+        if request.persist_detail_counters is not None:
+            request.persist_detail_counters(telemetry)
         return item if description is None else replace(item, description=description)
 
     @staticmethod
     def _detail_description(response: httpx.Response) -> str | None:
+        if response.status_code == 304:
+            return None
         try:
             payload = response.json()
         except ValueError as error:
@@ -462,7 +530,7 @@ class WorkdayCollector:
             return AcquisitionError(
                 code,
                 f"Workday returned HTTP {status}",
-                retryable=status == 429,
+                retryable=False,
                 retry_after_seconds=(
                     parse_retry_after_seconds(response.headers.get("Retry-After"))
                     if status == 429
