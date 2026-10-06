@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import threading
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -1082,3 +1083,291 @@ def test_an_unavailable_model_degrades_the_job_without_raising() -> None:
             )
         ).all()
     assert list(statuses) == [AnalysisStatus.AI_FAILED.value]
+
+
+# --- F51-12: daily cap with slack, interactive reserve, isolation ----------------------
+
+_CAP_DAY = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
+# 80% of the 170,000-token day is 136,000; one probe is 5,900, so the last admitted
+# starting usage is 130,100.
+_JUST_UNDER_CAP = 130_100
+
+
+class _Clock:
+    """A settable moment for `QuotaGuard`, to step from one day window to the next."""
+
+    def __init__(self, moment: datetime) -> None:
+        self.moment = moment
+
+    def __call__(self) -> datetime:
+        return self.moment
+
+
+def _cap_guard(model: str, clock: _Clock, *, tokens_used: int) -> QuotaGuard:
+    guard = QuotaGuard(
+        create_database_engine(os.environ["DATABASE_URL"]),
+        QuotaLimits(
+            minute_requests=1_000_000,
+            minute_tokens=1_000_000,
+            day_requests=1_000_000,
+            day_tokens=170_000,
+        ),
+        now=clock,
+    )
+    assert guard.reserve(model, tokens_used) is not None
+    return guard
+
+
+def _analyses_for(session: Session, assessment_ids: list[UUID]) -> list[str]:
+    return list(
+        session.scalars(
+            select(MatchAnalysisModel.status).where(
+                MatchAnalysisModel.assessment_id.in_(assessment_ids)
+            )
+        )
+    )
+
+
+def test_the_daily_cap_lets_a_batch_through_just_under_the_line() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    model = f"f51-12-{uuid4().hex[:8]}"
+    guard = _cap_guard(model, _Clock(_CAP_DAY), tokens_used=_JUST_UNDER_CAP)
+    try:
+        with Session(engine) as session:
+            _seed_assessment(session, verdict="HIGH_PRIORITY")
+        adapter = _TokenAwareAdapter(_completed(), model=model, quota_guard=guard)
+
+        analyze_pending(engine, adapter, batch_size=1, daily_cap_fraction=0.8)
+
+        assert adapter.calls == 1
+    finally:
+        _forget_quota(model)
+
+
+def test_the_daily_cap_idles_the_job_without_failures_and_resumes_next_day_by_score() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    model = f"f51-12-{uuid4().hex[:8]}"
+    clock = _Clock(_CAP_DAY)
+    guard = _cap_guard(model, clock, tokens_used=_JUST_UNDER_CAP + 1)
+    try:
+        with Session(engine) as session:
+            lower = _seed_assessment(
+                session, verdict="HIGH_PRIORITY", score=Decimal("99.0000")
+            )
+            higher = _seed_assessment(
+                session, verdict="HIGH_PRIORITY", score=Decimal("100.0000")
+            )
+            service = MatchingService(session)
+            analyses_before = session.scalar(select(func.count(MatchAnalysisModel.id)))
+            pending_before = service.count_pending_analysis()
+        adapter = _TokenAwareAdapter(_completed(), model=model, quota_guard=guard)
+
+        analyze_pending(engine, adapter, batch_size=2, daily_cap_fraction=0.8)
+
+        assert adapter.calls == 0
+        with Session(engine) as session:
+            service = MatchingService(session)
+            # No row at all: no AI_FAILED, hence no attempt and no cooldown either.
+            assert session.scalar(select(func.count(MatchAnalysisModel.id))) == analyses_before
+            assert service.count_pending_analysis() == pending_before
+            assert {higher, lower} <= set(service.pending_analysis_ids(limit=100))
+
+        clock.moment = _CAP_DAY + timedelta(days=1)
+        analyze_pending(engine, adapter, batch_size=1, daily_cap_fraction=0.8)
+
+        assert adapter.calls == 1
+        with Session(engine) as session:
+            assert _analyses_for(session, [higher]) == [AnalysisStatus.AI_COMPLETED.value]
+            assert _analyses_for(session, [lower]) == []
+    finally:
+        _forget_quota(model)
+
+
+class _ConsumingAdapter(_TokenAwareAdapter):
+    """Spends its probe estimate from the guard on every call, as a real provider call does."""
+
+    async def analyze(  # type: ignore[override]
+        self, request: AnalysisRequest, **kwargs: object
+    ) -> AnalysisOutcome:
+        assert self._real_guard.reserve(self.model, self.probe_tokens) is not None
+        return await super().analyze(request, **kwargs)  # type: ignore[arg-type]
+
+
+def test_the_daily_cap_is_rechecked_before_each_item_of_a_batch() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    model = f"f51-12-{uuid4().hex[:8]}"
+    # 120,000 + 5,900 and 125,900 + 5,900 fit under 136,000; 131,800 + 5,900 does not.
+    guard = _cap_guard(model, _Clock(_CAP_DAY), tokens_used=120_000)
+    try:
+        with Session(engine) as session:
+            seeded = [
+                _seed_assessment(
+                    session, verdict="HIGH_PRIORITY", score=Decimal(f"{100 - rank}.0000")
+                )
+                for rank in range(3)
+            ]
+        adapter = _ConsumingAdapter(_completed(), model=model, quota_guard=guard)
+
+        analyze_pending(engine, adapter, batch_size=3, daily_cap_fraction=0.8)
+
+        assert adapter.calls == 2
+        with Session(engine) as session:
+            assert _analyses_for(session, seeded[:2]) == [AnalysisStatus.AI_COMPLETED.value] * 2
+            assert _analyses_for(session, seeded[2:]) == []
+            assert seeded[2] in MatchingService(session).pending_analysis_ids(limit=100)
+    finally:
+        _forget_quota(model)
+
+
+def test_an_explicit_analysis_ignores_the_background_cap() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    model = f"f51-12-{uuid4().hex[:8]}"
+    guard = _cap_guard(model, _Clock(_CAP_DAY), tokens_used=_JUST_UNDER_CAP + 1)
+    try:
+        with Session(engine) as session:
+            assessment_id = _seed_assessment(session, verdict="HIGH_PRIORITY")
+        adapter = _TokenAwareAdapter(_completed(), model=model, quota_guard=guard)
+
+        analyze_pending(engine, adapter, batch_size=1, daily_cap_fraction=0.8)
+        assert adapter.calls == 0
+
+        with Session(engine) as session:
+            analysis = asyncio.run(MatchingService(session).analyze(assessment_id, adapter))
+            status = analysis.status
+
+        assert adapter.calls == 1
+        assert status == AnalysisStatus.AI_COMPLETED.value
+    finally:
+        _forget_quota(model)
+
+
+def test_background_ai_respects_interactive_reserve() -> None:
+    """Card F51-12 AC04, analysis side: at day requests minus the reserve, the job spends
+    nothing, and an interactive reservation (no ceiling) still goes through."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    model = f"f51-12-{uuid4().hex[:8]}"
+    guard = QuotaGuard(
+        engine,
+        QuotaLimits(
+            minute_requests=1_000_000, minute_tokens=1_000_000, day_requests=10, day_tokens=170_000
+        ),
+    )
+    worker_ceiling = 10 - 3  # day requests minus an interactive reserve of 3
+    for _ in range(worker_ceiling):
+        assert guard.reserve(model, 10) is not None
+
+    def day_requests() -> int:
+        return next(
+            row["requests"]
+            for row in guard.snapshot()
+            if row["model"] == model and row["window_kind"] == "day"
+        )
+
+    try:
+        with Session(engine) as session:
+            assessment_id = _seed_assessment(session, verdict="HIGH_PRIORITY")
+        adapter = _TokenAwareAdapter(_completed(), model=model, quota_guard=guard)
+
+        analyze_pending(
+            engine, adapter, batch_size=1, worker_requests_ceiling=worker_ceiling
+        )
+
+        assert adapter.calls == 0
+        assert day_requests() == worker_ceiling
+        with Session(engine) as session:
+            assert _analyses_for(session, [assessment_id]) == []
+
+        # The user's own request has no worker ceiling and takes from the reserve.
+        assert guard.reserve(model, 100) is not None
+        assert day_requests() == worker_ceiling + 1
+    finally:
+        _forget_quota(model)
+
+
+class _FlakyAdapter(_StubAdapter):
+    """Raises on its first call (a bug, not a classified failure), then answers."""
+
+    async def analyze(  # type: ignore[override]
+        self, request: AnalysisRequest, **kwargs: object
+    ) -> AnalysisOutcome:
+        if self.calls == 0:
+            self.calls += 1
+            raise RuntimeError("unexpected adapter bug")
+        return await super().analyze(request, **kwargs)  # type: ignore[arg-type]
+
+
+def test_a_failing_item_does_not_stop_or_poison_the_batch() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        first = _seed_assessment(session, verdict="HIGH_PRIORITY", score=Decimal("100.0000"))
+        second = _seed_assessment(session, verdict="HIGH_PRIORITY", score=Decimal("99.0000"))
+    adapter = _FlakyAdapter(_completed())
+
+    analyze_pending(engine, adapter, batch_size=2)
+
+    assert adapter.calls == 2
+    with Session(engine) as session:
+        # The second item completed on its own; the first left no result behind and no
+        # claim, and it is back in the queue instead of lost.
+        assert _analyses_for(session, [second]) == [AnalysisStatus.AI_COMPLETED.value]
+        assert _analyses_for(session, [first]) == []
+        assert (
+            session.scalars(
+                select(MatchAnalysisClaimModel.assessment_id).where(
+                    MatchAnalysisClaimModel.assessment_id.in_([first, second])
+                )
+            ).all()
+            == []
+        )
+        assert first in MatchingService(session).pending_analysis_ids(limit=100)
+
+
+class _SlowAdapter(_StubAdapter):
+    """Counts calls per opportunity and stays inside `analyze` long enough to overlap."""
+
+    def __init__(self, outcome: AnalysisOutcome) -> None:
+        super().__init__(outcome)
+        self.calls_by_opportunity: dict[UUID, int] = {}
+        self._lock = threading.Lock()
+
+    async def analyze(  # type: ignore[override]
+        self, request: AnalysisRequest, **kwargs: object
+    ) -> AnalysisOutcome:
+        with self._lock:
+            self.calls_by_opportunity[request.opportunity_id] = (
+                self.calls_by_opportunity.get(request.opportunity_id, 0) + 1
+            )
+        await asyncio.sleep(0.5)
+        return await super().analyze(request, **kwargs)  # type: ignore[arg-type]
+
+
+def test_two_workers_on_the_same_assessment_run_it_once() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        assessment_id = _seed_assessment(session, verdict="HIGH_PRIORITY")
+        opportunity_id = session.scalars(
+            select(MatchAssessmentModel.opportunity_id).where(
+                MatchAssessmentModel.id == assessment_id
+            )
+        ).one()
+    adapter = _SlowAdapter(_completed())
+    start = threading.Barrier(2)
+    errors: list[BaseException] = []
+
+    def work() -> None:
+        try:
+            start.wait(timeout=10)
+            analyze_pending(engine, adapter, batch_size=1)
+        except BaseException as error:  # noqa: BLE001 - surfaced after the join
+            errors.append(error)
+
+    threads = [threading.Thread(target=work) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    assert errors == []
+    assert adapter.calls_by_opportunity.get(opportunity_id) == 1
+    with Session(engine) as session:
+        assert _analyses_for(session, [assessment_id]) == [AnalysisStatus.AI_COMPLETED.value]

@@ -178,6 +178,7 @@ def analyze_pending(
     lease_seconds: int = 900,
     aging_sample_ratio: float = 0.0,
     worker_requests_ceiling: int | None = None,
+    daily_cap_fraction: float | None = None,
 ) -> None:
     """Attach the semantic layer to current assessments, one claim at a time.
 
@@ -195,10 +196,40 @@ def analyze_pending(
     the opportunity is back in the next pass, not lost. The same ceiling also travels with
     the call (SPEC 51), where the router enforces it atomically on the real reservation;
     the probe stays because a denial there is recorded as a failed attempt.
+
+    `daily_cap_fraction`, when given, stops the job for the day once the primary model's
+    day-window token usage plus one probe estimate would pass that share of the daily
+    token limit, leaving the rest as slack for interactive analysis (card F51-12). It is
+    a read (`QuotaGuard.has_day_balance`), checked before the queue is read and before each
+    item; reaching it writes nothing, so assessments stay pending in queue order for the
+    next day window. An explicit analysis never goes through this job, so it is not capped.
     """
     with observe_job(
         engine, job_name="analyze_pending", interval=timedelta(seconds=120)
     ) as correlation_id:
+        quota_guard = getattr(adapter, "quota_guard", None)
+        # The probe reserves what one call of the primary model can cost (0 for an
+        # adapter that does not say): a zero-token probe passes with 100 tokens left
+        # and the real call then fails as QUOTA_EXHAUSTED, one wasted attempt each.
+        probe_tokens = int(getattr(adapter, "probe_tokens", 0) or 0)
+
+        def under_daily_cap() -> bool:
+            return (
+                daily_cap_fraction is None
+                or quota_guard is None
+                or quota_guard.has_day_balance(
+                    adapter.model,
+                    estimated_tokens=probe_tokens,
+                    token_fraction=daily_cap_fraction,
+                )
+            )
+
+        if not under_daily_cap():
+            logger.info(
+                "analysis daily cap reached; assessments stay pending",
+                extra={"job": "analyze", "reason": "daily_cap", "cap_fraction": daily_cap_fraction},
+            )
+            return
         with Session(engine) as session:
             service = MatchingService(session)
             pending = service.pending_analysis_ids(
@@ -220,12 +251,20 @@ def analyze_pending(
                         extra={"job": "warm-up", "reason": "idle", "load_ms": metrics.load_ms},
                     )
             completed = reused = degraded = claimed_elsewhere = failed = skipped_budget = 0
-            quota_guard = getattr(adapter, "quota_guard", None)
-            # The probe reserves what one call of the primary model can cost (0 for an
-            # adapter that does not say): a zero-token probe passes with 100 tokens left
-            # and the real call then fails as QUOTA_EXHAUSTED, one wasted attempt each.
-            probe_tokens = int(getattr(adapter, "probe_tokens", 0) or 0)
-            for assessment_id in pending:
+            skipped_daily_cap = 0
+            for position, assessment_id in enumerate(pending):
+                if not under_daily_cap():
+                    skipped_daily_cap = len(pending) - position
+                    logger.info(
+                        "analysis daily cap reached; assessments stay pending",
+                        extra={
+                            "job": "analyze",
+                            "reason": "daily_cap",
+                            "cap_fraction": daily_cap_fraction,
+                            "skipped_daily_cap": skipped_daily_cap,
+                        },
+                    )
+                    break
                 if worker_requests_ceiling is not None and quota_guard is not None:
                     probe = quota_guard.reserve(
                         adapter.model, probe_tokens, ceiling_requests=worker_requests_ceiling
@@ -272,6 +311,7 @@ def analyze_pending(
                         "degraded": degraded,
                         "claimed_elsewhere": claimed_elsewhere,
                         "skipped_budget": skipped_budget,
+                        "skipped_daily_cap": skipped_daily_cap,
                         "failed": failed,
                     },
                 )
@@ -865,6 +905,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
                 "max_attempts": settings.analysis_retry_max_attempts,
                 "lease_seconds": settings.analysis_claim_lease_seconds,
                 "aging_sample_ratio": settings.worker_analyze_aging_sample_ratio,
+                "daily_cap_fraction": settings.worker_analyze_daily_cap_fraction,
                 "worker_requests_ceiling": (
                     settings.ai_daily_requests_soft_limit
                     - settings.ai_interactive_reserve_requests
