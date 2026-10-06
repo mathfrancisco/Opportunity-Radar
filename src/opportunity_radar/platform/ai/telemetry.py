@@ -21,6 +21,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine import Engine
 
+from opportunity_radar.platform.ai.providers.tokenharbor import MODEL_PREFIX, TokenHarborProvider
+
 if TYPE_CHECKING:
     from opportunity_radar.platform.ai.router import Attempt
 
@@ -85,6 +87,9 @@ def records_from_attempts(
 ) -> list[AICallRecord]:
     """One `AICallRecord` per `AIRouter.run` attempt — success or not (card F20-19).
 
+    `provider` is the default; an attempt on a model of another backend (a prefixed model
+    name) is recorded under that backend.
+
     `AIRouter.Attempt` never carries a response's token usage, so only the attempt that
     matches `attempts[-1]` when it succeeded gets `prompt_tokens`/`completion_tokens`;
     every other attempt (a retry, a repair, a model the fallback skipped past) records
@@ -98,7 +103,11 @@ def records_from_attempts(
         records.append(
             AICallRecord(
                 task=task,
-                provider=provider,
+                provider=(
+                    TokenHarborProvider.name
+                    if attempt.model.startswith(MODEL_PREFIX)
+                    else provider
+                ),
                 model=attempt.model,
                 attempt=attempt.attempt,
                 success=succeeded,

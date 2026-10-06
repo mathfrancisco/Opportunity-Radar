@@ -20,7 +20,7 @@ from opportunity_radar.matching.groq import GroqAnalysisAdapter
 from opportunity_radar.matching.prompts import load_prompt
 from opportunity_radar.platform.ai.breaker import CircuitBreaker
 from opportunity_radar.platform.ai.config import AIState, ai_status
-from opportunity_radar.platform.ai.providers.groq import GroqProvider
+from opportunity_radar.platform.ai.providers.routed import build_provider
 from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits
 from opportunity_radar.platform.ai.router import AIRouter
 from opportunity_radar.platform.ai.schema import make_validator
@@ -55,12 +55,8 @@ def build_analysis_adapter(
         return NullAnalysisAdapter()
 
     prompt = load_prompt(settings.ai_analysis_prompt)
-    provider = GroqProvider(
-        api_key=settings.groq_api_key.get_secret_value(),
-        base_url=settings.groq_base_url,
-        timeout_seconds=settings.ai_timeout_seconds,
-        connect_timeout_seconds=settings.ai_connect_timeout_seconds,
-    )
+    provider = build_provider(settings)
+
     quota_guard = QuotaGuard(
         engine,
         QuotaLimits(

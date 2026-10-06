@@ -58,7 +58,7 @@ from opportunity_radar.opportunities.suggestions import (
 )
 from opportunity_radar.platform.ai.breaker import CircuitBreaker
 from opportunity_radar.platform.ai.config import AIState, ai_status
-from opportunity_radar.platform.ai.providers.groq import GroqProvider
+from opportunity_radar.platform.ai.providers.routed import build_provider
 from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits
 from opportunity_radar.platform.ai.router import AIRouter
 from opportunity_radar.platform.ai.tasks import AITask, default_routes
@@ -281,12 +281,8 @@ def build_classification_router(settings: Settings, engine: Engine) -> AIRouter 
     state = ai_status(settings)
     if state is not AIState.ENABLED:
         return None
-    provider = GroqProvider(
-        api_key=settings.groq_api_key.get_secret_value(),
-        base_url=settings.groq_base_url,
-        timeout_seconds=settings.ai_timeout_seconds,
-        connect_timeout_seconds=settings.ai_connect_timeout_seconds,
-    )
+    provider = build_provider(settings)
+
     quota_guard = QuotaGuard(
         engine,
         QuotaLimits(
