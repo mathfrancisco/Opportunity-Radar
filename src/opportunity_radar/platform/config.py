@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     # F51-06 deadlines are opt-in until a deployment has observed its source durations.
     collection_source_deadline_seconds: int = Field(default=0, ge=0)
     collection_pass_deadline_seconds: int = Field(default=0, ge=0)
+    # F51-07: one claim/lease per source for every collection entry point (worker, CLI,
+    # HTTP). False restores the unclaimed behaviour; it never changes presence, dedupe or
+    # decisions, only whether concurrent runs of one source are refused and fenced.
+    collection_claim_enabled: bool = True
     greenhouse_base_url: str = "https://boards-api.greenhouse.io"
     # An empty webhook is a supported deployment: incidents are still opened and closed,
     # and the absent channel is reported by the doctor instead of failing collection.

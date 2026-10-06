@@ -36,6 +36,7 @@ from opportunity_radar.acquisition.scheduling import (
 )
 from opportunity_radar.acquisition.service import (
     AcquisitionService,
+    SourceClaimedElsewhereError,
     active_profile_target_role_families,
 )
 from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
@@ -589,6 +590,21 @@ def collect_enabled_sources(
                         _advance_keyword_rotation_checkpoint(
                             service, source, run, rotation_state, term_count=term_count
                         )
+                except SourceClaimedElsewhereError:
+                    # Another execution (CLI/API/previous pass) owns this source right now.
+                    # It made no request, so it is a skip, not a failure.
+                    session.rollback()
+                    summary["skipped"] += 1
+                    logger.info(
+                        "scheduled collection skipped",
+                        extra={
+                            "job": "collect",
+                            "source_id": str(source.id),
+                            "outcome": "skipped",
+                            "reason": "claimed_elsewhere",
+                        },
+                    )
+                    continue
                 except Exception:
                     # One unreachable source must not cost the others their pass.
                     session.rollback()
@@ -693,6 +709,7 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
             host_request_ceilings=settings.host_request_ceiling_map,
             target_role_families=active_profile_target_role_families(session),
             target_area_floor=settings.collection_target_area_floor,
+            claims_enabled=settings.collection_claim_enabled,
         )
 
     return build

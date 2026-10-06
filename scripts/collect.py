@@ -102,6 +102,7 @@ async def _collect_one(
                 registry=_registry(settings),
                 target_role_families=active_profile_target_role_families(session),
                 target_area_floor=settings.collection_target_area_floor,
+                claims_enabled=settings.collection_claim_enabled,
             )
             collector = service.registry.resolve(source.source_type)
             supported_keywords = keywords if collector.capabilities.keyword_search else ()
