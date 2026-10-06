@@ -251,7 +251,7 @@ def test_seniority_classification_records_precedence_and_conflicts() -> None:
 def test_seniority_v2_covers_portuguese_titles_and_abbreviations() -> None:
     from opportunity_radar.opportunities.domain import SENIORITY_MAPPING_VERSION
 
-    assert SENIORITY_MAPPING_VERSION == "seniority-v5"
+    assert SENIORITY_MAPPING_VERSION == "seniority-v6"
     assert infer_seniority("Engenheiro Especialista", None, {}) is Seniority.STAFF
     assert infer_seniority("Principal Engineer", None, {}) is Seniority.STAFF
     assert infer_seniority("Desenvolvedor Pl", None, {}) is Seniority.MID
@@ -358,6 +358,46 @@ def test_seniority_v5_classifies_the_titles_of_the_spec_52_table(
     assert infer_seniority(title, None, {}) is expected
 
 
+# seniority-v6: "manager" in a role name is not the MANAGER level; the other words decide.
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("Privacy Operations Program Manager", Seniority.UNKNOWN),
+        (
+            "Principal Technical Program Manager, Relational Deep Learning Platform",
+            Seniority.STAFF,
+        ),
+        ("Senior Account Manager, Digital Investment", Seniority.SENIOR),
+        ("Senior Data Product Manager, Product Telemetry", Seniority.SENIOR),
+        ("Staff Product Manager, Growth", Seniority.STAFF),
+        (
+            "Project Perseus |  Data Labeling Associate - Marathi Speakers (Human-in-the-Loop AI)",
+            Seniority.UNKNOWN,
+        ),
+        # Every other "manager" keeps its level.
+        ("Engineering Manager, Evals", Seniority.MANAGER),
+        ("Senior Engineering Manager, Test Systems & Tooling", Seniority.MANAGER),
+        ("Sr. Manager, Field Engineering - MFG", Seniority.MANAGER),
+        ("Senior Manager, GTM Data Science", Seniority.MANAGER),
+        ("Associate Manager, Robotics Lab", Seniority.MANAGER),
+        ("Technical Lead Manager - Training Runtime", Seniority.MANAGER),
+        ("Senior Technical Delivery Manager, CRM Technology & Client Data", Seniority.MANAGER),
+        ("Data Scientist Manager / Web Analytics", Seniority.MANAGER),
+        ("DATA SPECIALIST MANAGER II", Seniority.MANAGER),
+        ("Partner Enablement Operations Manager", Seniority.MANAGER),
+        ("Engagement Manager (Strategy & Data/AI Transformation)", Seniority.MANAGER),
+        ("Manager, Software Engineering", Seniority.MANAGER),
+        # "Associate" stays the junior tier outside the labeling role.
+        ("Associate Software Engineer", Seniority.JUNIOR),
+        ("DATA ENGINEERING ASSOCIATE II-3", Seniority.JUNIOR),
+    ],
+)
+def test_seniority_v6_reads_manager_and_associate_as_a_role_name(
+    title: str, expected: Seniority
+) -> None:
+    assert infer_seniority(title, None, {}) is expected
+
+
 @pytest.mark.parametrize(
     ("title", "expected"),
     [
@@ -402,7 +442,7 @@ def test_seniority_v5_keeps_the_lowest_level_of_a_range_and_cites_the_range(
     assert value is expected
     assert reason["value"] == expected.value
     assert reason["range"] == levels
-    assert reason["mapping_version"] == "seniority-v5"
+    assert reason["mapping_version"] == "seniority-v6"
 
 
 def test_seniority_v5_cites_no_range_for_a_single_or_compound_level() -> None:

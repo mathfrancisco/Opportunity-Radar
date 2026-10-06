@@ -941,6 +941,13 @@ _SENIORITY_WORDS: tuple[tuple[Seniority | None, str], ...] = (
     (None, r"\bgraduate\s+(?:school|degree|program)\b"),
     (Seniority.DIRECTOR, r"\bhead of\b"),
     (Seniority.DIRECTOR, r"\bdirector\b|\bdiretor(?:a)?\b"),
+    # seniority-v6: in these role names "manager" is the job, not a people-management
+    # level ("Senior Product Manager" is SENIOR). Deliberately narrow: every other
+    # "manager" stays MANAGER.
+    (
+        None,
+        r"\b(?:program|product|account) manager\b|\bproduct marketing manager\b",
+    ),
     (Seniority.MANAGER, r"\bmanager\b|\bgerente\b"),
     (Seniority.LEAD, r"\blead\b|\blider\b"),
     # "especialista" and "principal" have no dedicated enum tier; both denote a deep
@@ -949,6 +956,9 @@ _SENIORITY_WORDS: tuple[tuple[Seniority | None, str], ...] = (
     (Seniority.MID, r"\bsemi[- ]?senior\b|\bssr\b"),
     (Seniority.SENIOR, r"\bsenior\b|\bsr\b"),
     (Seniority.MID, r"\bmid(?:[- ]?level)?\b|\bmiddle\b|\bplen[oa]\b|\bpl\b"),
+    # seniority-v6: "associate" is the job name here, not a level. Deliberately narrow:
+    # only this short list of role phrases, so "Associate Software Engineer" stays JUNIOR.
+    (None, r"\blabell?ing associate\b"),
     # seniority-v5 (F52-02): "entry level" and "new grad" are a first job, not an
     # internship, and "associate" is the usual English word for the junior tier.
     (
@@ -1067,7 +1077,12 @@ def infer_seniority(
 #: of", "associate" and "semi senior" are read; "entry level" and "new grad" move from
 #: INTERN to JUNIOR. Unlike v3, this changes titles that were already classified — see
 #: docs/pesquisas/f52-02-reaplicacao-senioridade.md.
-SENIORITY_MAPPING_VERSION = "seniority-v5"
+#:
+#: v5 -> v6: "program/product/account manager" and "product marketing manager" name a
+#: role, not the MANAGER level, and "labeling associate" is not the JUNIOR level; both
+#: titles fall back to the other words of the title, or UNKNOWN. Changes titles that were
+#: already classified.
+SENIORITY_MAPPING_VERSION = "seniority-v6"
 
 # Collector payloads are intentionally listed even when they have no approved level
 # field. Adding a field here is part of that collector's homologation, not a heuristic.
