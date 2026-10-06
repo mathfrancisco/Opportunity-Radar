@@ -930,7 +930,7 @@ def test_service_runs_an_inhire_source_end_to_end_and_records_target_counts() ->
     assert run.complete is True
     # One bucket on the shared vendor host, charged for every request.
     assert repository.budget_calls == [
-        {"host": "api.inhire.app", "requests": 4, "default_ceiling": 300}
+        {"host": "api.inhire.app", "requests": 4, "default_ceiling": 1200}
     ]
     stored = [item for item in session.added if isinstance(item, RawItemModel)]
     assert len(stored) == 3
