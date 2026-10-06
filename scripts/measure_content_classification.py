@@ -24,8 +24,10 @@ is its only mode (`--dry-run` is accepted to make that explicit). The v4/v7 rule
 active when `CONTENT_CLASSIFICATION_V4_ENABLED=true`, which must not be set before this
 report's gate passes on a gold set of at least 200 human-labelled jobs. Labels are never
 generated here: `--sample-out` writes entries with `valor_recomendado: null` for a human.
-A case with a `judgment` only counts when `revisado_por` names who confirmed it; a suggestion
-(`valor_sugerido` in a `*-proposta.json` file) is never read. `judgment: "applicable"` with
+A case with a `judgment` only counts when `revisado_por` names who confirmed it. A signed case
+with no `judgment` of its own approves the suggestion of a `*-proposta.json` file
+(`julgamento_sugerido`, `valor_sugerido`) as written; an unsigned suggestion is never read.
+`judgment: "applicable"` with
 `valor_recomendado: "UNKNOWN"` says the text states no value: an emission there is wrong, and
 silence is right.
 
@@ -103,6 +105,19 @@ def _confirmed(item: Mapping[str, Any]) -> bool:
     return True
 
 
+def _signed_label(item: Mapping[str, Any]) -> tuple[Any, Any]:
+    """`(judgment, expected)` of a confirmed case.
+
+    A person who signs a proposal case without writing `judgment` approves the suggestion as
+    written, so the suggested judgment and value are the label. A case with its own `judgment`
+    never reads the suggestion.
+    """
+    judgment = item.get("judgment") or item.get("applicability")
+    if judgment is None and item.get("julgamento_sugerido"):
+        return item["julgamento_sugerido"], item.get("valor_sugerido")
+    return judgment or "legacy", item.get("valor_recomendado")
+
+
 def load_gold(path: Path) -> list[dict[str, Any]]:
     """Read the confirmed cases for the fields this script measures (role_family is skipped)."""
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -110,13 +125,13 @@ def load_gold(path: Path) -> list[dict[str, Any]]:
         {
             "opportunity_id": item["opportunity_id"],
             "field": item["field"],
-            "expected": item.get("valor_recomendado"),
+            "expected": _signed_label(item)[1],
             "title": item.get("title"),
             "evidence": item.get("evidencia"),
             "text": item.get("trecho_descricao"),
             "location_text": item.get("location_text"),
             "source_type": item.get("source_type"),
-            "judgment": item.get("judgment", item.get("applicability", "legacy")),
+            "judgment": _signed_label(item)[0],
             "expected_rule": item.get("expected_rule"),
         }
         for item in data["casos"]

@@ -407,6 +407,57 @@ def test_gold_loader_reads_only_the_cases_a_person_confirmed(tmp_path: Path) -> 
     assert [item["opportunity_id"] for item in load_gold(proposal)] == ["confirmed"]
 
 
+def test_gold_loader_reads_a_signed_suggestion_as_the_label(tmp_path: Path) -> None:
+    # Signing a case without writing `judgment` approves the suggestion as written.
+    empty = {"judgment": None, "valor_recomendado": None}
+    proposal = _write_gold(
+        tmp_path / "proposta.json",
+        [
+            {
+                "opportunity_id": "approved",
+                "field": "seniority",
+                "julgamento_sugerido": "applicable",
+                "valor_sugerido": "MID",
+                **empty,
+                "revisado_por": "owner",
+            },
+            {
+                "opportunity_id": "approved-inapplicable",
+                "field": "allowed_countries",
+                "julgamento_sugerido": "inapplicable",
+                "valor_sugerido": None,
+                **empty,
+                "revisado_por": "owner",
+            },
+            {
+                "opportunity_id": "own-label",
+                "field": "seniority",
+                "julgamento_sugerido": "applicable",
+                "valor_sugerido": "SENIOR",
+                "judgment": "applicable",
+                "valor_recomendado": "UNKNOWN",
+                "revisado_por": "owner",
+            },
+            {
+                "opportunity_id": "unsigned",
+                "field": "seniority",
+                "julgamento_sugerido": "applicable",
+                "valor_sugerido": "SENIOR",
+                **empty,
+                "revisado_por": None,
+            },
+        ],
+    )
+
+    assert [
+        (item["opportunity_id"], item["judgment"], item["expected"]) for item in load_gold(proposal)
+    ] == [
+        ("approved", "applicable", "MID"),
+        ("approved-inapplicable", "inapplicable", None),
+        ("own-label", "applicable", "UNKNOWN"),
+    ]
+
+
 def test_a_confirmed_unknown_makes_an_emission_wrong_and_silence_right() -> None:
     emitted = _case("seniority", "UNKNOWN", "3-5 years of experience", source_type="greenhouse")
     emitted = replace(emitted, judgment="applicable")
