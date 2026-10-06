@@ -1,6 +1,6 @@
 # SPEC 50 — estado da implementação
 
-- **Atualizado em:** 2026-10-05
+- **Atualizado em:** 2026-10-06 (seção "PRs #40 a #42")
 - **Branch:** a SPEC 50 entrou em `main` pelo PR #26, mesclado em 2026-10-05 (`46ebbed`). A
   continuação está no PR #31 (`f50-fontes-e-inhire`, base `main`); ver "PR #31" abaixo. O que
   veio depois está em "PRs #32 a #37 e SPECs 51 e 52". Nada foi aplicado na stack
@@ -168,6 +168,22 @@ O que não cabe mais na SPEC 50 continua em duas specs:
 - [SPEC 52 — aderência ao nível](../52-spec-aderencia-ao-nivel.md): classificador de
   senioridade, peso do nível na ordenação e oferta júnior/pleno remota. Proposta; nenhum card
   implementado.
+
+## PRs #40 a #42 (2026-10-06)
+
+| PR | Conteúdo | Estado |
+|---|---|---|
+| #40 | `seniority-v5` e `scripts/retag_seniority.py` (SPEC 52, F52-02); proposta de rótulo dos 300 títulos | Mesclado (`6ed1646`) |
+| #41 | Amostra de 368 vagas do F50-01 versionada em `rotulagem/`, proposta de rótulos e leitor do gold que só conta casos com `revisado_por` (F51-11) | Mesclado (`f361884`) |
+| #42 | `CLAUDE.md` versionado, `.claude/` no `.gitignore`, `matching-v4` em `docs/09-ddd-tatico.md` | Mesclado (`804e555`) |
+
+- O gold do F50-01 continua sem rótulo confirmado. A proposta está em
+  `rotulagem/f50-01-amostra-para-rotular-proposta.json`; o portão do F50-02/F51-11 segue
+  fechado e `GATED_RULES` não mudou.
+- O catálogo da stack de dev foi reclassificado para `seniority-v5`; ver a
+  [SPEC 52](../52-spec-aderencia-ao-nivel.md), F52-02.
+- Pendências que continuam sem card: a fila `REVIEW_REQUIRED` e as vagas sem skill
+  (`skills-v5`). Não foram tratadas nesta sessão.
 
 ## Stack de desenvolvimento `opportunity-radar-dev`
 

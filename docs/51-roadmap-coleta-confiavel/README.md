@@ -1,6 +1,7 @@
 # Roadmap 51 — coleta confiável e busca verificável
 
-**Status geral: em implementação, nenhum card concluído.** Os cards abaixo decompõem a
+**Status geral: em implementação, nenhum card concluído (2026-10-06).** O estado por card
+está em "Estado por card" abaixo. Os cards abaixo decompõem a
 [SPEC 51](../51-spec-coleta-confiavel-e-busca.md). O texto de cada card continua descrevendo o
 plano; o que já existe em código e o que falta está no
 [checkpoint de implementação](implementation-checkpoint.md).
@@ -34,6 +35,35 @@ plano; o que já existe em código e o que falta está no
 | [F51-16](cards/f51-16-browser-seletivo-js.md) | P2 | F51-13, F51-15 | Browser opt-in para JS comprovado |
 | [F51-17](cards/f51-17-benchmark-fts-relevancia.md) | P1 | F51-01, F51-02, F51-05, F51-11 | Qualidade de busca FTS |
 | [F51-18](cards/f51-18-piloto-operacional-rollout.md) | P0 | F51-05, F51-08, F51-12, F51-13, F51-17 | Evidência operacional e fechamento |
+
+## Estado por card (2026-10-06)
+
+Nenhum card tem todos os critérios de aceite com teste ou evidência. "Parcial" quer dizer
+código mesclado em `main` com critério ainda aberto.
+
+| Card | Estado | O que falta |
+| --- | --- | --- |
+| F51-01 | Parcial | Três execuções completas por fonte e contagem de descrição útil: vêm da janela de sete dias, que não foi aberta |
+| F51-02 | Parcial | Recall com amostra humana; observação da janela de sete dias |
+| F51-03 | Aberto | Aprovação do dono por fonte Workday e resposta real por fonte |
+| F51-04 | Parcial | Teste de dois workers disputando a última unidade do orçamento |
+| F51-05 | Não iniciado | Script de piloto e backfill com dry-run; piloto nos 5 tenants (autorizado em stack descartável) |
+| F51-06 | Parcial | AC03 (disputa de duas execuções) e AC04 (integração em banco) |
+| F51-07 | Parcial | Tabela e métodos de claim existem; falta ligar ao serviço e testar |
+| F51-08 | Não iniciado | Worker ainda em série. Decisão: um run por host, concorrência padrão de 4 hosts, configurável |
+| F51-09 | Parcial | Teste do relatório de coorte (`operation_cohort`) |
+| F51-10 | Parcial | Testes de erro por item, quota global e concorrência |
+| F51-11 | Em andamento | Proposta de rótulos e comando do portão prontos (PR #41); falta a confirmação do dono |
+| F51-12 | Parcial | Só o teto de requisições no router foi feito |
+| F51-13 | Não iniciado | Paginação, 304 e run parcial |
+| F51-14 a F51-16 | **Adiados** | Decisão do dono em 2026-10-06, como a SPEC 51 §9 permite: sem fonte prioritária aprovada nem evidência de necessidade. Não bloqueiam o núcleo |
+| F51-17 | Parcial | Benchmark pareado, latência fria (cinco reinícios do `postgres` em stack descartável) e gold no formato novo com revisão do dono |
+| F51-18 | Parcial | Validador pronto; falta montar o pacote e abrir a janela de sete dias |
+
+**Janela de sete dias: não aberta.** A regra é abrir no merge do último PR de código da SPEC
+51. Em 2026-10-06 só o PR #41 (leitor do gold) tocou código desta SPEC; F51-05, F51-07,
+F51-08 e F51-13 ainda têm código por escrever, e abrir a janela antes deles deixaria a
+evidência do F51-18 sem valor.
 
 ## Ordem de execução crítica
 

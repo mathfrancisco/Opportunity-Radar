@@ -1,5 +1,14 @@
 # Checkpoint de implementação — 5 de outubro de 2026
 
+> Atualização de 2026-10-06 (sessão das SPECs 51 e 52, PRs #40 a #42): na SPEC 51 só o
+> F51-11 avançou. O PR #41 trouxe a amostra de 368 vagas, a proposta de rótulos do modelo
+> (não é rótulo) e o leitor do gold que só conta casos com `revisado_por`; o comando do portão
+> roda e bloqueia com `gold_jobs: 0`. O desvio dos dois revisores e os adiamentos de F51-14 a
+> F51-16 estão na SPEC 51 §8.1 e no README do roadmap. Nenhum outro card foi tocado: o estado
+> de partida descrito abaixo e no README ("Estado por card") continua valendo, e a janela de
+> sete dias não foi aberta. O projeto Docker `or-f50-suite-1005` foi removido; `orf51terra`
+> não foi, porque o banco dele se chama `opportunity_radar` e não termina em `_test`.
+
 > Atualização de 2026-10-06 (integração no PR #37): a branch recebeu `main` (PRs #32 e #33) e
 > os PRs #34, #35 e #36. Pela primeira vez rodaram os checks globais, num projeto Compose
 > descartável com banco `_test`: `ruff check .` e `mypy` sem erros; migrações `0065` a `0067`
