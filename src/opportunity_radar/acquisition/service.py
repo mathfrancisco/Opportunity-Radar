@@ -129,7 +129,7 @@ _HOST_KEY_MAX_LENGTH = 255
 DEFAULT_HOST_CEILING_BY_SOURCE_TYPE: dict[str, int] = {
     "workday": 500,
     "hacker_news": 500,
-    "inhire": 300,
+    "inhire": 1200,
 }
 
 #: Rate-limit policy a source type gets when its own `rate_limit_policy` sets neither
