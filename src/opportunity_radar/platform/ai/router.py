@@ -108,10 +108,27 @@ class AIRouter:
     ) -> Reservation | None:
         if self._quota_guard is None:
             return None
-        return await asyncio.to_thread(
+        reserving = asyncio.ensure_future(asyncio.to_thread(
             self._quota_guard.reserve, model, estimated_tokens,
             ceiling_requests=ceiling_requests,
-        )
+        ))
+        try:
+            return await asyncio.shield(reserving)
+        except asyncio.CancelledError:
+            # The thread cannot be interrupted and may still commit the reservation
+            # after this await is gone; nobody else holds it, so give it back here.
+            while not reserving.done():
+                try:
+                    await asyncio.shield(reserving)
+                except asyncio.CancelledError:
+                    continue
+                except Exception:  # noqa: BLE001 - the reserve itself failed, nothing to return
+                    break
+            if not reserving.cancelled() and reserving.exception() is None:
+                reservation = reserving.result()
+                if reservation is not None:
+                    await asyncio.shield(self._release(reservation))
+            raise
 
     async def _settle(
         self, reservation: Reservation | None, response: LLMResponse | None
@@ -181,7 +198,13 @@ class AIRouter:
             repaired_once = False
             attempt_index = 0
             while True:
-                reservation = await self._reserve(model, estimated_total, quota_ceiling_requests)
+                try:
+                    reservation = await self._reserve(
+                        model, estimated_total, quota_ceiling_requests
+                    )
+                except asyncio.CancelledError as cancellation:
+                    cancellation.attempts = tuple(attempts)  # type: ignore[attr-defined]
+                    raise
                 if reservation is None and self._quota_guard is not None:
                     self._blocked_until[model] = self._clock_to_deadline(model)
                     last_error = ProviderError(ErrorKind.QUOTA, "no quota balance", model=model)
@@ -258,7 +281,9 @@ class AIRouter:
                         ))
                         operation_ordinal += 1
                     last_error = error
-                    if error.kind in (ErrorKind.CONFIGURATION, ErrorKind.REQUEST):
+                    if error.kind in (
+                        ErrorKind.CONFIGURATION, ErrorKind.REQUEST, ErrorKind.CANCELLED
+                    ):
                         if error.transport_started:
                             await self._settle_error(reservation, error)
                         else:
