@@ -73,7 +73,7 @@ class GroqProvider:
         self._clock = clock
 
     def __repr__(self) -> str:  # never includes the key
-        return f"GroqProvider(base_url={self._base_url!r})"
+        return f"{type(self).__name__}(base_url={self._base_url!r})"
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
         started = self._clock()
@@ -86,11 +86,11 @@ class GroqProvider:
                 )
         except httpx.TimeoutException as error:
             raise ProviderError(
-                ErrorKind.TRANSIENT, "groq request timed out", model=request.model
+                ErrorKind.TRANSIENT, f"{self.name} request timed out", model=request.model
             ) from error
         except httpx.TransportError as error:
             raise ProviderError(
-                ErrorKind.TRANSIENT, "could not connect to groq", model=request.model
+                ErrorKind.TRANSIENT, f"could not connect to {self.name}", model=request.model
             ) from error
         latency_ms = round((self._clock() - started) * 1000)
         rate_limit = self._rate_limit(response.headers)
@@ -180,7 +180,7 @@ class GroqProvider:
         if not isinstance(content, str) or not content:
             raise ProviderError(
                 ErrorKind.INVALID_OUTPUT,
-                "groq response had no message content",
+                f"{self.name} response had no message content",
                 model=payload.get("model"),
             )
         usage_payload = payload.get("usage") or {}

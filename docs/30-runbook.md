@@ -345,6 +345,31 @@ resto do radar — coleta, normalização, avaliação — continua funcionando 
 estado, se a chave está presente e o modelo por papel, sem nunca imprimir a chave.
 
 
+### Segundo provedor: Token Harbor (opcional)
+
+Com `TOKENHARBOR_API_KEY` no `.env`, os modelos de `TOKENHARBOR_MODELS` (padrão
+`deepseek-v4.1-flash:free` e `mimo-v2.6-flash:free`) entram no fim da cadeia de toda tarefa
+de IA, depois dos modelos do Groq. Sem a chave, nada muda. O Groq continua obrigatório: a IA
+só liga com `GROQ_API_KEY`.
+
+- **Quando respondem:** só quando os modelos do Groq estão sem saldo na cota, bloqueados por
+  `429` ou com o disjuntor aberto. Cota e disjuntor são por modelo, então o uso de um
+  provedor não consome o do outro; os limites diários e por minuto (`AI_DAILY_*`,
+  `AI_MINUTE_*`) valem para cada modelo em separado.
+- **Nos registros:** o modelo aparece como `tokenharbor:<id>` e o provedor como
+  `tokenharbor` em `platform.ai_call_record`.
+- **Limites do fornecedor (conta gratuita, lidos em 2026-10-05):** 60 requisições por minuto
+  e 1.800 por hora por conta; cota em janela móvel de 7 dias, de tamanho não publicado; `429`
+  com `Retry-After`. A resposta não traz cabeçalhos `x-ratelimit-*`.
+- **Privacidade:** os modelos gratuitos precisam ser ativados na conta da Token Harbor, e a
+  página de preços diz que o fornecedor "may retain those prompts and responses for
+  diagnostics, safety, optimisation and model or product improvement". O texto enviado já
+  passa por `sanitize_for_llm`.
+- **Saída estruturada:** a API aceita o `json_schema`, mas não o impõe. Numa chamada real, o
+  `deepseek-v4.1-flash:free` devolveu um campo fora do schema. Na análise, o roteador pede um
+  reparo e, se falhar de novo, a resposta é descartada. Qualidade da análise com esses
+  modelos: não medida.
+
 ## Embeddings (F20-05)
 
 A coluna de embedding fica vazia até existir provedor de embedding; ver SPEC 43 §9.

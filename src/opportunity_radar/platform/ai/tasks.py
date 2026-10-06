@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from opportunity_radar.platform.ai.providers.tokenharbor import MODEL_PREFIX
 from opportunity_radar.platform.config import Settings
 
 
@@ -45,6 +46,14 @@ def _model_for(settings: Settings, role: ModelRole) -> str:
     }[role]
 
 
+def _tokenharbor_models(settings: Settings) -> tuple[str, ...]:
+    """Token Harbor's models as route names, or nothing while the provider has no key."""
+    if not settings.tokenharbor_api_key.get_secret_value():
+        return ()
+    names = (name.strip() for name in settings.tokenharbor_models.split(","))
+    return tuple(MODEL_PREFIX + name for name in names if name)
+
+
 def _effort_for(settings: Settings, task: AITask) -> str:
     """The task's `reasoning_effort`: its own override (card F20-22) or the shared default.
 
@@ -75,10 +84,11 @@ def default_routes(settings: Settings) -> dict[AITask, ModelRoute]:
         AITask.JOB_CLASSIFICATION: ((ModelRole.FAST, ModelRole.ALT), 1500, 300),
         AITask.JOB_EXTRACTION: ((ModelRole.FAST, ModelRole.REASONING), 3000, 600),
     }
+    reserve = _tokenharbor_models(settings)
     return {
         task: ModelRoute(
             task=task,
-            chain=tuple(_model_for(settings, role) for role in roles),
+            chain=(*(_model_for(settings, role) for role in roles), *reserve),
             budget=TaskBudget(max_input, max_output, _effort_for(settings, task)),
         )
         for task, (roles, max_input, max_output) in table.items()
