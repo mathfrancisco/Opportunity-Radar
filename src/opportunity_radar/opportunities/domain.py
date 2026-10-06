@@ -119,7 +119,7 @@ class NormalizationError(ValueError):
     """Raised when a collected item cannot form a canonical candidate."""
 
 
-SKILL_TAXONOMY_VERSION = "skills-v4"
+SKILL_TAXONOMY_VERSION = "skills-v5"
 _MAX_DATABASE_AMOUNT = Decimal("999999999999.99")
 _AMBIGUOUS_SKILL_ALIASES = frozenset({"go", "react"})
 #: Aliases that are an ordinary word when lower-case ("a rag"): in prose they only match
@@ -277,6 +277,12 @@ SKILL_TAXONOMY: tuple[SkillTaxonomyEntry, ...] = (
         ("ci/cd", "continuous integration", "continuous deployment"),
     ),
     SkillTaxonomyEntry("observability", ("observability",)),
+    # skills-v5: unambiguous technologies named by 10 or more target-area postings that
+    # had no skill at all (docs/pesquisas/skills-v5-termos-sem-skill.md). Terms that are
+    # also an ordinary word or a company name ("excel", "spark", "databricks") stay out.
+    SkillTaxonomyEntry("linux", ("linux",)),
+    SkillTaxonomyEntry("c++", ("c++",)),
+    SkillTaxonomyEntry("etl", ("etl",)),
 )
 
 
