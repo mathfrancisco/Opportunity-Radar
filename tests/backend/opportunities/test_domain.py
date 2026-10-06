@@ -577,7 +577,7 @@ def test_extracts_versioned_canonical_skills_with_conservative_classification() 
     assert set(by_id) == {"react", "python", "postgresql", "docker"}
     assert by_id["react"].classification is SkillClassification.REQUIRED
     assert by_id["docker"].classification is SkillClassification.PREFERRED
-    assert by_id["react"].taxonomy_version == "skills-v4"
+    assert by_id["react"].taxonomy_version == "skills-v5"
     assert "Required: React.js" in by_id["react"].evidence_text
 
 
@@ -634,6 +634,27 @@ def test_skills_v2_never_removes_or_narrows_a_skills_v1_entry() -> None:
         )
     # F20-02's curated additions are net-new entries, not replacements.
     assert {"ai", "cicd", "observability"} <= set(current_by_id) - set(skills_v1_baseline)
+
+
+def test_skills_v5_adds_linux_cpp_and_etl() -> None:
+    skills = extract_skills(
+        "Embedded Linux C++ Developer",
+        "Experiência com processos de ETL/ELT. C/C++ is a plus.",
+        {},
+    )
+
+    assert {skill.canonical_id for skill in skills} == {"linux", "c++", "etl"}
+
+
+def test_skills_v5_leaves_ambiguous_terms_out() -> None:
+    skills = extract_skills(
+        "Software Engineer",
+        "A culture where everyone can excel. Backed by Spark Capital. Unity Catalog and "
+        "payment rails at Databricks. Not a C+ grade, and no linuxish or kettle.",
+        {},
+    )
+
+    assert skills == ()
 
 
 def test_ambiguous_skill_aliases_require_technical_context() -> None:
@@ -841,7 +862,7 @@ def test_react_native_does_not_lose_react_or_the_other_way_round() -> None:
 def test_skill_taxonomy_version_is_bumped_and_reaches_assessment_currency() -> None:
     from opportunity_radar.matching import currency, service
 
-    assert SKILL_TAXONOMY_VERSION == "skills-v4"
+    assert SKILL_TAXONOMY_VERSION == "skills-v5"
     assert currency.SKILL_TAXONOMY_VERSION == SKILL_TAXONOMY_VERSION
     assert service.SKILL_TAXONOMY_VERSION == SKILL_TAXONOMY_VERSION
     assert extract_skills(None, "Required: Vue.", {})[0].taxonomy_version == SKILL_TAXONOMY_VERSION

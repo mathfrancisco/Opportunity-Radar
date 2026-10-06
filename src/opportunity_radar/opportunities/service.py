@@ -1246,6 +1246,7 @@ def retag_skills(
     batch_size: int = 500,
     limit: int | None = None,
     apply: bool = False,
+    include_untagged: bool = False,
 ) -> dict[str, Any]:
     """Re-extract the skills of opportunities still tagged by an older taxonomy.
 
@@ -1258,6 +1259,10 @@ def retag_skills(
     `still_old`. A changed posting gets `search_skills` refreshed and `version` bumped once;
     a second run finds nothing to do for it. Each batch is its own transaction; without
     `apply` every batch rolls back.
+
+    A posting with no skill row carries no version, so it is only read with
+    `include_untagged`: the way a taxonomy that gained entries reaches the postings the old
+    one found nothing in. Those are selected on every such run, and change only once.
     """
     if batch_size < 1:
         raise ValueError("batch size must be at least 1")
@@ -1266,11 +1271,19 @@ def retag_skills(
         select(OpportunitySkillModel.opportunity_id)
         .where(OpportunitySkillModel.taxonomy_version != SKILL_TAXONOMY_VERSION)
         .distinct()
-        .order_by(OpportunitySkillModel.opportunity_id)
     )
-    if limit is not None:
-        query = query.limit(limit)
-    opportunity_ids = list(session.scalars(query).all())
+    selected_ids = set(session.scalars(query).all())
+    if include_untagged:
+        selected_ids.update(
+            session.scalars(
+                select(OpportunityModel.id).where(
+                    ~select(OpportunitySkillModel.id)
+                    .where(OpportunitySkillModel.opportunity_id == OpportunityModel.id)
+                    .exists()
+                )
+            ).all()
+        )
+    opportunity_ids = sorted(selected_ids)[:limit]
 
     skipped = Counter[str]()
     rows_before = Counter[str]()

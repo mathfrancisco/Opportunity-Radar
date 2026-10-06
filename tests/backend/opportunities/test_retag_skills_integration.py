@@ -170,3 +170,30 @@ def test_a_second_run_finds_nothing_to_do(
 
     assert second["selected"] == 0 and second["postings_changed"] == 0
     assert _state(engine, ids["A"]) == after_first
+
+
+def test_include_untagged_reaches_a_posting_that_has_no_skill_row(
+    engine: Engine, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ids = _seed(engine)
+    _run(capsys, "--apply")
+    with Session(engine) as session:
+        session.execute(
+            text("DELETE FROM opportunities.opportunity_skill WHERE opportunity_id = :id"),
+            {"id": ids["B"]},
+        )
+        session.commit()
+    untagged = _state(engine, ids["B"])
+    assert untagged["skills"] == []
+
+    assert _run(capsys, "--apply")["selected"] == 0
+    assert _state(engine, ids["B"]) == untagged
+
+    applied = _run(capsys, "--apply", "--include-untagged")
+
+    assert applied["selected"] == 1 and applied["postings_changed"] == 1
+    after = _state(engine, ids["B"])
+    assert ("python", SKILL_TAXONOMY_VERSION) in after["skills"]
+    assert after["version"] == untagged["version"] + 1
+    assert _run(capsys, "--apply", "--include-untagged")["postings_changed"] == 0
+    assert _state(engine, ids["B"]) == after
