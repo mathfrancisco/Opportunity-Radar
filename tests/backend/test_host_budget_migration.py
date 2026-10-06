@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -24,6 +25,8 @@ pytestmark = pytest.mark.skipif(
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PREVIOUS = "20260929_0055"
 REVISION = "20260929_0056"
+F51_PREVIOUS = "20261005_0065"
+F51_REVISION = "20261005_0066"
 
 
 def _alembic(url: str, *args: str) -> None:
@@ -132,5 +135,82 @@ def test_aggregate_rows_become_per_tenant_rows_and_back(scratch: str) -> None:
         _alembic(scratch, "upgrade", REVISION)
         with engine.connect() as connection:
             assert "workday:aig/site:wd5" in _budget_rows(connection)
+    finally:
+        engine.dispose()
+
+
+def test_workday_host_budget_downgrade_depletes_each_site_conservatively(
+    scratch: str,
+) -> None:
+    """Rollback cannot multiply a physical host's balance across its configured sites."""
+    _alembic(scratch, "upgrade", F51_PREVIOUS)
+    engine = create_database_engine(scratch)
+    cooldown = "2099-01-01 00:00:00+00"
+    try:
+        with engine.begin() as connection:
+            _add_source(
+                connection, "workday", "site-a",
+                {"tenant_identifier": "acme/site-a", "api_region": "wd5"},
+            )
+            _add_source(
+                connection, "workday", "site-b",
+                {"tenant_identifier": "acme/site-b", "api_region": "wd5"},
+            )
+            for host, used in (
+                ("workday:acme/site-a:wd5", 3),
+                ("workday:acme/site-b:wd5", 4),
+                ("acme.wd5.myworkdayjobs.com", 2),
+            ):
+                connection.execute(
+                    text(
+                        "INSERT INTO acquisition.host_budget_state "
+                        "(host, window_start, requests_used, requests_ceiling, cooldown_until, "
+                        "exploration_reserve_ratio) "
+                        "VALUES (:host, now() - interval '3 days', :used, 20, :cooldown, 0.1)"
+                    ),
+                    {"host": host, "used": used, "cooldown": cooldown},
+                )
+        _alembic(scratch, "upgrade", F51_REVISION)
+        with engine.begin() as connection:
+            # Simulate a window rollover at the physical host after migration.
+            connection.execute(
+                text(
+                    "UPDATE acquisition.host_budget_state SET window_start = now() - "
+                    "interval '3 days', requests_used = 9, requests_ceiling = 20, "
+                    "cooldown_until = :cooldown "
+                    "WHERE host = 'acme.wd5.myworkdayjobs.com'"
+                ),
+                {"cooldown": cooldown},
+            )
+            # A legacy key can be recreated by another older process before rollback.
+            connection.execute(
+                text(
+                    "INSERT INTO acquisition.host_budget_state "
+                    "(host, window_start, requests_used, requests_ceiling, cooldown_until, "
+                    "exploration_reserve_ratio) VALUES "
+                    "('workday:acme/site-a:wd5', now() - interval '1 day', 1, 10, "
+                    ":collision_cooldown, 0.2)"
+                ),
+                {"collision_cooldown": "2099-06-01 00:00:00+00"},
+            )
+        _alembic(scratch, "downgrade", F51_PREVIOUS)
+        with engine.connect() as connection:
+            rows = {
+                row.host: row
+                for row in connection.execute(
+                    text(
+                        "SELECT host, window_start, requests_used, requests_ceiling, "
+                        "cooldown_until FROM acquisition.host_budget_state "
+                        "WHERE host LIKE 'workday:%'"
+                    )
+                )
+            }
+        assert set(rows) == {"workday:acme/site-a:wd5", "workday:acme/site-b:wd5"}
+        for host, row in rows.items():
+            assert row.requests_used >= row.requests_ceiling
+            assert row.window_start >= datetime.now(UTC) - timedelta(minutes=1)
+        assert rows["workday:acme/site-a:wd5"].requests_used >= 20
+        assert rows["workday:acme/site-a:wd5"].cooldown_until.isoformat().startswith("2099-06-01")
+        assert rows["workday:acme/site-b:wd5"].cooldown_until.isoformat().startswith("2099-01-01")
     finally:
         engine.dispose()

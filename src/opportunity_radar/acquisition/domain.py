@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from enum import StrEnum
 from math import isfinite
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 from uuid import UUID, uuid4
 
 from opportunity_radar.acquisition.scheduling import ConditionalRequestHeaders
@@ -231,9 +231,15 @@ class CollectionTelemetry:
     def record_rate_limit(self) -> None:
         self.rate_limit_events += 1
 
-    def record_detail(self, *, failed: bool = False, skipped: bool = False) -> None:
+    detail_skip_reasons: dict[str, int] = field(default_factory=dict)
+
+    def record_detail(
+        self, *, failed: bool = False, skipped: bool = False, reason: str | None = None
+    ) -> None:
         if skipped:
             self.detail_skipped += 1
+            if reason:
+                self.detail_skip_reasons[reason] = self.detail_skip_reasons.get(reason, 0) + 1
             return
         self.detail_requests += 1
         if failed:
@@ -326,6 +332,17 @@ class CollectionRequest:
     #: by default; the detail endpoint is outside the terms review (SPEC 50, Q1).
     fetch_detail: bool = False
     detail_max_requests: int = 200
+    detail_approval_valid: bool = False
+    detail_approval_skip_reason: str = "approval_missing"
+    reserve_http_request: Callable[[bool], str | None] | None = field(
+        default=None, compare=False, repr=False
+    )
+    persist_cooldown: Callable[[datetime], None] | None = field(
+        default=None, compare=False, repr=False
+    )
+    persist_detail_counters: Callable[[CollectionTelemetry], None] | None = field(
+        default=None, compare=False, repr=False
+    )
     #: Requests the shared host budget still allows at the start of the run, when the
     #: service knows it (F20-38). `None` means no persisted budget, so only the cap applies.
     host_requests_remaining: int | None = None

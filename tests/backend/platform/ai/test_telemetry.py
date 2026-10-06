@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from dataclasses import fields
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
@@ -124,7 +125,29 @@ def test_no_field_on_any_record_carries_a_value_from_the_test_payload() -> None:
         "prompt_tokens",
         "completion_tokens",
         "prompt_version",
+        "operation_id",
+        "operation_ordinal",
+        "transport_started",
     }
+
+
+def test_attempt_usage_and_operation_correlation_survive_failure() -> None:
+    operation_id = uuid4()
+    attempts = (
+        Attempt(
+            "model-a", 0, ErrorKind.QUOTA, None, 429,
+            operation_id=operation_id, prompt_tokens=7, completion_tokens=5,
+        ),
+        Attempt("model-b", 0, None, 10, 200, operation_id=operation_id),
+    )
+
+    records = records_from_attempts(
+        attempts, task="job_match", provider="fake", fallback_used=True,
+        prompt_version="v1",
+    )
+
+    assert [record.operation_id for record in records] == [operation_id, operation_id]
+    assert (records[0].prompt_tokens, records[0].completion_tokens) == (7, 5)
 
 
 def test_cache_hit_record_has_no_tokens_and_attempt_zero() -> None:

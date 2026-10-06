@@ -27,6 +27,7 @@ from opportunity_radar.opportunities.suggestions import (
     SuggestionAlreadyDecidedError,
     SuggestionNotFoundError,
     SuggestionStatus,
+    _suggestion_content_hash,
     accept_suggestion,
     candidates_needing_suggestion,
     reject_suggestion,
@@ -175,6 +176,16 @@ def test_unknown_fields_empty_when_everything_resolved() -> None:
         work_mode=WorkMode.REMOTE.value,
     )
     assert unknown_fields(opportunity) == []
+
+
+def test_defer_content_hash_changes_with_content_or_pending_fields() -> None:
+    role = [SuggestibleField.ROLE_FAMILY]
+    base = _suggestion_content_hash("Backend", "Python APIs", role)
+    assert _suggestion_content_hash("Backend", "Python APIs", role) == base
+    assert _suggestion_content_hash("Backend", "Python APIs updated", role) != base
+    assert _suggestion_content_hash(
+        "Backend", "Python APIs", [SuggestibleField.SENIORITY]
+    ) != base
 
 
 def test_load_classification_prompt_reads_the_real_artifacts() -> None:
@@ -581,3 +592,51 @@ def test_candidates_needing_suggestion_skips_opportunities_already_suggested() -
                 session,
                 [needs_suggestion.id, already_suggested.id, fully_resolved.id],
             )
+
+
+def test_suggestion_queue_filters_before_limit_and_pages_stably() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        # Older than any row another test may have left in the shared database.
+        created_at = datetime(2000, 1, 1, tzinfo=UTC)
+        known = {
+            "role_family": RoleFamily.SOFTWARE_ENGINEERING.value,
+            "work_mode": WorkMode.REMOTE.value,
+        }
+        resolved = [_opportunity(seniority="UNKNOWN", **known) for _ in range(100)]
+        eligible = [_opportunity(seniority="UNKNOWN", **known) for _ in range(3)]
+        for item in resolved + eligible:
+            item.created_at = created_at
+        session.add_all(resolved + eligible)
+        session.commit()
+        session.add_all(
+            OpportunitySuggestionModel(
+                opportunity_id=item.id,
+                opportunity_version=item.version,
+                field=SuggestibleField.SENIORITY.value,
+                value=Seniority.SENIOR.value,
+                evidence="senior",
+                model=_FAST_MODEL,
+                prompt_version=_PROMPT.version,
+                status=SuggestionStatus.PENDING.value,
+            )
+            for item in resolved
+        )
+        session.commit()
+        try:
+            first_page = candidates_needing_suggestion(session, limit=2)
+            assert [item.id for item in first_page] == [
+                item.id for item in sorted(eligible, key=lambda row: row.id)[:2]
+            ]
+            last = first_page[-1]
+            second_page = candidates_needing_suggestion(
+                session, limit=2, after=(last.created_at, last.id)
+            )
+            # The shared database may hold newer candidates from other tests; they come
+            # after this test's rows and never include a resolved one.
+            assert second_page[0].id == sorted(eligible, key=lambda row: row.id)[2].id
+            assert {item.id for item in second_page}.isdisjoint(
+                {item.id for item in resolved} | {item.id for item in first_page}
+            )
+        finally:
+            _cleanup(session, [item.id for item in resolved + eligible])

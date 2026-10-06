@@ -1,5 +1,6 @@
 import logging
 from contextlib import nullcontext
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -129,7 +130,7 @@ def test_suggest_fields_batch_summary_uses_non_reserved_log_fields(
 ) -> None:
     opportunity = SimpleNamespace(id="opportunity-1")
 
-    async def suggest_fields(*_args: object) -> SimpleNamespace:
+    async def suggest_fields(*_args: object, **_kwargs: object) -> SimpleNamespace:
         return SimpleNamespace(created=(), discarded_fields=())
 
     monkeypatch.setattr(worker, "observe_job", lambda *_args, **_kwargs: nullcontext())
@@ -137,7 +138,7 @@ def test_suggest_fields_batch_summary_uses_non_reserved_log_fields(
     monkeypatch.setattr(
         worker,
         "candidates_needing_suggestion",
-        lambda _session, limit: [opportunity],
+        lambda _session, *, limit, **_kwargs: [opportunity],
     )
     monkeypatch.setattr(worker, "suggest_fields", suggest_fields)
     router = SimpleNamespace(
@@ -183,3 +184,119 @@ def test_assessment_retention_settings_must_be_positive() -> None:
         Settings(database_url=_DATABASE_URL, assessment_retention_days=0)
     with pytest.raises(ValueError, match="ASSESSMENT_RETENTION_BATCH_SIZE"):
         Settings(database_url=_DATABASE_URL, assessment_retention_batch_size=0)
+
+
+def test_worker_rechecks_due_time_after_each_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sources = [SimpleNamespace(id="slow"), SimpleNamespace(id="newly-due")]
+    current = [datetime(2026, 1, 1, tzinfo=UTC)]
+    executed: list[str] = []
+    judged_at: list[datetime] = []
+
+    class Service:
+        def list_collectable_sources(self) -> list[object]:
+            return sources
+
+        def scheduling_state(self, source: object, *, timezone: str) -> object:
+            del timezone
+            return source
+
+        async def execute(self, source_id: str, _request: object, **_kwargs: object):
+            executed.append(source_id)
+            current[0] += timedelta(seconds=90)
+            return SimpleNamespace(
+                complete=False,
+                status="SUCCEEDED",
+                id=f"run-{source_id}",
+                items_persisted=1,
+            )
+
+    monkeypatch.setattr(worker, "observe_job", lambda *_args, **_kwargs: nullcontext("pass"))
+    monkeypatch.setattr(worker, "Session", lambda _engine: nullcontext(object()))
+    def evaluate(_state: object, *, now: datetime, **_kwargs: object):
+        judged_at.append(now)
+        return worker.CollectionGate.DUE
+
+    monkeypatch.setattr(worker, "evaluate_gate", evaluate)
+    monkeypatch.setattr(
+        worker,
+        "_scheduled_request_with_rotation",
+        lambda _service, source, _correlation: (SimpleNamespace(keywords=()), None, 0),
+    )
+    monkeypatch.setattr(worker, "annotate_pass", lambda *_args, **_kwargs: None)
+
+    worker.collect_enabled_sources(
+        object(),
+        service_factory=lambda _session: Service(),  # type: ignore[arg-type]
+        utc_clock=lambda: current[0],
+    )
+
+    assert executed == ["slow", "newly-due"]
+    assert judged_at == [
+        datetime(2026, 1, 1, tzinfo=UTC),
+        datetime(2026, 1, 1, 0, 1, 30, tzinfo=UTC),
+    ]
+
+
+def test_pass_deadline_skips_next_source_after_prior_cleanup_finishes(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    sources = [SimpleNamespace(id="slow"), SimpleNamespace(id="not-started")]
+    current = [datetime(2026, 1, 1, tzinfo=UTC)]
+    monotonic = [0.0]
+    executed: list[str] = []
+    cleanup_finished = [False]
+    skips: list[str] = []
+
+    class Service:
+        def list_collectable_sources(self) -> list[object]:
+            return sources
+
+        def scheduling_state(self, source: object, *, timezone: str) -> object:
+            del timezone
+            return source
+
+        async def execute(self, source_id: str, _request: object, **_kwargs: object):
+            executed.append(source_id)
+            monotonic[0] = 2.0
+            cleanup_finished[0] = True
+            return SimpleNamespace(
+                complete=False,
+                status="PARTIAL",
+                id=f"run-{source_id}",
+                items_persisted=1,
+            )
+
+    monkeypatch.setattr(worker, "observe_job", lambda *_args, **_kwargs: nullcontext("pass"))
+    monkeypatch.setattr(worker, "Session", lambda _engine: nullcontext(object()))
+    monkeypatch.setattr(
+        worker,
+        "evaluate_gate",
+        lambda *_args, **_kwargs: worker.CollectionGate.DUE,
+    )
+    monkeypatch.setattr(
+        worker,
+        "_scheduled_request_with_rotation",
+        lambda _service, _source, _correlation: (SimpleNamespace(keywords=()), None, 0),
+    )
+    monkeypatch.setattr(worker, "annotate_pass", lambda *_args, **_kwargs: None)
+
+    with caplog.at_level(logging.INFO, logger="opportunity_radar.worker"):
+        worker.collect_enabled_sources(
+            object(),
+            service_factory=lambda _session: Service(),  # type: ignore[arg-type]
+            source_deadline_seconds=0.0,
+            pass_deadline_seconds=1.0,
+            monotonic_clock=lambda: monotonic[0],
+            utc_clock=lambda: current[0],
+        )
+    skips = [
+        record.reason
+        for record in caplog.records
+        if record.message == "scheduled collection skipped"
+    ]
+
+    assert cleanup_finished[0] is True
+    assert executed == ["slow"]
+    assert skips == ["pass_deadline"]

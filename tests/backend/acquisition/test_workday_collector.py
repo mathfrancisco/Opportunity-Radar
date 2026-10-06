@@ -208,36 +208,32 @@ def test_stops_at_the_announced_total_when_workday_wraps_past_the_cap() -> None:
     assert collection_request.telemetry.items_announced == total
 
 
-def test_retries_rate_limit_using_retry_after() -> None:
+def test_rate_limit_persists_retry_after_without_retry_loop() -> None:
     calls = 0
-    delays: list[float] = []
+    cooldowns: list[datetime] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal calls
         calls += 1
-        if calls == 1:
-            return httpx.Response(429, headers={"Retry-After": "4"})
-        return httpx.Response(200, json={"total": 0, "jobPostings": []})
-
-    async def sleeper(delay: float) -> None:
-        delays.append(delay)
+        return httpx.Response(429, headers={"Retry-After": "4"})
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     request = CollectionRequest(
         company_reference="acme/ExternalCareerSite",
         api_region="wd5",
         network_policy=CollectionNetworkPolicy(max_retries=1, max_retry_delay_seconds=3),
+        persist_cooldown=cooldowns.append,
     )
     try:
-        assert (
-            asyncio.run(_collect(WorkdayCollector(client=client, sleeper=sleeper), request))
-            == []
-        )
+        with pytest.raises(AcquisitionError) as caught:
+            asyncio.run(_collect(WorkdayCollector(client=client), request))
     finally:
         asyncio.run(client.aclose())
-    assert calls == 2
-    assert delays == [3]
-    assert request.telemetry.retry_count == 1
+    assert caught.value.code is AcquisitionErrorCode.SOURCE_RATE_LIMITED
+    assert calls == 1
+    assert len(cooldowns) == 1
+    assert 3.0 <= (cooldowns[0] - datetime.now(UTC)).total_seconds() <= 4.0
+    assert request.telemetry.retry_count == 0
     assert request.telemetry.rate_limit_events == 1
 
 
@@ -629,7 +625,7 @@ def test_500_item_workday_run_makes_zero_tavily_calls_and_finishes_pagination() 
     assert run.credits_used == 0
     # Only the 25 listing pages count against the tenant's own bucket.
     assert repository.budget_calls == [
-        {"host": "workday:adobe/external:wd5", "requests": 25, "default_ceiling": 500}
+        {"host": "adobe.wd5.myworkdayjobs.com", "requests": 25, "default_ceiling": 500}
     ]
 
 
@@ -678,6 +674,8 @@ def _detail_run(
         return httpx.Response(200, json=detail_payload)
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    # Test fixture approval is synthetic and is never loaded by production config.
+    request_fields.setdefault("detail_approval_valid", True)
     request = CollectionRequest(
         company_reference="acme/ExternalCareerSite",
         company_name="Acme",
@@ -720,6 +718,7 @@ def test_off_target_and_unknown_postings_get_no_detail_request() -> None:
     items, log, _ = _detail_run(
         ["Account Executive", "Wizard of Light", _ENG],
         fetch_detail=True,
+        detail_approval_valid=True,
         target_role_families=_TARGETS,
     )
 
@@ -766,6 +765,23 @@ def test_per_run_cap_limits_detail_requests_and_is_recorded() -> None:
     assert request.telemetry.detail_skipped == 3
 
 
+def test_per_run_cap_counts_retry_transports_and_preserves_listing_item() -> None:
+    items, log, request = _detail_run(
+        [_ENG],
+        detail_status={"/job/Remote/Job-0_R0": 500},
+        fetch_detail=True,
+        detail_max_requests=1,
+        target_role_families=_TARGETS,
+    )
+
+    assert len(items) == 1
+    assert items[0].description is None
+    assert len(_details(log)) == 1
+    assert request.telemetry.detail_requests == 1
+    assert request.telemetry.detail_failures == 1
+    assert request.telemetry.detail_skip_reasons == {"cap": 1}
+
+
 def test_host_budget_left_limits_detail_requests() -> None:
     # One listing page already spent 1 of the 3 requests the host still allows.
     items, log, request = _detail_run(
@@ -785,6 +801,7 @@ def test_detail_failure_keeps_the_posting_and_does_not_fail_the_run() -> None:
         [_ENG] * 3,
         detail_status={"/job/Remote/Job-1_R1": 404},
         fetch_detail=True,
+        detail_approval_valid=True,
         target_role_families=_TARGETS,
     )
 
@@ -806,6 +823,7 @@ def test_detail_schema_mismatch_keeps_the_posting() -> None:
         company_reference="acme/ExternalCareerSite",
         api_region="wd5",
         fetch_detail=True,
+        detail_approval_valid=True,
         target_role_families=_TARGETS,
     )
     try:
@@ -836,6 +854,37 @@ def test_detail_rate_limit_stops_further_detail_requests() -> None:
     assert len(_details(log)) == 2  # the 429 stops the run's detail requests
     assert request.telemetry.rate_limit_events == 1
     assert request.telemetry.detail_skipped == 2
+
+
+def test_budget_reservation_runs_before_every_http_and_denial_sends_no_request() -> None:
+    decisions = iter((None, "quota"))
+    items, log, request = _detail_run(
+        [_ENG],
+        fetch_detail=True,
+        detail_approval_valid=True,
+        target_role_families=_TARGETS,
+        reserve_http_request=lambda is_detail: next(decisions),
+    )
+
+    assert len(items) == 1
+    assert [call.method for call in log] == ["POST"]
+    assert request.telemetry.http_requests == 1
+    assert request.telemetry.detail_requests == 0
+    assert request.telemetry.detail_skipped == 1
+    assert request.telemetry.detail_skip_reasons == {"quota": 1}
+
+
+def test_detail_without_approval_never_opens_detail_transport() -> None:
+    _, log, request = _detail_run(
+        [_ENG],
+        fetch_detail=True,
+        detail_approval_valid=False,
+        target_role_families=_TARGETS,
+    )
+
+    assert _details(log) == []
+    assert request.telemetry.detail_skipped == 1
+    assert request.telemetry.detail_skip_reasons == {"approval_missing": 1}
 
 
 def test_detail_requests_honour_the_minimum_interval() -> None:

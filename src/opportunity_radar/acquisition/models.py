@@ -136,6 +136,11 @@ class SourceRunModel(Base):
     http_requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rate_limit_events: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    fencing_token: Mapped[int | None] = mapped_column(BigInteger)
+    detail_requests: Mapped[int | None] = mapped_column(Integer)
+    detail_failures: Mapped[int | None] = mapped_column(Integer)
+    detail_skipped: Mapped[int | None] = mapped_column(Integer)
+    detail_skip_reasons: Mapped[dict[str, int] | None] = mapped_column(JSONB)
     #: Provider credits spent by this run (e.g. Tavily's usage.credits). A different unit
     #: from http_requests/retry_count, which count HTTP calls regardless of what a source
     #: charges per call (F20-43).
@@ -173,6 +178,33 @@ class SourceRunModel(Base):
     )
     source_definition: Mapped[SourceDefinitionModel] = relationship(back_populates="runs")
     raw_items: Mapped[list["RawItemModel"]] = relationship(back_populates="source_run")
+
+
+class SourceExecutionClaimModel(Base):
+    """Durable per-source fencing generation; row locks are held only for writes."""
+
+    __tablename__ = "source_execution_claim"
+    __table_args__ = (
+        CheckConstraint("fencing_token >= 0", name="ck_source_execution_claim_token"),
+        CheckConstraint("task_key <> ''", name="ck_source_execution_claim_task"),
+        {"schema": "acquisition"},
+    )
+
+    source_definition_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("acquisition.source_definition.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    task_key: Mapped[str] = mapped_column(String(64), primary_key=True, default="collect")
+    fencing_token: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    owner_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    run_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("acquisition.source_run.id", ondelete="SET NULL")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class TavilyExtractCacheModel(Base):

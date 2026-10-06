@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     collection_target_area_floor: float = 0.30
     collection_backoff_base_seconds: int = 300
     collection_backoff_ceiling_seconds: int = 86400
+    # F51-06 deadlines are opt-in until a deployment has observed its source durations.
+    collection_source_deadline_seconds: int = Field(default=0, ge=0)
+    collection_pass_deadline_seconds: int = Field(default=0, ge=0)
     greenhouse_base_url: str = "https://boards-api.greenhouse.io"
     # An empty webhook is a supported deployment: incidents are still opened and closed,
     # and the absent channel is reported by the doctor instead of failing collection.
@@ -139,8 +142,8 @@ class Settings(BaseSettings):
     # F48-08: stop extracting for a host after this many consecutive failures (0 = off).
     tavily_extract_host_failure_threshold: int = 5
     # F48-08: request ceiling per source type for a new host budget row, `type=ceiling`
-    # comma separated. Types not listed use the scheduler default (200 per hour).
-    host_request_ceilings: str = "workday=500,hacker_news=500,inhire=300"
+    # comma separated. Types not listed use the scheduler default (1000 per hour).
+    host_request_ceilings: str = "workday=500,hacker_news=500,inhire=1200"
 
     @property
     def extraction_skip_source_type_set(self) -> frozenset[str]:

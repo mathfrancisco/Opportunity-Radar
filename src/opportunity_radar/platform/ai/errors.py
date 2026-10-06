@@ -19,6 +19,7 @@ class ErrorKind(StrEnum):
     INVALID_OUTPUT = "invalid_output"  # body without valid JSON, or outside the schema
     CONFIGURATION = "configuration"  # 401, 403, 404
     REQUEST = "request"  # 400, 413, 422
+    CANCELLED = "cancelled"  # caller cancellation after provider transport began
 
 
 class ProviderError(Exception):
@@ -36,6 +37,11 @@ class ProviderError(Exception):
         status: int | None = None,
         retry_after_seconds: float | None = None,
         model: str | None = None,
+        prompt_tokens: int | None = None,
+        completion_tokens: int | None = None,
+        latency_ms: int | None = None,
+        transport_started: bool = False,
+        rate_limit: object | None = None,
     ) -> None:
         super().__init__(summary)
         self.kind = kind
@@ -43,6 +49,12 @@ class ProviderError(Exception):
         self.status = status
         self.retry_after_seconds = retry_after_seconds
         self.model = model
+        self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
+        self.latency_ms = latency_ms
+        self.transport_started = transport_started
+        self.rate_limit = rate_limit
+        self.quota_exhausted = False
         # Filled by `AIRouter.run` (card F20-19) right before it re-raises, so a caller
         # can record per-call telemetry even for a call that never returned a response.
         self.attempts: tuple["Attempt", ...] = ()

@@ -2,9 +2,13 @@
 
 import asyncio
 import json
+import os
+from uuid import uuid4
 
 import httpx
+import pytest
 from pydantic import SecretStr
+from sqlalchemy import text
 
 from opportunity_radar.platform.ai.breaker import CircuitBreaker
 from opportunity_radar.platform.ai.errors import ErrorKind, ProviderError
@@ -14,8 +18,13 @@ from opportunity_radar.platform.ai.providers.routed import RoutedProvider, build
 from opportunity_radar.platform.ai.providers.tokenharbor import TokenHarborProvider
 from opportunity_radar.platform.ai.router import AIRouter
 from opportunity_radar.platform.ai.tasks import AITask, default_routes
-from opportunity_radar.platform.ai.telemetry import records_from_attempts
+from opportunity_radar.platform.ai.telemetry import (
+    record_attempt_started,
+    records_from_attempts,
+    start_operation,
+)
 from opportunity_radar.platform.config import Settings
+from opportunity_radar.platform.database import create_database_engine
 
 _KEY = "thk_live_test-key"
 _FREE = "tokenharbor:deepseek-v4.1-flash:free"
@@ -185,3 +194,87 @@ def test_router_falls_to_token_harbor_when_groq_is_rate_limited_and_telemetry_na
     )
     assert [record.provider for record in records] == ["groq", "groq", "tokenharbor"]
     assert records[-1].model == _FREE and records[-1].success
+
+
+def test_inherited_error_paths_carry_the_transport_facts_and_the_route_name() -> None:
+    """`complete` and the error handling come from `GroqProvider` (SPEC 51 telemetry)."""
+    started: list[str] = []
+
+    async def on_start() -> None:
+        started.append("sent")
+
+    def request() -> LLMRequest:
+        return LLMRequest(
+            model=_FREE, system="s", user="u", schema_name="check",
+            json_schema={"type": "object"}, on_transport_start=on_start,
+        )
+
+    def fail(handler) -> ProviderError:
+        provider = _backend(
+            TokenHarborProvider, handler, base_url="https://tokenharbor.ai/v1", api_key=_KEY
+        )
+        with pytest.raises(ProviderError) as excinfo:
+            asyncio.run(provider.complete(request()))
+        return excinfo.value
+
+    malformed = fail(lambda _: httpx.Response(200, text="not json"))
+    assert malformed.kind is ErrorKind.INVALID_OUTPUT and malformed.status == 200
+    assert malformed.transport_started and malformed.model == _FREE
+    assert malformed.summary == "tokenharbor response body was malformed"
+
+    empty = fail(lambda _: httpx.Response(200, json={"model": "deepseek-v4.1-flash"}))
+    assert empty.kind is ErrorKind.INVALID_OUTPUT and empty.transport_started
+    assert empty.status == 200
+
+    billed = fail(
+        lambda _: httpx.Response(
+            500, json={"usage": {"prompt_tokens": 7, "completion_tokens": 3}}
+        )
+    )
+    assert billed.kind is ErrorKind.TRANSIENT and billed.transport_started
+    assert (billed.prompt_tokens, billed.completion_tokens) == (7, 3)
+    assert billed.model == _FREE
+
+    def refuse(_: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused")
+
+    refused = fail(refuse)
+    assert refused.kind is ErrorKind.TRANSIENT and refused.transport_started
+    assert refused.summary == "could not connect to tokenharbor"
+    assert started == ["sent"] * 4
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("RUN_DATABASE_INTEGRATION") != "1",
+    reason="database integration is enabled only in the isolated CI database",
+)
+def test_an_in_flight_attempt_on_a_free_model_is_recorded_under_token_harbor() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    operation_id = uuid4()
+    try:
+        start_operation(engine, operation_id=operation_id, task="job_match")
+        record_attempt_started(
+            engine, operation_id=operation_id, operation_ordinal=0, task="job_match",
+            provider="groq", model=_FREE, attempt=0, prompt_version="v1", fallback_used=True,
+        )
+        with engine.connect() as connection:
+            row = connection.execute(
+                text(
+                    "SELECT provider, attempt_state FROM platform.ai_call_record "
+                    "WHERE operation_id = :id"
+                ),
+                {"id": operation_id},
+            ).one()
+        assert (row.provider, row.attempt_state) == ("tokenharbor", "in_flight")
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM platform.ai_call_record WHERE operation_id = :id"),
+                {"id": operation_id},
+            )
+            connection.execute(
+                text("DELETE FROM platform.ai_operation_record WHERE id = :id"),
+                {"id": operation_id},
+            )
+        engine.dispose()

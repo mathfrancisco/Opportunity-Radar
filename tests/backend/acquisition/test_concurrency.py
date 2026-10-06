@@ -17,8 +17,8 @@ def test_source_host_key_tenant_types_key_on_their_own_tenant_config() -> None:
     assert source_host_key("teamtailor", {"company_identifier": "acme"}) == "teamtailor:acme"
     assert source_host_key("factorial", {"company_identifier": "acme"}) == "factorial:acme"
     assert (
-        source_host_key("workday", {"tenant_identifier": "acme", "api_region": "us"})
-        == "workday:acme:us"
+        source_host_key("workday", {"tenant_identifier": "acme/site", "api_region": "us"})
+        == "acme.us.myworkdayjobs.com"
     )
 
 

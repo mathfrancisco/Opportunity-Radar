@@ -7,9 +7,9 @@ import hashlib
 import json
 import re
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import aclosing, contextmanager
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from math import ceil, isfinite
 from typing import Any, Literal
 from urllib.parse import urlsplit
@@ -1106,7 +1106,18 @@ class AcquisitionService:
     ) -> tuple[list[SourceRunModel], int]:
         return self.repository.list_runs(offset=offset, limit=limit, source_id=source_id)
 
-    async def execute(self, source_id: UUID, request: CollectionRequest) -> SourceRunModel:
+    async def execute(
+        self,
+        source_id: UUID,
+        request: CollectionRequest,
+        *,
+        deadline_seconds: float | None = None,
+    ) -> SourceRunModel:
+        deadline_at = (
+            asyncio.get_running_loop().time() + deadline_seconds
+            if deadline_seconds is not None
+            else None
+        )
         if request.source_definition_id not in {None, source_id}:
             raise AcquisitionError(
                 AcquisitionErrorCode.INVALID_CONFIGURATION,
@@ -1196,6 +1207,10 @@ class AcquisitionService:
         self.session.add(persisted_run)
         try:
             self.session.flush()
+            # The short, independent Workday reservation session must see the RUNNING
+            # run before it records attempts. Later collection writes remain in this
+            # session and are committed with the terminal result.
+            self.session.commit()
         except IntegrityError as conflict:
             self.session.rollback()
             raise AcquisitionError(
@@ -1203,6 +1218,18 @@ class AcquisitionService:
                 "source already has an active run",
                 retryable=True,
             ) from conflict
+
+        logger.info(
+            "source collection run started",
+            extra={
+                "job": "collect",
+                "source_id": str(source.id),
+                "run_id": str(run.id),
+                "state": "started",
+                "deadline_at_monotonic": deadline_at,
+                "last_activity_at": datetime.now(UTC).isoformat(),
+            },
+        )
 
         # A competing transaction may have waited on the active-run unique index.
         # Reload after acquiring that slot so throttling uses its committed attempt.
@@ -1226,7 +1253,18 @@ class AcquisitionService:
                         retryable=True,
                     )
                 else:
-                    await self._sleeper(delay)
+                    if deadline_at is None:
+                        await self._sleeper(delay)
+                    else:
+                        try:
+                            async with asyncio.timeout_at(deadline_at):
+                                await self._sleeper(delay)
+                        except TimeoutError:
+                            throttle_error = AcquisitionError(
+                                AcquisitionErrorCode.SOURCE_TIMEOUT,
+                                "source collection deadline exceeded during throttle",
+                                retryable=True,
+                            )
 
         error: AcquisitionError | None = None
         last_cursor: str | None = None
@@ -1248,6 +1286,8 @@ class AcquisitionService:
         # F48-08: Tavily `/extract` calls are counted here, never in `run_telemetry` —
         # that one feeds the ATS host budget, and extraction is a different provider.
         tavily_telemetry = CollectionTelemetry()
+        externally_cancelled = False
+        durable_reservations = callable(getattr(self.session, "get_bind", None))
         extraction_budget = (
             TavilyCreditBudget(limit=self._tavily_extraction.credit_budget_per_run)
             if self._tavily_extraction is not None
@@ -1266,13 +1306,60 @@ class AcquisitionService:
                 if source.source_type == "inhire"
                 else (request.fetch_detail, request.detail_max_requests)
             )
+            approval_valid, approval_reason = _workday_detail_approval(
+                source.configuration, source.id, company_reference, api_region
+            ) if source.source_type == "workday" else (False, "approval_missing")
+            budget_host = _budget_host_for_source(source.source_type, source.configuration)
+
+            def reserve_request(is_detail: bool) -> str | None:
+                with Session(bind=self.session.get_bind()) as budget_session:
+                    return AcquisitionRepository(budget_session).reserve_host_request(
+                        budget_host,
+                        now=datetime.now(UTC),
+                        default_ceiling=self._host_request_ceilings.get(
+                            source.source_type, DEFAULT_HOST_REQUESTS_CEILING
+                        ),
+                        run_id=run.id,
+                        detail=is_detail,
+                    )
+
+            def persist_cooldown(until: datetime) -> None:
+                with Session(bind=self.session.get_bind()) as budget_session:
+                    AcquisitionRepository(budget_session).persist_host_cooldown(
+                        budget_host, until
+                    )
+
+            def persist_detail(telemetry: CollectionTelemetry) -> None:
+                with Session(bind=self.session.get_bind()) as budget_session:
+                    AcquisitionRepository(budget_session).persist_detail_counters(
+                        run.id, telemetry
+                    )
             collector_request = replace(
                 request,
                 target_role_families=tuple(sorted(targets)),
                 fetch_detail=fetch_detail,
                 detail_max_requests=detail_max_requests,
+                detail_approval_valid=approval_valid,
+                detail_approval_skip_reason=approval_reason,
+                reserve_http_request=(
+                    reserve_request
+                    if source.source_type == "workday" and durable_reservations
+                    else None
+                ),
+                persist_cooldown=(
+                    persist_cooldown
+                    if source.source_type == "workday" and durable_reservations
+                    else None
+                ),
+                persist_detail_counters=(
+                    persist_detail
+                    if source.source_type == "workday" and durable_reservations
+                    else None
+                ),
                 host_requests_remaining=(
-                    self._host_requests_remaining(source) if fetch_detail else None
+                    self._host_requests_remaining(source)
+                    if fetch_detail and source.source_type != "workday"
+                    else None
                 ),
                 source_definition_id=source.id,
                 cursor=request.cursor,
@@ -1297,66 +1384,104 @@ class AcquisitionService:
                     else request.known_items
                 ),
             )
-            async for item in collector.discover(collector_request):
-                run.record_items(seen=1)
-                received_bytes += item_payload_bytes(item)
-                item_date = item.published_at or item.updated_at
-                if item_date is not None and (
-                    newest_dated_item is None or item_date > newest_dated_item
-                ):
-                    newest_dated_item = item_date
-                item = await self._fill_missing_description(
-                    item,
-                    client=extraction_client,
-                    budget=extraction_budget,
-                    telemetry=tavily_telemetry,
-                    network_policy=network_policy,
-                    run=run,
-                    source_type=source.source_type,
-                )
-                off_target = False
-                if targets:
+            deadline = asyncio.timeout_at(deadline_at)
+            async with deadline:
+                if deadline.expired():
+                    raise TimeoutError("source collection deadline exceeded")
+                async with aclosing(collector.discover(collector_request)) as items:
                     try:
-                        family = classify_role_family(
-                            title=item.title,
-                            departments=departments_from_metadata(item.metadata),
-                        ).role_family
-                    except Exception:  # noqa: BLE001 - a malformed item is UNKNOWN here
-                        # Validity is `_persist_item`'s call, as before this card.
-                        family = RoleFamily.UNKNOWN
-                    # UNKNOWN is in neither count and is never dropped.
-                    if family is not RoleFamily.UNKNOWN:
-                        off_target = family.value not in targets
-                        run.record_target_area(
-                            target=0 if off_target else 1, off_target=1 if off_target else 0
+                        async for item in items:
+                            if deadline.expired():
+                                raise TimeoutError("source collection deadline exceeded")
+                            run.record_items(seen=1)
+                            received_bytes += item_payload_bytes(item)
+                            item_date = item.published_at or item.updated_at
+                            if item_date is not None and (
+                                newest_dated_item is None or item_date > newest_dated_item
+                            ):
+                                newest_dated_item = item_date
+                            item = await self._fill_missing_description(
+                                item,
+                                client=extraction_client,
+                                budget=extraction_budget,
+                                telemetry=tavily_telemetry,
+                                network_policy=network_policy,
+                                run=run,
+                                source_type=source.source_type,
+                            )
+                            if deadline.expired():
+                                raise TimeoutError("source collection deadline exceeded")
+                            off_target = False
+                            if targets:
+                                try:
+                                    family = classify_role_family(
+                                        title=item.title,
+                                        departments=departments_from_metadata(item.metadata),
+                                    ).role_family
+                                except Exception:  # noqa: BLE001 - malformed item is UNKNOWN
+                                    family = RoleFamily.UNKNOWN
+                                if family is not RoleFamily.UNKNOWN:
+                                    off_target = family.value not in targets
+                                    run.record_target_area(
+                                        target=0 if off_target else 1,
+                                        off_target=1 if off_target else 0,
+                                    )
+                            try:
+                                created = self._persist_item(
+                                    source.id,
+                                    run.id,
+                                    source.source_type,
+                                    item,
+                                    observed_at=run.started_at or datetime.now(UTC),
+                                    persist_new=not (filter_active and off_target),
+                                )
+                            except (TypeError, ValueError) as item_error:
+                                run.record_items(invalid=1)
+                                error = AcquisitionError(
+                                    AcquisitionErrorCode.INVALID_ITEM,
+                                    str(item_error),
+                                    retryable=False,
+                                )
+                                continue
+                            if created:
+                                run.record_items(persisted=1)
+                            else:
+                                run.record_items(skipped=1)
+                            logger.info(
+                                "source collection item processed",
+                                extra={
+                                    "job": "collect",
+                                    "source_id": str(source.id),
+                                    "run_id": str(run.id),
+                                    "state": "progress",
+                                    "items_seen": run.items_seen,
+                                    "items_persisted": run.items_persisted,
+                                    "http_requests": run_telemetry.http_requests,
+                                    "last_activity_at": datetime.now(UTC).isoformat(),
+                                },
+                            )
+                            if source.source_type == "tavily_search":
+                                tavily_proposal_items.append(item)
+                            elif source.source_type == "hacker_news":
+                                hn_proposal = _hn_proposal_item(item)
+                                if hn_proposal is not None:
+                                    hn_proposal_items.append(hn_proposal)
+                            if item.cursor is not None:
+                                last_cursor = item.cursor
+                    except asyncio.CancelledError:
+                        logger.warning(
+                            "source collection cleanup pending",
+                            extra={
+                                "job": "collect",
+                                "source_id": str(source.id),
+                                "run_id": str(run.id),
+                                "state": "cleanup_pending",
+                                "last_activity_at": datetime.now(UTC).isoformat(),
+                            },
                         )
-                try:
-                    created = self._persist_item(
-                        source.id,
-                        run.id,
-                        source.source_type,
-                        item,
-                        observed_at=run.started_at or datetime.now(UTC),
-                        persist_new=not (filter_active and off_target),
-                    )
-                except (TypeError, ValueError) as item_error:
-                    run.record_items(invalid=1)
-                    error = AcquisitionError(
-                        AcquisitionErrorCode.INVALID_ITEM, str(item_error), retryable=False
-                    )
-                    continue
-                if created:
-                    run.record_items(persisted=1)
-                else:
-                    run.record_items(skipped=1)
-                if source.source_type == "tavily_search":
-                    tavily_proposal_items.append(item)
-                elif source.source_type == "hacker_news":
-                    hn_proposal = _hn_proposal_item(item)
-                    if hn_proposal is not None:
-                        hn_proposal_items.append(hn_proposal)
-                if item.cursor is not None:
-                    last_cursor = item.cursor
+                        raise
+            if deadline.expired():
+                raise TimeoutError("source collection deadline exceeded")
             # `_persist_item` flushed every candidate's immutable raw evidence before
             # this pass.  A proposal failure is isolated to a savepoint so it cannot
             # erase that evidence or the source run that explains it.
@@ -1384,6 +1509,19 @@ class AcquisitionService:
                         AcquisitionErrorCode.INVALID_CONFIGURATION,
                         f"hacker news source proposal failed: {proposal_error}",
                     )
+        except TimeoutError:
+            error = AcquisitionError(
+                AcquisitionErrorCode.SOURCE_TIMEOUT,
+                "source collection deadline exceeded",
+                retryable=True,
+            )
+        except asyncio.CancelledError:
+            externally_cancelled = True
+            error = AcquisitionError(
+                AcquisitionErrorCode.SOURCE_TIMEOUT,
+                "source collection cancelled",
+                retryable=True,
+            )
         except AcquisitionError as caught:
             error = caught
         except Exception as caught:  # Preserve a stable external error boundary.
@@ -1421,12 +1559,20 @@ class AcquisitionService:
         elif error.code in {
             AcquisitionErrorCode.INVALID_ITEM,
             AcquisitionErrorCode.CREDIT_BUDGET_EXCEEDED,
+            AcquisitionErrorCode.SOURCE_TIMEOUT,
         }:
+            final_status = SourceRunStatus.PARTIAL
+        elif (
+            source.source_type == "workday"
+            and error.code is AcquisitionErrorCode.SOURCE_RATE_LIMITED
+        ):
             final_status = SourceRunStatus.PARTIAL
         elif run.items_persisted:
             final_status = SourceRunStatus.PARTIAL
         else:
             final_status = SourceRunStatus.FAILED
+        if externally_cancelled:
+            final_status = SourceRunStatus.CANCELLED
         run.finish(
             final_status,
             error=error if final_status is not SourceRunStatus.SUCCEEDED else None,
@@ -1467,6 +1613,11 @@ class AcquisitionService:
                 and self.repository.has_completed_run(source.id, exclude_run_id=run.id)
             )
         self._copy_run(run, persisted_run)
+        if source.source_type == "workday":
+            persisted_run.detail_requests = run_telemetry.detail_requests
+            persisted_run.detail_failures = run_telemetry.detail_failures
+            persisted_run.detail_skipped = run_telemetry.detail_skipped
+            persisted_run.detail_skip_reasons = dict(run_telemetry.detail_skip_reasons)
         if run_telemetry.last_http_attempt_at is not None:
             source.last_http_attempt_at = run_telemetry.last_http_attempt_at
 
@@ -1503,7 +1654,9 @@ class AcquisitionService:
             and error.retry_after_seconds is not None
             else None
         )
-        if run_telemetry.http_requests or cooldown_until is not None:
+        if (source.source_type != "workday" or not durable_reservations) and (
+            run_telemetry.http_requests or cooldown_until is not None
+        ):
             self.repository.record_host_budget_usage(
                 _budget_host_for_source(source.source_type, source.configuration),
                 now=datetime.now(UTC),
@@ -1515,7 +1668,26 @@ class AcquisitionService:
             )
         self.session.commit()
         self.session.refresh(persisted_run)
+        logger.info(
+            "source collection run finished",
+            extra={
+                "job": "collect",
+                "source_id": str(source.id),
+                "run_id": str(run.id),
+                "state": "terminal",
+                "terminal_reason": (
+                    "cancelled"
+                    if final_status is SourceRunStatus.CANCELLED
+                    else error.code.value
+                    if error is not None
+                    else "succeeded"
+                ),
+                "last_activity_at": datetime.now(UTC).isoformat(),
+            },
+        )
         self._announce(source, persisted_run, max_items=request.max_items)
+        if final_status is SourceRunStatus.CANCELLED:
+            raise asyncio.CancelledError
         return persisted_run
 
     def _host_requests_remaining(self, source: SourceDefinitionModel) -> int | None:
@@ -1917,6 +2089,51 @@ def _detail_settings(
             field="configuration.detail_max_requests",
         )
     return fetch_detail, max_requests
+
+
+def _workday_detail_approval(
+    configuration: Mapping[str, Any],
+    source_id: UUID,
+    tenant_identifier: str | None,
+    pod: str | None,
+) -> tuple[bool, str]:
+    """Require a source-local, explicit human decision before any Workday detail call."""
+    approval = configuration.get("detail_approval")
+    if not isinstance(approval, Mapping):
+        return False, "approval_missing"
+    tenant = (tenant_identifier or "").split("/", 1)[0]
+    expected_host = f"{tenant}.{pod}.myworkdayjobs.com" if tenant and pod else ""
+    owner = approval.get("owner")
+    host = approval.get("hostname")
+    decision = approval.get("decision")
+    approved_source_id = approval.get("source_id")
+    terms = approval.get("terms_reference") or approval.get("policy_reference")
+    reviewed = approval.get("reviewed_at") or approval.get("reviewed_on")
+    if (
+        not expected_host
+        or not isinstance(owner, str)
+        or not owner.strip()
+        or not isinstance(host, str)
+        or host.casefold().rstrip(".") != expected_host.casefold()
+        or approved_source_id != str(source_id)
+        or decision != "approved"
+        or not isinstance(terms, str)
+        or not terms.strip()
+        or not isinstance(reviewed, str)
+    ):
+        return False, "approval_missing"
+    try:
+        if len(reviewed) == 10:
+            reviewed_date = date.fromisoformat(reviewed)
+        else:
+            reviewed_date = datetime.fromisoformat(
+                reviewed.replace("Z", "+00:00")
+            ).date()
+        if reviewed_date > datetime.now(UTC).date():
+            return False, "approval_future_date"
+    except ValueError:
+        return False, "approval_invalid_date"
+    return True, "approved"
 
 
 def _hn_proposal_item(item: CollectedItem) -> CollectedItem | None:

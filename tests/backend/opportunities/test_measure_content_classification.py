@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -12,9 +13,11 @@ from scripts.measure_content_classification import (
     build_cases,
     build_label_sample,
     classify,
+    evaluate_candidate_gate,
     load_gold,
     main,
     measure,
+    passing_rules,
     unknown_rates,
 )
 
@@ -87,18 +90,21 @@ def test_measure_reports_precision_per_rule_and_unknown_rates() -> None:
     assert report["gate"]["passes"] is False
 
 
-def test_gate_passes_only_when_every_rule_reaches_ninety_percent() -> None:
+def test_legacy_gold_cannot_pass_gate_even_when_precision_looks_high() -> None:
     cases = [_case("seniority", "MID", f"3-5 years of experience {i}") for i in range(9)]
     cases.append(_case("seniority", "SENIOR", "3-5 years of experience 9"))
-    assert measure(cases, min_gold_jobs=1)["gate"]["passes"] is True  # 9/10
-    cases.append(_case("seniority", "SENIOR", "3-5 years of experience 10"))
-    assert measure(cases, min_gold_jobs=1)["gate"]["passes"] is False  # 9/11
+    assert measure(cases, min_gold_jobs=1)["gate"]["passes"] is False
     assert measure([], min_gold_jobs=1)["gate"]["passes"] is False  # no evidence
-    # perfect precision on too small a gold set still does not pass (>= 200 jobs)
-    ok = cases[:9]
-    assert measure(ok, min_gold_jobs=1)["gate"]["passes"] is True
-    assert measure(ok)["gate"]["passes"] is False
-    assert measure(ok)["gate"]["min_gold_jobs"] == 200
+    assert measure(cases)["gate"]["min_gold_jobs"] == 200
+
+
+def test_rule_gate_is_independent_and_requires_minimum_support() -> None:
+    rules = {
+        "A": {"emitted": 20, "precision": 0.89},
+        "B": {"emitted": 20, "precision": 0.90},
+        "C": {"emitted": 19, "precision": 1.0},
+    }
+    assert passing_rules(rules) == ["B"]
 
 
 @needs_gold
@@ -161,7 +167,16 @@ def test_label_sample_is_unlabelled_deterministic_and_blind() -> None:
 def test_main_offline_evidence_mode_prints_report_and_gate_exit_code(
     capsys: object, tmp_path: Path
 ) -> None:
-    exit_code = main(["--gold", str(GOLD), "--evidence-as-text", "--check-gate"])
+    exit_code = main(
+        [
+            "--gold",
+            str(GOLD),
+            "--evidence-as-text",
+            "--check-gate",
+            "--candidate-rule",
+            "seniority:description_years_range",
+        ]
+    )
     out = capsys.readouterr().out  # type: ignore[attr-defined]
     report = json.loads(out)
     assert report["gate"]["threshold"] == 0.9
@@ -192,7 +207,60 @@ def test_measure_reports_precision_and_coverage_per_source_type() -> None:
 
 def test_case_without_source_type_is_grouped_as_unknown() -> None:
     report = measure([_case("seniority", "MID", "3-5 years of experience")], min_gold_jobs=1)
-    assert list(report["by_source_type"]) == ["unknown"]
+    assert list(report["by_source_type"]) == []
+    assert report["unassigned_source_type_cases"] == 1
+
+
+def test_unknown_judgment_is_excluded_from_precision_and_legacy_gold_blocks_gate() -> None:
+    applicable = _case("seniority", "MID", "3-5 years of experience", source_type="greenhouse")
+    unknown = _case("seniority", "MID", "3-5 years of experience", source_type="greenhouse")
+    unknown = replace(unknown, opportunity_id="unknown-id", judgment="unknown")
+    report = measure([applicable, unknown], min_gold_jobs=1)
+    assert report["judgments"]["unknown"] == 1
+    assert report["rules"]["seniority:description_years_range"]["emitted"] == 1
+    assert report["gate"]["passes"] is False
+    assert report["gate"]["population_passes"] is False
+
+
+def test_selected_rule_gate_is_explicit_and_applies_to_every_selected_rule() -> None:
+    rules = {
+        "seniority:description_years_min": {"emitted": 20, "precision": 0.89},
+        "seniority:description_years_range": {"emitted": 20, "precision": 0.90},
+        "seniority:description_entry_phrase": {"emitted": 19, "precision": 1.0},
+    }
+    assert evaluate_candidate_gate(True, rules, ())["passes"] is False
+    assert evaluate_candidate_gate(True, rules, ["seniority:description_years_range"])["passes"]
+    assert not evaluate_candidate_gate(
+        True,
+        rules,
+        ["seniority:description_years_min", "seniority:description_years_range"],
+    )["passes"]
+    assert not evaluate_candidate_gate(True, rules, ["seniority:description_entry_phrase"])[
+        "passes"
+    ]
+
+
+def test_inapplicable_emission_is_false_positive() -> None:
+    case = _case("seniority", None, "3-5 years of experience", source_type="greenhouse")
+    case = replace(case, judgment="inapplicable")
+    report = measure([case], min_gold_jobs=1)
+    assert (
+        report["excluded_emissions_by_rule"]["seniority:description_years_range"]["inapplicable"]
+        == 1
+    )
+    assert "seniority:description_years_range" not in report["rules"]
+
+
+def test_gold_rejects_duplicate_opportunity_field(tmp_path: Path) -> None:
+    gold = _write_gold(
+        tmp_path / "duplicate.json",
+        [
+            {"opportunity_id": "a", "field": "seniority", "valor_recomendado": "MID"},
+            {"opportunity_id": "a", "field": "seniority", "valor_recomendado": "SENIOR"},
+        ],
+    )
+    with pytest.raises(ValueError, match="duplicate gold case"):
+        load_gold(gold)
 
 
 def test_allowed_countries_is_measured() -> None:

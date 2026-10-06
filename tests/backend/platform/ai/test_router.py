@@ -1,10 +1,13 @@
 import asyncio
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 
 from opportunity_radar.platform.ai.breaker import CircuitBreaker
 from opportunity_radar.platform.ai.errors import ErrorKind, ProviderError
+from opportunity_radar.platform.ai.quota import Reservation
 from opportunity_radar.platform.ai.router import AIRouter, RouterResult
 from opportunity_radar.platform.ai.tasks import AITask, default_routes
 from opportunity_radar.platform.config import Settings
@@ -79,6 +82,99 @@ def test_first_model_success() -> None:
     assert [(a.model, a.attempt, a.error_kind, a.latency_ms) for a in result.attempts] == [
         (_REASONING, 0, None, 10)
     ]
+    assert result.operation_id == result.attempts[0].operation_id
+
+
+def test_fallback_attempts_share_the_supplied_operation_id() -> None:
+    operation_id = uuid4()
+    provider = FakeProvider(
+        {
+            _REASONING: [ProviderError(ErrorKind.QUOTA, "429")],
+            _ALT: [response(_ALT)],
+        }
+    )
+    router = _router(provider)
+
+    result = asyncio.run(
+        router.run(
+            AITask.JOB_MATCH, system="s", user="u", schema_name="analysis_v1",
+            json_schema=_SCHEMA, operation_id=operation_id,
+        )
+    )
+
+    assert result.operation_id == operation_id
+    assert [attempt.operation_id for attempt in result.attempts] == [operation_id, operation_id]
+    assert [attempt.operation_ordinal for attempt in result.attempts] == [0, 1]
+
+
+def test_provider_cancellation_carries_the_started_attempt() -> None:
+    class RecordingGuard:
+        settled = 0
+        released = 0
+
+        def reserve(self, model, estimated_tokens, *, ceiling_requests=None):
+            del ceiling_requests
+            return Reservation(model, datetime.now(UTC), datetime.now(UTC), estimated_tokens)
+
+        def settle(self, reservation, actual_tokens, rate_limit):
+            del reservation, actual_tokens, rate_limit
+            self.settled += 1
+
+        def release(self, reservation):
+            del reservation
+            self.released += 1
+
+        def next_available_at(self, model):
+            del model
+            return datetime.now(UTC)
+
+    class CancelledProvider:
+        name = "fake"
+
+        async def complete(self, request):
+            del request
+            error = asyncio.CancelledError()
+            error.transport_started = True  # type: ignore[attr-defined]
+            raise error
+
+    guard = RecordingGuard()
+    settings = _settings(ai_fallback_enabled=False)
+    router = AIRouter(
+        CancelledProvider(), default_routes(settings), fallback_enabled=False,
+        quota_guard=guard,
+    )
+    with pytest.raises(asyncio.CancelledError) as raised:
+        _run(router)  # type: ignore[arg-type]
+
+    (attempt,) = raised.value.attempts
+    assert attempt.error_kind is ErrorKind.CANCELLED
+    assert attempt.transport_started is True
+    assert attempt.operation_id is not None
+    assert guard.settled == 1
+    assert guard.released == 0
+
+
+def test_invalid_output_attempt_keeps_response_usage_and_http_status() -> None:
+    provider = FakeProvider({_REASONING: [response(_REASONING), response(_REASONING)]})
+    settings = _settings(ai_max_retries=0, ai_fallback_enabled=False)
+    validate_count = 0
+
+    def validate(_content: str) -> None:
+        nonlocal validate_count
+        validate_count += 1
+        if validate_count == 1:
+            raise ProviderError(ErrorKind.INVALID_OUTPUT, "invalid schema")
+
+    router = AIRouter(
+        provider, default_routes(settings), max_retries=0, fallback_enabled=False,
+        validator=validate,
+    )
+
+    result = _run(router)
+    attempt = result.attempts[0]
+    assert attempt.http_status == 200
+    assert attempt.prompt_tokens == 100
+    assert attempt.completion_tokens == 20
 
 
 def test_reasoning_model_setting_changes_job_match_model() -> None:

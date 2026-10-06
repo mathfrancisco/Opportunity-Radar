@@ -15,6 +15,7 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Any
+from uuid import UUID, uuid4
 
 from sqlalchemy.engine import Engine
 
@@ -54,7 +55,13 @@ from opportunity_radar.platform.ai.providers.base import LLMResponse
 from opportunity_radar.platform.ai.router import AIRouter, Attempt
 from opportunity_radar.platform.ai.sanitizer import sanitize_for_llm
 from opportunity_radar.platform.ai.tasks import AITask, ModelRoute
-from opportunity_radar.platform.ai.telemetry import record_calls, records_from_attempts
+from opportunity_radar.platform.ai.telemetry import (
+    finish_operation,
+    record_attempt_started,
+    record_calls,
+    records_from_attempts,
+    start_operation,
+)
 from opportunity_radar.platform.logging import get_logger
 
 logger = get_logger("opportunity_radar.matching.groq")
@@ -278,6 +285,7 @@ class GroqAnalysisAdapter:
         *,
         prepared: PreparedAnalysis | None = None,
         use_cache: bool = True,
+        quota_ceiling_requests: int | None = None,
     ) -> AnalysisOutcome:
         """Never raises for an external failure: callers get a classified outcome.
 
@@ -300,6 +308,9 @@ class GroqAnalysisAdapter:
             overflow.metrics = prepared.size
             return failed_outcome(overflow)
 
+        operation_id = uuid4()
+        await self._start_operation(operation_id)
+
         try:
             result = await self._router.run(
                 AITask.JOB_MATCH,
@@ -310,15 +321,39 @@ class GroqAnalysisAdapter:
                 temperature=self._prompt.sampling.get("temperature"),
                 seed=_SEED,
                 estimated_input_tokens=prepared.size.prompt_tokens_estimate or 0,
+                operation_id=operation_id,
+                quota_ceiling_requests=quota_ceiling_requests,
+                on_attempt_started=self._attempt_started,
             )
         except ProviderError as error:
-            await self._record_telemetry(error.attempts, fallback_used=False, response=None)
+            await self._record_telemetry(
+                error.attempts, response=None,
+                fallback_used=any(
+                    attempt.model != self._route.chain[0] for attempt in error.attempts
+                ),
+                operation_id=operation_id,
+                state="provider_error" if error.attempts else "preflight",
+                error_kind=error.kind.value,
+            )
             failure = _classify(error)
             failure.metrics = _with_size(None, prepared.size)
             return failed_outcome(failure)
+        except asyncio.CancelledError as cancellation:
+            cancelled_attempts = getattr(cancellation, "attempts", ())
+            await self._record_telemetry(
+                cancelled_attempts, fallback_used=any(
+                    attempt.model != self._route.chain[0] for attempt in cancelled_attempts
+                ), response=None,
+                operation_id=operation_id, state="cancelled", error_kind="cancelled",
+            )
+            raise
+        except Exception:
+            await self._finish_operation(operation_id, "internal_error", "internal_error")
+            raise
 
         await self._record_telemetry(
-            result.attempts, fallback_used=result.fallback_used, response=result.response
+            result.attempts, fallback_used=result.fallback_used, response=result.response,
+            operation_id=operation_id, state=None,
         )
         response = result.response
         try:
@@ -329,6 +364,7 @@ class GroqAnalysisAdapter:
                 "groq analysis content is not valid JSON",
             )
             invalid.metrics = _with_size(_response_metrics(response), prepared.size)
+            await self._finish_operation(operation_id, "parse_error", "parse_error")
             return failed_outcome(invalid)
         try:
             analysis = parse_analysis(
@@ -340,9 +376,11 @@ class GroqAnalysisAdapter:
             )
         except AnalysisError as error:
             error.metrics = _with_size(_response_metrics(response), prepared.size)
+            await self._finish_operation(operation_id, "parse_error", "parse_error")
             return failed_outcome(error)
 
         metrics = _with_size(_response_metrics(response), prepared.size)
+        await self._finish_operation(operation_id, "success")
         return completed_outcome(analysis, metrics)
 
     async def _record_telemetry(
@@ -351,6 +389,9 @@ class GroqAnalysisAdapter:
         *,
         fallback_used: bool,
         response: LLMResponse | None,
+        operation_id: UUID,
+        state: str | None,
+        error_kind: str | None = None,
     ) -> None:
         """One `AICallRecord` per attempt the router made (card F20-19, SPEC 43 §8.5).
 
@@ -358,21 +399,72 @@ class GroqAnalysisAdapter:
         one the provider actually billed usage for. Never raises: a telemetry write that
         failed must not turn a completed or a failed analysis into a worse failure.
         """
-        if self._engine is None or not attempts:
+        if self._engine is None:
             return
-        records = records_from_attempts(
-            attempts,
-            task=AITask.JOB_MATCH.value,
-            provider="groq",
-            fallback_used=fallback_used,
-            prompt_version=self._prompt.version,
-            prompt_tokens=response.usage.prompt_tokens if response is not None else None,
-            completion_tokens=response.usage.completion_tokens if response is not None else None,
-        )
         try:
-            await asyncio.to_thread(record_calls, self._engine, records)
+            if attempts:
+                records = records_from_attempts(
+                    attempts,
+                    task=AITask.JOB_MATCH.value,
+                    provider="groq",
+                    fallback_used=fallback_used,
+                    prompt_version=self._prompt.version,
+                    prompt_tokens=response.usage.prompt_tokens if response is not None else None,
+                    completion_tokens=(
+                        response.usage.completion_tokens if response is not None else None
+                    ),
+                    operation_id=operation_id,
+                )
+                await asyncio.to_thread(record_calls, self._engine, records)
+            if state is not None:
+                await self._finish_operation(operation_id, state, error_kind)
         except Exception:  # pragma: no cover - telemetry must never break an analysis
             logger.warning("ai call telemetry write failed", exc_info=True)
+
+    async def _start_operation(self, operation_id: UUID) -> None:
+        if self._engine is None:
+            return
+        try:
+            await asyncio.to_thread(
+                start_operation, self._engine, operation_id=operation_id,
+                task=AITask.JOB_MATCH.value, prompt_version=self._prompt.version,
+            )
+        except Exception:  # pragma: no cover - telemetry must never break an analysis
+            logger.warning("ai operation telemetry start failed", exc_info=True)
+
+    async def _attempt_started(
+        self, operation_id: UUID, ordinal: int, model: str, attempt: int
+    ) -> None:
+        if self._engine is None:
+            return
+        try:
+            await asyncio.to_thread(
+                record_attempt_started,
+                self._engine,
+                operation_id=operation_id,
+                operation_ordinal=ordinal,
+                task=AITask.JOB_MATCH.value,
+                provider="groq",
+                model=model,
+                attempt=attempt,
+                prompt_version=self._prompt.version,
+                fallback_used=model != self._route.chain[0],
+            )
+        except Exception:  # pragma: no cover - telemetry must never break an analysis
+            logger.warning("ai attempt start telemetry failed", exc_info=True)
+
+    async def _finish_operation(
+        self, operation_id: UUID, state: str, error_kind: str | None = None
+    ) -> None:
+        if self._engine is None:
+            return
+        try:
+            await asyncio.to_thread(
+                finish_operation, self._engine, operation_id=operation_id,
+                state=state, error_kind=error_kind,
+            )
+        except Exception:  # pragma: no cover - telemetry must never break an analysis
+            logger.warning("ai operation telemetry finish failed", exc_info=True)
 
     async def warm_up(self, *, only_if_idle: bool = False) -> AnalysisMetrics | None:
         del only_if_idle

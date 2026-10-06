@@ -34,6 +34,7 @@ from opportunity_radar.acquisition.scheduling import SourceRunHistory
 from opportunity_radar.acquisition.service import (
     COLLECTED_ITEM_V1_KEY,
     AcquisitionService,
+    _workday_detail_approval,
     canonical_payload_hash,
 )
 from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
@@ -310,6 +311,210 @@ def test_payload_hash_is_canonical_for_mapping_order() -> None:
     second_hash = canonical_payload_hash({"b": 2, "a": 1})
 
     assert first_hash == second_hash
+
+
+def test_source_deadline_waits_for_generator_cleanup_and_finishes_partial(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    closed: list[bool] = []
+
+    class _WaitingCollector(_Collector):
+        async def discover(
+            self, request: CollectionRequest
+        ) -> AsyncIterator[CollectedItem]:
+            del request
+            try:
+                yield CollectedItem(
+                    source_type=self.source_type,
+                    external_id="job-timeout",
+                    raw_payload={"title": "Waiting"},
+                )
+            finally:
+                closed.append(True)
+
+    service, session = _service(_WaitingCollector())
+
+    async def wait_forever(*_args: object, **_kwargs: object) -> CollectedItem:
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+    monkeypatch.setattr(service, "_fill_missing_description", wait_forever)
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+            deadline_seconds=0.01,
+        )
+    )
+
+    persisted_run = next(item for item in session.added if hasattr(item, "status"))
+    assert closed == [True]
+    assert run.status == "PARTIAL"
+    assert run.complete is False
+    assert persisted_run.status == "PARTIAL"
+    assert session.committed is True
+
+
+def test_source_deadline_is_partial_when_collector_suppresses_cancellation() -> None:
+    class _SuppressingCollector(_Collector):
+        async def discover(
+            self, request: CollectionRequest
+        ) -> AsyncIterator[CollectedItem]:
+            del request
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                yield CollectedItem(
+                    source_type=self.source_type,
+                    external_id="job-late",
+                    raw_payload={"title": "Late"},
+                )
+
+    service, session = _service(_SuppressingCollector())
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+            deadline_seconds=0.01,
+        )
+    )
+
+    assert run.status == "PARTIAL"
+    assert run.complete is False
+    assert run.items_seen == 0
+    assert session.committed is True
+
+
+def test_source_deadline_after_enrichment_prevents_late_item_persistence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _OneItemCollector(_Collector):
+        async def discover(
+            self, request: CollectionRequest
+        ) -> AsyncIterator[CollectedItem]:
+            del request
+            yield CollectedItem(
+                source_type=self.source_type,
+                external_id="job-enrichment-timeout",
+                title="Late enrichment",
+                description="already present",
+                raw_payload={"title": "Late enrichment"},
+            )
+
+    service, session = _service(_OneItemCollector())
+
+    async def suppress_cancel(item: CollectedItem, **_kwargs: object) -> CollectedItem:
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            return item
+        raise AssertionError("unreachable")
+
+    monkeypatch.setattr(service, "_fill_missing_description", suppress_cancel)
+    run = asyncio.run(
+        service.execute(
+            service.repository.source.id,  # type: ignore[attr-defined]
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+            deadline_seconds=0.01,
+        )
+    )
+
+    assert run.status == "PARTIAL"
+    assert run.complete is False
+    assert run.items_persisted == 0
+    assert not any(isinstance(item, RawItemModel) for item in session.added)
+
+
+def test_deadline_includes_throttle_sleep_and_never_starts_discovery() -> None:
+    collector = _Collector()
+    service, _ = _service(collector)
+    source = service.repository.source  # type: ignore[attr-defined]
+    source.last_http_attempt_at = datetime.now(UTC)
+    source.rate_limit_policy = {"minimum_interval_seconds": 15}
+    started = False
+
+    async def sleeper(_delay: float) -> None:
+        await asyncio.Event().wait()
+
+    async def discover(request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        nonlocal started
+        started = True
+        del request
+        if False:
+            yield CollectedItem(source_type="example", external_id="unused")
+
+    collector.discover = discover  # type: ignore[method-assign]
+    service._sleeper = sleeper
+    run = asyncio.run(
+        service.execute(
+            source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+            deadline_seconds=0.01,
+        )
+    )
+
+    assert started is False
+    assert run.status == "PARTIAL"
+    assert run.error_code == AcquisitionErrorCode.SOURCE_TIMEOUT.value
+
+
+def test_external_cancel_waits_for_live_collector_cleanup_and_logs_pending(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    entered_second_request = asyncio.Event()
+    release_cleanup = asyncio.Event()
+    cleanup_finished = asyncio.Event()
+    second_request_started = False
+
+    class _LiveCollector(_Collector):
+        async def discover(
+            self, request: CollectionRequest
+        ) -> AsyncIterator[CollectedItem]:
+            nonlocal second_request_started
+            del request
+            try:
+                yield CollectedItem(
+                    source_type=self.source_type,
+                    external_id="first-request",
+                    title="Persisted",
+                    description="Present",
+                    raw_payload={"title": "Persisted"},
+                )
+                second_request_started = True
+                entered_second_request.set()
+                await asyncio.Event().wait()
+            finally:
+                await release_cleanup.wait()
+                cleanup_finished.set()
+
+    async def run_cancelled() -> tuple[object, _MemorySession]:
+        service, session = _service(_LiveCollector())
+        task = asyncio.create_task(
+            service.execute(
+                service.repository.source.id,  # type: ignore[attr-defined]
+                CollectionRequest(mode=CollectionMode.DISCOVERY),
+            )
+        )
+        await entered_second_request.wait()
+        task.cancel()
+        await asyncio.sleep(0)
+        assert task.done() is False
+        assert cleanup_finished.is_set() is False
+        assert second_request_started is True
+        release_cleanup.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        return task, session
+
+    with caplog.at_level("WARNING", logger="opportunity_radar.acquisition.service"):
+        _, session = asyncio.run(run_cancelled())
+
+    assert cleanup_finished.is_set()
+    assert session.committed is True
+    pending = next(
+        record for record in caplog.records if record.message == "source collection cleanup pending"
+    )
+    assert pending.state == "cleanup_pending"
 
 
 def test_parser_or_parsed_boundary_variant_creates_fresh_raw_evidence() -> None:
@@ -1667,12 +1872,28 @@ def _workday_detail_run(configuration: dict[str, object]):
         )
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    source_id = uuid4()
+    synthetic_configuration = {
+        "tenant_identifier": "acme/site",
+        "api_region": "wd5",
+        **configuration,
+    }
+    if configuration.get("fetch_detail") is True:
+        # Synthetic approval only for this HTTP fake; never copied into source data.
+        synthetic_configuration["detail_approval"] = {
+            "source_id": str(source_id),
+            "owner": "test fixture",
+            "hostname": "acme.wd5.myworkdayjobs.com",
+            "reviewed_at": datetime.now(UTC).date().isoformat(),
+            "terms_reference": "synthetic fixture policy",
+            "decision": "approved",
+        }
     source = SourceDefinitionModel(
-        id=uuid4(),
+        id=source_id,
         source_type="workday",
         name="Acme",
         enabled=True,
-        configuration={"tenant_identifier": "acme/site", "api_region": "wd5", **configuration},
+        configuration=synthetic_configuration,
         rate_limit_policy={"minimum_interval_seconds": 5},
     )
     session = _MemorySession()
@@ -1704,6 +1925,39 @@ def _workday_detail_run(configuration: dict[str, object]):
     finally:
         asyncio.run(client.aclose())
     return run, budget_calls, sleeps, session
+
+
+def test_workday_detail_approval_is_source_local_and_requires_a_valid_nonfuture_date() -> None:
+    source_id = uuid4()
+    configuration = {
+        "detail_approval": {
+            "source_id": str(source_id),
+            "owner": "operator",
+            "hostname": "acme.wd5.myworkdayjobs.com",
+            "decision": "approved",
+            "terms_reference": "offline policy",
+            "reviewed_at": "2026-10-05",
+        }
+    }
+
+    assert _workday_detail_approval(configuration, source_id, "acme/site", "wd5") == (
+        True,
+        "approved",
+    )
+    assert _workday_detail_approval(configuration, uuid4(), "acme/site", "wd5")[0] is False
+
+    configuration["detail_approval"]["reviewed_at"] = "2026-10-05-not-a-date"  # type: ignore[index]
+    assert _workday_detail_approval(configuration, source_id, "acme/site", "wd5") == (
+        False,
+        "approval_invalid_date",
+    )
+    configuration["detail_approval"]["reviewed_at"] = (
+        datetime.now(UTC).date() + timedelta(days=1)
+    ).isoformat()  # type: ignore[index]
+    assert _workday_detail_approval(configuration, source_id, "acme/site", "wd5") == (
+        False,
+        "approval_future_date",
+    )
 
 
 def test_workday_detail_requests_count_in_the_run_budget_and_wait_the_interval() -> None:

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import signal
 from asyncio import run as run_async
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Event
+from time import monotonic
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -54,6 +56,7 @@ from opportunity_radar.operations.service import annotate_pass, observe_job
 from opportunity_radar.opportunities.service import OpportunityService
 from opportunity_radar.opportunities.suggestions import (
     candidates_needing_suggestion,
+    load_classification_prompt,
     suggest_fields,
 )
 from opportunity_radar.platform.ai.breaker import CircuitBreaker
@@ -189,7 +192,9 @@ def analyze_pending(
     counter against it and is released immediately either way,
     so the check never itself consumes quota. An assessment that fails the probe is
     skipped with no attempt recorded — the retry budget never counts a budget defer, and
-    the opportunity is back in the next pass, not lost.
+    the opportunity is back in the next pass, not lost. The same ceiling also travels with
+    the call (SPEC 51), where the router enforces it atomically on the real reservation;
+    the probe stays because a denial there is recorded as a failed attempt.
     """
     with observe_job(
         engine, job_name="analyze_pending", interval=timedelta(seconds=120)
@@ -214,12 +219,12 @@ def analyze_pending(
                         "analysis model warmed up",
                         extra={"job": "warm-up", "reason": "idle", "load_ms": metrics.load_ms},
                     )
+            completed = reused = degraded = claimed_elsewhere = failed = skipped_budget = 0
             quota_guard = getattr(adapter, "quota_guard", None)
             # The probe reserves what one call of the primary model can cost (0 for an
             # adapter that does not say): a zero-token probe passes with 100 tokens left
             # and the real call then fails as QUOTA_EXHAUSTED, one wasted attempt each.
             probe_tokens = int(getattr(adapter, "probe_tokens", 0) or 0)
-            completed = reused = degraded = claimed_elsewhere = failed = skipped_budget = 0
             for assessment_id in pending:
                 if worker_requests_ceiling is not None and quota_guard is not None:
                     probe = quota_guard.reserve(
@@ -236,6 +241,7 @@ def analyze_pending(
                             adapter,
                             owner=correlation_id,
                             lease=timedelta(seconds=lease_seconds),
+                            quota_ceiling_requests=worker_requests_ceiling,
                         )
                     )
                 except AnalysisInProgressError:
@@ -325,21 +331,29 @@ def suggest_fields_pending(
         engine, job_name="suggest_fields_pending", interval=timedelta(seconds=300)
     ):
         with Session(engine) as session:
-            candidates = candidates_needing_suggestion(session, limit=batch_size)
-            quota_guard = router.quota_guard
-            route_model = router.route(AITask.JOB_CLASSIFICATION).chain[0]
+            prompt = load_classification_prompt()
+            route = router.route(AITask.JOB_CLASSIFICATION)
+            route_hash = hashlib.sha256("\0".join(route.chain).encode()).hexdigest()
+            candidates = candidates_needing_suggestion(
+                session,
+                limit=batch_size,
+                prompt_version=prompt.version,
+                route_hash=route_hash,
+                prompt=prompt,
+                route=route,
+            )
             created = discarded = skipped_budget = failed = 0
             for opportunity in candidates:
-                if worker_requests_ceiling is not None and quota_guard is not None:
-                    probe = quota_guard.reserve(
-                        route_model, 0, ceiling_requests=worker_requests_ceiling
-                    )
-                    if probe is None:
-                        skipped_budget += 1
-                        continue
-                    quota_guard.release(probe)
                 try:
-                    outcome = run_async(suggest_fields(session, router, opportunity))
+                    outcome = run_async(
+                        suggest_fields(
+                            session,
+                            router,
+                            opportunity,
+                            prompt=prompt,
+                            quota_ceiling_requests=worker_requests_ceiling,
+                        )
+                    )
                 except Exception:
                     session.rollback()
                     failed += 1
@@ -442,6 +456,10 @@ def collect_enabled_sources(
     now: datetime | None = None,
     backoff_base_seconds: float = 300.0,
     backoff_ceiling_seconds: float = 86400.0,
+    source_deadline_seconds: float = 0.0,
+    pass_deadline_seconds: float = 0.0,
+    monotonic_clock: Callable[[], float] = monotonic,
+    utc_clock: Callable[[], datetime] | None = None,
     service_factory: Callable[[Session], AcquisitionService] = AcquisitionService,
 ) -> None:
     """Run every eligible source whose schedule is due, and account for the ones that are not.
@@ -450,7 +468,7 @@ def collect_enabled_sources(
     did not run is what makes partial coverage look like full coverage, so a skip and a
     block are reported as deliberately as a failure.
     """
-    moment = now or datetime.now(ZoneInfo(timezone))
+    pass_started = monotonic_clock()
     backoff_base = timedelta(seconds=backoff_base_seconds)
     backoff_ceiling = timedelta(seconds=backoff_ceiling_seconds)
     with observe_job(
@@ -462,6 +480,26 @@ def collect_enabled_sources(
             sources = service.list_collectable_sources()
             summary = {"completed": 0, "failed": 0, "skipped": 0, "blocked": 0}
             for source in sources:
+                moment = now or (
+                    utc_clock() if utc_clock is not None else datetime.now(ZoneInfo(timezone))
+                )
+                pass_remaining = (
+                    pass_deadline_seconds - (monotonic_clock() - pass_started)
+                    if pass_deadline_seconds > 0
+                    else None
+                )
+                if pass_remaining is not None and pass_remaining <= 0:
+                    summary["skipped"] += 1
+                    logger.info(
+                        "scheduled collection skipped",
+                        extra={
+                            "job": "collect",
+                            "source_id": str(source.id),
+                            "outcome": "skipped",
+                            "reason": "pass_deadline",
+                        },
+                    )
+                    continue
                 try:
                     # Read once per source, right before it is judged: the host's shared
                     # budget (F20-38) is state committed by whichever earlier source in
@@ -508,8 +546,44 @@ def collect_enabled_sources(
                     request, rotation_state, term_count = _scheduled_request_with_rotation(
                         service, source, correlation_id
                     )
+                    pass_remaining = (
+                        pass_deadline_seconds - (monotonic_clock() - pass_started)
+                        if pass_deadline_seconds > 0
+                        else None
+                    )
+                    if pass_remaining is not None and pass_remaining <= 0:
+                        summary["skipped"] += 1
+                        logger.info(
+                            "scheduled collection skipped",
+                            extra={
+                                "job": "collect",
+                                "source_id": str(source.id),
+                                "outcome": "skipped",
+                                "reason": "pass_deadline",
+                            },
+                        )
+                        continue
+                    source_started = monotonic_clock()
+                    source_timeout = source_deadline_seconds or None
+                    if pass_remaining is not None:
+                        source_timeout = min(
+                            source_timeout
+                            if source_timeout is not None
+                            else pass_remaining,
+                            pass_remaining,
+                        )
+                    logger.info(
+                        "scheduled collection started",
+                        extra={
+                            "job": "collect",
+                            "source_id": str(source.id),
+                            "deadline_seconds": source_timeout,
+                        },
+                    )
                     run = run_async(
-                        service.execute(source.id, request)
+                        service.execute(
+                            source.id, request, deadline_seconds=source_timeout
+                        )
                     )
                     if rotation_state is not None:
                         _advance_keyword_rotation_checkpoint(
@@ -554,6 +628,10 @@ def collect_enabled_sources(
                         "run_id": str(run.id),
                         "terms_used": list(request.keywords) if request is not None else [],
                         "items_persisted": run.items_persisted,
+                        "duration_ms": round(
+                            (monotonic_clock() - source_started) * 1000
+                        ),
+                        "last_activity_at": datetime.now(ZoneInfo(timezone)).isoformat(),
                     },
                 )
             # F48-07: DUE sources = the ones that reached execution (or failed doing so).
@@ -749,6 +827,8 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
                 "timezone": settings.collection_timezone,
                 "backoff_base_seconds": settings.collection_backoff_base_seconds,
                 "backoff_ceiling_seconds": settings.collection_backoff_ceiling_seconds,
+                "source_deadline_seconds": settings.collection_source_deadline_seconds,
+                "pass_deadline_seconds": settings.collection_pass_deadline_seconds,
                 "service_factory": collection_service_factory(settings),
             },
             id="collect-enabled-sources",

@@ -9,9 +9,10 @@ from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from typing import Any, Sequence, TypeVar
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import case, literal, select
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -64,6 +65,14 @@ from opportunity_radar.opportunities.models import (
 )
 from opportunity_radar.opportunities.repository import OpportunityRepository
 from opportunity_radar.opportunities.role_family import classify_role_family
+from opportunity_radar.platform.ai.tasks import AITask
+from opportunity_radar.platform.ai.telemetry import (
+    AICallRecord,
+    finish_operation,
+    record_calls,
+    start_operation,
+)
+from opportunity_radar.platform.logging import get_logger
 from opportunity_radar.profile.domain import ProfileNotFoundError, ProfileVersion
 from opportunity_radar.profile.service import ProfileService
 
@@ -81,6 +90,8 @@ DEFAULT_ANALYSIS_COOLDOWN = timedelta(hours=1)
 DEFAULT_ANALYSIS_ATTEMPT_WINDOW = timedelta(hours=24)
 DEFAULT_ANALYSIS_MAX_ATTEMPTS = 3
 DEFAULT_ANALYSIS_CLAIM_LEASE = timedelta(minutes=15)
+
+logger = get_logger("opportunity_radar.matching.service")
 
 
 class MatchNotFoundError(LookupError):
@@ -340,6 +351,7 @@ class MatchingService:
         refresh: bool = False,
         owner: str = "manual",
         lease: timedelta = DEFAULT_ANALYSIS_CLAIM_LEASE,
+        quota_ceiling_requests: int | None = None,
     ) -> MatchAnalysisModel:
         """Attach the advisory semantic layer to an assessment that already concluded.
 
@@ -361,6 +373,9 @@ class MatchingService:
                 assessment_id, cache_key=prepared.cache_key
             )
             if cached is not None:
+                _record_analysis_cache_hit(
+                    self.session, model=adapter.model, prompt_version=adapter.prompt_version
+                )
                 return cached
 
         now = datetime.now(UTC)
@@ -378,6 +393,9 @@ class MatchingService:
                     assessment_id, cache_key=prepared.cache_key
                 )
                 if cached is not None:
+                    _record_analysis_cache_hit(
+                        self.session, model=adapter.model, prompt_version=adapter.prompt_version
+                    )
                     return cached
 
             if prepared is None:
@@ -403,6 +421,9 @@ class MatchingService:
                     )
                 )
                 if source is not None:
+                    _record_analysis_cache_hit(
+                        self.session, model=adapter.model, prompt_version=adapter.prompt_version
+                    )
                     record = _reused_record(
                         source, assessment_id=assessment_id, analyzed_at=datetime.now(UTC)
                     )
@@ -411,7 +432,9 @@ class MatchingService:
                         assessment_id=assessment_id,
                         prepared=prepared,
                         outcome=await adapter.analyze(
-                            request, prepared=prepared, use_cache=not refresh
+                            request, prepared=prepared, use_cache=not refresh,
+                            **({"quota_ceiling_requests": quota_ceiling_requests}
+                               if quota_ceiling_requests is not None else {}),
                         ),
                         analyzed_at=datetime.now(UTC),
                         model_id=adapter.model,
@@ -785,6 +808,36 @@ TOKEN_RATIO_SAMPLE = 50
 #: Experiences and projects the profile history carries into the prompt (card F16-07).
 PROFILE_HISTORY_ITEMS = 5
 _HISTORY_LINE_LENGTH = 200
+
+
+def _record_analysis_cache_hit(
+    session: Session, *, model: str, prompt_version: str
+) -> None:
+    """Record cache reuse as one operation and a zero-transport cache event."""
+    bind = session.get_bind()
+    engine = bind.engine if isinstance(bind, Connection) else bind
+    operation_id = uuid4()
+    try:
+        start_operation(
+            engine, operation_id=operation_id, task=AITask.JOB_MATCH.value,
+            prompt_version=prompt_version,
+        )
+        record_calls(engine, [AICallRecord(
+            task=AITask.JOB_MATCH.value,
+            provider="cache",
+            model=model,
+            attempt=0,
+            success=True,
+            fallback_used=False,
+            cache_hit=True,
+            prompt_version=prompt_version,
+            operation_id=operation_id,
+            operation_ordinal=None,
+            transport_started=False,
+        )])
+        finish_operation(engine, operation_id=operation_id, state="cache_hit")
+    except Exception:
+        logger.warning("AI cache-hit telemetry write failed", exc_info=True)
 
 
 def is_reused_analysis(analysis: MatchAnalysisModel) -> bool:

@@ -34,7 +34,11 @@ target_metadata = Base.metadata
 #: hot-path counter/telemetry storage out of the ORM. Autogenerate only ever sees
 #: `Base.metadata`, so without this filter it reads their absence there as "table removed"
 #: and proposes dropping tables that were never meant to be ORM-managed.
-_UNMANAGED_TABLES = {("platform", "ai_quota_usage"), ("platform", "ai_call_record")}
+_UNMANAGED_TABLES = {
+    ("platform", "ai_quota_usage"),
+    ("platform", "ai_call_record"),
+    ("platform", "ai_operation_record"),
+}
 
 #: `ix_opportunity_embedding_hnsw` is raw `op.execute("CREATE INDEX ... USING hnsw ...")`
 #: (migration 20260925_0024): pgvector's HNSW access method and operator class

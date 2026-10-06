@@ -35,6 +35,7 @@ class FakeProvider:
         self.requests.append(request)
         outcome = self._script[request.model].pop(0)
         if isinstance(outcome, ProviderError):
+            outcome.transport_started = True
             raise outcome
         return outcome
 

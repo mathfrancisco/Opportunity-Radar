@@ -120,8 +120,8 @@ class _FakeProvider:
 class _ExhaustedQuotaGuard:
     """Always out of balance: proves the router never calls the provider (card F20-13)."""
 
-    def reserve(self, model: str, estimated_tokens: int):
-        del model, estimated_tokens
+    def reserve(self, model: str, estimated_tokens: int, *, ceiling_requests=None):
+        del model, estimated_tokens, ceiling_requests
         return None
 
     def settle(self, reservation, actual_tokens, rate_limit) -> None:  # pragma: no cover
@@ -229,6 +229,29 @@ def test_quota_exhausted_no_http_call() -> None:
     assert outcome.status is AnalysisStatus.AI_FAILED
     assert outcome.failure_code is AnalysisFailureCode.QUOTA_EXHAUSTED
     assert provider.requests == []
+
+
+def test_unexpected_router_error_finishes_operation_as_internal_error(monkeypatch) -> None:
+    class BrokenProvider:
+        name = "broken"
+
+        async def complete(self, request):
+            del request
+            raise RuntimeError("local setup failed")
+
+    provider = BrokenProvider()
+    adapter = _adapter(_router(provider))
+    finished = []
+
+    async def record_finish(operation_id, state, error_kind=None):
+        finished.append((operation_id, state, error_kind))
+
+    monkeypatch.setattr(adapter, "_finish_operation", record_finish)
+    with pytest.raises(RuntimeError, match="local setup failed"):
+        _analyze(adapter, _request())
+
+    assert len(finished) == 1
+    assert finished[0][1:] == ("internal_error", "internal_error")
 
 
 @pytest.mark.parametrize(

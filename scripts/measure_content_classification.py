@@ -41,10 +41,11 @@ from pathlib import Path
 from typing import Any
 
 from opportunity_radar.opportunities.content_classification import (
+    DESCRIPTION_RULES,
+    GATED_RULE_MIN_EMISSIONS,
     PRECISION_GATE,
     classify_seniority_v4,
     classify_work_mode_v7,
-    gate_passes,
 )
 from opportunity_radar.opportunities.domain import (
     Seniority,
@@ -59,7 +60,7 @@ DEFAULT_SAMPLE_SIZE = 200
 #: SPEC 48 decision 7: no activation on a gold set smaller than this many labelled jobs.
 MIN_GOLD_JOBS = 200
 #: A rule needs at least this many emissions before its precision counts as evidence.
-MIN_RULE_EMISSIONS = 20
+MIN_RULE_EMISSIONS = GATED_RULE_MIN_EMISSIONS
 UNKNOWN_SOURCE_TYPE = "unknown"
 EXCERPT_CHARS = 1200
 
@@ -73,12 +74,14 @@ class Case:
     description: str | None
     location_text: str | None
     source_type: str | None = None
+    judgment: str = "legacy"
+    expected_rule: str | None = None
 
 
 def load_gold(path: Path) -> list[dict[str, Any]]:
     """Read labelled cases for the fields this script measures (role_family is skipped)."""
     data = json.loads(path.read_text(encoding="utf-8"))
-    return [
+    cases = [
         {
             "opportunity_id": item["opportunity_id"],
             "field": item["field"],
@@ -88,10 +91,28 @@ def load_gold(path: Path) -> list[dict[str, Any]]:
             "text": item.get("trecho_descricao"),
             "location_text": item.get("location_text"),
             "source_type": item.get("source_type"),
+            "judgment": item.get("judgment", item.get("applicability", "legacy")),
+            "expected_rule": item.get("expected_rule"),
         }
         for item in data["casos"]
         if item["field"] in MEASURED_FIELDS
     ]
+    seen: dict[tuple[str, str], tuple[Any, str]] = {}
+    for item in cases:
+        key = (item["opportunity_id"], item["field"])
+        value = (item.get("expected"), str(item.get("judgment", "legacy")))
+        if key in seen:
+            raise ValueError(f"duplicate gold case for opportunity/field: {key[0]} / {key[1]}")
+        seen[key] = value
+        if value[1] not in ("applicable", "inapplicable", "unknown", "legacy"):
+            raise ValueError(f"invalid judgment {value[1]!r} for {key[0]} / {key[1]}")
+        if value[1] == "applicable" and item.get("expected") is None:
+            raise ValueError(f"applicable gold case needs expected value: {key[0]} / {key[1]}")
+        if value[1] in ("inapplicable", "unknown") and item.get("expected") is not None:
+            raise ValueError(
+                f"{value[1]} gold case must not contain expected value: {key[0]} / {key[1]}"
+            )
+    return cases
 
 
 def build_cases(
@@ -126,6 +147,8 @@ def build_cases(
                 description=description,
                 location_text=text.get("location_text") or item.get("location_text"),
                 source_type=text.get("source_type") or item.get("source_type"),
+                judgment=str(item.get("judgment", "legacy")),
+                expected_rule=item.get("expected_rule"),
             )
         )
     return cases
@@ -162,44 +185,119 @@ def _rule_stats(emitted: Mapping[str, Sequence[bool]]) -> dict[str, dict[str, An
     }
 
 
-def measure(cases: Sequence[Case], *, min_gold_jobs: int = MIN_GOLD_JOBS) -> dict[str, Any]:
+def passing_rules(rules: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """Return individually eligible rules; a weak rule does not invalidate a strong one."""
+    return sorted(
+        rule
+        for rule, stats in rules.items()
+        if stats.get("emitted", 0) >= GATED_RULE_MIN_EMISSIONS
+        and stats.get("precision", 0.0) >= PRECISION_GATE
+    )
+
+
+def measure(
+    cases: Sequence[Case],
+    *,
+    min_gold_jobs: int = MIN_GOLD_JOBS,
+    selected_rules: Sequence[str] = (),
+) -> dict[str, Any]:
     emitted: dict[str, list[bool]] = defaultdict(list)
     fields: dict[str, dict[str, Any]] = {
         name: {"cases": 0, "unknown_before": 0, "unknown_after": 0} for name in MEASURED_FIELDS
     }
     by_type_emitted: dict[str, dict[str, list[bool]]] = defaultdict(lambda: defaultdict(list))
     by_type_fields: dict[str, dict[str, dict[str, Any]]] = {}
+    judgment_counts = {
+        name: 0 for name in ("applicable", "inapplicable", "unknown", "legacy", "invalid")
+    }
+    reviewed_jobs: set[str] = set()
+    reviewed_by_type: dict[str, set[str]] = defaultdict(set)
+    unassigned_source_type = 0
+    confusion: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"tp": 0, "fp": 0, "fn": 0, "support": 0}
+    )
+    excluded_emissions: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"inapplicable": 0, "unknown": 0}
+    )
     for case in cases:
-        source_type = case.source_type or UNKNOWN_SOURCE_TYPE
-        type_fields = by_type_fields.setdefault(
-            source_type, {name: {"cases": 0, "unknown_after": 0} for name in MEASURED_FIELDS}
-        )
+        source_type = case.source_type
+        if not source_type:
+            unassigned_source_type += 1
+        type_fields = None
+        if source_type:
+            type_fields = by_type_fields.setdefault(
+                source_type, {name: {"cases": 0, "unknown_after": 0} for name in MEASURED_FIELDS}
+            )
         stats = fields[case.field]
         stats["cases"] += 1
-        stats["unknown_before"] += 1  # the old gold set is drawn from UNKNOWN fields
-        type_fields[case.field]["cases"] += 1
+        if case.judgment == "legacy":
+            stats["unknown_before"] += 1
+        if type_fields is not None:
+            type_fields[case.field]["cases"] += 1
         value, rule = classify(case)
         if value is None:
             stats["unknown_after"] += 1
-            type_fields[case.field]["unknown_after"] += 1
+            if type_fields is not None:
+                type_fields[case.field]["unknown_after"] += 1
+        if case.judgment == "unknown":
+            judgment_counts["unknown"] += 1
+            if rule is not None:
+                excluded_emissions[f"{case.field}:{rule}"]["unknown"] += 1
+            continue
+        if case.judgment in ("applicable", "inapplicable"):
+            reviewed_jobs.add(case.opportunity_id)
+            if source_type:
+                reviewed_by_type[source_type].add(case.opportunity_id)
+        if case.judgment == "inapplicable":
+            judgment_counts["inapplicable"] += 1
+            if value is not None:
+                excluded_emissions[f"{case.field}:{rule}"]["inapplicable"] += 1
+            continue
+        if case.judgment not in ("applicable", "legacy"):
+            judgment_counts["invalid"] += 1
+            continue
+        judgment_counts[case.judgment] += 1
+        if value is None:
+            if case.judgment == "applicable":
+                missed_rule = f"{case.field}:{case.expected_rule or 'no_emission'}"
+                confusion[missed_rule]["fn"] += 1
+                confusion[missed_rule]["support"] += 1
             continue
         correct = value == case.expected
-        emitted[f"{case.field}:{rule}"].append(correct)
-        by_type_emitted[source_type][f"{case.field}:{rule}"].append(correct)
+        rule_key = f"{case.field}:{rule}"
+        emitted[rule_key].append(correct)
+        confusion[rule_key]["support"] += 1
+        if case.judgment == "applicable" and correct:
+            confusion[rule_key]["tp"] += 1
+        else:
+            confusion[rule_key]["fp"] += 1
+        if source_type:
+            by_type_emitted[source_type][f"{case.field}:{rule}"].append(correct)
     for group in (fields, *by_type_fields.values()):
         for stats in group.values():
             total = stats["cases"]
             stats["coverage"] = round((total - stats["unknown_after"]) / total, 4) if total else 0.0
     rules = _rule_stats(emitted)
-    rules_passing = [
-        rule
-        for rule, r in rules.items()
-        if r["emitted"] >= MIN_RULE_EMISSIONS and r["correct"] / r["emitted"] >= PRECISION_GATE
-    ]
-    gold_jobs = len({case.opportunity_id for case in cases})
-    passes = gold_jobs >= min_gold_jobs and gate_passes(
-        {rule: (r["correct"], r["emitted"]) for rule, r in rules.items()}
+    gold_jobs = len(reviewed_jobs)
+    source_support = {
+        source_type: len(ids) for source_type, ids in sorted(reviewed_by_type.items())
+    }
+    supported_source_types = sorted(
+        source_type for source_type, count in source_support.items() if count >= 50
     )
+    enough_source_support = bool(source_support) and all(
+        count >= 50 for count in source_support.values()
+    )
+    population_passes = (
+        gold_jobs >= min_gold_jobs
+        and enough_source_support
+        and judgment_counts["legacy"] == 0
+        and judgment_counts["unknown"] == 0
+        and judgment_counts["invalid"] == 0
+        and unassigned_source_type == 0
+    )
+    candidate_gate = evaluate_candidate_gate(population_passes, rules, selected_rules)
+    passes = candidate_gate["passes"]
     return {
         "rules": rules,
         "fields": fields,
@@ -215,9 +313,58 @@ def measure(cases: Sequence[Case], *, min_gold_jobs: int = MIN_GOLD_JOBS) -> dic
             "min_gold_jobs": min_gold_jobs,
             "gold_jobs": gold_jobs,
             "passes": passes,
+            "population_passes": population_passes,
+            "population_gate": {
+                "passes": population_passes,
+                "gold_jobs": gold_jobs,
+                "min_gold_jobs": min_gold_jobs,
+                "reviewed_jobs_by_source_type": source_support,
+                "unassigned_source_type_cases": unassigned_source_type,
+                "unknown_judgments": judgment_counts["unknown"],
+                "legacy_judgments": judgment_counts["legacy"],
+                "invalid_judgments": judgment_counts["invalid"],
+            },
             "min_rule_emissions": MIN_RULE_EMISSIONS,
-            "rules_passing": rules_passing,
+            **candidate_gate,
+            "source_types_with_50_labeled": supported_source_types,
+            "reviewed_jobs_by_source_type": source_support,
+            "blocked_reason": (
+                None if passes else "insufficient_or_incomplete_human_gold"
+            ),
         },
+        "judgments": judgment_counts,
+        "confusion_by_rule": {key: val for key, val in sorted(confusion.items())},
+        "excluded_emissions_by_rule": {
+            key: val for key, val in sorted(excluded_emissions.items())
+        },
+        "unassigned_source_type_cases": unassigned_source_type,
+    }
+
+
+def evaluate_candidate_gate(
+    population_passes: bool,
+    rules: Mapping[str, Mapping[str, Any]],
+    selected_rules: Sequence[str],
+) -> dict[str, Any]:
+    """Require an explicit candidate set and every selected rule to meet its gate."""
+    eligible = passing_rules(
+        {name: stats for name, stats in rules.items() if name in DESCRIPTION_RULES}
+    )
+    selection_valid = (
+        bool(selected_rules)
+        and len(selected_rules) == len(set(selected_rules))
+        and set(selected_rules) <= DESCRIPTION_RULES
+    )
+    passes = selection_valid and population_passes and all(
+        name in eligible for name in selected_rules
+    )
+    return {
+        "passes": passes,
+        "rules_passing": eligible,
+        "rule_eligibility": {rule: rule in eligible for rule in DESCRIPTION_RULES},
+        "selected_rules": list(selected_rules),
+        "selection_required": not selection_valid,
+        "blocked_reason": None if passes else "population_or_selected_rule_gate_failed",
     }
 
 
@@ -365,6 +512,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--acervo-limit", type=int, default=None)
     parser.add_argument("--check-gate", action="store_true")
+    parser.add_argument(
+        "--candidate-rule",
+        action="append",
+        choices=sorted(DESCRIPTION_RULES),
+        help="rule selected for candidate approval; repeat to select multiple rules",
+    )
     parser.add_argument("--sample-out", type=Path, default=None)
     parser.add_argument("--sample-size", type=int, default=DEFAULT_SAMPLE_SIZE)
     parser.add_argument(
@@ -375,6 +528,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--seed", type=int, default=None)
     args = parser.parse_args(argv)
+    if args.check_gate and not args.candidate_rule:
+        parser.error("--check-gate requires at least one explicit --candidate-rule")
 
     if args.sample_out is not None:
         with _session() as session:
@@ -408,7 +563,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         gold_text=args.gold_text,
         unmeasurable=unmeasurable,
     )
-    report = measure(cases)
+    report = measure(cases, selected_rules=args.candidate_rule or ())
     report["unmeasurable"] = unmeasurable
     report["mode"] = mode
     report["gold_cases"] = len(gold)

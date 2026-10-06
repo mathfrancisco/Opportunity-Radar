@@ -131,6 +131,8 @@ def test_status_mapping(status: int, kind: ErrorKind) -> None:
 
     assert excinfo.value.kind is kind
     assert excinfo.value.status == status
+    assert excinfo.value.transport_started is True
+    assert excinfo.value.latency_ms == 250
 
 
 def test_429_reads_retry_after() -> None:
@@ -178,6 +180,21 @@ def test_empty_content_is_invalid_output() -> None:
     with pytest.raises(ProviderError) as excinfo:
         asyncio.run(provider.complete(_request()))
     assert excinfo.value.kind is ErrorKind.INVALID_OUTPUT
+    assert excinfo.value.transport_started is True
+    assert excinfo.value.status == 200
+    assert excinfo.value.latency_ms == 250
+
+
+def test_malformed_json_is_a_categorized_transport_attempt() -> None:
+    provider = _provider(lambda request: httpx.Response(200, text="not json"))
+
+    with pytest.raises(ProviderError) as excinfo:
+        asyncio.run(provider.complete(_request()))
+
+    assert excinfo.value.kind is ErrorKind.INVALID_OUTPUT
+    assert excinfo.value.status == 200
+    assert excinfo.value.transport_started is True
+    assert excinfo.value.latency_ms == 250
 
 
 @pytest.mark.parametrize(
