@@ -314,9 +314,11 @@ DEFAULT_FACTORS: tuple[FactorRule, ...] = (
 )
 
 RULES_VERSION_V3 = "matching-v3"
+#: F52-04: a known level outside the profile's accepted ones never ranks above WATCHLIST.
+RULES_VERSION_V4 = "matching-v4"
 
 
-def default_rule_set(version: str = RULES_VERSION_V3) -> MatchingRuleSet:
+def default_rule_set(version: str = RULES_VERSION_V4) -> MatchingRuleSet:
     """Return the current explicit, fully weighted deterministic rule set.
 
     `matching-v1` assessments stay in the history under their own `rules_version`; a new
@@ -353,7 +355,13 @@ def evaluate_match(
         factors=factors,
         score=score,
         confidence=_confidence(factors),
-        verdict=_verdict(score, eligibility, review_required, rules),
+        verdict=_verdict(
+            score,
+            eligibility,
+            review_required,
+            rules,
+            level_outside_preference=_level_outside_preference(opportunity, profile),
+        ),
         review_required=review_required,
     )
 
@@ -962,11 +970,19 @@ def _verdict(
     eligibility: EligibilityResult,
     review_required: bool,
     rules: MatchingRuleSet,
+    *,
+    level_outside_preference: bool = False,
 ) -> Verdict:
     if eligibility.status is EligibilityStatus.INELIGIBLE:
         return Verdict.INELIGIBLE
     if review_required:
         return Verdict.REVIEW_REQUIRED
+    if level_outside_preference:
+        # F52-04. F48-13 keeps a level above the preference eligible and ranked lower;
+        # the score of the other factors must not carry it back to the top of the list.
+        if score >= rules.watchlist_threshold:
+            return Verdict.WATCHLIST
+        return Verdict.LOW_MATCH
     if score >= rules.high_priority_threshold:
         return Verdict.HIGH_PRIORITY
     if score >= rules.recommended_threshold:
@@ -974,6 +990,15 @@ def _verdict(
     if score >= rules.watchlist_threshold:
         return Verdict.WATCHLIST
     return Verdict.LOW_MATCH
+
+
+def _level_outside_preference(opportunity: OpportunitySnapshot, profile: ProfileSnapshot) -> bool:
+    """A stated level the profile does not accept. Unknown on either side is not that."""
+    return (
+        opportunity.seniority is not Seniority.UNKNOWN
+        and bool(profile.accepted_seniorities)
+        and opportunity.seniority not in profile.accepted_seniorities
+    )
 
 
 def _normalized_set(values: tuple[str, ...]) -> frozenset[str]:

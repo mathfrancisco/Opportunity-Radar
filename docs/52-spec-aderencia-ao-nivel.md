@@ -1,7 +1,7 @@
 # SPEC 52 — Aderência ao nível: senioridade, oferta júnior/pleno e remoto (cards F52)
 
 - **Data:** 2026-10-05
-- **Estado:** proposta. Nenhum card implementado.
+- **Estado:** em implementação. F52-04 entregue em 2026-10-06 (`matching-v4`); os demais cards não começaram.
 - **Origem:** relato do dono: a busca devolve vagas muito acima do nível dele (júnior/pleno,
   remoto). Medições na stack `opportunity-radar-dev` em 2026-10-05.
 - **Relação com a [SPEC 51](51-spec-coleta-confiavel-e-busca.md)** (implementação parcial; ver
@@ -169,6 +169,23 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
 - **Aceite:** zero avaliações atuais de topo com nível conhecido fora do aceito; teste de
   regressão com uma vaga `SENIOR`, uma `INTERN` e o perfil atual.
 - **Esforço / risco:** P a M / baixo. Começar por aqui: é o erro mais visível.
+- **Resultado (2026-10-06):** investigado na base de dev, pelo ponteiro
+  `matching.current_assessment`. As duas hipóteses do P4 estavam erradas.
+  - **`INTERN` no topo (P5):** as 85 avaliações são da versão arquivada do perfil
+    (`60c45fa0`), que aceitava `INTERN`. No perfil ativo não há nenhuma. A contagem do §2
+    somou os ponteiros de todas as versões de perfil; não havia defeito de elegibilidade.
+  - **Nível acima do aceito (P4):** 140 avaliações de topo no perfil ativo (137 em
+    `matching-v3`, 3 em `matching-v2`). Causa: regra deliberada do F48-13, que mantém
+    `SENIOR` e acima elegíveis e só reduz o fator `SENIORITY_SCOPE` a 0,25. Com peso de 0,15,
+    os outros fatores levavam a vaga de volta a `RECOMMENDED`.
+  - **Correção:** `matching-v4`. Nível conhecido fora de `accepted_seniorities` continua
+    elegível (F48-13 preservado) e para no máximo em `WATCHLIST`. Perfil sem preferência de
+    nível e vaga de nível `UNKNOWN` não são afetados. Teste em
+    `tests/backend/matching/test_domain.py`.
+  - **Não feito aqui:** a troca de `RULES_VERSION` reavalia o catálogo uma vez; o aceite
+    ("zero avaliações de topo com nível conhecido fora do aceito") só pode ser medido depois
+    dessa reavaliação na base de dev. As avaliações da versão arquivada do perfil continuam
+    no ponteiro; contá-las ou não nas métricas do §1 é decisão de medição.
 
 ### F52-05 — Peso do nível desconhecido na ordenação
 

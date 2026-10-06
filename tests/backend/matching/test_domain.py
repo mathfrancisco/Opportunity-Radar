@@ -284,6 +284,42 @@ def test_senior_scores_below_an_accepted_level_on_the_seniority_factor() -> None
     assert factor_score(Seniority.SENIOR) > Decimal("0")
 
 
+_OWNER_ACCEPTED = (Seniority.JUNIOR, Seniority.MID, Seniority.UNKNOWN)
+_TOP = (Verdict.RECOMMENDED, Verdict.HIGH_PRIORITY)
+
+
+def _verdict_for(seniority: Seniority, accepted: tuple[Seniority, ...]) -> Verdict:
+    return evaluate_match(
+        _opportunity(seniority=seniority),
+        _profile(accepted_seniorities=accepted),
+        default_rule_set(RULES_VERSION),
+        assessed_at=ASSESSED_AT,
+    ).verdict
+
+
+@pytest.mark.parametrize(
+    "seniority",
+    [Seniority.SENIOR, Seniority.STAFF, Seniority.LEAD, Seniority.MANAGER, Seniority.DIRECTOR],
+)
+def test_a_known_level_above_the_accepted_ones_never_reaches_the_top(
+    seniority: Seniority,
+) -> None:
+    # F52-04: the same posting is at the top for a profile that accepts the level.
+    assert _verdict_for(seniority, (seniority,)) in _TOP
+    assert _verdict_for(seniority, _OWNER_ACCEPTED) is Verdict.WATCHLIST
+
+
+def test_an_intern_posting_is_ineligible_for_a_profile_that_does_not_list_it() -> None:
+    assert _verdict_for(Seniority.INTERN, _OWNER_ACCEPTED) is Verdict.INELIGIBLE
+
+
+@pytest.mark.parametrize("seniority", [Seniority.JUNIOR, Seniority.MID, Seniority.UNKNOWN])
+def test_an_accepted_or_unknown_level_is_not_capped(seniority: Seniority) -> None:
+    assert _verdict_for(seniority, _OWNER_ACCEPTED) in _TOP
+    # No stated preference caps nothing (F20-72).
+    assert _verdict_for(Seniority.SENIOR, ()) in _TOP
+
+
 def test_golden_case_partial_skills_uses_exact_canonical_overlap() -> None:
     result = evaluate_match(
         _opportunity(required_skills=("python", "go"), preferred_skills=()),
@@ -417,7 +453,7 @@ def _factor(result, code: str):
 def test_v2_is_the_current_rules_version_with_complete_weights() -> None:
     rules = default_rule_set()
 
-    assert rules.version == "matching-v3" == RULES_VERSION
+    assert rules.version == "matching-v4" == RULES_VERSION
     assert sum(item.weight for item in rules.factors) == Decimal("1")
     policies = {item.code: item.missing_policy for item in rules.factors}
     assert policies["TIMEZONE"] is MissingPolicy.EXCLUDE_AND_RENORMALIZE
