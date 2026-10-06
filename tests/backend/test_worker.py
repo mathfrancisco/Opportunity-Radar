@@ -300,3 +300,68 @@ def test_pass_deadline_skips_next_source_after_prior_cleanup_finishes(
     assert cleanup_finished[0] is True
     assert executed == ["slow"]
     assert skips == ["pass_deadline"]
+
+
+def test_claimed_elsewhere_source_is_skipped_without_costing_the_rest_of_the_pass(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    sources = [SimpleNamespace(id="held-by-cli"), SimpleNamespace(id="free")]
+    executed: list[str] = []
+    summaries: list[dict[str, int]] = []
+
+    class Service:
+        def list_collectable_sources(self) -> list[object]:
+            return sources
+
+        def scheduling_state(self, source: object, *, timezone: str) -> object:
+            del timezone
+            return source
+
+        async def execute(self, source_id: str, _request: object, **_kwargs: object):
+            executed.append(source_id)
+            if source_id == "held-by-cli":
+                raise worker.SourceClaimedElsewhereError(source_id)  # type: ignore[arg-type]
+            return SimpleNamespace(
+                complete=False, status="SUCCEEDED", id="run-free", items_persisted=1
+            )
+
+    monkeypatch.setattr(worker, "observe_job", lambda *_args, **_kwargs: nullcontext("pass"))
+    monkeypatch.setattr(
+        worker, "Session", lambda _engine: nullcontext(SimpleNamespace(rollback=lambda: None))
+    )
+    monkeypatch.setattr(
+        worker, "evaluate_gate", lambda *_args, **_kwargs: worker.CollectionGate.DUE
+    )
+    monkeypatch.setattr(
+        worker,
+        "_scheduled_request_with_rotation",
+        lambda _service, _source, _correlation: (SimpleNamespace(keywords=()), None, 0),
+    )
+    monkeypatch.setattr(
+        worker, "annotate_pass", lambda *_a, **summary: summaries.append(summary)
+    )
+
+    with caplog.at_level(logging.INFO, logger="opportunity_radar.worker"):
+        worker.collect_enabled_sources(
+            object(),
+            service_factory=lambda _session: Service(),  # type: ignore[arg-type]
+        )
+
+    assert executed == ["held-by-cli", "free"]
+    assert [
+        record.reason
+        for record in caplog.records
+        if record.message == "scheduled collection skipped"
+    ] == ["claimed_elsewhere"]
+    assert summaries[0]["skipped"] == 1 and summaries[0]["completed"] == 1
+    assert summaries[0]["failed"] == 0
+
+
+def test_collection_claims_follow_the_setting_and_default_on() -> None:
+    on = collection_service_factory(Settings(database_url=_DATABASE_URL))(None)  # type: ignore[arg-type]
+    off = collection_service_factory(
+        Settings(database_url=_DATABASE_URL, collection_claim_enabled=False)
+    )(None)  # type: ignore[arg-type]
+
+    assert on._claims_enabled is True  # type: ignore[attr-defined]
+    assert off._claims_enabled is False  # type: ignore[attr-defined]
