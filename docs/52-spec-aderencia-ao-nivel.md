@@ -1,9 +1,15 @@
 # SPEC 52 — Aderência ao nível: senioridade, oferta júnior/pleno e remoto (cards F52)
 
 - **Data:** 2026-10-05
-- **Estado:** em implementação. F52-04 entregue em 2026-10-06 (`matching-v4`), com o aceite
-  à espera do fim da reavaliação; F52-01 com script, relatório e amostra, à espera dos
-  rótulos; os demais cards não começaram.
+- **Estado (2026-10-06):** em implementação, nenhum card concluído.
+  - F52-04: `matching-v4` entregue; o aceite espera o fim da reavaliação.
+  - F52-01: script, relatório, amostra e proposta de rótulos; espera a revisão do dono.
+  - F52-02: `seniority-v5` mesclado (PR #40) e aplicado na base de dev; cobertura de 62,7%
+    nas áreas-alvo (meta de 60%). A precisão espera a revisão do dono.
+  - F52-03 e F52-07: dependem do gold (SPEC 51, F51-11); proposta de rótulos e comando do
+    portão prontos (PR #41).
+  - F52-05, F52-06, F52-08 e F52-09: não começaram. As decisões do dono para eles estão no
+    §7 e no F52-06.
 - **Origem:** relato do dono: a busca devolve vagas muito acima do nível dele (júnior/pleno,
   remoto). Medições na stack `opportunity-radar-dev` em 2026-10-05.
 - **Relação com a [SPEC 51](51-spec-coleta-confiavel-e-busca.md)** (implementação parcial; ver
@@ -173,6 +179,13 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
   `tests/backend/opportunities/test_retag_seniority_integration.py`. Dry-run numa cópia da
   base de dev em [f52-02-reaplicacao-senioridade.md](pesquisas/f52-02-reaplicacao-senioridade.md):
   nas áreas-alvo a cobertura vai de 50,5% para 62,7% e `JUNIOR`+`MID` de 177 para 408.
+  - **Aplicado na base de dev (2026-10-06, depois do merge do PR #40):** `pg_dump` antes
+    (`dev-before-seniority-v5-apply-2026-10-06.dump`), depois `--apply`: 31.218 vagas lidas,
+    4.732 reclassificadas, igual ao dry-run. Medido em seguida nas áreas-alvo: 5.320 de 8.484
+    com nível conhecido (**62,7%**) e **410** vagas `JUNIOR` ou `MID`. No perfil ativo, o
+    topo tinha 651 avaliações, 411 delas (63,1%) de nível `UNKNOWN` e 94 de nível acima do
+    aceito; essas 94 são vagas recém-reclassificadas que o worker ainda não reavaliou
+    (10.712 de 21.516 avaliações em `matching-v4`).
   - **Aberto:** a precisão de 90% depende dos rótulos. A proposta está em
     `docs/pesquisas/f52-01-amostra-senioridade-proposta.json`; só entradas com `revisado_por`
     preenchido pelo dono entram na medição.
@@ -238,7 +251,10 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
 - **Teste:** regressão de matching com os 50 casos existentes, mais casos de nível
   desconhecido.
 - **Esforço / risco:** M / médio. Muda `RULES_VERSION` e reavalia o catálogo uma vez.
-- **Decisão pendente:** o dono confirma que prefere ver primeiro o nível conhecido.
+- **Decisão do dono (2026-10-06, Q2):** confirmado. Entra como `matching-v5`, num único
+  bump junto com qualquer outra mudança de matching, depois de `seniority-v5` (feito) e de
+  `skills-v5` (se houver) aplicados na base de dev. Linha de base antes do `seniority-v5`:
+  690 de 847 no topo com `UNKNOWN`; depois dele, 411 de 651. Não implementado ainda.
 
 ### F52-06 — Mais oferta júnior/pleno remota no Brasil
 
@@ -250,6 +266,14 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
 - **Aceite:** 600 vagas `JUNIOR` ou `MID` nas áreas-alvo; relatório por fonte com a contagem
   de vagas do nível.
 - **Esforço / risco:** M / depende de revisão de termos por fonte nova.
+- **Decisões do dono (2026-10-06, Q4):** primeiro, sem coletor novo, ampliar o catálogo com
+  empresas brasileiras que já usam ATS homologado (Greenhouse, Lever, Ashby, Workable,
+  Teamtailor, Recruitee, inHire) e terminar o lote de 98 do inHire, medindo `JUNIOR`/`MID`
+  por fonte. Depois, revisão de termos em `docs/pesquisas/termos-<fonte>.md` para Sólides,
+  Recrutei e Quickin; coletor só para a fonte com listagem pública por API ou feed
+  documentado **e** termos que não proíbem coleta automatizada. Gupy continua proibida.
+  Priorizar fontes pela proporção de vagas do nível aceito, ao lado do
+  `COLLECTION_TARGET_AREA_FLOOR`. Nada disso foi executado ainda.
 
 ### F52-07 — Remoto de verdade: país e modo
 
@@ -312,4 +336,4 @@ fila de 5.219 normalizações em `REVIEW_REQUIRED` e as 2.543 vagas sem nenhuma 
   em `WATCHLIST`. No Inbox, nível conhecido e aceito vem antes.
 - **Q3.** Respondida em 2026-10-06: `Entry Level` e `New Grad` são `JUNIOR`. `INTERN` não
   entra em `accepted_seniorities`.
-- **Q4.** Quais fontes brasileiras o dono quer ver avaliadas no F52-06?
+- **Q4.** Respondida em 2026-10-06: ver "Decisões do dono" no F52-06.
