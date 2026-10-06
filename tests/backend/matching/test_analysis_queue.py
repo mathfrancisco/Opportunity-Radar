@@ -35,6 +35,7 @@ from opportunity_radar.matching.models import (
     MatchAssessmentModel,
 )
 from opportunity_radar.matching.repository import (
+    MIN_ANALYSIS_DESCRIPTION_CHARS,
     AnalysisRecord,
     AssessmentRecord,
     SqlAlchemyMatchingRepository,
@@ -62,6 +63,8 @@ pytestmark = [
 
 _MODEL = "llama3.2:3b"
 _PROMPT_VERSION = "opportunity_analysis/v1"
+# One character over the F51-12 floor: the automatic queue skips shorter descriptions.
+_USABLE_DESCRIPTION = "x" * (MIN_ANALYSIS_DESCRIPTION_CHARS + 1)
 
 
 @pytest.fixture(autouse=True)
@@ -274,6 +277,7 @@ def _seed_assessment(
             seniority="SENIOR",
             contract_type="FULL_TIME",
             lifecycle_status="ACTIVE",
+            description=_USABLE_DESCRIPTION,
             version=1,
             published_at=published_at or datetime.now(UTC),
             canonical_company_id=company.id if company is not None else None,
@@ -376,6 +380,7 @@ def _opportunity(session: Session, *, role_family: str) -> OpportunityModel:
         seniority="MID",
         contract_type="FULL_TIME",
         lifecycle_status="ACTIVE",
+        description=_USABLE_DESCRIPTION,
         version=1,
         published_at=datetime.now(UTC),
         role_family=role_family,
@@ -493,6 +498,52 @@ def test_pending_analysis_orders_by_value() -> None:
         ]
 
 
+def _opportunity_with(session: Session, **fields: object) -> OpportunityModel:
+    opportunity = _opportunity(session, role_family="DATA")
+    for name, value in fields.items():
+        setattr(opportunity, name, value)
+    session.flush()
+    return opportunity
+
+
+def test_the_queue_skips_closed_postings_and_postings_without_a_usable_description() -> None:
+    """Card F51-12: nothing to analyse, or nothing left to apply to; at the boundary, 200 is out."""
+    with _session() as session:
+        repository = SqlAlchemyMatchingRepository(session)
+        window = {
+            "eligible_verdicts": DEFAULT_ANALYSIS_VERDICTS,
+            "now": datetime.now(UTC),
+            "cooldown": timedelta(minutes=15),
+            "attempt_window": timedelta(hours=24),
+            "max_attempts": 3,
+        }
+        pending_before = repository.count_pending_analysis(**window)
+        no_description = _seed_assessment(
+            session, opportunity=_opportunity_with(session, description=None)
+        )
+        exactly_floor = _seed_assessment(
+            session,
+            opportunity=_opportunity_with(
+                session, description="x" * MIN_ANALYSIS_DESCRIPTION_CHARS
+            ),
+        )
+        closed = _seed_assessment(
+            session, opportunity=_opportunity_with(session, lifecycle_status="CLOSED")
+        )
+        usable = _seed_assessment(
+            session,
+            opportunity=_opportunity_with(
+                session, description="x" * (MIN_ANALYSIS_DESCRIPTION_CHARS + 1)
+            ),
+        )
+        queued = set(repository.pending_analysis_ids(limit=1_000_000, **window))
+
+        assert usable in queued
+        assert queued.isdisjoint({no_description, exactly_floor, closed})
+        # The count shares the conditions: of the four seeded, only `usable` is added.
+        assert repository.count_pending_analysis(**window) == pending_before + 1
+
+
 def test_pending_analysis_skips_without_material_change() -> None:
     """Card F20-24 / F20-39: re-evaluating an unchanged opportunity must not re-queue it."""
     with _session() as session:
@@ -506,6 +557,7 @@ def test_pending_analysis_skips_without_material_change() -> None:
             seniority="SENIOR",
             contract_type="FULL_TIME",
             lifecycle_status="ACTIVE",
+            description=_USABLE_DESCRIPTION,
             version=1,
         )
         session.add(opportunity)
@@ -718,6 +770,7 @@ def test_a_superseded_assessment_is_not_analyzed() -> None:
             seniority="SENIOR",
             contract_type="FULL_TIME",
             lifecycle_status="ACTIVE",
+            description=_USABLE_DESCRIPTION,
             version=1,
         )
         session.add(opportunity)

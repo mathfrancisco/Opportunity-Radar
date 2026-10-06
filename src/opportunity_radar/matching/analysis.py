@@ -36,11 +36,15 @@ ANALYSIS_SCHEMA_V3 = "analysis-v3"
 #: Bumped to v4: the key is built from `reusable_payload_digest`, not from the row version
 #: and the raw payload hash, so a recollection that changed nothing the model reads no
 #: longer pays for the same analysis again.
-ANALYSIS_KEY_VERSION = "analysis-key-v4"
+#: Bumped to v5 (card F51-12): `rules_version` and `taxonomy_version` left the key, so an
+#: analysis survives a rules release; rows under v4 are a miss once.
+ANALYSIS_KEY_VERSION = "analysis-key-v5"
 #: Payload fields that change with every recollection or daily re-evaluation without
 #: changing the posting, the profile or the verdict the analysis comments on.
 _EVIDENCE_REF_FIELDS = frozenset({"evidence_refs", "skill_evidence_refs"})
 _BOOKKEEPING_FIELDS = frozenset({"content_version"}) | _EVIDENCE_REF_FIELDS
+#: Fields of `deterministic_result` that do not change what the verdict says about the posting.
+_VERSION_FIELDS = frozenset({"score", "rules_version", "taxonomy_version"})
 #: Where a quoted piece of evidence may come from in the payload that was sent.
 CLAIM_SOURCES = ("posting", "profile")
 
@@ -629,16 +633,17 @@ def reusable_payload_digest(payload: Mapping[str, Any]) -> str:
     """Digest of what the analysis is about, for the key: the payload minus bookkeeping.
 
     The row version and the evidence references move on every recollection, and the score
-    moves with the posting's age on every daily re-evaluation. None of them changes the
-    posting, the profile or the verdict, and keying on them made the same posting be
-    analysed again each time. Eligibility and verdict stay in: an analysis written for one
-    verdict is not the answer for another.
+    moves with the posting's age on every daily re-evaluation; the rules and taxonomy
+    versions move on every release. None of them changes the posting, the profile or the
+    verdict, and keying on them made the same posting be analysed again each time.
+    Eligibility and verdict stay in: an analysis written for one verdict is not the answer
+    for another.
     """
     reusable = _without_bookkeeping(payload)
     result = reusable.get("deterministic_result")
     if isinstance(result, Mapping):
         reusable["deterministic_result"] = {
-            key: item for key, item in result.items() if key != "score"
+            key: item for key, item in result.items() if key not in _VERSION_FIELDS
         }
     return _digest(reusable)
 
@@ -660,15 +665,15 @@ def analysis_key(
     so a different cut or a changed decision is a different analysis. The prompt digest
     covers the wording and the schema, not just the version label, and `options` every
     inference setting that changes the answer. `keep_alive` is deliberately absent: it
-    changes how long the model stays loaded, not what it says.
+    changes how long the model stays loaded, not what it says. `rules_version` and
+    `taxonomy_version` are not part of it (F51-12): a bump that leaves the verdict and the
+    posting as they were must not pay for the same analysis again.
     """
     return _digest(
         {
             "key_version": ANALYSIS_KEY_VERSION,
             "opportunity_id": str(request.opportunity_id),
             "profile_version_id": str(request.profile_version_id),
-            "rules_version": request.rules_version,
-            "taxonomy_version": request.taxonomy_version,
             "model_id": model_id,
             "prompt_version": prompt_version,
             "prompt_digest": prompt_digest,
