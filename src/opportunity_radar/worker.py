@@ -192,7 +192,9 @@ def analyze_pending(
     counter against it and is released immediately either way,
     so the check never itself consumes quota. An assessment that fails the probe is
     skipped with no attempt recorded — the retry budget never counts a budget defer, and
-    the opportunity is back in the next pass, not lost.
+    the opportunity is back in the next pass, not lost. The same ceiling also travels with
+    the call (SPEC 51), where the router enforces it atomically on the real reservation;
+    the probe stays because a denial there is recorded as a failed attempt.
     """
     with observe_job(
         engine, job_name="analyze_pending", interval=timedelta(seconds=120)
@@ -218,7 +220,20 @@ def analyze_pending(
                         extra={"job": "warm-up", "reason": "idle", "load_ms": metrics.load_ms},
                     )
             completed = reused = degraded = claimed_elsewhere = failed = skipped_budget = 0
+            quota_guard = getattr(adapter, "quota_guard", None)
+            # The probe reserves what one call of the primary model can cost (0 for an
+            # adapter that does not say): a zero-token probe passes with 100 tokens left
+            # and the real call then fails as QUOTA_EXHAUSTED, one wasted attempt each.
+            probe_tokens = int(getattr(adapter, "probe_tokens", 0) or 0)
             for assessment_id in pending:
+                if worker_requests_ceiling is not None and quota_guard is not None:
+                    probe = quota_guard.reserve(
+                        adapter.model, probe_tokens, ceiling_requests=worker_requests_ceiling
+                    )
+                    if probe is None:
+                        skipped_budget += 1
+                        continue
+                    quota_guard.release(probe)
                 try:
                     analysis = run_async(
                         service.analyze(

@@ -573,7 +573,7 @@ def test_the_migration_round_trips() -> None:
                         params={"id": assessment_id},
                     )
 
-            _alembic(scratch, "downgrade", "-1")
+            _alembic(scratch, "downgrade", "20261005_0063")
             assert "immutable" in (prune_one(ids[0]) or "")
             _alembic(scratch, "upgrade", "head")
             assert prune_one(ids[0]) is None

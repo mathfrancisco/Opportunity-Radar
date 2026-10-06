@@ -131,7 +131,7 @@ class GroqProvider:
             usage = _error_usage(response)
             raise ProviderError(
                 ErrorKind.INVALID_OUTPUT,
-                "groq response body was malformed",
+                f"{self.name} response body was malformed",
                 model=request.model,
                 status=response.status_code,
                 latency_ms=latency_ms,

@@ -76,10 +76,10 @@ def downgrade() -> None:
     op.execute(sa.text("""
         WITH source_keys AS (
             SELECT DISTINCT
-                   'workday:' || sd.configuration ->> 'tenant_identifier' || ':' ||
-                   sd.configuration ->> 'api_region' AS legacy_host,
+                   'workday:' || (sd.configuration ->> 'tenant_identifier') || ':' ||
+                   (sd.configuration ->> 'api_region') AS legacy_host,
                    split_part(sd.configuration ->> 'tenant_identifier', '/', 1) || '.' ||
-                   sd.configuration ->> 'api_region' || '.myworkdayjobs.com' AS physical_host
+                   (sd.configuration ->> 'api_region') || '.myworkdayjobs.com' AS physical_host
               FROM acquisition.source_definition sd
              WHERE sd.source_type = 'workday'
                AND coalesce(sd.configuration ->> 'tenant_identifier', '') LIKE '%/%'

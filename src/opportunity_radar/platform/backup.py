@@ -43,6 +43,7 @@ MANIFEST_QUERIES: dict[str, str] = {
     "stage_history": "SELECT count(*) FROM crm.stage_history",
     "ai_quota_usage": "SELECT count(*) FROM platform.ai_quota_usage",
     "ai_call_record": "SELECT count(*) FROM platform.ai_call_record",
+    "ai_operation_record": "SELECT count(*) FROM platform.ai_operation_record",
 }
 
 #: Tables that live in a schema `MANIFEST_QUERIES` otherwise fully covers but are
@@ -59,6 +60,11 @@ MANIFEST_EXCLUDED_TABLES: dict[str, str] = {
     "platform.worker_pass_history": (
         "Pruned history of worker passes (duration, DUE sources), F48-07. Operational "
         "bookkeeping like worker_job_state; a restore starts a fresh history."
+    ),
+    "platform.ai_suggestion_defer": (
+        "Retry schedule of the AI suggestion queue (next_attempt_at per opportunity and "
+        "content hash), SPEC 51. Losing it after a restore only makes a deferred "
+        "opportunity eligible again sooner; no suggestion or decision lives here."
     ),
 }
 

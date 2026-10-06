@@ -115,6 +115,11 @@ class AIOperationCohort:
     attempts: int
 
 
+def _provider_for(model: str, default: str) -> str:
+    """The backend that serves `model`: a prefixed model name belongs to Token Harbor."""
+    return TokenHarborProvider.name if model.startswith(MODEL_PREFIX) else default
+
+
 def start_operation(
     engine: Engine, *, operation_id: uuid.UUID, task: str,
     prompt_version: str | None = None, now: datetime | None = None,
@@ -225,11 +230,7 @@ def records_from_attempts(
         records.append(
             AICallRecord(
                 task=task,
-                provider=(
-                    TokenHarborProvider.name
-                    if attempt.model.startswith(MODEL_PREFIX)
-                    else provider
-                ),
+                provider=_provider_for(attempt.model, provider),
                 model=attempt.model,
                 attempt=attempt.attempt,
                 success=succeeded,
@@ -324,7 +325,7 @@ def record_attempt_started(
         id=uuid.uuid4(),
         created_at=now or datetime.now(UTC),
         task=task,
-        provider=provider,
+        provider=_provider_for(model, provider),
         model=model,
         attempt=attempt,
         success=False,

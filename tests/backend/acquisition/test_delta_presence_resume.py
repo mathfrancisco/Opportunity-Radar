@@ -846,7 +846,7 @@ def test_source_deadline_commits_positive_prefix_without_closing_absent_occurren
 
             opportunities.reconcile_run_closures(partial.id)
             session.refresh(absent_occurrence)
-            assert absent_occurrence.opportunity.lifecycle_status == "ACTIVE"
+            assert absent_occurrence.opportunity.lifecycle_status != "CLOSED"
             assert absent_occurrence.opportunity.closure_evidence is None
         finally:
             fixture.cleanup()

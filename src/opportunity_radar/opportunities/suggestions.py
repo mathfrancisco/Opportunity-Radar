@@ -64,9 +64,9 @@ from opportunity_radar.platform.ai.sanitizer import sanitize_for_llm
 from opportunity_radar.platform.ai.tasks import AITask, ModelRoute
 from opportunity_radar.platform.ai.telemetry import (
     finish_operation,
+    record_attempt_started,
     record_calls,
     records_from_attempts,
-    record_attempt_started,
     start_operation,
 )
 from opportunity_radar.platform.database import Base

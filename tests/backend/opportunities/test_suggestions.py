@@ -597,12 +597,14 @@ def test_candidates_needing_suggestion_skips_opportunities_already_suggested() -
 def test_suggestion_queue_filters_before_limit_and_pages_stably() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
-        created_at = datetime(2026, 1, 1, tzinfo=UTC)
-        resolved = [
-            _opportunity(seniority="UNKNOWN")
-            for _ in range(100)
-        ]
-        eligible = [_opportunity(seniority="UNKNOWN") for _ in range(3)]
+        # Older than any row another test may have left in the shared database.
+        created_at = datetime(2000, 1, 1, tzinfo=UTC)
+        known = {
+            "role_family": RoleFamily.SOFTWARE_ENGINEERING.value,
+            "work_mode": WorkMode.REMOTE.value,
+        }
+        resolved = [_opportunity(seniority="UNKNOWN", **known) for _ in range(100)]
+        eligible = [_opportunity(seniority="UNKNOWN", **known) for _ in range(3)]
         for item in resolved + eligible:
             item.created_at = created_at
         session.add_all(resolved + eligible)
@@ -630,8 +632,11 @@ def test_suggestion_queue_filters_before_limit_and_pages_stably() -> None:
             second_page = candidates_needing_suggestion(
                 session, limit=2, after=(last.created_at, last.id)
             )
-            assert [item.id for item in second_page] == [
-                item.id for item in sorted(eligible, key=lambda row: row.id)[2:]
-            ]
+            # The shared database may hold newer candidates from other tests; they come
+            # after this test's rows and never include a resolved one.
+            assert second_page[0].id == sorted(eligible, key=lambda row: row.id)[2].id
+            assert {item.id for item in second_page}.isdisjoint(
+                {item.id for item in resolved} | {item.id for item in first_page}
+            )
         finally:
             _cleanup(session, [item.id for item in resolved + eligible])

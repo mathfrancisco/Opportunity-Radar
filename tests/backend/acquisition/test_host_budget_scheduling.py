@@ -438,7 +438,7 @@ def test_fifteen_workday_tenants_do_not_share_a_budget_bucket() -> None:
     hosts = {service.scheduling_state(source, timezone="UTC").host for source in sources}
 
     assert len(hosts) == 15
-    assert "workday:tenant0/site:wd5" in hosts
+    assert "tenant0.wd5.myworkdayjobs.com" in hosts
     assert "workday" not in hosts
 
 
@@ -492,4 +492,4 @@ def test_recorded_usage_goes_to_the_tenant_row_with_the_configured_ceiling() -> 
         (call["host"], call["requests"], call["default_ceiling"])
         for call in repository.host_budget_calls
     ]
-    assert recorded == [("workday:adobe/site:wd5", 2, 321)]
+    assert recorded == [("adobe.wd5.myworkdayjobs.com", 2, 321)]

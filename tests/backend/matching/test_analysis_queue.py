@@ -188,8 +188,9 @@ class _StubAdapter:
         *,
         prepared: PreparedAnalysis | None = None,
         use_cache: bool = True,
+        quota_ceiling_requests: int | None = None,
     ) -> AnalysisOutcome:
-        del request, prepared, use_cache
+        del request, prepared, use_cache, quota_ceiling_requests
         self.calls += 1
         return self._outcome
 
