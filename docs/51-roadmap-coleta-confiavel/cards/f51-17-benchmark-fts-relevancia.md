@@ -6,6 +6,14 @@
 - **Risco:** médio para inferência de ganho sobre corpus pequeno ou enviesado; benchmark mede, não altera rank.
 - **Dependências:** F51-01, F51-02, F51-05 e F51-11; medição final após piloto/backfill F51-05.
 
+## Desvio aceito (2026-10-06)
+
+O protocolo pede dois revisores humanos. Decisão do dono: passa a valer um revisor humano (o
+dono) mais a proposta do modelo como segundo julgamento, com a discordância resolvida pelo
+dono. A proposta nunca conta sozinha: só entra no benchmark o par com `revisado_por`
+preenchido. Latência fria: cinco reinícios do `postgres` numa stack descartável contam como
+reset de cache.
+
 ## Fatos e escopo
 
 Busca textual atual está em [`queries.py`](../../../src/opportunity_radar/dashboard/queries.py): usa `search_document @@ websearch_to_tsquery` e ordenação `ts_rank_cd`; busca semântica não está ativa. FTS permanece baseline e não será alterada por este card. Conteúdo piloto pode mudar recall; sem medição congelada não se declara melhora.

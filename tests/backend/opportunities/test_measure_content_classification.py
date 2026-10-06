@@ -371,3 +371,55 @@ def test_versioned_gold_runs(
     report = json.loads(capsys.readouterr().out)
     assert report["gold_cases"] == 37
     assert report["unmeasurable"] == []
+
+
+def test_gold_loader_reads_only_the_cases_a_person_confirmed(tmp_path: Path) -> None:
+    # A proposal file: suggestions for every case, a label only where `revisado_por` is set.
+    proposal = _write_gold(
+        tmp_path / "proposta.json",
+        [
+            {
+                "opportunity_id": "confirmed",
+                "field": "seniority",
+                "valor_sugerido": "MID",
+                "judgment": "applicable",
+                "valor_recomendado": "MID",
+                "revisado_por": "owner",
+            },
+            {
+                "opportunity_id": "suggested-only",
+                "field": "seniority",
+                "valor_sugerido": "SENIOR",
+                "judgment": None,
+                "valor_recomendado": None,
+                "revisado_por": None,
+            },
+            {
+                "opportunity_id": "unsigned",
+                "field": "seniority",
+                "judgment": "applicable",
+                "valor_recomendado": "SENIOR",
+                "revisado_por": " ",
+            },
+        ],
+    )
+
+    assert [item["opportunity_id"] for item in load_gold(proposal)] == ["confirmed"]
+
+
+def test_a_confirmed_unknown_makes_an_emission_wrong_and_silence_right() -> None:
+    emitted = _case("seniority", "UNKNOWN", "3-5 years of experience", source_type="greenhouse")
+    emitted = replace(emitted, judgment="applicable")
+    silent = _case("seniority", "UNKNOWN", "A friendly team.", source_type="greenhouse")
+    silent = replace(silent, judgment="applicable")
+
+    report = measure([emitted, silent], min_gold_jobs=1)
+
+    assert report["rules"]["seniority:description_years_range"] == {
+        **report["rules"]["seniority:description_years_range"],
+        "emitted": 1,
+        "precision": 0.0,
+    }
+    assert report["confusion_by_rule"] == {
+        "seniority:description_years_range": {"tp": 0, "fp": 1, "fn": 0, "support": 1}
+    }
