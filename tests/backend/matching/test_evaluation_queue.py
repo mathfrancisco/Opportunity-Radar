@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from opportunity_radar.matching.models import MatchAssessmentModel
@@ -316,3 +316,12 @@ def test_target_area_postings_are_queued_before_unknown_ones(
         queued = _queue_with_target_areas(monkeypatch, session, ("SOFTWARE_ENGINEERING", "DATA"))
 
         assert queued.index(target.id) < queued.index(unknown.id)
+
+
+@pytest.fixture(autouse=True)
+def _empty_catalogue() -> None:
+    """The queue reads the oldest pending postings first, up to its limit. Postings left by
+    earlier test modules are pending for every new profile version, and past the limit they
+    push the posting under test out of the page."""
+    with create_database_engine(os.environ["DATABASE_URL"]).begin() as connection:
+        connection.execute(text("TRUNCATE opportunities.opportunity CASCADE"))
