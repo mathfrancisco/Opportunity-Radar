@@ -53,8 +53,8 @@ código mesclado em `main` com critério ainda aberto.
 | F51-08 | Não iniciado | Worker ainda em série. Decisão: um run por host, concorrência padrão de 4 hosts, configurável |
 | F51-09 | Parcial | Teste do relatório de coorte (`operation_cohort`) |
 | F51-10 | Parcial | Testes de erro por item, quota global e concorrência |
-| F51-11 | Em andamento | Proposta de rótulos e comando do portão prontos (PR #41); falta a confirmação do dono |
-| F51-12 | Parcial | Só o teto de requisições no router foi feito |
+| F51-11 | Em andamento | Gold confirmado pelo dono (PRs #48 e #49). Nenhuma regra por descrição passa no portão: de 0 a 8 emissões por regra contra o mínimo de 20; 12 casos `unknown` e Remotive com 18 vagas bloqueiam a população. Falta amostra com suporte e rótulo novo do dono |
+| F51-12 | Parcial | Medição de partida registrada no card (2026-10-06). Falta implementar: filtros de entrada na fila, cache sem versão de regra, e os ACs 01 a 06 |
 | F51-13 | Não iniciado | Paginação, 304 e run parcial |
 | F51-14 a F51-16 | **Adiados** | Decisão do dono em 2026-10-06, como a SPEC 51 §9 permite: sem fonte prioritária aprovada nem evidência de necessidade. Não bloqueiam o núcleo |
 | F51-17 | Parcial | Benchmark pareado, latência fria (cinco reinícios do `postgres` em stack descartável) e gold no formato novo com revisão do dono |
@@ -62,6 +62,12 @@ código mesclado em `main` com critério ainda aberto.
 
 Atualização de 2026-10-06 (segunda sessão): só o F51-04 avançou, com o teste do AC02. Os
 demais cards de código (F51-05 a F51-10, F51-12, F51-13, F51-17) não foram tocados.
+
+Atualização de 2026-10-06 (terceira sessão, PRs #48 e #49): o dono aprovou as duas
+propostas de rótulo e o portão do F51-11 rodou com o gold confirmado; nenhuma regra passou e
+`GATED_RULES` não mudou. O F51-12 ganhou a medição de partida do uso de IA. Nenhum outro
+card da SPEC 51 foi tocado: F51-04 a F51-10, F51-13, F51-17 e F51-18 continuam como na
+tabela.
 
 **Janela de sete dias: não aberta.** A regra é abrir no merge do último PR de código da SPEC
 51. Em 2026-10-06 só o PR #41 (leitor do gold) tocou código desta SPEC; F51-05, F51-07,

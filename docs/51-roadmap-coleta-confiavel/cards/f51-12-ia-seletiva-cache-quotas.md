@@ -1,10 +1,80 @@
 # F51-12 — IA seletiva por conteúdo, cache e quotas
 
-- **Status:** Planejado
+- **Status:** Parcial — medição de partida feita em 2026-10-06; política ainda não implementada
 - **Prioridade:** P1
 - **Esforço estimado:** M
 - **Risco:** alto para bloquear análises solicitadas ou consumir quota interativa; elegibilidade do worker não pode invalidar uma solicitação explícita do usuário.
 - **Dependências:** F51-09 (telemetria IA completa); F51-10 (fila justa e defer).
+
+## Medição de partida (2026-10-06, base de dev, somente leitura)
+
+Perfil ativo `b0ad7958`. Configuração do worker: `WORKER_ANALYZE_VERDICTS=HIGH_PRIORITY,
+RECOMMENDED`, lote de 3, `AI_DAILY_TOKENS_SOFT_LIMIT=170000`, `AI_DAILY_REQUESTS_SOFT_LIMIT=850`,
+reserva interativa de 100, `WORKER_SUGGEST_ENABLED=true`.
+
+**Fila de análise hoje.** 520 avaliações atuais de topo (17 `HIGH_PRIORITY`, 503
+`RECOMMENDED`), 516 delas sem análise concluída para a avaliação atual. A
+fila já filtra por veredito e por área-alvo. Não filtra:
+
+| Condição | Vagas de topo |
+| --- | ---: |
+| Sem descrição (nula ou até 200 caracteres) | 225 |
+| Fechada (`lifecycle_status = CLOSED`) | 54 |
+| Fora das áreas-alvo (a fila já exclui) | 19 |
+| Duplicata (`duplicate_of`) | 0 |
+
+`WATCHLIST` tem 8.857 avaliações e hoje não entra sozinha. Com o `matching-v5` completo, o
+topo deve cair para perto das vagas `JUNIOR`/`MID` (200 hoje), porque `UNKNOWN` para em
+`WATCHLIST`.
+
+**Análise repetida.** 699 análises concluídas cobrem 248 vagas: 2,8 por vaga, e 197 vagas
+foram analisadas mais de uma vez (126 delas três vezes). São 679 chaves de cache distintas.
+`rules_version` e `taxonomy_version` entram em `analysis_key`, e o `payload_hash` inclui o
+veredito; cada troca de versão de regra refaz a análise da mesma vaga.
+
+**O que a análise muda.** Veredito e pontuação: nada, por contrato (a análise é consultiva).
+`recommended_review` veio `true` em 699 de 699: o campo não separa nada. Sugestão de campo:
+37 criadas (34 `seniority`, 3 `role_family`), nenhuma aceita nem rejeitada. Não há medida de
+"análise lida pelo usuário"; não existe telemetria para isso.
+
+**Tokens.** Média por análise concluída: 1.114 de entrada e 561 de saída, 1.675 no total.
+Com o teto de 170.000 tokens por dia por modelo, cabem cerca de 100 análises por dia por
+modelo; o teto de requisições (850) nunca é o limite. Por dia, em `ai_call_record`:
+
+| Dia | Provedor | Chamadas | Com sucesso | Tokens |
+| --- | --- | ---: | ---: | ---: |
+| 2026-10-06 | groq | 108 | 107 | 165.577 |
+| 2026-10-06 | tokenharbor | 78 | 75 | 68.575 |
+| 2026-10-05 | groq | 97 | 96 | 169.299 |
+| 2026-10-04 | groq | 28 | 28 | 48.871 |
+| 2026-09-29 | groq | 193 | 150 | 254.002 |
+
+Em 2026-10-06 os cinco modelos chegaram ao teto diário de tokens em `ai_quota_usage`.
+Falhas por quota gravadas como `AI_FAILED / QUOTA_EXHAUSTED`: 2.217, contra 699 concluídas.
+Operações de sugestão em 2026-10-06: 74 com sucesso, 1.399 `preflight / quota` e 386
+`deferred / quota`.
+
+**Achado a investigar (F51-09).** Em 2026-10-06, `ai_quota_usage` registra consumo sem
+chamada correspondente em `ai_call_record`: `openai/gpt-oss-20b` 145 requisições e 169.372
+tokens, `tokenharbor:deepseek-v4.1-flash:free` 148 e 169.499, `qwen/qwen3.8-27b` 191 e
+168.732, todos com zero chamadas gravadas no dia; `tokenharbor:mimo-v2.6-flash:free` 182
+requisições contra 78 chamadas. Causa não determinada. Hipóteses: script fora do worker
+usando o `QuotaGuard` sem telemetria, ou reserva liquidada pelo valor estimado depois de
+erro. Enquanto não for explicado, a quota do dia é gasta por algo que a telemetria não vê.
+
+**O que a medição diz sobre os itens propostos:**
+
+- Reduzir a entrada (sem descrição, fechada): corta até 279 das 520 de hoje (as duas condições se sobrepõem em 21 vagas: 258 distintas). Implementar.
+- Cache sem `rules_version` e `taxonomy_version`: é a maior repetição medida (2,8 análises
+  por vaga). Implementar; o veredito continua na chave.
+- Teto diário por provedor com fila por pontuação: o teto de tokens já existe; falta a
+  estimativa de "cabe com folga de 20%" (cerca de 80 análises por dia por modelo).
+- Grupo de vagas iguais em locais diferentes: não medido.
+- Trocar IA por regra (item 4): bloqueado, nenhuma regra por descrição passou no portão do
+  F51-11.
+- Trechos relevantes e modelo local (item 5): não medidos.
+
+Nada disso foi implementado nesta sessão; ACs 01 a 06 seguem abertos.
 
 ## Problema, fatos e hipótese
 

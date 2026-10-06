@@ -1,6 +1,6 @@
 # F51-11 — gold humano, regras V4 e reclassificação
 
-- **Status:** Em andamento — proposta de rótulos pronta, à espera da confirmação do dono
+- **Status:** Em andamento — gold confirmado; nenhuma regra por descrição passa no portão
 - **Prioridade:** P1
 - **Esforço estimado:** M
 - **Risco:** alto para falsos positivos e colisão de identidade; ativação é por regra e exige gold congelado suficiente.
@@ -34,6 +34,52 @@
   `test_reclassify_content_integration.py` e não foram reexecutados com regra ligada. O portão
   exige zero casos `unknown`: os 12 sugeridos como `unknown` (região sem lista de países,
   conflito entre local e texto) precisam de decisão.
+
+## Gold confirmado e portão (2026-10-06, terceira sessão)
+
+- **Aprovação:** dada pelo dono em bloco, por instrução na sessão de 2026-10-06, para as
+  duas propostas como estão, e gravada pelo agente. Única escrita: `revisado_por:
+  "mathfrancisco"`, sem mudar valor de rótulo nem de sugestão (PR #49, só de dados). Contagem
+  de `revisado_por` antes e depois: 0 e 1.104 nesta proposta; 0 e 300 na do F52-01. O formato
+  não tem campo de data: a data da aprovação, 2026-10-06, fica registrada aqui.
+- **Decisão tomada pelo agente (2026-10-06):** `load_gold` lê `julgamento_sugerido` e
+  `valor_sugerido` de um caso assinado que não tem `judgment` próprio (PR #48) — com
+  `judgment` nulo o portão falhava com `ValueError: invalid judgment 'None'`, e copiar a
+  sugestão para os campos de rótulo seria escrever valor de rótulo, o que o dono não
+  autorizou. Caso sem assinatura continua ignorado; caso com `judgment` próprio não lê a
+  sugestão (`test_gold_loader_reads_a_signed_suggestion_as_the_label`).
+- **População:** 368 vagas, 1.104 casos: 1.005 `applicable`, 87 `inapplicable`, 12
+  `unknown`. Por tipo de fonte: 50 em sete tipos e 18 no Remotive. A população **não passa**:
+  o portão exige zero casos `unknown` e 50 vagas em todo tipo presente.
+- **Portão, regra a regra** (comando acima, um `--candidate-rule` por vez; todas saem com
+  código 1):
+
+  | Regra | Emissões | Corretas | Precisão | Passa |
+  | --- | ---: | ---: | ---: | --- |
+  | `seniority:description_years_min` | 3 | 1 | 33,3% | não |
+  | `seniority:description_years_range` | 0 | — | — | não |
+  | `seniority:description_entry_phrase` | 0 | — | — | não |
+  | `seniority:description_intern_phrase` | 0 | — | — | não |
+  | `work_mode:description_phrase` | 8 | 7 | 87,5% | não |
+  | `allowed_countries:description` | 1 | 0 | 0% | não |
+
+  O mínimo é de 20 emissões e 90% por regra. `GATED_RULES`,
+  `CONTENT_CLASSIFICATION_V4_ENABLED` e `CONTENT_CLASSIFICATION_ENABLED_RULES` **não
+  mudaram**.
+- **Regras fora do portão, para referência:** `seniority:title` (regra `seniority-v4` do
+  script) 117 de 172 (68,0%); `work_mode:title_location_metadata` 162 de 167 (97,0%);
+  `allowed_countries:location` 15 de 30 (50,0%). Falsos negativos sem emissão: 15 em
+  senioridade, 36 em modo de trabalho, 70 em países.
+- **O que erra e o que destrava:** o problema principal é suporte, não só precisão. O trecho
+  de 1.200 caracteres do gold quase nunca alcança a parte da descrição em que as regras
+  emitem, então 368 vagas rendem de 0 a 8 emissões por regra. Para medir de verdade é
+  preciso (a) medir com a descrição inteira do banco (`--gold` sem `--gold-text`), o que
+  exige rótulo feito sobre a descrição inteira, ou (b) uma amostra nova, sorteada entre as
+  vagas em que cada regra emite. As duas pedem rótulo novo do dono; nenhuma foi feita. Os 12
+  casos `unknown` e as 18 vagas do Remotive também precisam de decisão do dono.
+- **AC01 e AC02:** os testes existentes cobrem o cálculo; o gold real atende 200 rótulos e
+  não atende os 50 por tipo (Remotive) nem o zero `unknown`. AC03 a AC06 não foram
+  reexecutados com regra ligada, porque nenhuma regra passou.
 
 ## Problema e evidência
 
