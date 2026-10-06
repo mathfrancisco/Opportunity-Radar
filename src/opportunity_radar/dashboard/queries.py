@@ -19,7 +19,8 @@ from functools import reduce
 from typing import Any, Literal
 from uuid import UUID
 
-from sqlalchemy import Select, String, case, cast, func, literal, select, true
+from sqlalchemy import Select, String, and_, any_, case, cast, func, literal, select, true
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import (
@@ -53,6 +54,7 @@ from opportunity_radar.opportunities.repository import (
     recency_condition,
 )
 from opportunity_radar.pipeline.models import ApplicationProcessModel
+from opportunity_radar.profile.models import EmploymentPreferenceModel
 
 NEW_OPPORTUNITY_WINDOW_DAYS = 7
 FOLLOW_UP_WINDOW_DAYS = 7
@@ -554,7 +556,12 @@ def _inbox_statement(query: InboxQuery, *, totals_only: bool = False) -> tuple[S
     # to the group representatives, or after the LIMIT for the lookups that only the page
     # needs.
     key = _posting_group_key(first_sources.c.first_source)
-    ordering = _inbox_ordering(query.order, assessments, (query.search or "").strip())
+    ordering = _inbox_ordering(
+        query.order,
+        assessments,
+        (query.search or "").strip(),
+        query.profile_version_id,
+    )
     in_area = (
         OpportunityModel.role_family.in_(query.role_families)
         if query.role_families
@@ -804,7 +811,12 @@ def _search_rank(term: str) -> Any:
     return func.ts_rank_cd(OpportunityModel.search_document, _search_tsquery(term))
 
 
-def _inbox_ordering(order: InboxOrder, assessments: Any, search_term: str = "") -> list[Any]:
+def _inbox_ordering(
+    order: InboxOrder,
+    assessments: Any,
+    search_term: str = "",
+    profile_version_id: UUID | None = None,
+) -> list[Any]:
     recency = OpportunityModel.published_at.desc().nulls_last()
     score = assessments.c.score.desc().nulls_last()
     if search_term:
@@ -821,7 +833,34 @@ def _inbox_ordering(order: InboxOrder, assessments: Any, search_term: str = "") 
     # accepted level reaches them when the profile states its levels, so those lead the
     # default Inbox even when an unknown-level posting scores higher.
     top_first = case((assessments.c.verdict.in_(("HIGH_PRIORITY", "RECOMMENDED")), 0), else_=1)
-    return [top_first, score, recency, OpportunityModel.id]
+    # Inside a tier, a known level the profile accepts goes ahead of an unknown one; an
+    # unknown level is never "known and accepted", even if the profile lists it. The levels
+    # are read in the same statement, from the profile version the Inbox is using; without
+    # one, or with an empty list, the key is the same for every row.
+    accepted = (
+        select(EmploymentPreferenceModel.accepted_seniorities)
+        .where(
+            EmploymentPreferenceModel.profile_version_id
+            == (
+                profile_version_id
+                if profile_version_id is not None
+                else currency.active_profile_version_id()
+            )
+        )
+        .limit(1)
+        .scalar_subquery()
+    )
+    level_known = case(
+        (
+            and_(
+                OpportunityModel.seniority != "UNKNOWN",
+                OpportunityModel.seniority == any_(cast(accepted, ARRAY(String))),
+            ),
+            0,
+        ),
+        else_=1,
+    )
+    return [top_first, level_known, score, recency, OpportunityModel.id]
 
 
 def list_opportunity_inbox(session: Session, query: InboxQuery) -> InboxPage:
