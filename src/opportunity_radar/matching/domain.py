@@ -316,9 +316,12 @@ DEFAULT_FACTORS: tuple[FactorRule, ...] = (
 RULES_VERSION_V3 = "matching-v3"
 #: F52-04: a known level outside the profile's accepted ones never ranks above WATCHLIST.
 RULES_VERSION_V4 = "matching-v4"
+#: F52-05: an unknown level, with no other sign of the level, never ranks above WATCHLIST
+#: either, for a profile that states the levels it accepts.
+RULES_VERSION_V5 = "matching-v5"
 
 
-def default_rule_set(version: str = RULES_VERSION_V4) -> MatchingRuleSet:
+def default_rule_set(version: str = RULES_VERSION_V5) -> MatchingRuleSet:
     """Return the current explicit, fully weighted deterministic rule set.
 
     `matching-v1` assessments stay in the history under their own `rules_version`; a new
@@ -360,7 +363,8 @@ def evaluate_match(
             eligibility,
             review_required,
             rules,
-            level_outside_preference=_level_outside_preference(opportunity, profile),
+            level_outside_preference=_level_outside_preference(opportunity, profile)
+            or _level_unknown_without_signal(opportunity, profile),
         ),
         review_required=review_required,
     )
@@ -980,6 +984,7 @@ def _verdict(
     if level_outside_preference:
         # F52-04. F48-13 keeps a level above the preference eligible and ranked lower;
         # the score of the other factors must not carry it back to the top of the list.
+        # F52-05: the same ceiling for a level nobody stated.
         if score >= rules.watchlist_threshold:
             return Verdict.WATCHLIST
         return Verdict.LOW_MATCH
@@ -999,6 +1004,18 @@ def _level_outside_preference(opportunity: OpportunitySnapshot, profile: Profile
         and bool(profile.accepted_seniorities)
         and opportunity.seniority not in profile.accepted_seniorities
     )
+
+
+def _level_unknown_without_signal(
+    opportunity: OpportunitySnapshot, profile: ProfileSnapshot
+) -> bool:
+    """A posting whose level is unknown, for a profile that states the levels it accepts.
+
+    Listing `UNKNOWN` among the accepted levels keeps the posting eligible; it does not put
+    it at the top. No other sign of the level (years asked, salary band) is read today, so
+    every unknown level stops here.
+    """
+    return opportunity.seniority is Seniority.UNKNOWN and bool(profile.accepted_seniorities)
 
 
 def _normalized_set(values: tuple[str, ...]) -> frozenset[str]:

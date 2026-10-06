@@ -817,7 +817,11 @@ def _inbox_ordering(order: InboxOrder, assessments: Any, search_term: str = "") 
     if order is InboxOrder.SCORE:
         return [score, recency, OpportunityModel.id]
     # F48-14: company priority is a factor of the score (COMPANY_PRIORITY), not a sort key.
-    return [score, recency, OpportunityModel.id]
+    # F52-05: the top verdicts come first. Since `matching-v5` only a posting of a known,
+    # accepted level reaches them when the profile states its levels, so those lead the
+    # default Inbox even when an unknown-level posting scores higher.
+    top_first = case((assessments.c.verdict.in_(("HIGH_PRIORITY", "RECOMMENDED")), 0), else_=1)
+    return [top_first, score, recency, OpportunityModel.id]
 
 
 def list_opportunity_inbox(session: Session, query: InboxQuery) -> InboxPage:

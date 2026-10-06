@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from opportunity_radar.companies.models import Company  # noqa: F401  (metadata)
@@ -188,12 +188,12 @@ def test_a_ruleset_bump_requeues_without_touching_the_previous_result(
 
         # The bump is detected by comparing the persisted version with the active
         # constant, so no migration or event is needed to notice it.
-        monkeypatch.setattr(matching_service, "RULES_VERSION", "matching-v5")
+        monkeypatch.setattr(matching_service, "RULES_VERSION", "matching-v6")
 
         assert opportunity.id in service.pending_evaluation_ids(limit=500)
         second = service.evaluate(opportunity.id)
-        assert second.rules_version == "matching-v5"
-        assert service.get(first.id).rules_version == "matching-v4"
+        assert second.rules_version == "matching-v6"
+        assert service.get(first.id).rules_version == "matching-v5"
 
 
 def test_a_taxonomy_bump_requeues_the_opportunity() -> None:
@@ -365,3 +365,12 @@ def test_a_posting_that_crossed_a_recency_band_is_queued_and_scored_lower() -> N
         assert recency(second) < recency(first)  # type: ignore[operator]
         assert second.score < first.score
         assert opportunity.id not in service.pending_evaluation_ids(limit=5000, now=tomorrow)
+
+
+@pytest.fixture(autouse=True)
+def _empty_catalogue() -> None:
+    """The queue reads the oldest pending postings first, up to its limit. Postings left by
+    earlier test modules are pending for every new profile version, and past the limit they
+    push the posting under test out of the page."""
+    with create_database_engine(os.environ["DATABASE_URL"]).begin() as connection:
+        connection.execute(text("TRUNCATE opportunities.opportunity CASCADE"))

@@ -1387,7 +1387,7 @@ Não transformar todo fato determinístico em “confidence 1.0” se isso não 
 Decisões reproduzíveis usam value objects/identificadores de versão:
 
 ```text
-RuleVersion("matching-v4")
+RuleVersion("matching-v5")
 FingerprintAlgorithmVersion("fp-v2")
 PromptVersion("opportunity-analysis-v4")
 TaxonomyVersion("skills-v1")
