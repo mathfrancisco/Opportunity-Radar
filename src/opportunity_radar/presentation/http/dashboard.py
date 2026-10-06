@@ -571,14 +571,12 @@ def list_inbox(
     session: Session = Depends(get_session),
 ) -> InboxPageResponse:
     role_families = tuple(role_family or ())
-    accepted_seniorities: tuple[str, ...] = ()
-    try:
-        preferences = ProfileService(session).get_active().snapshot.preferences
-        accepted_seniorities = tuple(preferences.accepted_seniorities)
-        if not role_families and not all_areas:
-            role_families = tuple(preferences.target_role_families)
-    except ProfileNotFoundError:
-        pass
+    if not role_families and not all_areas:
+        try:
+            active = ProfileService(session).get_active()
+            role_families = tuple(active.snapshot.preferences.target_role_families)
+        except ProfileNotFoundError:
+            role_families = ()
     page = list_opportunity_inbox(
         session,
         InboxQuery(
@@ -597,7 +595,6 @@ def list_inbox(
             salary_max=salary_max,
             source_definition_ids=tuple(source_definition_id or ()),
             role_families=role_families,
-            accepted_seniorities=accepted_seniorities,
             profile_version_id=profile_version_id,
             order=order,
             offset=offset,

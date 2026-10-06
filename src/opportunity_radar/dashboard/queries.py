@@ -19,7 +19,8 @@ from functools import reduce
 from typing import Any, Literal
 from uuid import UUID
 
-from sqlalchemy import Select, String, case, cast, func, literal, select, true
+from sqlalchemy import Select, String, and_, any_, case, cast, func, literal, select, true
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import (
@@ -53,6 +54,7 @@ from opportunity_radar.opportunities.repository import (
     recency_condition,
 )
 from opportunity_radar.pipeline.models import ApplicationProcessModel
+from opportunity_radar.profile.models import EmploymentPreferenceModel
 
 NEW_OPPORTUNITY_WINDOW_DAYS = 7
 FOLLOW_UP_WINDOW_DAYS = 7
@@ -160,9 +162,6 @@ class InboxQuery:
     #: `role-family-v1` codes. Empty means every area — never a filter that hides rows.
     role_families: tuple[str, ...] = ()
     profile_version_id: UUID | None = None
-    #: Levels the active profile accepts. Only the default order reads it (card F52-05);
-    #: empty means no declared levels, and the order is the one without this key.
-    accepted_seniorities: tuple[str, ...] = ()
     #: Empty means every seniority — an unknown/blank value is never an implicit
     #: exclusion (SPEC 37, "Contrato de consulta").
     seniorities: tuple[str, ...] = ()
@@ -561,7 +560,7 @@ def _inbox_statement(query: InboxQuery, *, totals_only: bool = False) -> tuple[S
         query.order,
         assessments,
         (query.search or "").strip(),
-        query.accepted_seniorities,
+        query.profile_version_id,
     )
     in_area = (
         OpportunityModel.role_family.in_(query.role_families)
@@ -816,7 +815,7 @@ def _inbox_ordering(
     order: InboxOrder,
     assessments: Any,
     search_term: str = "",
-    accepted_seniorities: tuple[str, ...] = (),
+    profile_version_id: UUID | None = None,
 ) -> list[Any]:
     recency = OpportunityModel.published_at.desc().nulls_last()
     score = assessments.c.score.desc().nulls_last()
@@ -835,11 +834,32 @@ def _inbox_ordering(
     # default Inbox even when an unknown-level posting scores higher.
     top_first = case((assessments.c.verdict.in_(("HIGH_PRIORITY", "RECOMMENDED")), 0), else_=1)
     # Inside a tier, a known level the profile accepts goes ahead of an unknown one; an
-    # unknown level is never "known and accepted", even if the profile lists it.
-    known_levels = tuple(level for level in accepted_seniorities if level != "UNKNOWN")
-    if not known_levels:
-        return [top_first, score, recency, OpportunityModel.id]
-    level_known = case((OpportunityModel.seniority.in_(known_levels), 0), else_=1)
+    # unknown level is never "known and accepted", even if the profile lists it. The levels
+    # are read in the same statement, from the profile version the Inbox is using; without
+    # one, or with an empty list, the key is the same for every row.
+    accepted = (
+        select(EmploymentPreferenceModel.accepted_seniorities)
+        .where(
+            EmploymentPreferenceModel.profile_version_id
+            == (
+                profile_version_id
+                if profile_version_id is not None
+                else currency.active_profile_version_id()
+            )
+        )
+        .limit(1)
+        .scalar_subquery()
+    )
+    level_known = case(
+        (
+            and_(
+                OpportunityModel.seniority != "UNKNOWN",
+                OpportunityModel.seniority == any_(cast(accepted, ARRAY(String))),
+            ),
+            0,
+        ),
+        else_=1,
+    )
     return [top_first, level_known, score, recency, OpportunityModel.id]
 
 
