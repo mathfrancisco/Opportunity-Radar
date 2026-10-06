@@ -1,5 +1,16 @@
 # Checkpoint de implementação — 5 de outubro de 2026
 
+> Atualização de 2026-10-06 (terceira sessão, PRs #48 e #49): o dono aprovou as duas
+> propostas de rótulo em bloco. O PR #48 faz os leitores de gold lerem a sugestão de um caso
+> assinado sem rótulo próprio (decisão do agente, registrada no F51-11); suíte completa num
+> banco novo `_test`: `1921 passed, 17 skipped`, `ruff` e `mypy` sem erros. O PR #49 grava
+> `revisado_por` em 300 e 1.104 entradas, sem mudar valor. Com o gold confirmado: precisão do
+> título de 95,3% (F52-01 e F52-02 concluídos) e portão do F51-11 sem nenhuma regra aprovada,
+> por falta de emissões (0 a 8 por regra, mínimo 20). `GATED_RULES` não mudou; F52-03 e
+> F52-07 seguem bloqueados. A medição de uso de IA está no card F51-12. Nenhum outro card da
+> SPEC 51 foi tocado e a janela de sete dias continua fechada. O projeto Docker `or-f5111a`
+> foi removido.
+
 > Atualização de 2026-10-06 (segunda sessão, PRs #44 a #46): na SPEC 51 só o F51-04 avançou.
 > O PR #45 traz o teste do AC02: dois workers, cada um com a própria sessão, disputam a
 > última unidade do orçamento de um host; exatamente um reserva e o consumo persistido fica

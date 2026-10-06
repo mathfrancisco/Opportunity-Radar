@@ -1,16 +1,17 @@
 # SPEC 52 — Aderência ao nível: senioridade, oferta júnior/pleno e remoto (cards F52)
 
 - **Data:** 2026-10-05
-- **Estado (2026-10-06):** em implementação, nenhum card concluído.
+- **Estado (2026-10-06):** em implementação; F52-01 e F52-02 concluídos.
   - F52-04: `matching-v4` entregue; o aceite espera o fim da reavaliação, que o
     `matching-v5` reiniciou.
   - F52-05: `matching-v5` mesclado (PR #46) e rodando na base de dev; o aceite espera a
     mesma reavaliação.
-  - F52-01: script, relatório, amostra e proposta de rótulos; espera a revisão do dono.
-  - F52-02: `seniority-v5` mesclado (PR #40) e aplicado na base de dev; cobertura de 62,7%
-    nas áreas-alvo (meta de 60%). A precisão espera a revisão do dono.
-  - F52-03 e F52-07: dependem do gold (SPEC 51, F51-11); proposta de rótulos e comando do
-    portão prontos (PR #41).
+  - F52-01: **concluído** (terceira sessão). Rótulos aprovados pelo dono (PR #49); precisão
+    de 95,3% na amostra.
+  - F52-02: **concluído** (terceira sessão). `seniority-v5` com cobertura de 62,7% (meta de
+    60%) e precisão de 95,3% (meta de 90%).
+  - F52-03 e F52-07: **bloqueados pelo portão do F51-11**. Com o gold confirmado, nenhuma
+    regra por descrição passa (ver F52-03); as regras continuam desligadas.
   - F52-06, F52-08 e F52-09: não começaram. As decisões do dono para eles estão no §7 e no
     F52-06.
 - **Origem:** relato do dono: a busca devolve vagas muito acima do nível dele (júnior/pleno,
@@ -155,6 +156,25 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
     medição só conta entradas com `revisado_por` preenchido pelo dono.
   - **Meta decidida (2026-10-06):** o teto de cobertura só com o título é 65,3%; a meta do
     F52-02 passa a 60%.
+  - **Rótulos aprovados e precisão medida (2026-10-06, PRs #48 e #49):** o dono aprovou a
+    proposta em bloco, como está; `revisado_por: "mathfrancisco"` gravado nas 300 entradas
+    (0 antes, 300 depois), sem mudar valor. Comando:
+    `python scripts/measure_seniority_titles.py --sample docs/pesquisas/f52-01-amostra-senioridade-proposta.json`
+    (Python local, `PYTHONPATH=src`). Resultado: 300 entradas medidas, **precisão de 95,3%**
+    (142 de 149 emissões). Por nível: `SENIOR` 69/69, `MANAGER` 23/29 (79,3%), `STAFF` 14/14,
+    `MID` 11/11, `INTERN` 9/9, `JUNIOR` 7/8, `LEAD` 6/6, `DIRECTOR` 3/3. Dos 151 títulos que
+    a regra deixa `UNKNOWN`, 144 também não têm nível no rótulo; 7 têm (4 sem sinal, 3 com
+    numeral).
+  - **O que erra:** `Manager` como parte do nome do cargo (`Program Manager`, `Product
+    Manager`, `Account Manager`) vira nível `MANAGER`, inclusive quando o título traz
+    `Senior`, `Staff` ou `Principal` (6 casos); `Associate` em `Data Labeling Associate` vira
+    `JUNIOR` (1 caso). Correção fica para uma próxima versão da regra; não foi feita aqui.
+  - **Decisão tomada pelo agente (2026-10-06):** os leitores passam a ler a sugestão de uma
+    entrada assinada que não tem rótulo próprio (PR #48) — a autorização do dono era gravar
+    só `revisado_por`, e com `nivel_rotulado` nulo a medição contava zero entradas. Sugestão
+    sem assinatura continua sem ser lida.
+  - **Estado:** concluído. As metas do §1 ficam: cobertura só com o título em 60% (atingida);
+    os 80% dependem do F52-03, que está bloqueado.
 
 ### F52-02 — Classificador de senioridade: acentos, dois níveis e numerais
 
@@ -189,9 +209,10 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
     topo tinha 651 avaliações, 411 delas (63,1%) de nível `UNKNOWN` e 94 de nível acima do
     aceito; essas 94 são vagas recém-reclassificadas que o worker ainda não reavaliou
     (10.712 de 21.516 avaliações em `matching-v4`).
-  - **Aberto:** a precisão de 90% depende dos rótulos. A proposta está em
-    `docs/pesquisas/f52-01-amostra-senioridade-proposta.json`; só entradas com `revisado_por`
-    preenchido pelo dono entram na medição.
+  - **Precisão (2026-10-06, PR #49):** 95,3% na amostra do F52-01, acima da meta de 90%;
+    detalhe por nível no F52-01. `MANAGER` isolado fica em 79,3%.
+  - **Estado:** concluído. Tabela do P2 com um teste por linha, precisão de 95,3% e cobertura
+    de 62,7% contra a meta decidida de 60%.
 
 ### F52-03 — Senioridade pela descrição
 
@@ -201,6 +222,12 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
 - **Aceite:** cobertura de senioridade nas áreas-alvo de 80%, com precisão de 90% no gold.
 - **Esforço / risco:** P aqui / o risco está no F51-11. 40% das vagas não têm descrição
   (Workday); para elas só o título vale.
+- **Resultado do portão (2026-10-06):** bloqueado. Com o gold confirmado (368 vagas),
+  `seniority:description_years_min` emite em 3 casos e acerta 1 (33,3%); o portão pede 20
+  emissões e 90%. `description_years_range`, `description_entry_phrase` e
+  `description_intern_phrase` não emitem nenhuma vez. A regra continua desligada, não há
+  sinal de nível novo e o `matching-v6` não tem o que incluir daqui. Sem a regra, a
+  cobertura continua em 62,7%. Ver o F51-11 para o que destrava.
 
 ### F52-04 — Por que vaga acima do nível é recomendada
 
@@ -251,6 +278,12 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
     em `matching-v2`, 8 em `matching-v3`); nenhuma em `matching-v4` nem em `matching-v5`. O
     `matching-v5` reavalia o catálogo inteiro; a cerca de 2.700 avaliações por hora, leva
     por volta de 8 horas. Repetir a contagem quando só houver `matching-v5`.
+  - **Medição do aceite (2026-10-06, 20h57 UTC):** não fechado. De 22.122 avaliações atuais,
+    4.250 em `matching-v5`, 9.700 em `matching-v4`, 328 em `matching-v3` e 7.844 em
+    `matching-v2`. Restam 11 de topo com nível fora do aceito, todas em `matching-v2` (3) ou
+    `matching-v3` (8); nenhuma em `matching-v4` nem em `matching-v5`. Consulta: contar em
+    `matching.current_assessment` do perfil `b0ad7958`, com `verdict` em `RECOMMENDED` ou
+    `HIGH_PRIORITY`, as vagas com `seniority` fora de `JUNIOR`, `MID` e `UNKNOWN`.
 
 ### F52-05 — Peso do nível desconhecido na ordenação
 
@@ -282,6 +315,13 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
     em `matching-v5`, o topo tinha 624 avaliações, 413 de nível `UNKNOWN`, todas de versões
     anteriores. A regra leva esse número a zero; falta conferir quantas vagas sobram no topo
     e que o total do Inbox não cai.
+  - **Medição (2026-10-06, 20h57 UTC):** não fechado, reavaliação em 4.250 de 22.122. Topo
+    com 447 avaliações, 236 de nível `UNKNOWN` (52,8%), nenhuma delas em `matching-v5`: as 21
+    avaliações de topo já em v5 são todas `JUNIOR` ou `MID`. Avaliações não `INELIGIBLE` no
+    perfil ativo: 18.188 (referência para "o total do Inbox não cai").
+  - **Limite conhecido:** não tratado nesta sessão. Continua a proposta de levar os níveis
+    aceitos do perfil para a ordenação do Inbox (`_inbox_ordering` em `dashboard/queries.py`),
+    sem trocar `RULES_VERSION`.
 
 ### F52-06 — Mais oferta júnior/pleno remota no Brasil
 
@@ -311,6 +351,10 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
 - **Aceite:** `work_mode` conhecido em 70% e `allowed_countries` em 50% das vagas remotas das
   áreas-alvo.
 - **Esforço / risco:** P aqui / o risco está no F51-11.
+- **Resultado do portão (2026-10-06):** bloqueado. `work_mode:description_phrase` acerta 7
+  de 8 emissões (87,5%); `allowed_countries:description` erra a única emissão. Nenhuma chega
+  às 20 emissões nem aos 90%. As duas continuam desligadas; a separação "remoto, país não
+  informado" no Inbox não foi feita.
 
 ### F52-08 — Tabela de ritmo por fornecedor
 
