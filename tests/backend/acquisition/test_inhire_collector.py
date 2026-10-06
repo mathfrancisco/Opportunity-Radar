@@ -5,10 +5,10 @@ import asyncio
 import json
 from contextlib import nullcontext
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -46,6 +46,18 @@ _DETAIL = json.loads((_FIXTURES / "inhire_job_detail.json").read_text(encoding="
 _IDS = [job["jobId"] for job in _LIST["jobsPage"]]
 _CONTRACTS = {_IDS[0]: ["CLT"], _IDS[1]: ["PJ"], _IDS[2]: ["Estágio"]}
 _PAGES = "/job-posts/public/pages"
+_REFRESH_DAYS = 7
+_WEEK = [date(2026, 10, 5) + timedelta(days=offset) for offset in range(_REFRESH_DAYS)]
+
+
+def _refresh_day(job_id: str) -> date:
+    """A day on which the weekly re-read of this job's detail is due."""
+    slot = UUID(job_id).int % _REFRESH_DAYS
+    return next(day for day in _WEEK if day.toordinal() % _REFRESH_DAYS == slot)
+
+
+#: A day on which none of the fixture jobs is due.
+_QUIET_DAY = next(day for day in _WEEK if all(day != _refresh_day(job) for job in _IDS))
 _STORED_FIELDS = {
     "jobId",
     "displayName",
@@ -126,10 +138,14 @@ def _run(
     *,
     tenant: str = "acme",
     sleeps: list[float] | None = None,
+    today: date | None = None,
     **request_fields: Any,
 ):
-    """Collect one run; returns the items emitted before an error, the error and the request."""
+    """Collect one run; returns the items emitted before an error, the error and the request.
+
+    Without `today` the run happens on a day when no fixture job is due for its re-read."""
     sleeps = [] if sleeps is None else sleeps
+    today = today or _QUIET_DAY
 
     async def sleeper(seconds: float) -> None:
         sleeps.append(seconds)
@@ -140,7 +156,8 @@ def _run(
         items: list = []
         error: AcquisitionError | None = None
         try:
-            async for item in InhireCollector(client=client, sleeper=sleeper).discover(request):
+            collector = InhireCollector(client=client, sleeper=sleeper, today=lambda: today)
+            async for item in collector.discover(request):
                 items.append(item)
         except AcquisitionError as raised:
             error = raised
@@ -162,7 +179,7 @@ def test_listing_only_parses_the_reduced_real_fixture() -> None:
     assert [item.external_id for item in items] == _IDS
     first = items[0]
     assert first.source_type == "inhire"
-    assert first.url == f"https://acme.inhire.app/vagas/{_IDS[0]}"
+    assert first.url == f"https://acme.inhire.app/vagas/{_IDS[0]}/vaga"
     assert first.title == "\U0001f680 | Backend Developer (Python) | Senior"
     assert first.company_name == "Acme Tecnologia"  # tenantName; no company_name configured
     assert first.location_text == "BR"
@@ -611,7 +628,92 @@ def test_stored_listing_only_job_gets_its_detail_once_there_is_room() -> None:
     assert all(item.description is not None for item in second)
 
 
+# --- weekly re-read of a known job's detail -------------------------------------------
+
+
+def test_description_only_edit_is_picked_up_on_the_jobs_refresh_day() -> None:
+    first, _, _ = _run(_Board(), fetch_detail=True)
+    board = _Board()
+    board.detail_description = "<p>Edited description, same list fields.</p>"
+
+    items, error, request = _run(
+        board, fetch_detail=True, known_items=_stored(first), today=_refresh_day(_IDS[1])
+    )
+
+    assert error is None
+    due = [job for job in _IDS if _refresh_day(job) == _refresh_day(_IDS[1])]
+    assert board.details == due
+    assert request.telemetry.detail_requests == len(due)
+    by_id = {item.external_id: item for item in items}
+    assert set(by_id) == set(_IDS)
+    assert by_id[_IDS[1]].description == "<p>Edited description, same list fields.</p>"
+    assert _hashes(by_id[_IDS[1]]) != _hashes(first[1])
+
+
+def test_refresh_that_finds_the_same_content_creates_no_new_version() -> None:
+    first, _, _ = _run(_Board(), fetch_detail=True)
+    board = _Board()
+
+    items, _, _ = _run(
+        board, fetch_detail=True, known_items=_stored(first), today=_refresh_day(_IDS[0])
+    )
+
+    assert _IDS[0] in board.details
+    assert {_hashes(item) for item in items} == {_hashes(item) for item in first}
+
+
+def test_refresh_only_uses_the_room_new_and_changed_jobs_leave() -> None:
+    first, _, _ = _run(_Board(), fetch_detail=True)
+    listing = deepcopy(_LIST)
+    new_id = str(uuid4())
+    listing["jobsPage"].append({**listing["jobsPage"][0], "jobId": new_id})  # new, listed last
+    board = _Board(listing)
+    board.detail_description = "<p>Edited.</p>"
+
+    items, error, request = _run(
+        board,
+        fetch_detail=True,
+        detail_max_requests=1,
+        known_items=_stored(first),
+        today=_refresh_day(_IDS[0]),
+    )
+
+    assert error is None
+    assert board.details == [new_id]  # the new job wins the only slot
+    assert request.telemetry.detail_skipped >= 1
+    by_id = {item.external_id: item for item in items}
+    # The job that was due stays exactly as stored and is tried again next week.
+    assert _hashes(by_id[_IDS[0]]) == _hashes(first[0])
+
+
+def test_no_refresh_when_detail_is_off() -> None:
+    first, _, _ = _run(_Board(), fetch_detail=True)
+    board = _Board()
+
+    _run(board, known_items=_stored(first), today=_refresh_day(_IDS[0]))
+
+    assert board.details == []
+
+
 # --- data minimisation ----------------------------------------------------------------
+
+
+def test_contact_data_in_the_description_is_masked_before_storage() -> None:
+    board = _Board()
+    board.detail_description = (
+        '<p>Envie para <a href="mailto:maria.silva@acme.example">maria.silva@acme.example</a>'
+        " ou ligue (11) 98765-4321, +55 51 3333-4444 ou 21 99876-5432.</p>"
+        "<p>Faixa 2024-2025, salário 8000-12000, CNPJ 12.345.678/0001-90.</p>"
+    )
+
+    items, _, _ = _run(board, fetch_detail=True)
+
+    text = items[0].description
+    assert text == items[0].raw_payload["description"]
+    assert "@" not in text and "98765" not in text and "3333" not in text and "99876" not in text
+    assert text.count("[email]") == 2 and text.count("[telefone]") == 3
+    # Years, ranges and document numbers are not phone numbers.
+    assert "2024-2025" in text and "8000-12000" in text and "12.345.678/0001-90" in text
 
 
 def _all_strings(value: Any):

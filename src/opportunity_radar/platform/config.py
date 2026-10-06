@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     groq_reasoning_model: str = "openai/gpt-oss-120b"
     groq_fast_model: str = "openai/gpt-oss-20b"
     groq_alt_model: str = "qwen/qwen3.8-27b"
+    # Second provider, off until it has a key. Its models go to the end of every task's
+    # chain, so they answer only when the Groq models are out of quota or failing.
+    tokenharbor_api_key: SecretStr = SecretStr("")
+    tokenharbor_base_url: str = "https://tokenharbor.ai/v1"
+    tokenharbor_models: str = "deepseek-v4.1-flash:free,mimo-v2.6-flash:free"
     ai_timeout_seconds: float = 25.0
     ai_connect_timeout_seconds: float = 5.0
     ai_max_retries: int = 2

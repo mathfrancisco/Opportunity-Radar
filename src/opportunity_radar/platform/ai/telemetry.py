@@ -22,6 +22,8 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Engine
 
+from opportunity_radar.platform.ai.providers.tokenharbor import MODEL_PREFIX, TokenHarborProvider
+
 if TYPE_CHECKING:
     from opportunity_radar.platform.ai.router import Attempt
 
@@ -212,6 +214,9 @@ def records_from_attempts(
 
     Usage attached to an attempt is preserved even for failed HTTP responses. The
     response arguments remain a compatibility fallback for older Attempt producers.
+
+    `provider` is the default; an attempt on a model of another backend (a prefixed model
+    name) is recorded under that backend.
     """
     records = []
     for index, attempt in enumerate(attempts):
@@ -220,7 +225,11 @@ def records_from_attempts(
         records.append(
             AICallRecord(
                 task=task,
-                provider=provider,
+                provider=(
+                    TokenHarborProvider.name
+                    if attempt.model.startswith(MODEL_PREFIX)
+                    else provider
+                ),
                 model=attempt.model,
                 attempt=attempt.attempt,
                 success=succeeded,

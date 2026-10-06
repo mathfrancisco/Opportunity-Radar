@@ -19,6 +19,14 @@ A known job that did not change is re-emitted from its stored payload: same cont
 hashes, so the service records a presence observation and no new version appears. A known job
 whose detail cannot be fetched (cap, budget, failure, stop) is re-emitted the same way, stale
 but never blanked.
+
+An edit that touches only the description changes no list field. So each known job is also
+re-read once every `_REFRESH_DAYS` days, on the day its id falls on, after every new or
+changed job got its detail and only with the room that is left. A re-read that finds the
+same content yields the same payload and hashes, so it creates no version.
+
+E-mail addresses and phone numbers in the description are masked before anything is stored
+(the review's personal-data condition); the public page keeps the original text.
 """
 
 from __future__ import annotations
@@ -27,7 +35,7 @@ import asyncio
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, TypeVar
 from uuid import UUID
 
@@ -66,9 +74,26 @@ _STOP_CODES = frozenset(
         AcquisitionErrorCode.SOURCE_RATE_LIMITED,
     }
 )
+#: A known, unchanged job has its detail re-read once in this many days.
+_REFRESH_DAYS = 7
+#: Any last path segment resolves on the public page, but the page stays blank without one
+#: (checked in a browser on 2026-10-05). A fixed one keeps the URL independent of the title.
+_URL_SLUG = "vaga"
+# Contact data in the free text. The phone shapes need a country code, an area code in
+# parentheses or a mobile ninth digit, so years, ranges and amounts are left alone.
+_EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]*\w")
+_PHONE = re.compile(
+    r"\+55\s?\(?\d{2}\)?\s?9?\d{4}[-\s]?\d{4}"
+    r"|\(\d{2}\)\s?9?\d{4}[-\s]?\d{4}"
+    r"|\b\d{2}\s9\d{4}-\d{4}\b"
+)
 # What the normalizer's contract patterns can read; anything else passes through as text.
 _CONTRACT_EVIDENCE = {"clt": "full-time", "pj": "contract"}
 _T = TypeVar("_T")
+
+
+def _mask_contacts(text: str) -> str:
+    return _PHONE.sub("[telefone]", _EMAIL.sub("[email]", text))
 
 
 class _DetailRun:
@@ -104,6 +129,7 @@ class InhireCollector:
         max_retries: int = 2,
         retry_after_seconds: float = 1.0,
         sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        today: Callable[[], date] = lambda: datetime.now(UTC).date(),
     ) -> None:
         if client is not None and client_factory is not None:
             raise ValueError("provide either client or client_factory, not both")
@@ -116,6 +142,7 @@ class InhireCollector:
         self._max_retries = max_retries
         self._retry_after_seconds = retry_after_seconds
         self._sleeper = sleeper
+        self._today = today
 
     async def healthcheck(
         self, context: HealthcheckContext | None = None
@@ -162,6 +189,9 @@ class InhireCollector:
         company_name = request.company_name or tenant_name
         known_items = request.known_items or {}
         detail = _DetailRun(request)
+        refresh_slot = self._today().toordinal() % _REFRESH_DAYS
+        # Jobs due for a re-read wait until every new or changed job had its turn.
+        deferred: list[tuple[dict[str, Any], Mapping[str, Any]]] = []
         emitted = 0
         for job in jobs:
             if job.get("status") != _PUBLISHED_STATUS:
@@ -175,6 +205,14 @@ class InhireCollector:
             try:
                 listing = self._listing(job)
                 known = known_items.get(listing["jobId"])
+                if (
+                    known is not None
+                    and detail.enabled
+                    and self._unchanged(known, listing)
+                    and UUID(listing["jobId"]).int % _REFRESH_DAYS == refresh_slot
+                ):
+                    deferred.append((listing, known))
+                    continue
                 payload = await self._payload(client, tenant, listing, known, request, detail)
                 item = self._item(payload, tenant=tenant, company_name=company_name)
             except AcquisitionError as error:
@@ -186,8 +224,23 @@ class InhireCollector:
             emitted += 1
             if request.max_items is not None and emitted >= request.max_items:
                 break
+        for listing, known in deferred:
+            if request.max_items is not None and emitted >= request.max_items:
+                break
+            payload = await self._payload(
+                client, tenant, listing, known, request, detail, refresh=True
+            )
+            yield self._item(payload, tenant=tenant, company_name=company_name)
+            emitted += 1
         if detail.stopped is not None:
             raise detail.stopped
+
+    @staticmethod
+    def _unchanged(known: Mapping[str, Any], listing: Mapping[str, Any]) -> bool:
+        """A stored job with its detail whose list fields are what the list shows now."""
+        return "description" in known and all(
+            known.get(key) == listing[key] for key in _LISTING_FIELDS
+        )
 
     async def _payload(
         self,
@@ -197,11 +250,15 @@ class InhireCollector:
         known: Mapping[str, Any] | None,
         request: CollectionRequest,
         detail: _DetailRun,
+        *,
+        refresh: bool = False,
     ) -> dict[str, Any]:
-        """The reduced raw payload of one job: stored, fresh from the detail, or listing only."""
+        """The reduced raw payload of one job: stored, fresh from the detail, or listing only.
+
+        `refresh` re-reads the detail of a stored job whose list fields did not change."""
         fallback = listing
         if known is not None and "description" in known:
-            if all(known.get(key) == listing[key] for key in _LISTING_FIELDS):
+            if not refresh and self._unchanged(known, listing):
                 return dict(known)
             # A stored job that changed but cannot be refreshed stays as stored: never blanked.
             fallback = dict(known)
@@ -382,7 +439,7 @@ class InhireCollector:
                 "inHire detail description or contractType has an unexpected type",
             )
         fields: dict[str, Any] = {
-            "description": (description or "").strip() or None,
+            "description": _mask_contacts((description or "").strip()) or None,
             "contractType": [entry.strip() for entry in contract or [] if entry.strip()],
         }
         for key in ("publishedAt", "lastPublishedAt"):
@@ -402,7 +459,7 @@ class InhireCollector:
             source_type=InhireCollector.source_type,
             external_id=job_id,
             # Identity never depends on the title: the id alone resolves on the public page.
-            url=f"https://{tenant}.inhire.app/vagas/{job_id}",
+            url=f"https://{tenant}.inhire.app/vagas/{job_id}/{_URL_SLUG}",
             title=payload["displayName"].strip(),
             company_name=company_name,
             location_text=location.strip() or None if isinstance(location, str) else None,
