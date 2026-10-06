@@ -2,14 +2,17 @@
 
 - **Data:** 2026-10-05
 - **Estado (2026-10-06):** em implementação, nenhum card concluído.
-  - F52-04: `matching-v4` entregue; o aceite espera o fim da reavaliação.
+  - F52-04: `matching-v4` entregue; o aceite espera o fim da reavaliação, que o
+    `matching-v5` reiniciou.
+  - F52-05: `matching-v5` mesclado (PR #46) e rodando na base de dev; o aceite espera a
+    mesma reavaliação.
   - F52-01: script, relatório, amostra e proposta de rótulos; espera a revisão do dono.
   - F52-02: `seniority-v5` mesclado (PR #40) e aplicado na base de dev; cobertura de 62,7%
     nas áreas-alvo (meta de 60%). A precisão espera a revisão do dono.
   - F52-03 e F52-07: dependem do gold (SPEC 51, F51-11); proposta de rótulos e comando do
     portão prontos (PR #41).
-  - F52-05, F52-06, F52-08 e F52-09: não começaram. As decisões do dono para eles estão no
-    §7 e no F52-06.
+  - F52-06, F52-08 e F52-09: não começaram. As decisões do dono para eles estão no §7 e no
+    F52-06.
 - **Origem:** relato do dono: a busca devolve vagas muito acima do nível dele (júnior/pleno,
   remoto). Medições na stack `opportunity-radar-dev` em 2026-10-05.
 - **Relação com a [SPEC 51](51-spec-coleta-confiavel-e-busca.md)** (implementação parcial; ver
@@ -239,6 +242,15 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
     `matching-v4`. A regra está provada pelo teste de regressão; o número zero depende do fim
     da reavaliação, que as trocas de versão desta sessão (`seniority-v5`, `matching-v5`)
     reiniciam para as vagas que mudam.
+  - **Medição do aceite (2026-10-06, 18h15 UTC):** não fechado. 10.900 de 21.531 avaliações
+    atuais em `matching-v4`. Restavam 12 de topo com nível conhecido fora do aceito, todas
+    anteriores à v4 (3 em `matching-v2`, 9 em `matching-v3`); nenhuma em `matching-v4`.
+  - **Medição do aceite (2026-10-06, 19h33 UTC, logo depois do `matching-v5` entrar):** não
+    fechado. De 22.122 avaliações atuais, 50 em `matching-v5`, 13.900 em `matching-v4`, 328
+    em `matching-v3` e 7.844 em `matching-v2`. Restam 11 de topo com nível fora do aceito (3
+    em `matching-v2`, 8 em `matching-v3`); nenhuma em `matching-v4` nem em `matching-v5`. O
+    `matching-v5` reavalia o catálogo inteiro; a cerca de 2.700 avaliações por hora, leva
+    por volta de 8 horas. Repetir a contagem quando só houver `matching-v5`.
 
 ### F52-05 — Peso do nível desconhecido na ordenação
 
@@ -254,7 +266,22 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
 - **Decisão do dono (2026-10-06, Q2):** confirmado. Entra como `matching-v5`, num único
   bump junto com qualquer outra mudança de matching, depois de `seniority-v5` (feito) e de
   `skills-v5` (se houver) aplicados na base de dev. Linha de base antes do `seniority-v5`:
-  690 de 847 no topo com `UNKNOWN`; depois dele, 411 de 651. Não implementado ainda.
+  690 de 847 no topo com `UNKNOWN`; depois dele, 411 de 651.
+- **Resultado (2026-10-06, PR #46):** `matching-v5` em `matching/domain.py`. Para perfil que
+  declara os níveis aceitos, vaga de nível `UNKNOWN` continua elegível e para no máximo em
+  `WATCHLIST`; perfil sem preferência de nível não muda. Nenhum outro sinal de nível é lido
+  hoje, então todo `UNKNOWN` para ali; o F52-03 é quem traz o sinal. No Inbox, a ordem padrão
+  põe os vereditos de topo antes e depois ordena por pontuação; a ordem `score` continua só
+  por pontuação. Testes em `tests/backend/matching/test_domain.py` (teto, elegibilidade
+  mantida, perfil sem preferência) e `tests/backend/dashboard/test_queries.py` (ordem); os
+  casos de regressão existentes continuam passando.
+  - **Limite conhecido:** dentro da faixa `WATCHLIST` a ordem é só por pontuação, então uma
+    vaga de nível aceito com pontuação menor fica atrás de uma `UNKNOWN`.
+  - **Aberto:** o aceite ("menos de 30% do topo com `UNKNOWN`; nenhuma vaga some do Inbox")
+    só pode ser medido na base de dev depois da reavaliação. Às 19h33 UTC, com 50 avaliações
+    em `matching-v5`, o topo tinha 624 avaliações, 413 de nível `UNKNOWN`, todas de versões
+    anteriores. A regra leva esse número a zero; falta conferir quantas vagas sobram no topo
+    e que o total do Inbox não cai.
 
 ### F52-06 — Mais oferta júnior/pleno remota no Brasil
 
@@ -317,6 +344,24 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
 Dois itens não estão em nenhuma das duas specs e ficam registrados aqui como pendência: a
 fila de 5.219 normalizações em `REVIEW_REQUIRED` e as 2.543 vagas sem nenhuma skill depois do
 `skills-v4`.
+
+- **Vagas sem skill (2026-10-06, PR #44):** `skills-v5` acrescenta `linux`, `c++` e `etl`, os
+  únicos termos que são tecnologia inequívoca em 10 ou mais das 1.043 vagas das áreas-alvo
+  com descrição e sem skill. Medição e lista de termos ambíguos em
+  [skills-v5-termos-sem-skill.md](pesquisas/skills-v5-termos-sem-skill.md). Aplicado na base
+  de dev com `retag_skills.py --apply --include-untagged`, depois de `pg_dump`
+  (`dev-before-skills-v5-apply-2026-10-06.dump`): 38.954 linhas de skill, todas `skills-v5`,
+  em 12.507 vagas, igual ao dry-run. Vagas sem skill no catálogo: de 19.224 para 18.742; nas
+  áreas-alvo com descrição, de 1.043 para 974. A maior parte das que restam não cita
+  tecnologia; taxonomia maior não resolve isso.
+- **Fila `REVIEW_REQUIRED`:** não tratada. A decisão do dono de 2026-10-06 continua valendo:
+  amostrar 50 de cada motivo, resolver em lote só "mesma fonte, `external_id` diferente e
+  local ou modo diferente", nenhuma fusão automática.
+- **8 testes de fila (2026-10-06, PR #46):** reproduzido numa suíte completa em banco
+  reutilizado. A fila de avaliação lê as vagas pendentes mais antigas até o limite de 500;
+  vagas deixadas por outros módulos de teste ficam pendentes para cada versão nova de perfil
+  e empurram a vaga do teste para fora da página. Corrigido esvaziando o catálogo antes de
+  cada teste em `test_evaluation_queue.py` e `test_reevaluation.py`. O limite não mudou.
 
 ## 6. Ordem
 

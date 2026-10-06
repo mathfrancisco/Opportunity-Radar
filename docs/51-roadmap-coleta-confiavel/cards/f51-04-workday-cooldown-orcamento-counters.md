@@ -1,6 +1,6 @@
 # F51-04 — Workday: cooldown 429, orçamento e contadores
 
-- **Status:** Planejado
+- **Status:** Parcial. AC02 tem teste desde 2026-10-06 (PR #45, `tests/backend/acquisition/test_host_budget_reservation_integration.py`); os demais critérios não foram conferidos
 - **Prioridade:** P0
 - **Esforço estimado:** M
 - **Risco:** alto para tráfego duplicado ou quota excedida em workers concorrentes; reserva persistente deve preceder toda chamada externa.
