@@ -455,6 +455,123 @@ def test_inbox_default_order_puts_the_top_verdicts_before_a_higher_capped_score(
         assert ids(InboxOrder.SCORE) == [capped.id, top.id]
 
 
+def _accepted_levels_fixture(
+    session: Session,
+) -> tuple[Company, dict[str, OpportunityModel]]:
+    profile_version = _profile_version(session)
+    company = _company(session, "normal")
+    rows = {
+        "top_unknown": ("UNKNOWN", "RECOMMENDED", "60.0000"),
+        "mid": ("MID", "WATCHLIST", "50.0000"),
+        "unknown": ("UNKNOWN", "WATCHLIST", "80.0000"),
+        "senior": ("SENIOR", "WATCHLIST", "90.0000"),
+    }
+    postings: dict[str, OpportunityModel] = {}
+    for name, (seniority, verdict, score) in rows.items():
+        postings[name] = _opportunity(
+            session, company, title=name, published_at=NOW, seniority=seniority
+        )
+        _assessment(
+            session,
+            postings[name],
+            profile_version.id,
+            verdict=verdict,
+            score=score,
+            assessed_at=NOW,
+        )
+    session.commit()
+    return company, postings
+
+
+def _accepted_levels_ids(
+    session: Session,
+    company: Company,
+    order: InboxOrder,
+    accepted: tuple[str, ...],
+) -> list[UUID]:
+    page = list_opportunity_inbox(
+        session,
+        InboxQuery(
+            order=order,
+            company_id=company.id,
+            only_recent=False,
+            accepted_seniorities=accepted,
+        ),
+    )
+    return [item.opportunity_id for item in page.items]
+
+
+def test_inbox_default_order_puts_an_accepted_level_before_an_unknown_one() -> None:
+    """F52-05: inside a tier, a known accepted level leads an unknown one with a higher score."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company, rows = _accepted_levels_fixture(session)
+        ids = _accepted_levels_ids(
+            session, company, InboxOrder.PRIORITY, ("JUNIOR", "MID", "UNKNOWN")
+        )
+
+        assert ids.index(rows["mid"].id) < ids.index(rows["unknown"].id)
+
+
+def test_inbox_default_order_scores_a_known_level_the_profile_does_not_accept() -> None:
+    """F52-05: a SENIOR posting is known but not accepted, so only the score ranks it."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company, rows = _accepted_levels_fixture(session)
+        ids = _accepted_levels_ids(
+            session, company, InboxOrder.PRIORITY, ("JUNIOR", "MID", "UNKNOWN")
+        )
+
+        assert ids.index(rows["senior"].id) < ids.index(rows["unknown"].id)
+        assert ids == [
+            rows["top_unknown"].id,
+            rows["mid"].id,
+            rows["senior"].id,
+            rows["unknown"].id,
+        ]
+
+
+def test_inbox_default_order_keeps_a_top_verdict_ahead_of_any_watchlist_level() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company, rows = _accepted_levels_fixture(session)
+        ids = _accepted_levels_ids(
+            session, company, InboxOrder.PRIORITY, ("JUNIOR", "MID", "UNKNOWN")
+        )
+
+        assert ids[0] == rows["top_unknown"].id
+
+
+def test_inbox_score_order_ignores_the_accepted_levels() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company, rows = _accepted_levels_fixture(session)
+        ids = _accepted_levels_ids(
+            session, company, InboxOrder.SCORE, ("JUNIOR", "MID", "UNKNOWN")
+        )
+
+        assert ids == [
+            rows["senior"].id,
+            rows["unknown"].id,
+            rows["top_unknown"].id,
+            rows["mid"].id,
+        ]
+
+
+def test_inbox_default_order_without_declared_levels_is_the_score_order() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        company, rows = _accepted_levels_fixture(session)
+        ids = _accepted_levels_ids(session, company, InboxOrder.PRIORITY, ())
+
+        assert ids == [
+            rows["top_unknown"].id,
+            rows["senior"].id,
+            rows["unknown"].id,
+            rows["mid"].id,
+        ]
+
+
 def test_inbox_default_order_is_score_then_recency_not_company_priority() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:

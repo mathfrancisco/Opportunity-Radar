@@ -160,6 +160,9 @@ class InboxQuery:
     #: `role-family-v1` codes. Empty means every area — never a filter that hides rows.
     role_families: tuple[str, ...] = ()
     profile_version_id: UUID | None = None
+    #: Levels the active profile accepts. Only the default order reads it (card F52-05);
+    #: empty means no declared levels, and the order is the one without this key.
+    accepted_seniorities: tuple[str, ...] = ()
     #: Empty means every seniority — an unknown/blank value is never an implicit
     #: exclusion (SPEC 37, "Contrato de consulta").
     seniorities: tuple[str, ...] = ()
@@ -554,7 +557,12 @@ def _inbox_statement(query: InboxQuery, *, totals_only: bool = False) -> tuple[S
     # to the group representatives, or after the LIMIT for the lookups that only the page
     # needs.
     key = _posting_group_key(first_sources.c.first_source)
-    ordering = _inbox_ordering(query.order, assessments, (query.search or "").strip())
+    ordering = _inbox_ordering(
+        query.order,
+        assessments,
+        (query.search or "").strip(),
+        query.accepted_seniorities,
+    )
     in_area = (
         OpportunityModel.role_family.in_(query.role_families)
         if query.role_families
@@ -804,7 +812,12 @@ def _search_rank(term: str) -> Any:
     return func.ts_rank_cd(OpportunityModel.search_document, _search_tsquery(term))
 
 
-def _inbox_ordering(order: InboxOrder, assessments: Any, search_term: str = "") -> list[Any]:
+def _inbox_ordering(
+    order: InboxOrder,
+    assessments: Any,
+    search_term: str = "",
+    accepted_seniorities: tuple[str, ...] = (),
+) -> list[Any]:
     recency = OpportunityModel.published_at.desc().nulls_last()
     score = assessments.c.score.desc().nulls_last()
     if search_term:
@@ -821,7 +834,13 @@ def _inbox_ordering(order: InboxOrder, assessments: Any, search_term: str = "") 
     # accepted level reaches them when the profile states its levels, so those lead the
     # default Inbox even when an unknown-level posting scores higher.
     top_first = case((assessments.c.verdict.in_(("HIGH_PRIORITY", "RECOMMENDED")), 0), else_=1)
-    return [top_first, score, recency, OpportunityModel.id]
+    # Inside a tier, a known level the profile accepts goes ahead of an unknown one; an
+    # unknown level is never "known and accepted", even if the profile lists it.
+    known_levels = tuple(level for level in accepted_seniorities if level != "UNKNOWN")
+    if not known_levels:
+        return [top_first, score, recency, OpportunityModel.id]
+    level_known = case((OpportunityModel.seniority.in_(known_levels), 0), else_=1)
+    return [top_first, level_known, score, recency, OpportunityModel.id]
 
 
 def list_opportunity_inbox(session: Session, query: InboxQuery) -> InboxPage:
