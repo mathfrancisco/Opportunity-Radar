@@ -47,7 +47,13 @@ JOBS = [
         "updated_at": "2026-09-20T12:00:00-04:00",
         "requisition_id": "RADAR-1",
         "location": {"name": "Remote"},
-        "content": "Required: Python and ReactJS. Full-time remote position.",
+        "content": (
+            "Required: Python and ReactJS. Full-time remote position. "
+            # Longer than the 200 characters the automatic analysis queue asks for (F51-12).
+            "The team ships a product used every day by its customers, plans the work in "
+            "short cycles, reviews every change before it goes out and writes down what "
+            "it decides so that people in other time zones can follow along."
+        ),
         "departments": [{"id": 1, "name": "Engineering"}],
         "offices": [{"id": 1, "name": "Remote"}],
         "metadata": [],
@@ -74,7 +80,13 @@ def _jobs_for(board: str) -> list[dict[str, object]] | None:
                 "updated_at": "2026-09-20T12:00:00-04:00",
                 "requisition_id": f"{board.upper()}-1",
                 "location": {"name": "Remote"},
-                "content": "Required: Python and ReactJS. Full-time remote position.",
+                "content": (
+            "Required: Python and ReactJS. Full-time remote position. "
+            # Longer than the 200 characters the automatic analysis queue asks for (F51-12).
+            "The team ships a product used every day by its customers, plans the work in "
+            "short cycles, reviews every change before it goes out and writes down what "
+            "it decides so that people in other time zones can follow along."
+        ),
                 "departments": [{"id": 1, "name": "Engineering"}],
                 "offices": [{"id": 1, "name": "Remote"}],
                 "metadata": [],
