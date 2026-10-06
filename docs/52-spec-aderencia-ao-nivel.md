@@ -1,7 +1,9 @@
 # SPEC 52 — Aderência ao nível: senioridade, oferta júnior/pleno e remoto (cards F52)
 
 - **Data:** 2026-10-05
-- **Estado:** em implementação. F52-04 entregue em 2026-10-06 (`matching-v4`); os demais cards não começaram.
+- **Estado:** em implementação. F52-04 entregue em 2026-10-06 (`matching-v4`), com o aceite
+  à espera do fim da reavaliação; F52-01 com script, relatório e amostra, à espera dos
+  rótulos; os demais cards não começaram.
 - **Origem:** relato do dono: a busca devolve vagas muito acima do nível dele (júnior/pleno,
   remoto). Medições na stack `opportunity-radar-dev` em 2026-10-05.
 - **Relação com a [SPEC 51](51-spec-coleta-confiavel-e-busca.md)** (implementação parcial; ver
@@ -132,6 +134,15 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
   nível; metas do §1 confirmadas ou corrigidas.
 - **Teste:** o script roda no CI contra a amostra versionada.
 - **Esforço / risco:** P / baixo. Sem mudança de comportamento.
+- **Resultado (2026-10-06):** `scripts/measure_seniority_titles.py`, relatório em
+  [f52-01-linha-de-base-senioridade.md](pesquisas/f52-01-linha-de-base-senioridade.md) e
+  amostra de 300 títulos em `docs/pesquisas/f52-01-amostra-senioridade.json`, que roda no CI.
+  Dos 4.121 `UNKNOWN`: 138 por acento, 375 com dois níveis, 136 com numeral, 577 com palavra
+  não coberta e 2.895 (70,2%) sem sinal no título.
+  - **Aberto:** a amostra não foi rotulada, então a precisão por nível não foi medida e o
+    card não está concluído.
+  - **Meta a decidir:** o teto de cobertura só com o título é 65,3%. O relatório propõe
+    baixar a meta do F52-02 de 65% para 60%.
 
 ### F52-02 — Classificador de senioridade: acentos, dois níveis e numerais
 
@@ -186,6 +197,12 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
     ("zero avaliações de topo com nível conhecido fora do aceito") só pode ser medido depois
     dessa reavaliação na base de dev. As avaliações da versão arquivada do perfil continuam
     no ponteiro; contá-las ou não nas métricas do §1 é decisão de medição.
+  - **Medição do aceite (2026-10-06, 14h41 UTC):** não fechado. A reavaliação não terminou:
+    no perfil ativo (`b0ad7958`), 2.350 de 21.378 avaliações atuais estão em `matching-v4`
+    (7.845 em `matching-v2`, 11.183 em `matching-v3`). Há 88 avaliações de topo com nível
+    conhecido fora do aceito, todas ainda em `matching-v2` (3) ou `matching-v3` (85);
+    nenhuma em `matching-v4`. Repetir a contagem quando não restar avaliação anterior à v4.
+    As métricas do §1 passam a contar só o perfil ativo.
 
 ### F52-05 — Peso do nível desconhecido na ordenação
 
