@@ -228,8 +228,13 @@ def test_inbox_prefers_a_current_assessment_and_falls_back_to_a_stale_one() -> N
         )
         profile_version.status = "ACTIVE"
         company = _company(session, "normal")
-        with_fresh = _opportunity(session, company, title="Current result", published_at=NOW)
-        fallback_only = _opportunity(session, company, title="Waiting result", published_at=NOW)
+        # Published a day back: an assessment made an hour ago may fall on the previous UTC
+        # day, and a posting published after that day would sit in another recency band.
+        published = NOW - timedelta(days=1)
+        with_fresh = _opportunity(session, company, title="Current result", published_at=published)
+        fallback_only = _opportunity(
+            session, company, title="Waiting result", published_at=published
+        )
         old_current = _assessment(
             session,
             with_fresh,
