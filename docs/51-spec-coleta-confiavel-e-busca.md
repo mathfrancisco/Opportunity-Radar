@@ -177,6 +177,18 @@ flag, interrompe novos claims com cancelamento/aguardo, preserva evidência já 
 reverte somente dados cuja migração tenha plano explícito. Não apagar raw items ou fechar vagas
 para “limpar” um piloto.
 
+### 8.1 Desvios aceitos pelo dono (2026-10-06)
+
+- **Gold e benchmark (F51-11, F51-17):** onde os cards pedem dois revisores humanos, vale um
+  revisor humano (o dono) mais a proposta do modelo como segundo julgamento; a discordância é
+  resolvida pelo dono. O modelo não cria rótulo: a proposta fica em arquivo separado
+  (`*-proposta.json`) e os scripts de medição contam só casos com `revisado_por`.
+- **Latência fria (F51-17):** cinco reinícios do `postgres` numa stack descartável contam
+  como reset de cache.
+- **Janela de sete dias (F51-01, F51-02, F51-18):** começa no merge do último PR de código
+  desta SPEC; data, SHA e digest da imagem ficam no pacote de evidência do F51-18.
+- **F51-14 a F51-16:** adiados, como o §9 permite.
+
 ## 9. Definition of Done da SPEC
 
 A SPEC só pode ser fechada quando: cada card marcado concluído tiver evidência de seus ACs;

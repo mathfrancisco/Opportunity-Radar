@@ -1,10 +1,39 @@
 # F51-11 — gold humano, regras V4 e reclassificação
 
-- **Status:** Planejado
+- **Status:** Em andamento — proposta de rótulos pronta, à espera da confirmação do dono
 - **Prioridade:** P1
 - **Esforço estimado:** M
 - **Risco:** alto para falsos positivos e colisão de identidade; ativação é por regra e exige gold congelado suficiente.
 - **Dependências:** F51-01; concluir F50-01/F50-02 originais antes de habilitar regras.
+
+## Estado em 2026-10-06
+
+- **Amostra:** `docs/50-roadmap-motor-de-busca/rotulagem/f50-01-amostra-para-rotular.json`,
+  368 vagas e 1.104 casos (três campos por vaga); 50 vagas por tipo de fonte em sete tipos e
+  18 no Remotive.
+- **Proposta, não rótulo:** `f50-01-amostra-para-rotular-proposta.json`, na mesma pasta. O
+  modelo sugeriu julgamento, valor e trecho por caso, a partir do título, do local e do trecho
+  de 1.200 caracteres, sem ver a resposta das regras. Ordem: 85 casos em que a regra emite
+  valor diferente do sugerido, 121 em que a regra não emite e a sugestão tem valor, depois os
+  concordantes. `GATED_RULES` e as flags não mudaram.
+- **Decisão do dono (2026-10-06):** o modelo não cria rótulo. Um caso só vale quando o dono
+  preenche `judgment`, `valor_recomendado` e `revisado_por`; `load_gold` ignora os demais
+  (`test_gold_loader_reads_only_the_cases_a_person_confirmed`).
+- **Formato:** `judgment: "applicable"` com `valor_recomendado: "UNKNOWN"` diz que o texto não
+  informa o valor: emissão ali é falso positivo e silêncio não é falso negativo
+  (`test_a_confirmed_unknown_makes_an_emission_wrong_and_silence_right`).
+- **Comando do portão**, uma regra por vez; sai com código 1 enquanto o gold não passar:
+
+  ```
+  python scripts/measure_content_classification.py     --gold docs/50-roadmap-motor-de-busca/rotulagem/f50-01-amostra-para-rotular-proposta.json     --gold-text --check-gate --candidate-rule seniority:description_years_min
+  ```
+
+  Rodado em 2026-10-06 sem nenhum caso confirmado: `passes: false`, `gold_jobs: 0`,
+  `blocked_reason: insufficient_or_incomplete_human_gold`.
+- **Falta:** a confirmação do dono (AC01, AC02); AC03 a AC06 seguem os testes existentes de
+  `test_reclassify_content_integration.py` e não foram reexecutados com regra ligada. O portão
+  exige zero casos `unknown`: os 12 sugeridos como `unknown` (região sem lista de países,
+  conflito entre local e texto) precisam de decisão.
 
 ## Problema e evidência
 

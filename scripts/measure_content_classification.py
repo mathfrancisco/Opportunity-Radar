@@ -10,6 +10,10 @@
     python scripts/measure_content_classification.py --acervo-limit 5000
     # exit code 1 unless every rule reaches 90 percent (the activation gate)
     python scripts/measure_content_classification.py --check-gate
+    # the F51-11 gate, one rule at a time; only the cases a person confirmed are read
+    # (<proposta>: f50-01-amostra-para-rotular-proposta.json, in the F50 `rotulagem` folder)
+    python scripts/measure_content_classification.py --gold <proposta> --gold-text --check-gate
+        --candidate-rule seniority:description_years_min
     # unlabelled sample for the operator to label (the gold set needs >= 200 jobs)
     python scripts/measure_content_classification.py --sample-out sample.json --sample-size 200
     # stratified unlabelled sample: at most N jobs with a description per source type
@@ -20,6 +24,10 @@ is its only mode (`--dry-run` is accepted to make that explicit). The v4/v7 rule
 active when `CONTENT_CLASSIFICATION_V4_ENABLED=true`, which must not be set before this
 report's gate passes on a gold set of at least 200 human-labelled jobs. Labels are never
 generated here: `--sample-out` writes entries with `valor_recomendado: null` for a human.
+A case with a `judgment` only counts when `revisado_por` names who confirmed it; a suggestion
+(`valor_sugerido` in a `*-proposta.json` file) is never read. `judgment: "applicable"` with
+`valor_recomendado: "UNKNOWN"` says the text states no value: an emission there is wrong, and
+silence is right.
 
 Card F50-01 adds `allowed_countries`, precision and coverage per rule and per source type, and
 `gate.rules_passing` (precision at or above the gate with at least `MIN_RULE_EMISSIONS`
@@ -78,8 +86,25 @@ class Case:
     expected_rule: str | None = None
 
 
+#: `expected` of a confirmed case whose text states no value: the rule must stay silent.
+EXPECTED_UNKNOWN = "UNKNOWN"
+
+
+def _confirmed(item: Mapping[str, Any]) -> bool:
+    """Whether a person signed this label (card F51-11).
+
+    A proposal file carries a suggestion per case (`valor_sugerido`); it becomes a label only
+    when `revisado_por` names who confirmed `judgment` and `valor_recomendado`. The F20-23
+    gold predates the field and its labels are human, so a case with neither a judgment nor
+    the field still counts.
+    """
+    if "revisado_por" in item or item.get("judgment") or item.get("applicability"):
+        return bool(str(item.get("revisado_por") or "").strip())
+    return True
+
+
 def load_gold(path: Path) -> list[dict[str, Any]]:
-    """Read labelled cases for the fields this script measures (role_family is skipped)."""
+    """Read the confirmed cases for the fields this script measures (role_family is skipped)."""
     data = json.loads(path.read_text(encoding="utf-8"))
     cases = [
         {
@@ -95,7 +120,7 @@ def load_gold(path: Path) -> list[dict[str, Any]]:
             "expected_rule": item.get("expected_rule"),
         }
         for item in data["casos"]
-        if item["field"] in MEASURED_FIELDS
+        if item["field"] in MEASURED_FIELDS and _confirmed(item)
     ]
     seen: dict[tuple[str, str], tuple[Any, str]] = {}
     for item in cases:
@@ -258,7 +283,7 @@ def measure(
             continue
         judgment_counts[case.judgment] += 1
         if value is None:
-            if case.judgment == "applicable":
+            if case.judgment == "applicable" and case.expected != EXPECTED_UNKNOWN:
                 missed_rule = f"{case.field}:{case.expected_rule or 'no_emission'}"
                 confusion[missed_rule]["fn"] += 1
                 confusion[missed_rule]["support"] += 1
