@@ -188,12 +188,12 @@ def test_a_ruleset_bump_requeues_without_touching_the_previous_result(
 
         # The bump is detected by comparing the persisted version with the active
         # constant, so no migration or event is needed to notice it.
-        monkeypatch.setattr(matching_service, "RULES_VERSION", "matching-v4")
+        monkeypatch.setattr(matching_service, "RULES_VERSION", "matching-v5")
 
         assert opportunity.id in service.pending_evaluation_ids(limit=500)
         second = service.evaluate(opportunity.id)
-        assert second.rules_version == "matching-v4"
-        assert service.get(first.id).rules_version == "matching-v3"
+        assert second.rules_version == "matching-v5"
+        assert service.get(first.id).rules_version == "matching-v4"
 
 
 def test_a_taxonomy_bump_requeues_the_opportunity() -> None:

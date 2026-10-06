@@ -221,7 +221,7 @@ jobs:
           opportunity_id="$(curl --fail --silent http://127.0.0.1:3000/api/opportunities | python -c "import json,sys; print(json.load(sys.stdin)['items'][0]['id'])")"
           match_payload="{\"opportunity_id\":\"$opportunity_id\"}"
           first_match="$(curl --fail --silent --json "$match_payload" http://127.0.0.1:3000/api/matches/evaluate)"
-          first_match_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['rules_version'] == 'matching-v3'; assert data['taxonomy_version'] == 'skills-v4'; assert data['eligibility'] == 'ELIGIBLE'; assert data['verdict'] == 'RECOMMENDED'; assert len(data['input_hash']) == 64; assert len(data['eligibility_details']) == 7; assert len(data['factors']) == 8; print(data['id'])" <<< "$first_match")"
+          first_match_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['rules_version'] == 'matching-v4'; assert data['taxonomy_version'] == 'skills-v4'; assert data['eligibility'] == 'ELIGIBLE'; assert data['verdict'] == 'RECOMMENDED'; assert len(data['input_hash']) == 64; assert len(data['eligibility_details']) == 7; assert len(data['factors']) == 8; print(data['id'])" <<< "$first_match")"
           second_match_id="$(curl --fail --silent --json "$match_payload" http://127.0.0.1:3000/api/matches/evaluate | python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
           test "$first_match_id" = "$second_match_id"
           curl --fail --silent "http://127.0.0.1:3000/api/matches?opportunity_id=$opportunity_id" | \
