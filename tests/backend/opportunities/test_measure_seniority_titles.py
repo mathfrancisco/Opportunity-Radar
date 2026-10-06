@@ -120,16 +120,19 @@ def test_label_sample_is_blind_stratified_and_repeatable() -> None:
         assert entry["nivel_rotulado"] is None
 
 
+REVIEWED = {"revisado_por": "owner"}
+
+
 def test_measure_sample_reports_precision_per_emitted_level() -> None:
     report = measure_sample(
         [
-            {"title": "Senior Software Engineer", "nivel_rotulado": "SENIOR"},
-            {"title": "Senior Account Engineer", "nivel_rotulado": "MID"},
-            {"title": "Engineering Manager", "nivel_rotulado": "MANAGER"},
+            {"title": "Senior Software Engineer", "nivel_rotulado": "SENIOR", **REVIEWED},
+            {"title": "Senior Account Engineer", "nivel_rotulado": "MID", **REVIEWED},
+            {"title": "Engineering Manager", "nivel_rotulado": "MANAGER", **REVIEWED},
             # A range label: the emitted level is correct when it is one of the values.
-            {"title": "Pleno Developer", "nivel_rotulado": ["MID", "SENIOR"]},
-            {"title": "Software Engineer IV", "nivel_rotulado": "SENIOR"},
-            {"title": "Data Engineer", "nivel_rotulado": "UNKNOWN"},
+            {"title": "Pleno Developer", "nivel_rotulado": ["MID", "SENIOR"], **REVIEWED},
+            {"title": "Software Engineer IV", "nivel_rotulado": "SENIOR", **REVIEWED},
+            {"title": "Data Engineer", "nivel_rotulado": "UNKNOWN", **REVIEWED},
             {"title": "Staff Engineer", "nivel_rotulado": None},
         ]
     )
@@ -158,7 +161,27 @@ def test_measure_sample_without_labels_reports_no_precision() -> None:
 
 def test_measure_sample_rejects_a_label_that_is_not_a_seniority() -> None:
     with pytest.raises(ValueError, match="invalid nivel_rotulado"):
-        measure_sample([{"opportunity_id": "x", "title": "Engineer", "nivel_rotulado": "Sênior"}])
+        measure_sample(
+            [{"opportunity_id": "x", "title": "Engineer", "nivel_rotulado": "Sênior", **REVIEWED}]
+        )
+
+
+def test_measure_sample_ignores_a_label_nobody_signed() -> None:
+    # A proposal carries a suggestion and may carry an unsigned label: neither is a label.
+    report = measure_sample(
+        [
+            {"title": "Senior Engineer", "nivel_sugerido": "SENIOR", "nivel_rotulado": None},
+            {"title": "Staff Engineer", "nivel_rotulado": "STAFF", "revisado_por": None},
+            {"title": "Lead Engineer", "nivel_rotulado": "LEAD", "revisado_por": "  "},
+            {"title": "Engineering Manager", "nivel_rotulado": "MANAGER", **REVIEWED},
+        ]
+    )
+
+    assert report["entries"] == 4
+    assert report["labelled"] == 1
+    assert report["precision_by_level"] == {
+        "MANAGER": {"emitted": 1, "correct": 1, "precision": 1.0}
+    }
 
 
 @needs_sample

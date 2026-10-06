@@ -140,9 +140,12 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
   Dos 4.121 `UNKNOWN`: 138 por acento, 375 com dois níveis, 136 com numeral, 577 com palavra
   não coberta e 2.895 (70,2%) sem sinal no título.
   - **Aberto:** a amostra não foi rotulada, então a precisão por nível não foi medida e o
-    card não está concluído.
-  - **Meta a decidir:** o teto de cobertura só com o título é 65,3%. O relatório propõe
-    baixar a meta do F52-02 de 65% para 60%.
+    card não está concluído. Há uma proposta de rótulo por título, feita pelo modelo sem ver
+    a resposta do classificador, em `docs/pesquisas/f52-01-amostra-senioridade-proposta.json`
+    (14 de 300 discordam do `seniority-v5`, listadas primeiro). Proposta não é rótulo: a
+    medição só conta entradas com `revisado_por` preenchido pelo dono.
+  - **Meta decidida (2026-10-06):** o teto de cobertura só com o título é 65,3%; a meta do
+    F52-02 passa a 60%.
 
 ### F52-02 — Classificador de senioridade: acentos, dois níveis e numerais
 
@@ -158,9 +161,21 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
 - **Teste:** um caso por linha da tabela do P2, mais regressão sobre a amostra.
 - **Esforço / risco:** M / médio. Muda a identidade? Não: senioridade não entra no
   fingerprint. Muda a elegibilidade de milhares de vagas de uma vez; rodar o dry-run antes.
-- **Decisão pendente:** vaga com faixa de níveis (`Júnior a Sênior`) guarda um nível só ou
-  uma faixa? Faixa exige coluna nova. Proposta: guardar o nível mais baixo e a faixa na
-  evidência, sem migração.
+- **Decisões do dono (2026-10-06):** faixa de níveis guarda o nível mais baixo e a faixa vai
+  para a evidência (`range`), sem migração (Q1). `Entry Level` e `New Grad` são `JUNIOR` (Q3).
+  `Architect` é `SENIOR` quando o título não tem outra palavra de nível. `Member of Technical
+  Staff` não é `STAFF` e fica `UNKNOWN`. Palavra de nível vence numeral. Numerais acima de
+  `III` ficam `UNKNOWN`. Só os níveis de `INTERN` a `STAFF` formam faixa. A meta de cobertura
+  só com o título passa de 65% para 60%; os 80% do §1 são do F52-03.
+- **Resultado (2026-10-06):** `seniority-v5` em `opportunities/domain.py`, com um teste por
+  linha da tabela do P2. Reaplicação por `scripts/retag_seniority.py` (dry-run por padrão,
+  `--apply` grava), com teste de integração em
+  `tests/backend/opportunities/test_retag_seniority_integration.py`. Dry-run numa cópia da
+  base de dev em [f52-02-reaplicacao-senioridade.md](pesquisas/f52-02-reaplicacao-senioridade.md):
+  nas áreas-alvo a cobertura vai de 50,5% para 62,7% e `JUNIOR`+`MID` de 177 para 408.
+  - **Aberto:** a precisão de 90% depende dos rótulos. A proposta está em
+    `docs/pesquisas/f52-01-amostra-senioridade-proposta.json`; só entradas com `revisado_por`
+    preenchido pelo dono entram na medição.
 
 ### F52-03 — Senioridade pela descrição
 
@@ -203,6 +218,14 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
     conhecido fora do aceito, todas ainda em `matching-v2` (3) ou `matching-v3` (85);
     nenhuma em `matching-v4`. Repetir a contagem quando não restar avaliação anterior à v4.
     As métricas do §1 passam a contar só o perfil ativo.
+  - **Medição do aceite (2026-10-06, 16h39 UTC):** não fechado, pelo mesmo motivo. No perfil
+    ativo, 7.812 de 21.380 avaliações atuais estão em `matching-v4` (7.845 em `matching-v2`,
+    5.723 em `matching-v3`); o worker reavalia cerca de 2.700 por hora. Restam 8 avaliações
+    de topo com nível conhecido fora do aceito, todas anteriores à v4: 3 em `matching-v2`
+    (`MANAGER`, `SENIOR`, `STAFF`) e 5 em `matching-v3` (3 `LEAD`, 2 `SENIOR`). Nenhuma em
+    `matching-v4`. A regra está provada pelo teste de regressão; o número zero depende do fim
+    da reavaliação, que as trocas de versão desta sessão (`seniority-v5`, `matching-v5`)
+    reiniciam para as vagas que mudam.
 
 ### F52-05 — Peso do nível desconhecido na ordenação
 
@@ -282,7 +305,11 @@ fila de 5.219 normalizações em `REVIEW_REQUIRED` e as 2.543 vagas sem nenhuma 
 
 ## 7. Perguntas abertas
 
-- **Q1.** Vaga com faixa de níveis (`Júnior a Sênior`): guardar o nível mais baixo (F52-02)?
-- **Q2.** Nível desconhecido para no máximo em `WATCHLIST` (F52-05)?
-- **Q3.** `INTERN` entra em `accepted_seniorities`? Hoje não está, e `Entry Level` cai nele.
+- **Q1.** Respondida em 2026-10-06: a faixa guarda o nível mais baixo; a faixa inteira vai
+  para a evidência. Sem migração.
+- **Q2.** Respondida em 2026-10-06: nível `UNKNOWN` para no máximo em `WATCHLIST` enquanto não
+  houver outro sinal de nível. Hoje nenhum outro sinal está ligado, então todo `UNKNOWN` para
+  em `WATCHLIST`. No Inbox, nível conhecido e aceito vem antes.
+- **Q3.** Respondida em 2026-10-06: `Entry Level` e `New Grad` são `JUNIOR`. `INTERN` não
+  entra em `accepted_seniorities`.
 - **Q4.** Quais fontes brasileiras o dono quer ver avaliadas no F52-06?

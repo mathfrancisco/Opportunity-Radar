@@ -81,7 +81,7 @@ As portas 3000 e 8000 são publicadas apenas em `127.0.0.1`; o Postgres não é 
 flowchart LR
     A["Empresas e fontes<br/>(catálogo pesquisado)"] --> B["Coleta agendada<br/>12 tipos de coletor"]
     B --> C["Itens brutos<br/>(evidência imutável)"]
-    C --> D["Normalização<br/>v6, seniority-v3, skills-v3"]
+    C --> D["Normalização<br/>v6, seniority-v5, skills-v4"]
     D --> E["Oportunidade canônica<br/>+ candidatos a duplicata"]
     E --> F["Matching determinístico<br/>hard filters + 8 fatores"]
     F --> G["Análise de IA consultiva<br/>Groq sob quota"]

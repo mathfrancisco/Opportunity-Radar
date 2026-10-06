@@ -1014,6 +1014,9 @@ def _named_seniorities(
         levels = tuple(level for level in _SENIORITY_LADDER if level in in_range)
         return levels[0], levels
     named = {level for _, _, level in found}
+    if named == {Seniority.INTERN, Seniority.JUNIOR}:
+        # "Associate Intern", "Graduate Trainee": the junior word describes the internship.
+        return Seniority.INTERN, ()
     highest = next((level for level in reversed(_SENIORITY_LADDER) if level in named), None)
     return highest or Seniority.UNKNOWN, ()
 

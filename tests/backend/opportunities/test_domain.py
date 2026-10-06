@@ -286,6 +286,10 @@ def test_seniority_v2_covers_portuguese_titles_and_abbreviations() -> None:
         ("Vaga de Aprendiz Administrativo", Seniority.INTERN),
         ("Early Career Software Engineer", Seniority.JUNIOR),
         ("Graduate Software Engineer", Seniority.JUNIOR),
+        # An internship named with a junior word is still an internship.
+        ("Business Development Associate Intern", Seniority.INTERN),
+        ("Graduate Trainee, Data", Seniority.INTERN),
+        ("Junior Software Engineer Internship", Seniority.INTERN),
     ],
 )
 def test_seniority_v3_covers_entry_program_keywords(title: str, expected: Seniority) -> None:
