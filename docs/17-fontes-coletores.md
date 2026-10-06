@@ -193,7 +193,7 @@ ATS brasileiro; revisão de termos em [`pesquisas/termos-inhire.md`](pesquisas/t
 - **Limites:** política padrão do tipo de 1 requisição por segundo, em série
   (`DEFAULT_RATE_LIMIT_POLICY_BY_SOURCE_TYPE`, vale quando a política da fonte não define
   `minimum_interval_seconds` nem `requests_per_second`); orçamento no host compartilhado
-  `api.inhire.app` (teto padrão 300 por hora). `403`, `401` ou `429`, na lista ou num
+  `api.inhire.app` (teto padrão 1.200 por hora; a revisão de termos permite até 1 por segundo, ou 3.600 por hora. Era 300 até 2026-10-05, valor escolhido sem medição, que fazia o primeiro cadastro de um lote de empresas levar horas). `403`, `401` ou `429`, na lista ou num
   detalhe, param todas as requisições da execução, sem repetição, e voltam com os códigos
   `SOURCE_FORBIDDEN`/`SOURCE_UNAUTHORIZED`/`SOURCE_RATE_LIMITED` (as demais vagas saem sem
   detalhe antes do erro). `5xx` e timeout seguem a política de retentativas.

@@ -32,7 +32,7 @@ DEFAULT_HOST_BUDGET_WINDOW = timedelta(hours=1)
 # It is intentionally generous: the ceiling is a shared-abuse guard, not a per-source
 # throttle (that is `minimum_run_interval_seconds`), so a wrong default here should err
 # on the side of not starving every source of a healthy host.
-DEFAULT_HOST_REQUESTS_CEILING = 200
+DEFAULT_HOST_REQUESTS_CEILING = 1000
 
 
 class CollectionGate(StrEnum):
