@@ -183,7 +183,7 @@ def test_only_years_min_enabled_changes_seniority_and_nothing_else() -> None:
     )
 
 
-def test_a_title_decided_value_keeps_the_v3_version_under_partial_activation() -> None:
+def test_a_title_decided_value_keeps_the_title_mapping_version_under_partial_activation() -> None:
     candidate = _candidate(
         "Senior Data Engineer",
         "Remote — Brazil",
@@ -193,7 +193,7 @@ def test_a_title_decided_value_keeps_the_v3_version_under_partial_activation() -
     assert candidate.seniority.value == "SENIOR"
     (reason,) = candidate.classification_reasons
     assert reason["source"] == "title"
-    assert reason["mapping_version"] == "seniority-v3"
+    assert reason["mapping_version"] == "seniority-v5"
     assert candidate.allowed_countries_version == "regions-v1"
 
 

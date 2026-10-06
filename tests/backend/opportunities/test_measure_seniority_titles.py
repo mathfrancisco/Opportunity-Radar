@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts import measure_seniority_titles
 from scripts.measure_seniority_titles import (
     baseline,
     build_label_sample,
@@ -44,26 +45,35 @@ def _rows(*titles: str) -> list[dict[str, str]]:
     ],
 )
 def test_unknown_pattern_names_the_first_reason(
-    title: str, pattern: str, detail: str | None
+    monkeypatch: pytest.MonkeyPatch, title: str, pattern: str, detail: str | None
 ) -> None:
-    assert classify(title) == "UNKNOWN"
+    # The grouping explains a title the classifier left UNKNOWN; `seniority-v5` reads most
+    # of these, so the classifier is replaced by one that reads nothing.
+    monkeypatch.setattr(measure_seniority_titles, "classify", lambda title: "UNKNOWN")
+
     assert unknown_pattern(title) == (pattern, detail)
 
 
-def test_accent_pattern_is_a_title_that_classifies_once_the_accent_is_removed() -> None:
-    # Skips itself when the classifier already reads the accented word (F52-02).
-    title = "Analista de Dados Júnior"
-    if classify(title) != "UNKNOWN":
-        pytest.skip("the classifier already compares without accents")
-    assert unknown_pattern(title) == ("accent", None)
+def test_accent_pattern_is_a_title_that_classifies_once_the_accent_is_removed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # `seniority-v5` ignores accents, so the pattern is shown on a classifier that does not.
+    monkeypatch.setattr(
+        measure_seniority_titles,
+        "classify",
+        lambda title: "JUNIOR" if "junior" in title.casefold() else "UNKNOWN",
+    )
+
+    assert unknown_pattern("Analista de Dados Júnior") == ("accent", None)
+    assert unknown_pattern("Engenharia de Dados") == ("no_signal", None)
 
 
 def test_baseline_counts_levels_patterns_and_the_title_only_ceiling() -> None:
     report = baseline(
         _rows(
             "Senior Software Engineer",
-            "Senior Staff Engineer",
-            "Software Engineer II",
+            "Founding Engineer",
+            "Software Engineer IV",
             "Data Engineer",
         )
     )
@@ -75,12 +85,12 @@ def test_baseline_counts_levels_patterns_and_the_title_only_ceiling() -> None:
     patterns = report["unknown_patterns"]
     assert {name: stats["titles"] for name, stats in patterns.items()} == {
         "accent": 0,
-        "two_levels": 1,
+        "two_levels": 0,
         "numeral": 1,
-        "uncovered_word": 0,
+        "uncovered_word": 1,
         "no_signal": 1,
     }
-    assert patterns["two_levels"]["details"] == {"SENIOR+STAFF": 1}
+    assert patterns["uncovered_word"]["details"] == {"founding": 1}
     assert patterns["no_signal"]["examples"] == ["Data Engineer"]
     # Only the title with no level word stays out of reach of a title-only classifier.
     assert report["coverage_ceiling_title_only"] == 0.75
@@ -118,7 +128,7 @@ def test_measure_sample_reports_precision_per_emitted_level() -> None:
             {"title": "Engineering Manager", "nivel_rotulado": "MANAGER"},
             # A range label: the emitted level is correct when it is one of the values.
             {"title": "Pleno Developer", "nivel_rotulado": ["MID", "SENIOR"]},
-            {"title": "Software Engineer II", "nivel_rotulado": "MID"},
+            {"title": "Software Engineer IV", "nivel_rotulado": "SENIOR"},
             {"title": "Data Engineer", "nivel_rotulado": "UNKNOWN"},
             {"title": "Staff Engineer", "nivel_rotulado": None},
         ]

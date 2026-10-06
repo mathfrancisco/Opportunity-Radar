@@ -907,77 +907,158 @@ def infer_work_mode(
     return WorkMode.UNKNOWN
 
 
+#: Lowest to highest. A title naming two levels takes the higher one ("Senior Staff
+#: Engineer" is STAFF), so the order is part of the mapping version.
+_SENIORITY_LADDER: tuple[Seniority, ...] = (
+    Seniority.INTERN,
+    Seniority.JUNIOR,
+    Seniority.MID,
+    Seniority.SENIOR,
+    Seniority.STAFF,
+    Seniority.LEAD,
+    Seniority.MANAGER,
+    Seniority.DIRECTOR,
+)
+
+# Level words, read on the case-folded title without accents ("Sênior" is "senior"). Order
+# matters: a match is blanked before the next expression runs, so the longer phrase wins
+# ("semi senior" is MID and its "senior" is never read). `None` blanks a phrase that only
+# looks like a level.
+_SENIORITY_WORDS: tuple[tuple[Seniority | None, str], ...] = (
+    # A team name at several companies, used at every level; not the STAFF level.
+    (None, r"\bmember of technical staff\b"),
+    (None, r"\bmiddle east\b"),
+    (None, r"\bmid[- ]market\b"),
+    (None, r"\bpl[/-]?sql\b"),
+    # An academic credential, not a job level (diagnostic in docs/44-roadmap-fase-20/
+    # evidencias/diagnostico-vagas-junior-2026-09-28.md).
+    (None, r"\bgraduate\s+(?:school|degree|program)\b"),
+    (Seniority.DIRECTOR, r"\bhead of\b"),
+    (Seniority.DIRECTOR, r"\bdirector\b|\bdiretor(?:a)?\b"),
+    (Seniority.MANAGER, r"\bmanager\b|\bgerente\b"),
+    (Seniority.LEAD, r"\blead\b|\blider\b"),
+    # "especialista" and "principal" have no dedicated enum tier; both denote a deep
+    # individual-contributor level closest to STAFF (card F17-06 scope).
+    (Seniority.STAFF, r"\bstaff\b|\bespecialista\b|\bprincipal\b"),
+    (Seniority.MID, r"\bsemi[- ]?senior\b|\bssr\b"),
+    (Seniority.SENIOR, r"\bsenior\b|\bsr\b"),
+    (Seniority.MID, r"\bmid(?:[- ]?level)?\b|\bmiddle\b|\bplen[oa]\b|\bpl\b"),
+    # seniority-v5 (F52-02): "entry level" and "new grad" are a first job, not an
+    # internship, and "associate" is the usual English word for the junior tier.
+    (
+        Seniority.JUNIOR,
+        r"\bentry[ -]level\b|\bnew (?:college )?grad(?:uate)?\b|\bearly career\b"
+        r"|\bjunior\b|\bjr\b|\bgraduate\b|\bassociate\b",
+    ),
+    # `trainee` and `apprentice`/`aprendiz` are entry programs, INTERN-equivalent in this
+    # app's domain (F20-70).
+    (
+        Seniority.INTERN,
+        r"\bintern(?:ship)?\b|\bestagi[oa]\b|\bestagiari[oa]s?\b|\btrainee\b"
+        r"|\bapprentice\b|\baprendiz\b",
+    ),
+)
+
+# Read only when the title has no level word: a numeral after the role, and a role that
+# implies a level. "Senior Engineer II" is SENIOR, not MID.
+_SENIORITY_IMPLIED: tuple[tuple[Seniority | None, str], ...] = (
+    (Seniority.SENIOR, r"\biii\b"),
+    (Seniority.MID, r"\bii\b"),
+    # A lone "I" is a level only where a level numeral goes: closing the title or a part
+    # of it ("Software Engineer I", "Engineer I - Payments").
+    (Seniority.JUNIOR, r"(?<=[a-z)] )i\b(?=\s*(?:$|[-,|(/:]))"),
+    (Seniority.SENIOR, r"\barchitect\b|\barquitet[oa]\b"),
+)
+
+# What may stand between two level words for them to be a range ("Pl/Sr", "Junior to
+# Senior", "Pleno, Sênior e Especialista") rather than one compound level ("Senior Staff").
+_SENIORITY_RANGE_CONNECTOR = re.compile(
+    r"(?:\.|\([ao]\))?\s*(?:[/,&+]|,?\s*\b(?:e|ou|or|and|a|to|ate)\b)\s*"
+)
+# Only the individual-contributor levels form a range: "Manager, Senior Data Engineer" is
+# an inverted title, not a posting open from senior to manager.
+_SENIORITY_RANGE_LEVELS = frozenset(
+    {Seniority.INTERN, Seniority.JUNIOR, Seniority.MID, Seniority.SENIOR, Seniority.STAFF}
+)
+
+
+def _fold_accents(text: str) -> str:
+    return "".join(
+        character
+        for character in unicodedata.normalize("NFKD", text)
+        if not unicodedata.combining(character)
+    )
+
+
+def _named_seniorities(
+    text: str, words: tuple[tuple[Seniority | None, str], ...]
+) -> tuple[Seniority, tuple[Seniority, ...]]:
+    """The level `text` names and, when it names a range, the levels of that range."""
+    found: list[tuple[int, int, Seniority]] = []
+    for level, expression in words:
+        for match in re.finditer(expression, text):
+            if level is not None:
+                found.append((match.start(), match.end(), level))
+        text = re.sub(expression, lambda match: " " * len(match.group()), text)
+    found.sort()
+    in_range: set[Seniority] = set()
+    for (_, end, first), (start, _, second) in zip(found, found[1:]):
+        if (
+            first is not second
+            and {first, second} <= _SENIORITY_RANGE_LEVELS
+            and _SENIORITY_RANGE_CONNECTOR.fullmatch(text[end:start])
+        ):
+            in_range.update((first, second))
+    if in_range:
+        # A range keeps its lowest level (SPEC 52, Q1); the evidence carries the rest.
+        levels = tuple(level for level in _SENIORITY_LADDER if level in in_range)
+        return levels[0], levels
+    named = {level for _, _, level in found}
+    highest = next((level for level in reversed(_SENIORITY_LADDER) if level in named), None)
+    return highest or Seniority.UNKNOWN, ()
+
+
+def _infer_seniority(evidence: tuple[str, ...]) -> tuple[Seniority, tuple[Seniority, ...]]:
+    results = set()
+    for text in evidence:
+        folded = _fold_accents(text)
+        result = _named_seniorities(folded, _SENIORITY_WORDS)
+        if result[0] is Seniority.UNKNOWN:
+            result = _named_seniorities(folded, _SENIORITY_IMPLIED)
+        if result[0] is not Seniority.UNKNOWN:
+            results.add(result)
+    # Two pieces of evidence that disagree stay UNKNOWN: neither is silently preferred.
+    return results.pop() if len(results) == 1 else (Seniority.UNKNOWN, ())
+
+
 def infer_seniority(
     title: str | None, location_text: str | None, metadata: Mapping[str, Any]
 ) -> Seniority:
     del location_text
-    result = _infer_unique(
+    return _infer_seniority(
         _evidence_texts(
             title,
             metadata=metadata,
             metadata_keys=frozenset(
                 {"seniority", "level", "experience_level", "experiencelevel"}
             ),
-        ),
-        {
-            # seniority-v3 (F20-70): the noun form "estágio"/"estágia" was already
-            # covered, but the far more common Brazilian job-title form is the
-            # person/adjective form "estagiário"/"estagiária" ("Vaga de Estagiário de
-            # X"), with or without the accent, singular or plural — that pattern was
-            # missing entirely. `trainee`, `entry level`, `new grad` and
-            # `apprentice`/`aprendiz` are treated as INTERN-equivalent entry programs in
-            # this app's domain (not an intermediate level).
-            Seniority.INTERN: (
-                r"\bintern(ship)?\b",
-                r"\best[aá]gi[oa]\b",
-                r"\best[aá]gi[áa]ri[oa]s?\b",
-                r"\btrainee\b",
-                r"\bentry[ -]level\b",
-                r"\bnew grad(?:uate)?\b",
-                r"\bapprentice\b",
-                r"\baprendiz\b",
-            ),
-            Seniority.JUNIOR: (
-                r"\bjunior\b",
-                r"\bjr\.?\b",
-                # "early career" (Greenhouse convention) and a bare "graduate" title
-                # (not "Graduate School"/"...degree"/"...program", which name an
-                # academic credential, not a job level) read as JUNIOR, per the
-                # diagnostic in docs/44-roadmap-fase-20/evidencias/
-                # diagnostico-vagas-junior-2026-09-28.md.
-                r"\bearly career\b",
-                # "new grad(uate)" is handled by the INTERN pattern above; excluded
-                # here so it is not ambiguous between the two enums (the 4-char
-                # lookbehind matches "new " exactly, case-folded evidence).
-                r"(?<!new )\bgraduate\b(?!\s+(?:school|degree|program))",
-            ),
-            Seniority.MID: (
-                r"\bmid(?:[- ]level)?\b",
-                r"\bmiddle\b",
-                r"\bpleno\b",
-                r"\bpl\.?\b",
-            ),
-            Seniority.SENIOR: (r"\bsenior\b", r"\bsr\.?\b"),
-            # "especialista" and "principal" have no dedicated enum tier; both denote a
-            # deep individual-contributor level closest to STAFF, so they are folded
-            # into it rather than inventing a new Seniority member (card F17-06 scope).
-            Seniority.STAFF: (r"\bstaff\b", r"\bespecialista\b", r"\bprincipal\b"),
-            Seniority.LEAD: (r"\blead\b", r"\bl[ií]der\b"),
-            Seniority.MANAGER: (r"\bmanager\b", r"\bgerente\b"),
-            Seniority.DIRECTOR: (r"\bdirector\b", r"\bdiretor\b"),
-        },
-        Seniority.UNKNOWN,
-    )
-    return Seniority(result)
+        )
+    )[0]
 
 
 #: v2 -> v3 (F20-70): fixed INTERN to also match the person/adjective form
 #: "estagiário"/"estagiária" (was noun-only, "estágio"/"estágia"), and added
 #: trainee/entry level/new grad/apprentice/aprendiz (INTERN) and early
 #: career/graduate (JUNIOR) — see docs/44-roadmap-fase-20/fase-20/
-#: f20-70-lacunas-de-palavra-chave-senioridade.md. No existing non-UNKNOWN
-#: classification changes; this only fills previously-UNKNOWN titles.
-SENIORITY_MAPPING_VERSION = "seniority-v3"
+#: f20-70-lacunas-de-palavra-chave-senioridade.md.
+#:
+#: v3 -> v5 (F52-02; `seniority-v4` names the description rules in
+#: content_classification.py): accents are ignored; a title naming two levels takes the
+#: higher one, or the lowest of an explicit range; numerals I/II/III, "architect", "head
+#: of", "associate" and "semi senior" are read; "entry level" and "new grad" move from
+#: INTERN to JUNIOR. Unlike v3, this changes titles that were already classified — see
+#: docs/pesquisas/f52-02-reaplicacao-senioridade.md.
+SENIORITY_MAPPING_VERSION = "seniority-v5"
 
 # Collector payloads are intentionally listed even when they have no approved level
 # field. Adding a field here is part of that collector's homologation, not a heuristic.
@@ -1016,7 +1097,9 @@ def seniority_classification(
         None,
     )
     structured = infer_seniority(None, None, {"seniority": external} if external else {})
-    title_value = infer_seniority(title, None, {})
+    title_value, title_range = _infer_seniority(
+        _evidence_texts(title, metadata={}, metadata_keys=frozenset())
+    )
     conflict = (
         structured is not Seniority.UNKNOWN
         and title_value is not Seniority.UNKNOWN
@@ -1027,13 +1110,16 @@ def seniority_classification(
         if conflict or (external is not None and structured is Seniority.UNKNOWN)
         else structured if external is not None else title_value
     )
+    source = "conflict" if conflict else "structured" if external else "title"
     return value, {
         "code": "SENIORITY_CLASSIFICATION",
-        "source": "conflict" if conflict else "structured" if external else "title",
+        "source": source,
         "external_value": external,
         "mapping_version": SENIORITY_MAPPING_VERSION,
         "collector": source_type,
         "value": value.value,
+        # The levels of a title that names a range ("Pl/Sr"); `value` is the lowest one.
+        "range": ",".join(title_range) if source == "title" and title_range else None,
     }
 
 
