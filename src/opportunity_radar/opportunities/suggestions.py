@@ -53,6 +53,9 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
+from opportunity_radar.matching import currency
+from opportunity_radar.matching.models import CurrentAssessmentModel
+from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.domain import RoleFamily, Seniority, WorkMode
 from opportunity_radar.opportunities.models import SCHEMA, OpportunityModel
 from opportunity_radar.opportunities.role_family import ROLE_FAMILY_VERSION
@@ -86,6 +89,11 @@ class SuggestibleField(StrEnum):
     ROLE_FAMILY = "role_family"
     SENIORITY = "seniority"
     WORK_MODE = "work_mode"
+
+
+#: Verdicts worth a background model call: a suggestion can only change what the user does
+#: with a posting the active profile already ranks at the top.
+SUGGESTION_VERDICTS = ("HIGH_PRIORITY", "RECOMMENDED")
 
 
 class SuggestionStatus(StrEnum):
@@ -260,7 +268,9 @@ def candidates_needing_suggestion(
     """Return pending rows in stable `(created_at, id)` order.
 
     Eligibility stays in SQL so resolved rows cannot consume the page before newer
-    candidates. `after` is the last row from the prior page for keyset pagination.
+    candidates: a field still `UNKNOWN` without a suggestion for this version, and a
+    current assessment under the active profile with a top verdict (none, with no active
+    profile). `after` is the last row from the prior page for keyset pagination.
     `over_fetch_factor` remains accepted for callers using the previous signature.
     """
     del over_fetch_factor
@@ -290,7 +300,13 @@ def candidates_needing_suggestion(
             ),
         ),
     )
-    query = select(OpportunityModel).where(or_(*pending_fields))
+    pointer = CurrentAssessmentModel.__table__
+    has_top_assessment = exists().where(
+        pointer.c.opportunity_id == OpportunityModel.id,
+        pointer.c.verdict.in_(SUGGESTION_VERDICTS),
+        currency.is_current_assessment(pointer, rules_version=RULES_VERSION),
+    )
+    query = select(OpportunityModel).where(or_(*pending_fields), has_top_assessment)
     rows: list[OpportunityModel] = []
     cursor = after
     page_size = max(limit, 100)
@@ -782,6 +798,7 @@ __all__ = [
     "SuggestionNotFoundError",
     "SuggestionOutcome",
     "SuggestionStatus",
+    "SUGGESTION_VERDICTS",
     "accept_suggestion",
     "candidates_needing_suggestion",
     "load_classification_prompt",

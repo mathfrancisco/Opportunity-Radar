@@ -363,7 +363,8 @@ def suggest_fields_pending(
     rules left `UNKNOWN` (card F20-23). Off by default (`worker_suggest_enabled`): the
     card requires measuring precision on a labelled sample before this job ever writes a
     suggestion outside a controlled run. Never touches the canonical column itself — an
-    operator accepts or rejects each suggestion through the HTTP endpoints.
+    operator accepts or rejects each suggestion through the HTTP endpoints. Only postings
+    with a top verdict under the active profile are taken (`candidates_needing_suggestion`).
     """
     if router is None:
         return
@@ -374,6 +375,24 @@ def suggest_fields_pending(
             prompt = load_classification_prompt()
             route = router.route(AITask.JOB_CLASSIFICATION)
             route_hash = hashlib.sha256("\0".join(route.chain).encode()).hexdigest()
+            # One read of the day windows decides the pass: with no balance on any model of
+            # the chain every candidate would only leave an operation row and a defer.
+            guard = router.quota_guard
+            if guard is not None:
+                estimated = route.budget.max_input_tokens + route.budget.max_output_tokens
+                if not any(
+                    guard.has_day_balance(
+                        model,
+                        estimated_tokens=estimated,
+                        ceiling_requests=worker_requests_ceiling,
+                    )
+                    for model in route.chain
+                ):
+                    logger.info(
+                        "suggest fields skipped: no day quota on any route model",
+                        extra={"job": "suggest-fields", "reason": "no_quota"},
+                    )
+                    return
             candidates = candidates_needing_suggestion(
                 session,
                 limit=batch_size,
