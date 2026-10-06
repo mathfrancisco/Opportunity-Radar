@@ -251,7 +251,7 @@ def test_seniority_classification_records_precedence_and_conflicts() -> None:
 def test_seniority_v2_covers_portuguese_titles_and_abbreviations() -> None:
     from opportunity_radar.opportunities.domain import SENIORITY_MAPPING_VERSION
 
-    assert SENIORITY_MAPPING_VERSION == "seniority-v3"
+    assert SENIORITY_MAPPING_VERSION == "seniority-v5"
     assert infer_seniority("Engenheiro Especialista", None, {}) is Seniority.STAFF
     assert infer_seniority("Principal Engineer", None, {}) is Seniority.STAFF
     assert infer_seniority("Desenvolvedor Pl", None, {}) is Seniority.MID
@@ -277,14 +277,19 @@ def test_seniority_v2_covers_portuguese_titles_and_abbreviations() -> None:
         ("Vaga de Estagiaria de Dados", Seniority.INTERN),  # no accent
         ("Estagiários de Engenharia", Seniority.INTERN),  # plural
         ("Programa Trainee 2027", Seniority.INTERN),
-        ("Software Engineer, Entry Level", Seniority.INTERN),
-        ("Software Engineer - Entry-Level", Seniority.INTERN),
-        ("New Grad Software Engineer", Seniority.INTERN),
-        ("New Graduate Software Engineer", Seniority.INTERN),
+        # seniority-v5 (F52-02, SPEC 52 Q3): a first job, not an internship.
+        ("Software Engineer, Entry Level", Seniority.JUNIOR),
+        ("Software Engineer - Entry-Level", Seniority.JUNIOR),
+        ("New Grad Software Engineer", Seniority.JUNIOR),
+        ("New Graduate Software Engineer", Seniority.JUNIOR),
         ("Apprentice Software Engineer", Seniority.INTERN),
         ("Vaga de Aprendiz Administrativo", Seniority.INTERN),
         ("Early Career Software Engineer", Seniority.JUNIOR),
         ("Graduate Software Engineer", Seniority.JUNIOR),
+        # An internship named with a junior word is still an internship.
+        ("Business Development Associate Intern", Seniority.INTERN),
+        ("Graduate Trainee, Data", Seniority.INTERN),
+        ("Junior Software Engineer Internship", Seniority.INTERN),
     ],
 )
 def test_seniority_v3_covers_entry_program_keywords(title: str, expected: Seniority) -> None:
@@ -325,6 +330,101 @@ def test_seniority_v3_does_not_regress_false_positives(title: str) -> None:
 )
 def test_seniority_v3_does_not_regress_existing_terms(title: str, expected: Seniority) -> None:
     assert infer_seniority(title, None, {}) is expected
+
+
+# Card F52-02: one case per row of the P2 table of docs/52-spec-aderencia-ao-nivel.md.
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("Dev. Back-end Node.js Sênior | Pix [Remoto]", Seniority.SENIOR),
+        ("Desenvolvedor(a) Backend Sênior - Node.js", Seniority.SENIOR),
+        ("Analista de Dados Júnior", Seniority.JUNIOR),
+        ("Senior Staff Engineer - Enterprise Messaging", Seniority.STAFF),
+        ("Software Engineer I", Seniority.JUNIOR),
+        ("Software Engineer II", Seniority.MID),
+        ("Software Engineer III", Seniority.SENIOR),
+        ("Software Architect (AWS, NodeJS)", Seniority.SENIOR),
+        ("Head of Engineering", Seniority.DIRECTOR),
+        ("Tech Lead | Engenheiro(a) Backend Especialista", Seniority.LEAD),
+        ("Associate Software Engineer", Seniority.JUNIOR),
+        ("Systems Software Engineer - New College Grad 2026", Seniority.JUNIOR),
+        ("Desenvolvedor Pl/Sr", Seniority.MID),
+        ("Entry Level Developer", Seniority.JUNIOR),
+    ],
+)
+def test_seniority_v5_classifies_the_titles_of_the_spec_52_table(
+    title: str, expected: Seniority
+) -> None:
+    assert infer_seniority(title, None, {}) is expected
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        # Two levels in one compound title: the higher one.
+        ("Sr. Staff Software Engineer", Seniority.STAFF),
+        ("Finance Data Engineer (Senior Manager)", Seniority.MANAGER),
+        ("Senior Director of Engineering", Seniority.DIRECTOR),
+        ("Associate Director, Data", Seniority.DIRECTOR),
+        # An inverted title is not a range from senior to manager.
+        ("Manager, Senior Data Engineer", Seniority.MANAGER),
+        # A level word beats a numeral and a role that only implies a level.
+        ("Senior Software Engineer II", Seniority.SENIOR),
+        ("Principal Architect", Seniority.STAFF),
+        ("Estágio em Engenharia de Dados", Seniority.INTERN),
+        ("Java Developer Semi Senior", Seniority.MID),
+        ("Engineer I - Payments", Seniority.JUNIOR),
+    ],
+)
+def test_seniority_v5_takes_the_highest_named_level(title: str, expected: Seniority) -> None:
+    assert infer_seniority(title, None, {}) is expected
+
+
+@pytest.mark.parametrize(
+    ("title", "expected", "levels"),
+    [
+        ("Desenvolvedor Pl/Sr", Seniority.MID, "MID,SENIOR"),
+        ("Desenvolvedor(a) .NET Core Senior/Pleno(a)", Seniority.MID, "MID,SENIOR"),
+        ("Desenvolvedor(a) COBOL | Pleno a Sênior", Seniority.MID, "MID,SENIOR"),
+        ("Dev Java (Junior, Pleno e Sênior)", Seniority.JUNIOR, "JUNIOR,MID,SENIOR"),
+        ("Junior to Senior Fullstack Engineer", Seniority.JUNIOR, "JUNIOR,SENIOR"),
+        ("Software Engineer (Mid-Level, Senior or Staff)", Seniority.MID, "MID,SENIOR,STAFF"),
+        ("Senior/Staff/Principal Engineer", Seniority.SENIOR, "SENIOR,STAFF"),
+        ("Engineer II/III, Automation", Seniority.MID, "MID,SENIOR"),
+    ],
+)
+def test_seniority_v5_keeps_the_lowest_level_of_a_range_and_cites_the_range(
+    title: str, expected: Seniority, levels: str
+) -> None:
+    # SPEC 52, Q1: the lowest level is stored and the range goes to the evidence.
+    value, reason = seniority_classification(title, {})
+
+    assert value is expected
+    assert reason["value"] == expected.value
+    assert reason["range"] == levels
+    assert reason["mapping_version"] == "seniority-v5"
+
+
+def test_seniority_v5_cites_no_range_for_a_single_or_compound_level() -> None:
+    assert seniority_classification("Senior Staff Engineer", {})[1]["range"] is None
+    assert seniority_classification("Junior Engineer", {})[1]["range"] is None
+    assert seniority_classification("Engineer", {})[1]["range"] is None
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Member of Technical Staff, Pre-Training Data",  # a team name, at every level
+        "Oracle PL/SQL Developer",
+        "Solutions Engineer - Middle East",
+        "Account Executive, Mid-Market",
+        "Software Engineer IV",  # numerals above III have no agreed level
+        "Desk Side Engineer 6439365",
+        "AI Engineer",  # "AI" is not the numeral
+    ],
+)
+def test_seniority_v5_does_not_read_a_level_into_lookalikes(title: str) -> None:
+    assert infer_seniority(title, None, {}) is Seniority.UNKNOWN
 
 
 def test_structured_seniority_conflict_keeps_candidate_unknown() -> None:

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from opportunity_radar.acquisition.models import RawItemModel, SourceRunModel
 from opportunity_radar.acquisition.service import COLLECTED_ITEM_V1_KEY
 from opportunity_radar.opportunities.domain import (
+    SENIORITY_MAPPING_VERSION,
     SKILL_TAXONOMY_VERSION,
     CanonicalCandidate,
     CompensationPeriod,
@@ -1336,6 +1337,146 @@ def retag_skills(
         "skipped_occurrences": dict(skipped),
         "skill_rows_before": dict(sorted(rows_before.items())),
         "skill_rows_after": dict(sorted(rows_after.items())),
+    }
+
+
+_SENIORITY_REASON_CODE = "SENIORITY_CLASSIFICATION"
+
+
+def retag_seniority(
+    session: Session,
+    *,
+    rules: bool | frozenset[str] = False,
+    batch_size: int = 500,
+    limit: int | None = None,
+    apply: bool = False,
+) -> dict[str, Any]:
+    """Recompute the seniority of existing opportunities with the current mapping (F52-02).
+
+    The mapping version lives in the evidence, not on the posting, so a new mapping only
+    reaches a posting when it is normalized again. This redoes just the seniority, from the
+    evidence normalization uses: the occurrence last seen, classified by `build_candidate`
+    with the enabled `rules`. A posting whose level changes gets it rewritten and `version`
+    bumped once; the worker then evaluates it again. The seniority evidence (the
+    `SENIORITY_CLASSIFICATION` reason of that raw item's normalization result) is rewritten
+    whenever it differs, level changed or not, so the mapping version it names is the one
+    that produced the value; that alone does not bump `version`. A second run reports zero
+    changes. Each batch is its own transaction; without `apply` every batch rolls back.
+    """
+    if batch_size < 1:
+        raise ValueError("batch size must be at least 1")
+    repository = OpportunityRepository(session)
+    query = select(OpportunityModel.id).order_by(OpportunityModel.id)
+    if limit is not None:
+        query = query.limit(limit)
+    opportunity_ids = list(session.scalars(query).all())
+
+    skipped = Counter[str]()
+    before = Counter[str]()
+    after = Counter[str]()
+    transitions = Counter[str]()
+    examples: list[dict[str, Any]] = []
+    changed = evidence_rewritten = 0
+    for start in range(0, len(opportunity_ids), batch_size):
+        chunk = opportunity_ids[start : start + batch_size]
+        try:
+            for opportunity in session.scalars(
+                select(OpportunityModel)
+                .where(OpportunityModel.id.in_(chunk))
+                .order_by(OpportunityModel.id)
+            ).all():
+                occurrence = session.scalar(
+                    select(SourceOccurrenceModel)
+                    .where(SourceOccurrenceModel.opportunity_id == opportunity.id)
+                    .order_by(SourceOccurrenceModel.last_seen_at.desc())
+                    .limit(1)
+                )
+                evidence = (
+                    repository.raw_item_evidence(occurrence.raw_item_id) if occurrence else None
+                )
+                if occurrence is None or evidence is None:
+                    skipped["no_evidence"] += 1
+                    continue
+                try:
+                    normalization_input = _normalization_input(evidence)
+                    candidate = build_candidate(normalization_input, content_rules=rules)
+                except (NormalizationError, TypeError, ValueError):
+                    skipped["unreadable_evidence"] += 1
+                    continue
+                reason = next(
+                    (
+                        dict(item)
+                        for item in candidate.classification_reasons
+                        if item.get("code") == _SENIORITY_REASON_CODE
+                    ),
+                    None,
+                )
+                if reason is None:
+                    _, reason = seniority_classification(
+                        normalization_input.title,
+                        normalization_input.metadata,
+                        source_type=normalization_input.source_type,
+                    )
+                old, new = opportunity.seniority, candidate.seniority.value
+                before[old] += 1
+                after[new] += 1
+                if old != new:
+                    changed += 1
+                    transitions[f"{old}->{new}"] += 1
+                    if len(examples) < _CONTENT_EXAMPLE_LIMIT:
+                        examples.append(
+                            {
+                                "id": str(opportunity.id),
+                                "title": opportunity.canonical_title,
+                                "old": old,
+                                "new": new,
+                                "range": reason.get("range"),
+                            }
+                        )
+                    opportunity.seniority = new
+                    opportunity.version += 1
+                result = repository.normalization_result(
+                    occurrence.raw_item_id, NORMALIZER_VERSION
+                )
+                if result is None:
+                    continue
+                stored = [
+                    item
+                    for item in result.reasons
+                    if isinstance(item, Mapping) and item.get("code") == _SENIORITY_REASON_CODE
+                ]
+                if stored != [reason]:
+                    # In place: the seniority reason keeps its position among the others.
+                    kept: list[Any] = []
+                    for item in result.reasons:
+                        if isinstance(item, Mapping) and item.get("code") == _SENIORITY_REASON_CODE:
+                            if reason not in kept:
+                                kept.append(reason)
+                        else:
+                            kept.append(item)
+                    result.reasons = kept if reason in kept else [*kept, reason]
+                    evidence_rewritten += 1
+            if apply:
+                session.commit()
+            else:
+                session.rollback()
+        except Exception:
+            session.rollback()
+            raise
+
+    return {
+        "mode": "apply" if apply else "dry-run",
+        "mapping_version": SENIORITY_MAPPING_VERSION,
+        "rules": "all" if rules is True else sorted(rules or ()),
+        "selected": len(opportunity_ids),
+        "skipped": dict(skipped),
+        "postings_changed": changed,
+        "version_bumps": changed,
+        "evidence_rewritten": evidence_rewritten,
+        "transitions": dict(sorted(transitions.items())),
+        "distribution_before": dict(sorted(before.items())),
+        "distribution_after": dict(sorted(after.items())),
+        "examples": examples,
     }
 
 
