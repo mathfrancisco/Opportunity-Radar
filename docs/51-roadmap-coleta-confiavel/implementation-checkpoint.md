@@ -1,5 +1,14 @@
 # Checkpoint de implementação — 5 de outubro de 2026
 
+> Atualização de 2026-10-06 (segunda sessão, PRs #44 a #46): na SPEC 51 só o F51-04 avançou.
+> O PR #45 traz o teste do AC02: dois workers, cada um com a própria sessão, disputam a
+> última unidade do orçamento de um host; exatamente um reserva e o consumo persistido fica
+> igual ao teto. `reserve_host_request` já era um UPSERT condicional e passou sem mudança. A
+> suíte completa rodou num banco novo `_test`: `1914 passed, 17 skipped`. Os outros critérios
+> do F51-04 não foram conferidos contra os testes existentes. F51-05 a F51-10, F51-12, F51-13
+> e F51-17 não foram tocados; a janela de sete dias continua fechada e as propostas de rótulo
+> continuam sem `revisado_por`. Os PRs #44 (`skills-v5`) e #46 (`matching-v5`) são da SPEC 52.
+
 > Atualização de 2026-10-06 (sessão das SPECs 51 e 52, PRs #40 a #42): na SPEC 51 só o
 > F51-11 avançou. O PR #41 trouxe a amostra de 368 vagas, a proposta de rótulos do modelo
 > (não é rótulo) e o leitor do gold que só conta casos com `revisado_por`; o comando do portão

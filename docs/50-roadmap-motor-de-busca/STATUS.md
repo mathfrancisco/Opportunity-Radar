@@ -184,6 +184,11 @@ O que não cabe mais na SPEC 50 continua em duas specs:
   [SPEC 52](../52-spec-aderencia-ao-nivel.md), F52-02.
 - Pendências que continuam sem card: a fila `REVIEW_REQUIRED` e as vagas sem skill
   (`skills-v5`). Não foram tratadas nesta sessão.
+- Segunda sessão de 2026-10-06 (PRs #44 a #46): `skills-v5` (`linux`, `c++`, `etl`) mesclado
+  e aplicado na base de dev; `matching-v5` (nível `UNKNOWN` para em `WATCHLIST`) mesclado, com
+  a reavaliação do catálogo em curso; os 8 testes de fila foram reproduzidos e corrigidos. A
+  fila `REVIEW_REQUIRED` continua sem tratamento. Detalhes na
+  [SPEC 52](../52-spec-aderencia-ao-nivel.md), §4 (F52-05) e §5.
 
 ## Stack de desenvolvimento `opportunity-radar-dev`
 

@@ -46,7 +46,7 @@ código mesclado em `main` com critério ainda aberto.
 | F51-01 | Parcial | Três execuções completas por fonte e contagem de descrição útil: vêm da janela de sete dias, que não foi aberta |
 | F51-02 | Parcial | Recall com amostra humana; observação da janela de sete dias |
 | F51-03 | Aberto | Aprovação do dono por fonte Workday e resposta real por fonte |
-| F51-04 | Parcial | Teste de dois workers disputando a última unidade do orçamento |
+| F51-04 | Parcial | AC02 tem teste (PR #45, `test_host_budget_reservation_integration.py`). Falta conferir se AC01, AC03, AC04, AC05a e AC05b têm o teste que o card propõe |
 | F51-05 | Não iniciado | Script de piloto e backfill com dry-run; piloto nos 5 tenants (autorizado em stack descartável) |
 | F51-06 | Parcial | AC03 (disputa de duas execuções) e AC04 (integração em banco) |
 | F51-07 | Parcial | Tabela e métodos de claim existem; falta ligar ao serviço e testar |
@@ -59,6 +59,9 @@ código mesclado em `main` com critério ainda aberto.
 | F51-14 a F51-16 | **Adiados** | Decisão do dono em 2026-10-06, como a SPEC 51 §9 permite: sem fonte prioritária aprovada nem evidência de necessidade. Não bloqueiam o núcleo |
 | F51-17 | Parcial | Benchmark pareado, latência fria (cinco reinícios do `postgres` em stack descartável) e gold no formato novo com revisão do dono |
 | F51-18 | Parcial | Validador pronto; falta montar o pacote e abrir a janela de sete dias |
+
+Atualização de 2026-10-06 (segunda sessão): só o F51-04 avançou, com o teste do AC02. Os
+demais cards de código (F51-05 a F51-10, F51-12, F51-13, F51-17) não foram tocados.
 
 **Janela de sete dias: não aberta.** A regra é abrir no merge do último PR de código da SPEC
 51. Em 2026-10-06 só o PR #41 (leitor do gold) tocou código desta SPEC; F51-05, F51-07,
