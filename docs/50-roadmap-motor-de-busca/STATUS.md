@@ -2,8 +2,9 @@
 
 - **Atualizado em:** 2026-10-05
 - **Branch:** a SPEC 50 entrou em `main` pelo PR #26, mesclado em 2026-10-05 (`46ebbed`). A
-  continuação está no PR #31 (`f50-fontes-e-inhire`, base `main`); ver "PR #31" abaixo. Nada
-  foi aplicado na stack `spec46full`.
+  continuação está no PR #31 (`f50-fontes-e-inhire`, base `main`); ver "PR #31" abaixo. O que
+  veio depois está em "PRs #32 a #37 e SPECs 51 e 52". Nada foi aplicado na stack
+  `spec46full`.
 - **Verificação:** suíte completa do backend na branch `f50-pendencias`, com integração em
   banco `_test` de um projeto Compose descartável, migrado até `20261005_0064`:
   `1776 passed, 16 skipped`; `ruff check .` e `mypy` sem erros. Os testes do frontend não
@@ -136,6 +137,37 @@ continua `20261005_0064`.
 
 Fontes criadas, lote do inHire e pendências:
 [f50-fontes-2026-10-05](../pesquisas/f50-fontes-2026-10-05.md).
+
+## PRs #32 a #37 e SPECs 51 e 52 (2026-10-05 e 2026-10-06)
+
+| PR | Branch | Estado | Conteúdo |
+|---|---|---|---|
+| #32 | `f50-pendencias` | Mesclado em `main` (`2e46f69`) | Link e releitura do inHire, `scripts/retag_skills.py`, pendências da SPEC 50. |
+| #33 | `f50-tokenharbor` | Mesclado em `main` (`3e4aed8`) | Modelos gratuitos da Token Harbor como reserva do Groq. |
+| #34 | `f50-inhire-ceiling` | Fechado, contido no #37 | Teto do host do inHire de 300 para 1.200 requisições por hora; padrão de 200 para 1.000. |
+| #35 | `f52-spec-aderencia-ao-nivel` | Fechado, contido no #37 | Texto da SPEC 52. |
+| #36 | `f50-inhire-lote-final` | Fechado, contido no #37 | Resultado final do lote do inHire em [f50-fontes-2026-10-05](../pesquisas/f50-fontes-2026-10-05.md). |
+| #37 | `feat/f51-coleta-confiavel` | Aberto, base `main` | Junta #34, #35, #36 e o trabalho em andamento da SPEC 51. |
+
+O PR #37 leva o esquema do banco de `20261005_0064` para `20261005_0067` (telemetria de
+operações de IA, orçamento do Workday por host físico e contadores de detalhe, claims de
+execução por fonte).
+
+Verificação da branch do PR #37 em 2026-10-06, num projeto Compose descartável com banco
+`_test`: `ruff check .` e `mypy` sem erros; `alembic upgrade head`, `downgrade base` e
+`upgrade head` concluídos; suíte completa do backend com integração: `1843 passed, 10
+skipped`. Os testes do frontend não rodaram localmente.
+
+O que não cabe mais na SPEC 50 continua em duas specs:
+
+- [SPEC 51 — coleta confiável e busca verificável](../51-spec-coleta-confiavel-e-busca.md):
+  detalhe do Workday (pendência do F50-03), gold e ligação das regras de conteúdo (F50-01 e
+  F50-02), worker, telemetria e fila de IA. Cards e ponto em que a implementação parou em
+  [roadmap 51](../51-roadmap-coleta-confiavel/README.md) e no
+  [checkpoint](../51-roadmap-coleta-confiavel/implementation-checkpoint.md).
+- [SPEC 52 — aderência ao nível](../52-spec-aderencia-ao-nivel.md): classificador de
+  senioridade, peso do nível na ordenação e oferta júnior/pleno remota. Proposta; nenhum card
+  implementado.
 
 ## Stack de desenvolvimento `opportunity-radar-dev`
 

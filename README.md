@@ -147,7 +147,8 @@ Segredos ficam só no `.env` local (ignorado pelo Git e pelo Docker); somente AP
 - [SPEC 45 — descoberta de startups](docs/45-spec-descoberta-startups.md).
 - [SPEC 48 — mais vagas úteis](docs/48-spec-mais-vagas.md): funil medido na stack real, north-star, problemas priorizados e cards F48 (planejada; nada declarado entregue).
 - [SPEC 51 — coleta confiável e busca verificável](docs/51-spec-coleta-confiavel-e-busca.md): melhoria planejada de conteúdo, workers, extração, IA consultiva e evidências operacionais.
-- [Roadmap 51](docs/51-roadmap-coleta-confiavel/README.md): 18 cards detalhados da SPEC 51, todos planejados.
+- [Roadmap 51](docs/51-roadmap-coleta-confiavel/README.md): 18 cards detalhados da SPEC 51; nenhum concluído, implementação parcial registrada no [checkpoint](docs/51-roadmap-coleta-confiavel/implementation-checkpoint.md).
+- [SPEC 52 — aderência ao nível](docs/52-spec-aderencia-ao-nivel.md): classificador de senioridade, peso do nível na ordenação e oferta júnior/pleno remota (cards F52; proposta, nada implementado).
 - [SPEC 41 — Tavily](docs/41-spec-tavily.md) e [cards da fase 19](docs/42-roadmap-tavily/README.md).
 - [SPEC 39 — varredura produtiva](docs/39-spec-varredura-produtiva.md) e [cards da fase 18](docs/40-roadmap-varredura-produtiva/README.md).
 - [SPEC 37 — busca](docs/37-spec-busca.md), [roadmap de IA e busca](docs/38-roadmap-ia-e-busca.md) (fases 16 e 17).

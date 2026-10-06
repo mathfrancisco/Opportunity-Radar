@@ -1,5 +1,18 @@
 # Checkpoint de implementação — 5 de outubro de 2026
 
+> Atualização de 2026-10-06 (integração no PR #37): a branch recebeu `main` (PRs #32 e #33) e
+> os PRs #34, #35 e #36. Pela primeira vez rodaram os checks globais, num projeto Compose
+> descartável com banco `_test`: `ruff check .` e `mypy` sem erros; migrações `0065` a `0067`
+> em `upgrade head`, `downgrade base`, `upgrade head`; suíte completa com integração,
+> `1843 passed, 10 skipped`. Para chegar a isso foram corrigidos: o `downgrade` da `0066`
+> (precedência de `||` sobre `->>`, que falhava em qualquer banco); a sonda de orçamento do
+> worker em `analyze_pending`, que tinha sido removida e fazia um teto esgotado gravar
+> `AI_FAILED` (contratos F20-24 e F48-02); o manifesto de backup, sem as tabelas
+> `ai_operation_record` e `ai_suggestion_defer`; a tentativa em andamento num modelo da Token
+> Harbor, gravada como `groq`; e testes que ainda esperavam a chave antiga de orçamento do
+> Workday ou tinham dados de preparação errados. Nenhum card foi continuado. O estado por
+> card continua o descrito abaixo: nenhum concluído.
+
 > Atualização Terra: três tentativas Luna parciais falharam por capacidade e o usuário
 > autorizou fallback Terra. Esta fatia corrigiu o retorno de `measure()` e registrou F51-17
 > warm (10 repetições/query, bruto, p50/p95); cold fica N/D sem cinco resets reais de cache

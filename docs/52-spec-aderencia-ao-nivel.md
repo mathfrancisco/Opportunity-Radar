@@ -4,9 +4,10 @@
 - **Estado:** proposta. Nenhum card implementado.
 - **Origem:** relato do dono: a busca devolve vagas muito acima do nível dele (júnior/pleno,
   remoto). Medições na stack `opportunity-radar-dev` em 2026-10-05.
-- **Relação com a SPEC 51** (em elaboração na branch `feat/f51-coleta-confiavel`): a SPEC 51
-  trata do detalhe do Workday, da concorrência do worker por host, do gold das regras de
-  conteúdo e da fila de IA. Esta spec não repete esses cards; o §5 diz onde cada assunto mora.
+- **Relação com a [SPEC 51](51-spec-coleta-confiavel-e-busca.md)** (implementação parcial; ver
+  o [roadmap 51](51-roadmap-coleta-confiavel/README.md)): a SPEC 51 trata do detalhe do
+  Workday, da concorrência do worker por host, do gold das regras de conteúdo e da fila de IA.
+  Esta spec não repete esses cards; o §5 diz onde cada assunto mora.
 
 ## 1. Objetivo
 
@@ -227,10 +228,10 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
 
 | Assunto | Card da SPEC 51 |
 |---|---|
-| Descrição das vagas do Workday (40% do catálogo sem descrição) | F51-03, F51-04, F51-05 |
-| Worker coletando hosts diferentes em paralelo | F51-08 |
-| Gold e ligação das regras de conteúdo | F51-11 |
-| Fila e cota de IA, com dois provedores | F51-10, F51-12 |
+| Descrição das vagas do Workday (40% do catálogo sem descrição) | [F51-03](51-roadmap-coleta-confiavel/cards/f51-03-workday-termos-e-contratos-reais.md), [F51-04](51-roadmap-coleta-confiavel/cards/f51-04-workday-cooldown-orcamento-counters.md), [F51-05](51-roadmap-coleta-confiavel/cards/f51-05-workday-piloto-backfill.md) |
+| Worker coletando hosts diferentes em paralelo | [F51-08](51-roadmap-coleta-confiavel/cards/f51-08-worker-concorrencia-host-orcamento.md) |
+| Gold e ligação das regras de conteúdo | [F51-11](51-roadmap-coleta-confiavel/cards/f51-11-gold-regras-v4-reclassificacao.md) |
+| Fila e cota de IA, com dois provedores | [F51-10](51-roadmap-coleta-confiavel/cards/f51-10-fila-ia-justa-retry.md), [F51-12](51-roadmap-coleta-confiavel/cards/f51-12-ia-seletiva-cache-quotas.md) |
 
 Dois itens não estão em nenhuma das duas specs e ficam registrados aqui como pendência: a
 fila de 5.219 normalizações em `REVIEW_REQUIRED` e as 2.543 vagas sem nenhuma skill depois do

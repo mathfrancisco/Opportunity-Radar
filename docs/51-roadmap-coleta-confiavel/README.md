@@ -1,8 +1,9 @@
 # Roadmap 51 — coleta confiável e busca verificável
 
-**Status geral: Planejado.** Os cards abaixo decompõem a
-[SPEC 51](../51-spec-coleta-confiavel-e-busca.md). Nenhum card declara código, configuração ou
-teste já executado nesta fase.
+**Status geral: em implementação, nenhum card concluído.** Os cards abaixo decompõem a
+[SPEC 51](../51-spec-coleta-confiavel-e-busca.md). O texto de cada card continua descrevendo o
+plano; o que já existe em código e o que falta está no
+[checkpoint de implementação](implementation-checkpoint.md).
 
 | Bloco | Cards | Resultado de saída |
 | --- | --- | --- |
