@@ -139,7 +139,7 @@ class Settings(BaseSettings):
     # F48-08: stop extracting for a host after this many consecutive failures (0 = off).
     tavily_extract_host_failure_threshold: int = 5
     # F48-08: request ceiling per source type for a new host budget row, `type=ceiling`
-    # comma separated. Types not listed use the scheduler default (200 per hour).
+    # comma separated. Types not listed use the scheduler default (1000 per hour).
     host_request_ceilings: str = "workday=500,hacker_news=500,inhire=1200"
 
     @property
