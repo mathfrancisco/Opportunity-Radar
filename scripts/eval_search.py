@@ -13,14 +13,22 @@ ranking) without depending on the removed production code path, purely for the
 comparison; it is not live behavior.
 
 Shared with F16-10 (search by meaning), which will add its own `--mode semantic`.
+
+Card F52-09 adds level cases: a query paired with the seniorities that must not appear in
+the top K ("júnior remoto" must not return a `SENIOR` or higher posting there). They are
+a different kind of case from the relevant-set ones above (they need no hand-labelled
+vagas), so `LEVEL_CASES` below ships with the code, and an entry in the reference file may
+add more with a `forbidden_seniorities` list. Level cases never enter recall/nDCG.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
 
@@ -37,6 +45,24 @@ from opportunity_radar.platform.database import create_database_engine  # noqa: 
 from scripts.search_reference import DEFAULT_PATH, resolve  # noqa: E402
 
 K = 10
+
+#: Levels above what a junior/mid search wants (the profile's `accepted_seniorities` stop
+#: at `MID`). `UNKNOWN` is not here: an unclassified posting is not a level violation.
+SENIOR_OR_HIGHER: tuple[str, ...] = ("SENIOR", "STAFF", "LEAD", "MANAGER", "DIRECTOR")
+
+
+@dataclass(frozen=True)
+class LevelCase:
+    query: str
+    forbidden_seniorities: tuple[str, ...] = SENIOR_OR_HIGHER
+    top_k: int = K
+
+
+LEVEL_CASES: tuple[LevelCase, ...] = (
+    LevelCase("júnior remoto"),
+    LevelCase("desenvolvedor junior"),
+    LevelCase("pleno remoto"),
+)
 
 
 def _like_ranked_ids(session: Session, query: str, limit: int = K) -> list[UUID]:
@@ -81,6 +107,55 @@ def _ndcg_at_k(ranked: list[UUID], relevant: set[UUID]) -> float | None:
     return dcg / idcg if idcg else None
 
 
+def reference_level_cases(path: Path) -> tuple[LevelCase, ...]:
+    """Level cases an operator added to the reference file (`forbidden_seniorities`)."""
+    if not path.exists():
+        return ()
+    with path.open("r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    cases: list[LevelCase] = []
+    for entry in data.get("queries", []) if isinstance(data, dict) else []:
+        forbidden = entry.get("forbidden_seniorities")
+        query = str(entry.get("query", "")).strip()
+        if query and forbidden:
+            cases.append(LevelCase(query, tuple(str(item) for item in forbidden)))
+    return tuple(cases)
+
+
+def evaluate_level_cases(
+    session: Session, mode: str, cases: tuple[LevelCase, ...]
+) -> list[dict[str, object]]:
+    """Per case: how many results came back and which forbidden levels sit in the top K."""
+    ranker = _fulltext_ranked_ids if mode == "fulltext" else _like_ranked_ids
+    results: list[dict[str, object]] = []
+    for case in cases:
+        ranked = ranker(session, case.query, case.top_k)
+        levels: dict[UUID, str] = {
+            row[0]: row[1]
+            for row in session.execute(
+                select(OpportunityModel.id, OpportunityModel.seniority).where(
+                    OpportunityModel.id.in_(ranked)
+                )
+            )
+        }
+        violations = [
+            {"position": position + 1, "opportunity_id": str(item), "seniority": levels[item]}
+            for position, item in enumerate(ranked)
+            if levels.get(item, "") in case.forbidden_seniorities
+        ]
+        results.append(
+            {
+                "query": case.query,
+                "top_k": case.top_k,
+                "forbidden_seniorities": list(case.forbidden_seniorities),
+                "returned": len(ranked),
+                "violations": violations,
+                "passed": not violations,
+            }
+        )
+    return results
+
+
 def evaluate(session: Session, mode: str, path: Path) -> dict[str, object]:
     ranker = _fulltext_ranked_ids if mode == "fulltext" else _like_ranked_ids
     per_query: list[dict[str, object]] = []
@@ -113,6 +188,9 @@ def evaluate(session: Session, mode: str, path: Path) -> dict[str, object]:
         "average_recall_at_10": average_recall,
         "average_ndcg_at_10": average_ndcg,
         "per_query": per_query,
+        "level_cases": evaluate_level_cases(
+            session, mode, LEVEL_CASES + reference_level_cases(path)
+        ),
     }
 
 
@@ -125,6 +203,9 @@ def _print_report(report: dict[str, object]) -> None:
             f"  - {row['query']!r}: relevant={row['relevant_count']} "
             f"recall@10={row['recall_at_10']} nDCG@10={row['ndcg_at_10']}"
         )
+    for case in report["level_cases"]:  # type: ignore[attr-defined]
+        verdict = "ok" if case["passed"] else f"FAIL {case['violations']}"
+        print(f"  - level {case['query']!r}: returned={case['returned']} {verdict}")
 
 
 def main() -> int:
