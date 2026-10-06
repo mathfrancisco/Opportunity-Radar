@@ -27,8 +27,9 @@ from opportunity_radar.platform.config import Settings
 _CASES = prompts_root() / "opportunity_analysis" / "eval" / "cases"
 _REFS = ("evidence_refs", "skill_evidence_refs")
 
-#: `analysis_key` of the request below under v1, captured before v3 existed.
-_V1_KEY = "b0143c24febb98ba4ab581d2a3178017d0dc0b71116d92b7290f91e42563c524"
+#: `analysis_key` of the request below under v1, captured before v3 existed and
+#: recaptured when `analysis-key-v5` dropped the rules and taxonomy versions (F51-12).
+_V1_KEY = "de9d26681ddc95738d13e4ee1c66cc2db59251cb83d29c1c27f28dcf60e15807"
 
 
 def _settings(prompt: str) -> Settings:

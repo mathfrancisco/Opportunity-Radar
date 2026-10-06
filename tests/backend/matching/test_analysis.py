@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 from decimal import Decimal
 from uuid import UUID
 
@@ -14,6 +15,7 @@ from opportunity_radar.matching.analysis import (
     AnalysisStatus,
     NullAnalysisAdapter,
     analysis_cache_key,
+    analysis_key,
     parse_analysis,
     reusable_payload_digest,
 )
@@ -200,6 +202,69 @@ def test_cache_key_ignores_the_deterministic_outcome() -> None:
     other_verdict = _request(verdict=Verdict.HIGH_PRIORITY, score=Decimal("91"))
 
     assert analysis_cache_key(other_verdict, model_id="m", prompt_version="v1") == baseline
+
+
+def _identity_key(
+    *,
+    verdict: Verdict = Verdict.RECOMMENDED,
+    rules_version: str = "matching-v1",
+    taxonomy_version: str = "skills-v1",
+    description: str = "Build APIs in Python.",
+    profile_version_id: UUID = _PROFILE_VERSION_ID,
+    prompt_version: str = "v1",
+    model_id: str = "m",
+    route: tuple[str, ...] = ("m",),
+) -> str:
+    """The key the adapters build: the payload carries content, verdict and the versions."""
+    request = _request(
+        verdict=verdict, rules_version=rules_version, taxonomy_version=taxonomy_version
+    )
+    payload = {
+        "deterministic_result": {
+            "eligibility": request.eligibility.value,
+            "verdict": request.verdict.value,
+            "score": str(request.score),
+            "rules_version": rules_version,
+            "taxonomy_version": taxonomy_version,
+        },
+        "posting": {"description": description},
+    }
+    return analysis_key(
+        replace(request, profile_version_id=profile_version_id),
+        model_id=model_id,
+        prompt_version=prompt_version,
+        schema_version="analysis-v1",
+        prompt_digest="digest",
+        payload_hash=reusable_payload_digest(payload),
+        options={"provider": "groq", "chain": list(route)},
+    )
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        {"description": "Build APIs in Go."},
+        {"profile_version_id": UUID("33333333-3333-3333-3333-333333333333")},
+        {"prompt_version": "v2"},
+        {"model_id": "other-model"},
+        {"route": ("m", "fallback")},
+        {"verdict": Verdict.HIGH_PRIORITY},
+    ],
+)
+def test_analysis_cache_key_covers_content_profile_prompt_model_route(
+    changed: dict[str, object],
+) -> None:
+    assert _identity_key(**changed) != _identity_key()  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "unchanged",
+    [{"rules_version": "matching-v2"}, {"taxonomy_version": "skills-v2"}],
+)
+def test_analysis_key_survives_a_rules_or_taxonomy_release(
+    unchanged: dict[str, str],
+) -> None:
+    assert _identity_key(**unchanged) == _identity_key()
 
 
 @pytest.mark.parametrize(
