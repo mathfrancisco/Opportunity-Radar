@@ -6,8 +6,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from datetime import date, timedelta
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -94,10 +95,19 @@ def test_second_run_makes_no_detail_request_and_no_new_raw_item() -> None:
         )
         session.add(source)
         session.commit()
+        # A day on which no job is due for the weekly re-read of its detail.
+        due = {UUID(job["jobId"]).int % 7 for job in listing["jobsPage"]}
+        quiet_day = next(
+            day
+            for day in (date(2026, 10, 5) + timedelta(days=offset) for offset in range(7))
+            if day.toordinal() % 7 not in due
+        )
         client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
         service = AcquisitionService(
             session,
-            registry=CollectorRegistry((InhireCollector(client=client, sleeper=no_sleep),)),
+            registry=CollectorRegistry(
+                (InhireCollector(client=client, sleeper=no_sleep, today=lambda: quiet_day),)
+            ),
             repository=AcquisitionRepository(session),
             sleeper=no_sleep,
         )
