@@ -36,6 +36,10 @@ ANALYSIS_VERDICT_PRIORITY = ("HIGH_PRIORITY", "RECOMMENDED", "REVIEW_REQUIRED", 
 # (`companies/models.py`); matching's own `CompanyPriority` enum uppercases it.
 _COMPANY_PRIORITY_RANK = {"high": 3, "normal": 2, "low": 1, "blocked": 0}
 
+# F51-12: a description this short (or missing) gives the model nothing to analyse, so the
+# automatic queue skips it; an explicit request from the posting's page still runs.
+MIN_ANALYSIS_DESCRIPTION_CHARS = 200
+
 
 def _stored_item(item: Any) -> Any:
     return item.as_dict() if isinstance(item, Claim) else item
@@ -463,12 +467,24 @@ class SqlAlchemyMatchingRepository:
             )
             .scalar_subquery()
         )
+        # A closed posting or one with no usable description is not worth a model call.
+        queueable = aliased(OpportunityModel)
+        is_queueable = (
+            select(literal(1))
+            .where(
+                queueable.id == MatchAssessmentModel.opportunity_id,
+                func.length(queueable.description) > MIN_ANALYSIS_DESCRIPTION_CHARS,
+                queueable.lifecycle_status != "CLOSED",
+            )
+            .exists()
+        )
         conditions: tuple[Any, ...] = (
             MatchAssessmentModel.verdict.in_(tuple(eligible_verdicts)),
             ~has_completed,
             ~is_superseded,
             ~in_cooldown,
             attempts < max_attempts,
+            is_queueable,
         )
         if not role_families:
             return conditions
