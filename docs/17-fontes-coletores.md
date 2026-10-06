@@ -205,8 +205,17 @@ ATS brasileiro; revisão de termos em [`pesquisas/termos-inhire.md`](pesquisas/t
   chamadas de detalhe. Teto por execução (`detail_max_requests`) e orçamento do host como no
   Workday: o que passar do limite sai só com a lista, conta em `detail_skipped`, e a execução
   continua bem-sucedida; vaga já guardada com detalhe que não pôde ser atualizada sai como
-  está guardada, nunca com a descrição apagada. Limitação: uma edição só da descrição, sem
-  mudar título, local ou modelo de atuação, não é percebida (a lista não a mostra).
+  está guardada, nunca com a descrição apagada.
+- **Releitura semanal:** uma edição só da descrição não muda nenhum campo da lista. Por isso
+  cada vaga conhecida e sem mudança tem o detalhe relido uma vez a cada 7 dias, no dia que
+  cabe ao seu `jobId` (cerca de um sétimo do board por dia). A releitura só usa o espaço que
+  sobra depois das vagas novas e alteradas, dentro do teto por execução e do orçamento do
+  host. Se o conteúdo relido for igual, o payload e os hashes são os mesmos e não nasce
+  versão. Uma edição leva até 7 dias para aparecer; se a fonte rodar mais de uma vez no dia,
+  a mesma fatia é relida em cada execução.
+- **Dados de contato:** endereços de e-mail e telefones no texto da descrição são trocados
+  por `[email]` e `[telefone]` antes de guardar. Vagas guardadas antes dessa regra ficam
+  como estão até a próxima releitura.
 - **Guardado:** `jobId`, `displayName`, `status`, `workplaceType`, `location`, e do detalhe
   `description` (HTML), `contractType`, `publishedAt`, `lastPublishedAt`. **Descartado, nem no
   `raw_payload`:** `settings.*`, `activeJobBoards`, `jobBoardsData`, `privacyPolicyUrl`,
@@ -215,7 +224,9 @@ ATS brasileiro; revisão de termos em [`pesquisas/termos-inhire.md`](pesquisas/t
 - **Sinais para o normalizador:** `workplaceType` (`Remote`, `Hybrid`, `On-site`) vai em
   `metadata.workplace_type`; `contractType` vai em `metadata.contract_type`, com `CLT` como
   `full-time` e `PJ` como `contract`; valores desconhecidos passam como texto e ficam
-  `UNKNOWN`. Link da vaga: `https://<tenant>.inhire.app/vagas/<jobId>`.
+  `UNKNOWN`. Link da vaga: `https://<tenant>.inhire.app/vagas/<jobId>/vaga`. A página pública
+  fica em branco sem um último trecho no caminho e aceita qualquer texto nele (conferido no
+  navegador em 2026-10-05, tenant `gx2`); o trecho fixo mantém o link independente do título.
 - A descrição vem do detalhe, então o tipo fica em `EXTRACTION_SKIP_SOURCE_TYPES`.
 
 ---

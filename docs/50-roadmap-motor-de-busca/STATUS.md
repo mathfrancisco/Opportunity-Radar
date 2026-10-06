@@ -4,10 +4,11 @@
 - **Branch:** a SPEC 50 entrou em `main` pelo PR #26, mesclado em 2026-10-05 (`46ebbed`). A
   continuação está no PR #31 (`f50-fontes-e-inhire`, base `main`); ver "PR #31" abaixo. Nada
   foi aplicado na stack `spec46full`.
-- **Verificação:** suíte completa do backend na branch do PR #31 (`196319f`), com integração em
+- **Verificação:** suíte completa do backend na branch `f50-pendencias`, com integração em
   banco `_test` de um projeto Compose descartável, migrado até `20261005_0064`:
-  `1769 passed, 16 skipped`. `ruff`, `mypy` e os testes do frontend rodaram no CI do PR #31, que
-  passou nesse commit. No PR #26 a suíte tinha dado `1602 passed, 10 skipped`.
+  `1776 passed, 16 skipped`; `ruff check .` e `mypy` sem erros. Os testes do frontend não
+  rodaram localmente. No PR #31 a suíte tinha dado `1769 passed, 16 skipped`, e no PR #26,
+  `1602 passed, 10 skipped`.
 
 ## Decisões do dono (2026-10-05)
 
@@ -26,12 +27,12 @@
 |---|---|---|---|
 | F50-01 | Script e linha de base entregues | `06199c0`, `55a5adf` | Gold rotulado por pessoa: 200 vagas, 50 por fonte. Precisão não medida. |
 | F50-02 | Mecânica entregue, nada ligado | `846fd74` | Gold passar no portão; depois preencher `GATED_RULES`, ligar as regras e reclassificar. |
-| F50-03 | Entregue atrás de flag desligada | `8e8b82b` | Revisão de termos por fonte; captura real da resposta de detalhe. |
+| F50-03 | Entregue atrás de flag desligada | `8e8b82b` | Revisão de termos relida em 2026-10-05: veredito "a confirmar", flag continua desligada. Captura real da resposta de detalhe. |
 | F50-04 | Entregue | `6e85c93` | Medir o aceite depois de três execuções completas por fonte. |
-| F50-05 | Entregue | `3248382` | `ai` em 24,1% do catálogo, contra a meta de menos de 15%. Amostra rotulada de 100 vagas. |
+| F50-05 | Entregue | `3248382` | `ai` em 24,1% do catálogo, contra a meta de menos de 15% (simulação; não medido de novo depois do `retag_skills.py`). Amostra rotulada de 100 vagas. |
 | F50-06 | Entregue | `954cdf0` | Aceite de 50% não sai só daqui: contrato e senioridade desconhecidos ainda seguram. |
 | F50-07 | Entregue | `bce10f6` | `EXPLAIN ANALYZE` da fila em base de produção. |
-| F50-08 | Entregue, desligado no worker | ver `git log` | Rodar `scripts/prune_assessments.py` em dry-run, ler o relatório e só então ligar `WORKER_ASSESSMENT_RETENTION_ENABLED`. `EXPLAIN` em volume real. |
+| F50-08 | Entregue; ligado só na stack de dev | ver `git log` | Dry-run de 2026-10-05 na base de dev: 1.403 apagáveis de 66.648. Falta ver a primeira execução real do job e o `EXPLAIN` em volume real. O padrão do código continua desligado. |
 | F50-09 | Entregue como `v3`, desligado por padrão | `bc6a4a3`, `514ffd2` | Funciona contra o Groq, mas não reduz a saída. Falta a avaliação de qualidade `v1` contra `v3`. |
 | F50-10 | Entregue | `58d24a1`, `5ff2647` | `/inbox` em ~0,6 s na cópia de 25 mil vagas. Falta medir em produção. |
 | F50-11 | Decisão registrada na spec | — | Nada. |
@@ -147,8 +148,9 @@ API em `127.0.0.1:8000`, frontend em `127.0.0.1:3000`. Todo comando leva
   `opportunity-radar-recovery-a7a43`, que ficou intacto como cópia do estado anterior à
   SPEC 50.
 - As fontes novas de 2026-10-05 entraram nessa base, pela API do produto.
-- Continuam desligados nela: as regras de classificação por descrição, a poda de avaliações e
-  o `fetch_detail` do Workday.
+- Continuam desligados nela: as regras de classificação por descrição e o `fetch_detail` do
+  Workday. A poda de avaliações foi ligada nela em 2026-10-05, depois do dry-run.
+- O catálogo dela está inteiro em `skills-v4` desde 2026-10-05 (`scripts/retag_skills.py`).
 - Experimentos que alteram dados vão para uma stack descartável com outro nome de projeto,
   não para esta.
 
@@ -206,7 +208,9 @@ Dois achados que mudam leituras anteriores:
 ## Antes do deploy
 
 1. Aplicar as migrações `0062`, `0063` e `0064`. A `0063` faz o backfill dos ponteiros.
-2. Esperar uma reavaliação completa do catálogo (taxonomia e regras mudaram).
+2. Rodar `scripts/retag_skills.py` em dry-run e depois com `--apply`, para levar o catálogo
+   existente a `skills-v4`, e esperar a reavaliação completa do catálogo (taxonomia e regras
+   mudaram).
 3. Rodar `scripts/prune_assessments.py` em dry-run e ler o relatório antes de ligar a poda.
 4. Rodar `scripts/reclassify_content.py` em dry-run e ler `fingerprint_collisions` antes de
    qualquer `--apply`. Isso só faz sentido depois de o gold passar no portão.

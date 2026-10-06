@@ -61,3 +61,28 @@ acima (robôs, aplicações que interagem sem consentimento escrito) são amplas
 sites de tenant não está esclarecido. Recomendação: o detalhe segue o mesmo regime da listagem;
 o risco só sobe se o detalhe for chamado em volume (o orçamento do F48-08 continua valendo);
 decisão de manter ou revogar fica com o mantenedor.
+
+## Atualização de 2026-10-05
+
+**Veredito mantido: a confirmar. Decisão: o `fetch_detail` do Workday continua desligado.**
+
+Relido hoje: https://www.workday.com/en-us/legal/site-terms.html (o texto traz "Last Updated:
+08/13/2026"), por fetch com resumo, não no original em navegador.
+
+- A definição de "Sites" tem quatro partes: (a) `www.workday.com` e páginas associadas; (b)
+  "any web pages, websites, corresponding social media pages, materials, or other documents
+  (including all content therein) that directly reference these Terms"; (c) a Community; (d)
+  as Workday APIs.
+- As três proibições citadas acima continuam no texto.
+- O texto não nomeia `myworkdayjobs.com` nem sites de carreira de clientes, a não ser um link
+  de navegação para as vagas da própria Workday.
+
+O que continua não determinado: se uma página de carreiras de tenant "directly reference
+these Terms" (parte b) e se a rota `/wday/cxs/` conta como "Workday APIs" (parte d). O que
+fecharia: ler o rodapé e os avisos legais de uma página de tenant num navegador, ou uma
+resposta escrita da Workday.
+
+Motivo da decisão: a rota não é documentada, os termos têm proibição expressa de extração e
+de aplicações sem consentimento escrito, e ligar o detalhe nas 19 fontes Workday habilitadas
+na base de dev significa uma requisição por vaga em cerca de 13 mil vagas. No inHire a
+documentação oficial declara a rota pública; aqui não há nada equivalente.

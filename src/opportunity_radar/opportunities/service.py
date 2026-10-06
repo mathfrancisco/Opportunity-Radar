@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from opportunity_radar.acquisition.models import RawItemModel, SourceRunModel
 from opportunity_radar.acquisition.service import COLLECTED_ITEM_V1_KEY
 from opportunity_radar.opportunities.domain import (
+    SKILL_TAXONOMY_VERSION,
     CanonicalCandidate,
     CompensationPeriod,
     GrossNet,
@@ -643,6 +644,23 @@ def _reconcile_enrichment(
                 }
             )
 
+    _reconcile_skills(
+        opportunity=opportunity,
+        occurrence=occurrence,
+        candidate=candidate,
+        raw_item_id=raw_item_id,
+    )
+    return reasons
+
+
+def _reconcile_skills(
+    *,
+    opportunity: OpportunityModel,
+    occurrence: SourceOccurrenceModel,
+    candidate: CanonicalCandidate,
+    raw_item_id: UUID,
+) -> None:
+    """Replace what this occurrence says about the opportunity's skills with `candidate`'s."""
     occurrence_key = str(occurrence.id)
     candidate_skill_keys = {
         (skill.canonical_id, skill.taxonomy_version) for skill in candidate.skills
@@ -685,7 +703,6 @@ def _reconcile_enrichment(
         current_skill.evidence = [*current_skill.evidence, evidence]
         _refresh_skill_requirement(current_skill)
         current_skill.normalizer_version = NORMALIZER_VERSION
-    return reasons
 
 
 def _enrichment_state(opportunity: OpportunityModel) -> tuple[object, ...]:
@@ -1219,6 +1236,106 @@ def reclassify_content(
             }
             for field in _CONTENT_FIELDS
         },
+    }
+
+
+def retag_skills(
+    session: Session,
+    *,
+    batch_size: int = 500,
+    limit: int | None = None,
+    apply: bool = False,
+) -> dict[str, Any]:
+    """Re-extract the skills of opportunities still tagged by an older taxonomy.
+
+    The taxonomy version is stored on each skill row, so a new taxonomy only reaches a
+    posting when it is normalized again. This redoes just the skills: for every opportunity
+    with a skill row of another version, each of its occurrences is read from the evidence
+    normalization uses and its skills are replaced, as normalization would. Nothing else
+    about the posting is recomputed. An occurrence whose evidence is gone or unreadable
+    keeps what it had said, so such a posting may keep old rows and is reported under
+    `still_old`. A changed posting gets `search_skills` refreshed and `version` bumped once;
+    a second run finds nothing to do for it. Each batch is its own transaction; without
+    `apply` every batch rolls back.
+    """
+    if batch_size < 1:
+        raise ValueError("batch size must be at least 1")
+    repository = OpportunityRepository(session)
+    query = (
+        select(OpportunitySkillModel.opportunity_id)
+        .where(OpportunitySkillModel.taxonomy_version != SKILL_TAXONOMY_VERSION)
+        .distinct()
+        .order_by(OpportunitySkillModel.opportunity_id)
+    )
+    if limit is not None:
+        query = query.limit(limit)
+    opportunity_ids = list(session.scalars(query).all())
+
+    skipped = Counter[str]()
+    rows_before = Counter[str]()
+    rows_after = Counter[str]()
+    changed = still_old = without_skills = 0
+    for start in range(0, len(opportunity_ids), batch_size):
+        chunk = opportunity_ids[start : start + batch_size]
+        try:
+            for opportunity in session.scalars(
+                select(OpportunityModel)
+                .where(OpportunityModel.id.in_(chunk))
+                .order_by(OpportunityModel.id)
+            ).all():
+                rows_before.update(skill.taxonomy_version for skill in opportunity.skills)
+                state = _enrichment_state(opportunity)[1]
+                for occurrence in session.scalars(
+                    select(SourceOccurrenceModel)
+                    .where(SourceOccurrenceModel.opportunity_id == opportunity.id)
+                    .order_by(SourceOccurrenceModel.id)
+                ).all():
+                    evidence = repository.raw_item_evidence(occurrence.raw_item_id)
+                    if evidence is None:
+                        skipped["no_evidence"] += 1
+                        continue
+                    try:
+                        candidate = build_candidate(_normalization_input(evidence))
+                    except (NormalizationError, TypeError, ValueError):
+                        skipped["unreadable_evidence"] += 1
+                        continue
+                    _reconcile_skills(
+                        opportunity=opportunity,
+                        occurrence=occurrence,
+                        candidate=candidate,
+                        raw_item_id=occurrence.raw_item_id,
+                    )
+                rows_after.update(skill.taxonomy_version for skill in opportunity.skills)
+                if any(
+                    skill.taxonomy_version != SKILL_TAXONOMY_VERSION
+                    for skill in opportunity.skills
+                ):
+                    still_old += 1
+                if not opportunity.skills:
+                    without_skills += 1
+                if state != _enrichment_state(opportunity)[1]:
+                    changed += 1
+                    opportunity.search_skills = _search_skills_text(opportunity.skills)
+                    opportunity.version += 1
+            if apply:
+                session.commit()
+            else:
+                session.rollback()
+        except Exception:
+            session.rollback()
+            raise
+
+    return {
+        "mode": "apply" if apply else "dry-run",
+        "taxonomy_version": SKILL_TAXONOMY_VERSION,
+        "selected": len(opportunity_ids),
+        "postings_changed": changed,
+        "version_bumps": changed,
+        "still_old": still_old,
+        "left_without_skills": without_skills,
+        "skipped_occurrences": dict(skipped),
+        "skill_rows_before": dict(sorted(rows_before.items())),
+        "skill_rows_after": dict(sorted(rows_after.items())),
     }
 
 
