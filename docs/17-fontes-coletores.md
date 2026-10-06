@@ -229,6 +229,47 @@ ATS brasileiro; revisão de termos em [`pesquisas/termos-inhire.md`](pesquisas/t
   navegador em 2026-10-05, tenant `gx2`); o trecho fixo mantém o link independente do título.
 - A descrição vem do detalhe, então o tipo fica em `EXTRACTION_SKIP_SOURCE_TYPES`.
 
+### 6.3 Ritmo por fornecedor
+
+Uma linha por tipo de fonte com coletor registrado (`acquisition/registry.py`). Cada fonte de
+um tipo compartilha o teto da sua chave de orçamento: o host do fornecedor para os tipos de
+host único e o tenant para `workday`, `teamtailor`, `factorial` e `jobposting`
+(`service.py:122`). O pico é o maior total de `acquisition.source_run.http_requests` numa
+hora de relógio (hora de `started_at`) numa única chave de orçamento, na base de dev, de
+2026-09-25 a 2026-10-06. Uma execução que atravessa a virada da hora conta inteira na hora em
+que começou. `—` significa que o tipo não tem execução com requisição nesse período.
+
+| Tipo | O que o fornecedor pede (fonte) | Teto por hora | Onde está o teto | Intervalo usado | Pico medido (req/h) | Base da medição |
+|---|---|---|---|---|---|---|
+| `manual` | Não faz requisição a fornecedor. | — | — | — | — | 2 execuções, 0 requisições |
+| `ashby` | Não publicado pelo fornecedor: sem limite nem restrição declarados ([termos-ashby.md](pesquisas/termos-ashby.md), verificado em 2026-10-05). | 1000 | `scheduling.py:35` | 0,2 req/s na política das fontes importadas (dados); agenda padrão por prioridade da empresa, `scheduling.py:183` | 55 | 612 execuções, 2026-09-26 a 2026-10-06; chave `api.ashbyhq.com` |
+| `lever` | Leitura (GET): não publicado pelo fornecedor. `Crawl-delay: 1` no `robots.txt` do site comercial, https://www.lever.co/robots.txt ([termos-lever.md](pesquisas/termos-lever.md)). O limite de 2 POST por segundo vale só para candidaturas. | 1000 | `scheduling.py:35` | 0,2 req/s na política das fontes importadas (dados); agenda padrão por prioridade | 39 | 143 execuções, 2026-09-26 a 2026-10-06; chave `api.lever.co` |
+| `greenhouse` | Não publicado pelo fornecedor: sem cabeçalho de limite ([termos-greenhouse.md](pesquisas/termos-greenhouse.md), verificado em 2026-10-05). | 1000 | `scheduling.py:35` | 0,2 req/s na política das fontes importadas (dados); agenda padrão por prioridade | 46 | 492 execuções, 2026-09-26 a 2026-10-06; chave `boards.greenhouse.io` |
+| `remotive` | Até 4 consultas por dia; bloqueio acima de 2 por minuto (https://github.com/remotive-com/remote-jobs-api, consultada em 2026-09-26; [2026-09-fontes-amplas.md](pesquisas/2026-09-fontes-amplas.md)). | 1000 | `scheduling.py:35` | `minimum_run_interval_seconds` de 21600 (6 h) na política da fonte (dados) | 1 | 11 execuções, 2026-09-26 a 2026-10-06; chave `remotive.com` |
+| `workday` | Não publicado pelo fornecedor ([termos-workday.md](pesquisas/termos-workday.md), [termos-workday-detalhe.md](pesquisas/termos-workday-detalhe.md)). | 500 | `config.py:146`, `service.py:130` | 0,2 req/s na política das fontes importadas (dados); agenda padrão por prioridade | 2092 | 58 execuções, 2026-09-29 a 2026-10-06; tenant `abbott.wd5`, 2026-09-29 20h UTC. Acima do teto de 500: mantido por decisão (F52-08), tratado na SPEC 51 (F51-04). |
+| `teamtailor` | Não publicado pelo fornecedor ([termos-teamtailor.md](pesquisas/termos-teamtailor.md)). | 1000 | `scheduling.py:35` | 0,2 req/s na política das fontes importadas (dados); agenda padrão por prioridade | 1 | 67 execuções, 2026-09-29 a 2026-10-06; maior total numa chave de tenant (7 tenants) |
+| `workable` | Não publicado pelo fornecedor ([termos-workable.md](pesquisas/termos-workable.md)). | 1000 | `scheduling.py:35` | 0,2 req/s na política das fontes importadas (dados); agenda padrão por prioridade | 11 | 99 execuções, 2026-09-29 a 2026-10-06; chave `workable` |
+| `factorial` | Não publicado pelo fornecedor ([termos-factorial.md](pesquisas/termos-factorial.md)). | 1000 | `scheduling.py:35` | Sem política própria nas 2 fontes (dados); agenda padrão por prioridade | 143 | 24 execuções, 2026-09-29 a 2026-10-06; maior total numa chave de tenant (2 tenants) |
+| `jobposting` | Sem fonte no repositório (o host é o site de cada empresa). | 1000 | `scheduling.py:35` | Sem política própria; agenda padrão por prioridade | — | 0 execuções |
+| `hacker_news` | "There is currently no rate limit." (https://github.com/HackerNews/API, README; [termos-hn-who-is-hiring.md](pesquisas/termos-hn-who-is-hiring.md)). | 500 | `config.py:146`, `service.py:131` | `minimum_interval_seconds` de 0,3 na política da fonte (dados); agenda `0 18 3 * *` na fonte (dados) | 302 | 2 execuções, 2026-09-29 a 2026-10-04; chave `hacker-news.firebaseio.com` |
+| `inhire` | Rota pública: limite não documentado. A política documentada de 20 req/s com rajada de 400 é de contas autenticadas (https://docs.inhire.com.br/guides/rate-limits/); a revisão de termos adota no máximo 1 req/s ([termos-inhire.md](pesquisas/termos-inhire.md)). | 1200 | `config.py:146`, `service.py:132` | 1 requisição por segundo, em série, `service.py:139` | 1089 | 121 execuções, 2026-10-05 a 2026-10-06; chave `api.inhire.app`, 2026-10-06 02h UTC |
+| `tavily_search` | 1.000 créditos por mês no plano gratuito ([41-spec-tavily.md](41-spec-tavily.md)); limite por hora: sem fonte no repositório. | 1000 | `scheduling.py:35` | Orçamento por execução de 100 créditos (`config.py`, `tavily_credit_budget_per_run`) | — | 0 execuções (consumo em créditos, não em requisições) |
+
+Notas da medição:
+
+- O teto de cada tipo é o que uma linha nova de `acquisition.host_budget_state` recebe. Uma linha
+  já gravada mantém o teto com que nasceu; na base de dev, `api.inhire.app` está em 1200,
+  `hacker-news.firebaseio.com` em 500, cada tenant do Workday em 500 e os demais hosts em 1000.
+- `DEFAULT_HOST_CEILING_BY_SOURCE_TYPE` (`service.py:129`) vale quando o serviço é criado sem
+  `host_request_ceilings` (API, soak). O `inhire` estava em 300 ali, abaixo do pico de 1089, e
+  foi para 1200, o mesmo valor de `Settings.host_request_ceilings`. O worker usa o valor de
+  `Settings`.
+- O Workday não foi alterado: o pico de 2092 requisições na hora, num único tenant, é maior
+  que o teto de 500.
+- Um teste (`test_pacing_table.py`) falha se um tipo com coletor não tiver linha, se o teto da
+  tabela diferir do teto do código, ou se o teto ficar abaixo do pico da tabela (exceto
+  `workday`).
+
 ---
 
 ## 7. `CompanySource`

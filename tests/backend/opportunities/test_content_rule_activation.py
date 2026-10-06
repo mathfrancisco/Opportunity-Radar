@@ -193,7 +193,7 @@ def test_a_title_decided_value_keeps_the_title_mapping_version_under_partial_act
     assert candidate.seniority.value == "SENIOR"
     (reason,) = candidate.classification_reasons
     assert reason["source"] == "title"
-    assert reason["mapping_version"] == "seniority-v5"
+    assert reason["mapping_version"] == "seniority-v6"
     assert candidate.allowed_countries_version == "regions-v1"
 
 

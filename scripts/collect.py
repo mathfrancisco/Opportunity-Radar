@@ -6,10 +6,11 @@ import argparse
 import asyncio
 import json
 import os
+from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import distinct, func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -20,19 +21,99 @@ from opportunity_radar.acquisition.domain import (
     CollectionMode,
     CollectionRequest,
 )
-from opportunity_radar.acquisition.models import SourceDefinitionModel
+from opportunity_radar.acquisition.models import RawItemModel, SourceDefinitionModel
 from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.service import (
     AcquisitionService,
     active_profile_target_role_families,
 )
 from opportunity_radar.companies.models import CompanySource  # noqa: F401
+from opportunity_radar.opportunities.models import OpportunityModel, SourceOccurrenceModel
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
+from opportunity_radar.profile.domain import ProfileNotFoundError
+from opportunity_radar.profile.service import ProfileService
 
 #: Sources collected at once, default 1 (current sequential behavior unchanged). Same-
 #: host work still serializes at 1 request/second regardless of this setting.
 DEFAULT_COLLECT_CONCURRENCY = 1
+
+
+NO_ACTIVE_PROFILE = "no_active_profile"
+
+
+def active_profile_accepted_seniorities(session: Session) -> tuple[str, ...] | None:
+    """The active profile's `accepted_seniorities` without `UNKNOWN` (F52-09).
+
+    `None` when there is no active profile or it names no level: the report then says it
+    cannot tell, instead of counting everything or nothing as the accepted level.
+    """
+    try:
+        profile = ProfileService(session).get_active()
+    except ProfileNotFoundError:
+        return None
+    accepted = tuple(
+        level
+        for level in profile.snapshot.preferences.accepted_seniorities
+        if level != "UNKNOWN"
+    )
+    return accepted or None
+
+
+def level_counts_by_run(
+    session: Session, run_ids: Sequence[UUID], accepted: Sequence[str]
+) -> dict[UUID, dict[str, int]]:
+    """Per run: postings its raw items normalized into, and how many have an accepted level.
+
+    A posting counts once per run. Raw items the normalizer has not reached yet are not in
+    either number (normalization runs after collection), so a fresh run can read low until
+    the worker catches up.
+    """
+    counts = {run_id: {"postings": 0, "accepted_level": 0} for run_id in run_ids}
+    if not run_ids:
+        return counts
+    rows = session.execute(
+        select(
+            RawItemModel.source_run_id,
+            OpportunityModel.seniority,
+            func.count(distinct(OpportunityModel.id)),
+        )
+        .join(SourceOccurrenceModel, SourceOccurrenceModel.raw_item_id == RawItemModel.id)
+        .join(OpportunityModel, OpportunityModel.id == SourceOccurrenceModel.opportunity_id)
+        .where(RawItemModel.source_run_id.in_(list(run_ids)))
+        .group_by(RawItemModel.source_run_id, OpportunityModel.seniority)
+    ).all()
+    for run_id, seniority, total in rows:
+        counts[run_id]["postings"] += total
+        if seniority in accepted:
+            counts[run_id]["accepted_level"] += total
+    return counts
+
+
+def add_level_column(
+    session: Session, runs: list[dict[str, Any]], accepted: tuple[str, ...] | None
+) -> dict[str, Any]:
+    """Put an `accepted_level` entry on every run that has a `run_id`; return the summary.
+
+    No active profile: every entry says `no_active_profile` and nothing is counted. The
+    summary is the total over the runs of this execution.
+    """
+    run_ids = [UUID(item["run_id"]) for item in runs if item.get("run_id")]
+    if accepted is None:
+        for item in runs:
+            item["accepted_level"] = {"status": NO_ACTIVE_PROFILE}
+        return {"status": NO_ACTIVE_PROFILE}
+    counts = level_counts_by_run(session, run_ids, accepted)
+    total = {"postings": 0, "accepted_level": 0}
+    for item in runs:
+        if not item.get("run_id"):
+            item["accepted_level"] = {"status": "no_run"}
+            continue
+        found = counts[UUID(item["run_id"])]
+        item["accepted_level"] = {"status": "ok", **found}
+        total["postings"] += found["postings"]
+        total["accepted_level"] += found["accepted_level"]
+    return {"status": "ok", "accepted_seniorities": list(accepted), **total}
 
 
 def _split(value: str | None) -> tuple[str, ...]:
@@ -102,6 +183,7 @@ async def _collect_one(
                 registry=_registry(settings),
                 target_role_families=active_profile_target_role_families(session),
                 target_area_floor=settings.collection_target_area_floor,
+                claims_enabled=settings.collection_claim_enabled,
             )
             collector = service.registry.resolve(source.source_type)
             supported_keywords = keywords if collector.capabilities.keyword_search else ()
@@ -253,9 +335,20 @@ def main() -> int:
         for item in report
         if item.get("status") in {"FAILED", "PARTIAL", "ERROR"}
     ]
+    try:
+        with Session(engine) as session:
+            level = add_level_column(
+                session, report, active_profile_accepted_seniorities(session)
+            )
+    except Exception as error:  # noqa: BLE001 - the level column never fails the run
+        level = {"status": "unavailable", "error_summary": str(error)}
     print(
         json.dumps(
-            {"status": "partial" if failures else "completed", "runs": report},
+            {
+                "status": "partial" if failures else "completed",
+                "accepted_level": level,
+                "runs": report,
+            },
             ensure_ascii=False,
             indent=2,
             default=str,

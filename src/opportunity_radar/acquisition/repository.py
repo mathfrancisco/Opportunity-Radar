@@ -49,6 +49,9 @@ class SourceExecutionClaim:
     owner_id: UUID
     fencing_token: int
     task_key: str = "collect"
+    #: Set when this claim took over an expired lease: the abandoned run it closed, if any.
+    recovered: bool = False
+    recovered_run_id: UUID | None = None
 
 
 class AcquisitionRepository:
@@ -94,16 +97,20 @@ class AcquisitionRepository:
             )
             if claim is None:  # pragma: no cover - the insert/select share a transaction
                 raise RuntimeError("source execution claim row disappeared")
+            recovered = False
+            recovered_run_id: UUID | None = None
             if claim.owner_id is not None and claim.lease_expires_at is not None:
                 expires_at = claim.lease_expires_at
                 if expires_at.tzinfo is None:
                     expires_at = expires_at.replace(tzinfo=UTC)
                 if expires_at > now:
                     raise SourceClaimUnavailable(f"source {source_id} is already claimed")
+                recovered = True
             previous_run_id = claim.run_id
             if previous_run_id is not None:
                 old_run = claim_session.get(SourceRunModel, previous_run_id)
                 if old_run is not None and old_run.status in _UNFINISHED_RUN_STATUSES:
+                    recovered_run_id = previous_run_id
                     old_run.status = "PARTIAL"
                     old_run.finished_at = now
                     old_run.complete = False
@@ -117,7 +124,9 @@ class AcquisitionRepository:
             claim.run_id = None
             claim.updated_at = now
             token = claim.fencing_token
-        return SourceExecutionClaim(source_id, run_id, owner_id, token, task_key)
+        return SourceExecutionClaim(
+            source_id, run_id, owner_id, token, task_key, recovered, recovered_run_id
+        )
 
     def attach_source_execution_run(self, claim: SourceExecutionClaim) -> bool:
         """Bind a committed RUNNING row to its already-acquired lease."""
