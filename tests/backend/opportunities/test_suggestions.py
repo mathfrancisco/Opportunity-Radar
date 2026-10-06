@@ -640,3 +640,119 @@ def test_suggestion_queue_filters_before_limit_and_pages_stably() -> None:
             )
         finally:
             _cleanup(session, [item.id for item in resolved + eligible])
+
+
+# --- F51-09: no reservation without a call record ------------------------------------
+
+_TH_MODELS = ("tokenharbor:deepseek-v4.1-flash:free", "tokenharbor:mimo-v2.6-flash:free")
+_CHAIN = (_FAST_MODEL, "qwen/qwen3.8-27b", *_TH_MODELS)
+
+
+class _StepProvider:
+    """Scripted per model like `FakeProvider`, but honours `on_transport_start` the way
+    the Groq adapter does: it fires only once the request is really handed to transport."""
+
+    name = "fake"
+
+    def __init__(self, script: dict) -> None:
+        self._script = {model: list(items) for model, items in script.items()}
+
+    async def complete(self, request: LLMRequest) -> LLMResponse:
+        items = self._script[request.model]
+        step = items.pop(0) if len(items) > 1 else items[0]
+        transport = step.get("transport", True)
+        if transport and request.on_transport_start is not None:
+            await request.on_transport_start()
+        kind = step["kind"]
+        if kind == "ok":
+            return response(request.model, step.get("content", "{}"))
+        if kind == "cancel":
+            cancellation = asyncio.CancelledError()
+            cancellation.transport_started = transport  # type: ignore[attr-defined]
+            raise cancellation
+        usage = step.get("usage", False)
+        raise ProviderError(
+            kind, "boom", model=request.model, transport_started=transport,
+            prompt_tokens=100 if usage else None, completion_tokens=20 if usage else None,
+        )
+
+
+def _everywhere(step: dict) -> dict:
+    return {model: [step] for model in _CHAIN}
+
+
+_QUOTA_AFTER = {"kind": ErrorKind.QUOTA, "usage": True}
+_OK = {"kind": "ok"}
+_RESERVATION_CASES = {
+    "success-first": _everywhere(_OK),
+    "fallthrough-mixed-chain": {
+        _CHAIN[0]: [_QUOTA_AFTER],
+        _CHAIN[1]: [{"kind": ErrorKind.TRANSIENT, "transport": False}],
+        _CHAIN[2]: [{"kind": ErrorKind.INVALID_OUTPUT}],
+        _CHAIN[3]: [_OK],
+    },
+    "all-transient-after-transport": _everywhere({"kind": ErrorKind.TRANSIENT}),
+    "all-quota-before-transport": _everywhere({"kind": ErrorKind.QUOTA, "transport": False}),
+    "all-transient-before-transport": _everywhere(
+        {"kind": ErrorKind.TRANSIENT, "transport": False}
+    ),
+    "parse-error": _everywhere({"kind": "ok", "content": "not json"}),
+    "request-error": _everywhere({"kind": ErrorKind.REQUEST, "usage": True}),
+    "configuration-before-transport": _everywhere(
+        {"kind": ErrorKind.CONFIGURATION, "transport": False}
+    ),
+    "cancel-after-transport": _everywhere({"kind": "cancel", "transport": True}),
+    "cancel-before-transport": _everywhere({"kind": "cancel", "transport": False}),
+}
+
+
+@pytest.mark.parametrize("label", list(_RESERVATION_CASES))
+def test_suggest_fields_leaves_no_reservation_without_a_call_record(label: str) -> None:
+    from sqlalchemy import text
+
+    from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits
+
+    async def no_sleep(_: float) -> None:
+        return None
+
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with engine.begin() as connection:
+        connection.execute(text("TRUNCATE platform.ai_quota_usage, platform.ai_call_record"))
+    guard = QuotaGuard(engine, QuotaLimits(10_000, 10_000_000, 10_000, 10_000_000))
+    settings = Settings(  # type: ignore[call-arg,arg-type]
+        _env_file=None, database_url="postgresql+psycopg://u@h/db", tokenharbor_api_key="k"
+    )
+    router = AIRouter(
+        _StepProvider(_RESERVATION_CASES[label]), default_routes(settings),
+        max_retries=1, sleeper=no_sleep, quota_guard=guard,
+    )
+    with Session(engine) as session:
+        opportunity = _opportunity(role_family="UNKNOWN")
+        session.add(opportunity)
+        session.commit()
+        try:
+            try:
+                _run(suggest_fields(session, router, opportunity, prompt=_PROMPT))
+            except (ProviderError, asyncio.CancelledError):
+                pass
+            with engine.connect() as connection:
+                reserved = {
+                    row.model: row.requests
+                    for row in connection.execute(text(
+                        "SELECT model, requests FROM platform.ai_quota_usage "
+                        "WHERE window_kind = 'day' AND requests > 0"
+                    ))
+                }
+                recorded = {
+                    row.model: row.calls
+                    for row in connection.execute(text(
+                        "SELECT model, count(*) AS calls FROM platform.ai_call_record "
+                        "WHERE task = 'job_classification' AND transport_started "
+                        "GROUP BY model"
+                    ))
+                }
+            assert reserved == recorded
+        finally:
+            _cleanup(session, [opportunity.id])
+            with engine.begin() as connection:
+                connection.execute(text("TRUNCATE platform.ai_call_record"))
