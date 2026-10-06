@@ -1,0 +1,253 @@
+# SPEC 52 — Aderência ao nível: senioridade, oferta júnior/pleno e remoto (cards F52)
+
+- **Data:** 2026-10-05
+- **Estado:** proposta. Nenhum card implementado.
+- **Origem:** relato do dono: a busca devolve vagas muito acima do nível dele (júnior/pleno,
+  remoto). Medições na stack `opportunity-radar-dev` em 2026-10-05.
+- **Relação com a SPEC 51** (em elaboração na branch `feat/f51-coleta-confiavel`): a SPEC 51
+  trata do detalhe do Workday, da concorrência do worker por host, do gold das regras de
+  conteúdo e da fila de IA. Esta spec não repete esses cards; o §5 diz onde cada assunto mora.
+
+## 1. Objetivo
+
+Fazer o topo da busca ser, na maioria, vaga que o dono pode de fato disputar. Sem filtro
+fixo novo: o perfil continua dizendo o que aceita, e o produto passa a classificar melhor o
+nível de cada vaga, a pesar o nível na ordenação e a buscar mais vagas do nível certo.
+
+| Métrica (áreas-alvo) | Hoje | Meta |
+|---|---:|---:|
+| Vagas com senioridade conhecida | 50,8% | 80% |
+| Vagas `JUNIOR` ou `MID` no catálogo | 147 (1,8%) | 600 |
+| `RECOMMENDED` e `HIGH_PRIORITY` com nível acima do aceito | 164 de 1.515 | 0 |
+| `RECOMMENDED` e `HIGH_PRIORITY` com senioridade `UNKNOWN` | 1.156 de 1.515 (76%) | menos de 30% |
+
+As metas são propostas; o F52-01 confirma ou corrige depois da linha de base.
+
+## 2. Estado medido (2026-10-05)
+
+Perfil ativo: senioridades aceitas `JUNIOR`, `MID`, `UNKNOWN`; modo `remote`; contrato
+`full-time`; país `BR`; áreas `SOFTWARE_ENGINEERING` e `DATA`.
+
+Catálogo nas áreas-alvo, 8.186 vagas:
+
+| Senioridade | Vagas | % |
+|---|---:|---:|
+| `UNKNOWN` | 4.031 | 49,2 |
+| `SENIOR` | 2.183 | 26,7 |
+| `MANAGER` | 682 | 8,3 |
+| `STAFF` | 590 | 7,2 |
+| `INTERN` | 264 | 3,2 |
+| `LEAD` | 194 | 2,4 |
+| `MID` | 101 | 1,2 |
+| `DIRECTOR` | 95 | 1,2 |
+| `JUNIOR` | 46 | 0,6 |
+
+Modo de trabalho nas mesmas vagas: `UNKNOWN` 52,8%, `REMOTE` 34,5%, `HYBRID` 6,8%, `ONSITE`
+5,9%. Vagas `JUNIOR` ou `MID` e `REMOTE`: 70.
+
+Vagas `JUNIOR` ou `MID` por tipo de fonte (contagem por ocorrência):
+
+| Tipo | Júnior/pleno | Total | % |
+|---|---:|---:|---:|
+| inhire | 62 | 371 | 16,7 |
+| lever | 36 | 2.009 | 1,8 |
+| workday | 25 | 2.688 | 0,9 |
+| greenhouse | 17 | 2.175 | 0,8 |
+| ashby | 5 | 1.272 | 0,4 |
+| demais | 4 | 483 | 0,8 |
+
+O inHire entrou hoje, com o lote de 98 empresas ainda pela metade, e já responde por cerca
+de 40% das vagas júnior/pleno do catálogo.
+
+Avaliações atuais com veredito `RECOMMENDED` ou `HIGH_PRIORITY`, por senioridade da vaga:
+`UNKNOWN` 1.156, `SENIOR` 92, `INTERN` 85, `MID` 68, `JUNIOR` 42, `STAFF` 38, `MANAGER` 17,
+`LEAD` 12, `DIRECTOR` 5.
+
+## 3. Problemas
+
+**P1. Quase não há vaga do nível do dono no catálogo.** 147 em 8.186. As fontes são, na
+maioria, boards de empresas globais de tecnologia, que publicam sobretudo vagas sênior. Onde
+há fonte brasileira (inHire), a proporção sobe de menos de 2% para 17%. Nenhuma regra de
+ordenação conserta falta de oferta.
+
+**P2. O classificador de senioridade erra títulos comuns.** Testado em 2026-10-05 com
+`seniority_classification` sobre títulos reais do catálogo:
+
+| Título | Resultado | Esperado |
+|---|---|---|
+| `Dev. Back-end Node.js Sênior \| Pix [Remoto]` | `UNKNOWN` | `SENIOR` |
+| `Desenvolvedor(a) Backend Sênior - Node.js` | `UNKNOWN` | `SENIOR` |
+| `Analista de Dados Júnior` | `UNKNOWN` | `JUNIOR` |
+| `Senior Staff Engineer - Enterprise Messaging` | `UNKNOWN` | `STAFF` |
+| `Software Engineer I`, `II`, `III` | `UNKNOWN` | `JUNIOR`, `MID`, `SENIOR` |
+| `Software Architect (AWS, NodeJS)` | `UNKNOWN` | `STAFF` ou `SENIOR` |
+| `Head of Engineering` | `UNKNOWN` | `DIRECTOR` |
+| `Tech Lead \| Engenheiro(a) Backend Especialista` | `UNKNOWN` | `LEAD` |
+| `Associate Software Engineer` | `UNKNOWN` | `JUNIOR` |
+| `Systems Software Engineer - New College Grad 2026` | `UNKNOWN` | `JUNIOR` |
+| `Desenvolvedor Pl/Sr` | `UNKNOWN` | `MID` e `SENIOR` |
+| `Entry Level Developer` | `INTERN` | `JUNIOR` |
+
+Dois padrões respondem pela maior parte: a palavra com acento (`Sênior`, `Júnior`) não casa,
+enquanto `Sr` e `Jr` casam; e um título com dois níveis (`Senior Staff`, `Tech Lead ...
+Especialista`) vira `UNKNOWN` em vez do nível mais alto. Quantas das 4.031 vagas `UNKNOWN`
+cada padrão explica: não medido; o F52-01 mede.
+
+**P3. `UNKNOWN` passa como se fosse do nível.** O perfil aceita `UNKNOWN`, o que é razoável:
+recusar metade do catálogo por falta de dado esconderia vagas boas. Mas o resultado é que 76%
+do topo da busca é vaga de nível desconhecido, e boa parte dela é sênior mal classificada
+(P2). O fator `SENIORITY_SCOPE` está `UNKNOWN` em 23.845 de 43.283 avaliações atuais.
+
+**P4. Vaga acima do nível ainda chega ao topo.** 164 avaliações `RECOMMENDED` ou
+`HIGH_PRIORITY` são de vagas `SENIOR`, `STAFF`, `MANAGER`, `LEAD` ou `DIRECTOR`, que o perfil
+não aceita. Ao mesmo tempo, 1.042 vagas `SENIOR` estão `INELIGIBLE`. Por que parte passa e
+parte não: não determinado. Hipóteses a conferir no F52-04: avaliação anterior à
+reclassificação da vaga, ou elegibilidade que não lê senioridade em algum caminho.
+
+**P5. Estágio conta como recomendação.** 85 vagas `INTERN` estão `RECOMMENDED`, e o perfil
+não lista `INTERN`. Mesma investigação do P4. Além disso, `Entry Level` é classificado como
+`INTERN`, o que tira vaga júnior do alcance do perfil.
+
+**P6. Remoto e país desconhecidos na metade das vagas.** `work_mode` é `UNKNOWN` em 52,8%, e
+`allowed_countries` tinha 11,5% de cobertura na medição da SPEC 50. Uma vaga "remota" restrita
+aos Estados Unidos aparece como candidata. As regras que leem isso da descrição existem e
+estão desligadas, à espera do gold (SPEC 51, F51-11).
+
+**P7. Tetos de coleta sem base.** O teto de 300 requisições por hora no inHire e o padrão de
+200 não vieram de fornecedor nem de medição. Corrigidos em 2026-10-05 (PR #34: 1.200 e
+1.000). Falta a tabela por tipo com o que cada fornecedor pede (F52-08).
+
+## 4. Cards
+
+Cada card é entregue sozinho, com teste, e medido contra o §1.
+
+### F52-01 — Linha de base e amostra rotulada de senioridade
+
+- **Problema:** P2, P3.
+- **Mudança:** script que roda o classificador sobre todos os títulos das áreas-alvo e
+  agrupa os `UNKNOWN` por padrão (acento, dois níveis, numeral, palavra não coberta, sem
+  sinal). Amostra de 200 títulos `UNKNOWN` e 100 classificados, rotulada pelo dono.
+- **Aceite:** relatório em `docs/pesquisas/` com a contagem por padrão e a precisão por
+  nível; metas do §1 confirmadas ou corrigidas.
+- **Teste:** o script roda no CI contra a amostra versionada.
+- **Esforço / risco:** P / baixo. Sem mudança de comportamento.
+
+### F52-02 — Classificador de senioridade: acentos, dois níveis e numerais
+
+- **Problema:** P2, P5.
+- **Mudança:** comparar sem acento (`Sênior`, `Júnior`, `Estágio`); com dois níveis no
+  título, ficar com o mais alto, salvo lista explícita de faixas (`Júnior, Pleno e Sênior`,
+  `Pl/Sr`), que vira o conjunto de níveis; numerais `I`, `II`, `III` depois de um cargo;
+  `Architect`, `Head of`, `Associate`, `New Grad`, `Entry Level` (júnior, não estágio).
+  Nova versão da regra (`seniority-v5`), aplicada ao catálogo por um script com dry-run, como
+  o `retag_skills.py`.
+- **Aceite:** todos os títulos da tabela do P2 classificados como esperado; precisão de 90%
+  ou mais na amostra do F52-01; cobertura nas áreas-alvo de 65% só com o título.
+- **Teste:** um caso por linha da tabela do P2, mais regressão sobre a amostra.
+- **Esforço / risco:** M / médio. Muda a identidade? Não: senioridade não entra no
+  fingerprint. Muda a elegibilidade de milhares de vagas de uma vez; rodar o dry-run antes.
+- **Decisão pendente:** vaga com faixa de níveis (`Júnior a Sênior`) guarda um nível só ou
+  uma faixa? Faixa exige coluna nova. Proposta: guardar o nível mais baixo e a faixa na
+  evidência, sem migração.
+
+### F52-03 — Senioridade pela descrição
+
+- **Problema:** P3.
+- **Mudança:** depende do gold da SPEC 51 (F51-11). Com a regra `description_years_min`
+  ligada, anos de experiência pedidos passam a decidir o nível quando o título não decide.
+- **Aceite:** cobertura de senioridade nas áreas-alvo de 80%, com precisão de 90% no gold.
+- **Esforço / risco:** P aqui / o risco está no F51-11. 40% das vagas não têm descrição
+  (Workday); para elas só o título vale.
+
+### F52-04 — Por que vaga acima do nível é recomendada
+
+- **Problema:** P4, P5.
+- **Mudança:** investigar as 164 avaliações de nível não aceito e as 85 de `INTERN` no topo;
+  corrigir a causa. Regra-alvo: nível conhecido e fora de `accepted_seniorities` nunca
+  termina `RECOMMENDED` ou `HIGH_PRIORITY`.
+- **Aceite:** zero avaliações atuais de topo com nível conhecido fora do aceito; teste de
+  regressão com uma vaga `SENIOR`, uma `INTERN` e o perfil atual.
+- **Esforço / risco:** P a M / baixo. Começar por aqui: é o erro mais visível.
+
+### F52-05 — Peso do nível desconhecido na ordenação
+
+- **Problema:** P3.
+- **Mudança:** sem filtro novo. Uma vaga de nível `UNKNOWN` continua elegível, mas não passa
+  de `WATCHLIST` sem outro sinal de nível (anos pedidos, faixa salarial, palavras da
+  descrição). Vaga de nível conhecido e aceito ganha a frente no Inbox.
+- **Aceite:** menos de 30% do topo com senioridade `UNKNOWN`; nenhuma vaga some do Inbox, só
+  muda de faixa.
+- **Teste:** regressão de matching com os 50 casos existentes, mais casos de nível
+  desconhecido.
+- **Esforço / risco:** M / médio. Muda `RULES_VERSION` e reavalia o catálogo uma vez.
+- **Decisão pendente:** o dono confirma que prefere ver primeiro o nível conhecido.
+
+### F52-06 — Mais oferta júnior/pleno remota no Brasil
+
+- **Problema:** P1.
+- **Mudança:** terminar o lote do inHire (98 empresas) e medir quantas vagas júnior/pleno
+  remotas ele traz. Levantar outras fontes brasileiras com revisão de termos viável; Gupy
+  segue proibida. Priorizar no catálogo empresas cujas fontes trazem o nível do dono
+  (`COLLECTION_TARGET_AREA_FLOOR` já mede área; falta medir nível).
+- **Aceite:** 600 vagas `JUNIOR` ou `MID` nas áreas-alvo; relatório por fonte com a contagem
+  de vagas do nível.
+- **Esforço / risco:** M / depende de revisão de termos por fonte nova.
+
+### F52-07 — Remoto de verdade: país e modo
+
+- **Problema:** P6.
+- **Mudança:** depende do gold da SPEC 51. Ligar as regras `work_mode:description_phrase` e
+  `allowed_countries:description` quando passarem no portão; no Inbox, mostrar "remoto, país
+  não informado" separado de "remoto no Brasil".
+- **Aceite:** `work_mode` conhecido em 70% e `allowed_countries` em 50% das vagas remotas das
+  áreas-alvo.
+- **Esforço / risco:** P aqui / o risco está no F51-11.
+
+### F52-08 — Tabela de ritmo por fornecedor
+
+- **Problema:** P7.
+- **Mudança:** uma tabela em `docs/17-fontes-coletores.md` com, por tipo de fonte: o que o
+  fornecedor pede (com a fonte da informação), o teto por hora e o intervalo usados, e o
+  consumo medido. Ajustar o que não tem base. Workday fica como está.
+- **Aceite:** todo tipo com coletor tem linha na tabela; nenhum teto abaixo do consumo
+  medido (o do Hacker News estava: 226 usados contra 200 gravados).
+- **Esforço / risco:** P / baixo.
+
+### F52-09 — Busca e coleta por script
+
+- **Problema:** os scripts de coleta e busca não leem o nível do perfil.
+- **Mudança:** `scripts/collect.py` e a busca por texto passam a relatar, por execução,
+  quantas vagas do nível aceito cada fonte trouxe; `eval_search` ganha casos de nível
+  (consulta "júnior remoto" não devolve sênior no topo).
+- **Aceite:** relatório por fonte com a coluna de nível; casos de nível no conjunto de
+  avaliação da busca.
+- **Esforço / risco:** P / baixo.
+
+## 5. O que fica na SPEC 51
+
+| Assunto | Card da SPEC 51 |
+|---|---|
+| Descrição das vagas do Workday (40% do catálogo sem descrição) | F51-03, F51-04, F51-05 |
+| Worker coletando hosts diferentes em paralelo | F51-08 |
+| Gold e ligação das regras de conteúdo | F51-11 |
+| Fila e cota de IA, com dois provedores | F51-10, F51-12 |
+
+Dois itens não estão em nenhuma das duas specs e ficam registrados aqui como pendência: a
+fila de 5.219 normalizações em `REVIEW_REQUIRED` e as 2.543 vagas sem nenhuma skill depois do
+`skills-v4`.
+
+## 6. Ordem
+
+1. F52-04: erro visível, sem dependência.
+2. F52-01 e F52-02: o classificador.
+3. F52-06: oferta, em paralelo (o lote do inHire já está rodando).
+4. F52-05: depois do F52-02, para não rebaixar vaga que o classificador novo resolveria.
+5. F52-03 e F52-07: quando o gold da SPEC 51 passar.
+6. F52-08 e F52-09: a qualquer momento.
+
+## 7. Perguntas abertas
+
+- **Q1.** Vaga com faixa de níveis (`Júnior a Sênior`): guardar o nível mais baixo (F52-02)?
+- **Q2.** Nível desconhecido para no máximo em `WATCHLIST` (F52-05)?
+- **Q3.** `INTERN` entra em `accepted_seniorities`? Hoje não está, e `Entry Level` cai nele.
+- **Q4.** Quais fontes brasileiras o dono quer ver avaliadas no F52-06?
