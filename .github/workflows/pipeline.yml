@@ -207,10 +207,12 @@ jobs:
             python -c "import json,sys; from decimal import Decimal; data=json.load(sys.stdin); assert data['total'] == 1; item=data['items'][0]; assert item['fingerprint_version'] == 'v1'; assert item['work_mode'] == 'REMOTE'; assert item['seniority'] == 'SENIOR'; assert item['contract_type'] == 'FULL_TIME'; assert len(item['compensations']) == 2; assert all(Decimal(value['minimum']) == Decimal('100000') and value['currency'] == 'USD' for value in item['compensations']); assert {skill['canonical_name'] for skill in item['skills']} == {'python', 'react'}; assert all(skill['taxonomy_version'] == 'skills-v4' for skill in item['skills']); assert len(item['occurrences']) == 2"
       - name: Verify deterministic matching through the public API
         run: |
+          # The posting is SENIOR, so the profile accepts SENIOR: a level outside the accepted
+          # ones stops at WATCHLIST (F52-04) and this gate checks a RECOMMENDED posting.
           # A fresh database has no profile yet (GET /profile answers 404), so the first
           # write is made against lock 0.
           profile_lock=0
-          profile_payload="{\"expected_profile_version\":$profile_lock,\"skills\":[{\"canonical_name\":\"python\"},{\"canonical_name\":\"react\"}],\"preferences\":{\"work_modes\":[\"REMOTE\"],\"contracts\":[\"FULL_TIME\"],\"countries\":[\"BR\"],\"compensation_min\":100000,\"compensation_currency\":\"USD\",\"compensation_period\":\"YEAR\"}}"
+          profile_payload="{\"expected_profile_version\":$profile_lock,\"skills\":[{\"canonical_name\":\"python\"},{\"canonical_name\":\"react\"}],\"preferences\":{\"work_modes\":[\"REMOTE\"],\"contracts\":[\"FULL_TIME\"],\"countries\":[\"BR\"],\"compensation_min\":100000,\"compensation_currency\":\"USD\",\"compensation_period\":\"YEAR\",\"accepted_seniorities\":[\"SENIOR\"]}}"
           profile_draft="$(curl --fail --silent --json "$profile_payload" http://127.0.0.1:3000/api/profile/versions)"
           profile_id="$(python -c "import json,sys; print(json.load(sys.stdin)['id'])" <<< "$profile_draft")"
           profile_lock="$(python -c "import json,sys; print(json.load(sys.stdin)['profile_lock_version'])" <<< "$profile_draft")"
