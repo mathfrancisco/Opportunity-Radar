@@ -140,7 +140,7 @@ class Settings(BaseSettings):
     tavily_extract_host_failure_threshold: int = 5
     # F48-08: request ceiling per source type for a new host budget row, `type=ceiling`
     # comma separated. Types not listed use the scheduler default (200 per hour).
-    host_request_ceilings: str = "workday=500,hacker_news=500,inhire=300"
+    host_request_ceilings: str = "workday=500,hacker_news=500,inhire=1200"
 
     @property
     def extraction_skip_source_type_set(self) -> frozenset[str]:
