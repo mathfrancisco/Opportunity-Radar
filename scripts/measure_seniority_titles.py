@@ -14,8 +14,9 @@ the classifier's answer and in shuffled order, so the label is not anchored on i
 A label is a `Seniority` value, `"UNKNOWN"` when the title does not state a level, or a list
 of values when the title states a range (`Pl/Sr`). An emitted level counts as correct when it
 is one of the labelled values. An entry is only measured when `revisado_por` names the person
-who confirmed its `nivel_rotulado`; `--sample` also reads a `*-proposta.json` file, whose
-suggestions (`nivel_sugerido`) are never counted.
+who confirmed it. `--sample` also reads a `*-proposta.json` file: a signed entry with no
+`nivel_rotulado` of its own approves the suggestion (`nivel_sugerido`) as written, and an
+unsigned suggestion is never counted.
 """
 
 from __future__ import annotations
@@ -182,10 +183,15 @@ def _labels(entry: Mapping[str, Any]) -> list[str] | None:
     """The confirmed values, or `None` for an entry the owner has not confirmed yet.
 
     A label only counts with `revisado_por` filled in: a proposal file carries a suggestion
-    per entry, and a suggestion is not a label until a person signs it.
+    per entry, and a suggestion is not a label until a person signs it. Signing an entry
+    without writing `nivel_rotulado` approves its `nivel_sugerido` as written.
     """
+    if not str(entry.get("revisado_por") or "").strip():
+        return None
     label = entry.get("nivel_rotulado")
-    if label is None or not str(entry.get("revisado_por") or "").strip():
+    if label is None:
+        label = entry.get("nivel_sugerido")
+    if label is None:
         return None
     values = [label] if isinstance(label, str) else list(label)
     valid = {member.value for member in Seniority}

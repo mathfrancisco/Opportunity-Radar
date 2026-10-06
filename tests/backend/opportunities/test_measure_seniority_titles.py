@@ -184,6 +184,30 @@ def test_measure_sample_ignores_a_label_nobody_signed() -> None:
     }
 
 
+def test_measure_sample_reads_a_signed_suggestion_as_the_label() -> None:
+    # Signing an entry without writing `nivel_rotulado` approves the suggestion as written.
+    suggested = {"nivel_rotulado": None}
+    report = measure_sample(
+        [
+            {"title": "Senior Engineer", "nivel_sugerido": "SENIOR", **suggested, **REVIEWED},
+            # The owner's own label wins over the suggestion.
+            {
+                "title": "Engineering Manager",
+                "nivel_sugerido": "MANAGER",
+                "nivel_rotulado": "UNKNOWN",
+                **REVIEWED,
+            },
+            {"title": "Staff Engineer", "nivel_sugerido": "STAFF", **suggested},
+        ]
+    )
+
+    assert report["labelled"] == 2
+    assert report["precision_by_level"] == {
+        "MANAGER": {"emitted": 1, "correct": 0, "precision": 0.0},
+        "SENIOR": {"emitted": 1, "correct": 1, "precision": 1.0},
+    }
+
+
 @needs_sample
 def test_versioned_sample_has_the_card_strata_and_runs_offline(
     capsys: pytest.CaptureFixture[str],
