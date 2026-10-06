@@ -418,6 +418,43 @@ def test_inbox_query_filters_by_created_after() -> None:
         assert [item.opportunity_id for item in page.items] == [after.id]
 
 
+def test_inbox_default_order_puts_the_top_verdicts_before_a_higher_capped_score() -> None:
+    """F52-05: a posting capped at WATCHLIST stays in the Inbox, behind the top verdicts."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        profile_version = _profile_version(session)
+        company = _company(session, "normal")
+        capped = _opportunity(session, company, title="Unknown level", published_at=NOW)
+        top = _opportunity(session, company, title="Accepted level", published_at=NOW)
+        _assessment(
+            session,
+            capped,
+            profile_version.id,
+            verdict="WATCHLIST",
+            score="90.0000",
+            assessed_at=NOW,
+        )
+        _assessment(
+            session,
+            top,
+            profile_version.id,
+            verdict="RECOMMENDED",
+            score="70.0000",
+            assessed_at=NOW,
+        )
+        session.commit()
+
+        def ids(order: InboxOrder) -> list[UUID]:
+            page = list_opportunity_inbox(
+                session,
+                InboxQuery(order=order, company_id=company.id, only_recent=False),
+            )
+            return [item.opportunity_id for item in page.items]
+
+        assert ids(InboxOrder.PRIORITY) == [top.id, capped.id]
+        assert ids(InboxOrder.SCORE) == [capped.id, top.id]
+
+
 def test_inbox_default_order_is_score_then_recency_not_company_priority() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:

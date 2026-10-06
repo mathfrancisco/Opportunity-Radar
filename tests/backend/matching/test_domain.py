@@ -313,11 +313,23 @@ def test_an_intern_posting_is_ineligible_for_a_profile_that_does_not_list_it() -
     assert _verdict_for(Seniority.INTERN, _OWNER_ACCEPTED) is Verdict.INELIGIBLE
 
 
-@pytest.mark.parametrize("seniority", [Seniority.JUNIOR, Seniority.MID, Seniority.UNKNOWN])
-def test_an_accepted_or_unknown_level_is_not_capped(seniority: Seniority) -> None:
+@pytest.mark.parametrize("seniority", [Seniority.JUNIOR, Seniority.MID])
+def test_a_known_and_accepted_level_is_not_capped(seniority: Seniority) -> None:
     assert _verdict_for(seniority, _OWNER_ACCEPTED) in _TOP
     # No stated preference caps nothing (F20-72).
     assert _verdict_for(Seniority.SENIOR, ()) in _TOP
+
+
+def test_an_unknown_level_stops_at_watchlist_and_stays_eligible() -> None:
+    # F52-05: the profile lists UNKNOWN, so the posting is kept; it just leaves the top.
+    assert _verdict_for(Seniority.UNKNOWN, _OWNER_ACCEPTED) is Verdict.WATCHLIST
+    assert _verdict_for(Seniority.UNKNOWN, (Seniority.JUNIOR, Seniority.MID)) is Verdict.WATCHLIST
+    # Under matching-v4 the same posting reached the top.
+    assert _verdict_for(Seniority.JUNIOR, _OWNER_ACCEPTED) in _TOP
+
+
+def test_an_unknown_level_is_not_capped_for_a_profile_without_level_preference() -> None:
+    assert _verdict_for(Seniority.UNKNOWN, ()) in _TOP
 
 
 def test_golden_case_partial_skills_uses_exact_canonical_overlap() -> None:
@@ -453,7 +465,7 @@ def _factor(result, code: str):
 def test_v2_is_the_current_rules_version_with_complete_weights() -> None:
     rules = default_rule_set()
 
-    assert rules.version == "matching-v4" == RULES_VERSION
+    assert rules.version == "matching-v5" == RULES_VERSION
     assert sum(item.weight for item in rules.factors) == Decimal("1")
     policies = {item.code: item.missing_policy for item in rules.factors}
     assert policies["TIMEZONE"] is MissingPolicy.EXCLUDE_AND_RENORMALIZE
