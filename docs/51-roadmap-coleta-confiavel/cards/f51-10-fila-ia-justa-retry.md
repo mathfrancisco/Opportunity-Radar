@@ -44,3 +44,21 @@ Selecionar candidatos pendentes com ordem justa e estável, persistir defer/retr
 ## Falhas, rollout e reversão
 
 Falha de provider, quota, schema, lease e configuração aparecem em categorias distintas; nenhuma é sucesso vazio. Primeiro publicar métricas em shadow, depois aplicar seleção SQL sem alterar o provedor nem a regra de sugestão. Rollback pode voltar à consulta anterior mantendo defer e registros; se a consulta antiga reintroduzir starvation, suspender batch ao invés de elevar chamadas. Testes mutáveis ficam em `_test`, com provider falso. Entregáveis: baseline reproduzível, query/cursor, contrato de defer, claim se necessário, resumo da fila e testes. O risco estrutural está observado; incidência de starvation ainda não está medida.
+
+## Conferência dos critérios contra os testes (2026-10-07, sexta sessão)
+
+Conferido critério por critério, lendo o corpo de cada teste. Caminhos relativos a
+`tests/backend/`. "banco" é teste de integração com PostgreSQL real
+(`RUN_DATABASE_INTEGRATION=1`); "unidade" usa dublês. Os marcados com PR #70 foram
+escritos nesta sessão, sem mudança em `src`.
+
+| AC | Teste | Tipo | Observação |
+| --- | --- | --- | --- |
+| AC01 | `opportunities/test_suggestions.py::test_suggestion_queue_filters_before_limit_and_pages_stably` | banco | Confere o resultado, não o SQL |
+| AC02 | o mesmo teste do AC01 | banco |  |
+| AC03 | `opportunities/test_suggestions.py::test_a_failed_suggestion_does_not_hide_the_next_candidate` | banco | A falha do teste é corpo que não é JSON, não schema |
+| AC04 | `opportunities/test_suggestions.py::test_quota_exhaustion_persists_one_coherent_defer_and_a_rerun_waits_for_availability` (PR #70); `::test_global_quota_exhaustion_defers_rest_of_batch` | banco | **Diferença do card:** só o candidato que encontrou o saldo esgotado ganha linha de adiamento; os seguintes ficam como não tentados, sem linha. O card diz que todos recebem adiamento |
+| AC05 | `opportunities/test_suggestions.py::test_a_defer_is_scoped_to_its_content_hash_and_changed_content_is_selectable` (PR #70) | banco |  |
+| AC06 | `opportunities/test_suggestions.py::test_suggestion_claim_prevents_duplicate_provider_call` | banco | Duas sessões no mesmo processo |
+
+Os nomes propostos no card (`test_suggestion_sql_queue_skips_resolved_before_limit`, `test_suggestion_keyset_cursor_is_stable`, `test_suggestion_schema_failure_does_not_hide_next_candidate`, `test_suggestion_defer_is_scoped_to_content_version`) não existem; os testes reais são os da tabela. Todos os critérios têm teste. **Decisão pendente do dono no AC04:** aceitar o comportamento (um adiamento, o resto não tentado) ou pedir adiamento para todos. O fechamento depende disso e da janela do F51-18.

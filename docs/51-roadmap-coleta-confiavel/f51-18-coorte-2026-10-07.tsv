@@ -1,0 +1,277 @@
+id	source_type	name	schedule
+4f03144a-f4d3-4d33-adf6-c6b094564fb9	ashby	Airbyte	0 * * * *
+a5e3ccab-4a0f-424d-90c1-04bed89d539f	ashby	Andela jobs	0 * * * *
+5840aa39-0685-488d-93fd-6690bfed805e	ashby	Apollo GraphQL (Ashby)	0 * * * *
+514ff08d-ead3-4dc0-90ab-772619d9cd43	ashby	Browserbase jobs	0 * * * *
+e6750b9d-b9af-4b68-a536-26b1d28c8a46	ashby	Camunda (Ashby)	0 * * * *
+cd30e4ae-151f-4a98-8bc9-c7a002bebcda	ashby	Cartesia jobs	0 * * * *
+59ca7429-cc46-403c-bfe3-eb5ea0d6435f	ashby	Clerk jobs	0 * * * *
+c401a5c9-e865-43dd-b119-6fc62916ddb2	ashby	ClickHouse	0 * * * *
+6b85fd9b-c003-4f48-8da2-d1833feb9d72	ashby	Cohere (ashby)	0 * * * *
+29655a3c-de97-4864-ad19-df9623bb2877	ashby	DuckDuckGo (Ashby)	0 * * * *
+e14824de-6ce3-43da-b530-885310a640e6	ashby	ElevenLabs (Ashby)	0 * * * *
+d1724fd0-72f9-48e2-81a6-ac5cc3c876f5	ashby	Firecrawl jobs	0 * * * *
+ce1095cd-3b5f-4eb9-820a-5c9e6fdc4b71	ashby	Inngest jobs	0 * * * *
+ae9ff4b3-34ee-4fb5-bc71-45947c8c4337	ashby	LangChain (Ashby)	0 * * * *
+b1ba3a3a-ce2c-4a2f-bb65-3235d3a7f230	ashby	Lemon.io jobs	0 * * * *
+1a2f582f-e8ce-4f6a-ae5d-95cecc15510d	ashby	Linear (Ashby)	0 * * * *
+eedba883-e3d7-4b1c-986c-ea77ff508418	ashby	LiteLLM jobs	0 * * * *
+edd1209d-2693-4dd6-92f2-7372de6bfbb5	ashby	LlamaIndex (Ashby)	0 */6 * * *
+3c57ed82-9e6b-40fa-bf3c-c21a44a796d5	ashby	Nubank jobs	0 * * * *
+51c7aa37-0706-497e-aca0-1e3c964067d8	ashby	OpenAI (Ashby)	0 * * * *
+6aa9f073-f2e0-46e9-9248-af81d97542ce	ashby	Oyster (Ashby)	0 * * * *
+8dbc1f81-64bb-4d82-9c05-5ce8c57ae83c	ashby	Percona jobs	0 * * * *
+15cee2e0-93d8-47c8-b817-5c8171c1f172	ashby	Plaid (Ashby)	0 */6 * * *
+c29d56f9-9008-4b4c-bcf0-c72eb2f32899	ashby	Proposed Aios ashby	0 * * * *
+d016ddb0-670d-41b7-b085-282c42489834	ashby	Proposed Anysphere (Cursor) ashby	0 */6 * * *
+dcb536f2-091d-4e6c-b214-32190bf1c2c4	ashby	Proposed ClassDojo ashby	0 * * * *
+3b1334d8-4471-40bd-88c4-aabbfcec6182	ashby	Proposed Clipboard ashby	0 * * * *
+2fd06ef3-3e89-4440-915d-b5019c6cb66d	ashby	Proposed Cognition ashby	0 * * * *
+374b9e7f-ff09-415a-adfb-f05c69e4409b	ashby	Proposed DeepL ashby	
+d2df96dd-e6e2-403c-8ba9-515298058329	ashby	Proposed Deepgram ashby	0 * * * *
+6b94cd83-6284-4e1c-978c-efb72a132944	ashby	Proposed Duckbill ashby	0 */6 * * *
+f7fb535e-e1c5-489c-91ba-26db758b6664	ashby	Proposed Fieldguide ashby	0 * * * *
+de07c1d4-bd9b-4202-b702-a4bc30d0cb9b	ashby	Proposed GitBook ashby	0 * * * *
+6518dc9d-6e49-45d8-981b-6998e27ae887	ashby	Proposed Hebbia ashby	0 * * * *
+413fd099-47a7-4825-8bb2-e2babb97b5c5	ashby	Proposed Help Scout ashby	0 * * * *
+294a587d-6340-40f6-9692-6c3d6d1c713f	ashby	Proposed Jiga ashby	0 * * * *
+cdac21d1-cd6e-4709-81c6-71c4fa831ad8	ashby	Proposed Kit ashby	0 * * * *
+1a860d48-2ae9-403e-846a-95dd04c450d7	ashby	Proposed Legionhealth ashby	0 * * * *
+d30b4e79-87be-46dc-a854-87186ee62286	ashby	Proposed LiveKit ashby	
+52aee40f-ddda-455d-bc1e-1430687f6e48	ashby	Proposed Mistral AI ashby	0 * * * *
+cf59c297-843b-40a6-a4ab-d5d1e241ac14	ashby	Proposed Notion ashby	0 * * * *
+bb857f9f-5ad2-4e0d-ab6e-c0613a3dc7a2	ashby	Proposed Pinecone ashby	0 * * * *
+10a67924-07ab-4bed-959e-f3961b79c197	ashby	Proposed Pleo ashby	0 * * * *
+1cffd5d1-60de-4351-9838-9653c5ac9ed5	ashby	Proposed Ramp ashby	0 */6 * * *
+24cad9b7-f543-4066-89de-8a823a6fc071	ashby	Proposed Sierra ashby	0 * * * *
+cd5aa88e-9c05-4cd3-b647-1f2adb35caf1	ashby	Proposed TravelPerk ashby	0 */6 * * *
+02011da9-2926-43fd-a2b0-7184be880fcb	ashby	Proposed Vapi ashby	0 * * * *
+d91e9aa5-ce68-4ac1-9d86-f28e0480687c	ashby	Proposed Writer ashby	0 */6 * * *
+10288e9c-07bf-41c0-8026-d7aa36d7bb09	ashby	Quora (ashby)	0 * * * *
+0f52cb8f-4005-4c5b-9b32-e3bb685273a4	ashby	Realm (ashby)	0 * * * *
+2c616aba-729d-488a-926f-63a132566f81	ashby	Render jobs	0 * * * *
+decf92f9-f3ab-4074-bd21-7ff09c40831f	ashby	Replit (ashby)	0 * * * *
+4f4c5540-c30f-4f12-9831-cedbaa13204f	ashby	Retell AI (Ashby)	0 * * * *
+9a28777e-67bb-4d21-8f24-751022538d4d	ashby	RevenueCat jobs	0 * * * *
+6fc2360e-10e0-407c-bdbf-0cfaa5606bff	ashby	Roboflow jobs	0 * * * *
+e513ad99-a537-4e69-9328-e94a0e6c086f	ashby	Rollstack jobs	0 * * * *
+1c226b79-a211-4a3f-ae17-61f76ade86ba	ashby	Sentry (Ashby)	0 */6 * * *
+c12385ea-e1cc-42d6-92c3-afea78c7e9c1	ashby	Supabase jobs	0 * * * *
+52ff2887-09a7-4b7e-af29-17e9417526c5	ashby	Temporal	0 * * * *
+88afc581-67ce-4e79-a5f6-e83db4749a16	ashby	TestGorilla jobs	0 * * * *
+5b535c50-4961-4347-a1c4-3b3432228052	ashby	Trigger.dev jobs	0 * * * *
+510fe6f0-3ecd-485e-99cc-230845503e6f	ashby	Upvest (ashby)	0 * * * *
+ff072423-40e8-44eb-a2c9-1a26623e7b0f	ashby	WorkOS jobs	0 * * * *
+78708db3-c281-4793-ab2b-b02fbd84b536	ashby	Zapier (Ashby)	0 * * * *
+f1e16309-c351-461f-9a7b-ff37bd1bea3a	ashby	n8n jobs	0 * * * *
+70335587-ab87-4f79-b98a-192587c315d6	factorial	Agentero (Factorial)	0 * * * *
+fbcd83b1-ac84-44e3-a35f-a157de838b0d	factorial	Factorial (Factorial)	0 * * * *
+005ef831-2c35-4976-9f9c-f1a7bb463d9d	greenhouse	Aiven (Greenhouse)	0 * * * *
+51748cba-fa4c-45ec-ac89-df2a6fe30c57	greenhouse	Algolia (Greenhouse)	0 * * * *
+f1ead0e7-5198-468a-a3c2-7ff4e77a5eea	greenhouse	Altafonte Brasil (greenhouse)	0 * * * *
+914afb30-2c60-4b68-a92d-1e1f3bee8326	greenhouse	Anthropic (Greenhouse)	0 * * * *
+4856b8cd-1a88-4c32-9c85-708833c9b40c	greenhouse	Artefact (greenhouse)	0 * * * *
+ff1007a4-f1c3-49d1-af84-c2583565e5a4	greenhouse	AssemblyAI jobs	0 * * * *
+923847ea-8ebd-435a-94ba-e5ecc1ebfd29	greenhouse	Automattic (Greenhouse)	0 * * * *
+e744b20c-e39c-43e6-a785-8bbae990e337	greenhouse	Brex (Greenhouse)	0 * * * *
+8918e5d6-a6d3-4ee0-84fd-03c7dfa89f25	greenhouse	Chainguard (Greenhouse)	0 * * * *
+753f0851-986d-46ae-bbd7-a843150c93e9	greenhouse	Cloudflare (Greenhouse)	0 * * * *
+3a881f7f-b2f7-4e7b-9903-ad0d78d570a6	greenhouse	Cockroach Labs (Greenhouse)	0 * * * *
+89c06fa4-3eb2-4c7c-9e3f-5b61dca2d348	greenhouse	Customer.io jobs	0 * * * *
+062ebbc4-d637-4561-b5b1-27123eb062bb	greenhouse	Databricks (Greenhouse)	0 * * * *
+a91088e5-826f-45f2-8054-c481fdcdf113	greenhouse	Datadog (Greenhouse)	0 * * * *
+faa93c5c-8d84-4894-a113-620aa8ff124c	greenhouse	DigitalOcean (Greenhouse)	0 * * * *
+104df2af-5c7f-49fc-8489-329e31725116	greenhouse	DoorDash jobs	0 * * * *
+3156e83e-916d-46b0-bbec-489c3eb4497c	greenhouse	EBANX jobs	0 * * * *
+d5d1a070-092c-463e-9ab8-1f5bd83092fa	greenhouse	Fastly (Greenhouse)	0 * * * *
+a03e99ac-8f2c-45f2-bfba-06483fef106f	greenhouse	GitLab (Greenhouse)	0 */6 * * *
+ed9f259e-0ab8-4b78-9882-402e280b181d	greenhouse	Glean (Greenhouse)	0 * * * *
+4b9979f4-7d46-4318-a7cf-2fb89e2db061	greenhouse	Grafana Labs jobs	0 * * * *
+9b5c658f-74b4-4753-b47b-dc7dea46d492	greenhouse	Grupo Burson Brasil (greenhouse)	0 * * * *
+518727e2-9963-4178-b2d3-f0723685b5f3	greenhouse	Honeycomb (Greenhouse)	0 */6 * * *
+34ca6813-075f-406e-84db-51caf518c7b5	greenhouse	HubSpot (Greenhouse)	0 * * * *
+117c5611-bccf-4c9a-95b6-5bb4d2cd1303	greenhouse	Hunter Douglas (greenhouse)	0 * * * *
+9cdc1255-c44a-4160-ba05-a0ee6e69a846	greenhouse	Lokalise (Greenhouse)	0 * * * *
+ffe369bf-71a0-44c1-ac98-bc9082d2f727	greenhouse	MongoDB (Greenhouse)	0 * * * *
+6be8d1ce-a5a9-4b19-9f32-fa66ccd100e6	greenhouse	Monks (greenhouse)	0 * * * *
+439fc03a-e7ee-4d82-8d62-83af49466c79	greenhouse	Proposed Alpaca greenhouse	0 * * * *
+f6819a02-f988-4050-83e1-750d2c6a1f35	greenhouse	Proposed Blip greenhouse	0 */6 * * *
+652e1f57-0f39-4b18-9d70-adcd8ab23ba7	greenhouse	Proposed Buildkite greenhouse	0 * * * *
+7cf260e6-21ff-47db-82e4-a63e4e44b5e0	greenhouse	Proposed Canonical greenhouse	0 */6 * * *
+692c906f-fedd-4a3f-8dc3-34e5687dad84	greenhouse	Proposed CircleCI greenhouse	0 */6 * * *
+8cae1b59-19ce-4e04-92a9-89dabbd38a30	greenhouse	Proposed Dataiku greenhouse	0 * * * *
+f912b2f3-75b1-4884-bf7a-9cc63bda993f	greenhouse	Proposed Daybreak Health greenhouse	0 * * * *
+7c6526fe-c667-41e6-b502-332ac6a50fe7	greenhouse	Proposed Figma greenhouse	0 * * * *
+7f2d6d35-ce44-4440-93c1-e5f6368d4d5f	greenhouse	Proposed GoCardless greenhouse	0 * * * *
+596d61c4-8998-4247-81ab-98ad39a31497	greenhouse	Proposed Instawork greenhouse	0 * * * *
+29003f9e-a7a4-4fdd-a7b6-a54e447aefc9	greenhouse	Proposed LaunchDarkly greenhouse	0 * * * *
+ab4e1e2e-a438-45fd-8426-a8dce115f168	greenhouse	Proposed Netlify greenhouse	0 * * * *
+37348927-2a66-40a3-b83d-ee97fbdb15a0	greenhouse	Proposed Postscript greenhouse	0 * * * *
+c11bce07-16b1-484d-949d-afc455b90356	greenhouse	Proposed Si greenhouse	0 * * * *
+928921ff-60ec-4827-93dc-25a326ef276e	greenhouse	Proposed Sourcegraph greenhouse	0 */6 * * *
+0e19f541-7d9d-4ee8-9d0e-6f5a1402d192	greenhouse	Proposed Swayable greenhouse	0 * * * *
+afa0e0c9-6d19-41b8-bde3-7b254e14f8fb	greenhouse	Proposed Telnyx greenhouse	0 */6 * * *
+73a917b3-f1e5-4158-9f09-a5abc00ef59e	greenhouse	Proposed Wikimedia Foundation greenhouse	
+8fbb2862-01dc-4696-a255-73458a553672	greenhouse	Pulumi (Greenhouse)	0 */6 * * *
+eb5c3d0b-dc94-4349-b01c-ed516e05862f	greenhouse	Stone (greenhouse)	0 * * * *
+9d6125b8-e5b9-4af9-9391-cbf53d8b850d	greenhouse	Storyblok (Greenhouse)	0 * * * *
+022968f4-ddde-4bc7-814b-72b7fd4c7a76	greenhouse	Stripe (Greenhouse)	0 * * * *
+e9b924be-ab2f-4de1-b799-1ce9dbcdb970	greenhouse	Tailscale (Greenhouse)	0 */6 * * *
+42c7792a-ba29-4438-b64f-8a2861ed31c6	greenhouse	Turing jobs	0 * * * *
+92001634-1947-4a55-9846-76f6a2f37702	greenhouse	VTEX jobs	0 * * * *
+b0ffed48-ac26-4efe-806f-ef96d1907471	greenhouse	Vercel (Greenhouse)	0 * * * *
+32d49344-38fb-4cbf-8f7f-b10478b180de	greenhouse	XP Inc (greenhouse)	0 * * * *
+296d026e-be5a-42cd-99ff-e9e393ffab7e	greenhouse	Zup jobs	0 * * * *
+4685796e-9523-4376-b2c4-ffddc8101331	hacker_news	Hacker News - Who is hiring? (F20-55)	0 18 3 * *
+d208de3d-76b3-4530-a31d-25b932be7a5c	inhire	Proposed Acerto inhire	0 * * * *
+fe678cb0-ff19-495d-a39f-4258f9a75384	inhire	Proposed Agrotools inhire	0 * * * *
+46be9f1d-1db3-44e0-92c4-99e6417ee3dd	inhire	Proposed Aiko inhire	0 * * * *
+33067494-89ed-459b-9bc1-ed9d67b87f50	inhire	Proposed Alelo inhire	0 * * * *
+5dccc788-6bb4-440b-9c4d-208d30c16a6a	inhire	Proposed Alice inhire	0 * * * *
+274cdf43-802d-41c6-bd7c-6c0fc8588a2f	inhire	Proposed Appmax inhire	0 * * * *
+a0e6eaac-4e00-431f-a4d9-f50d1b444c45	inhire	Proposed Atlas inhire	0 * * * *
+ded3b217-5583-4dc7-bdac-4c83d1ac0b1d	inhire	Proposed Atlântico inhire	0 * * * *
+f3cf8bfe-326c-4b0f-b1fb-8cc799aead12	inhire	Proposed Auvo inhire	0 * * * *
+13e65fa3-f366-4c2d-8d92-d9ac436f5734	inhire	Proposed B3 inhire	0 * * * *
+c1c9f1f3-a95e-4b2d-a48a-41146e3a3fd5	inhire	Proposed BIX Tecnologia inhire	0 * * * *
+723e9614-939c-4133-b6af-79f999ef3d78	inhire	Proposed BRQ inhire	0 * * * *
+7d9881aa-1016-464f-9bbb-bd9e6dfc87f7	inhire	Proposed Bemobi inhire	0 * * * *
+acbde2f4-c4c1-4ea5-80fa-2992e9ea4527	inhire	Proposed Big Data (BIG) inhire	0 * * * *
+f6698497-cd7c-4e83-83c7-ea67a9b699e5	inhire	Proposed Brasoftware inhire	0 * * * *
+38e63d88-e399-415d-93ac-fdf9db462a4a	inhire	Proposed CERC inhire	0 * * * *
+4c26a94b-f982-4ed3-8290-2ef1831dbf5b	inhire	Proposed CRMBonus inhire	0 * * * *
+9fa1a060-35df-48e0-8cc1-5ae009dd37ed	inhire	Proposed Cactus Gaming inhire	0 * * * *
+bff779f0-7c2a-489a-9753-987e7e3e1bcf	inhire	Proposed Caveo inhire	0 * * * *
+084a2a9a-4e2e-465d-b035-da3863902c19	inhire	Proposed ChatGuru inhire	0 * * * *
+a6682e49-ce4e-4ca8-a9db-d56f6b95a96b	inhire	Proposed Cielo inhire	0 * * * *
+d39465b4-4af1-4143-a41b-c72408bd9630	inhire	Proposed Clavis inhire	0 * * * *
+d201435a-f02f-4c5c-bfa0-567b66cee4eb	inhire	Proposed Conta Azul inhire	0 * * * *
+c8d4315c-fbde-4dcf-8e51-a456115b9188	inhire	Proposed Conta Simples inhire	0 * * * *
+f5cd1070-e866-4a77-ae88-8d9f9a7c9106	inhire	Proposed Creditas inhire	0 * * * *
+2a1c404c-1ced-459c-b3dc-e713e72a6b67	inhire	Proposed DB1 Group inhire	0 * * * *
+c60804a1-cf8b-419f-8f19-5accf6653157	inhire	Proposed Dataside inhire	0 * * * *
+e87eccde-7361-461f-b0da-2bfa28072b37	inhire	Proposed Deal Group inhire	0 * * * *
+b933df6f-8a64-4db2-8362-16817b7e93a8	inhire	Proposed Dock inhire	0 * * * *
+f20bbb82-e8ac-4df3-8563-7d5f2618ee5a	inhire	Proposed ED inhire	0 * * * *
+0be5fcb9-41cd-47a8-929e-6c369292749e	inhire	Proposed EDGE inhire	0 * * * *
+9a7d60b0-04cd-4e20-a303-f3e83a4268ef	inhire	Proposed FIAP / Alura / PM3 (Grupo Alun) inhire	0 * * * *
+f25a23ad-72c3-4e4d-8903-f1b3fa08ba87	inhire	Proposed Final Level Co. inhire	0 * * * *
+7f774ba3-b41f-405f-aeb9-39caa8cc7068	inhire	Proposed Fusion Consultoria inhire	0 * * * *
+d1a59bcc-1a92-4dab-9cdf-1ecde47548b0	inhire	Proposed GEX inhire	0 * * * *
+dbfc3be5-5ce1-4283-9f43-f3d0a4010916	inhire	Proposed GX2 inhire	0 * * * *
+8cf51af5-3256-43fe-8e01-f4e5c67f1afc	inhire	Proposed Housi inhire	0 * * * *
+3212b827-1a27-48a1-a56e-90b641d48f0c	inhire	Proposed IPNET by Vivo inhire	0 * * * *
+8f8bb644-26b6-4924-b8ce-32d025b20d50	inhire	Proposed IVENTIS inhire	0 * * * *
+d388832c-0755-454c-a0b3-2a2b83c25003	inhire	Proposed InHire (próprio) inhire	0 * * * *
+66198cc5-0e9f-4aaa-92ac-5db572364917	inhire	Proposed Indicium inhire	0 * * * *
+a7180cb7-082d-4f6a-9f4b-0a9929d32470	inhire	Proposed Involves inhire	0 * * * *
+24b97e4a-00c3-482d-ab39-5838f976ce65	inhire	Proposed Jump inhire	0 * * * *
+f6648923-3eea-4f86-8c9b-4e7bd85efedc	inhire	Proposed Kamino inhire	0 * * * *
+6e97af2a-78de-4e15-a469-a61f55344915	inhire	Proposed Kobe Apps inhire	0 * * * *
+51a12381-d278-49ca-91cc-8194ad686664	inhire	Proposed Kstack inhire	0 * * * *
+aeb69c35-5ad2-480e-bbf0-65720ae3878e	inhire	Proposed LWSA inhire	0 * * * *
+a639808c-c455-4238-b78d-8fe920a12c4e	inhire	Proposed Linx inhire	0 * * * *
+980f66c1-e59f-4ebb-9364-6a9ac6de0b75	inhire	Proposed Loft inhire	0 * * * *
+0ccbbf7f-f379-41f6-bb20-0d406fced231	inhire	Proposed Lyncas inhire	0 * * * *
+38db9ddf-8ec0-4e82-92c8-2f9175040345	inhire	Proposed MB Labs inhire	0 * * * *
+f1450643-147b-425e-bcf5-7c12c83281b2	inhire	Proposed MJV Technology & Innovation inhire	0 * * * *
+85ac8eb6-31d8-49c4-8acc-5a255fc16ebd	inhire	Proposed MadeinWeb inhire	0 * * * *
+5bbf5063-098e-4b1d-a5e6-787689d31310	inhire	Proposed Magazine Luiza inhire	0 * * * *
+ee486402-f697-428d-8bcd-712af75f3329	inhire	Proposed Makasí inhire	0 * * * *
+12ba52e8-5140-48cc-989f-6991946595a7	inhire	Proposed Matera inhire	0 * * * *
+6b28c07d-53da-45a3-b736-e43732e93ba0	inhire	Proposed MeetRox inhire	0 * * * *
+72fd4198-595b-4ae9-840d-88a5906c9607	inhire	Proposed Mottu inhire	0 * * * *
+11f2f70d-1d96-4163-af17-7b9821804554	inhire	Proposed Neoway (Trillia) inhire	0 * * * *
+cc65c93b-f8b3-48a0-bf28-01ec7ab8b6ab	inhire	Proposed Ninecon inhire	0 * * * *
+44bd74d5-8182-4ebb-93e2-df7109ef01f7	inhire	Proposed Nuvemshop (Tiendanube) inhire	0 * * * *
+a8ae6a31-ef5b-4e2b-8f49-29ad5ec2c8cf	inhire	Proposed Objective inhire	0 * * * *
+84e76f01-6059-4d8b-ac30-c72daa143872	inhire	Proposed Olist inhire	0 * * * *
+cea28333-0ff7-4cbb-a8de-0ae43753c193	inhire	Proposed OnSign inhire	0 * * * *
+59859498-6ff7-410f-8d7a-a17431f51fc4	inhire	Proposed Outsera inhire	0 * * * *
+8ef3f4f4-6292-410e-aaab-b6cd1479307e	inhire	Proposed Pantheon Inc. do Brasil inhire	0 * * * *
+121b8260-7b89-4194-8f9c-4b23423530ea	inhire	Proposed Peers inhire	0 * * * *
+f414c757-3404-48c9-a3e1-6d08168015da	inhire	Proposed Ponce Tech inhire	0 * * * *
+12628e1f-873c-4d54-91e8-cd1a07abf574	inhire	Proposed Pottencial Seguradora inhire	0 * * * *
+c6f68fb1-82df-4e7c-9047-453a1e9a3690	inhire	Proposed Pravaler inhire	0 * * * *
+815cb947-3250-4275-a57c-738ec11fd085	inhire	Proposed Premiersoft inhire	0 * * * *
+19ee4274-494f-4e88-abdd-ad22d214c588	inhire	Proposed Programmers inhire	0 * * * *
+f62b851f-b172-4a1b-987d-b60d49e173a7	inhire	Proposed QI Tech inhire	0 * * * *
+f8d238e5-0fea-41e3-ae70-a263fd763d4a	inhire	Proposed QuickSoft inhire	0 * * * *
+843ba7ee-5734-4856-b913-826f878d1da4	inhire	Proposed Radix inhire	0 * * * *
+d5cbe59a-3408-419c-ad29-357eed50ee63	inhire	Proposed Sanar inhire	0 * * * *
+6e467131-9cab-4322-9fa8-421f15a8fb18	inhire	Proposed Segura inhire	0 * * * *
+f593599f-f650-478b-aa11-323b7f38863f	inhire	Proposed Sevenred inhire	0 * * * *
+6e6edeb5-4048-4412-968b-a2a4a3a7e10f	inhire	Proposed Sicredi inhire	0 * * * *
+4cbd0958-a251-4567-9bed-6af626d958ec	inhire	Proposed Skeelo inhire	0 * * * *
+43a00793-be5e-4b91-91d4-a7f896c30515	inhire	Proposed Sympla inhire	0 * * * *
+50912a49-9f67-4828-8d94-b379c6b5db5a	inhire	Proposed TOTVS inhire	0 * * * *
+0fbab34c-7808-48c1-afb6-32c3f1d19ac6	inhire	Proposed TQI inhire	0 * * * *
+efa2eb2a-b09a-4d21-bbc7-8bd9c1365406	inhire	Proposed Tecer inhire	0 * * * *
+5d7e6a52-83fb-4c2f-bd26-082b955b69b0	inhire	Proposed Techlead IT Solutions inhire	0 * * * *
+6c862fd4-ac27-4def-8cef-65138d31dee3	inhire	Proposed Tecla T inhire	0 * * * *
+d7363011-dad9-405f-b567-f945d3a43a1c	inhire	Proposed Toro Investimentos inhire	0 * * * *
+3b3810e8-f749-4cf9-b36b-769eb6ad9cdf	inhire	Proposed Tray inhire	0 * * * *
+99252ccf-03be-4144-9ab0-132065bb91a0	inhire	Proposed Ubots inhire	0 * * * *
+148d7a31-1a09-4a22-b143-a21ce699ed2d	inhire	Proposed Ume inhire	0 * * * *
+362cd96e-79f4-4993-bbd5-3639af341268	inhire	Proposed Unitech inhire	0 * * * *
+a7be4eea-583d-4c22-89fa-52db6939d0a7	inhire	Proposed Venturus inhire	0 * * * *
+8432471f-c677-496d-a757-54a21799c5c2	inhire	Proposed Via inhire	0 * * * *
+c80e776b-34fa-4835-af9f-24ec739c155f	inhire	Proposed benup inhire	0 * * * *
+9ee7f18a-09be-421a-bf85-b6acfd336d05	inhire	Proposed iFood inhire	0 * * * *
+7e172541-fd8a-4d4c-9955-d4ee0f620ddf	inhire	Proposed iSystems inhire	0 * * * *
+e5f11c0a-d7d5-4770-bbbd-a14a2667f87e	inhire	Proposed ideen inhire	0 * * * *
+d57a307c-b7e8-4203-a53e-9d3feed419b2	inhire	Proposed nstech inhire	0 * * * *
+25c03607-9466-4e64-a6aa-e119d2968b8c	lever	Bluelight Consulting jobs	0 * * * *
+da73ef0f-34cc-4c6f-aa1d-f2d423ac1f48	lever	CI&T jobs	0 * * * *
+82fedecc-1278-4edb-860c-7a2802a35c1f	lever	Loadsmart jobs	0 * * * *
+1adc1067-c36e-47f7-9bfe-faeaa65e4ee4	lever	Palantir Technologies (lever)	0 * * * *
+821fd72f-c8d8-4723-b5e2-38122cbe3b95	lever	Proposed Emi Labs lever	0 * * * *
+4ce23dd4-b80d-49b6-9c7b-f715128f0104	lever	Proposed Fampay lever	0 * * * *
+08605d9d-fee5-4a8f-9991-9c122bd81778	lever	Proposed Qonto lever	0 * * * *
+5905598a-dd7b-4d5c-b167-437ec2ab0ae7	lever	Proposed Scaleway lever	0 * * * *
+46ed58d5-ae09-457a-ad8d-5216ccef7e50	lever	Proposed Sonar lever	0 * * * *
+6ec9b8a7-afdc-48ca-8597-c4718605bc5a	lever	Proposed Tryjeeves lever	0 * * * *
+6cbacaea-e2ee-403b-8c14-3a2dca3f21cf	lever	Proposed Weekdayworks lever	0 * * * *
+054e4e4b-92b7-43ad-a127-699c2be54386	lever	Spotify jobs	0 * * * *
+9bf06a55-9a45-484f-a0e2-93b52c53dc50	lever	Ubiminds (Lever)	0 */6 * * *
+d2089d5e-5eb7-4edb-877f-30ed9f7e4cd8	lever	Welo Global (lever)	0 * * * *
+eddf23d0-666d-4031-91ea-28a87a5c146f	lever	Zippi (lever)	0 * * * *
+0a083ab8-5747-4d2d-a2a1-e91179626b19	manual	Manual MVP intake	
+88ea79ab-0a2f-4fb7-ac89-1b2700786633	remotive	Remotive remote jobs	0 */3 * * *
+b7ccfc65-314d-49e3-aadb-3b59d5e1efb1	teamtailor	Leroy Merlin Brasil (teamtailor)	0 * * * *
+a3c62569-23ba-4362-aae3-d48c29825353	teamtailor	Lingokids (Teamtailor)	0 * * * *
+395ddd87-bd34-41e3-9ed3-ab036690c21d	teamtailor	Obramax (teamtailor)	0 * * * *
+7893ace9-c23a-41b4-a3ec-630e2fe83462	teamtailor	Proposed EWOR GmbH teamtailor	0 * * * *
+6f2e7428-48b1-4f1c-b55a-aa271dfabea6	teamtailor	Proposed Spendesk teamtailor	0 * * * *
+4d44d946-b4f4-463a-bf3f-69a38a1ed859	teamtailor	Proposed Supersub teamtailor	0 * * * *
+ead205a1-fb89-46e0-8cf7-ce2d907a76e9	teamtailor	Seedtag (Teamtailor)	0 * * * *
+b54bf5c2-52af-4e26-8902-46fbddb43263	workable	Azumo jobs	0 * * * *
+352215b8-12b1-425e-83f2-e876eda89f43	workable	Devsu jobs	0 * * * *
+e9a90c44-2f7f-4ee3-826f-d00a4e624dce	workable	Proposed Hugging Face workable	0 * * * *
+477e3a7b-fb9b-49f7-a85f-cd9408a4620c	workable	Proposed Open workable	0 * * * *
+a1e178a1-05ef-4f08-bd6b-1784af4c193f	workable	Proposed Plain Concepts workable	0 * * * *
+02bbf2b6-9b8c-415d-84c5-18b8965833cf	workable	Proposed Weekday workable	0 * * * *
+4668645c-d9ed-4b66-a0a7-5dffe195dfea	workable	Proposed Writesonic workable	0 * * * *
+dbdfe07e-8027-4816-a635-7ed53a4be398	workable	Remotebase jobs	0 * * * *
+d9c10c4d-ff34-4dc0-9d54-0b66b4ee3ddd	workable	Valatam (workable)	0 * * * *
+d7e066b5-ea55-47c5-bdbc-941e1da73906	workable	Wantable (Workable)	0 * * * *
+4cfa8366-c180-413a-9dc3-0b9cdda1774b	workable	Workable (Workable)	0 * * * *
+11abe199-2a12-4c84-9a01-47f843f941a4	workday	AIG (workday)	0 6 * * *
+aa8f2249-8ba4-47c1-8cfb-64dbd35d9b58	workday	Abbott (workday)	0 6 * * *
+04fa6133-ea55-459b-801a-9b1f491f0a4f	workday	Accenture jobs	0 6 * * *
+ab27776b-3185-4ebc-a81e-70f81fd2d32f	workday	Adobe (Workday)	0 */3 * * *
+96783ed6-8938-4f56-be60-51be193aa301	workday	Biogen (workday)	0 6 * * *
+f3958093-eef3-4cd5-bbf8-661d18e9c5b0	workday	Chanel (workday)	0 6 * * *
+f6497706-f66e-4f48-9ab3-3f01bf4b3bf4	workday	ERM (workday)	0 6 * * *
+c98dd0ed-9ff7-4d57-b021-0a9e919043f9	workday	NTT DATA jobs	0 6 * * *
+495cf0fc-2b0e-4c2a-8f3b-9013dde051a5	workday	NVIDIA (Workday)	0 0 * * 0
+456b1ac0-d173-4c16-b10b-d8b9972b7268	workday	Procter & Gamble (workday)	0 6 * * *
+770c9bdf-57ee-49f8-b598-df2dfd6f1c98	workday	Proposed Amadeus workday	0 0 * * *
+f223632f-e1e9-49b8-9328-ce8dd18eb964	workday	Proposed BBVA workday	0 0 * * 0
+11c82a4a-2f83-4e1f-8252-f0e7fb9f9080	workday	Proposed Babel workday	0 0 * * 0
+ea817f0b-84d9-4239-b94f-a66b90b42504	workday	Proposed Infobip workday	0 0 * * *
+451b370d-cba8-4e6c-96b7-4edcf0e4b8e0	workday	RELX (LexisNexis Legal) (workday)	0 6 * * *
+5c03600b-1d12-4329-8cd2-92784752a607	workday	Red Hat jobs	0 6 * * *
+1567a593-a077-409c-ad62-aa6bd8f7f2a2	workday	SUSE (Workday)	0 0 * * 0
+f53692b5-19cf-48f8-85e0-4b1efea64bf9	workday	Santander (Workday)	0 0 * * 0
+53852e73-8060-476d-8ab9-a01ed06f4d5b	workday	Toyota (TLAC) (workday)	0 6 * * *

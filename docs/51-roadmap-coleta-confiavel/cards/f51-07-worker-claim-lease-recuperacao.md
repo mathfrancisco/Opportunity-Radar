@@ -58,3 +58,19 @@ Não escopo: provedores novos, embeddings, scrape indiscriminado ou mudança de 
 ## Rollout, rollback e entregáveis
 
 Rollout inicia em uma fonte de baixa prioridade, com aquisição compartilhada pelo worker e CLI/manual e consulta de claims por correlação. Se houver rejeição inesperada, o rollback desliga recuperação automática, impede novos claims dessa coorte, aguarda execuções vivas e preserva fences/histórico para diagnóstico. Entregar migração justificada, consulta operacional de leases e os quatro testes acima.
+
+## Conferência dos critérios contra os testes (2026-10-07, sexta sessão)
+
+Conferido critério por critério, lendo o corpo de cada teste. Caminhos relativos a
+`tests/backend/`. "banco" é teste de integração com PostgreSQL real
+(`RUN_DATABASE_INTEGRATION=1`); "unidade" usa dublês. Os marcados com PR #70 foram
+escritos nesta sessão, sem mudança em `src`.
+
+| AC | Teste | Tipo | Observação |
+| --- | --- | --- | --- |
+| AC01 | `acquisition/test_source_run_claim_fencing.py::test_worker_and_cli_race_only_one_claims_and_the_other_makes_zero_http`; `test_worker.py::test_claimed_elsewhere_source_is_skipped_without_costing_the_rest_of_the_pass` | banco; unidade | As duas entradas são duas chamadas do serviço; `scripts/collect.py` não é exercitado |
+| AC02 | `acquisition/test_source_run_claim_fencing.py::test_fenced_item_write_is_rejected_after_the_lease_is_recovered`; `::test_fenced_terminal_write_leaves_run_checkpoint_and_inventory_untouched`; `::test_stale_complete_run_does_not_close_absences_once_a_newer_run_started`; `::test_stale_owner_leaves_no_occurrence_or_observation_rows_after_recovery` (PR #70); `::test_closure_is_refused_for_a_run_whose_expired_lease_was_recovered` (PR #70) | banco | Os tokens reais são 1 e 2, não 7 e 8. A guarda de fechamento compara a geração do token, não o horário do lease |
+| AC03 | `acquisition/test_source_run_claim_fencing.py::test_two_recoveries_of_one_expired_lease_have_a_single_winner` | banco |  |
+| AC04 | `acquisition/test_source_run_claim_fencing.py::test_distinct_sources_claim_independently` | banco |  |
+
+Todos os critérios têm teste. Continuam abertos, fora dos critérios numerados: os eventos do card são registros de log, e o custo do commit por item não foi medido. O fechamento depende da janela do F51-18.

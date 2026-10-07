@@ -45,3 +45,20 @@ Usar `now` atual ao decidir cada fonte, acompanhar estado e concluir deadline so
 ## Rollout, rollback e entregáveis
 
 Começar com relógio fake e transporte fake em testes isolados; depois ativar deadline conservador em um ambiente controlado, observando duração, timeout, cleanup pendente e fontes adiadas. Não alterar o max_instances nem permitir duas chamadas simultâneas por fonte. Rollback desativa o novo deadline configurável mantendo timeouts existentes e a serialização; nunca resolve problema liberando ownership de request ainda vivo. Entregáveis: política de limites, estado/log de progresso, cancelamento aguardado, testes determinísticos e procedimento para cleanup pendente. Testes e operação não foram executados nesta tarefa documental.
+
+## Conferência dos critérios contra os testes (2026-10-07, sexta sessão)
+
+Conferido critério por critério, lendo o corpo de cada teste. Caminhos relativos a
+`tests/backend/`. "banco" é teste de integração com PostgreSQL real
+(`RUN_DATABASE_INTEGRATION=1`); "unidade" usa dublês. Os marcados com PR #70 foram
+escritos nesta sessão, sem mudança em `src`.
+
+| AC | Teste | Tipo | Observação |
+| --- | --- | --- | --- |
+| AC01 | `test_worker.py::test_worker_rechecks_due_time_after_each_source` | unidade | O portão é substituído por um que sempre responde vencido; o teste confere os instantes passados a ele |
+| AC02 | `acquisition/test_service.py::test_deadline_cancels_then_closes_http_resource_then_persists_terminal_state` (PR #70); `::test_source_deadline_waits_for_generator_cleanup_and_finishes_partial`; `::test_external_cancel_waits_for_live_collector_cleanup_and_logs_pending` | unidade | O teste novo confere a ordem: cancelamento, fechamento do recurso HTTP, gravação do estado terminal |
+| AC03 | `acquisition/test_source_run_claim_fencing.py::test_live_transport_keeps_source_single_flight` | banco |  |
+| AC04 | `acquisition/test_source_run_claim_fencing.py::test_worker_timeout_preserves_positive_presence_only`; `acquisition/test_delta_presence_resume.py::test_source_deadline_commits_positive_prefix_without_closing_absent_occurrence` | banco |  |
+| AC05 | `test_worker.py::test_pass_deadline_skips_next_source_after_prior_cleanup_finishes`; `acquisition/test_collection_host_concurrency.py::test_the_pass_deadline_starts_no_new_host_once_it_has_passed` | unidade |  |
+
+Os nomes propostos no card (`test_worker_rechecks_due_time_per_source`, `test_deadline_waits_for_http_cleanup`, `test_pass_deadline_skips_new_source_after_cleanup`, arquivo `test_worker_collection_deadline.py`) não existem; os testes reais são os da tabela. Todos os critérios têm teste. O fechamento depende da janela do F51-18.

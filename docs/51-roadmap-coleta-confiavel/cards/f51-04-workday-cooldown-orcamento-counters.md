@@ -45,3 +45,21 @@ Garantir orçamento atômico compartilhado entre processos, respeitar `Retry-Aft
 ## Rollout e reversão
 
 Implementar com detalhe desativado por padrão. Se a inspeção confirmar necessidade de migração, torná-la aditiva, compatível com legado desconhecido (`NULL`) e testada em `_test`; zero é válido somente para métrica nova observada. Verificar upgrade e downgrade antes de piloto. Liberar primeiro em fake HTTP; ativação e piloto de fonte cabem ao F51-05 após aprovação humana. Rollback: desligar detalhe por fonte e reverter a versão do worker; manter registros de uso/cooldown para evitar tráfego prematuro. Entregáveis: contrato dos contadores, reserva atômica, cooldown persistente e testes concorrentes. Testes não foram executados nesta tarefa documental.
+
+## Conferência dos critérios contra os testes (2026-10-07, sexta sessão)
+
+Conferido critério por critério, lendo o corpo de cada teste. Caminhos relativos a
+`tests/backend/`. "banco" é teste de integração com PostgreSQL real
+(`RUN_DATABASE_INTEGRATION=1`); "unidade" usa dublês. Os marcados com PR #70 foram
+escritos nesta sessão, sem mudança em `src`.
+
+| AC | Teste | Tipo | Observação |
+| --- | --- | --- | --- |
+| AC01 | `acquisition/test_workday_detail_budget_integration.py::test_workday_429_retry_after_persists_across_sessions` | banco |  |
+| AC02 | `acquisition/test_host_budget_reservation_integration.py::test_workday_budget_reservation_is_atomic_across_workers` | banco | Threads com sessões separadas, não processos |
+| AC03 | `acquisition/test_workday_detail_budget_integration.py::test_workday_cooldown_survives_budget_window_rollover` | banco |  |
+| AC04 | `acquisition/test_workday_detail_budget_integration.py::test_detail_telemetry_round_trips_with_source_run` | banco |  |
+| AC05a | `acquisition/test_workday_detail_budget_integration.py::test_detail_429_keeps_completed_listing_inventory` | banco |  |
+| AC05b | `acquisition/test_workday_detail_budget_integration.py::test_listing_budget_exhaustion_does_not_close_absences` | banco |  |
+
+Todos os critérios têm teste. Os testes não foram conferidos quebrando o código de propósito. O fechamento depende da janela do F51-18.
