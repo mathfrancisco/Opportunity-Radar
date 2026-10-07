@@ -27,13 +27,13 @@ Inventário: URLs `/`, `/inbox`, `/opportunities/:opportunityId`, `/applications
 | Pacote | Estado verificado | Próxima evidência |
 | --- | --- | --- |
 | WP0 baseline/inventário | Preparação local validada; não AC54 | Rever contratos e polling na base aceita sem reescrever hashes históricos |
-| WP1 spike | Parcial, nenhum kit selecionado; seleção de biblioteca em andamento por autorização do dono em 2026-10-07 | Proveniência, acessibilidade e bundle dentro do orçamento |
+| WP1 spike | Concluído para o recorte aprovado: `@radix-ui/react-dialog@1.2.0` selecionado para a gaveta móvel; licença MIT | Reavaliar apenas se outro primitive entrar no escopo |
 | WP2 protótipos | 4 protótipos aceitos visualmente em 2026-10-07, com 2 ajustes aplicados e verificados pelo runner (ver `docs/54-review/README.md`, "Aceite visual") | Nenhuma para WP2; aceite não cobre F53, AC54-01/08/10 nem a SPEC como um todo |
-| WP3 sistema/wrappers | Não iniciado; depende de WP2 | DESIGN.md e CSS juntos, tokens, foco, contraste, motion, wrappers e testes |
-| WP4 rotas prioritárias | Não iniciado; depende de WP2/WP3 | Overview, Inbox, detalhe e Pipeline com contratos preservados |
+| WP3 sistema/wrappers | Implementado localmente; `npm run check` terminou com exit 0 no checkout integrado (42 arquivos / 336 testes) | Completar e verificar os itens de sistema visual e acessibilidade ainda pendentes |
+| WP4 rotas prioritárias | Migrado localmente; `npm run check` terminou com exit 0 no checkout integrado | Verificar evidências finais das rotas e contratos |
 | WP5 rotas restantes | Não iniciado; depende de WP2/WP3 | Companies, Company Detail, Sources, Homologation, Profile, Status e wildcard |
-| WP6 auth/regressão | Pendente de F53 real | Clerk real e testes offline/estados de autorização |
-| WP7 preview/release | Pendente de gates/autorização | Preview, smoke, comparação e rollback demonstrados |
+| WP6 auth/regressão | Bloqueado por F53, ainda não implementada | Clerk real e testes offline/estados de autorização após F53 |
+| WP7 preview/release | Bloqueado por F53 e pelos gates/autorização | Preview, smoke, comparação e rollback demonstrados após F53 |
 
 ### Critérios AC54
 
@@ -41,13 +41,13 @@ Inventário: URLs `/`, `/inbox`, `/opportunities/:opportunityId`, `/applications
 | --- | --- |
 | AC54-01 F53 operacional | Hosting, Clerk, backup/restore e aceite F53 ausentes |
 | AC54-02 identidade aprovada | Aceite visual explícito dos 4 protótipos em 2026-10-07 (`docs/54-review/README.md`, "Aceite visual"); a identidade final ainda depende de WP3 (DESIGN.md/CSS) |
-| AC54-03 biblioteca | Nenhum kit selecionado; spikes inconclusivas; seleção em andamento por autorização do dono em 2026-10-07 |
-| AC54-04 componentes/tokens | Não iniciado; faltam wrappers, WCAG, testes e regressão |
-| AC54-05 contratos/domínio | Não migrado; faltam testes de queries, filtros, scores, IA, forms e mutations |
-| AC54-06 responsividade | Baseline não prova migração; faltam 10 rotas × 5 larguras e URL direta |
+| AC54-03 biblioteca | Seleção aprovada: somente `@radix-ui/react-dialog@1.2.0` sob wrapper local para a gaveta móvel; licença MIT |
+| AC54-04 componentes/tokens | Parcial: WP3 implementado localmente e `npm run check` passou; faltam comprovação completa de tokens/sistema visual, WCAG 2.2 AA, zoom real, leitor de tela, reduced motion e regressão visual final |
+| AC54-05 contratos/domínio | Parcial: WP4 migrado localmente; evidência de preservação dos contratos ainda pendente, incluindo queries, filtros, scores, IA, forms e mutations |
+| AC54-06 responsividade | Pendente: capturas da aplicação final para 11 rotas (10 rotas e wildcard) × 5 larguras e verificação de URL direta; não concluído |
 | AC54-07 WCAG 2.2 AA | Não provado: leitor de tela, zoom real, teclado, labels e contraste final |
 | AC54-08 autenticação | Não iniciado; depende de Clerk/F53 real |
-| AC54-09 performance | Sem bundle pós-migração; spike Radix aumentou JS gzip inicial 30,76 kB/20,64%, acima do limite +10% |
+| AC54-09 performance | Medição integrada no HEAD `a196780`: `npm run check` exit 0, Vitest 42 arquivos / 336 testes; JS inicial gzip 163,65 kB, +14,64 kB / +9,83% contra baseline aceito de 149,01 kB, dentro do limite +10% com 0,26 kB de margem. Medir novamente após WP5 |
 | AC54-10 release/rollback | ZIP local não prova preview, release ou rollback cloud |
 
 ## Revisão visual

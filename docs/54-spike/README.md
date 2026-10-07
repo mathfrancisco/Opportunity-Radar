@@ -68,9 +68,11 @@ há menu, popover, combobox ou tabs no app que justifiquem outro primitive.
 | React Aria | +16,73% | fora do orçamento |
 | MUI | +24,13% | fora do orçamento |
 
-Restam aproximadamente 2,2 kB antes do limite de +10%, mas esse espaço não
-autoriza adicionar outro primitive Radix sem nova medição comparável. Caso o
-total futuro exceda +10%, o Dialog da gaveta deve ser carregado sob demanda.
+A margem histórica de aproximadamente 2,2 kB pertence ao spike isolado
+(149,01→161,62 kB). Na medição integrada, restam 0,26 kB até o limite de +10%;
+essa margem não autoriza adicionar outro primitive Radix sem nova medição
+comparável. Caso o total futuro exceda +10%, o Dialog da gaveta deve ser
+carregado sob demanda.
 
 ## Limites da decisão
 
