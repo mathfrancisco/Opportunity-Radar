@@ -67,3 +67,10 @@ Segundo relato do worker, spike Base UI 1.8.0 teve testes unitários aprovados, 
 Node 24.12.0/npm 11.6.2. Relatos do ambiente dizem que runtime checks mostraram “not recognized” no sandbox e passaram elevados; não repita checks amplos sem motivo. Playwright está em `tests/e2e/browser/node_modules`; browser da CUA indisponível. Evite E2E com Compose operacional. Integração DB somente banco terminado em `_test` e `RUN_DATABASE_INTEGRATION=1`, `DATABASE_INTEGRATION_ISOLATED=1`; nunca usar banco operacional. `git diff --cached --check` da publicação encontrou whitespace literal preservado no log de check e em linha de contexto do patch; não alegar check limpo sem resolver com cuidado, sem alterar logs literais.
 
 Retome pelo aceite visual e pelo próximo menor pacote que satisfaça os gates. Registre evidência literal e incerteza; PR draft, baseline, captura ou protótipo não fecha F54.
+## Branch e sequência prática
+
+Este handoff foi publicado na branch `docs/f54-preparation-handoff-20261007`, criada sobre `3aaca63` (merge #70). Confirme o estado da branch e do PR ao retomar.
+
+Ordem de trabalho: corrigir as pendências dos protótipos e do runner em escopo local; validar os protótipos localmente; apresentar as telas para revisão concreta e obter aceite explícito; escolher biblioteca somente com orçamento e proveniência comprovados; então WP3 atualiza `DESIGN.md` e CSS juntos, seguido por WP4/WP5 nas dez rotas. WP6/WP7 continuam dependentes de F53 e autorização para preview/release. Preserve aplicação manual, filtros, scores, matching determinístico separado de IA e polling atual até decisão baseada em evidência.
+
+Modelo de ownership: Sol/Astra coordenam e revisam read-only. Alteração de uma linha pode ser direta; trabalho maior deve ir para Luna/Terra (Luna como fallback), com arquivos/responsabilidade delimitados. No máximo três workers em tarefas independentes; workers não delegam. Faça revisão de diff separada e reporte os comandos/saídas realmente observados.
