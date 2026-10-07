@@ -34,7 +34,7 @@ function stubMatchMedia() {
     matches,
     media: '(min-width: 768px)',
     removeEventListener: (_: string, listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener),
-  } as MediaQueryList
+  } as unknown as MediaQueryList
 
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,

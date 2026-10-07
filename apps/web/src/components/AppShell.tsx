@@ -41,6 +41,10 @@ export function AppShell({
   const menuButton = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      return
+    }
+
     const desktop = window.matchMedia('(min-width: 768px)')
     const closeOnDesktop = (event: MediaQueryListEvent) => {
       if (event.matches) {
