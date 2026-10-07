@@ -59,3 +59,19 @@ Não escopo: provedores novos, embeddings, scrape indiscriminado ou mudança de 
 ## Rollout, rollback e entregáveis
 
 Ativar em coorte não Workday, limite global 2 e orçamento observado; rollback reduz a um, cancela/aguarda tarefas e conserva métricas. Entregar scheduler bounded, testes de barreira e painel de uso.
+
+## Conferência dos critérios contra os testes (2026-10-07, sexta sessão)
+
+Conferido critério por critério, lendo o corpo de cada teste. Caminhos relativos a
+`tests/backend/`. "banco" é teste de integração com PostgreSQL real
+(`RUN_DATABASE_INTEGRATION=1`); "unidade" usa dublês. Os marcados com PR #70 foram
+escritos nesta sessão, sem mudança em `src`.
+
+| AC | Teste | Tipo | Observação |
+| --- | --- | --- | --- |
+| AC01 | `acquisition/test_collection_host_concurrency.py::test_two_sources_on_distinct_hosts_are_inside_the_transport_together`; `acquisition/test_concurrent_pass_database.py::test_a_concurrent_pass_leaves_consistent_rows_for_every_host` | unidade; banco | A passada tem uma correlação só, compartilhada pelas duas execuções; o card fala em duas |
+| AC02 | `acquisition/test_collection_host_concurrency.py::test_two_sources_on_one_host_never_overlap_while_another_host_progresses` | unidade | No teste de banco acima, o pico por host fica em 1 |
+| AC03 | `acquisition/test_host_budget_reservation_integration.py::test_workday_budget_reservation_is_atomic_across_workers` | banco | Sem contagem de HTTP falso nem ordem entre commit e HTTP |
+| AC04 | `acquisition/test_concurrent_pass_database.py::test_a_timed_out_listing_stays_partial_while_a_complete_one_on_another_host_reconciles` (PR #70); `acquisition/test_collection_host_concurrency.py::test_a_partial_run_keeps_presence_while_a_complete_run_on_another_host_reconciles` | banco; unidade | O teste novo usa relógio real (prazo de 1 s) |
+
+O card cita `test_concurrency.py` e `test_host_budget_scheduling.py`; os testes dos critérios estão nos arquivos da tabela. Todos os critérios têm teste. O painel de uso listado nos entregáveis não tem teste. O fechamento depende da janela do F51-18.

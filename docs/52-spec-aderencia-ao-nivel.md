@@ -14,9 +14,10 @@
     60%) e precisão de 95,3% (meta de 90%).
   - F52-03 e F52-07: **bloqueados pelo portão do F51-11**. Com o gold confirmado, nenhuma
     regra por descrição passa (ver F52-03); as regras continuam desligadas.
-  - F52-06: **em andamento**. Lote do inHire terminado (98 fontes) e medição por fonte
-    feita em 2026-10-07: 369 vagas `JUNIOR` ou `MID` nas áreas-alvo, contra a meta de 600.
-    A ampliação do catálogo não foi feita.
+  - F52-06: **em andamento** (sexta sessão). Catálogo ampliado com 159 empresas curadas do
+    inHire, todas com fonte habilitada. Medido em 2026-10-07, 18h14 UTC: 530 vagas `JUNIOR`
+    ou `MID` nas áreas-alvo, contra a meta de 600; eram 369 às 13h40 UTC. Faltam 70.
+    Termos revistos: Quickin a confirmar; Sólides e Recrutei não viáveis hoje.
 - **Origem:** relato do dono: a busca devolve vagas muito acima do nível dele (júnior/pleno,
   remoto). Medições na stack `opportunity-radar-dev` em 2026-10-05.
 - **Relação com a [SPEC 51](51-spec-coleta-confiavel-e-busca.md)** (implementação parcial; ver
@@ -396,12 +397,69 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
 
   O inHire tem a maior proporção e quase dois terços das vagas remotas do nível. As fontes
   inHire passaram a coletar de hora em hora (PR #66).
-- **Não feito:** a ampliação do catálogo. Das 362 empresas, 249 têm fonte habilitada e as
-  outras 113 só têm página de carreiras. Chegar a 600 pede empresas novas: a cerca de uma
-  vaga do nível por fonte inHire, faltam por volta de 230 vagas. O caminho já aceito é
-  curadoria de empresas brasileiras em `docs/pesquisas/empresas-adicionais.md`, depois
-  `import_research_catalog.py`, `discover_ats.py` e `enable_sources.py`. A revisão de termos
-  de Sólides, Recrutei e Quickin também não foi feita.
+- **Ampliação do catálogo (2026-10-07, sexta sessão):** 159 empresas brasileiras com board
+  no inHire entraram no catálogo e tiveram a fonte habilitada. A meta não foi atingida.
+  - **Curadoria:** o tenant de cada empresa veio de uma página `<tenant>.inhire.app` que um
+    buscador já indexa: 190 consultas de busca na web restritas ao domínio `inhire.app`, por
+    cargo, linguagem, nível e cidade. Nenhum nome de tenant foi adivinhado contra a API. A
+    busca devolveu 328 tenants. Cada tenant novo recebeu uma única chamada à rota pública de
+    lista; nenhuma respondeu `401`, `403` ou `429`. Entraram os tenants com pelo menos uma
+    vaga de título de tecnologia e board de até 45 vagas, ou com 4,5% ou mais do board em
+    tecnologia; ficaram de fora os sem vaga de tecnologia, os boards grandes com pouca
+    tecnologia e as consultorias de recrutamento. Contagens e linhas por empresa em
+    [empresas-adicionais.md](pesquisas/empresas-adicionais.md), seção "Lote inHire de
+    2026-10-07".
+  - **Decisão: cadastrar o inHire pela API do produto.** O caminho que a medição anterior
+    apontava (`import_research_catalog.py`, depois `discover_ats.py` e `enable_sources.py`)
+    só materializa fonte de Ashby, Lever e Greenhouse. Para o inHire,
+    `import_research_catalog.py` cria a empresa e a página de carreiras, sem a chave do
+    tenant. O resto foi feito por empresa na API: `POST /companies`,
+    `POST /companies/{id}/sources` com o tenant em `external_key`,
+    `POST /companies/{id}/detect-source`, `POST /sources/{id}/probe` e `PATCH /sources/{id}`
+    para habilitar. Foi assim que as 98 primeiras entraram. O script usado nesta sessão não
+    está no repositório.
+  - **Ritmo:** `pg_dump` antes do lote. Cinco lotes, um por hora, entre 14h07 e 18h06 UTC,
+    com orçamento de 850 requisições por lote, porque a primeira execução de uma fonte faz
+    uma chamada de detalhe por vaga e o teto do host é de 1.200 por hora. Requisições ao
+    inHire por hora de início da execução: 908, 1.015, 904, 967 e 548. Nenhum evento de
+    limite de taxa e nenhum `401`, `403` ou `429`; a única falha foi um `400` na CERC às
+    14h02 UTC, que não se repetiu às 15h03. No lote das 15h06 dois agendadores rodaram ao
+    mesmo tempo, por engano; a hora ficou em 1.015 requisições, abaixo do teto.
+  - **Resultado (18h14 UTC):** 257 fontes inHire habilitadas, todas de hora em hora e todas
+    com execução `SUCCEEDED`. Vagas abertas das áreas-alvo, sem duplicata: 212 `JUNIOR` e
+    318 `MID`, **530 no total, contra a meta de 600: faltam 70**; 3.181 continuam com nível
+    `UNKNOWN`. Por tipo de fonte (uma vaga com duas fontes conta nas duas):
+
+    | Fonte | Fontes habilitadas | `JUNIOR` ou `MID` | Vagas das áreas-alvo | Proporção | `JUNIOR` ou `MID` e remotas |
+    |---|---:|---:|---:|---:|---:|
+    | inHire | 257 | 263 | 1.155 | 22,8% | 133 |
+    | Workday | 19 | 128 | 1.989 | 6,4% | 1 |
+    | Lever | 15 | 57 | 1.925 | 3,0% | 33 |
+    | Greenhouse | 56 | 55 | 2.064 | 2,7% | 5 |
+    | Ashby | 65 | 17 | 1.212 | 1,4% | 5 |
+    | Hacker News | 1 | 7 | 202 | 3,5% | 1 |
+    | Workable | 11 | 3 | 167 | 1,8% | 0 |
+    | Factorial, Teamtailor, Remotive | 10 | 0 | 42 | 0% | 0 |
+
+    As 159 fontes novas trouxeram 3.179 vagas, 643 das áreas-alvo e 152 `JUNIOR` ou `MID`;
+    68 delas têm pelo menos uma vaga do nível. As 98 anteriores somam 111. O relatório por
+    fonte, com as 257 fontes inHire, está em
+    [f52-06-vagas-do-nivel-por-fonte-2026-10-07.md](pesquisas/f52-06-vagas-do-nivel-por-fonte-2026-10-07.md).
+  - **Estado:** não concluído. O relatório por fonte existe; faltam 70 vagas para a meta. A
+    cerca de uma vaga do nível por fonte inHire nova, a mesma curadoria precisaria de umas
+    70 empresas a mais, e as duas rodadas de busca já renderam menos na segunda (34 contra
+    125). Não foi feito o levantamento de empresas brasileiras em Greenhouse, Lever, Ashby,
+    Workable, Teamtailor e Recruitee, que a decisão do dono também lista.
+- **Termos de Sólides, Recrutei e Quickin (2026-10-07):** nenhuma passa hoje nas duas
+  condições da decisão do dono; nenhum coletor foi escrito.
+  - [Quickin](pesquisas/termos-quickin.md): **a confirmar**. Há rota pública descrita em
+    artigo de ajuda; os termos de uso não foram localizados, e falta saber como o
+    `account_id` é publicado.
+  - [Sólides](pesquisas/termos-solides.md): **não viável hoje**. Não há API nem feed
+    público documentado; coletar exigiria ler o HTML ou o sitemap do portal, e a cláusula
+    3.7(d), se aplicável, veda o meio não fornecido.
+  - [Recrutei](pesquisas/termos-recrutei.md): **não viável hoje**. Os termos não proíbem
+    a coleta de forma expressa, mas não há API nem feed público documentado.
 
 ### F52-07 — Remoto de verdade: país e modo
 
@@ -500,6 +558,11 @@ fila de 5.219 normalizações em `REVIEW_REQUIRED` e as 2.543 vagas sem nenhuma 
   do primeiro motivo (mesmo local e modo, local desconhecido ou candidato de outra fonte) e
   as 576 dos outros motivos, que pedem decisão caso a caso. O normalizador não mudou: uma
   vaga nova no mesmo padrão volta a entrar na fila, e o script pode ser rodado de novo.
+- **Fila `REVIEW_REQUIRED`, proposta de regra (2026-10-07, sexta sessão):** a fila voltou a
+  crescer com a coleta: 1.222 linhas às 13h52 UTC e 1.370 às 18h14 UTC, depois do lote do
+  inHire. A proposta por motivo, com contagem e dez exemplos de cada padrão, está em
+  [fila-review-required-proposta-2026-10-07.md](pesquisas/fila-review-required-proposta-2026-10-07.md).
+  Nada foi resolvido nem fundido; as regras A, B e C esperam decisão do dono.
 - **8 testes de fila (2026-10-06, PR #46):** reproduzido numa suíte completa em banco
   reutilizado. A fila de avaliação lê as vagas pendentes mais antigas até o limite de 500;
   vagas deixadas por outros módulos de teste ficam pendentes para cada versão nova de perfil

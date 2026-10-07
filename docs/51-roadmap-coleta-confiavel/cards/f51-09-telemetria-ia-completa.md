@@ -60,3 +60,20 @@ Não escopo: provedores novos, embeddings, scrape indiscriminado ou mudança de 
 ## Rollout, rollback e entregáveis
 
 Rollout inicia com escrita aditiva em uma coorte de sugestões, compara agregados antigos e novos por `operation_id` e mantém a retenção existente. Se houver cardinalidade duplicada, rollback desliga o novo agregador sem apagar eventos, preservando rastreio para reconciliação. Entregar mapa de eventos, consulta por coorte com período de graça e relatório de completude.
+
+## Conferência dos critérios contra os testes (2026-10-07, sexta sessão)
+
+Conferido critério por critério, lendo o corpo de cada teste. Caminhos relativos a
+`tests/backend/`. "banco" é teste de integração com PostgreSQL real
+(`RUN_DATABASE_INTEGRATION=1`); "unidade" usa dublês. Os marcados com PR #70 foram
+escritos nesta sessão, sem mudança em `src`.
+
+| AC | Teste | Tipo | Observação |
+| --- | --- | --- | --- |
+| AC01 | `opportunities/test_suggestions.py::test_a_connection_error_after_transport_start_is_one_failed_attempt_of_one_operation` (PR #70) | banco | **Diferença do card:** o lote sai com `failed=0` e `failure_classes={"provider_error": 1}`; o card pede `failed=1`. `failed` só conta exceção inesperada (`worker.py`) |
+| AC02 | `opportunities/test_suggestions.py::test_http_200_with_an_unparseable_body_and_no_usage_keeps_status_and_unknown_tokens` (PR #70) | banco |  |
+| AC03 | `opportunities/test_suggestions.py::test_an_open_breaker_is_decided_before_transport_and_records_no_attempt` (PR #70); `matching/test_analysis_reuse.py::test_a_valid_cached_analysis_is_a_cache_hit_with_no_attempt_and_no_zero_tokens` (PR #70) | banco | O disjuntor aberto aparece como `error_kind="quota"` e grava um adiamento por quota. O acerto de cache grava uma linha de chamada com `provider="cache"`, sem transporte e com tokens nulos |
+| AC04 | `opportunities/test_suggestions.py::test_a_rate_limited_primary_and_a_fallback_answer_are_one_operation_with_summed_usage` (PR #70) | banco | 12 + 30 = 42; sem `usage` na resposta, os tokens ficam nulos |
+| AC05 | `platform/ai/test_telemetry.py::test_operation_cohort_counts_a_recovered_crash_as_terminal_while_another_is_in_grace` | banco |  |
+
+Todos os critérios têm teste. **Decisão pendente do dono no AC01:** mudar o card para o que o código faz (erro de provedor em `failure_classes`) ou mudar o código para contar em `failed`. O fechamento depende disso e da janela do F51-18.

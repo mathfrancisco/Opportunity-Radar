@@ -1,5 +1,39 @@
 # Checkpoint de implementação — 5 de outubro de 2026
 
+> Atualização de 2026-10-07 (sexta sessão, PRs #69 e #70): nenhuma mudança em `src`. O PR #70
+> acrescenta testes para dez critérios que estavam sem cobertura completa (F51-06 AC02, F51-07
+> AC02, F51-08 AC04, F51-09 AC01 a AC04, F51-10 AC04 e AC05, F51-13 AC03); os sete cards com
+> critérios conferidos trazem agora o nome do teste de cada um. Suíte completa num banco novo
+> `_test`: `2274 passed, 21 skipped`; `ruff check tests` sem erros; CI do PR com os quatro
+> checks verdes. O merge, em 2026-10-07 14:28:49 UTC, reabriu a janela de sete dias, que fecha
+> em 2026-10-14 14:28:49 UTC. A stack de dev foi reconstruída em `3aaca63`.
+>
+> Onde o teste mostrou diferença entre o card e o código, o teste confere o que o código faz e
+> o card registra a diferença: no F51-09 AC01 o erro de provedor vai para `failure_classes` e
+> `failed` fica em 0; no F51-10 AC04 só o candidato que encontra o saldo esgotado ganha
+> adiamento; no F51-07 AC02 a guarda de fechamento compara a geração do token, não o horário
+> do lease. Risco relatado pelo worker dos testes e não reproduzido: duas execuções seguidas de
+> reuso por `304` com manifesto revalidado fechariam as vagas vistas antes (F51-13). Na base
+> de dev nenhuma vaga foi fechada por execução sem itens.
+>
+> Passada das 14:00 UTC com o código do PR #66, contada no log bruto do worker: 264 respostas
+> HTTP (177 `200`, 86 `304`, 1 `400`), nenhum `429`. No inHire, 98 requisições de lista (97
+> `200` e um `400` na CERC, cuja execução terminou `FAILED` com `UNKNOWN_EXTERNAL_ERROR`) e 7
+> de detalhe, em 2 min 10 s. Das quatro reexecuções Workday das 13:25 UTC, Chanel, Procter &
+> Gamble e RELX terminaram `SUCCEEDED` com token de fencing 2; a da Accenture terminou
+> `PARTIAL` com `PARSER_SCHEMA_CHANGED` ("Workday pagination repeated a page without making
+> progress"), com 1.480 de 2.000 itens. A CERC voltou a `SUCCEEDED` na execução das 15:03 UTC.
+> A agenda da Accenture é diária, às 06:00 UTC; a execução seguinte não ocorreu nesta sessão.
+>
+> Lote do F52-06, fora da coorte da janela: 159 fontes inHire habilitadas entre 14:07 e 18:06
+> UTC, em cinco lotes. Requisições ao inHire por hora de início da execução, das 14:00 às
+> 18:00 UTC: 908, 1.015, 904, 967 e 548, contra o teto de 1.200; nenhum evento de limite de
+> taxa. Às 18:14 UTC eram 257 fontes inHire, todas com execução `SUCCEEDED`.
+>
+> Medição da abertura da janela nos cards F51-01 e F51-02; preparação do pacote no F51-18;
+> decisão de não fazer trechos relevantes nem modelo local no F51-12. Não feito: reinício real
+> do `postgres` do F51-17, piloto Workday do F51-05 e o portão do F51-11, que dependem do dono.
+
 > Atualização de 2026-10-07 (quinta sessão, PRs #65 a #68): o PR #65 foi mesclado (descrição
 > preservada na recoleta, lote de sugestão interrompido no adiamento por quota, fechamento
 > guardado pelo token de fencing). O PR #66 faz o inHire reler o detalhe de vaga conhecida só
