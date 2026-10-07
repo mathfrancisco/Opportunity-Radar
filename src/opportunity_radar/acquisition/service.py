@@ -1602,6 +1602,7 @@ class AcquisitionService:
                     if collector.capabilities.known_items
                     else request.known_items
                 ),
+                previous_attempt_at=last_http_attempt_at,
             )
             deadline = asyncio.timeout_at(deadline_at)
             async with deadline:

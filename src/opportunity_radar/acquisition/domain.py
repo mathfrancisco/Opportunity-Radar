@@ -354,6 +354,10 @@ class CollectionRequest:
     known_items: Mapping[str, Mapping[str, Any]] | None = field(
         default=None, compare=False, repr=False
     )
+    #: The source's last HTTP attempt before this run, set by `AcquisitionService`. Lets a
+    #: collector do once-a-day work only on the first run of the day (inHire's weekly
+    #: re-read). `None` means no earlier attempt is known.
+    previous_attempt_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if self.max_items is not None and self.max_items < 1:

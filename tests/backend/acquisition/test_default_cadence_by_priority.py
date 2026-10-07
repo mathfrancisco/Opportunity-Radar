@@ -11,7 +11,7 @@ from opportunity_radar.acquisition.scheduling import (
 
 _DEFAULT = {"high": "0 * * * *", "normal": "0 * * * *", "low": "0 */6 * * *"}
 _WORKDAY = {"high": "0 */6 * * *", "normal": "0 0 * * *", "low": "0 0 * * 0"}
-_INHIRE = {"high": "0 */3 * * *", "normal": "0 */3 * * *", "low": "0 0 * * *"}
+_INHIRE = {"high": "0 * * * *", "normal": "0 * * * *", "low": "0 0 * * *"}
 
 
 @pytest.mark.parametrize("priority", ["high", "normal", "low"])
@@ -40,7 +40,7 @@ def test_workday_keeps_the_old_cadence(priority: str) -> None:
 
 
 @pytest.mark.parametrize("priority", ["high", "normal", "low"])
-def test_inhire_runs_every_three_hours_or_daily(priority: str) -> None:
+def test_inhire_runs_hourly_or_daily(priority: str) -> None:
     assert default_schedule_for_priority(priority, source_type="inhire") == _INHIRE[priority]
 
 
