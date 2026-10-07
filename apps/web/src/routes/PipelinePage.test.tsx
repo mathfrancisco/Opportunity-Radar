@@ -95,10 +95,20 @@ describe('PipelinePage — quadro por etapa', () => {
     ])
     expect(stages.every((stage) => stage.labelled)).toBe(true)
     expect(stages.map((stage) => stage.cards)).toEqual([1, 0, 0, 2, 0, 0, 0])
-    // Abaixo de lg as vazias somem do layout: a frase as resume para tecnologia assistiva.
-    expect(container.textContent).toContain(
-      'Sem candidaturas em: Candidatura enviada, Triagem, Teste técnico, Etapa final, Oferta.',
+    const emptyStageList = [...container.querySelectorAll('ul')].find((list) =>
+      list.textContent?.includes('Candidatura enviada: 0'),
     )
+    expect(emptyStageList).toBeDefined()
+    expect(emptyStageList?.parentElement?.textContent).toContain('Sem candidaturas em')
+    expect([...emptyStageList?.querySelectorAll('li') ?? []].map((item) => item.textContent)).toEqual([
+      'Candidatura enviada: 0',
+      'Triagem: 0',
+      'Teste técnico: 0',
+      'Etapa final: 0',
+      'Oferta: 0',
+    ])
+    expect(emptyStageList?.textContent).not.toContain('Interesse')
+    expect(emptyStageList?.textContent).not.toContain('Entrevista')
   })
 
   it('o seletor de visão troca o que é mostrado e expõe o estado em aria-pressed', async () => {

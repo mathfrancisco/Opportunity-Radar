@@ -159,9 +159,16 @@ function Board({
         })}
       </div>
       {emptyStages.length > 0 && (
-        <p className="mt-4 text-sm text-muted lg:hidden">
-          Sem candidaturas em: {emptyStages.map((stage) => stageLabels[stage]).join(', ')}.
-        </p>
+        <div className="mt-4 text-sm text-muted lg:hidden">
+          <p>Sem candidaturas em:</p>
+          <ul className="mt-1 list-disc pl-5">
+            {emptyStages.map((stage) => (
+              <li key={stage}>
+                {stageLabels[stage]}: 0
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </>
   )
