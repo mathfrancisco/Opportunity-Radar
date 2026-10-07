@@ -456,9 +456,24 @@ fila de 5.219 normalizações em `REVIEW_REQUIRED` e as 2.543 vagas sem nenhuma 
   em 12.507 vagas, igual ao dry-run. Vagas sem skill no catálogo: de 19.224 para 18.742; nas
   áreas-alvo com descrição, de 1.043 para 974. A maior parte das que restam não cita
   tecnologia; taxonomia maior não resolve isso.
-- **Fila `REVIEW_REQUIRED`:** não tratada. A decisão do dono de 2026-10-06 continua valendo:
-  amostrar 50 de cada motivo, resolver em lote só "mesma fonte, `external_id` diferente e
-  local ou modo diferente", nenhuma fusão automática.
+- **Fila `REVIEW_REQUIRED` (2026-10-07):** tratada conforme a decisão do dono de 2026-10-06
+  (amostrar 50 de cada motivo, resolver em lote só "mesma fonte, `external_id` diferente e
+  local ou modo diferente", nenhuma fusão automática). `scripts/resolve_review_queue.py` faz
+  a amostra e a resolução; sem `--apply` só conta. Na base de dev a fila tinha 5.607 linhas:
+  5.031 `SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY`, 552
+  `EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED`, 12 `EXACT_VERSIONED_FINGERPRINT`, 8
+  `SAME_SOURCE_EXTERNAL_IDENTITY` e 4 `IDENTITY_REFRESHED_SAME_EXTERNAL_ID`. A amostra (124
+  linhas: 50 dos dois primeiros motivos e todas as dos outros três) está em
+  [fila-review-required-amostra-2026-10-07.json](pesquisas/fila-review-required-amostra-2026-10-07.json).
+  O padrão só existe no primeiro motivo: 4.455 linhas em que todos os candidatos estão na
+  mesma fonte com outro `external_id` e diferem em local ou modo conhecidos (a mesma vaga
+  publicada por cidade). Depois de `pg_dump`
+  (`dev-before-review-queue-resolve-2026-10-07.dump`), essas linhas passaram a
+  `SUCCEEDED`/`NEW` com o motivo `REVIEW_RESOLVED_DISTINCT_POSTING`; o motivo original fica.
+  Nenhuma vaga, ocorrência ou vínculo de duplicata mudou. Ficaram 1.152 linhas na fila: 576
+  do primeiro motivo (mesmo local e modo, local desconhecido ou candidato de outra fonte) e
+  as 576 dos outros motivos, que pedem decisão caso a caso. O normalizador não mudou: uma
+  vaga nova no mesmo padrão volta a entrar na fila, e o script pode ser rodado de novo.
 - **8 testes de fila (2026-10-06, PR #46):** reproduzido numa suíte completa em banco
   reutilizado. A fila de avaliação lê as vagas pendentes mais antigas até o limite de 500;
   vagas deixadas por outros módulos de teste ficam pendentes para cada versão nova de perfil
