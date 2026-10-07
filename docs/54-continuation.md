@@ -40,7 +40,7 @@ Inventário: URLs `/`, `/inbox`, `/opportunities/:opportunityId`, `/applications
 | Critério | Estado e evidência faltante |
 | --- | --- |
 | AC54-01 F53 operacional | Hosting, Clerk, backup/restore e aceite F53 ausentes |
-| AC54-02 identidade aprovada | Aceite visual explícito dos 4 protótipos em 2026-10-07 (`docs/54-review/README.md`, "Aceite visual"); a identidade final ainda depende de WP3 (DESIGN.md/CSS) |
+| AC54-02 identidade aprovada | Identidade implementada localmente em WP3; aceite visual explícito dos 4 protótipos em 2026-10-07 (`docs/54-review/README.md`, "Aceite visual"). Ainda faltam a validação visual final da aplicação e WP5; o critério não está concluído |
 | AC54-03 biblioteca | Seleção aprovada: somente `@radix-ui/react-dialog@1.2.0` sob wrapper local para a gaveta móvel; licença MIT |
 | AC54-04 componentes/tokens | Parcial: WP3 implementado localmente e `npm run check` passou; faltam comprovação completa de tokens/sistema visual, WCAG 2.2 AA, zoom real, leitor de tela, reduced motion e regressão visual final |
 | AC54-05 contratos/domínio | Parcial: WP4 migrado localmente; evidência de preservação dos contratos ainda pendente, incluindo queries, filtros, scores, IA, forms e mutations |
@@ -82,6 +82,6 @@ Retome pela seleção de biblioteca e pelo próximo menor pacote que satisfaça 
 
 Este handoff foi publicado na branch `docs/f54-preparation-handoff-20261007`, criada sobre `3aaca63` (merge #70). Confirme o estado da branch e do PR ao retomar.
 
-Ordem de trabalho: corrigir as pendências dos protótipos e do runner em escopo local; validar os protótipos localmente (concluído, com aceite visual em 2026-10-07); escolher biblioteca somente com orçamento e proveniência comprovados; então WP3 atualiza `DESIGN.md` e CSS juntos, seguido por WP4/WP5 nas dez rotas. WP6/WP7 continuam dependentes de F53 e autorização para preview/release. Preserve aplicação manual, filtros, scores, matching determinístico separado de IA e polling atual até decisão baseada em evidência.
+Ordem de trabalho: concluir WP5; resolver as pendências menores de WP4 (variante `link` de Button e colunas da Pipeline); produzir evidência final da aplicação para 11 rotas × 5 larguras e medir novamente o bundle; então fazer revisões por pacote. WP6/WP7 estão bloqueados por F53. Preserve aplicação manual, filtros, scores, matching determinístico separado de IA e polling atual.
 
 Modelo de ownership: Sol/Astra coordenam e revisam read-only. Alteração de uma linha pode ser direta; trabalho maior deve ir para Luna/Terra (Luna como fallback), com arquivos/responsabilidade delimitados. No máximo três workers em tarefas independentes; workers não delegam. Faça revisão de diff separada e reporte os comandos/saídas realmente observados.
