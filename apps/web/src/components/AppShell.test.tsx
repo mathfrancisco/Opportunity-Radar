@@ -41,6 +41,21 @@ describe('AppShell', () => {
     expect(container.innerHTML).not.toContain('shadow-shell')
   })
 
+  it('desenha o link de volta acima do título e o eyebrow só quando dado', () => {
+    const container = render(
+      <MemoryRouter>
+        <AppShell back={<a href="/inbox">Voltar</a>} eyebrow="Oportunidade" title="Vaga">
+          <p>conteúdo</p>
+        </AppShell>
+      </MemoryRouter>,
+    )
+    const back = container.querySelector('a[href="/inbox"]') as HTMLElement
+    const h1 = container.querySelector('h1') as HTMLElement
+    expect(back.compareDocumentPosition(h1) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(container.querySelector('header p')?.textContent).toBe('Oportunidade')
+    expect(renderShell().querySelector('header p')?.textContent).toBe('Fontes ativas')
+  })
+
   it('abre a gaveta pelo botão, com aria-expanded e aria-controls', () => {
     const container = renderShell()
     const button = menuButton(container)

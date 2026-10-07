@@ -5,10 +5,14 @@ import { Sidebar, type NavigationPath } from './Sidebar'
 export interface AppShellProps {
   /** Omitted on pages that are reached from a link rather than from the nav. */
   current?: NavigationPath
-  /** Kept for API compatibility with the old shell; no longer shown (SPEC 46, D10). */
+  /** Petrol kicker above the title (SPEC 54: "Decidir"); drawn only when given. */
   eyebrow?: string
   title: string
   description?: string
+  /** Back link, drawn above the title block. */
+  back?: ReactNode
+  /** Facts that belong to the title block (meta line, chips), drawn under the title. */
+  meta?: ReactNode
   /** Header action slot: at most one secondary Button (SPEC 46, 7.1). */
   actions?: ReactNode
   children: ReactNode
@@ -21,7 +25,17 @@ const drawerId = 'sidebar'
  * Sidebar + content on the canvas. From `md` up the sidebar is a fixed column; below it, it
  * is a drawer opened by the menu button.
  */
-export function AppShell({ current, title, description, actions, children, footer }: AppShellProps) {
+export function AppShell({
+  current,
+  eyebrow,
+  title,
+  description,
+  back,
+  meta,
+  actions,
+  children,
+  footer,
+}: AppShellProps) {
   const [open, setOpen] = useState(false)
   const menuButton = useRef<HTMLButtonElement>(null)
 
@@ -83,7 +97,14 @@ export function AppShell({ current, title, description, actions, children, foote
       <main className="min-w-0 flex-1 p-4 md:p-8">
         <div className="min-h-[calc(100vh-4rem)]">
           <section id="conteudo" tabIndex={-1}>
-            <PageHeader actions={actions} description={description} title={title} />
+            {back && <div className="mb-4">{back}</div>}
+            <PageHeader
+              actions={actions}
+              description={description}
+              eyebrow={eyebrow}
+              meta={meta}
+              title={title}
+            />
             <div className="mt-6">{children}</div>
           </section>
           {footer && (

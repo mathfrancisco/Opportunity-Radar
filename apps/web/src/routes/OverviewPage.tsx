@@ -36,7 +36,8 @@ function savedSearchInboxLink(filters: SavedSearchFilters): string {
   return query ? `/inbox?${query}` : '/inbox'
 }
 
-function Tile({
+/** Uma ação possível: o que é, quantos, e para onde leva. A linha inteira é o link. */
+function ActionRow({
   label,
   value,
   hint,
@@ -45,26 +46,47 @@ function Tile({
   label: string
   value: string
   hint?: string
-  to?: string
+  to: string
 }) {
-  const body = (
-    <>
-      <p className="text-sm text-muted">{label}</p>
-      <p className="mt-2 text-metric">{value}</p>
-      {hint && <p className="mt-2 text-sm text-subtle">{hint}</p>}
-    </>
-  )
-  if (to) {
-    return (
+  return (
+    <li className="border-b border-divider last:border-b-0">
       <Link
-        className="rounded-control border border-line bg-surface p-5 transition hover:border-ink"
+        className="flex items-center justify-between gap-4 p-4 hover:bg-accent-surface max-md:min-h-11"
         to={to}
       >
-        {body}
+        <span className="min-w-0">
+          <span className="block font-medium text-ink">{label}</span>
+          {hint && <span className="block text-sm text-muted">{hint}</span>}
+        </span>
+        <span className="text-metric-sm tabular-nums text-ink">{value}</span>
       </Link>
-    )
-  }
-  return <Card>{body}</Card>
+    </li>
+  )
+}
+
+/** Um número que leva a uma ação, em destaque. Os demais números ficam em `SupportItem`. */
+function MetricBlock({
+  label,
+  value,
+  hint,
+  to,
+}: {
+  label: string
+  value: string
+  hint?: string
+  to: string
+}) {
+  return (
+    <div className="rounded-panel border border-line bg-panel p-4">
+      <p className="text-metric tabular-nums text-ink">{value}</p>
+      <p className="mt-1 text-sm">
+        <Link className="underline decoration-accent decoration-2 underline-offset-4" to={to}>
+          {label}
+        </Link>
+      </p>
+      {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
+    </div>
+  )
 }
 
 function FailingSources({ sources }: { sources: FailingSource[] }) {
@@ -314,8 +336,8 @@ function SourceMetricsSection() {
 }
 
 /**
- * Os três blocos antes dos números: decisão com quatro cartões, acervo e operação com
- * quatro linhas de apoio cada. Os títulos são os de verdade, porque não dependem do dado.
+ * A decisão e o acervo lado a lado e a operação abaixo, como a página pronta. Os títulos
+ * são os de verdade, porque não dependem do dado.
  */
 function SummarySkeleton() {
   // Uma linha de apoio com dica quebra em duas fora da tela larga; sem dica, fica em uma.
@@ -331,32 +353,35 @@ function SummarySkeleton() {
   )
   return (
     <Skeleton label="Carregando o resumo…">
-      <section className="mt-8">
-        <p className="text-section">Decisão de hoje</p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[0, 1, 2, 3].map((tile) => (
-            <div className="rounded-control border border-line bg-surface p-5" key={tile}>
-              <Bone className="w-24" />
-              <Bone className="mt-4 h-8 w-12" />
-              {/* O cartão de follow-up traz uma dica, e a linha de cartões cresce com ela. */}
-              {tile === 3 && <Bone className="mt-4 w-28" />}
-            </div>
-          ))}
-        </div>
-        {/* As pílulas de veredito, que aparecem sempre que há alguma vaga avaliada. */}
-        <div className="mt-3 rounded-control border border-line bg-surface">
-          <span className="block h-9 border-b border-line bg-panel" />
-          {[0, 1].map((row) => (
-            <span className="block h-11" key={row} />
-          ))}
-        </div>
-      </section>
-      <section className="mt-10">
-        <p className="text-section">Acervo</p>
-        <Bone className="mt-3 w-2/3" />
-        {supportLines([true, true, true, false])}
-      </section>
-      <section className="mt-10">
+      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+        <section>
+          <p className="text-section">Decisão de hoje</p>
+          <div className="mt-4 rounded-panel border border-line bg-surface">
+            {[0, 1, 2, 3].map((row) => (
+              <div
+                className="flex items-center justify-between gap-4 border-b border-divider p-4 last:border-b-0"
+                key={row}
+              >
+                <Bone className="w-40" />
+                <Bone className="h-6 w-8" />
+              </div>
+            ))}
+          </div>
+        </section>
+        <section>
+          <p className="text-section">Acervo</p>
+          <div className="mt-4 grid gap-3">
+            {[0, 1].map((block) => (
+              <div className="rounded-panel border border-line bg-panel p-4" key={block}>
+                <Bone className="h-8 w-12" />
+                <Bone className="mt-3 w-32" />
+              </div>
+            ))}
+          </div>
+          {supportLines([true, true, false])}
+        </section>
+      </div>
+      <section className="mt-10 border-t border-line pt-8">
         <p className="text-section">Operação</p>
         <Bone className="mt-3 w-1/2" />
         {supportLines([true, true, true])}
@@ -516,14 +541,16 @@ function Block({
   description,
   children,
   id,
+  className = '',
 }: {
   title: string
   description: string
   children: ReactNode
   id: string
+  className?: string
 }) {
   return (
-    <section aria-labelledby={`${id}-title`} className="mt-10 scroll-mt-6" id={id}>
+    <section aria-labelledby={`${id}-title`} className={`scroll-mt-6 ${className}`.trim()} id={id}>
       <h2 className="text-section" id={`${id}-title`}>
         {title}
       </h2>
@@ -536,8 +563,8 @@ function Block({
 /**
  * O que exige decisão hoje.
  *
- * Primeiro bloco e o único com peso de cartão: se nada aqui pede ação, o operador pode
- * parar de ler a página, e a tela precisa deixar isso claro sem que ele desça até o fim.
+ * Primeiro bloco e coluna larga: se nada aqui pede ação, o operador pode parar de ler a
+ * página, e a tela precisa deixar isso claro sem que ele desça até o fim.
  */
 /** Card F20-34: só as buscas salvas com vaga nova desde a última abertura aparecem aqui. */
 export function SavedSearchesWithNews() {
@@ -592,45 +619,45 @@ function PendingDecisions({ overview }: { overview: Overview }) {
   const verdicts = verdictOrder.filter((verdict) => overview.verdictCounts[verdict] > 0)
 
   return (
-    <section aria-labelledby="decisao-de-hoje-title" className="mt-8 scroll-mt-6" id="decisao-de-hoje">
+    <section aria-labelledby="decisao-de-hoje-title" className="scroll-mt-6" id="decisao-de-hoje">
       <h2 className="text-section" id="decisao-de-hoje-title">
         Decisão de hoje
       </h2>
       {pending === 0 ? (
-        <p className="mt-4 rounded-control border border-success-line bg-success-surface p-5 text-success-ink">
+        <p className="mt-4 rounded-panel border border-success-line bg-success-surface p-5 text-success-ink">
           Nada exige decisão agora: sem vagas novas na janela, sem recomendações abertas e
           sem follow-up devido.
         </p>
       ) : (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Tile
+        <ul className="mt-4 rounded-panel border border-line bg-surface">
+          <ActionRow
             label="Alta prioridade"
-            value={String(highPriority)}
             to="/inbox?verdict=HIGH_PRIORITY"
+            value={String(highPriority)}
           />
-          <Tile
+          <ActionRow
             label="Recomendadas"
-            value={String(recommended)}
             to="/inbox?verdict=RECOMMENDED"
+            value={String(recommended)}
           />
-          <Tile
+          <ActionRow
             label={`Novas (${overview.newOpportunityWindowDays} dias)`}
-            value={String(overview.newOpportunities)}
             to="/inbox?order=recency"
+            value={String(overview.newOpportunities)}
           />
-          <Tile
-            label="Follow-ups devidos"
-            value={String(overview.followUpsDue)}
+          <ActionRow
             hint={`Próximos ${overview.followUpWindowDays} dias`}
+            label="Follow-ups devidos"
             to="/applications"
+            value={String(overview.followUpsDue)}
           />
-        </div>
+        </ul>
       )}
 
       {verdicts.length > 0 && (
         <DataTable
           caption="Vagas avaliadas por decisão"
-          className="mt-3"
+          className="mt-4"
           columns={['Decisão', 'Vagas']}
         >
           {verdicts.map((verdict) => (
@@ -643,7 +670,7 @@ function PendingDecisions({ overview }: { overview: Overview }) {
                   {verdictCountLabels[verdict] ?? verdict}
                 </Link>
               </td>
-              <td className="font-semibold">{overview.verdictCounts[verdict]}</td>
+              <td className="font-semibold tabular-nums">{overview.verdictCounts[verdict]}</td>
             </tr>
           ))}
         </DataTable>
@@ -674,7 +701,7 @@ export function StartupShortcut() {
 function Summary({ overview }: { overview: Overview }) {
   return (
     <>
-      <nav aria-label="Seções da visão geral" className="mt-8 flex flex-wrap gap-2">
+      <nav aria-label="Seções da visão geral" className="flex flex-wrap gap-2">
         {[
           ['#decisao-de-hoje', 'Decisão de hoje'],
           ['#acervo', 'Acervo'],
@@ -689,55 +716,63 @@ function Summary({ overview }: { overview: Overview }) {
           </a>
         ))}
       </nav>
-      <PendingDecisions overview={overview} />
 
-      <Block
-        description="O que o radar já coletou e decidiu, e que continua disponível para consulta."
-        id="acervo"
-        title="Acervo"
-      >
-        <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <SupportItem
-            hint={`de ${overview.opportunitiesTotal} no total`}
-            label="Oportunidades ativas"
-            value={String(overview.opportunitiesActive)}
-          />
-          <SupportItem
-            hint="Com decisão determinística registrada"
-            label="Avaliadas"
-            to="/inbox?only_assessed=true"
-            value={String(overview.assessedOpportunities)}
-          />
-          <SupportItem
-            hint="Preservados, ainda sem normalização"
-            label="Itens brutos pendentes"
-            value={String(overview.pendingNormalizations)}
-          />
-          <SupportItem
-            label="Candidaturas ativas"
-            to="/applications"
-            value={String(overview.applicationsActive)}
-          />
-          <SupportItem
-            hint={
-              overview.precisionPercent === null
-                ? `sem marcação suficiente · ${overview.companiesCovered} de ${overview.companiesWithAts} empresas cobertas`
-                : `(${overview.precisionMarkedCount} marcadas) · ${overview.companiesCovered} de ${overview.companiesWithAts} empresas cobertas`
-            }
-            label={`${overview.newOpportunityWindowDays} dias: vagas novas`}
-            value={String(overview.newOpportunities)}
-          />
-          {overview.precisionPercent !== null && (
-            <SupportItem
-              hint={`${overview.precisionMarkedCount} marcadas`}
-              label="Precisão da Inbox"
-              value={`${Number(overview.precisionPercent).toFixed(0)}%`}
+      {/* Decisão na coluna larga, números que levam a uma ação na estreita: nessa ordem no DOM. */}
+      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+        <PendingDecisions overview={overview} />
+
+        <Block
+          description="O que o radar já coletou e decidiu, e que continua disponível para consulta."
+          id="acervo"
+          title="Acervo"
+        >
+          <div className="grid gap-3">
+            <MetricBlock
+              hint="Com decisão determinística registrada"
+              label="Avaliadas"
+              to="/inbox?only_assessed=true"
+              value={String(overview.assessedOpportunities)}
             />
-          )}
-        </dl>
-      </Block>
+            <MetricBlock
+              label="Candidaturas ativas"
+              to="/applications"
+              value={String(overview.applicationsActive)}
+            />
+          </div>
+          <dl className="mt-5 grid gap-3 text-sm">
+            <SupportItem
+              hint={`de ${overview.opportunitiesTotal} no total`}
+              label="Oportunidades ativas"
+              value={String(overview.opportunitiesActive)}
+            />
+            <SupportItem
+              hint="Preservados, ainda sem normalização"
+              label="Itens brutos pendentes"
+              value={String(overview.pendingNormalizations)}
+            />
+            <SupportItem
+              hint={
+                overview.precisionPercent === null
+                  ? `sem marcação suficiente · ${overview.companiesCovered} de ${overview.companiesWithAts} empresas cobertas`
+                  : `(${overview.precisionMarkedCount} marcadas) · ${overview.companiesCovered} de ${overview.companiesWithAts} empresas cobertas`
+              }
+              label={`${overview.newOpportunityWindowDays} dias: vagas novas`}
+              value={String(overview.newOpportunities)}
+            />
+            {overview.precisionPercent !== null && (
+              <SupportItem
+                hint={`${overview.precisionMarkedCount} marcadas`}
+                label="Precisão da Inbox"
+                value={`${Number(overview.precisionPercent).toFixed(0)}%`}
+              />
+            )}
+          </dl>
+        </Block>
+      </div>
 
+      {/* Operação por último e mais quieta: continua completa e acessível pelo salto acima. */}
       <Block
+        className="mt-10 border-t border-line pt-8"
         description="Como o ciclo está passando quando ninguém está olhando."
         id="operacao"
         title="Operação"
@@ -772,10 +807,18 @@ export function OverviewPage() {
 
   return (
     <PageShell
+      actions={
+        <Link
+          className="inline-flex h-9 items-center justify-center rounded-control bg-accent px-4 text-sm font-semibold text-surface hover:bg-accent-hover max-md:min-h-11"
+          to="/inbox"
+        >
+          Abrir Inbox
+        </Link>
+      }
       current="/"
-      eyebrow="Radar local"
-      title="Visão geral"
-      description="O estado do ciclo completo: o que chegou, o que já foi decidido e o que precisa de atenção."
+      eyebrow="Decidir"
+      title="O que move sua busca esta semana?"
+      description="Um ponto de partida calmo para escolher a próxima ação, com a origem dos dados à vista."
       footer="Descubra oportunidades, preserve evidências e decida com contexto."
     >
       <div>
@@ -783,7 +826,7 @@ export function OverviewPage() {
           <SummarySkeleton />
         )}
         {overview.isError && (
-          <ErrorState className="mt-8" onRetry={() => void overview.refetch()}>Não foi possível carregar o resumo.</ErrorState>
+          <ErrorState onRetry={() => void overview.refetch()}>Não foi possível carregar o resumo.</ErrorState>
         )}
         {overview.data && <Summary overview={overview.data} />}
       </div>

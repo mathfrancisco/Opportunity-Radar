@@ -18,6 +18,22 @@ describe('PageHeader', () => {
     expect(container.querySelector('button')?.textContent).toBe('Adicionar fonte')
   })
 
+  it('desenha o eyebrow como kicker antes do h1 e, sem ele, não desenha nada', () => {
+    const withKicker = render(<PageHeader eyebrow="Decidir" title="Inbox" />)
+    const kicker = withKicker.querySelector('header p')
+    expect(kicker?.textContent).toBe('Decidir')
+    expect(kicker?.nextElementSibling?.tagName).toBe('H1')
+
+    expect(render(<PageHeader title="Inbox" />).querySelector('header p')).toBeNull()
+  })
+
+  it('desenha o slot de metadados do título depois do h1', () => {
+    const container = render(<PageHeader meta={<p data-testid="meta">Acme</p>} title="Vaga" />)
+    const h1 = container.querySelector('h1') as HTMLElement
+    const meta = container.querySelector('[data-testid="meta"]') as HTMLElement
+    expect(h1.compareDocumentPosition(meta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('não desenha o slot de ação nem o subtítulo quando ausentes', () => {
     const container = render(<PageHeader title="Status" />)
 

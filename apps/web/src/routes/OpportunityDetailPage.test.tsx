@@ -423,3 +423,134 @@ describe('OpportunityDetailPage', () => {
     expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent === 'Registrar interesse')).toBe(true)
   })
 })
+
+describe('OpportunityDetailPage composition (SPEC 54)', () => {
+  const assessmentPayload = {
+    id: 'assessment-1',
+    opportunity_id: 'opportunity-1',
+    opportunity_version: 1,
+    profile_version_id: 'profile-version-1',
+    input_hash: 'a'.repeat(64),
+    rules_version: 'matching-v1',
+    taxonomy_version: 'skills-v1',
+    eligibility: 'ELIGIBLE',
+    eligibility_details: [],
+    status: 'COMPLETED',
+    verdict: 'RECOMMENDED',
+    score: '82.0000',
+    confidence: '0.700',
+    assessed_at: '2026-09-17T12:00:00Z',
+    created_at: '2026-09-17T12:00:00Z',
+    factors: [],
+    analysis: null,
+  }
+
+  async function renderDetail() {
+    const detail = opportunity({ description: 'Pesquisa com pessoas usuárias.' })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.includes('/duplicate-candidates')) return new Response(JSON.stringify({ items: [] }))
+        if (url.includes('/matches?')) {
+          return new Response(JSON.stringify({ items: [assessmentPayload] }))
+        }
+        if (url.includes('/applications?')) {
+          return new Response(JSON.stringify({ items: [], total: 0, offset: 0, limit: 1 }))
+        }
+        if (url.endsWith('/opportunities/opportunity-1')) {
+          return new Response(
+            JSON.stringify({
+              id: detail.id,
+              fingerprint: detail.fingerprint,
+              fingerprint_version: detail.fingerprintVersion,
+              title: detail.title,
+              company_id: detail.companyId,
+              company_name: detail.companyName,
+              location: detail.location,
+              work_mode: detail.workMode,
+              seniority: detail.seniority,
+              contract_type: detail.contractType,
+              description: detail.description,
+              lifecycle_status: detail.lifecycleStatus,
+              published_at: detail.publishedAt,
+              recency_effective_date: detail.recencyEffectiveDate,
+              recency_basis: detail.recencyBasis,
+              created_at: detail.createdAt,
+              version: detail.version,
+              compensations: [],
+              skills: [],
+              occurrences: [],
+              normalization_results: [],
+              sibling_locations: [],
+              relevance_mark: null,
+            }),
+          )
+        }
+        return new Response('{}', { status: 404 })
+      }),
+    )
+    const container = renderWithProviders(
+      <MemoryRouter initialEntries={['/opportunities/opportunity-1']}>
+        <Routes>
+          <Route path="/opportunities/:opportunityId" element={<OpportunityDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+      false,
+    )
+    await flush(8)
+    return container
+  }
+
+  function before(first: Element, second: Element) {
+    return Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)
+  }
+
+  it('mantém a ordem do DOM: voltar, bloco do título, painel de decisão, primeira seção', async () => {
+    const container = await renderDetail()
+
+    const content = container.querySelector('#conteudo') as HTMLElement
+    const back = content.querySelector('a[href="/inbox"]') as HTMLElement
+    const kicker = container.querySelector('header p') as HTMLElement
+    const title = container.querySelector('h1') as HTMLElement
+    const facts = container.querySelector('#resumo') as HTMLElement
+    const panel = container.querySelector('aside[aria-labelledby="painel-decisao"]') as HTMLElement
+    const firstSection = panel.nextElementSibling?.querySelector('section') as HTMLElement
+
+    expect(back.textContent).toContain('Voltar')
+    expect(kicker.textContent).toBe('Oportunidade')
+    expect(title.textContent).toBe('Backend Engineer')
+    expect(facts.textContent).toContain('Acme')
+    expect(facts.textContent).toContain('Remoto')
+    expect(firstSection.querySelector('h2')?.textContent).toBe('Descrição')
+    expect(before(back, title)).toBe(true)
+    expect(before(title, facts)).toBe(true)
+    expect(before(facts, panel)).toBe(true)
+    expect(before(panel, firstSection)).toBe(true)
+    // The panel carries the human actions that already existed.
+    expect(panel.textContent).toContain('Relevante')
+    expect(panel.querySelector('#candidatura')).not.toBeNull()
+    expect(panel.textContent).toContain('Registrar interesse')
+  })
+
+  it('separa o matching determinístico da análise de IA em regiões rotuladas', async () => {
+    const container = await renderDetail()
+
+    const deterministic = container.querySelector('#decisao') as HTMLElement
+    const analysis = container.querySelector('#analise') as HTMLElement
+    expect(deterministic.tagName).toBe('SECTION')
+    expect(analysis.tagName).toBe('SECTION')
+    expect(deterministic.contains(analysis)).toBe(false)
+    expect(analysis.contains(deterministic)).toBe(false)
+
+    const nameOf = (section: HTMLElement) =>
+      container.querySelector(`#${section.getAttribute('aria-labelledby')}`)?.textContent
+    expect(nameOf(deterministic)).toBe('Decisão')
+    expect(nameOf(analysis)).toBe('Análise semântica')
+    expect(deterministic.textContent).toContain('Recomendada')
+    expect(deterministic.textContent).not.toContain('Analisar com IA')
+    expect(analysis.textContent).toContain('Analisar com IA')
+    expect(analysis.textContent).toContain('consultiv')
+    expect(before(deterministic, analysis)).toBe(true)
+  })
+})

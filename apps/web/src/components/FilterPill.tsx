@@ -41,7 +41,7 @@ export function FilterPill({
   const active = value !== defaultValue
   return (
     <div
-      className={`relative inline-flex h-8 items-center gap-1.5 rounded-control border bg-surface pl-2.5 text-body-sm focus-within:outline focus-within:outline-3 focus-within:outline-offset-3 focus-within:outline-ink max-md:h-11 ${
+      className={`relative inline-flex h-8 items-center gap-1.5 rounded-control border bg-surface pl-2.5 text-body-sm focus-within:outline focus-within:outline-3 focus-within:outline-offset-3 focus-within:outline-accent max-md:h-11 ${
         active ? 'border-ink' : 'border-line-strong hover:border-ink'
       } ${className}`.trim()}
       data-active={active}

@@ -59,11 +59,14 @@ function Tracker({
   application,
   opportunityId,
   onReload,
+  bare = false,
 }: {
   application: Application
   opportunityId: string
   /** Re-reads the candidacy after a conflict, so the operator decides on the new version. */
   onReload: () => void
+  /** Inside a narrow, already framed panel: no own frame and the form fields stacked. */
+  bare?: boolean
 }) {
   const transition = useTransitionApplication(opportunityId)
   const nextAction = useSetNextAction(opportunityId)
@@ -82,7 +85,7 @@ function Tracker({
   }
 
   return (
-    <Card>
+    <Card bare={bare}>
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <span className="text-section">{label(application.currentStage)}</span>
         <span className="text-sm text-muted">
@@ -127,7 +130,10 @@ function Tracker({
               <p className="mt-3 text-sm text-danger-ink">{transition.error.message}</p>
             ))}
 
-          <form className="mt-6 grid gap-3 sm:grid-cols-[2fr_1fr_auto]" onSubmit={saveNextAction}>
+          <form
+            className={`mt-6 grid gap-3${bare ? '' : ' sm:grid-cols-[2fr_1fr_auto]'}`}
+            onSubmit={saveNextAction}
+          >
             <Field label="Próxima ação">
               <input
                 className={controlClassName}
@@ -144,7 +150,11 @@ function Tracker({
                 value={actionDue}
               />
             </Field>
-            <Button className="self-end" disabled={nextAction.isPending} type="submit">
+            <Button
+              className={bare ? 'justify-self-start' : 'self-end'}
+              disabled={nextAction.isPending}
+              type="submit"
+            >
               Salvar
             </Button>
           </form>
@@ -169,7 +179,14 @@ function Tracker({
   )
 }
 
-export function ApplicationPanel({ opportunityId }: { opportunityId: string }) {
+export function ApplicationPanel({
+  opportunityId,
+  bare = false,
+}: {
+  opportunityId: string
+  /** Inside a narrow, already framed panel: no own frame and the form fields stacked. */
+  bare?: boolean
+}) {
   const application = useOpportunityApplication(opportunityId)
   const start = useStartApplication(opportunityId)
 
@@ -220,6 +237,7 @@ export function ApplicationPanel({ opportunityId }: { opportunityId: string }) {
   return (
     <Tracker
       application={application.data}
+      bare={bare}
       onReload={() => void application.refetch()}
       opportunityId={opportunityId}
     />

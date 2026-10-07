@@ -1,7 +1,6 @@
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '../components/Button'
-import { Card } from '../components/Card'
 import { Chip } from '../components/Chip'
 import { PrimaryText, SecondaryText } from '../components/cells'
 import { DataTable } from '../components/DataTable'
@@ -27,7 +26,6 @@ import { verdictLabels, verdictTones } from '../features/matching/verdicts'
 import { useMarkRelevance } from '../features/opportunities/useOpportunity'
 import { type ApplicationStage, stageLabels } from '../features/pipeline/api'
 import { roleFamilies } from '../features/dashboard/roleFamilies'
-import { useMediaQuery } from '../lib/useMediaQuery'
 import type { SavedSearch, SavedSearchFilters } from '../features/saved-searches/api'
 import {
   useCreateSavedSearch,
@@ -93,136 +91,24 @@ const appliedOptions = [
   { value: 'false', label: 'Ainda não aplicada' },
 ] as const
 
-/** Operator relevance mark (F17-01). It is evaluation data: it never feeds the score. */
-function RelevanceButtons({ opportunityId }: { opportunityId: string }) {
-  const mark = useMarkRelevance(opportunityId)
+const neutralScoreTone = 'border-line-strong bg-canvas text-neutral-ink'
+const absentScoreTone = 'border-dashed border-line-strong bg-surface text-muted'
+
+/**
+ * The score as a tabular number in a box toned by the verdict. The tone only reinforces: the
+ * verdict name is always written next to it by `VerdictBadge`, never colour alone.
+ */
+function ScoreBox({ item }: { item: InboxItem }) {
+  const tone =
+    item.score === null
+      ? absentScoreTone
+      : ((item.verdict && verdictTones[item.verdict]) ?? neutralScoreTone)
   return (
-    <div className="mt-4 flex flex-wrap gap-2">
-      <Button
-        disabled={mark.isPending}
-        onClick={() => mark.mutate({ relevant: true })}
-      >
-        Relevante
-      </Button>
-      <Button
-        disabled={mark.isPending}
-        onClick={() => mark.mutate({ relevant: false })}
-        variant="secondary"
-      >
-        Não é para mim
-      </Button>
-    </div>
-  )
-}
-
-function ItemCard({ item }: { item: InboxItem }) {
-  return (
-    <Card as="article">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="font-semibold">
-            <Link
-              className="underline decoration-accent decoration-2 underline-offset-4"
-              to={`/opportunities/${item.opportunityId}`}
-            >
-              {item.title}
-            </Link>
-          </h2>
-          <p className="mt-1 text-sm text-muted">
-            {display(item.companyName)} · {display(item.location)}
-            {item.siblingCount > 0 && (
-              <span
-                className="ml-2 inline-flex rounded-full border border-line px-2 py-0.5 text-xs font-medium"
-                data-testid="sibling-chip"
-              >
-                +{item.siblingCount} {item.siblingCount === 1 ? 'local' : 'locais'}
-              </span>
-            )}
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <VerdictBadge verdict={item.verdict} />
-          {item.hasPendingDuplicate && (
-            <span className="inline-flex rounded-full border border-warning-line bg-warning-surface px-3 py-1 text-xs font-medium text-warning-ink">
-              Possível duplicata
-            </span>
-          )}
-          {item.startupStrength && (
-            <span
-              className="inline-flex rounded-full border border-accent px-3 py-1 text-xs font-medium"
-              data-testid="startup-badge"
-            >
-              Startup{item.startupBatch ? ` · YC ${item.startupBatch}` : ''}
-              {item.startupStrength === 'weak' ? ' (sinal fraco)' : ''}
-            </span>
-          )}
-          {item.applied && (
-            <span className="inline-flex rounded-full border border-success-line bg-success-surface px-3 py-1 text-xs font-medium text-success-ink">
-              Candidatura: {stageLabels[item.applicationStage as ApplicationStage] ??
-                item.applicationStage}
-            </span>
-          )}
-          <span className="text-metric-sm">
-            {formatScore(item.score)}
-          </span>
-        </div>
-      </div>
-
-      <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-        <div>
-          <dt className="text-muted">Modalidade</dt>
-          <dd className="mt-1 font-medium">{item.workMode}</dd>
-        </div>
-        <div>
-          <dt className="text-muted">Senioridade</dt>
-          <dd className="mt-1 font-medium">{item.seniority}</dd>
-        </div>
-        <div>
-          <dt className="text-muted">Status</dt>
-          <dd className="mt-1 font-medium">{item.lifecycleStatus}</dd>
-        </div>
-        <div>
-          <dt className="text-muted">Publicada</dt>
-          <dd className="mt-1 font-medium">
-            {formatDate(item.recencyEffectiveDate)}
-            {item.dateIsEstimated && (
-              <span
-                className="ml-1 text-xs font-normal text-subtle"
-                title={estimatedDateHint(item.recencyBasis)}
-              >
-                (estimada)
-              </span>
-            )}
-          </dd>
-        </div>
-      </dl>
-
-      {item.isStale && (
-        <p className="mt-4 rounded-control border border-warning-line bg-warning-surface p-3 text-sm text-warning-ink" role="status">
-          Esta avaliação usa uma versão anterior do perfil ou da oportunidade. A
-          reavaliação está pendente; o resultado anterior continua disponível.
-          {item.assessmentProfileVersionId && item.currentProfileVersionId && (
-            <> Perfil avaliado: {item.assessmentProfileVersionId.slice(0, 8)} · perfil atual: {item.currentProfileVersionId.slice(0, 8)}.</>
-          )}
-        </p>
-      )}
-
-      {item.analysisStatus && item.analysisStatus !== 'AI_COMPLETED' && (
-        <p className="mt-4 text-sm text-warning-ink">
-          Análise semântica indisponível ({item.analysisStatus}). A decisão determinística
-          permanece completa.
-        </p>
-      )}
-      {item.analysisSummary && (
-        <p className="mt-4 text-prose text-subtle">{item.analysisSummary}</p>
-      )}
-      {item.analysisRecommendedReview === true && (
-        <p className="mt-2 text-sm font-medium text-warning-ink">
-          A análise sugere revisão humana antes de aplicar.
-        </p>
-      )}
-      <RelevanceButtons opportunityId={item.opportunityId} />
-    </Card>
+    <span
+      className={`inline-grid h-8 min-w-12 place-items-center rounded-chip border px-2 text-body-sm font-semibold tabular-nums ${tone}`}
+    >
+      {formatScore(item.score)}
+    </span>
   )
 }
 
@@ -241,13 +127,17 @@ function StartupChip({ item }: { item: InboxItem }) {
   )
 }
 
-/** One row of the desktop table. Everything that decides (verdict, duplicate, startup) stays in the row. */
+/**
+ * One row of the comparison table; below `md` the same row is a card. The explicit ARIA roles
+ * keep row and cell semantics when the table is laid out as `display: block`. Everything that
+ * decides (verdict, duplicate, startup) stays in the row.
+ */
 function ItemRow({ item }: { item: InboxItem }) {
   const mark = useMarkRelevance(item.opportunityId)
   return (
-    <tr className="align-top">
-      <td className="min-w-72">
-        <PrimaryText>
+    <tr className="align-top" role="row">
+      <td className="xl:min-w-56" role="cell">
+        <PrimaryText className="break-anywhere">
           <Link
             className="underline decoration-accent decoration-2 underline-offset-4"
             to={`/opportunities/${item.opportunityId}`}
@@ -255,7 +145,7 @@ function ItemRow({ item }: { item: InboxItem }) {
             {item.title}
           </Link>
         </PrimaryText>
-        <SecondaryText>
+        <SecondaryText className="break-anywhere">
           {display(item.companyName)} · {display(item.location)}
         </SecondaryText>
         {(item.hasPendingDuplicate || item.startupStrength || item.siblingCount > 0) && (
@@ -271,6 +161,24 @@ function ItemRow({ item }: { item: InboxItem }) {
             <StartupChip item={item} />
           </div>
         )}
+      </td>
+      <td role="cell">
+        <div className="flex flex-wrap items-center gap-2 xl:flex-col xl:items-start xl:gap-1.5">
+          <ScoreBox item={item} />
+          <VerdictBadge verdict={item.verdict} />
+          {item.applied && (
+            <Chip tone={appliedTone}>
+              Candidatura: {stageLabels[item.applicationStage as ApplicationStage] ??
+                item.applicationStage}
+            </Chip>
+          )}
+        </div>
+      </td>
+      <td className="xl:max-w-64" role="cell">
+        <PrimaryText className="font-medium">
+          {item.workMode} · {item.seniority}
+        </PrimaryText>
+        <SecondaryText>Status {item.lifecycleStatus}</SecondaryText>
         {item.isStale && (
           <SecondaryText className="mt-1.5 text-warning-ink">
             <span role="status">
@@ -297,24 +205,8 @@ function ItemRow({ item }: { item: InboxItem }) {
           </SecondaryText>
         )}
       </td>
-      <td>
-        <div className="flex flex-col items-start gap-1.5">
-          <VerdictBadge verdict={item.verdict} />
-          {item.applied && (
-            <Chip tone={appliedTone}>
-              Candidatura: {stageLabels[item.applicationStage as ApplicationStage] ??
-                item.applicationStage}
-            </Chip>
-          )}
-        </div>
-      </td>
-      <td className="font-semibold tabular-nums">{formatScore(item.score)}</td>
-      <td>
-        <PrimaryText className="font-medium">{item.workMode}</PrimaryText>
-        <SecondaryText>{item.seniority}</SecondaryText>
-      </td>
-      <td>{item.lifecycleStatus}</td>
-      <td className="whitespace-nowrap">
+      <td className="xl:whitespace-nowrap" role="cell">
+        <span className="text-caption text-muted xl:hidden">Publicada </span>
         {formatDate(item.recencyEffectiveDate)}
         {item.dateIsEstimated && (
           <span title={estimatedDateHint(item.recencyBasis)}>
@@ -322,7 +214,7 @@ function ItemRow({ item }: { item: InboxItem }) {
           </span>
         )}
       </td>
-      <td>
+      <td role="cell">
         <div className="flex flex-wrap gap-2">
           <Button
             disabled={mark.isPending}
@@ -345,15 +237,7 @@ function ItemRow({ item }: { item: InboxItem }) {
   )
 }
 
-const tableColumns = [
-  'Oportunidade',
-  'Decisão',
-  'Score',
-  'Modalidade',
-  'Status',
-  'Publicada',
-  'Ações',
-]
+const tableColumns = ['Vaga', 'Score e decisão', 'Sinais', 'Publicada', 'Ações']
 
 function filtersFromParams(params: URLSearchParams): SavedSearchFilters {
   const filters: SavedSearchFilters = {}
@@ -575,7 +459,6 @@ export function InboxPage() {
   const pageSize = (pageSizeOptions as readonly number[]).includes(rawSize)
     ? rawSize
     : defaultPageSize
-  const isDesktop = useMediaQuery('(min-width: 768px)')
   const [searchInput, setSearchInput] = useState(search)
   const allAreas = params.get('all_areas') === 'true'
   const areaFilter = params.getAll('area')
@@ -710,29 +593,31 @@ export function InboxPage() {
 
   return (
     <PageShell
+      actions={
+        <SavedSearchesMenu
+          filters={filtersFromParams(params)}
+          onApply={applySavedSearch}
+          term={search}
+        />
+      }
       current="/inbox"
-      eyebrow="Decisão diária"
-      title="Oportunidades"
-      description="Tudo que o radar encontrou, com a decisão determinística mais recente de cada vaga. Oportunidades ainda não avaliadas continuam visíveis."
+      eyebrow="Decidir"
+      title="Quais vagas merecem sua atenção agora?"
+      description="Compare sinais, evidências e recência antes de decidir o que acompanhar. Cada vaga mostra a decisão determinística mais recente; as ainda não avaliadas continuam visíveis."
     >
       <FilterBar
         search={
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchInput
-              id="inbox-search"
-              label="Buscar oportunidades"
-              onChange={setSearchInput}
-              onSubmit={submitSearch}
-              placeholder="Título ou empresa"
-              value={searchInput}
-            />
-            <SavedSearchesMenu
-              filters={filtersFromParams(params)}
-              onApply={applySavedSearch}
-              term={search}
-            />
-          </div>
+          <SearchInput
+            fullWidth
+            id="inbox-search"
+            label="Buscar oportunidades"
+            onChange={setSearchInput}
+            onSubmit={submitSearch}
+            placeholder="Título ou empresa"
+            value={searchInput}
+          />
         }
+        variant="toolbar"
       >
         <FilterPill
           id="inbox-verdict"
@@ -886,7 +771,7 @@ export function InboxPage() {
           </Field>
         </div>
 
-      <label className="mt-4 flex items-center gap-2 text-sm text-subtle">
+      <label className="mt-4 flex items-center gap-2 text-sm text-subtle max-md:min-h-11">
         <input
           checked={onlyAssessed}
           className="h-4 w-4"
@@ -896,7 +781,7 @@ export function InboxPage() {
         Somente oportunidades já avaliadas
       </label>
 
-      <label className="mt-2 flex items-center gap-2 text-sm text-subtle">
+      <label className="mt-2 flex items-center gap-2 text-sm text-subtle max-md:min-h-11">
         <input
           checked={onlyRecent}
           className="h-4 w-4"
@@ -909,7 +794,7 @@ export function InboxPage() {
         candidatura continuam visíveis)
       </label>
 
-      <label className="mt-2 flex items-center gap-2 text-sm text-subtle">
+      <label className="mt-2 flex items-center gap-2 text-sm text-subtle max-md:min-h-11">
         <input
           checked={onlyStartups}
           className="h-4 w-4"
@@ -927,7 +812,7 @@ export function InboxPage() {
         </p>
         <div className="mt-2 flex flex-wrap gap-4">
           {roleFamilies.map((family) => (
-            <label className="flex items-center gap-2 text-sm" key={family.code}>
+            <label className="flex items-center gap-2 text-sm max-md:min-h-11" key={family.code}>
               <input
                 checked={!allAreas && areaFilter.includes(family.code)}
                 className="h-4 w-4"
@@ -969,34 +854,41 @@ export function InboxPage() {
       )}
       </details>
 
-      <div className="mt-8 grid gap-3">
-        {inbox.isPending &&
-          (isDesktop ? (
-            <TableSkeleton columns={tableColumns.length} label="Carregando oportunidades…" />
-          ) : (
-            <CardListSkeleton count={5} label="Carregando oportunidades…" />
-          ))}
+      <div className="mt-5 grid gap-3">
+        {inbox.isPending && (
+          <>
+            {/* One skeleton per breakpoint, the hidden one out of the accessibility tree. */}
+            <div className="hidden xl:block">
+              <TableSkeleton columns={tableColumns.length} label="Carregando oportunidades…" />
+            </div>
+            <div className="xl:hidden">
+              <CardListSkeleton count={5} label="Carregando oportunidades…" />
+            </div>
+          </>
+        )}
         {inbox.isError && (
           <ErrorState onRetry={() => void inbox.refetch()}>Não foi possível carregar a inbox.</ErrorState>
         )}
-        {inbox.data?.items.length === 0 && (
-          <EmptyState>Nenhuma oportunidade encontrada com esses filtros.</EmptyState>
-        )}
+        {inbox.data?.items.length === 0 &&
+          (activeFilterCount === 0 && !search ? (
+            <EmptyState>
+              Ainda não há oportunidades para mostrar. Quando uma fonte trouxer vagas, elas
+              aparecem aqui.
+            </EmptyState>
+          ) : (
+            <EmptyState>Nenhuma oportunidade encontrada com esses filtros.</EmptyState>
+          ))}
         {inbox.data && inbox.data.items.length > 0 && (
           <>
             <p className="text-sm text-muted">
               {inbox.data.total} oportunidade{inbox.data.total === 1 ? '' : 's'} encontrada
               {inbox.data.total === 1 ? '' : 's'}.
             </p>
-            {isDesktop ? (
-              <DataTable caption="Oportunidades" columns={tableColumns}>
-                {inbox.data.items.map((item) => (
-                  <ItemRow item={item} key={item.opportunityId} />
-                ))}
-              </DataTable>
-            ) : (
-              inbox.data.items.map((item) => <ItemCard item={item} key={item.opportunityId} />)
-            )}
+            <DataTable caption="Oportunidades" columns={tableColumns} stackBelowXl>
+              {inbox.data.items.map((item) => (
+                <ItemRow item={item} key={item.opportunityId} />
+              ))}
+            </DataTable>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
               <Pagination
                 className="min-w-0 flex-1"

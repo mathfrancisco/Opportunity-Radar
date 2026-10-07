@@ -173,6 +173,40 @@ describe('DataTable, visual do redesenho', () => {
     expect(container.querySelector<HTMLInputElement>('thead input')?.indeterminate).toBe(true)
   })
 
+  it('em modo empilhado esconde só visualmente o cabeçalho e dá papéis ARIA explícitos', () => {
+    const container = render(
+      <DataTable caption="Vagas" columns={['Vaga', 'Score']} stackBelowXl>
+        <tr role="row">
+          <td role="cell">Backend</td>
+          <td role="cell">82</td>
+        </tr>
+      </DataTable>,
+    )
+
+    expect(container.querySelector('table')?.getAttribute('role')).toBe('table')
+    const head = container.querySelector('thead') as HTMLElement
+    expect(head.getAttribute('role')).toBe('rowgroup')
+    expect(head.className).toContain('max-xl:sr-only')
+    expect(head.className).not.toContain('hidden')
+    expect(container.querySelector('tbody')?.getAttribute('role')).toBe('rowgroup')
+    expect([...container.querySelectorAll('th')].map((th) => th.getAttribute('role'))).toEqual([
+      'columnheader',
+      'columnheader',
+    ])
+  })
+
+  it('sem o modo empilhado não acrescenta papéis ARIA', () => {
+    const container = render(
+      <DataTable columns={['Vaga']}>
+        <tr>
+          <td>Backend</td>
+        </tr>
+      </DataTable>,
+    )
+
+    expect(container.querySelector('[role]')).toBeNull()
+  })
+
   it('RowSelect exige rótulo que nomeia a linha', () => {
     const container = render(
       <RowSelect checked={false} label="Selecionar Acme" onChange={() => {}} />,

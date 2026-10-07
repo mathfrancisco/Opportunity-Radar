@@ -1,7 +1,5 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Button } from '../components/Button'
-import { Card } from '../components/Card'
 import { Chip } from '../components/Chip'
 import { PageShell } from '../components/PageShell'
 import { Pagination } from '../components/Pagination'
@@ -40,8 +38,9 @@ function isOverdue(value: string | null) {
 
 function ApplicationCard({ application }: { application: Application }) {
   const due = formatDate(application.nextActionAt)
+  const overdue = isOverdue(application.nextActionAt)
   return (
-    <Card as="li" className="text-sm">
+    <li className="break-words rounded-panel border border-l-4 border-line border-l-accent bg-surface p-3 text-sm">
       <Link
         className="font-medium underline decoration-accent decoration-2 underline-offset-4"
         to={`/opportunities/${application.opportunityId}`}
@@ -50,13 +49,10 @@ function ApplicationCard({ application }: { application: Application }) {
       </Link>
       <p className="mt-1 text-muted">{application.companyName ?? 'Empresa não informada'}</p>
       {application.nextAction ? (
-        <p
-          className={`mt-2 ${
-            isOverdue(application.nextActionAt) ? 'text-danger-ink' : 'text-subtle'
-          }`}
-        >
-          {application.nextAction}
+        <p className={`mt-2 ${overdue ? 'text-danger-ink' : 'text-warning-ink'}`}>
+          <span className="font-medium">Próxima ação:</span> {application.nextAction}
           {due ? ` · ${due}` : ''}
+          {overdue ? ' · atrasada' : ''}
         </p>
       ) : (
         <p className="mt-2 text-muted">Sem próxima ação definida.</p>
@@ -65,7 +61,7 @@ function ApplicationCard({ application }: { application: Application }) {
         {application.history.length} movimento
         {application.history.length === 1 ? '' : 's'} no histórico
       </p>
-    </Card>
+    </li>
   )
 }
 
@@ -82,7 +78,7 @@ function BoardSkeleton() {
             </div>
             <div className="mt-3 grid gap-2">
               {[0, 1].map((card) => (
-                <div className="rounded-control border border-line bg-surface p-5" key={card}>
+                <div className="rounded-panel border border-line bg-surface p-3" key={card}>
                   <Bone className="w-24" />
                   <Bone className="mt-3 w-4/5" />
                   <Bone className="mt-3 w-1/2" />
@@ -112,30 +108,62 @@ function Board({
       application,
     ])
   }
-  const columns = stages.filter((stage) => (byStage.get(stage) ?? []).length > 0)
+  const emptyStages = stages.filter((stage) => (byStage.get(stage) ?? []).length === 0)
 
-  if (columns.length === 0) {
-    return (
-      <EmptyState>{emptyMessage}</EmptyState>
-    )
+  if (emptyStages.length === stages.length) {
+    return <EmptyState>{emptyMessage}</EmptyState>
   }
 
+  // Do `lg` para cima, todas as etapas na ordem do funil; a que não tem candidatura encolhe
+  // para uma coluna estreita com nome e contagem. Abaixo, só as que têm candidatura, em
+  // sequência, e a frase resume as ocultas para que a informação não se perca.
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {columns.map((stage) => (
-        <section key={stage}>
-          <h2 className="flex items-baseline justify-between text-sm font-semibold">
-            <span>{stageLabels[stage]}</span>
-            <span className="text-muted">{(byStage.get(stage) ?? []).length}</span>
-          </h2>
-          <ul className="mt-3 grid gap-2">
-            {(byStage.get(stage) ?? []).map((application) => (
-              <ApplicationCard application={application} key={application.id} />
-            ))}
-          </ul>
-        </section>
-      ))}
-    </div>
+    <>
+      <div
+        aria-label="Candidaturas por etapa"
+        className="grid gap-6 lg:flex lg:items-start lg:gap-4"
+        role="group"
+      >
+        {stages.map((stage) => {
+          const items = byStage.get(stage) ?? []
+          const empty = items.length === 0
+          return (
+            <section
+              aria-labelledby={`etapa-${stage}`}
+              className={
+                empty
+                  ? 'max-lg:hidden lg:w-28 lg:flex-none lg:rounded-panel lg:border lg:border-dashed lg:border-line-strong lg:p-2'
+                  : 'min-w-0 lg:flex-[1_1_9rem]'
+              }
+              data-empty={empty ? 'true' : undefined}
+              key={stage}
+            >
+              <h3
+                className={`flex justify-between gap-2 text-sm font-semibold ${
+                  empty ? 'lg:flex-col lg:gap-0.5 lg:break-words' : 'border-b border-line pb-2'
+                }`}
+                id={`etapa-${stage}`}
+              >
+                <span>{stageLabels[stage]}</span>
+                <span className="font-medium tabular-nums text-muted">{items.length}</span>
+              </h3>
+              {!empty && (
+                <ul className="mt-3 grid gap-2">
+                  {items.map((application) => (
+                    <ApplicationCard application={application} key={application.id} />
+                  ))}
+                </ul>
+              )}
+            </section>
+          )
+        })}
+      </div>
+      {emptyStages.length > 0 && (
+        <p className="mt-4 text-sm text-muted lg:hidden">
+          Sem candidaturas em: {emptyStages.map((stage) => stageLabels[stage]).join(', ')}.
+        </p>
+      )}
+    </>
   )
 }
 
@@ -167,28 +195,33 @@ export function PipelinePage() {
   return (
     <PageShell
       current="/applications"
-      eyebrow="Acompanhamento"
-      title="Candidaturas"
-      description="Cada candidatura com o estágio em que está e o que você deve fazer a seguir. A oportunidade segue o ciclo dela; a candidatura segue o seu."
+      eyebrow="Decidir"
+      title="Onde cada candidatura precisa de atenção?"
+      description="Organize a próxima ação em cada etapa da sua busca. A oportunidade segue o ciclo dela; a candidatura segue o seu."
     >
-      <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
-        <div aria-label="Visão das candidaturas" className="flex flex-wrap gap-2" role="group">
-          <Button
-            aria-pressed={view === 'active'}
-            onClick={() => setView('active')}
-            size="sm"
-            variant={view === 'active' ? 'primary' : 'secondary'}
-          >
-            Em andamento{active.data ? ` (${active.data.total})` : ''}
-          </Button>
-          <Button
-            aria-pressed={view === 'closed'}
-            onClick={() => setView('closed')}
-            size="sm"
-            variant={view === 'closed' ? 'primary' : 'secondary'}
-          >
-            Encerradas{closed.data ? ` (${closed.data.total})` : ''}
-          </Button>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line">
+        <div aria-label="Visão das candidaturas" className="flex flex-wrap gap-5" role="group">
+          {(
+            [
+              ['active', 'Em andamento', active.data?.total],
+              ['closed', 'Encerradas', closed.data?.total],
+            ] as const
+          ).map(([value, label, total]) => (
+            <button
+              aria-pressed={view === value}
+              className={`-mb-px border-b-[3px] px-0.5 py-2 text-sm font-semibold max-md:min-h-11 ${
+                view === value
+                  ? 'border-accent text-ink'
+                  : 'border-transparent text-muted hover:text-ink'
+              }`}
+              key={value}
+              onClick={() => setView(value)}
+              type="button"
+            >
+              {label}
+              {total !== undefined ? ` (${total})` : ''}
+            </button>
+          ))}
         </div>
         {selected.data && <Chip>{selected.data.total} no total</Chip>}
       </div>

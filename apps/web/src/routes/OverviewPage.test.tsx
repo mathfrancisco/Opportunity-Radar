@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { App } from '../app/App'
 import { render } from '../components/testing'
 import { OverviewPage, SavedSearchesWithNews, StartupShortcut } from './OverviewPage'
 
@@ -304,6 +305,125 @@ describe('OverviewPage — orientação', () => {
 
     expect(container.textContent).toContain('Janela: 24h.')
     expect(container.textContent).toContain('Consolidado em')
+  })
+})
+
+describe('OverviewPage — composição', () => {
+  it('põe a decisão antes dos números e a operação por último, na ordem do DOM', async () => {
+    stubOverviewFetch(overviewBody({ new_opportunities: 2 }), [])
+
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    expect(container.querySelector('h1')?.textContent).toBe('O que move sua busca esta semana?')
+    const order = [...container.querySelectorAll('section[aria-labelledby]')]
+      .map((section) => section.id)
+      .filter((id) => ['decisao-de-hoje', 'acervo', 'operacao'].includes(id))
+    expect(order).toEqual(['decisao-de-hoje', 'acervo', 'operacao'])
+    // As quatro ações da decisão continuam com o rótulo e o destino de antes.
+    const decision = container.querySelector('#decisao-de-hoje')!
+    expect(
+      [...decision.querySelectorAll('li a')].map((link) => link.getAttribute('href')),
+    ).toEqual([
+      '/inbox?verdict=HIGH_PRIORITY',
+      '/inbox?verdict=RECOMMENDED',
+      '/inbox?order=recency',
+      '/applications',
+    ])
+    expect(
+      [...container.querySelectorAll('main a[href="/inbox"]')].map((link) => link.textContent),
+    ).toContain('Abrir Inbox')
+  })
+
+  it('mantém o estado vazio "nada exige decisão" e os números do acervo e da operação', async () => {
+    stubOverviewFetch(overviewBody({ applications_active: 4, assessed_opportunities: 9 }), [])
+
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    expect(container.querySelector('#decisao-de-hoje')?.textContent).toContain(
+      'Nada exige decisão agora',
+    )
+    const acervo = container.querySelector('#acervo')!
+    expect(acervo.querySelector('a[href="/applications"]')?.textContent).toBe('Candidaturas ativas')
+    expect(acervo.querySelector('a[href="/inbox?only_assessed=true"]')?.textContent).toBe(
+      'Avaliadas',
+    )
+    expect(container.querySelector('#operacao')?.textContent).toContain(
+      'Fontes com falha na última execução',
+    )
+  })
+
+  it('faz exatamente as mesmas requisições de antes, sem chamadas extras', async () => {
+    stubOverviewFetch(overviewBody(), ['greenhouse'])
+
+    renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    const calls = (fetch as ReturnType<typeof vi.fn>).mock.calls.map(([input]) => String(input))
+    expect([...new Set(calls)].sort()).toEqual([
+      '/api/analysis-metrics',
+      '/api/overview',
+      '/api/saved-searches',
+      '/api/source-metrics',
+    ])
+    expect(calls).toHaveLength(4)
+  })
+
+  it('abrir uma busca salva com novidade continua marcando a busca como aberta', async () => {
+    const search = savedSearch({ id: 'saved-1', name: 'Backend remoto' })
+    const base = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/saved-searches/saved-1/new-count')) {
+        return new Response(JSON.stringify({ new_count: 2 }), { status: 200 })
+      }
+      if (url.endsWith('/saved-searches/saved-1') && init?.method === 'PATCH') {
+        return new Response(JSON.stringify(search), { status: 200 })
+      }
+      if (url.endsWith('/saved-searches')) {
+        return new Response(JSON.stringify([search]), { status: 200 })
+      }
+      if (url.endsWith('/overview')) {
+        return new Response(JSON.stringify(overviewBody({ new_opportunities: 1 })), { status: 200 })
+      }
+      if (url.endsWith('/analysis-metrics')) {
+        return new Response(JSON.stringify(disabledAnalysisMetrics), { status: 200 })
+      }
+      return new Response(JSON.stringify({ generated_at: '', windows: [] }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', base)
+
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(8)
+
+    const link = [...container.querySelectorAll('a')].find(
+      (anchor) => anchor.textContent === 'Backend remoto',
+    ) as HTMLAnchorElement
+    expect(link.getAttribute('href')).toBe('/inbox?work_mode=REMOTE')
+    act(() => link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })))
+    await flush()
+
+    expect(base).toHaveBeenCalledWith(
+      '/api/saved-searches/saved-1',
+      expect.objectContaining({ method: 'PATCH' }),
+    )
+  })
+
+  it('renderiza a Visão geral em uma URL desconhecida (rota coringa)', async () => {
+    stubOverviewFetch(overviewBody(), [])
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    const container = render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/essa-rota-nao-existe']}>
+          <App />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await flush(6)
+
+    expect(container.querySelector('h1')?.textContent).toBe('O que move sua busca esta semana?')
+    expect(container.querySelector('#decisao-de-hoje')).not.toBeNull()
   })
 })
 

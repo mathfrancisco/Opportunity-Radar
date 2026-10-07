@@ -71,8 +71,7 @@ function isControl(children: ReactNode): children is ReactElement<Record<string,
   )
 }
 
-/** The shared look of every text, number and select control. */
+/** The shared look of every text, number and select control; focus is the global ring. */
 export const controlClassName =
   'mt-1 w-full rounded-control border border-line-strong bg-surface px-3 py-2 ' +
-  'outline-none focus:border-ink focus:ring-2 focus:ring-accent ' +
-  'aria-invalid:border-danger-ink aria-invalid:ring-danger-line'
+  'max-md:min-h-11 aria-invalid:border-danger-ink'
