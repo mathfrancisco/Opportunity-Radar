@@ -70,6 +70,34 @@ function typeInto(input: HTMLInputElement, value: string) {
 }
 
 describe('CompaniesPage', () => {
+  it('mostra o kicker do catálogo e associa rótulo e erro ao campo de nome', async () => {
+    stubCompanies(0)
+
+    const container = renderPage(<CompaniesPage />)
+    await flush()
+
+    expect(container.querySelector('header p')?.textContent).toBe('Catálogo local')
+    const createButton = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Nova empresa',
+    )
+    act(() => createButton?.click())
+
+    const form = container.querySelector<HTMLFormElement>('form[aria-labelledby="new-company-title"]')
+    expect(form).not.toBeNull()
+    const controls = [...(form?.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(
+      'input, select, textarea',
+    ) ?? [])]
+    expect(controls.map((control) => document.getElementById(control.getAttribute('aria-labelledby') ?? '')?.textContent))
+      .toEqual(['Nome', 'Domínio', 'Prioridade', 'Status no radar', 'Aliases'])
+
+    act(() => form?.requestSubmit())
+    const name = controls[0]
+    expect(name.getAttribute('aria-invalid')).toBe('true')
+    const errorId = name.getAttribute('aria-describedby')
+    expect(errorId).toBeTruthy()
+    expect(document.getElementById(errorId ?? '')?.textContent).toBe('Dê o nome da empresa.')
+  })
+
   it('lista as empresas num DataTable com chips e fontes em cinza', async () => {
     stubCompanies(3)
 
