@@ -1,6 +1,6 @@
 # SPEC 50 — estado da implementação
 
-- **Atualizado em:** 2026-10-06 (seção "PRs #40 a #42")
+- **Atualizado em:** 2026-10-07 (seção "Sexta sessão")
 - **Branch:** a SPEC 50 entrou em `main` pelo PR #26, mesclado em 2026-10-05 (`46ebbed`). A
   continuação está no PR #31 (`f50-fontes-e-inhire`, base `main`); ver "PR #31" abaixo. O que
   veio depois está em "PRs #32 a #37 e SPECs 51 e 52". Nada foi aplicado na stack
@@ -208,6 +208,41 @@ das SPECs 51 e 52; o detalhe está no
   230 de 244 requisições de detalhe de uma passada eram releitura de vaga já guardada.
 - **Stack de dev:** em 2026-10-07 roda o `main` com os PRs até o #66; `seniority-v6`
   aplicado; 135 fontes de hora em hora, 98 do inHire de hora em hora, 18 a cada 6 horas.
+
+## Sexta sessão (2026-10-07), PRs #69 e #70
+
+Nenhuma mudança em `src`. O detalhe está no
+[roadmap 51](../51-roadmap-coleta-confiavel/README.md), no
+[checkpoint](../51-roadmap-coleta-confiavel/implementation-checkpoint.md) e na
+[SPEC 52](../52-spec-aderencia-ao-nivel.md).
+
+- **SPEC 51:** o PR #70 só traz testes, para dez critérios de aceite que estavam sem
+  cobertura completa; os cards trazem o nome do teste de cada critério. O merge reabriu a
+  janela de sete dias do F51-18: abre em 2026-10-07 14:28:49 UTC e fecha em 2026-10-14
+  14:28:49 UTC. Nenhum card da SPEC 51 está concluído.
+- **F52-06, oferta júnior/pleno:** 159 empresas brasileiras com board no inHire foram
+  curadas, cadastradas pela API do produto e habilitadas em cinco lotes de hora em hora. Em
+  2026-10-07, 18h14 UTC: 530 vagas `JUNIOR` ou `MID` nas áreas-alvo (eram 369 às 13h40 UTC),
+  contra a meta de 600. Faltam 70; o card continua aberto. Relatório por fonte em
+  [f52-06-vagas-do-nivel-por-fonte-2026-10-07.md](../pesquisas/f52-06-vagas-do-nivel-por-fonte-2026-10-07.md).
+- **Termos:** Quickin a confirmar; Sólides e Recrutei não viáveis hoje. Nenhum coletor novo.
+- **Fila `REVIEW_REQUIRED`:** 1.370 linhas às 18h14 UTC; cresce com a coleta. Proposta de
+  regra por motivo em
+  [fila-review-required-proposta-2026-10-07.md](../pesquisas/fila-review-required-proposta-2026-10-07.md),
+  à espera de decisão do dono. Nada foi resolvido.
+- **Stack de dev:** roda o `main` em `3aaca63`. O catálogo tem 522 empresas, 408 com fonte
+  habilitada. São 257 fontes inHire, todas de hora em hora; ao todo, 392 fontes de hora em
+  hora. A passada horária do inHire faz cerca de 260 requisições de lista, mais o detalhe
+  das vagas novas.
+- **Vistos e não tratados:** a fonte Greenhouse da HubSpot falhou com `404`
+  (`SOURCE_NOT_FOUND`) em todas as execuções de 2026-10-07. A execução da Accenture no
+  Workday terminou `PARTIAL` com `PARSER_SCHEMA_CHANGED` às 13h25 UTC; a agenda dela é
+  diária, às 06h00 UTC, e a execução seguinte não tinha ocorrido no fim da sessão.
+- **Dependem do dono:** F51-09 AC01, F51-10 AC04, o risco de fechamento por dois `304`
+  seguidos no F51-13 e as regras A, B e C da fila de revisão. Continuam bloqueados: rótulos
+  da amostra (F51-11, F52-03, F52-07), aprovação Workday nos 5 tenants (F51-03, F51-05), gold
+  de busca com dois revisores (F51-17), definição de "resultado útil" (F51-12 AC06) e
+  amostra humana de recall (F51-02).
 
 ## Stack de desenvolvimento `opportunity-radar-dev`
 

@@ -22,7 +22,13 @@
 > de detalhe, em 2 min 10 s. Das quatro reexecuções Workday das 13:25 UTC, Chanel, Procter &
 > Gamble e RELX terminaram `SUCCEEDED` com token de fencing 2; a da Accenture terminou
 > `PARTIAL` com `PARSER_SCHEMA_CHANGED` ("Workday pagination repeated a page without making
-> progress"), com 1.480 de 2.000 itens.
+> progress"), com 1.480 de 2.000 itens. A CERC voltou a `SUCCEEDED` na execução das 15:03 UTC.
+> A agenda da Accenture é diária, às 06:00 UTC; a execução seguinte não ocorreu nesta sessão.
+>
+> Lote do F52-06, fora da coorte da janela: 159 fontes inHire habilitadas entre 14:07 e 18:06
+> UTC, em cinco lotes. Requisições ao inHire por hora de início da execução, das 14:00 às
+> 18:00 UTC: 908, 1.015, 904, 967 e 548, contra o teto de 1.200; nenhum evento de limite de
+> taxa. Às 18:14 UTC eram 257 fontes inHire, todas com execução `SUCCEEDED`.
 >
 > Medição da abertura da janela nos cards F51-01 e F51-02; preparação do pacote no F51-18;
 > decisão de não fazer trechos relevantes nem modelo local no F51-12. Não feito: reinício real
