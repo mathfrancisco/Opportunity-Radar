@@ -18,7 +18,7 @@ export interface AppShellProps {
 const drawerId = 'sidebar'
 
 /**
- * Sidebar + white content panel. From `md` up the sidebar is a fixed column; below it, it
+ * Sidebar + content on the canvas. From `md` up the sidebar is a fixed column; below it, it
  * is a drawer opened by the menu button.
  */
 export function AppShell({ current, title, description, actions, children, footer }: AppShellProps) {
@@ -50,7 +50,7 @@ export function AppShell({ current, title, description, actions, children, foote
         Pular para o conteúdo
       </a>
 
-      <div className="flex items-center gap-3 border-b border-line px-4 py-2 md:hidden">
+      <div className="flex items-center gap-3 border-b border-line-strong bg-sidebar px-4 py-2 md:hidden">
         <button
           aria-controls={drawerId}
           aria-expanded={open}
@@ -73,15 +73,15 @@ export function AppShell({ current, title, description, actions, children, foote
       )}
       <aside
         className={`${
-          open ? 'fixed inset-y-0 left-0 z-20 block overflow-y-auto' : 'hidden'
-        } w-60 shrink-0 border-r border-line bg-canvas p-3 md:sticky md:top-0 md:block md:h-screen md:overflow-y-auto md:border-r-0`}
+          open ? 'fixed inset-y-0 left-0 z-20 block overflow-y-auto shadow-overlay' : 'hidden'
+        } w-60 shrink-0 border-r border-line-strong bg-sidebar p-3 md:sticky md:top-0 md:block md:h-screen md:overflow-y-auto`}
         id={drawerId}
       >
         <Sidebar current={current} onNavigate={() => close(false)} />
       </aside>
 
-      <main className="min-w-0 flex-1 md:p-3 md:pl-0">
-        <div className="min-h-[calc(100vh-1.5rem)] border-line bg-surface p-4 md:rounded-panel md:border md:p-6">
+      <main className="min-w-0 flex-1 p-4 md:p-8">
+        <div className="min-h-[calc(100vh-4rem)]">
           <section id="conteudo" tabIndex={-1}>
             <PageHeader actions={actions} description={description} title={title} />
             <div className="mt-6">{children}</div>

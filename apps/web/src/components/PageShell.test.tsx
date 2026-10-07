@@ -22,9 +22,9 @@ describe('PageShell', () => {
     })
 
     expect(groups).toEqual([
-      ['Dia a dia', ['Visão geral', 'Oportunidades', 'Candidaturas']],
-      ['Catálogo', ['Empresas', 'Fontes', 'Perfil']],
-      ['Diagnóstico', ['Status']],
+      ['Decidir', ['Visão geral', 'Inbox', 'Pipeline']],
+      ['Pesquisar', ['Empresas']],
+      ['Operar', ['Fontes', 'Homologação', 'Perfil', 'Status']],
     ])
   })
 

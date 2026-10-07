@@ -13,10 +13,11 @@ const base =
   'inline-flex items-center justify-center gap-2 rounded-control text-sm transition ' +
   'disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11'
 
-// The focus ring is the global `:focus-visible` (3px `ink`, offset 3px; SPEC 46, 9): the
-// ring sits outside the button, on the light page, so `ink` is the contrasting colour.
+// The focus ring is the global `:focus-visible` (3px `accent`, offset 3px; SPEC 54, 5.2): the
+// ring sits outside the button, separated by the offset, so it stays visible against the
+// petrol fill of the primary variant.
 const variants: Record<ButtonVariant, string> = {
-  primary: 'bg-ink font-semibold text-surface hover:bg-ink-hover',
+  primary: 'bg-accent font-semibold text-surface hover:bg-accent-hover',
   secondary: 'border border-line-strong bg-surface font-medium text-ink hover:border-ink',
 }
 

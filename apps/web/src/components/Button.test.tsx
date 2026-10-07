@@ -21,7 +21,8 @@ describe('Button', () => {
       'button',
     )
 
-    expect(primary?.className).toContain('bg-ink')
+    expect(primary?.className).toContain('bg-accent')
+    expect(primary?.className).toContain('hover:bg-accent-hover')
     expect(secondary?.className).toContain('border-line-strong')
     expect(secondary?.className).not.toContain('bg-ink')
   })

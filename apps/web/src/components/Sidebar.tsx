@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import {
   ApplicationsIcon,
   CompaniesIcon,
+  HomologationIcon,
   InboxIcon,
   OverviewIcon,
   ProfileIcon,
@@ -10,33 +11,34 @@ import {
 } from './icons'
 
 /*
- * As sete telas agrupadas pelo que servem: o trabalho de todo dia, o catálogo que o
- * alimenta, e o diagnóstico. Uma lista plana dava o mesmo peso à tela mais usada e à menos
- * usada, e era lida item a item, toda vez.
+ * As oito telas agrupadas pela pergunta que respondem (SPEC 54, 5.1): decidir o que fazer
+ * agora, pesquisar o mercado e operar o que alimenta o radar. Uma lista plana dava o mesmo
+ * peso à tela mais usada e à menos usada, e era lida item a item, toda vez.
  */
 const navigation = [
   {
-    id: 'diario',
-    label: 'Dia a dia',
+    id: 'decidir',
+    label: 'Decidir',
     items: [
       { to: '/', label: 'Visão geral', icon: <OverviewIcon /> },
-      { to: '/inbox', label: 'Oportunidades', icon: <InboxIcon /> },
-      { to: '/applications', label: 'Candidaturas', icon: <ApplicationsIcon /> },
+      { to: '/inbox', label: 'Inbox', icon: <InboxIcon /> },
+      { to: '/applications', label: 'Pipeline', icon: <ApplicationsIcon /> },
     ],
   },
   {
-    id: 'catalogo',
-    label: 'Catálogo',
+    id: 'pesquisar',
+    label: 'Pesquisar',
+    items: [{ to: '/companies', label: 'Empresas', icon: <CompaniesIcon /> }],
+  },
+  {
+    id: 'operar',
+    label: 'Operar',
     items: [
-      { to: '/companies', label: 'Empresas', icon: <CompaniesIcon /> },
       { to: '/sources', label: 'Fontes', icon: <SourcesIcon /> },
+      { to: '/sources/homologation-queue', label: 'Homologação', icon: <HomologationIcon /> },
       { to: '/profile', label: 'Perfil', icon: <ProfileIcon /> },
+      { to: '/status', label: 'Status', icon: <StatusIcon /> },
     ],
-  },
-  {
-    id: 'diagnostico',
-    label: 'Diagnóstico',
-    items: [{ to: '/status', label: 'Status', icon: <StatusIcon /> }],
   },
 ] as const
 
@@ -50,7 +52,7 @@ interface SidebarProps {
 }
 
 /**
- * Logo + the three navigation groups. Layout (fixed column or drawer) is the shell's
+ * Logo + the navigation groups. Layout (fixed column or drawer) is the shell's
  * business; this component only owns what is inside.
  */
 export function Sidebar({ current, onNavigate }: SidebarProps) {
@@ -61,7 +63,7 @@ export function Sidebar({ current, onNavigate }: SidebarProps) {
         onClick={onNavigate}
         to="/"
       >
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-brand text-base font-black">
+        <span className="grid h-8 w-8 place-items-center rounded-full bg-brand text-base font-black text-surface">
           ◉
         </span>
         <span className="text-section tracking-tight">Opportunity Radar</span>
@@ -80,10 +82,10 @@ export function Sidebar({ current, onNavigate }: SidebarProps) {
                     <li key={item.to}>
                       <Link
                         aria-current={active ? 'page' : undefined}
-                        className={`flex items-center gap-2 whitespace-nowrap rounded-control border px-3 text-sm max-md:min-h-11 md:h-9 ${
+                        className={`flex items-center gap-2 whitespace-nowrap rounded-control px-3 text-sm max-md:min-h-11 md:h-9 ${
                           active
-                            ? 'border-line bg-surface font-semibold text-ink'
-                            : 'border-transparent font-medium text-subtle hover:bg-line hover:text-ink'
+                            ? 'bg-surface font-semibold text-ink shadow-[inset_3px_0_0_var(--color-accent)]'
+                            : 'font-medium text-subtle hover:bg-surface hover:text-ink'
                         }`}
                         onClick={onNavigate}
                         to={item.to}
