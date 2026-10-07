@@ -85,6 +85,10 @@ class _Harness:
                 del timezone
                 return source
 
+            def run_may_close_absences(self, run_id: object) -> bool:
+                del run_id
+                return True
+
             async def execute(self, source_id: UUID, request: object, **_kwargs: object):
                 source = harness.by_id[source_id]
                 host = harness.host_of(source)
@@ -144,7 +148,7 @@ class _Harness:
             def normalize_run(self, run_id: object) -> None:
                 harness.reconciled.append(("normalize", run_id))
 
-            def reconcile_run_closures(self, run_id: object) -> None:
+            def reconcile_run_closures(self, run_id: object, may_close: object = None) -> None:
                 harness.reconciled.append(("reconcile", run_id))
 
         monkeypatch.setattr(worker, "OpportunityService", FakeOpportunityService)
