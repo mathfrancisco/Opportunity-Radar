@@ -48,6 +48,7 @@ from opportunity_radar.acquisition.forbidden import (
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
 from opportunity_radar.acquisition.hacker_news import DISCOVERY_VIA as HN_DISCOVERY_VIA
 from opportunity_radar.acquisition.inhire import InhireCollector
+from opportunity_radar.acquisition.inventory_contract import inventory_scope_hash
 from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.models import (
     RawItemModel,
@@ -159,7 +160,7 @@ def _budget_host_for_source(source_type: str, configuration: dict[str, Any] | No
 
 
 def _conditional_headers_for(
-    source: SourceDefinitionModel,
+    source: SourceDefinitionModel, scope_hash: str | None = None
 ) -> ConditionalRequestHeaders | None:
     """Validators for the next request, only when the checkpoint is the same scope.
 
@@ -173,6 +174,11 @@ def _conditional_headers_for(
     if checkpoint is None or checkpoint.checkpoint_type != "cursor":
         return None
     if checkpoint.etag is None and checkpoint.last_modified is None:
+        return None
+    # F51-13: a validator describes the board, filters and contract version it was stored
+    # under (`None` = unverifiable, e.g. written before the scope existed); under any other
+    # scope the request goes out unconditional and is read in full.
+    if scope_hash is not None and checkpoint.scope_hash != scope_hash:
         return None
     return ConditionalRequestHeaders(
         if_none_match=checkpoint.etag,
@@ -411,6 +417,7 @@ class AcquisitionService:
         target_area_floor: float = 0.0,
         claims_enabled: bool = False,
         claim_renew_interval_seconds: float | None = None,
+        inventory_contract_enabled: bool = True,
     ) -> None:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
@@ -445,6 +452,8 @@ class AcquisitionService:
         # F51-07: off keeps the unclaimed behaviour (the active-run unique index stays the
         # only single-flight); on needs a repository that can claim, i.e. a real database.
         self._claims_enabled = claims_enabled
+        # F51-13: off restores unscoped validators and the earlier terminal-status rule.
+        self._inventory_contract_enabled = inventory_contract_enabled
         self._claim_renew_interval = (
             claim_renew_interval_seconds
             if claim_renew_interval_seconds is not None
@@ -1459,6 +1468,9 @@ class AcquisitionService:
         tavily_telemetry = CollectionTelemetry()
         externally_cancelled = False
         durable_reservations = callable(getattr(self.session, "get_bind", None))
+        # F51-13: what this run's validators and revalidated manifest describe; `None` until
+        # the board is resolved, or when the inventory contract is switched off.
+        scope_hash: str | None = None
         extraction_budget = (
             TavilyCreditBudget(limit=self._tavily_extraction.credit_budget_per_run)
             if self._tavily_extraction is not None
@@ -1468,6 +1480,14 @@ class AcquisitionService:
             if throttle_error is not None:
                 raise throttle_error
             company_reference, company_name, api_region = _collector_settings(source)
+            if self._inventory_contract_enabled:
+                scope_hash = inventory_scope_hash(
+                    source_type=source.source_type,
+                    company_reference=company_reference or request.company_reference,
+                    api_region=api_region or request.api_region,
+                    keywords=request.keywords,
+                    locations=request.locations,
+                )
             fetch_detail, detail_max_requests = (
                 _detail_settings(source.configuration, source.source_type)
                 if source.source_type == "workday"
@@ -1542,7 +1562,7 @@ class AcquisitionService:
                 conditional_headers=(
                     request.conditional_headers
                     if request.conditional_headers is not None
-                    else _conditional_headers_for(source)
+                    else _conditional_headers_for(source, scope_hash)
                 ),
                 known_ats_boards=(
                     self.repository.enabled_ats_boards()
@@ -1787,9 +1807,15 @@ class AcquisitionService:
         # a manifest of representations and every one of them revalidated as 304 in this
         # same run, and some earlier run already proved the board's inventory complete.
         # That combination is the only thing SPEC 39 §7 lets a 304 reuse (F20-39).
+        # F51-13: a revalidation counts only against a cache stored under this same
+        # board, filters and contract version (always true with the contract switched off).
+        cache_in_scope = scope_hash is None or (
+            source.checkpoint is not None and source.checkpoint.scope_hash == scope_hash
+        )
         if run_telemetry.not_modified:
             manifest_fully_revalidated = (
-                run_telemetry.manifest_size is not None
+                cache_in_scope
+                and run_telemetry.manifest_size is not None
                 and run_telemetry.not_modified_count >= run_telemetry.manifest_size
                 and request.cursor is None
                 and run.items_seen == 0
@@ -1813,12 +1839,24 @@ class AcquisitionService:
         # the representation's own etag/last-modified — SPEC 39 §7: that revalidation must
         # never be read as proof the board is fully read (`run.complete` above is untouched
         # by it, and stays governed by `evaluate_completeness`/the manifest check above).
-        if final_status is SourceRunStatus.SUCCEEDED and (
-            last_cursor is not None
-            or run_telemetry.response_etag is not None
-            or run_telemetry.response_last_modified is not None
+        # F51-13: a 304 answering a cache of another scope confirms nothing about this one.
+        foreign_304 = run_telemetry.not_modified and not cache_in_scope
+        if (
+            final_status is SourceRunStatus.SUCCEEDED
+            and not foreign_304
+            and (
+                last_cursor is not None
+                or run_telemetry.response_etag is not None
+                or run_telemetry.response_last_modified is not None
+            )
         ):
             checkpoint = source.checkpoint or SourceCheckpointModel(source_definition_id=source.id)
+            if scope_hash is not None and checkpoint.scope_hash != scope_hash:
+                # Validators stored under another scope (or none) never carry over to this
+                # one; only what this run's own response reported is kept.
+                checkpoint.etag = None
+                checkpoint.last_modified = None
+                checkpoint.scope_hash = scope_hash
             if last_cursor is not None:
                 checkpoint.cursor = last_cursor
                 checkpoint.checkpoint_type = "cursor"

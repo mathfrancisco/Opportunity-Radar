@@ -37,6 +37,7 @@ from opportunity_radar.acquisition.models import (
     SourceRunModel,
 )
 from opportunity_radar.acquisition.repository import AcquisitionRepository
+from opportunity_radar.acquisition.scheduling import ConditionalRequestHeaders
 from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
@@ -999,5 +1000,154 @@ def test_resume_of_run_rejects_a_run_that_is_not_a_resumable_prefix() -> None:
                     )
                 )
             assert excinfo.value.code == AcquisitionErrorCode.INVALID_CONFIGURATION
+        finally:
+            fixture.cleanup()
+
+
+def _normalize_all(fixture: _Fixture, opportunities: OpportunityService) -> None:
+    for raw_item in fixture.raw_items():
+        opportunities.normalize(raw_item.id)
+
+
+def _opportunity_states(fixture: _Fixture) -> dict[str, str]:
+    states: dict[str, str] = {}
+    for raw_item in fixture.raw_items():
+        occurrence = fixture.occurrence_for(raw_item.id)
+        assert occurrence is not None
+        fixture.session.refresh(occurrence.opportunity)
+        states[str(raw_item.external_id)] = occurrence.opportunity.lifecycle_status
+    return states
+
+
+def test_304_requires_matching_inventory_scope() -> None:
+    """A 304 reuses the stored inventory only for the board, filters and contract version
+    the cache was stored under; otherwise the run is partial and closes nothing (F51-13)."""
+    import asyncio
+
+    engine = _engine()
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        opportunities = OpportunityService(session)
+        seen_headers: list[str | None] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen_headers.append(request.headers.get("If-None-Match"))
+            if request.headers.get("If-None-Match") == '"v1"':
+                return httpx.Response(304, headers={"ETag": '"v1"'})
+            return httpx.Response(
+                200,
+                headers={"ETag": '"v1"'},
+                json={"jobs": [{"id": "job-1", "title": "Backend Engineer"}]},
+            )
+
+        def execute(collector: object, **request: object):
+            return asyncio.run(
+                fixture.service(collector).execute(
+                    fixture.source.id,
+                    CollectionRequest(mode=CollectionMode.DISCOVERY, **request),  # type: ignore[arg-type]
+                )
+            )
+
+        try:
+            # A complete read, under the unfiltered scope, stores a validator for it.
+            first = execute(
+                _ConditionalCollector(fixture.source_type, httpx.MockTransport(handler)),
+                company_reference="acme",
+            )
+            assert first.complete is True
+            _normalize_all(fixture, opportunities)
+            checkpoint = fixture.source.checkpoint
+            assert checkpoint is not None and checkpoint.scope_hash is not None
+            stored_scope = checkpoint.scope_hash
+
+            # Same scope: every declared representation revalidates, the inventory is reused.
+            same = execute(
+                _ManifestConditionalCollector(fixture.source_type, [True, True]),
+                company_reference="acme",
+            )
+            assert same.complete is True
+
+            # Different board: the same fully revalidated manifest proves nothing.
+            other = execute(
+                _ManifestConditionalCollector(fixture.source_type, [True, True]),
+                company_reference="other-board",
+            )
+            assert other.status == "SUCCEEDED"
+            assert other.complete is False
+            opportunities.reconcile_run_closures(other.id)
+            assert "CLOSED" not in _opportunity_states(fixture).values()
+
+            # The stored validator is not sent for the other filter: the request is
+            # unconditional and the board is read in full.
+            seen_headers.clear()
+            unconditional = execute(
+                _ConditionalCollector(fixture.source_type, httpx.MockTransport(handler)),
+                company_reference="other-board",
+            )
+            assert seen_headers == [None]
+            assert unconditional.items_seen == 1
+
+            # A 304 that answers a validator of another scope (here supplied by the caller)
+            # confirms nothing: partial, no closure, and the stored cache is left alone.
+            session.refresh(checkpoint)
+            scope_before = checkpoint.scope_hash
+            assert scope_before != stored_scope
+            foreign = execute(
+                _ConditionalCollector(fixture.source_type, httpx.MockTransport(handler)),
+                company_reference="third-board",
+                conditional_headers=ConditionalRequestHeaders(if_none_match='"v1"'),
+            )
+            assert foreign.items_persisted == 0 and foreign.items_seen == 0
+            assert foreign.complete is False
+            opportunities.reconcile_run_closures(foreign.id)
+            assert "CLOSED" not in _opportunity_states(fixture).values()
+            session.refresh(checkpoint)
+            assert checkpoint.scope_hash == scope_before
+        finally:
+            fixture.cleanup()
+
+
+class _TimeoutAfterPrefixCollector(_StaticCollector):
+    async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        del request
+        yield self._batches[0][0]
+        raise AcquisitionError(AcquisitionErrorCode.SOURCE_TIMEOUT, "next page timed out")
+
+
+def test_timeout_after_valid_page_keeps_presence_and_closes_nothing() -> None:
+    import asyncio
+
+    engine = _engine()
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        opportunities = OpportunityService(session)
+        try:
+            present = _item(fixture.source_type, external_id="page-1", title="On page one")
+            absent = _item(fixture.source_type, external_id="page-2", title="On page two")
+            first = asyncio.run(
+                fixture.service(_StaticCollector(fixture.source_type, [[present, absent]])).execute(
+                    fixture.source.id, CollectionRequest(mode=CollectionMode.DISCOVERY)
+                )
+            )
+            assert first.complete is True
+            _normalize_all(fixture, opportunities)
+
+            partial = asyncio.run(
+                fixture.service(
+                    _TimeoutAfterPrefixCollector(fixture.source_type, [[present]])
+                ).execute(fixture.source.id, CollectionRequest(mode=CollectionMode.DISCOVERY))
+            )
+
+            assert partial.status == "PARTIAL"
+            assert partial.error_code == AcquisitionErrorCode.SOURCE_TIMEOUT.value
+            assert partial.complete is False
+            observed = fixture.occurrence_for(
+                next(i.id for i in fixture.raw_items() if i.external_id == "page-1")
+            )
+            assert observed is not None
+            session.refresh(observed)
+            assert observed.last_seen_run_id == partial.id
+            opportunities.reconcile_run_closures(partial.id)
+            assert _opportunity_states(fixture)["page-2"] != "CLOSED"
         finally:
             fixture.cleanup()

@@ -367,6 +367,7 @@ async def execute_source(
             target_role_families=active_profile_target_role_families(session),
             target_area_floor=get_settings().collection_target_area_floor,
             claims_enabled=get_settings().collection_claim_enabled,
+            inventory_contract_enabled=get_settings().collection_inventory_contract_enabled,
         ).execute(source_id, request)
     except AcquisitionError as error:
         _raise_acquisition_error(error)
