@@ -1,8 +1,19 @@
-import { act } from 'react'
+import { act, type ReactElement } from 'react'
+import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { AppShell } from './AppShell'
-import { render } from './testing'
+
+const roots: ReturnType<typeof createRoot>[] = []
+
+function render(element: ReactElement) {
+  const container = document.createElement('div')
+  document.body.append(container)
+  const root = createRoot(container)
+  roots.push(root)
+  act(() => root.render(element))
+  return container
+}
 
 function renderShell() {
   return render(
@@ -51,6 +62,9 @@ function stubMatchMedia() {
 const originalMatchMedia = window.matchMedia
 
 afterEach(() => {
+  act(() => {
+    roots.splice(0).forEach((root) => root.unmount())
+  })
   document.body.replaceChildren()
   Object.defineProperty(window, 'matchMedia', { configurable: true, value: originalMatchMedia })
 })
