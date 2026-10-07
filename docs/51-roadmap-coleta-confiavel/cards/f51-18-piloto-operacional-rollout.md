@@ -66,7 +66,7 @@ Feito antes do fim da janela, sem dado estimado:
   worker não foi recriado: continua o iniciado às 13:25:06 UTC a partir de `b6d25ae` (imagem
   `sha256:dd316ee9512d1addf0a1918ecb925f36927e013a4034420a5f2b8dd5d803a764`). Conferido: o
   hash de todos os `.py` de `src` é igual nos dois contêineres, e `src` não muda entre
-  `b6d25ae` e `3aaca63`. CI de `3aaca63`: PR #70, quatro checks verdes.
+  `b6d25ae` e `3aaca63`. CI: os quatro checks do PR #70 verdes no commit `e3d3294`, o topo do PR.
 - **Linha de base:** a medição do [F51-01](f51-01-baseline-benchmark-auditavel.md).
 
 **O que o validador vai exigir e hoje não existe:**
