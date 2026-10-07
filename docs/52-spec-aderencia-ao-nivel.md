@@ -1,11 +1,13 @@
 # SPEC 52 — Aderência ao nível: senioridade, oferta júnior/pleno e remoto (cards F52)
 
 - **Data:** 2026-10-05
-- **Estado (2026-10-06):** em implementação; F52-01 e F52-02 concluídos.
-  - F52-04: `matching-v4` entregue; o aceite espera o fim da reavaliação, que o
-    `matching-v5` reiniciou.
-  - F52-05: `matching-v5` mesclado (PR #46) e rodando na base de dev; o aceite espera a
-    mesma reavaliação.
+- **Estado (2026-10-07):** em implementação; F52-01, F52-02, F52-04 e F52-05 concluídos.
+  - F52-04: **concluído** (quarta sessão). Medido em 2026-10-07, 02h44 UTC, com a
+    reavaliação terminada: nenhuma avaliação de topo com nível fora do aceito.
+  - F52-05: **concluído** (quarta sessão). Na mesma medição, nenhuma avaliação de topo com
+    nível `UNKNOWN`; o total do Inbox não caiu. A ordem do Inbox passou a ler os níveis
+    aceitos (PR #51).
+  - F52-08 e F52-09: código em `main` (PR #56); ver os cards.
   - F52-01: **concluído** (terceira sessão). Rótulos aprovados pelo dono (PR #49); precisão
     de 95,3% na amostra.
   - F52-02: **concluído** (terceira sessão). `seniority-v5` com cobertura de 62,7% (meta de
@@ -175,6 +177,16 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
     sem assinatura continua sem ser lida.
   - **Estado:** concluído. As metas do §1 ficam: cobertura só com o título em 60% (atingida);
     os 80% dependem do F52-03, que está bloqueado.
+  - **`seniority-v6` (2026-10-06, PR #53):** corrige os erros acima. `Program Manager`,
+    `Product Manager`, `Account Manager` e `Product Marketing Manager` deixam de emitir
+    `MANAGER`; o nível vem das outras palavras do título ou fica `UNKNOWN`. `Labeling
+    Associate` deixa de emitir `JUNIOR`. Na mesma amostra a precisão vai de 95,3% (142 de
+    149) para 99,3%; `MANAGER` de 23/29 para 23/23. `LEAD` vai de 6/6 para 6/7: o erro que
+    resta é o título que lista vários cargos (`SWE, Tech Lead, ML Engineer, Product
+    Manager, ...`), que era `MANAGER` errado e virou `LEAD` errado; não foi criada regra
+    para lista de cargos com base num caso só. **Não aplicado na base de dev:** faltam o
+    dry-run, o `pg_dump` e o `--apply`. O efeito em títulos fora da amostra (por exemplo
+    `Group Product Manager`) não foi medido.
 
 ### F52-02 — Classificador de senioridade: acentos, dois níveis e numerais
 
@@ -284,6 +296,21 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
     `matching-v3` (8); nenhuma em `matching-v4` nem em `matching-v5`. Consulta: contar em
     `matching.current_assessment` do perfil `b0ad7958`, com `verdict` em `RECOMMENDED` ou
     `HIGH_PRIORITY`, as vagas com `seniority` fora de `JUNIOR`, `MID` e `UNKNOWN`.
+  - **Escopo da medição (2026-10-06, quarta sessão):** a condição "só `matching-v5` em
+    `matching.current_assessment`" não é alcançável. A fila de avaliação
+    (`pending_evaluation_ids`) só reavalia vaga aberta (`DISCOVERED` ou `ACTIVE`) das
+    áreas-alvo ou de área `UNKNOWN`. Às 21h13 UTC, 7.705 ponteiros do perfil ativo estavam
+    fora disso e ficam na versão antiga: 1.228 de vagas fechadas e 6.477 de vagas abertas
+    de outras áreas, com 66 avaliações de topo entre eles (54 fechadas, 12 de outras
+    áreas). O Inbox padrão não lista vaga fechada. O aceite passa a ser medido sobre vagas
+    abertas das áreas-alvo (`SOFTWARE_ENGINEERING` e `DATA`), que é o escopo do §1.
+  - **Medição do aceite (2026-10-07, 02h44 UTC):** fechado. Nesse escopo, as 8.116
+    avaliações atuais do perfil `b0ad7958` estão em `matching-v5`. Topo com 188 avaliações;
+    nenhuma com nível fora de `JUNIOR` e `MID` (meta: 0).
+  - **Estado:** concluído. Regra provada pelo teste de regressão em
+    `tests/backend/matching/test_domain.py` e número zero medido na base de dev. Fora do
+    escopo medido continuam avaliações antigas de vagas fechadas e de outras áreas, que o
+    worker não reavalia.
 
 ### F52-05 — Peso do nível desconhecido na ordenação
 
@@ -319,9 +346,17 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
     com 447 avaliações, 236 de nível `UNKNOWN` (52,8%), nenhuma delas em `matching-v5`: as 21
     avaliações de topo já em v5 são todas `JUNIOR` ou `MID`. Avaliações não `INELIGIBLE` no
     perfil ativo: 18.188 (referência para "o total do Inbox não cai").
-  - **Limite conhecido:** não tratado nesta sessão. Continua a proposta de levar os níveis
-    aceitos do perfil para a ordenação do Inbox (`_inbox_ordering` em `dashboard/queries.py`),
-    sem trocar `RULES_VERSION`.
+  - **Limite conhecido, tratado (2026-10-06, PR #51):** a ordem padrão do Inbox passou a
+    ser veredito de topo, depois nível conhecido e aceito, depois pontuação, recência e id.
+    Os níveis aceitos são lidos de `profile.employment_preference` dentro da mesma
+    consulta; `UNKNOWN` nunca conta como aceito, mesmo quando o perfil o lista. As ordens
+    `score` e `recency` e a ordem com termo de busca não mudaram, e `RULES_VERSION`
+    continua `matching-v5`. Cinco testes em `tests/backend/dashboard/test_queries.py`.
+  - **Medição do aceite (2026-10-07, 02h44 UTC):** fechado, no escopo descrito no F52-04
+    (vagas abertas das áreas-alvo, todas em `matching-v5`). Topo com 188 avaliações,
+    nenhuma de nível `UNKNOWN` (meta: menos de 30%). Avaliações não `INELIGIBLE` no perfil
+    ativo: 18.217, contra a referência de 18.188; o total do Inbox não caiu.
+  - **Estado:** concluído.
 
 ### F52-06 — Mais oferta júnior/pleno remota no Brasil
 
@@ -365,6 +400,19 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
 - **Aceite:** todo tipo com coletor tem linha na tabela; nenhum teto abaixo do consumo
   medido (o do Hacker News estava: 226 usados contra 200 gravados).
 - **Esforço / risco:** P / baixo.
+- **Resultado (2026-10-06, PR #56):** tabela em `docs/17-fontes-coletores.md` §6.3, com o
+  pico medido na base de dev entre 2026-09-25 e 2026-10-06 (requisições por hora de
+  relógio do início da execução, por chave de orçamento). O teto padrão do inHire em
+  `acquisition/service.py` foi de 300 para 1.200: estava abaixo do pico medido (1.089) e
+  diferente do valor de `Settings`, que o worker usa. Testes em
+  `tests/backend/acquisition/test_pacing_table.py`.
+  - **Workday:** não alterado, por decisão. O pico medido é de 2.092 requisições numa
+    hora para um tenant, contra o teto de 500; a execução inteira conta na hora em que
+    começou, então o número é uma estimativa por cima.
+  - **Sem fonte no repositório:** o que o fornecedor pede em `jobposting` e o limite por
+    hora de `tavily_search`.
+  - **Estado:** critérios de aceite com teste. Os quatro testes que leem `docs/` são
+    pulados no contêiner e passaram com `docs/` montado.
 
 ### F52-09 — Busca e coleta por script
 
@@ -375,6 +423,16 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
 - **Aceite:** relatório por fonte com a coluna de nível; casos de nível no conjunto de
   avaliação da busca.
 - **Esforço / risco:** P / baixo.
+- **Resultado (2026-10-06, PR #56):** `scripts/collect.py` relata por execução quantas
+  vagas dos níveis aceitos pelo perfil (sem `UNKNOWN`) cada fonte trouxe; sem perfil
+  ativo a coluna diz isso e a execução não falha. `scripts/eval_search.py` ganhou três
+  casos de nível ("júnior remoto", "desenvolvedor junior", "pleno remoto") que proíbem
+  `SENIOR` ou acima nos dez primeiros. Testes em
+  `tests/backend/dashboard/test_collect_level_column.py` e
+  `test_eval_search_level_cases.py`.
+  - **Aberto:** não existe relatório de busca por fonte, então nenhum recebeu a coluna.
+    A contagem só vê item que o normalizador já processou. Os dois scripts não foram
+    rodados de ponta a ponta contra a base de dev.
 
 ## 5. O que fica na SPEC 51
 

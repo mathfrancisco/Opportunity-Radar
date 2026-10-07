@@ -1,6 +1,6 @@
 # F51-12 — IA seletiva por conteúdo, cache e quotas
 
-- **Status:** Parcial — medição de partida feita em 2026-10-06; política ainda não implementada
+- **Status:** Parcial — filtros de entrada e chave sem versão de regra em `main` (PR #52); teto diário e política de sugestão no PR #58, aberto
 - **Prioridade:** P1
 - **Esforço estimado:** M
 - **Risco:** alto para bloquear análises solicitadas ou consumir quota interativa; elegibilidade do worker não pode invalidar uma solicitação explícita do usuário.
@@ -75,6 +75,47 @@ erro. Enquanto não for explicado, a quota do dia é gasta por algo que a teleme
 - Trechos relevantes e modelo local (item 5): não medidos.
 
 Nada disso foi implementado nesta sessão; ACs 01 a 06 seguem abertos.
+
+## Causa do consumo sem registro (2026-10-06, quarta sessão)
+
+Não é vazamento de reserva. Todo o consumo de `ai_quota_usage` sem linha em
+`ai_call_record` em 2026-10-06 aconteceu antes de 03h31min11s UTC, horário da primeira
+linha de `ai_operation_record`. Até ali o worker rodava a versão de `suggestions.py` do
+commit `0bec250`, que fazia chamadas reais de `job_classification` e não gravava registro
+de chamada (`record_calls` não aparece nesse arquivo antes do commit `1832f81`). A partir de
+03h32 UTC, `tokenharbor:mimo-v2.6-flash:free` fecha: 72 requisições na quota e 72 registros
+de chamada. Os tokens diferem em 4.757 (67.928 contra 63.171): três tentativas com falha têm
+uso desconhecido e ficam pelo valor estimado. `openai/gpt-oss-120b` (`job_match`) fecha em
+165.577 tokens dos dois lados.
+
+As hipóteses do achado ficam assim: script fora do worker usando o `QuotaGuard`, descartada
+(o único `reserve` fora do roteador é a sonda do worker, que libera em seguida); reserva
+liquidada pelo estimado depois de erro, verdadeira só para tentativa com uso desconhecido, o
+que explica a diferença de 4.757 tokens e não o consumo sem registro.
+
+O PR #54 acrescenta um teste de invariante sobre o `AIRouter` e o `QuotaGuard` reais (144
+casos com provedor falso e com os adaptadores de produção): depois de `run`, o contador de
+cada modelo é explicado por uma tentativa. Ele achou dois caminhos latentes, corrigidos: erro
+de tipo `CANCELLED` sem liberar a reserva (nada em `src` o levanta hoje) e cancelamento
+durante a reserva. Nenhum dos dois explica os números acima.
+
+## Implementação (2026-10-06 e 2026-10-07)
+
+- **PR #52, em `main`:** a fila automática de análise deixa de fora vaga fechada e vaga com
+  descrição nula ou de até 200 caracteres; o pedido explícito não é afetado. `rules_version`
+  e `taxonomy_version` saem de `analysis_key` e do resumo reutilizável do payload
+  (`ANALYSIS_KEY_VERSION` = `analysis-key-v5`); veredito, conteúdo, perfil, prompt, modelo e
+  rota continuam na chave. Análises gravadas com a chave anterior viram falta de cache uma
+  vez. Testes: AC01 (metade da análise) e AC02.
+- **PR #58, aberto:** teto diário do job automático em 80% do teto de tokens
+  (`worker_analyze_daily_cap_fraction`), sem gravar `AI_FAILED`, tentativa nem cooldown; com
+  a estimativa do adaptador (5.900 tokens) são cerca de 77 análises por dia por modelo.
+  Sugestão de campo só para vaga com campo `UNKNOWN` e veredito de topo no perfil ativo; o
+  job de sugestão não cria operação quando nenhum modelo da rota tem saldo no dia. Testes de
+  AC01 (metade da sugestão), AC03, AC04, AC05 e AC06.
+- **Aberto:** o AC06 recebe "resultado útil" do chamador ou o lista como lacuna; a
+  definição é humana e não está nos cards. O efeito na base de dev não foi medido: a stack
+  de dev não foi reconstruída com este código.
 
 ## Problema, fatos e hipótese
 
