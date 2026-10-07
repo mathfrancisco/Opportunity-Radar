@@ -159,6 +159,9 @@ def _budget_host_for_source(source_type: str, configuration: dict[str, Any] | No
     return _host_for_source_type(source_type)
 
 
+budget_host_for_source = _budget_host_for_source
+
+
 def _conditional_headers_for(
     source: SourceDefinitionModel, scope_hash: str | None = None
 ) -> ConditionalRequestHeaders | None:

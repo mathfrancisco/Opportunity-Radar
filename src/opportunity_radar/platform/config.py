@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     # F51-06 deadlines are opt-in until a deployment has observed its source durations.
     collection_source_deadline_seconds: int = Field(default=0, ge=0)
     collection_pass_deadline_seconds: int = Field(default=0, ge=0)
+    # F51-08: how many budget hosts one collection pass works at once. A host never has two
+    # runs at the same time, and its request ceiling is enforced per request regardless.
+    # 1 is the original serial pass.
+    collection_host_concurrency: int = Field(default=4, ge=1)
     # F51-07: one claim/lease per source for every collection entry point (worker, CLI,
     # HTTP). False restores the unclaimed behaviour; it never changes presence, dedupe or
     # decisions, only whether concurrent runs of one source are refused and fenced.
