@@ -1,0 +1,2824 @@
+{
+  "total": 5588,
+  "by_reason": {
+    "EXACT_VERSIONED_FINGERPRINT": {
+      "rows": 12,
+      "distinct_posting": 0
+    },
+    "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED": {
+      "rows": 551,
+      "distinct_posting": 0
+    },
+    "IDENTITY_REFRESHED_SAME_EXTERNAL_ID": {
+      "rows": 4,
+      "distinct_posting": 0
+    },
+    "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY": {
+      "rows": 5013,
+      "distinct_posting": 4449
+    },
+    "SAME_SOURCE_EXTERNAL_IDENTITY": {
+      "rows": 8,
+      "distinct_posting": 0
+    }
+  },
+  "sample": [
+    {
+      "normalization_result_id": "1103f39d-5dab-45cc-b637-51b646179374",
+      "reason": "EXACT_VERSIONED_FINGERPRINT",
+      "source_type": "greenhouse",
+      "opportunity_id": "50b77409-ecee-412a-b38f-f3d3455af1a4",
+      "title": "Senior Enterprise Account Executive, Growth",
+      "company": "MongoDB",
+      "location": "san francisco",
+      "work_mode": "UNKNOWN",
+      "external_id": "8147923",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "68d88fea-b53b-40ec-8484-f9f51e16f702",
+      "reason": "EXACT_VERSIONED_FINGERPRINT",
+      "source_type": "greenhouse",
+      "opportunity_id": "5ac1f640-d443-418a-9429-a5d946cc0f08",
+      "title": "Remote Mental Health Therapist – LCSW/LPCC/LMFT/LP (1099, California)",
+      "company": "Daybreak Health",
+      "location": "california (remote)",
+      "work_mode": "REMOTE",
+      "external_id": "5211902007",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "6d026239-cc1f-4494-8f09-49469ce24d9e",
+      "reason": "EXACT_VERSIONED_FINGERPRINT",
+      "source_type": "greenhouse",
+      "opportunity_id": "99cc4a4c-8435-488f-8f93-48513c889f6d",
+      "title": "Senior Manager, Financial Planning & Analysis",
+      "company": "MongoDB",
+      "location": "austin; new york city",
+      "work_mode": "UNKNOWN",
+      "external_id": "8154864",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "90232b81-0c3e-422a-a9e1-41312698db63",
+      "reason": "EXACT_VERSIONED_FINGERPRINT",
+      "source_type": "greenhouse",
+      "opportunity_id": "181e31b9-f8d7-44b3-9a27-545b4bb0d529",
+      "title": "Senior Enterprise Account Executive, Growth",
+      "company": "MongoDB",
+      "location": "new york city",
+      "work_mode": "UNKNOWN",
+      "external_id": "7967394",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "a3429a2d-bd07-416d-9e07-c169ac9cf05a",
+      "reason": "EXACT_VERSIONED_FINGERPRINT",
+      "source_type": "greenhouse",
+      "opportunity_id": "5ac1f640-d443-418a-9429-a5d946cc0f08",
+      "title": "Remote Mental Health Therapist – LCSW/LPCC/LMFT/LP (1099, California)",
+      "company": "Daybreak Health",
+      "location": "california (remote)",
+      "work_mode": "REMOTE",
+      "external_id": "5206102007",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "777b977a-573f-4c54-a1a6-c3e222f7438f",
+      "reason": "EXACT_VERSIONED_FINGERPRINT",
+      "source_type": "greenhouse",
+      "opportunity_id": "5ac1f640-d443-418a-9429-a5d946cc0f08",
+      "title": "Remote Mental Health Therapist – LCSW/LPCC/LMFT/LP (1099, California)",
+      "company": "Daybreak Health",
+      "location": "california (remote)",
+      "work_mode": "REMOTE",
+      "external_id": "5211879007",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "d44cb6d0-076d-4ba0-a572-34db0432f1a7",
+      "reason": "EXACT_VERSIONED_FINGERPRINT",
+      "source_type": "greenhouse",
+      "opportunity_id": "5ac1f640-d443-418a-9429-a5d946cc0f08",
+      "title": "Remote Mental Health Therapist – LCSW/LPCC/LMFT/LP (1099, California)",
+      "company": "Daybreak Health",
+      "location": "california (remote)",
+      "work_mode": "REMOTE",
+      "external_id": "5228434007",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "27f1ae61-9ded-43b7-b44a-35aebb5f98e1",
+      "reason": "EXACT_VERSIONED_FINGERPRINT",
+      "source_type": "greenhouse",
+      "opportunity_id": "36ebe17f-94dc-4358-b18e-8ee68180d29f",
+      "title": "Field Operations Executive",
+      "company": "Instawork",
+      "location": "bengaluru, karnataka, india",
+      "work_mode": "UNKNOWN",
+      "external_id": "4625772006",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "61dc17e8-6ce7-4608-bd50-2ebd7eab4605",
+      "reason": "EXACT_VERSIONED_FINGERPRINT",
+      "source_type": "greenhouse",
+      "opportunity_id": "63897eb0-0129-420a-91d3-949cfff564ca",
+      "title": "Staff Software Engineer - AI Research Infrastructure",
+      "company": "Databricks",
+      "location": "new york city, new york; san francisco, california",
+      "work_mode": "UNKNOWN",
+      "external_id": "8532682002",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "ee05ec2a-5fb0-4bbf-95f5-b1d3947f5998",
+      "reason": "EXACT_VERSIONED_FINGERPRINT",
+      "source_type": "greenhouse",
+      "opportunity_id": "50b77409-ecee-412a-b38f-f3d3455af1a4",
+      "title": "Senior Enterprise Account Executive, Growth",
+      "company": "MongoDB",
+      "location": "san francisco",
+      "work_mode": "UNKNOWN",
+      "external_id": "8147949",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "585d0696-8508-4591-b480-7ca80d124ffa",
+      "reason": "EXACT_VERSIONED_FINGERPRINT",
+      "source_type": "greenhouse",
+      "opportunity_id": "5ac1f640-d443-418a-9429-a5d946cc0f08",
+      "title": "Remote Mental Health Therapist – LCSW/LPCC/LMFT/LP (1099, California)",
+      "company": "Daybreak Health",
+      "location": "california (remote)",
+      "work_mode": "REMOTE",
+      "external_id": "5242914007",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "f10988f6-5d15-4331-9c83-2ea4bb074e91",
+      "reason": "EXACT_VERSIONED_FINGERPRINT",
+      "source_type": "workable",
+      "opportunity_id": "0c2c3b06-5b0a-4968-9431-ae71895a9920",
+      "title": "DevOps Engineer",
+      "company": "Weekday",
+      "location": null,
+      "work_mode": "UNKNOWN",
+      "external_id": "E1AD11D35C",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "83d95df3-2452-4ee7-9e5f-9c35ccdc5dc9",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "b1aa6d9b-23d6-4808-9dc9-3a9f4d8a686e",
+      "title": "AI Risk Management Senior Specialist",
+      "company": "Nubank",
+      "location": "são paulo",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:4324de82635a1964fd4815ea71db14b5b5b4d2923c0a2eb60f9e129743fb3a22",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "471491a8-49ea-46b6-b260-2093ba3553b8",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "2bb8ae70-7044-49c8-980d-fa444eba03cb",
+      "title": "[Job - 30728] Salesforce Solution Architect (Client Facing), Brazil",
+      "company": "CI&T",
+      "location": "brazil",
+      "work_mode": "REMOTE",
+      "external_id": "8ee01f82-ee9d-4249-8a80-ea598ce39689",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "5ade88a6-7a02-40e9-bfc5-0fac3360ac3e",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "ebf7e293-c9eb-4a09-acbc-de354ab7f1b6",
+      "title": "Community-Led Growth Senior Specialist",
+      "company": "Nubank",
+      "location": "miami",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:a4f1636b00a0370bc17cce7f45ab1f116457fff1ab483762e11fb45f5b78351e",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "c251d7e1-ab73-497f-92c2-9b04cbea2bad",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "90833114-e7f2-4634-b575-a17e67332237",
+      "title": "Content Marketer",
+      "company": "Firecrawl",
+      "location": "san francisco hq; toronto hub",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:96411ac0478d59721a919c99e450ba69631d0ff4206329ac95d0acf67fa2cef1",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "ec95c208-2c2c-4143-81bf-5260e245b273",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "2cbb85a4-13f7-4af7-97d8-647ff357a64b",
+      "title": "Staff Machine Learning Engineer",
+      "company": "Nubank",
+      "location": "palo alto",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:df2a17da6e3a5b81fc77a4d622f36371fcf62bdd2135295d1b6f008bcbe90ff4",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "0b668061-708b-4ce2-af41-47df03257626",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "f38cf714-c7b8-464f-b2f0-df3560d814f6",
+      "title": "[Job-31453]Senior ML Engineer (B2B Personalization), Brasil",
+      "company": "CI&T",
+      "location": "brazil",
+      "work_mode": "REMOTE",
+      "external_id": "3f6c1e73-efcf-4656-8cb6-c60bc3a310c8",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "cf73bd01-1e1e-479d-8dd5-a93da7c2bfca",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "workday",
+      "opportunity_id": "c89808d4-3f84-48a1-a683-6f0e4a9c1699",
+      "title": "Packaged/SaaS Application Engineer",
+      "company": "Accenture",
+      "location": null,
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/Hyderabad/Packaged-SaaS-Application-Engineer_ATCI-5789649-S2070807-1",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "899cf7c6-daaa-4f9f-a5f1-77762d2bf03f",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "02364659-f6e8-41b9-8e3f-878e471bf37f",
+      "title": "[Job - 31921] Analista de Relação com Investidores Sênior",
+      "company": "CI&T",
+      "location": "campinas, sp",
+      "work_mode": "HYBRID",
+      "external_id": "94abdfa8-76e3-480c-a6bd-dfcad2492f7a",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "e977c576-5bfc-4fa8-b187-ccd6fc961ea4",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "be5312da-b43b-4105-9103-73883737e83b",
+      "title": "[Job-30904] Mid level Java Developer, Brazil",
+      "company": "CI&T",
+      "location": "brazil",
+      "work_mode": "REMOTE",
+      "external_id": "418f5dc8-275b-4434-be0d-c401d234cf75",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "15820880-2ea3-428f-94bc-4c6edfb92c5e",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "e40fd960-c23d-4b32-ab9e-934f06a09015",
+      "title": "[Job-31874] Mid level Android Developer, Brazil",
+      "company": "CI&T",
+      "location": "brazil",
+      "work_mode": "REMOTE",
+      "external_id": "849a3503-1f62-462f-87c8-987c530473bb",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "1343dfbf-6c0e-498f-b44b-b96a10fe5228",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "greenhouse",
+      "opportunity_id": "5e1257af-2772-49fa-ad24-1b96fe621dee",
+      "title": "Senior Software Engineer, PKI & Cryptographic Systems",
+      "company": "Cloudflare",
+      "location": "hybrid",
+      "work_mode": "HYBRID",
+      "external_id": "8237801",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "04282468-860b-4ddb-9434-287599fa57b8",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "05351a3e-93c8-4cd0-b363-4dd271749ac3",
+      "title": "[Job - 31339] Analista de Remuneração Sênior",
+      "company": "CI&T",
+      "location": "brazil",
+      "work_mode": "HYBRID",
+      "external_id": "6d9f31cf-2493-4774-bb9c-1b9241a33f63",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "2688aa4c-997a-4246-a1c6-2faf4e1fceff",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "b48df5ec-9b6d-472c-87cc-220fd4c0e602",
+      "title": "[Job 31300] Senior Data Developer, Brazil",
+      "company": "CI&T",
+      "location": "brazil",
+      "work_mode": "REMOTE",
+      "external_id": "f251d1c4-2b3d-4aca-b86a-0e704d7e2ee7",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "46350505-a792-4c96-ab1b-86322b07ebf5",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "e232e62c-0140-443a-a2d3-97a83d71a5dc",
+      "title": "Senior Software Engineer",
+      "company": "Nubank",
+      "location": "são paulo",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:858eabdc8d9e6f82b42f6eddc7990e7a73752f35e0e3e9733e2cac1af7ffddb3",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "ff006030-74c6-49d6-9735-3b8ca10d30c7",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "4dc771be-cc3c-4f7d-8045-bc99e10ee324",
+      "title": "Head of FP&A | Efficiency",
+      "company": "Nubank",
+      "location": "são paulo",
+      "work_mode": "HYBRID",
+      "external_id": "ashby:134731d89b4d244b1c364da01a9303ec40dcf2525d264f856c1aa111c5b193c1",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "b4b5b945-de15-4f00-a60f-bf645f3d6cd0",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "f30f5409-af14-4e3d-b46c-4123705dd777",
+      "title": "Controllership Specialist - Regulatory",
+      "company": "Nubank",
+      "location": "são paulo",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:0d753b1c755e6be6258a8df17f66c3d9e55ea17b766b5a9bc5114ae79153b9a4",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "8c8d5002-e684-4ed6-9928-a3349271c47f",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "88c546b1-b6af-45fb-a1ee-82a26825425d",
+      "title": "IT Risk Management Specialist",
+      "company": "Nubank",
+      "location": "são paulo",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:3d4f77705b4bfa8c73d8592a96fc646d2d8b53100ed6513ce9d12950ca7a457b",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "a427e65e-d308-4078-bcf0-d8f08821dca1",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "3407c917-6bad-43b9-b534-a9b969ed19d4",
+      "title": "Senior Staff Software Engineer - Developer Experience",
+      "company": "Nubank",
+      "location": "palo alto",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:497a48b9f91fd2cea9e6001c6279ba0cd61beb4bc048cf1b7e28f1afa2dc5d49",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "13af161f-9126-4126-87e4-e1ac220ade23",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "272f8655-45f4-4293-9ae0-516351cd7993",
+      "title": "[Job-31490] Mid-level Data Developer, Brazil",
+      "company": "CI&T",
+      "location": "brazil",
+      "work_mode": "REMOTE",
+      "external_id": "cfba04a5-e3eb-47be-85c3-312a1856032e",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "9ac9c43f-b362-4e65-87ab-92b7015ebe8b",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "4a2a6c3d-855e-4699-93fc-139d460e9f70",
+      "title": "[Job-26705] Senior Data Engineer, Campinas, Brazil (Hybrid)",
+      "company": "CI&T",
+      "location": "campinas, sp",
+      "work_mode": "HYBRID",
+      "external_id": "516abaa8-8dcf-4231-a98d-da9ee09f7ab6",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "c94a1de7-e101-4cbc-97b6-3297cf76116c",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "workday",
+      "opportunity_id": "21dfb794-c208-4ab9-980e-1263a0575f20",
+      "title": "Custom Software Engineer",
+      "company": "Accenture",
+      "location": null,
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/Bengaluru/Custom-Software-Engineer_ATCI-R1-S2032671-1",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "d8d22826-46b3-4524-bd5c-f71dd51b27f3",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "96428135-a195-4c82-8d82-d7ee3bc28ae6",
+      "title": "Quantitative Specialist — Portfolio Solutions, Nu Asset",
+      "company": "Nubank",
+      "location": "são paulo",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:2914b674cefc0b6bc1580d2271c9a8c47d2278676e36cbf69312d0270e325061",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "776e1636-f293-4423-aafb-f77c24dfec97",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "dfece083-c2cb-4885-bd75-f7ffd6cbbe9b",
+      "title": "Consumer Compliance and CRA Analyst",
+      "company": "Nubank",
+      "location": "virginia",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:1ae887c867909b6e237390d70d849864239f0fb46b6affab4051b009ac37174a",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "d9f98d1a-2c0e-4ed0-b090-59be8e03ce21",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "e87bbda4-d9a0-4804-8a86-1a3a6e66b8d0",
+      "title": "[Job-31817] Data Engineer Manager",
+      "company": "CI&T",
+      "location": "brazil",
+      "work_mode": "REMOTE",
+      "external_id": "2bb54ae1-3d67-41eb-8495-f77e28a5ee5e",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "3f1e8c22-3b4e-47ea-9bb7-4d3d7e0ede26",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "67794e3c-475f-4559-87b4-691358a7b909",
+      "title": "[Job-31365] Data Developer (Azure/Databricks) Sênior , Brazil",
+      "company": "CI&T",
+      "location": "brazil",
+      "work_mode": "REMOTE",
+      "external_id": "b68063c0-d95d-4977-bdbd-37d41a0fa1bc",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "4b3ae5cc-61f2-4176-8da5-02d59c263294",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "4e530049-4d33-4a3a-bba3-bcaf00e2a0e2",
+      "title": "Staff IT Engineer - Service Management",
+      "company": "Nubank",
+      "location": "miami",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:0ff1ee56c37a3513cc6ba4bf78f8b881110908d29f04c000439b5a189d39dc0b",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "604b3eb8-7532-4bc7-a1bf-98b9f472690a",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "02e0763a-f1e4-4e61-a2ce-880257aa0c08",
+      "title": "Global Software Asset Management Lead",
+      "company": "Nubank",
+      "location": "são paulo",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:c142d45e0746077baaac561f3e43c9b0fb3382739e689d67244fe22d8c2931ec",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "17170c48-88c2-45ba-9351-07858d0511da",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "0359e483-0603-4db1-9816-b1f0ab1fbb3c",
+      "title": "[Job - 31343] Data Product Manager, Colombia",
+      "company": "CI&T",
+      "location": "colombia",
+      "work_mode": "REMOTE",
+      "external_id": "2fee42ea-7501-4f7f-bb44-779b0e92f072",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "5a232813-47f6-4490-843b-ba755496093a",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "workday",
+      "opportunity_id": "6c5694c9-36c4-4646-9cd8-74a307e85106",
+      "title": "Custom Software Engineering Lead",
+      "company": "Accenture",
+      "location": null,
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/Pune/Custom-Software-Engineering-Lead_ATCI-5678550-S2058266-1",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "14e803a5-a9d2-43fd-b73b-841e1dd070e4",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "c6ccf4ab-6409-4e7f-8a51-c64bde7825eb",
+      "title": "[Job-31843] Senior Product Designer, Colombia",
+      "company": "CI&T",
+      "location": "colombia",
+      "work_mode": "REMOTE",
+      "external_id": "ee2d002e-f9c6-46a1-8ee4-fa1a6bab526e",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "cf918be7-3a9a-4340-87dd-daf8d7036632",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "9c736461-548d-49d9-975e-1d51aaea35b3",
+      "title": "Staff IT Engineer - Service Management",
+      "company": "Nubank",
+      "location": "são paulo",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:df72047a68e3efc3795eeef7d5ce5a9645f1086417acad2a7dff741bb4bd22b9",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "8e2e540e-02a3-4091-91ff-aae6312b1fa5",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "greenhouse",
+      "opportunity_id": "e22dc904-ec30-4955-8295-727405f9e337",
+      "title": "Senior Associate, Commerce Platform Enterprise Online Ordering - Strategy & Operations",
+      "company": "DoorDash",
+      "location": "new york, ny; denver, co; los angeles, ca; chicago, il",
+      "work_mode": "UNKNOWN",
+      "external_id": "7654723",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "febe1da1-b013-4e18-9d9d-15cfbc9d21b8",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "workday",
+      "opportunity_id": "21dfb794-c208-4ab9-980e-1263a0575f20",
+      "title": "Custom Software Engineer",
+      "company": "Accenture",
+      "location": null,
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/Hyderabad/Custom-Software-Engineer_ATCI-5471053-S1999852-1",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "6b9b8dc1-b442-459b-a638-c83386ea7ebe",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "d2767e8e-5483-475b-899b-aac3a0af7c6c",
+      "title": "[Job-31953] Senior Scrum Master, Brazil",
+      "company": "CI&T",
+      "location": "brazil",
+      "work_mode": "REMOTE",
+      "external_id": "4702b7f4-738c-4df3-9967-b2c8109cdc9f",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "90fe3fc2-4d02-48ff-821b-cdebad58acc4",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "greenhouse",
+      "opportunity_id": "c56aa2d6-427c-4541-8bce-7771f376e01d",
+      "title": "Associate Manager, GTM Strategy & Pricing",
+      "company": "DoorDash",
+      "location": "san francisco, ca; los angeles, ca; chicago, il; austin, tx; seattle, wa; atlanta, ga",
+      "work_mode": "UNKNOWN",
+      "external_id": "8138703",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "f78a2f36-f6cb-482a-a0e3-b28f77a9bd34",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "e8b81997-f7d4-4d75-ae9b-5e0628c1f2ae",
+      "title": "Backend Infrastructure Engineer",
+      "company": "Firecrawl",
+      "location": "san francisco hq; toronto hub",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:8b7a633e0e61179e4c9b1e9c8be4da63a1eb3be5a27812bba8d714e792a4e869",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "db0d4c61-6963-43e6-877b-8f52426f62c6",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "041b1d78-2885-40e4-a70b-fb9f359fc32b",
+      "title": "[Job- 31650] Master Generative AI Developer, Brazil",
+      "company": "CI&T",
+      "location": "brazil",
+      "work_mode": "REMOTE",
+      "external_id": "abf5ef39-5849-46c3-9855-b727bc501593",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "8b31d8b5-7fa7-45cb-a57e-558920e423c8",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "e6c57560-782b-4f14-9ffb-d8fc4828a20c",
+      "title": "[Job-31778] Scrum Master, Colombia",
+      "company": "CI&T",
+      "location": "colombia",
+      "work_mode": "REMOTE",
+      "external_id": "e3ce1393-065d-4b94-94d6-ef89ff0a78f8",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "35e6d307-3301-4b0d-b9bd-543bbaa36a2a",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "62bfe0e7-f5d8-4318-83ac-a8766be7c54f",
+      "title": "Senior Software Engineer - Computing Squad",
+      "company": "Nubank",
+      "location": "toronto",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:04321df9db06f430a5c870aab510e29c7203ea794002104cbd138ecce1b6dd4c",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "fc4c5802-a459-4e61-8cca-4ed3bd03ae75",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "293325eb-fb2c-4fd3-900a-e13d22dad5fe",
+      "title": "Product Engineer - Scrape",
+      "company": "Firecrawl",
+      "location": "san francisco hq; toronto hub",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:98219ac701e2a5a9456c9402216fb125dc077d625d5c407f2bff509eb80467db",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "e65108c7-da2b-453e-aa14-71144a0ddce6",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "workday",
+      "opportunity_id": "21dfb794-c208-4ab9-980e-1263a0575f20",
+      "title": "Custom Software Engineer",
+      "company": "Accenture",
+      "location": null,
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/Bengaluru/Custom-Software-Engineer_ATCI-5543505-S2019987-1",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "00b75ef4-3558-4c06-bf04-d58227972785",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "workday",
+      "opportunity_id": "bc5d694a-8d96-4679-a0ab-237b1e9b2b31",
+      "title": "Application Support Engineer",
+      "company": "Accenture",
+      "location": null,
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/Hyderabad/Application-Support-Engineer_ATCI-R1-S1936495-1",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "bd6c33e8-6c26-4fd1-b2a3-40a2ea86ed2b",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "fbfcaf94-9b84-452a-9de4-cf1867ba71c8",
+      "title": "Staff Software Engineer",
+      "company": "Nubank",
+      "location": "são paulo",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:486d4197439a21fa1ef4dcfd3dbe9ef0057e6f9f2ee85c0715b20029a1a44dee",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "450febc4-947d-4c7e-8448-61d0c5b9c953",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "44a86bfe-f607-4761-ab49-25486d671b9f",
+      "title": "[Job-30394] Senior Fullstack Developer (Java / React), Brazil",
+      "company": "CI&T",
+      "location": "brazil",
+      "work_mode": "REMOTE",
+      "external_id": "22de5505-5f46-494d-9813-4b8d951a779e",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "f911ec40-ad14-47be-88a1-7032ef95e1d5",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "22e0e76d-9556-49f2-9495-f258b242f141",
+      "title": "FP&A Sr Expert",
+      "company": "Nubank",
+      "location": "são paulo",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:e300ae64d321e141d140964a75d80910b498dadaaec2d375fffe62913f59618b",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "a06f8d82-d1ee-4113-b5eb-2ade82463484",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "d654e6c2-3b39-42c6-8366-57720bd58dd5",
+      "title": "[Job-31658] Senior Data & Analytics Specialist, Colombia",
+      "company": "CI&T",
+      "location": "colombia",
+      "work_mode": "REMOTE",
+      "external_id": "bb0d9d3e-497c-4205-822c-daec510ed584",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "60d3022a-2e6f-4034-a12f-cc8bf262acc3",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "88c546b1-b6af-45fb-a1ee-82a26825425d",
+      "title": "IT Risk Management Specialist",
+      "company": "Nubank",
+      "location": "são paulo",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:3d4f77705b4bfa8c73d8592a96fc646d2d8b53100ed6513ce9d12950ca7a457b",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "f4959cc6-e148-4c61-a5d2-447c4183c206",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "1d000435-c93c-48f3-8171-249f5668cf60",
+      "title": "[Job- 31345]Senior DevOps Engineer (Cloud Network Foundation), Brazil",
+      "company": "CI&T",
+      "location": "brazil",
+      "work_mode": "REMOTE",
+      "external_id": "8afc856c-736e-49bd-bb65-6424faba8992",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "27f5a75e-c2b5-4abb-aaa9-bfeae5784b24",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "lever",
+      "opportunity_id": "20fb7029-32bb-403b-b125-3d3a8728ee6b",
+      "title": "[Job 31627] AI Engineer/Software Architect (Java + Angular), Brazil",
+      "company": "CI&T",
+      "location": "brazil",
+      "work_mode": "REMOTE",
+      "external_id": "8b072ca5-df06-40a8-ae69-793cd47dd9d3",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "c327ca7e-3e1b-406f-a096-ecb232cb61cd",
+      "reason": "EXTERNAL_ID_CANONICAL_IDENTITY_CHANGED",
+      "source_type": "ashby",
+      "opportunity_id": "fd1f9293-3b72-4874-9d57-5d85d08a26f6",
+      "title": "Controllership Senior Specialist- Global Product Accounting",
+      "company": "Nubank",
+      "location": "ciudad de méxico",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:10fff50841e0d2afe2dbfd03b1f6f1ab8826d00ab0693eeac43d3f8e24bb90aa",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "21ab587c-387f-4f7d-95e4-28598ed81c3f",
+      "reason": "IDENTITY_REFRESHED_SAME_EXTERNAL_ID",
+      "source_type": "ashby",
+      "opportunity_id": "d151ae39-9bcf-4468-8a37-5efe92616da7",
+      "title": "Senior Cloud Data Infrastructure Engineer (APJ Remote)",
+      "company": "ClickHouse",
+      "location": "singapore",
+      "work_mode": "REMOTE",
+      "external_id": "ashby:2c4beb101fb3580643767e2a99ea58e55ff03821da42abade150743e4ca0a3c2",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "eb609efe-fab1-4e54-b1f9-ee37696910fe",
+      "reason": "IDENTITY_REFRESHED_SAME_EXTERNAL_ID",
+      "source_type": "ashby",
+      "opportunity_id": "d151ae39-9bcf-4468-8a37-5efe92616da7",
+      "title": "Senior Cloud Data Infrastructure Engineer (APJ Remote)",
+      "company": "ClickHouse",
+      "location": "singapore",
+      "work_mode": "REMOTE",
+      "external_id": "ashby:bbd81af646987be9cbb1b510ccbd5784833f4dd1278c06aa04e6baf7def52d5f",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "94010e4b-ddb0-4b99-a98c-4066f4710efa",
+      "reason": "IDENTITY_REFRESHED_SAME_EXTERNAL_ID",
+      "source_type": "ashby",
+      "opportunity_id": "61b275e5-22d0-43d6-a536-5730f4127fab",
+      "title": "Principal Product Manager - ClickHouse Cloud",
+      "company": "ClickHouse",
+      "location": "united states",
+      "work_mode": "REMOTE",
+      "external_id": "ashby:8be55f051a4f3b95fa3089d547b7a7bb157c5ec7a7c38b0cb6600df788c85080",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "e414510a-f6cf-49d3-ae9a-5007b3fb4350",
+      "reason": "IDENTITY_REFRESHED_SAME_EXTERNAL_ID",
+      "source_type": "ashby",
+      "opportunity_id": "61b275e5-22d0-43d6-a536-5730f4127fab",
+      "title": "Principal Product Manager - ClickHouse Cloud",
+      "company": "ClickHouse",
+      "location": "united states",
+      "work_mode": "REMOTE",
+      "external_id": "ashby:099833da9183861a460f1491d3ae753c61f2e3d8b6b75efd66e1272269260f46",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "98747efb-ef35-447f-b4b6-6b08c4d3add8",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "lever",
+      "opportunity_id": "5ecb04af-9eda-4b08-aa19-fa3d90eca8bc",
+      "title": "Project Manager (Software Development) -  Latin America, Remote",
+      "company": "Bluelight Consulting",
+      "location": "chihuahua city, mexico",
+      "work_mode": "REMOTE",
+      "external_id": "cec53815-e5f8-43f1-b782-f39f18abba23",
+      "candidates": [
+        {
+          "opportunity_id": "f4851658-c3c2-4e54-9672-b57eee9e55ab",
+          "location": "medellin, antioquia, colombia",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "f1166f1e-8bf4-4323-9278-f052f5e950f3"
+          ]
+        },
+        {
+          "opportunity_id": "d96d6b7e-4393-4cef-b738-3c21ed49b70e",
+          "location": "cali, valle del cauca, colombia",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "1dad3c08-5e67-4032-8849-68b8385d18cc"
+          ]
+        },
+        {
+          "opportunity_id": "daab2eb8-cc6b-49ac-8821-7ff9894a2bfc",
+          "location": "quito, pichincha, ecuador",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "fb0cc576-f135-4b4d-b2c4-250622d773ed"
+          ]
+        },
+        {
+          "opportunity_id": "26abcbef-0598-4e7c-bd1e-5b02fe0ed2c0",
+          "location": "guayaquil, guayas, ecuador",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "2149fae8-99da-4ff7-91d5-713465a0952f"
+          ]
+        },
+        {
+          "opportunity_id": "e748b203-d3c1-41d7-945e-7aa7269d3ccf",
+          "location": "san pedro sula, honduras",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "31a4a7d1-ea8e-4202-8fcd-07ff09de5f8a"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "5c178b60-b780-4499-80bf-44a8392e2b2f",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "88feb81d-e76c-48a8-ac3e-90aeb5ea580c",
+      "title": "Support Specialist I",
+      "company": "Brex",
+      "location": "salt lake city, utah, united states",
+      "work_mode": "UNKNOWN",
+      "external_id": "8815805002",
+      "candidates": [
+        {
+          "opportunity_id": "927c7b33-8903-4d79-9957-41a9c630feae",
+          "location": "vancouver, british columbia, canada",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8815803002"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "7eb3a0cb-facb-4fa0-bf11-10df3b8ffcf0",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "ashby",
+      "opportunity_id": "6d8c3669-56fe-4a6f-9795-4ba0961d579d",
+      "title": "Customer Success Manager - Guided - West Coast",
+      "company": "n8n",
+      "location": "washington state",
+      "work_mode": "REMOTE",
+      "external_id": "ashby:4065bc1f0d25539e89080552384a871b36dc65212533607486b174f5d8da2e13",
+      "candidates": [
+        {
+          "opportunity_id": "e406a710-3433-46d3-ad6b-539c9eb9f312",
+          "location": "austin, texas",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "ashby:fee4cf4572f84dde52d46d36198d16e43fe84d26e50b0dc5cc23db5034037c1a"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "71d4f3b6-c25d-4f82-b88c-5917670faa61",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "ashby",
+      "opportunity_id": "a3f186b0-8dfa-4c17-97c2-357f246fdac4",
+      "title": "Product Manager",
+      "company": "Linear",
+      "location": "europe",
+      "work_mode": "REMOTE",
+      "external_id": "ashby:0b585757c0545f2560efd356119c2341ba8f326ab75e5f2be800e0214a38f16d",
+      "candidates": [
+        {
+          "opportunity_id": "c72cbb0b-0532-432e-9554-89557276d4b1",
+          "location": "north america",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "ashby:add975f7fd159ee8798f8266e6dda32d7dc7628568665041424abaa5cc7bcc9c"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "9b33ed09-5656-45ba-994d-e0a295457767",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "lever",
+      "opportunity_id": "9dee627d-1059-498d-b4d8-a6cefb9d524d",
+      "title": "Project Manager (Software Development) - Remote, Latin America",
+      "company": "Bluelight Consulting",
+      "location": "salvador, bahia, brazil",
+      "work_mode": "REMOTE",
+      "external_id": "44698b4a-a006-4520-8064-7407d5dd0f10",
+      "candidates": [
+        {
+          "opportunity_id": "bf8ea7af-781a-45fb-8918-d4b3c183f6e3",
+          "location": "georgetown, guyana",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "e1858030-a5b6-47ea-ac3b-d6bb7836c91c"
+          ]
+        },
+        {
+          "opportunity_id": "3336ff69-7aa6-4b4a-817e-4cc80e7d965d",
+          "location": "cordoba, argentina",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "bcc19cc8-11d6-4474-8ff6-05a9268d9aeb"
+          ]
+        },
+        {
+          "opportunity_id": "a9598823-c8f9-4d49-bb21-fd67dbcd4438",
+          "location": "tacna, peru",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "cced11a5-4a7a-4e47-b2b1-43921dfd8d38"
+          ]
+        },
+        {
+          "opportunity_id": "14d12d9b-e902-4cd6-87ed-63e49fb6eff5",
+          "location": "medellin, antioquia, colombia",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "9a8b717d-66c0-448e-b779-8b42ccf90895"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "d4e5e00d-ada8-4e9a-9a9a-7c0f4f9340b5",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "eb669419-3ee0-41be-83b2-91763af73002",
+      "title": "Enterprise Implementation Consultant",
+      "company": "Brex",
+      "location": "new york, new york, united states",
+      "work_mode": "UNKNOWN",
+      "external_id": "8152938002",
+      "candidates": [
+        {
+          "opportunity_id": "e6994ac3-04b1-4968-a737-def882826df4",
+          "location": "san francisco, california, united states",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8152870002"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "8c033648-70ca-446b-9830-2b1692a1c218",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "lever",
+      "opportunity_id": "496ea2d9-cc1f-409e-8505-d1bbd51877fe",
+      "title": "Senior AI Engineer",
+      "company": "Tryjeeves",
+      "location": "colombia",
+      "work_mode": "REMOTE",
+      "external_id": "66241934-7138-4d7d-8b05-a211ec5d6e24",
+      "candidates": [
+        {
+          "opportunity_id": "d3de33be-3424-47a3-bb78-ae49dab9f64b",
+          "location": "brazil",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "2f00206f-6091-4eed-8b5f-1325afdbfe30"
+          ]
+        },
+        {
+          "opportunity_id": "73ff6b2a-c26b-4372-8a1c-806f25bd67cd",
+          "location": "mexico",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "03f901fc-7a43-4fae-9916-3b287a4bdff6"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "a09a04b6-3b46-4899-a029-17803519bab5",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "workday",
+      "opportunity_id": "004560ce-6eb0-407a-b703-35df19884eba",
+      "title": "Espec Clientes B1 I",
+      "company": "Santander",
+      "location": "cotia",
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/COTIA/Espec-Clientes-B1-I_Req1601571",
+      "candidates": [
+        {
+          "opportunity_id": "a09e2b67-1e32-4476-ae64-9bbf0795341c",
+          "location": "sao paulo",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/SAO-PAULO/Espec-Clientes-B1-I_Req1601319",
+            "/job/SAO-PAULO/Espec-Clientes-B1-I_Req1611053"
+          ]
+        },
+        {
+          "opportunity_id": "4b2b25d4-f11f-46a6-bdb5-1448fd56c19b",
+          "location": "rio de janeiro",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/RIO-DE-JANEIRO/Espec-Clientes-B1-I_Req1601279"
+          ]
+        },
+        {
+          "opportunity_id": "7bf6c54b-dbfb-49ac-a2e8-36352230692b",
+          "location": "americo de campos",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/AMERICO-DE-CAMPOS/Espec-Clientes-B1-I_Req1601633"
+          ]
+        },
+        {
+          "opportunity_id": "180cbf55-0cd2-4a2e-8548-0c9ad4d0c4cc",
+          "location": "itapetininga",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/ITAPETININGA/Espec-Clientes-B1-I_Req1617604"
+          ]
+        },
+        {
+          "opportunity_id": "6df5be6f-9084-4a92-acf2-83515283497c",
+          "location": "sao paulo",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/SAO-PAULO/Espec-Clientes-B1-I_Req1601144"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "a694d52b-6cc3-450a-b623-ae7a2dedd0d6",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "inhire",
+      "opportunity_id": "f60d99d9-f4d4-458e-b796-2c29615eb625",
+      "title": "Closer",
+      "company": "Tecer",
+      "location": "são paulo, sp, br",
+      "work_mode": "HYBRID",
+      "external_id": "934bae12-268c-460e-97f3-f3183f442363",
+      "candidates": [
+        {
+          "opportunity_id": "7fc1f3da-b409-4bab-bd7a-060048350894",
+          "location": "florianópolis, sc, br",
+          "work_mode": "ONSITE",
+          "external_ids_in_same_source": [
+            "359584dc-15ff-4506-a40c-22f1f3ff53c5"
+          ]
+        },
+        {
+          "opportunity_id": "18c37093-93b2-4290-bd5f-b059226b52d4",
+          "location": "br",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "4bc803b1-f086-42e4-be5b-1ff279d5f4e0"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "6d344da2-05e6-4bca-a295-f25b12ec9a4e",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "fc52cb05-5c04-4f17-ae05-65250f1b385c",
+      "title": "Senior Software Engineer II, Managed Databases",
+      "company": "DigitalOcean",
+      "location": "seattle",
+      "work_mode": "UNKNOWN",
+      "external_id": "8256140",
+      "candidates": [
+        {
+          "opportunity_id": "153e7df7-ca8c-4d71-b908-1fc65cd71b39",
+          "location": "san francisco",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8256136"
+          ]
+        },
+        {
+          "opportunity_id": "b2ddf7b8-04a1-4877-b5a1-41752b53dec0",
+          "location": "boston",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8256138"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "2b7b0685-ec13-423c-a96a-c282a8d35447",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "bc96fafe-e6d1-47f1-b51a-2eccaf50861e",
+      "title": "Account Executive, Small Business - Nordics (English Speaking)",
+      "company": "HubSpot",
+      "location": "london, united kingdom",
+      "work_mode": "UNKNOWN",
+      "external_id": "5986372",
+      "candidates": [
+        {
+          "opportunity_id": "e1717ee5-465a-4c68-ae9f-80f0a5cd7572",
+          "location": "remote - united kingdom",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "7292158"
+          ]
+        },
+        {
+          "opportunity_id": "0938524b-4ec8-4b88-98fa-626e385ade72",
+          "location": "flex - london, united kingdom",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "7292157"
+          ]
+        },
+        {
+          "opportunity_id": "2f083c68-2cd9-482e-9ed1-fb5f914b36c0",
+          "location": "remote - ireland",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "7292163"
+          ]
+        },
+        {
+          "opportunity_id": "d9679c30-e020-478d-9fe7-6db0da56f33e",
+          "location": "flex - dublin, ireland",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "7292159"
+          ]
+        },
+        {
+          "opportunity_id": "8c404fa4-562b-49ac-8fcb-23f9f6d23fb8",
+          "location": "dublin, ireland",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "5986374"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "46086503-99ec-4159-bcab-0ca2e907bbe3",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "4d7c0950-5371-49af-bec4-6c22a5b77016",
+      "title": "Strategic Account Executive (SLED)",
+      "company": "Datadog",
+      "location": "texas, usa, remote",
+      "work_mode": "REMOTE",
+      "external_id": "7453034",
+      "candidates": [
+        {
+          "opportunity_id": "b069ea2c-5264-4237-a21f-6face65a9d0a",
+          "location": "sydney, australia",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8043036"
+          ]
+        },
+        {
+          "opportunity_id": "d73bb058-7001-4d8f-99c1-c5789a2f4449",
+          "location": "california, usa, remote; oregon, usa, remote; washington, usa, remote",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "6430945"
+          ]
+        },
+        {
+          "opportunity_id": "e0545b99-041b-4566-ab2b-53301ff3a339",
+          "location": "boston, massachusetts, usa; new york, new york, usa",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "7314667"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "2e6401a9-b1d3-4756-a1f3-34fd59e9d136",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "workday",
+      "opportunity_id": "1c84fd2f-0cd3-49ab-9df7-24d0790222be",
+      "title": "Senior Multinational Client Executive",
+      "company": "AIG",
+      "location": "ny-new york",
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/NY-New-York/Senior-Multinational-Client-Executive_JR2604087-1",
+      "candidates": [
+        {
+          "opportunity_id": "2e320780-ff59-4663-8c2a-3e16caed89e2",
+          "location": "london",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/London/Senior-Multinational-Client-Executive_JR2603681-1"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "f77c528b-278c-4858-b529-f5489830ed6a",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "ashby",
+      "opportunity_id": "8368014c-426a-4b9c-b60a-0d3e1da65bff",
+      "title": "Security Engineer, Application Security",
+      "company": "OpenAI",
+      "location": "san francisco",
+      "work_mode": "HYBRID",
+      "external_id": "ashby:aeddeee62754c34ba8457be5a426855227bd2cb122c6caa736b8ab0e0379cd21",
+      "candidates": [
+        {
+          "opportunity_id": "5011241b-dd92-4984-bed6-c4179c8e9c1e",
+          "location": "new york city",
+          "work_mode": "HYBRID",
+          "external_ids_in_same_source": [
+            "ashby:cc84230cb8c7bf3866ff794a933c08d199fcc6a1d7a7dc10da8fbc7326ed538b"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "314aad0a-184e-4b79-a4ba-c5bb8a3cf2ca",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "lever",
+      "opportunity_id": "c1bc38aa-99e8-40f3-bc40-f157b141341e",
+      "title": "Software Engineer, New Grad - Infrastructure",
+      "company": "Palantir Technologies",
+      "location": "london, united kingdom",
+      "work_mode": "HYBRID",
+      "external_id": "9265acce-12cd-4179-8c50-55d15963532b",
+      "candidates": [
+        {
+          "opportunity_id": "4a995ec1-b88a-4b59-b235-b363f4713af4",
+          "location": "new york, ny",
+          "work_mode": "HYBRID",
+          "external_ids_in_same_source": [
+            "4abf26b4-795c-420a-bf22-1ab98db268b4"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "ed49f3f2-a30f-4481-8415-051eecc31fd2",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "lever",
+      "opportunity_id": "2e083449-9785-4989-89fd-273a95583ac2",
+      "title": "Full Stack Laravel + React Developer - Remote, Latin America",
+      "company": "Bluelight Consulting",
+      "location": "mexicali, baja california, mexico",
+      "work_mode": "REMOTE",
+      "external_id": "4aa3e0f6-be87-4f2a-a216-82efd21d8f17",
+      "candidates": [
+        {
+          "opportunity_id": "6fe90ed2-e552-4186-85a8-bda5a4bfb6ec",
+          "location": "punta del este, uruguay",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "b09d0766-91f5-4b9c-b1a8-b6ebcb109100"
+          ]
+        },
+        {
+          "opportunity_id": "e507c1e0-9e8f-4c27-a53e-ad81d9ef9c41",
+          "location": "panama city, panama",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "dfe2687a-f8c0-4a33-aee2-1c28aab5c019"
+          ]
+        },
+        {
+          "opportunity_id": "754e45f8-bf7b-4854-8140-1dd75e6a34c2",
+          "location": "san pedro sula, honduras",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "320c4f41-4693-4673-9266-2b986c301e93"
+          ]
+        },
+        {
+          "opportunity_id": "a3970863-eb22-47a6-970b-1e64bbf85655",
+          "location": "encarnacion, paraguay",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "454ca70b-dd56-4e95-be40-34ec6a564666"
+          ]
+        },
+        {
+          "opportunity_id": "02601855-94b6-4947-bfeb-4332e1f68c10",
+          "location": "masaya, nicaragua",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "9ab4a6e4-5703-4273-8405-7a889723a745"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "64a14185-3809-448b-b253-40ed3d35a1ec",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "teamtailor",
+      "opportunity_id": "961f7291-2aac-4c1b-b7f3-3603c0d247d1",
+      "title": "DevTools Founding AI Engineer (100 % remote) (m/f/d)",
+      "company": "EWOR GmbH",
+      "location": "valletta, europe, mt",
+      "work_mode": "REMOTE",
+      "external_id": "4658126b-3687-4098-ae79-2292c5d6a1ac",
+      "candidates": [
+        {
+          "opportunity_id": "1fb3cc7c-072f-4cac-9442-cf3188ac1872",
+          "location": "zagreb, europe, hr",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "75b03e9e-11fc-4295-84cb-1d4a5b5b4bb5"
+          ]
+        },
+        {
+          "opportunity_id": "da57f404-cb08-4fa6-802e-ed616941f223",
+          "location": "budapest, europe, hu",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "00695716-62ce-4d96-a1a1-099987260d03"
+          ]
+        },
+        {
+          "opportunity_id": "99177e0d-2edf-4dea-8fed-f602db52c67b",
+          "location": "almere, europe, nl",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "7b28338e-06f1-4185-8b85-fdca48e1e6c7"
+          ]
+        },
+        {
+          "opportunity_id": "ce82d099-5ce8-41f9-8a71-36dc65b060d5",
+          "location": "aachen, europe, de",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "f344604f-9433-402b-ad56-81a9742ddbd9"
+          ]
+        },
+        {
+          "opportunity_id": "ddb64ea0-cd28-4c6b-80cb-e496d5c31d1b",
+          "location": "copenhagen, europe, dk",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "5a92dc8f-fb49-4acc-90a8-83113e3c0fbe"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "58aeb20c-991a-4ed9-9cea-48740c2e94e0",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "workday",
+      "opportunity_id": "b812acca-66f6-4cf4-a4f4-4d6954c65355",
+      "title": "Senior Solution Engineer, Networking",
+      "company": "NVIDIA",
+      "location": "6 locations",
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/US-CA-Santa-Clara/Senior-Solution-Engineer--Networking_JR2026385",
+      "candidates": [
+        {
+          "opportunity_id": "ef4bd8d8-08ac-450d-86af-25756de64bbe",
+          "location": "6 locations",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/US-CA-Santa-Clara/Senior-Solution-Engineer--Networking_JR2022908"
+          ]
+        },
+        {
+          "opportunity_id": "3a1ff678-7f59-41c1-92df-47117f376b89",
+          "location": "6 locations",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/US-CA-Santa-Clara/Senior-Solution-Engineer--Networking_JR2025361"
+          ]
+        }
+      ],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "0e0fcd79-21ec-4333-9a43-97f7fcc4a160",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "ashby",
+      "opportunity_id": "838d3c0d-8778-4d82-923e-732b856ab8c8",
+      "title": "Enterprise Account Executive III - NA",
+      "company": "Camunda",
+      "location": "remote",
+      "work_mode": "REMOTE",
+      "external_id": "ashby:5c74ba662f5078fe7c6c7538955ddece92f31f76e051dc207667841941ad2017",
+      "candidates": [
+        {
+          "opportunity_id": "270395b1-aaed-49db-9767-071fc8b93980",
+          "location": "remote",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "ashby:6729247fceb3c5e7ef1f0a5b25ce68913f33b631690522e4cb3fb4608b475fdf"
+          ]
+        }
+      ],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "2132ab28-e2ad-41dc-b475-ffca93b6985a",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "76ee5673-4b94-483d-88b6-02b35a9eb416",
+      "title": "Senior Solutions Engineer",
+      "company": "Databricks",
+      "location": "london, united kingdom",
+      "work_mode": "UNKNOWN",
+      "external_id": "8614459002",
+      "candidates": [
+        {
+          "opportunity_id": "9b206899-b71b-489f-b74d-26c49500da51",
+          "location": "india",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8747434002"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "59f35847-aa73-45b4-8cec-2dce43f0e841",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "teamtailor",
+      "opportunity_id": "176f5c73-8933-4bc1-86c1-e3770a79f64e",
+      "title": "AI Research Lab Senior Full-Stack Engineer (100 % remote) (m/f/d)",
+      "company": "EWOR GmbH",
+      "location": "skopje, europe, mk",
+      "work_mode": "REMOTE",
+      "external_id": "cbb48d3a-0184-42a0-b8c2-a6992147245b",
+      "candidates": [
+        {
+          "opportunity_id": "e38df567-d384-4a27-820d-02bebaa88844",
+          "location": "belgrade, europe, rs",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "1e0457e1-5d69-4ade-9a72-dd4211970f4b"
+          ]
+        },
+        {
+          "opportunity_id": "aa439e3b-9959-471e-9f1f-690baeca7a78",
+          "location": "southampton, europe, gb",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "64a08459-2f67-4665-96a8-f99e1bd7f3bf"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "9475b4cf-bc28-4fcd-8952-fc4f3286cef4",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "8eb40367-ab3e-4619-8775-153940e6286a",
+      "title": "Manager, Technical Services",
+      "company": "MongoDB",
+      "location": "austin",
+      "work_mode": "UNKNOWN",
+      "external_id": "8053153",
+      "candidates": [
+        {
+          "opportunity_id": "858a9c7b-4f6a-4520-b0f1-401d313e5a8d",
+          "location": "gurugram",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8238623"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "6ad58ca7-4aba-455a-9180-0ac1a7a3b4c6",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "lever",
+      "opportunity_id": "8284a6ed-133b-4048-b58a-b1711e5a9b51",
+      "title": "Senior Business Analyst - Latin America, Remote",
+      "company": "Bluelight Consulting",
+      "location": "mérida, yucatán, mexico",
+      "work_mode": "REMOTE",
+      "external_id": "c0ebd95c-2d9d-4ed9-8d13-e6996aff7de8",
+      "candidates": [
+        {
+          "opportunity_id": "9329abf3-8240-4981-9784-df6ca5fd3cb6",
+          "location": "fortaleza, ceará, brazil",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "198b8df2-109e-499d-b2ed-fc49eae28d44"
+          ]
+        },
+        {
+          "opportunity_id": "cef8079c-e913-4982-8cb9-3d4c6723f0d3",
+          "location": "salto, uruguay",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "1ff6c37b-fe1f-4fb0-8efe-105bff57cae8"
+          ]
+        },
+        {
+          "opportunity_id": "d8787fa5-fa36-4d90-b0d6-81d8646a5eb0",
+          "location": "palmira, valle del cauca, colombia",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "1d1259de-df74-41a5-86c2-c16e2ac662ec"
+          ]
+        },
+        {
+          "opportunity_id": "ff7588f5-d253-4e4f-bf21-741aa6f3b012",
+          "location": "porto alegre, brazil",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "8d3689e4-8d75-48ae-bbf0-11d96c8fc0b6"
+          ]
+        },
+        {
+          "opportunity_id": "75cdf271-10e6-4765-a3d0-87ab5cdc0255",
+          "location": "salta, argentina",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "323962af-b498-4772-b1a6-5a3f5c1823d0"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "7ecdc54b-0a98-4476-9ef5-58947745dff0",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "eb4cf914-1fe9-472a-99f5-c5c94084caf5",
+      "title": "Principal Software Engineer",
+      "company": "HubSpot",
+      "location": "remote - ireland",
+      "work_mode": "REMOTE",
+      "external_id": "8195046",
+      "candidates": [
+        {
+          "opportunity_id": "d6c17606-10fa-4278-985e-ec9280a75bde",
+          "location": "flex - dublin, ireland",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8112940"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "8744b97f-3901-4e6b-8c96-d246a8221aac",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "lever",
+      "opportunity_id": "312a9c8f-f269-4e82-a00a-837fb15d1cc7",
+      "title": "Project Manager (Software Development) - Remote, Latin America",
+      "company": "Bluelight Consulting",
+      "location": "san miguel, el salvador",
+      "work_mode": "REMOTE",
+      "external_id": "98621bf9-884d-4f30-b575-072c8754a354",
+      "candidates": [
+        {
+          "opportunity_id": "98e11962-6428-484f-a788-a6774521b707",
+          "location": "valparaíso, chile",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "a2b15c7b-ddf3-4e0a-a2e9-6943419e48d3"
+          ]
+        },
+        {
+          "opportunity_id": "6491ccc3-62d4-4d2c-9dbb-454c043f2bcf",
+          "location": "mar del plata, buenos aires province, argentina",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "0b04b2b4-e711-4cfe-991d-3f38cc7bede8"
+          ]
+        },
+        {
+          "opportunity_id": "179583aa-1b48-4ee7-87b7-1e163fee01b4",
+          "location": "san pedro sula, honduras",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "44a9e12d-c3a8-498e-8c0b-2b0c767e3fed"
+          ]
+        },
+        {
+          "opportunity_id": "606dea42-fc9c-43cf-81bf-592204b4d37a",
+          "location": "brasília, federal district, brazil",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "4e9ffbc5-9612-4e1d-a9c2-d2308ddde1c8"
+          ]
+        },
+        {
+          "opportunity_id": "386599e2-952f-46d6-ab3f-c0417f0a6a34",
+          "location": "puebla city, mexico",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "f4d32352-14f2-4156-b9e9-ad3af214ca0d"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "66005b16-2207-498e-a965-d04c13cd8ed3",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "48a84b99-496e-484b-b3cf-a2925252475f",
+      "title": "Outbound Sales Development Representative",
+      "company": "Brex",
+      "location": "vancouver, british columbia, canada",
+      "work_mode": "UNKNOWN",
+      "external_id": "8814626002",
+      "candidates": [
+        {
+          "opportunity_id": "83492787-b690-48f4-86de-4a496ae92880",
+          "location": "são paulo, são paulo, brazil",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8814629002"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "32136e8f-1e7a-4eca-891d-76ab0ba361c0",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "lever",
+      "opportunity_id": "b8e2dbf5-4adb-4e01-9547-ab77dbaffb2b",
+      "title": "Full Stack and Backend NodeJS TypeScript/JavaScript Engineer (Senior) - Remote, Latin America",
+      "company": "Bluelight Consulting",
+      "location": "nieuw nickerie, suriname",
+      "work_mode": "REMOTE",
+      "external_id": "942c81a4-a884-471c-a4e1-0950f2402323",
+      "candidates": [
+        {
+          "opportunity_id": "6b4a6b39-be88-444e-b5fa-870dabe9ce95",
+          "location": "puebla city, mexico",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "d5adefca-e67c-4201-94ba-a5d972819e7f"
+          ]
+        },
+        {
+          "opportunity_id": "55e849a9-853e-4a10-9bf2-127290cff2fb",
+          "location": "fortaleza, ceará, brazil",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "1cba583d-25f4-4fee-893e-87ed03540833"
+          ]
+        },
+        {
+          "opportunity_id": "ea5cf275-c41e-4e88-aeeb-3db23d146f63",
+          "location": "rosario, santa fe, argentina",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "f4f4604f-e0a6-4dd4-bff0-f3c904e1e28e"
+          ]
+        },
+        {
+          "opportunity_id": "be7b982f-3685-494e-ad4f-e5e92e651ecf",
+          "location": "la paz, bolivia",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "b1f4e333-d9af-47ce-8dce-20d7ae66532e"
+          ]
+        },
+        {
+          "opportunity_id": "37a41ba2-c98e-46e4-8675-dda3d14bf39d",
+          "location": "buenos aires province, argentina",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "82166d44-eb37-4efd-aa78-d0a35049296e"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "23177538-4171-476f-8744-3f9988c2c521",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "lever",
+      "opportunity_id": "2abcbe48-91c2-4b4c-bc74-64756b9577ea",
+      "title": "DevOps / SRE / DevSecOps Engineer (AWS) - Remote, Latin America",
+      "company": "Bluelight Consulting",
+      "location": "mexico city, mexico",
+      "work_mode": "REMOTE",
+      "external_id": "00b6680a-5fad-4cb6-9e37-2317cc05417b",
+      "candidates": [
+        {
+          "opportunity_id": "e902a5ec-fe79-4222-88bc-6bc63d5c93fc",
+          "location": "belize city, belize",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "bdc666fa-1a38-49ab-9eb5-29798ce6e1f6"
+          ]
+        },
+        {
+          "opportunity_id": "2cea8bcf-903f-4f02-9734-aaec37e0ceac",
+          "location": "salta, argentina",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "9324f301-e8fd-4ad0-b542-1e020aa148dc"
+          ]
+        },
+        {
+          "opportunity_id": "4c8843a6-47ce-4529-9831-8f3d64a9fc54",
+          "location": "curitiba, paraná, brazil",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "4fe8146a-67e6-4189-bcb0-41eef792d08d"
+          ]
+        },
+        {
+          "opportunity_id": "77359924-e262-40ba-99d9-1c2af9f35922",
+          "location": "aguascalientes, mexico",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "c703f5bc-8c5b-4f7d-9d75-09b87b0bfe73"
+          ]
+        },
+        {
+          "opportunity_id": "c153c9fe-9797-49bc-8009-1c40d65642b3",
+          "location": "naucalpan, mexico",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "4d1a5954-08eb-414c-bec0-6e55772f5538"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "55f1c007-aed3-4174-b138-32d089bfd91a",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "workday",
+      "opportunity_id": "607f9037-d308-4d5f-b2ac-4dec8ec87d74",
+      "title": "Cajero Sucursal",
+      "company": "Santander",
+      "location": "san luis potosí",
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/San-Luis-Potos/Cajero-Sucursal_Req1616645",
+      "candidates": [
+        {
+          "opportunity_id": "d6c42d82-29cb-4e8a-8257-be2986adfcc9",
+          "location": "naucalpan de juárez",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/Naucalpan-de-Jurez/Cajero-Sucursal_Req1615091"
+          ]
+        },
+        {
+          "opportunity_id": "177409b6-b954-4a94-9050-3b36f19ce2f2",
+          "location": null,
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/Cajero-Sucursal_Req0858634"
+          ]
+        },
+        {
+          "opportunity_id": "ee713bcf-14b9-42fd-881b-d00e03cead53",
+          "location": "cd. cuauhtémoc",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/Cd-Cuauhtmoc/Cajero-Sucursal_Req1616660"
+          ]
+        }
+      ],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "7a961cde-266c-4357-b240-cc5021722e92",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "ashby",
+      "opportunity_id": "7400b681-c55d-429e-80bc-d9224b6a3423",
+      "title": "Strategic Sourcing Leader, Professional Services",
+      "company": "OpenAI",
+      "location": "san francisco",
+      "work_mode": "HYBRID",
+      "external_id": "ashby:78e55050abc237a3a1dcc8e5f9ff550fc71a6c3dc4260c7093e93e628ff7311a",
+      "candidates": [
+        {
+          "opportunity_id": "ecf1f16b-cec3-4971-9262-be5ff74ece3a",
+          "location": "san francisco",
+          "work_mode": "HYBRID",
+          "external_ids_in_same_source": [
+            "ashby:e36a6069953c8e2f52e12af500e12226744de86ba54bff5f85fde840f3f40135"
+          ]
+        }
+      ],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "ade611e1-bd13-4397-9af4-369538ff2ef9",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "ashby",
+      "opportunity_id": "268f07c4-1840-46b7-be37-1c26a6ae1b37",
+      "title": "Account Director, Large Enterprise",
+      "company": "OpenAI",
+      "location": "london, uk",
+      "work_mode": "UNKNOWN",
+      "external_id": "ashby:c8e5619ee821d775af1a0d6f2775c1053781d2a91a53a38119c978ecf115e6ed",
+      "candidates": [
+        {
+          "opportunity_id": "07fa2113-21d9-4f7b-bbc9-be594333a751",
+          "location": "san francisco",
+          "work_mode": "HYBRID",
+          "external_ids_in_same_source": [
+            "ashby:325325a8fb0e131da8c5b8432ddf8871ad832fee9a6bd2a42620540deec48b42"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "ec9a5162-d22f-40f6-bcab-7220072e4f72",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "workday",
+      "opportunity_id": "c6993405-ca36-4002-a4ce-9ee2b35b11df",
+      "title": "Territory Manager",
+      "company": "Abbott",
+      "location": "korea - seoul",
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/Korea---Seoul/Therapy-Development-Manager_31159635",
+      "candidates": [
+        {
+          "opportunity_id": "4f66f743-650e-413d-b028-ee5e40e8b352",
+          "location": "india - uttar pradesh - lucknow",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/INDIA---UTTAR-PRADESH---LUCKNOW/Territory-Manager_31161833"
+          ]
+        },
+        {
+          "opportunity_id": "7da8b43c-82ec-44e9-9036-9fd362f10b4c",
+          "location": "australia > macquarie park : 299 lane cove road",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/Australia--Macquarie-Park--299-Lane-Cove-Road/Territory-Manager_31159088"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "67725f42-88f1-4899-888b-e4456ae4e413",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "lever",
+      "opportunity_id": "c5f99267-612c-44d5-a61c-73066d05da15",
+      "title": "Full Stack Laravel + React Developer - Remote, Latin America",
+      "company": "Bluelight Consulting",
+      "location": "hermosillo, sonora, mexico",
+      "work_mode": "REMOTE",
+      "external_id": "fb4d4061-fd48-489d-b9bd-3562d8e97f26",
+      "candidates": [
+        {
+          "opportunity_id": "ed91eb4d-ee7c-4c75-8320-8193ee11a6b2",
+          "location": "fortaleza, ceará, brazil",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "d5ff2d1d-5f67-48f8-8ca7-dc472fc497ee"
+          ]
+        },
+        {
+          "opportunity_id": "4ed8fa6d-c880-4ac0-85f2-ade46719499a",
+          "location": "curitiba, paraná, brazil",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "dc48b9f5-badd-465e-a11b-ed4f55b34ccc"
+          ]
+        },
+        {
+          "opportunity_id": "a0184c45-872d-48d4-addf-7907ba217bc2",
+          "location": "palmira, valle del cauca, colombia",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "2c797ef1-1223-4a60-9d74-7e72e9040c6f"
+          ]
+        },
+        {
+          "opportunity_id": "61ac6e43-2bd8-4f8c-8a85-0331a2d6cbb8",
+          "location": "mérida, yucatán, mexico",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "5461a601-1a3c-429f-926d-1b940d793664"
+          ]
+        },
+        {
+          "opportunity_id": "8bda2457-0f34-4533-9a6a-cc635085f151",
+          "location": "mendoza, argentina",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "e160c543-b317-4288-980d-d77b29e5341f"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "b06fd6de-fcc3-432a-80d9-4055ab9cd34f",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "workday",
+      "opportunity_id": "efc7a027-0eda-45ad-aebb-b96955d8f485",
+      "title": "Espec Select One",
+      "company": "Santander",
+      "location": "cuiaba",
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/CUIABA/Espec-Select-One_Req1610418",
+      "candidates": [
+        {
+          "opportunity_id": "8b6c4d97-bc73-43a8-b237-be89cdf01b00",
+          "location": "santos",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/SANTOS/Espec-Select-One_Req1612704"
+          ]
+        },
+        {
+          "opportunity_id": "37717870-c08f-4788-b83f-f625dda877b3",
+          "location": "guarulhos",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/GUARULHOS/Espec-Select-One_Req1611663"
+          ]
+        },
+        {
+          "opportunity_id": "ef002701-7cf7-41ee-a634-51474c2a4bcc",
+          "location": "campo grande",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/CAMPO-GRANDE/Espec-Select-One_Req1615594"
+          ]
+        },
+        {
+          "opportunity_id": "25cb7a18-0da8-430d-95e7-c00b5bd0e59e",
+          "location": "select assembleia",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/SELECT-ASSEMBLEIA/Espec-Select-One_Req1612712"
+          ]
+        },
+        {
+          "opportunity_id": "0feef0cb-5242-4d32-887c-6be89779086c",
+          "location": "campo grande",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/CAMPO-GRANDE/Espec-Select-One_Req1614757"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "e862e453-4709-450d-9c7e-4f25589ab968",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "workday",
+      "opportunity_id": "258a7a41-44b4-4f0e-a28e-4d8101015bc3",
+      "title": "High Speed IO Validation Engineer",
+      "company": "NVIDIA",
+      "location": "india, bengaluru",
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/India-Bengaluru/High-Speed-IO-Validation-Engineer_JR2025319",
+      "candidates": [
+        {
+          "opportunity_id": "d2c182fd-f8f3-4e88-8170-b43ce8f54916",
+          "location": "india, bengaluru",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/India-Bengaluru/High-Speed-IO-Validation-Engineer_JR2020227"
+          ]
+        }
+      ],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "73fa91ea-6a35-46f4-85a8-34ce3b13eb3f",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "lever",
+      "opportunity_id": "4c1b4d7a-0a17-4ece-b5c5-59bb93b48856",
+      "title": "Software Architect (AWS, NodeJS) - Remote, Latin America",
+      "company": "Bluelight Consulting",
+      "location": "santa cruz, bolivia",
+      "work_mode": "REMOTE",
+      "external_id": "247a1cc8-4e10-4302-b13d-8646cc2227a6",
+      "candidates": [
+        {
+          "opportunity_id": "6f300e20-2e40-43ae-ae57-62caf9dd92ce",
+          "location": "managua, nicaragua",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "ebfa9b5b-aa25-4665-85d9-8f41ab041a93"
+          ]
+        },
+        {
+          "opportunity_id": "62056cde-72cf-41b1-bb36-e6104b419cb8",
+          "location": "cartago, costa rica",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "3d9d40fc-7d14-41fd-b19f-b358002fc5d7"
+          ]
+        },
+        {
+          "opportunity_id": "991b0f8d-ee26-46a6-a48f-21d30d66c2cb",
+          "location": "linden, guyana",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "a07f548c-adea-470e-941c-6221cd732076"
+          ]
+        },
+        {
+          "opportunity_id": "ed561bba-8700-4f9c-99da-70689305a74d",
+          "location": "goiânia, goiás, brazil",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "a6b36eec-c295-43e1-a5bd-9e4307d6c167"
+          ]
+        },
+        {
+          "opportunity_id": "53c3050c-4fb6-41a6-b76e-11eab7a872f4",
+          "location": "ciudad nezahualcóyotl, mexico",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "009a4a6e-00c4-496e-9e51-61154c210670"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "28495e1a-624d-458e-bee8-d5163cab924d",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "workday",
+      "opportunity_id": "8a693466-8631-4748-9868-e79898d00d02",
+      "title": "Operator II",
+      "company": "Abbott",
+      "location": "united states - minnesota - st. paul",
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/United-States---Minnesota---St-Paul/Operator-II_31162919-1",
+      "candidates": [
+        {
+          "opportunity_id": "e948c369-0d1a-4e00-9ad6-4a6749f4e38b",
+          "location": "united states - georgia - atlanta",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/United-States---Georgia---Atlanta/Operator-II_31162280",
+            "/job/United-States---Georgia---Atlanta/Operator-II_31162281-2",
+            "/job/United-States---Georgia---Atlanta/Operator-II_31162272-1"
+          ]
+        },
+        {
+          "opportunity_id": "4ef929ac-7e3d-4edc-ad91-f0cbb6ae7949",
+          "location": "united states - minnesota - st. paul",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/United-States---Minnesota---St-Paul/Operator-II_31163060-1"
+          ]
+        },
+        {
+          "opportunity_id": "a27489b8-9faa-460e-8946-9797683a26d4",
+          "location": "united states - minnesota - minnetonka",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/United-States---Minnesota---Minnetonka/Operator-II_31162136"
+          ]
+        },
+        {
+          "opportunity_id": "42ce6958-54e8-4db4-8634-0a24865b7f59",
+          "location": "united states - georgia - atlanta",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/United-States---Georgia---Atlanta/Operator-II_31160551-1",
+            "/job/United-States---Georgia---Atlanta/Operator-II_31160553-1"
+          ]
+        },
+        {
+          "opportunity_id": "617297f8-1986-4610-99b1-6b4b7c5d25d9",
+          "location": "united states - california - irvine",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/United-States---California---Irvine/Operator-II_31162932-1"
+          ]
+        }
+      ],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "ff93e280-92d7-42a8-9ef5-59c6955cb9e8",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "bd0a7e2c-db94-49f5-9165-493611b6c83b",
+      "title": "Software Engineer, New Grad",
+      "company": "Stripe",
+      "location": "singapore",
+      "work_mode": "UNKNOWN",
+      "external_id": "8160776",
+      "candidates": [
+        {
+          "opportunity_id": "792597dc-0611-4260-87b9-01d8ea4c5d8c",
+          "location": "bucharest",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8130922"
+          ]
+        },
+        {
+          "opportunity_id": "daf1eb7c-fed7-4e0e-94fc-df7f67afbe96",
+          "location": "london",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8130930"
+          ]
+        },
+        {
+          "opportunity_id": "1686e427-47d2-429d-87af-180d9fbed041",
+          "location": "toronto",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8157838"
+          ]
+        },
+        {
+          "opportunity_id": "333e441a-50e1-4a6a-b582-d619443db876",
+          "location": "san francisco, seattle, new york",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8128744"
+          ]
+        },
+        {
+          "opportunity_id": "b3fab7c1-546f-415f-807e-ab242eedfdf4",
+          "location": "dublin",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8130881"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "66301a64-04ff-4e3a-a1f2-133e06d95463",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "lever",
+      "opportunity_id": "c6daaed2-9150-4881-ba66-e2e095591c47",
+      "title": "Project Manager (Software Development) - Remote, Latin America",
+      "company": "Bluelight Consulting",
+      "location": "león, nicaragua",
+      "work_mode": "REMOTE",
+      "external_id": "00ff6a93-c8b3-49d0-a5f4-a87d47c5fc24",
+      "candidates": [
+        {
+          "opportunity_id": "f4cef8de-3ef4-4b29-b1e5-70fba4cbcef8",
+          "location": "david, panama",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "6d019042-12da-4e8a-bf20-a7ab8e721351"
+          ]
+        },
+        {
+          "opportunity_id": "7944ee1c-a888-4bc5-a725-73b2328ebddb",
+          "location": "guayaquil, guayas, ecuador",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "d6c2ca93-8596-4d32-a175-778cffc57597"
+          ]
+        },
+        {
+          "opportunity_id": "dcc62602-5b37-413c-857d-5c11b6139c73",
+          "location": "curitiba, paraná, brazil",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "da040543-3672-4ffe-ac54-5081b2d6128a"
+          ]
+        },
+        {
+          "opportunity_id": "605391f6-ecb4-418f-b7b0-160fc8c09d6f",
+          "location": "colombia",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "f8bf40b4-d239-496d-ae77-70a3be9b7b29"
+          ]
+        },
+        {
+          "opportunity_id": "2136cae5-7653-40b8-ac47-516edb2b3835",
+          "location": "comayagua, honduras",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "73fd2e0e-3b89-43cb-89f6-5f6a334031b3"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "bab4ff2f-92d2-471b-9166-5a7ef50055f9",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "teamtailor",
+      "opportunity_id": "796abcbc-28ee-4b56-8bf9-f1f2c2f22748",
+      "title": "Fiscal de Caixa",
+      "company": "Leroy Merlin Brasil",
+      "location": "bauru, regional interior são paulo, br",
+      "work_mode": "UNKNOWN",
+      "external_id": "f668fff1-d6b3-4ddf-9746-c50cc6ad7da3",
+      "candidates": [
+        {
+          "opportunity_id": "a8501703-3e60-4586-8053-10d97a4e6df6",
+          "location": "são paulo, regional são paulo, br",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "524ab5ea-c308-4e2d-94e4-5f866373a7d6"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "edbf5deb-35c7-4c80-9284-2137fa511432",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "lever",
+      "opportunity_id": "349eb418-1e7a-4ee8-8855-7dc08f6876d0",
+      "title": "Software Architect (AWS, NodeJS) - Remote, Latin America",
+      "company": "Bluelight Consulting",
+      "location": "montevideo, uruguay",
+      "work_mode": "REMOTE",
+      "external_id": "9dcaa30d-b14a-4c47-9f1d-8469c878c779",
+      "candidates": [
+        {
+          "opportunity_id": "3a3d25ca-4e24-413c-850c-141596fb7112",
+          "location": "buenos aires province, argentina",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "d0cecc38-fe43-4e1c-9ff6-01f0b97b0c0a"
+          ]
+        },
+        {
+          "opportunity_id": "45cd8fb2-e896-46ba-a97a-612d1156f9bc",
+          "location": "guadalupe, nuevo león, mexico",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "b1ac4efe-2f42-4311-89ac-03e836834c3e"
+          ]
+        },
+        {
+          "opportunity_id": "17f2da30-5e61-493c-baba-d8bf7366c27d",
+          "location": "panama city, panama",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "fba3a24f-631a-4581-91fa-25755b2e29dd"
+          ]
+        },
+        {
+          "opportunity_id": "d69a1419-e959-4237-9e8b-4162e34df5d3",
+          "location": "iquitos, peru",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "a650c411-588c-4509-aea4-857cba122f5b"
+          ]
+        },
+        {
+          "opportunity_id": "75dff2cb-d0de-4ead-811b-35eb24606f08",
+          "location": "arequipa, peru",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "88c12e5e-cecf-4ef8-a64a-6d3c7d114bc0"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "9558881c-6894-4bfa-9481-b6fa54dc1db5",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "workday",
+      "opportunity_id": "06bd07a0-fd7c-4ff3-a382-19d1940078a8",
+      "title": "Contract Specialist",
+      "company": "Accenture",
+      "location": null,
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/Bengaluru/Contract-Specialist_R00358833",
+      "candidates": [
+        {
+          "opportunity_id": "23a3fd97-7eee-4117-8b1b-7f036ab62640",
+          "location": null,
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/Bengaluru/Contract-Specialist_R00343182",
+            "/job/Melbourne-161-Collins-Street-Level-5/Contract-Specialist_R00336704-1"
+          ]
+        }
+      ],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "92065816-990b-40e6-9925-dff314f360a6",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "workday",
+      "opportunity_id": "23d53530-f47b-4719-8694-d416a64ccc3a",
+      "title": "Administrative Assistant II",
+      "company": "Abbott",
+      "location": "2 locations",
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/United-States--Austin--8701-Bee-Caves-Rd/Administrative-Assistant-II_31163548-2",
+      "candidates": [
+        {
+          "opportunity_id": "08f24f19-87c1-471f-ad85-456935053a2a",
+          "location": "united states - minnesota - plymouth",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/United-States---Minnesota---Plymouth/Administrative-Assistant-II_31158244-1"
+          ]
+        },
+        {
+          "opportunity_id": "e3a3ab47-359b-4092-9021-66a1f1158197",
+          "location": "united states - california - sylmar",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/United-States---California---Sylmar/Administrative-Assistant-II_31159112-1"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "56fbcff2-d586-4959-816d-8338024c1720",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "5ff409b9-51cb-4394-b67d-25ad4eb7f5aa",
+      "title": "Senior Customer Success Manager",
+      "company": "MongoDB",
+      "location": "melbourne",
+      "work_mode": "UNKNOWN",
+      "external_id": "8129890",
+      "candidates": [
+        {
+          "opportunity_id": "9d5e1edb-7707-4935-9509-3d89ceb8b6eb",
+          "location": "montreal",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "7944089"
+          ]
+        },
+        {
+          "opportunity_id": "f7279c17-0501-4247-81d4-0d7cd84325b3",
+          "location": "dublin, ireland; london",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8091796"
+          ]
+        },
+        {
+          "opportunity_id": "5676588b-3980-4cd1-863d-923675063aa8",
+          "location": "austin; san francisco",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8160195"
+          ]
+        },
+        {
+          "opportunity_id": "5dc83632-ec70-4d8f-87a7-ab33fcfe995d",
+          "location": "madrid",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8071152"
+          ]
+        },
+        {
+          "opportunity_id": "22ee3933-c52a-4dde-b337-b39e8f1592d6",
+          "location": "chicago",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "8053367"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "95b6531d-c888-4623-9795-c0d6f492bb62",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "teamtailor",
+      "opportunity_id": "d87f5733-8500-42b9-be4f-78af5846eaf3",
+      "title": "Assessor(a) de Vendas - Madeiras",
+      "company": "Leroy Merlin Brasil",
+      "location": "vitória, regional sudeste, br",
+      "work_mode": "UNKNOWN",
+      "external_id": "b4daf934-33e7-463b-b324-916004dfe8da",
+      "candidates": [
+        {
+          "opportunity_id": "cf280cb5-b196-4679-b772-0499f63d4e39",
+          "location": "brasilia, regional centro nordeste, br",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "ed078036-1010-41ce-8e37-1b510d0ba22f"
+          ]
+        },
+        {
+          "opportunity_id": "4ee3481f-f511-480b-b3f0-fe886526de82",
+          "location": "porto alegre, regional sul, br",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "4166f3ab-02c7-4671-803e-35fb2bbf2463"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "162667cd-d439-4f19-8b3c-0fae6f03a02e",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "workday",
+      "opportunity_id": "36f64b2b-5c8d-4c85-98f8-ca8d04904e28",
+      "title": "Cloud Platform Architect",
+      "company": "Accenture",
+      "location": null,
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/Hyderabad/Cloud-Platform-Architect_ATCI-5724476-S2064652-1",
+      "candidates": [
+        {
+          "opportunity_id": "0b2aab09-411b-4b5c-a6a9-85ae535d7ac5",
+          "location": null,
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/Bengaluru/Cloud-Platform-Architect_ATCI-5783524-S2070791-1",
+            "/job/Bengaluru/Cloud-Platform-Architect_ATCI-5783511-S2070790"
+          ]
+        }
+      ],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "df47a30c-5f58-4eca-aef6-15a3e44ef9f7",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "workday",
+      "opportunity_id": "7d3bd607-b9f9-41df-9cdc-41100593c6c3",
+      "title": "MEX Anfitrion Digital",
+      "company": "Santander",
+      "location": "tijuana",
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/Tijuana/MEX-Anfitrion-Digital_Req1612444",
+      "candidates": [
+        {
+          "opportunity_id": "250d619c-a62a-4182-8c35-c47306d1cbf6",
+          "location": "amecameca",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/Amecameca/MEX-Anfitrion-Digital_Req1600814"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "4721e48f-fbf4-45ed-91ee-e050ccb1df46",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "workday",
+      "opportunity_id": "44093189-f1f0-4d4a-a9e0-736e859c8f0e",
+      "title": "Senior Deep Learning Software Engineer, Inference",
+      "company": "NVIDIA",
+      "location": "6 locations",
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/US-CA-Remote/Senior-Deep-Learning-Software-Engineer--Inference_JR2003655",
+      "candidates": [
+        {
+          "opportunity_id": "5e482ecc-bcdb-4b46-a86b-a4430caeb975",
+          "location": "3 locations",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/Netherlands-Remote/Senior-Deep-Learning-Software-Engineer--Inference_JR2023106-1"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "352327a2-f50a-496e-81d0-df4aeb39ce0f",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "workday",
+      "opportunity_id": "b8521b8e-6274-4132-80fe-14e0b0f5a4ff",
+      "title": "Espec Santander II 8h",
+      "company": "Santander",
+      "location": "curitiba",
+      "work_mode": "UNKNOWN",
+      "external_id": "/job/CURITIBA/Espec-Santander-II-8h_Req1613001",
+      "candidates": [
+        {
+          "opportunity_id": "e37ed9a3-87a5-40cb-8443-e3048fe98176",
+          "location": "neropolis",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/NEROPOLIS/Espec-Santander-II-8h_Req1616644"
+          ]
+        },
+        {
+          "opportunity_id": "fee351ce-1051-4eb8-94d0-27780736a287",
+          "location": "belo horizonte",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/BELO-HORIZONTE/Espec-Santander-II-8h_Req1616120"
+          ]
+        },
+        {
+          "opportunity_id": "f3b70d40-963d-4e85-b0cb-4401a4d9747e",
+          "location": "santo andre",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/SANTO-ANDRE/Espec-Santander-II-8h_Req1617867"
+          ]
+        },
+        {
+          "opportunity_id": "d250fab4-d616-4143-91b7-0eb1fc5bb87a",
+          "location": "caxias",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/CAXIAS/Espec-Santander-II-8h_Req1616546"
+          ]
+        },
+        {
+          "opportunity_id": "305fb77e-fc9c-4de3-8f95-f2c978bbd871",
+          "location": "rio de janeiro",
+          "work_mode": "UNKNOWN",
+          "external_ids_in_same_source": [
+            "/job/RIO-DE-JANEIRO/Espec-Santander-II-8h_Req1617645",
+            "/job/RIO-DE-JANEIRO/Espec-Santander-II-8h_Req1617652"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "69c73cfb-5bc4-4802-8875-b72a8c221c54",
+      "reason": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+      "source_type": "lever",
+      "opportunity_id": "7516dbca-796f-495b-8e98-8bcc5a9b96a4",
+      "title": "Full Stack and Backend NodeJS TypeScript/JavaScript Engineer (Senior) - Latin America, Remote",
+      "company": "Bluelight Consulting",
+      "location": "masaya, nicaragua",
+      "work_mode": "REMOTE",
+      "external_id": "f5468431-8e45-4ebb-9aa6-61b4a57c85de",
+      "candidates": [
+        {
+          "opportunity_id": "85d9f6da-5c5c-48e3-8a5b-89166951d327",
+          "location": "antigua guatemala, guatemala",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "ea530113-98ee-462b-985f-bd8882439c1b"
+          ]
+        },
+        {
+          "opportunity_id": "41d2409e-be4d-418c-958b-39ae5856efa5",
+          "location": "cusco, peru",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "e0cf0bd1-e05d-4ffa-baaa-e85fddeef165"
+          ]
+        },
+        {
+          "opportunity_id": "f385481f-7a9f-4d4b-9614-e32ce7147670",
+          "location": "monterrey, nuevo león, mexico",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "9078ebdf-2f87-4361-abb7-9929060b5011"
+          ]
+        },
+        {
+          "opportunity_id": "1a5b54c0-94af-41af-8421-576225f9447e",
+          "location": "zapopan, jalisco, mexico",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "5dbe8ba2-4170-4673-ac35-8f39cf799a2d"
+          ]
+        },
+        {
+          "opportunity_id": "53849a0f-4ce1-4a97-b2ba-504726f2ac76",
+          "location": "paramaribo, suriname",
+          "work_mode": "REMOTE",
+          "external_ids_in_same_source": [
+            "71e79a4b-6753-4e8a-81d0-4481a053c9c1"
+          ]
+        }
+      ],
+      "distinct_posting": true
+    },
+    {
+      "normalization_result_id": "ff6b5d01-2c51-42db-9365-f4be370f705a",
+      "reason": "SAME_SOURCE_EXTERNAL_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "99cc4a4c-8435-488f-8f93-48513c889f6d",
+      "title": "Senior Manager, Financial Planning & Analysis",
+      "company": "MongoDB",
+      "location": "austin; new york city",
+      "work_mode": "UNKNOWN",
+      "external_id": "8154864",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "06552df2-8946-4421-8694-d5964c445a42",
+      "reason": "SAME_SOURCE_EXTERNAL_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "50b77409-ecee-412a-b38f-f3d3455af1a4",
+      "title": "Senior Enterprise Account Executive, Growth",
+      "company": "MongoDB",
+      "location": "san francisco",
+      "work_mode": "UNKNOWN",
+      "external_id": "8175160",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "3cb91d6d-75e8-4a70-8d8b-ee83ab3916cc",
+      "reason": "SAME_SOURCE_EXTERNAL_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "50b77409-ecee-412a-b38f-f3d3455af1a4",
+      "title": "Senior Enterprise Account Executive, Growth",
+      "company": "MongoDB",
+      "location": "san francisco",
+      "work_mode": "UNKNOWN",
+      "external_id": "8147949",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "38415203-29e8-40b3-8c22-2b7ae6032f7e",
+      "reason": "SAME_SOURCE_EXTERNAL_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "99cc4a4c-8435-488f-8f93-48513c889f6d",
+      "title": "Senior Manager, Financial Planning & Analysis",
+      "company": "MongoDB",
+      "location": "austin; new york city",
+      "work_mode": "UNKNOWN",
+      "external_id": "8154864",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "51d3f719-9e91-4592-ac05-a6d5f7bc0847",
+      "reason": "SAME_SOURCE_EXTERNAL_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "181e31b9-f8d7-44b3-9a27-545b4bb0d529",
+      "title": "Senior Enterprise Account Executive, Growth",
+      "company": "MongoDB",
+      "location": "new york city",
+      "work_mode": "UNKNOWN",
+      "external_id": "8097302",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "27f1254c-0f23-40ad-bbb0-578a72271f0a",
+      "reason": "SAME_SOURCE_EXTERNAL_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "181e31b9-f8d7-44b3-9a27-545b4bb0d529",
+      "title": "Senior Enterprise Account Executive, Growth",
+      "company": "MongoDB",
+      "location": "new york city",
+      "work_mode": "UNKNOWN",
+      "external_id": "7967394",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "bfc509bb-42c2-4cff-a2f4-5737252aa711",
+      "reason": "SAME_SOURCE_EXTERNAL_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "50b77409-ecee-412a-b38f-f3d3455af1a4",
+      "title": "Senior Enterprise Account Executive, Growth",
+      "company": "MongoDB",
+      "location": "san francisco",
+      "work_mode": "UNKNOWN",
+      "external_id": "8147923",
+      "candidates": [],
+      "distinct_posting": false
+    },
+    {
+      "normalization_result_id": "5a30c723-7b1c-4f92-941f-19ee819ef5a4",
+      "reason": "SAME_SOURCE_EXTERNAL_IDENTITY",
+      "source_type": "greenhouse",
+      "opportunity_id": "99cc4a4c-8435-488f-8f93-48513c889f6d",
+      "title": "Senior Manager, Financial Planning & Analysis",
+      "company": "MongoDB",
+      "location": "austin; new york city",
+      "work_mode": "UNKNOWN",
+      "external_id": "8072504",
+      "candidates": [],
+      "distinct_posting": false
+    }
+  ]
+}
