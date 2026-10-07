@@ -123,21 +123,20 @@ describe('AppShell', () => {
     expect(drawer().textContent).toContain('Navegação principal')
   })
 
-  it('mantém o foco dentro da gaveta sem depender dos focus guards do jsdom', () => {
+  it('redireciona o foco para a gaveta quando um controle externo recebe foco', async () => {
     const container = renderShell()
     const button = menuButton(container)
     act(() => button.click())
 
     const dialog = drawer()
-    const links = dialog.querySelectorAll<HTMLElement>('a')
-    expect(dialog.contains(document.activeElement)).toBe(true)
+    await act(async () => {
+      await flushTimer()
+    })
 
-    act(() => links[0].focus())
-    expect(document.activeElement).toBe(links[0])
-    expect(dialog.contains(document.activeElement)).toBe(true)
-
-    act(() => links[links.length - 1].focus())
-    expect(document.activeElement).toBe(links[links.length - 1])
+    act(() => button.focus())
+    await act(async () => {
+      await flushTimer()
+    })
     expect(dialog.contains(document.activeElement)).toBe(true)
   })
 
@@ -172,6 +171,10 @@ describe('AppShell', () => {
     const container = renderShell()
     const button = menuButton(container)
     act(() => button.click())
+
+    await act(async () => {
+      await flushTimer()
+    })
 
     act(() => {
       const backdrop = document.querySelector<HTMLElement>('[data-testid="drawer-backdrop"]')
