@@ -174,33 +174,58 @@ class SourceSchedulingState:
 #: Cron schedules for a company source that names no schedule of its own. Cadence follows
 #: `Company.priority` (the user's interest) and nothing else: `research_confidence` (how
 #: mature the catalogue is, F48-14) is operational and never lowers a company to weekly.
-#: A high-priority company is worth checking far more often than a low one; every
-#: cadence here stays well inside a source's own minimum run interval for any policy
-#: this codebase configures.
+#: New postings should surface within about an hour: high and normal every hour, low every
+#: 6 hours. A source whose own minimum run interval is longer than a cadence steps down to
+#: the next one (see the fallback below).
 DEFAULT_SCHEDULE_BY_COMPANY_PRIORITY = {
-    "high": "0 */6 * * *",  # every 6 hours
-    "normal": "0 0 * * *",  # once a day
-    "low": "0 0 * * 0",  # once a week
+    "high": "0 * * * *",  # every hour
+    "normal": "0 * * * *",  # every hour
+    "low": "0 */6 * * *",  # every 6 hours
+}
+
+#: Per-source-type cadences that replace the mapping above.
+SCHEDULE_OVERRIDE_BY_SOURCE_TYPE = {
+    # One detail request per posting, a pass over the 19 sources takes about 39 minutes
+    # serially, and per-source approval (card F51-03) is pending: keeps the old cadences.
+    "workday": {
+        "high": "0 */6 * * *",  # every 6 hours
+        "normal": "0 0 * * *",  # once a day
+        "low": "0 0 * * 0",  # once a week
+    },
+    # About 14 requests per run over 98 sources on one shared host is about 1,360 requests
+    # per pass against the 1,200 per hour ceiling: hourly would end in partial runs until the
+    # 304/delta contract (card F51-13) lands.
+    "inhire": {
+        "high": "0 */3 * * *",  # every 3 hours
+        "normal": "0 */3 * * *",  # every 3 hours
+        "low": "0 0 * * *",  # once a day
+    },
 }
 
 
 def default_schedule_for_priority(
-    priority: str, *, minimum_run_interval_seconds: float | None = None
+    priority: str,
+    *,
+    minimum_run_interval_seconds: float | None = None,
+    source_type: str | None = None,
 ) -> str:
     """The default cron schedule for a company source of this priority.
 
     Falls back to the next cadence down whenever the network policy's own minimum run
     interval would make the priority's usual cadence tighter than the source allows.
     """
+    cadences = SCHEDULE_OVERRIDE_BY_SOURCE_TYPE.get(
+        source_type or "", DEFAULT_SCHEDULE_BY_COMPANY_PRIORITY
+    )
     order = ("high", "normal", "low")
     start = order.index(priority) if priority in order else order.index("normal")
     for candidate in order[start:]:
-        schedule = DEFAULT_SCHEDULE_BY_COMPANY_PRIORITY[candidate]
+        schedule = cadences[candidate]
         if minimum_run_interval_seconds is None or _cron_interval_seconds(
             schedule
         ) >= minimum_run_interval_seconds:
             return schedule
-    return DEFAULT_SCHEDULE_BY_COMPANY_PRIORITY["low"]
+    return cadences["low"]
 
 
 def _cron_interval_seconds(schedule: str) -> float:

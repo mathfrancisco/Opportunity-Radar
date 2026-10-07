@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # prints them (e.g. `seniority:description_years_min,work_mode:description_phrase`).
     # The boolean above keeps meaning "every rule". Empty and False: none runs.
     content_classification_enabled_rules: str = ""
-    worker_evaluate_batch_size: int = 50
+    worker_evaluate_batch_size: int = 500
     # The local model competes with the rest of the machine for the GPU, so a pass is
     # capped well below the evaluation batch: analysis falls behind on purpose, never the
     # rules.
