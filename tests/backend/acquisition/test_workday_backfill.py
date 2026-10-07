@@ -439,6 +439,32 @@ def test_workday_backfill_resume_is_idempotent(
 
 
 @integration
+def test_workday_backfill_apply_recomputes_skills_from_the_written_description(
+    make_env: Callable[[list[dict[str, object]]], _Env], tmp_path: Path
+) -> None:
+    env = make_env(_board(1))
+    env.on_detail = lambda path: httpx.Response(
+        200,
+        json={"jobPostingInfo": {"jobDescription": "<p>Requirements: Python and PostgreSQL.</p>"}},
+    )
+    before = env.opportunity(0)
+    assert not before.skills
+    version = before.version
+
+    dry = env.run(None)
+    assert dry["mode"] == "dry-run"
+    assert not env.opportunity(0).skills
+
+    report = env.run(tmp_path / "manifest.json", apply=True)
+
+    after = env.opportunity(0)
+    assert (report["applied"], report["derived_changed"]) == (1, 1)
+    assert {skill.canonical_name for skill in after.skills} >= {"python"}
+    assert after.search_skills and "python" in after.search_skills
+    assert after.version == version + 2  # the description, then the derived fields
+
+
+@integration
 def test_workday_backfill_preserves_human_text_and_raw_payload(
     make_env: Callable[[list[dict[str, object]]], _Env], tmp_path: Path
 ) -> None:
