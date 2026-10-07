@@ -117,6 +117,29 @@ durante a reserva. Nenhum dos dois explica os números acima.
   definição é humana e não está nos cards. O efeito na base de dev não foi medido: a stack
   de dev não foi reconstruída com este código.
 
+## Trechos relevantes e modelo local (item 5): não será feito nesta SPEC (2026-10-07)
+
+Decisão do agente, com a autorização do dono de decidir o que o card deixa em aberto. O item
+5 é uma proposta da medição de partida; não é critério de aceite do card.
+
+- **Não há o que medir sem escrever código da SPEC 51.** Não existe recorte de trechos nem
+  provedor Ollama em `src` (nenhuma ocorrência de `ollama`), e `scripts/eval_analysis.py` só
+  fala com o Groq. Um recorte atrás de flag é mudança de código da SPEC 51 e reabre a janela
+  de sete dias do F51-18.
+- **Não há quota para a comparação.** Uma rodada do `eval_analysis.py` tem 50 casos e gasta
+  cerca de 100 mil tokens; a comparação pede duas (com e sem recorte). Em 2026-10-07, 14h10
+  UTC, o modelo principal (`openai/gpt-oss-120b`) tinha 130.762 tokens gastos no dia, de um
+  teto de 170.000; em 2026-10-06 os cinco modelos da rota fecharam entre 165.577 e 169.499.
+- **O modelo local não é comparável.** O Docker tem 4.106.457.088 bytes de memória (3,8 GiB)
+  e o único modelo local é o `llama3.2:3b`; medir a qualidade dele contra o `openai/gpt-oss-120b`
+  não diria nada sobre trocar o padrão.
+- **O ganho maior já entrou.** Os PRs #52 e #58 cortaram a entrada (vaga fechada ou sem
+  descrição), a repetição por versão de regra e o teto diário, que eram os custos medidos.
+
+O padrão não muda. Reabrir se, com a fila seletiva em produção por uma janela inteira, o
+teto diário de tokens ainda for o limite: aí o recorte entra como card próprio, com flag
+desligada por padrão e a medição feita num dia com 200 mil tokens livres no modelo principal.
+
 ## Problema, fatos e hipótese
 
 O fluxo principal de coleta, classificação explícita por regras, matching/score e busca textual é determinístico; análise semântica e sugestões Groq são opcionais/consultivas. `QuotaGuard` já reserva e liquida quota; `AIRouter` orquestra tentativas, enquanto cache existe no serviço de análise do matching e telemetria em `platform.ai.telemetry`. Sugestões de campos são uma tarefa distinta de análise explicativa de compatibilidade; os dois fluxos não devem compartilhar a mesma política de elegibilidade ou cache sem contrato.
