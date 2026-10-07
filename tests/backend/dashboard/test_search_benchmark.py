@@ -1,6 +1,9 @@
+from collections.abc import Callable
+
 import pytest
 
 from opportunity_radar.dashboard.search_benchmark import (
+    FORBIDDEN_RESTART_PROJECTS,
     FTS_INDEX_CONFIG,
     REQUIRED_QUERY_CATEGORIES,
     SEARCH_BENCHMARK_VERSION,
@@ -8,10 +11,13 @@ from opportunity_radar.dashboard.search_benchmark import (
     canonical_hash,
     compare_snapshots,
     ensure_live_corpus_matches,
+    measure_latency_groups,
+    paired_report,
     precision_recall_at_k,
     summarize_latencies,
     summarize_raw_latencies,
     validate_frozen_manifest,
+    validate_restart_project,
 )
 
 
@@ -233,3 +239,170 @@ def test_content_delta_requires_fixed_cohort_queries_gold_and_filters() -> None:
         compare_snapshots(left, {**right, "gold_hash": "changed"})["content_comparison"]
         == "not_comparable"
     )
+
+
+def _clock(step_ms: list[float]) -> Callable[[], float]:
+    """A fake clock: each timed call (two reads) lasts the next `step_ms` value."""
+    reads = iter(
+        value
+        for step in step_ms
+        for value in (0.0, step / 1000)
+    )
+    return lambda: next(reads)
+
+
+def test_benchmark_latency_separates_warm_and_cold() -> None:
+    queries = ["alpha", "beta"]
+    calls: list[str] = []
+    cold_calls: list[str] = []
+    steps = [float(n) for n in range(1, 21)] + [100.0 + n for n in range(10)]
+    report = measure_latency_groups(
+        queries,
+        calls.append,
+        warm_repetitions=10,
+        cold_restarts=5,
+        restart=lambda: calls.append("RESTART"),
+        restart_method="fake restart",
+        run_cold=cold_calls.append,
+        clock=_clock(steps),
+        environment={"server_version": "fake"},
+    )
+
+    warm, cold = report["warm"], report["cold"]
+    # Warm: one untimed run, then ten timed, per query; raw samples kept.
+    assert warm["raw_ms"]["alpha"] == pytest.approx([float(n) for n in range(1, 11)])
+    assert warm["per_query"]["alpha"]["count"] == 10
+    assert warm["per_query"]["alpha"]["p50_ms"] == pytest.approx(5.5)
+    assert warm["per_query"]["alpha"]["p95_ms"] == pytest.approx(9.55)
+    assert warm["all_queries"]["count"] == 20
+    # Cold: five restarts, each followed by every query once, on its own runner.
+    assert cold["restarts"] == 5
+    assert calls.count("RESTART") == 5
+    assert cold_calls == queries * 5
+    assert [len(values) for values in cold["raw_ms"].values()] == [5, 5]
+    assert cold["per_query"]["alpha"]["status"] == "measured"
+    assert cold["all_queries"]["status"] == "measured"
+    assert cold["condition"] == "fake restart"
+    assert cold["positions"][1] == {"restart": 1, "query": "beta", "position": 2}
+    assert report["environment"] == {"server_version": "fake"}
+
+
+def test_benchmark_latency_never_invents_a_cold_group() -> None:
+    no_restart = measure_latency_groups(["q"], lambda _: None)
+    assert no_restart["cold"]["restarts"] == 0
+    assert no_restart["cold"]["raw_ms"] == {"q": []}
+    assert no_restart["cold"]["all_queries"]["status"] == "insufficient_need_5_restarts"
+    assert no_restart["cold"]["condition"].startswith("N/D")
+    assert no_restart["warm"]["per_query"]["q"]["status"] == "measured"
+
+    # Many queries pool past five samples, but two restarts are still two restarts.
+    two = measure_latency_groups(
+        list("abcdef"), lambda _: None, cold_restarts=2, restart=lambda: None
+    )
+    assert two["cold"]["all_queries"]["status"] == "insufficient_need_5_restarts"
+    assert two["cold"]["per_query"]["a"]["status"] == "insufficient_need_5"
+
+    with pytest.raises(ValueError, match="at least 10"):
+        measure_latency_groups(["q"], lambda _: None, warm_repetitions=9)
+    with pytest.raises(ValueError, match="restart callable"):
+        measure_latency_groups(["q"], lambda _: None, cold_restarts=5)
+
+
+@pytest.mark.parametrize("project", sorted(FORBIDDEN_RESTART_PROJECTS))
+def test_cold_restart_refuses_projects_that_hold_real_data(
+    project: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(ValueError, match="refusing"):
+        validate_restart_project(project)
+    assert validate_restart_project(" orf51x-disposable ") == "orf51x-disposable"
+    with pytest.raises(ValueError, match="lowercase"):
+        validate_restart_project("../opportunity-radar")
+
+    from scripts import search_benchmark
+
+    def never(*args: object, **kwargs: object) -> None:
+        raise AssertionError("docker must not be called")
+
+    monkeypatch.setattr(search_benchmark.subprocess, "run", never)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "search_benchmark.py",
+            "--manifest",
+            "m.json",
+            "--restart-postgres-of-compose-project",
+            project,
+        ],
+    )
+    with pytest.raises(SystemExit) as exit_info:
+        search_benchmark.main()
+    assert exit_info.value.code == 2
+
+
+def _report(
+    *,
+    corpus: str = "corpus-1",
+    config: str = "config-1",
+    gold: str = "gold-1",
+    filters: dict | None = None,
+    recall: float | None = 0.5,
+    parser: str | None = None,
+) -> dict:
+    metrics = {
+        "at_10": {"precision_at_k": 0.1, "recall_at_k": recall},
+        "at_20": {"precision_at_k": 0.05, "recall_at_k": recall},
+    }
+    return {
+        "hashes": {
+            "cohort": "cohort-1",
+            "queries": "queries-1",
+            "gold": gold,
+            "corpus": corpus,
+            "index_config": config,
+        },
+        "parser_version": parser,
+        "per_query": [
+            {
+                "query": "kubernetes",
+                "category": "specific",
+                "filters": filters or {},
+                "metrics": metrics,
+            }
+        ],
+    }
+
+
+def test_benchmark_separates_content_and_algorithm_deltas() -> None:
+    before = _report(parser="workday-cxs-v1")
+
+    # Enrichment: same cohort, queries, filters and gold; the payload hash changed.
+    content = paired_report(before, _report(corpus="corpus-2", recall=1.0, parser="v2"))
+    assert content["comparison"] == "comparable"
+    assert content["payload_changed"] is True
+    assert content["delta_attributed_to"] == "content"
+    assert content["algorithm_comparison"] == "not_comparable"  # the corpus differs
+    assert content["parser_versions"] == {"a": "workday-cxs-v1", "b": "v2"}
+    assert content["hashes"]["a"]["corpus_hash"] == "corpus-1"
+    assert content["hashes"]["b"]["corpus_hash"] == "corpus-2"
+    assert content["per_query"][0]["at_10"]["recall_at_k"] == {"a": 0.5, "b": 1.0, "delta": 0.5}
+
+    # Algorithm: the same payload hash on both sides.
+    algorithm = paired_report(before, _report(config="config-2", recall=0.25))
+    assert algorithm["delta_attributed_to"] == "algorithm"
+    assert algorithm["algorithm_comparison"] == "comparable"
+    assert algorithm["payload_changed"] is False
+
+    # Both moved: the delta cannot be attributed to either.
+    assert paired_report(before, _report(corpus="corpus-2", config="config-2"))[
+        "delta_attributed_to"
+    ] == "confounded"
+
+    # A changed gold, or a changed filter, makes the pairing N/D, never a delta.
+    for changed in (_report(gold="gold-2", recall=1.0), _report(filters={"allowed_country": "BR"})):
+        refused = paired_report(before, changed)
+        assert refused["comparison"] == "not_comparable"
+        assert refused["delta_attributed_to"] == "N/D"
+        assert refused["per_query"][0]["at_10"]["recall_at_k"]["delta"] is None
+    assert paired_report(before, _report(gold="gold-2"))["not_comparable_because"] == ["gold_hash"]
+    assert before["parser_version"] == "workday-cxs-v1"
+    assert paired_report(_report(), _report())["parser_versions"] == {"a": "N/D", "b": "N/D"}
