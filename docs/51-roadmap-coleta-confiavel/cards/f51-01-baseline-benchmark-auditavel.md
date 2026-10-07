@@ -74,7 +74,7 @@ janela de sete dias corridos até esse instante. `query_hash`
 
 O estado da base de execuções é "insuficiente": 43 fontes ainda não têm três execuções
 completas. Dessas, 42 têm a última tentativa `SUCCEEDED` e uma `PARTIAL`; em 29 a última
-tentativa não é inventário completo (resposta `304` sem reuso de inventário). Entre elas
+tentativa não é inventário completo (causa não conferida fonte a fonte). Entre elas
 estão Santander, NVIDIA e SUSE (Workday), Hacker News e as fontes Teamtailor.
 
 `scripts/measure_descriptions.py`, 2026-10-07 14:13 UTC: 32.249 vagas, 19.436 com descrição;

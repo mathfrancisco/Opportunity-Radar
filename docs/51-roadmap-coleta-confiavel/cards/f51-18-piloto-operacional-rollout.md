@@ -69,8 +69,8 @@ Feito antes do fim da janela, sem dado estimado:
 - restauração e rollback demonstrados em ambiente `_test`, com hashes comparados;
 - aprovação assinada pelo responsável;
 - três inventários completos por fonte dentro da janela. Em 2026-10-07 havia 43 fontes sem
-  três execuções completas em sete dias; as que só respondem `304` sem reuso de inventário
-  não acumulam execução completa.
+  três execuções completas em sete dias; na passada das 14:00 UTC, 86 das 264 respostas foram
+  `304`, e essas execuções saem com `complete=false`.
 
 Qualquer PR de código da SPEC 51 mesclado reabre a janela na data do merge e troca o SHA e a
 imagem acima. A data vigente está no [README do roadmap](../README.md).
