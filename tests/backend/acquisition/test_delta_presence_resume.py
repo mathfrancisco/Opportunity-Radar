@@ -30,6 +30,7 @@ from opportunity_radar.acquisition.domain import (
     CollectorCapabilities,
     HealthResult,
 )
+from opportunity_radar.acquisition.inventory_contract import inventory_scope_hash
 from opportunity_radar.acquisition.models import (
     RawItemModel,
     SourceCheckpointModel,
@@ -1103,6 +1104,167 @@ def test_304_requires_matching_inventory_scope() -> None:
             assert "CLOSED" not in _opportunity_states(fixture).values()
             session.refresh(checkpoint)
             assert checkpoint.scope_hash == scope_before
+        finally:
+            fixture.cleanup()
+
+
+def test_inventory_scope_hash_changes_with_every_dimension_of_the_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F51-13 AC03: the fingerprint a validator is stored under covers the board, the
+    filters, the region and the contract version, and ignores filter order and case."""
+    from opportunity_radar.acquisition import inventory_contract
+
+    base = {
+        "source_type": "greenhouse",
+        "company_reference": "acme",
+        "api_region": None,
+        "keywords": ("python", "backend"),
+        "locations": ("Recife",),
+    }
+    baseline = inventory_scope_hash(**base)  # type: ignore[arg-type]
+
+    # Filter order and case do not make another scope.
+    assert baseline == inventory_scope_hash(
+        **{**base, "keywords": ("Backend", "PYTHON"), "locations": ("recife",)}  # type: ignore[arg-type]
+    )
+    variants = {
+        "source_type": {"source_type": "lever"},
+        "company_reference": {"company_reference": "other-board"},
+        "api_region": {"api_region": "eu"},
+        "keywords": {"keywords": ("python",)},
+        "locations": {"locations": ("Recife", "Lisbon")},
+    }
+    hashes = {
+        name: inventory_scope_hash(**{**base, **change})  # type: ignore[arg-type]
+        for name, change in variants.items()
+    }
+    assert baseline not in hashes.values()
+    assert len(set(hashes.values())) == len(variants)
+
+    monkeypatch.setattr(inventory_contract, "INVENTORY_CONTRACT_VERSION", "inventory-contract-next")
+    assert inventory_scope_hash(**base) not in {baseline, *hashes.values()}  # type: ignore[arg-type]
+
+
+_SEARCHABLE = CollectorCapabilities(
+    incremental_cursor=True,
+    etag=True,
+    last_modified=True,
+    keyword_search=True,
+    location_search=True,
+)
+
+
+class _SearchableConditionalCollector(_ConditionalCollector):
+    capabilities = _SEARCHABLE
+
+
+class _SearchableManifestCollector(_ManifestConditionalCollector):
+    capabilities = _SEARCHABLE
+
+
+@pytest.mark.parametrize(
+    "change",
+    ["keywords", "locations", "api_region", "contract_version"],
+)
+def test_304_validator_and_inventory_reuse_are_scoped_to_filters_region_and_contract(
+    change: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F51-13 AC03: a validator stored under one scope is sent, and lets a fully revalidated
+    manifest reuse the inventory, only under that same scope. Under a changed keyword,
+    location, region or contract version nothing is sent, nothing is reused, and no
+    previously seen posting is closed."""
+    import asyncio
+
+    from opportunity_radar.acquisition import inventory_contract
+
+    engine = _engine()
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        opportunities = OpportunityService(session)
+        seen_headers: list[str | None] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen_headers.append(request.headers.get("If-None-Match"))
+            if request.headers.get("If-None-Match") == '"v1"':
+                return httpx.Response(304, headers={"ETag": '"v1"'})
+            return httpx.Response(
+                200,
+                headers={"ETag": '"v1"'},
+                json={
+                    "jobs": [
+                        {"id": "job-1", "title": "Backend Engineer"},
+                        {"id": "job-2", "title": "Data Engineer"},
+                    ]
+                },
+            )
+
+        def execute(collector: object, **request: object):
+            return asyncio.run(
+                fixture.service(collector).execute(
+                    fixture.source.id,
+                    CollectionRequest(
+                        mode=CollectionMode.DISCOVERY,
+                        company_reference="acme",
+                        **request,  # type: ignore[arg-type]
+                    ),
+                )
+            )
+
+        def conditional() -> _SearchableConditionalCollector:
+            return _SearchableConditionalCollector(
+                fixture.source_type, httpx.MockTransport(handler)
+            )
+
+        changed: dict[str, object] = {
+            "keywords": {"keywords": ("python",)},
+            "locations": {"locations": ("Recife",)},
+            "api_region": {"api_region": "eu"},
+            "contract_version": {},
+        }[change]  # type: ignore[assignment]
+        try:
+            first = execute(conditional())
+            assert first.complete is True and first.items_seen == 2
+            _normalize_all(fixture, opportunities)
+            checkpoint = fixture.source.checkpoint
+            assert checkpoint is not None and checkpoint.scope_hash is not None
+            stored_scope = checkpoint.scope_hash
+            seen_ids = set(_opportunity_states(fixture))
+            assert seen_ids == {"job-1", "job-2"}
+
+            # Same scope: the validator is sent, and a fully revalidated manifest reuses the
+            # inventory (complete run, zero items re-read) without closing what it knew.
+            seen_headers.clear()
+            execute(conditional())
+            assert seen_headers == ['"v1"']
+            same = execute(_SearchableManifestCollector(fixture.source_type, [True, True]))
+            assert same.complete is True and same.items_seen == 0
+            assert opportunities.reconcile_run_closures(same.id) is True
+            assert set(_opportunity_states(fixture)) == seen_ids
+            assert "CLOSED" not in _opportunity_states(fixture).values()
+
+            # Another scope: the same fully revalidated manifest proves nothing about it.
+            if change == "contract_version":
+                monkeypatch.setattr(
+                    inventory_contract, "INVENTORY_CONTRACT_VERSION", "inventory-contract-next"
+                )
+            foreign = execute(
+                _SearchableManifestCollector(fixture.source_type, [True, True]), **changed
+            )
+            assert foreign.status == "SUCCEEDED" and foreign.complete is False
+            opportunities.reconcile_run_closures(foreign.id)
+            assert "CLOSED" not in _opportunity_states(fixture).values()
+            session.refresh(checkpoint)
+            assert checkpoint.scope_hash == stored_scope  # the cache was left alone
+
+            # The validator stored under the old scope is not sent: the request is
+            # unconditional and the whole board is read again.
+            seen_headers.clear()
+            unconditional = execute(conditional(), **changed)
+            assert seen_headers == [None]
+            assert unconditional.items_seen == 2
+            session.refresh(checkpoint)
+            assert checkpoint.scope_hash != stored_scope  # now stored under the new scope
         finally:
             fixture.cleanup()
 
