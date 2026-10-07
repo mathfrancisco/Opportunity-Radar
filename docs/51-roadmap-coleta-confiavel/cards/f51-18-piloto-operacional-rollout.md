@@ -56,10 +56,17 @@ Feito antes do fim da janela, sem dado estimado:
   98 inHire, 65 Ashby, 56 Greenhouse, 19 Workday, 15 Lever, 11 Workable, 7 Teamtailor, 2
   Factorial, 1 Remotive, 1 Hacker News e 1 manual. As fontes inHire cadastradas depois (lote
   do F52-06) ficam fora da coorte.
-- **Runtime no início:** stack `opportunity-radar-dev` construída em 2026-10-07 13:24:18 UTC
-  a partir de `b6d25ae`; imagem do worker
-  `sha256:dd316ee9512d1addf0a1918ecb925f36927e013a4034420a5f2b8dd5d803a764`, da API
-  `sha256:80304800993d5ea875e5384fb1e35902fdf36156eeeeb8ac5eabd647e10b6b4b`.
+- **Janela:** aberta em 2026-10-07 13:23:48 UTC (merge do PR #68) e **reaberta em 2026-10-07
+  14:28:49 UTC**, no merge do PR #70, que só traz testes. Fecha em 2026-10-14 14:28:49 UTC. A
+  coorte continua a das 276 fontes: as 45 fontes inHire habilitadas entre 14:07 e 14:09 UTC
+  e as seguintes do lote do F52-06 ficam fora, por decisão registrada aqui.
+- **Runtime:** stack `opportunity-radar-dev` reconstruída em 2026-10-07 14:29 UTC a partir de
+  `3aaca63`. A API foi recriada (imagem
+  `sha256:9c108df19168573978a6eb5e5cdde74dd236f7e9f3b1cc57c5277c3b7bf73425`). O contêiner do
+  worker não foi recriado: continua o iniciado às 13:25:06 UTC a partir de `b6d25ae` (imagem
+  `sha256:dd316ee9512d1addf0a1918ecb925f36927e013a4034420a5f2b8dd5d803a764`). Conferido: o
+  hash de todos os `.py` de `src` é igual nos dois contêineres, e `src` não muda entre
+  `b6d25ae` e `3aaca63`. CI de `3aaca63`: PR #70, quatro checks verdes.
 - **Linha de base:** a medição do [F51-01](f51-01-baseline-benchmark-auditavel.md).
 
 **O que o validador vai exigir e hoje não existe:**
@@ -72,5 +79,5 @@ Feito antes do fim da janela, sem dado estimado:
   três execuções completas em sete dias; na passada das 14:00 UTC, 86 das 264 respostas foram
   `304`, e essas execuções saem com `complete=false`.
 
-Qualquer PR de código da SPEC 51 mesclado reabre a janela na data do merge e troca o SHA e a
-imagem acima. A data vigente está no [README do roadmap](../README.md).
+Qualquer outro PR de código da SPEC 51 mesclado reabre a janela na data do merge e troca o
+SHA e a imagem acima. A data vigente está no [README do roadmap](../README.md).
