@@ -318,7 +318,7 @@ class _ConditionalCollector:
 
 
 def _conditional_service(
-    transport: httpx.MockTransport,
+    transport: httpx.MockTransport, *, inventory_contract_enabled: bool = True
 ) -> tuple[AcquisitionService, SourceDefinitionModel]:
     source = SourceDefinitionModel(
         id=uuid4(),
@@ -338,6 +338,7 @@ def _conditional_service(
         registry=CollectorRegistry((_ConditionalCollector(transport),)),
         repository=_MemoryRepository(source),  # type: ignore[arg-type]
         alerts=SourceAlertService(session, notifier=None),  # type: ignore[arg-type]
+        inventory_contract_enabled=inventory_contract_enabled,
     )
     return service, source
 
@@ -400,6 +401,57 @@ def test_conditional_headers_are_not_reused_across_a_different_checkpoint_scope(
     )
 
     assert run.status == "SUCCEEDED"
+
+
+def _legacy_etag_checkpoint(source: SourceDefinitionModel) -> None:
+    source.checkpoint = SourceCheckpointModel(
+        source_definition_id=source.id, checkpoint_type="cursor", etag='"v1"'
+    )
+
+
+def test_checkpoint_without_a_scope_never_conditions_a_request() -> None:
+    sent: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request.headers.get("If-None-Match"))
+        return httpx.Response(
+            200, headers={"ETag": '"v2"'}, json={"jobs": [{"id": "job-1", "title": "A"}]}
+        )
+
+    service, source = _conditional_service(httpx.MockTransport(handler))
+    _legacy_etag_checkpoint(source)
+
+    run = asyncio.run(
+        service.execute(source.id, CollectionRequest(mode=CollectionMode.DISCOVERY))
+    )
+
+    assert sent == [None]  # unverifiable cache: a full read, not a conditional one
+    assert run.status == "SUCCEEDED"
+    assert source.checkpoint is not None
+    # The new validator is stored under this scope, so the next run can use it.
+    assert source.checkpoint.etag == '"v2"'
+    assert source.checkpoint.scope_hash is not None
+
+
+def test_inventory_contract_off_keeps_the_unscoped_validator() -> None:
+    sent: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request.headers.get("If-None-Match"))
+        return httpx.Response(304, headers={"ETag": '"v1"'})
+
+    service, source = _conditional_service(
+        httpx.MockTransport(handler), inventory_contract_enabled=False
+    )
+    _legacy_etag_checkpoint(source)
+
+    run = asyncio.run(
+        service.execute(source.id, CollectionRequest(mode=CollectionMode.DISCOVERY))
+    )
+
+    assert sent == ['"v1"']
+    assert run.complete is False  # a bare 304 is never a complete read, with or without it
+    assert source.checkpoint is not None and source.checkpoint.scope_hash is None
 
 
 # --- F48-08: host budget keyed per tenant, ceiling per source type ---------------------

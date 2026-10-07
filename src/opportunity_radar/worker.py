@@ -769,6 +769,7 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
             target_role_families=active_profile_target_role_families(session),
             target_area_floor=settings.collection_target_area_floor,
             claims_enabled=settings.collection_claim_enabled,
+            inventory_contract_enabled=settings.collection_inventory_contract_enabled,
         )
 
     return build

@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     # HTTP). False restores the unclaimed behaviour; it never changes presence, dedupe or
     # decisions, only whether concurrent runs of one source are refused and fenced.
     collection_claim_enabled: bool = True
+    # F51-13: a stored 304 validator conditions a request, and a revalidated manifest reuses
+    # an inventory, only for the same board/filters/contract version; a failure after valid
+    # evidence ends PARTIAL, never FAILED. False restores the earlier behaviour; presence,
+    # dedupe and decisions are untouched either way.
+    collection_inventory_contract_enabled: bool = True
     greenhouse_base_url: str = "https://boards-api.greenhouse.io"
     # An empty webhook is a supported deployment: incidents are still opened and closed,
     # and the absent channel is reported by the doctor instead of failing collection.

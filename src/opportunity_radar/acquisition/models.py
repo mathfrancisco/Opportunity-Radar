@@ -441,6 +441,9 @@ class SourceCheckpointModel(Base):
     updated_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     etag: Mapped[str | None] = mapped_column(Text)
     last_modified: Mapped[str | None] = mapped_column(Text)
+    #: Fingerprint of the board, filters and contract version the stored validators
+    #: describe (F51-13). `None` on checkpoints written before it existed: unverifiable.
+    scope_hash: Mapped[str | None] = mapped_column(String(64))
     promoted_by_run_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("acquisition.source_run.id", ondelete="RESTRICT"),

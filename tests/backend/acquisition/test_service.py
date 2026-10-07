@@ -1,4 +1,5 @@
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
@@ -22,6 +23,11 @@ from opportunity_radar.acquisition.domain import (
 )
 from opportunity_radar.acquisition.factorial import FactorialCollector
 from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
+from opportunity_radar.acquisition.inventory_contract import (
+    INVENTORY_CONTRACTS,
+    PAGINATION_NONE,
+    PAGINATION_OFFSET,
+)
 from opportunity_radar.acquisition.lever import LeverCollector
 from opportunity_radar.acquisition.models import (
     RawItemModel,
@@ -29,6 +35,7 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
 )
 from opportunity_radar.acquisition.probing import run_probe
+from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.remotive import RemotiveCollector
 from opportunity_radar.acquisition.scheduling import SourceRunHistory
 from opportunity_radar.acquisition.service import (
@@ -1978,3 +1985,155 @@ def test_workday_without_the_flag_makes_listing_requests_only() -> None:
     assert run.items_seen == 2
     assert budget_calls == [1]
     assert sleeps == []
+
+
+# --- F51-13: inventory contracts, announced total, no-progress pagination ---------------
+
+
+def test_adapter_inventory_contract_matrix() -> None:
+    # The matrix is tied to the code: every contract describes a registered collector and
+    # agrees with what that collector declares about pagination.
+    registry = build_collector_registry(greenhouse_base_url="https://boards-api.greenhouse.io")
+    for source_type, contract in INVENTORY_CONTRACTS.items():
+        capabilities = registry.resolve(source_type).capabilities
+        assert capabilities.pagination is (contract.pagination != PAGINATION_NONE), source_type
+
+    assert INVENTORY_CONTRACTS["workday"].pagination == PAGINATION_OFFSET
+    # Teamtailor and Workable have no pagination: no cursor is invented for them.
+    for source_type in ("teamtailor", "workable"):
+        assert INVENTORY_CONTRACTS[source_type].pagination == PAGINATION_NONE
+        assert registry.resolve(source_type).capabilities.pagination is False
+    # Of the three the card names, only Workday declares offset pagination.
+    assert [
+        name
+        for name in ("workday", "teamtailor", "workable")
+        if registry.resolve(name).capabilities.pagination
+    ] == ["workday"]
+    # A value nobody verified is stated as such, never filled in.
+    assert INVENTORY_CONTRACTS["jobposting"].termination == "not_verifiable"
+
+
+class _AnnouncingCollector(_Collector):
+    def __init__(self, announced: int | None, items: int) -> None:
+        self._announced = announced
+        self._items = items
+
+    async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        for index in range(self._items):
+            yield CollectedItem(
+                source_type=self.source_type,
+                external_id=f"job-{index}",
+                raw_payload={"title": f"Role {index}"},
+            )
+        if self._announced is not None:
+            request.telemetry.record_items_announced(self._announced)
+
+
+def test_missing_announced_total_is_not_zero() -> None:
+    def execute(collector: _Collector):
+        service, _ = _service(collector)
+        return asyncio.run(
+            service.execute(
+                service.repository.source.id,  # type: ignore[attr-defined]
+                CollectionRequest(mode=CollectionMode.DISCOVERY),
+            )
+        )
+
+    unknown = execute(_AnnouncingCollector(announced=None, items=0))
+    zero = execute(_AnnouncingCollector(announced=0, items=0))
+    counted = execute(_AnnouncingCollector(announced=2, items=2))
+
+    assert unknown.items_announced is None
+    assert zero.items_announced == 0
+    assert counted.items_announced == 2
+    # Both an unknown and an explicit zero total are trusted as complete only on a
+    # successful, unbounded run; neither is rewritten into the other.
+    assert unknown.complete is True and zero.complete is True
+
+
+def _workday_posting(identity: str) -> dict[str, str]:
+    return {
+        "title": f"Engineer {identity}",
+        "externalPath": f"/job/Remote/Engineer-{identity}_R{identity}",
+        "locationsText": "Remote",
+    }
+
+
+def _paginated_service(source_type: str, configuration: dict[str, object], collector):
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type=source_type,
+        name="Paginated",
+        enabled=True,
+        configuration=configuration,
+    )
+    session = _MemorySession()
+    return AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((collector,)),
+        repository=_ShareRepository(source, None),  # type: ignore[arg-type]
+        alerts=SourceAlertService(session),  # type: ignore[arg-type]
+    ), source
+
+
+@pytest.mark.parametrize("variant", ["same_page", "same_postings_reordered"])
+def test_repeated_cursor_is_bounded_and_partial(variant: str) -> None:
+    first = [_workday_posting(str(number)) for number in range(20)]
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        offset = json.loads(request.content)["offset"]
+        calls.append(offset)
+        if offset == 0:
+            return httpx.Response(200, json={"total": 100, "jobPostings": first})
+        # The endpoint ignores the offset: it keeps answering with what it already sent.
+        repeated = first if variant == "same_page" else list(reversed(first))
+        return httpx.Response(200, json={"total": 0, "jobPostings": repeated})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    service, source = _paginated_service(
+        "workday",
+        {"tenant_identifier": "acme/site", "api_region": "wd5"},
+        WorkdayCollector(client=client),
+    )
+    try:
+        run = asyncio.run(
+            service.execute(source.id, CollectionRequest(mode=CollectionMode.DISCOVERY))
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert calls == [0, 20]  # bounded: it does not walk the announced 100
+    assert run.status == "PARTIAL"
+    assert run.complete is False
+    assert run.items_persisted == 20
+    assert run.error_code == AcquisitionErrorCode.PARSER_SCHEMA_CHANGED.value
+    assert "without making progress" in (run.error_summary or "")
+
+
+def test_lever_page_of_already_read_postings_is_no_progress() -> None:
+    page = [
+        {"id": f"job-{number}", "hostedUrl": f"https://jobs.lever.co/acme/{number}"}
+        for number in range(100)
+    ]
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.params["skip"])
+        # Page two is a different, shorter slice made only of postings page one had.
+        return httpx.Response(200, json=page if len(calls) == 1 else page[:40])
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    service, source = _paginated_service(
+        "lever", {"site_identifier": "acme"}, LeverCollector(client=client)
+    )
+    try:
+        run = asyncio.run(
+            service.execute(source.id, CollectionRequest(mode=CollectionMode.DISCOVERY))
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert calls == ["0", "100"]
+    assert run.status == "PARTIAL"
+    assert run.complete is False
