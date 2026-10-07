@@ -572,6 +572,27 @@ def test_crash_leaves_an_observable_lease_and_never_becomes_success(board: _Boar
     assert recovered.status == "SUCCEEDED" and recovered.fencing_token == 2
 
 
+def test_an_abandoned_run_stops_being_the_last_attempt_once_its_lease_expires(
+    board: _Board,
+) -> None:
+    """Seen on the dev stack on 2026-10-07: a worker restart left four runs RUNNING and the
+    scheduler called their sources fresh until the next cron fire, a day later."""
+    abandoned_run_id, _ = board.seed_abandoned_run()
+    started_at = board.run(abandoned_run_id).started_at
+
+    def last_attempt() -> datetime | None:
+        with Session(board.engine) as session:
+            return AcquisitionRepository(session).run_history(board.source_id).last_started_at
+
+    # While the lease is alive the owner may still be working: the run is the last attempt.
+    assert last_attempt() == started_at
+
+    board.expire_lease()
+
+    # Expired: the source is due again, so the next pass claims it and recovers the run.
+    assert last_attempt() is None
+
+
 def test_network_failure_ends_failed_not_succeeded(board: _Board) -> None:
     async def failing(request: CollectionRequest) -> AsyncIterator[CollectedItem]:
         del request

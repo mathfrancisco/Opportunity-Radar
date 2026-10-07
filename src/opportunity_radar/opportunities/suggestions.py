@@ -25,7 +25,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -48,6 +49,7 @@ from sqlalchemy import (
     func,
     or_,
     select,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.engine import Connection, Engine
@@ -418,6 +420,27 @@ class SuggestionOutcome:
     quota_exhausted: bool = False  # the day/global balance is gone: no other call can pass
 
 
+@contextmanager
+def _suggestion_claim(engine: Engine, opportunity_id: UUID) -> Iterator[bool]:
+    """Whether this caller owns the posting's suggestion for the duration of the block.
+
+    A PostgreSQL session advisory lock on a connection of its own: two workers (or the
+    worker and the API) never ask the provider about the same posting at the same time
+    (F51-10 AC06). The lock dies with the connection, so a crashed owner leaves no claim
+    behind and nothing has to expire."""
+    digest = hashlib.sha256(f"field-suggestion:{opportunity_id}".encode()).digest()
+    key = int.from_bytes(digest[:8], "big", signed=True)
+    with engine.connect() as connection:
+        claimed = bool(connection.scalar(text("SELECT pg_try_advisory_lock(:key)"), {"key": key}))
+        connection.commit()
+        try:
+            yield claimed
+        finally:
+            if claimed:
+                connection.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": key})
+                connection.commit()
+
+
 async def suggest_fields(
     session: Session,
     router: AIRouter,
@@ -429,7 +452,37 @@ async def suggest_fields(
 ) -> SuggestionOutcome:
     """Ask the `job_classification` task for the fields still `UNKNOWN`, and persist
     what survives the evidence check. Never raises for a provider failure: the caller
-    (the worker job) must keep going through its batch."""
+    (the worker job) must keep going through its batch.
+
+    One caller at a time per posting: a second one gets `claimed_elsewhere` without a
+    provider call, and a later one finds the fields already suggested."""
+    bind = session.get_bind()
+    engine = bind.engine if isinstance(bind, Connection) else bind
+    with _suggestion_claim(engine, opportunity.id) as claimed:
+        if not claimed:
+            operation_id = uuid4()
+            _start_suggestion_operation(engine, operation_id, None)
+            _finish_suggestion_operation(engine, operation_id, "preflight", "claimed_elsewhere")
+            return SuggestionOutcome(state="preflight", error_kind="claimed_elsewhere")
+        return await _suggest_fields_claimed(
+            session,
+            router,
+            opportunity,
+            prompt=prompt,
+            quota_ceiling_requests=quota_ceiling_requests,
+            ai_enabled=ai_enabled,
+        )
+
+
+async def _suggest_fields_claimed(
+    session: Session,
+    router: AIRouter,
+    opportunity: OpportunityModel,
+    *,
+    prompt: ClassificationPrompt | None,
+    quota_ceiling_requests: int | None,
+    ai_enabled: bool,
+) -> SuggestionOutcome:
     operation_id = uuid4()
     bind = session.get_bind()
     engine = bind.engine if isinstance(bind, Connection) else bind

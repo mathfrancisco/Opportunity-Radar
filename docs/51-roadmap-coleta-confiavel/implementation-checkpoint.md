@@ -1,5 +1,34 @@
 # Checkpoint de implementação — 5 de outubro de 2026
 
+> Atualização de 2026-10-07 (quinta sessão, PRs #65 a #68): o PR #65 foi mesclado (descrição
+> preservada na recoleta, lote de sugestão interrompido no adiamento por quota, fechamento
+> guardado pelo token de fencing). O PR #66 faz o inHire reler o detalhe de vaga conhecida só
+> na primeira execução do dia e passa a frequência padrão para 1 hora; as 98 fontes da base de
+> dev foram atualizadas. O PR #68 traz: claim de sugestão por vaga com advisory lock do
+> PostgreSQL (F51-10 AC06, `test_suggestion_claim_prevents_duplicate_provider_call`); teste do
+> F51-09 AC05 com os números do card (a operação que caiu antes da carência já conta como
+> terminal: iniciadas=3, terminal=2, in_flight=1, recovered=1; o código não mudou, o teste
+> anterior punha as duas dentro da carência); teste de banco real de uma passada concorrente
+> (F51-08, `test_concurrent_pass_database.py`); e uma correção achada na base de dev: execução
+> abandonada com lease vencido deixava a fonte "em dia" até o próximo horário do cron
+> (`run_history` agora a ignora). Suíte completa num banco novo `_test`:
+> `2243 passed, 21 skipped`; `ruff` e `mypy` sem erros.
+>
+> Passada medida na stack de dev em e84be68, 12:43 a 12:54 UTC, com tudo vencido depois de a
+> stack ficar parada: 139 fontes em 10 min 48 s, nenhuma falha; 567 respostas HTTP contadas no
+> log do worker (556 `200`, 11 `304`), nenhum `429`, nenhum erro; 98 fontes inHire em 5 min
+> 58 s com 342 requisições; 5 fontes Workday com 160 requisições em 8 min 22 s; de 9 a 10
+> conexões abertas no banco, de 100, em duas leituras. Na passada das 13:00 UTC, 134 fontes
+> horárias em 3 min 41 s. Das requisições de detalhe do inHire nessa passada, 230 de 244 eram
+> releitura de vaga já guardada. O reconstruir da stack no meio de uma passada deixou quatro
+> execuções Workday em `RUNNING`; a correção do PR #68 as devolve à fila.
+>
+> Não feito nesta sessão: reinício real do `postgres` do F51-17 (o manifesto congelado exige
+> gold com dois revisores, que depende do dono); medição de trechos relevantes e de modelo
+> local (não há código de trechos nem provedor Ollama em `src`, o Docker tem 3,8 GiB e o
+> modelo principal estava com 77% do teto diário de tokens gasto); janela de sete dias do
+> F51-18, que abre no merge do último PR de código, o #68.
+
 > Atualização de 2026-10-06 (terceira sessão, PRs #48 e #49): o dono aprovou as duas
 > propostas de rótulo em bloco. O PR #48 faz os leitores de gold lerem a sugestão de um caso
 > assinado sem rótulo próprio (decisão do agente, registrada no F51-11); suíte completa num

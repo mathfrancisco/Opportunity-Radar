@@ -1134,3 +1134,76 @@ def test_global_quota_exhaustion_defers_rest_of_batch(
             _cleanup(session, [item.id for item in items])
             with engine.begin() as connection:
                 connection.execute(text("TRUNCATE platform.ai_call_record"))
+
+
+class _GatedProvider:
+    """Holds its first call open until released, so a second caller can arrive meanwhile."""
+
+    name = "fake"
+
+    def __init__(self, answer: object) -> None:
+        self.requests: list[LLMRequest] = []
+        self.entered = asyncio.Event()
+        self.release = asyncio.Event()
+        self._answer = answer
+
+    async def complete(self, request: LLMRequest) -> object:
+        self.requests.append(request)
+        self.entered.set()
+        await self.release.wait()
+        return self._answer
+
+
+def test_suggestion_claim_prevents_duplicate_provider_call() -> None:
+    """F51-10 AC06: two workers on the same posting make one provider call."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    other_engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session, Session(other_engine) as other_session:
+        opportunity = _opportunity(
+            description="Remote role building Python APIs.",
+            role_family=RoleFamily.SOFTWARE_ENGINEERING.value,
+            seniority=Seniority.MID.value,
+        )
+        session.add(opportunity)
+        session.commit()
+        same_posting = other_session.get(OpportunityModel, opportunity.id)
+        assert same_posting is not None
+        provider = _GatedProvider(
+            _classification_response({"work_mode": {"value": "remote", "evidence": "Remote role"}})
+        )
+        router = AIRouter(provider, default_routes(_settings()), max_retries=0)  # type: ignore[arg-type]
+
+        async def two_workers() -> tuple[object, object, int]:
+            owner = asyncio.create_task(
+                suggest_fields(session, router, opportunity, prompt=_PROMPT)
+            )
+            await provider.entered.wait()
+            second = await suggest_fields(other_session, router, same_posting, prompt=_PROMPT)
+            with engine.connect() as connection:
+                active_claims = connection.scalar(
+                    text("SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND granted")
+                )
+            provider.release.set()
+            return await owner, second, active_claims
+
+        try:
+            first, second, active_claims = _run(two_workers())
+
+            assert active_claims == 1
+            assert (second.state, second.error_kind) == ("preflight", "claimed_elsewhere")
+            assert not second.created
+            assert [suggestion.field for suggestion in first.created] == ["work_mode"]
+            assert len(provider.requests) == 1
+
+            # Once the owner is done the claim is gone and nothing is left to ask.
+            other_session.expire_all()
+            later = _run(suggest_fields(other_session, router, same_posting, prompt=_PROMPT))
+            assert not later.created and later.error_kind is None
+            assert len(provider.requests) == 1
+            with engine.connect() as connection:
+                assert connection.scalar(
+                    text("SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'")
+                ) == 0
+        finally:
+            _cleanup(session, [opportunity.id])
+    other_engine.dispose()
