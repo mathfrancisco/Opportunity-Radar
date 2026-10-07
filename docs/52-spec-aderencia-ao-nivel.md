@@ -14,8 +14,9 @@
     60%) e precisão de 95,3% (meta de 90%).
   - F52-03 e F52-07: **bloqueados pelo portão do F51-11**. Com o gold confirmado, nenhuma
     regra por descrição passa (ver F52-03); as regras continuam desligadas.
-  - F52-06, F52-08 e F52-09: não começaram. As decisões do dono para eles estão no §7 e no
-    F52-06.
+  - F52-06: **em andamento**. Lote do inHire terminado (98 fontes) e medição por fonte
+    feita em 2026-10-07: 369 vagas `JUNIOR` ou `MID` nas áreas-alvo, contra a meta de 600.
+    A ampliação do catálogo não foi feita.
 - **Origem:** relato do dono: a busca devolve vagas muito acima do nível dele (júnior/pleno,
   remoto). Medições na stack `opportunity-radar-dev` em 2026-10-05.
 - **Relação com a [SPEC 51](51-spec-coleta-confiavel-e-busca.md)** (implementação parcial; ver
@@ -375,7 +376,32 @@ Cada card é entregue sozinho, com teste, e medido contra o §1.
   Recrutei e Quickin; coletor só para a fonte com listagem pública por API ou feed
   documentado **e** termos que não proíbem coleta automatizada. Gupy continua proibida.
   Priorizar fontes pela proporção de vagas do nível aceito, ao lado do
-  `COLLECTION_TARGET_AREA_FLOOR`. Nada disso foi executado ainda.
+  `COLLECTION_TARGET_AREA_FLOOR`.
+- **Medição (2026-10-07, base de dev):** o lote do inHire terminou: 98 fontes, todas com
+  execução `SUCCEEDED`, 1.676 vagas. Vagas abertas das áreas-alvo (`SOFTWARE_ENGINEERING` e
+  `DATA`), sem duplicata: 186 `JUNIOR` e 183 `MID`, **369 no total, contra a meta de 600**;
+  3.049 continuam com nível `UNKNOWN`. Por tipo de fonte (uma vaga com duas fontes conta nas
+  duas):
+
+  | Fonte | `JUNIOR` ou `MID` | Vagas das áreas-alvo | Proporção | `JUNIOR` ou `MID` e remotas |
+  |---|---:|---:|---:|---:|
+  | Workday | 128 | 1.978 | 6,5% | 1 |
+  | inHire | 106 | 498 | 21,3% | 60 |
+  | Lever | 54 | 1.921 | 2,8% | 30 |
+  | Greenhouse | 54 | 2.081 | 2,6% | 4 |
+  | Ashby | 17 | 1.207 | 1,4% | 5 |
+  | Hacker News | 7 | 202 | 3,5% | 1 |
+  | Workable | 3 | 163 | 1,8% | 0 |
+  | Factorial, Teamtailor, Remotive | 0 | 42 | 0% | 0 |
+
+  O inHire tem a maior proporção e quase dois terços das vagas remotas do nível. As fontes
+  inHire passaram a coletar de hora em hora (PR #66).
+- **Não feito:** a ampliação do catálogo. Das 362 empresas, 249 têm fonte habilitada e as
+  outras 113 só têm página de carreiras. Chegar a 600 pede empresas novas: a cerca de uma
+  vaga do nível por fonte inHire, faltam por volta de 230 vagas. O caminho já aceito é
+  curadoria de empresas brasileiras em `docs/pesquisas/empresas-adicionais.md`, depois
+  `import_research_catalog.py`, `discover_ats.py` e `enable_sources.py`. A revisão de termos
+  de Sólides, Recrutei e Quickin também não foi feita.
 
 ### F52-07 — Remoto de verdade: país e modo
 
