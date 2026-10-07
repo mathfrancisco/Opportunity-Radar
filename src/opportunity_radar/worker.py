@@ -4,10 +4,13 @@ import hashlib
 import signal
 from asyncio import run as run_async
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from threading import Event
+from threading import Event, Lock
 from time import monotonic
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -38,6 +41,7 @@ from opportunity_radar.acquisition.service import (
     AcquisitionService,
     SourceClaimedElsewhereError,
     active_profile_target_role_families,
+    budget_host_for_source,
 )
 from opportunity_radar.acquisition.tavily import TavilyClient, TavilyExtractionSettings
 from opportunity_radar.matching.adapters import build_analysis_adapter
@@ -509,6 +513,263 @@ def prune_match_assessments(
         )
 
 
+@dataclass
+class _PassSummary:
+    """Per-bucket counts of one pass; the threads of a concurrent pass add to it safely."""
+
+    counts: dict[str, int] = field(
+        default_factory=lambda: {"completed": 0, "failed": 0, "skipped": 0, "blocked": 0}
+    )
+    _lock: Lock = field(default_factory=Lock, repr=False)
+
+    def add(self, outcome: str) -> None:
+        with self._lock:
+            self.counts[outcome] += 1
+
+
+@dataclass(frozen=True)
+class _PassContext:
+    """What one source needs to know about the pass it runs in."""
+
+    correlation_id: str
+    timezone: str
+    now: datetime | None
+    utc_clock: Callable[[], datetime] | None
+    backoff_base: timedelta
+    backoff_ceiling: timedelta
+    source_deadline_seconds: float
+    pass_deadline_seconds: float
+    pass_started: float
+    monotonic_clock: Callable[[], float]
+    summary: _PassSummary
+
+
+def _collect_one_source(
+    session: Session,
+    service: AcquisitionService,
+    source: SourceDefinitionModel,
+    ctx: _PassContext,
+) -> None:
+    """Judge one source and, when due, run it. A source's own failure is counted, not raised."""
+    timezone = ctx.timezone
+    summary = ctx.summary
+    now = ctx.now
+    utc_clock = ctx.utc_clock
+    backoff_base = ctx.backoff_base
+    backoff_ceiling = ctx.backoff_ceiling
+    pass_deadline_seconds = ctx.pass_deadline_seconds
+    source_deadline_seconds = ctx.source_deadline_seconds
+    pass_started = ctx.pass_started
+    monotonic_clock = ctx.monotonic_clock
+    correlation_id = ctx.correlation_id
+    moment = now or (
+        utc_clock() if utc_clock is not None else datetime.now(ZoneInfo(timezone))
+    )
+    pass_remaining = (
+        pass_deadline_seconds - (monotonic_clock() - pass_started)
+        if pass_deadline_seconds > 0
+        else None
+    )
+    if pass_remaining is not None and pass_remaining <= 0:
+        summary.add("skipped")
+        logger.info(
+            "scheduled collection skipped",
+            extra={
+                "job": "collect",
+                "source_id": str(source.id),
+                "outcome": "skipped",
+                "reason": "pass_deadline",
+            },
+        )
+        return
+    try:
+        # Read once per source, right before it is judged: the host's shared
+        # budget (F20-38) is state committed by whichever earlier source in
+        # this same pass already spent against it, so re-reading it here (not
+        # once for the whole pass) is what keeps the running total correct
+        # without one failing source blocking the others on its host.
+        state = service.scheduling_state(source, timezone=timezone)
+        gate = evaluate_gate(
+            state,
+            now=moment,
+            backoff_base=backoff_base,
+            backoff_ceiling=backoff_ceiling,
+        )
+    except Exception:
+        session.rollback()
+        summary.add("failed")
+        logger.exception(
+            "source scheduling could not be evaluated",
+            extra={"job": "collect", "source_id": str(source.id)},
+        )
+        return
+    if gate is not CollectionGate.DUE:
+        summary.add(gate.outcome)
+        _, reason = next_due_at(
+            state,
+            now=moment,
+            backoff_base=backoff_base,
+            backoff_ceiling=backoff_ceiling,
+        )
+        logger.info(
+            "scheduled collection did not run",
+            extra={
+                "job": "collect",
+                "source_id": str(source.id),
+                "outcome": gate.outcome,
+                "gate": gate.value,
+                "reason": reason,
+                "host": state.host,
+            },
+        )
+        return
+    request: CollectionRequest | None = None
+    try:
+        request, rotation_state, term_count = _scheduled_request_with_rotation(
+            service, source, correlation_id
+        )
+        pass_remaining = (
+            pass_deadline_seconds - (monotonic_clock() - pass_started)
+            if pass_deadline_seconds > 0
+            else None
+        )
+        if pass_remaining is not None and pass_remaining <= 0:
+            summary.add("skipped")
+            logger.info(
+                "scheduled collection skipped",
+                extra={
+                    "job": "collect",
+                    "source_id": str(source.id),
+                    "outcome": "skipped",
+                    "reason": "pass_deadline",
+                },
+            )
+            return
+        source_started = monotonic_clock()
+        source_timeout = source_deadline_seconds or None
+        if pass_remaining is not None:
+            source_timeout = min(
+                source_timeout
+                if source_timeout is not None
+                else pass_remaining,
+                pass_remaining,
+            )
+        logger.info(
+            "scheduled collection started",
+            extra={
+                "job": "collect",
+                "source_id": str(source.id),
+                "deadline_seconds": source_timeout,
+            },
+        )
+        run = run_async(
+            service.execute(
+                source.id, request, deadline_seconds=source_timeout
+            )
+        )
+        if rotation_state is not None:
+            _advance_keyword_rotation_checkpoint(
+                service, source, run, rotation_state, term_count=term_count
+            )
+    except SourceClaimedElsewhereError:
+        # Another execution (CLI/API/previous pass) owns this source right now.
+        # It made no request, so it is a skip, not a failure.
+        session.rollback()
+        summary.add("skipped")
+        logger.info(
+            "scheduled collection skipped",
+            extra={
+                "job": "collect",
+                "source_id": str(source.id),
+                "outcome": "skipped",
+                "reason": "claimed_elsewhere",
+            },
+        )
+        return
+    except Exception:
+        # One unreachable source must not cost the others their pass.
+        session.rollback()
+        summary.add("failed")
+        logger.exception(
+            "scheduled collection failed",
+            extra={
+                "job": "collect",
+                "source_id": str(source.id),
+                "terms_used": list(request.keywords) if request is not None else [],
+            },
+        )
+        return
+    if run.complete:
+        # Closure compares this run's occurrences against the previous complete
+        # run, so its items must be normalized first: an occurrence that has
+        # not been touched yet would read as absent and close by mistake.
+        try:
+            opportunity_service = OpportunityService(session)
+            opportunity_service.normalize_run(run.id)
+            opportunity_service.reconcile_run_closures(run.id)
+        except Exception:
+            session.rollback()
+            logger.exception(
+                "run closure reconciliation failed",
+                extra={"job": "collect", "source_id": str(source.id)},
+            )
+    outcome = "failed" if run.status == "FAILED" else "completed"
+    summary.add(outcome)
+    logger.info(
+        "scheduled collection finished",
+        extra={
+            "job": "collect",
+            "source_id": str(source.id),
+            "outcome": outcome,
+            "run_status": run.status,
+            "run_id": str(run.id),
+            "terms_used": list(request.keywords) if request is not None else [],
+            "items_persisted": run.items_persisted,
+            "duration_ms": round(
+                (monotonic_clock() - source_started) * 1000
+            ),
+            "last_activity_at": datetime.now(ZoneInfo(timezone)).isoformat(),
+        },
+    )
+
+
+def _collect_host_group(
+    engine: Engine,
+    service_factory: Callable[[Session], AcquisitionService],
+    source_ids: list[UUID],
+    ctx: _PassContext,
+) -> None:
+    """Run the sources of one host, one after another, on this thread's own session.
+
+    The session, the service and each run's HTTP client belong to this thread alone; the
+    only state shared with the other threads is the database. A group that cannot even
+    start counts its unreached sources as failed and leaves the other hosts alone.
+    """
+    reached = 0
+    try:
+        with Session(engine) as session:
+            service = service_factory(session)
+            for source_id in source_ids:
+                reached += 1
+                try:
+                    source = service.get_source(source_id)
+                except Exception:
+                    session.rollback()
+                    source = None
+                if source is None:
+                    ctx.summary.add("failed")
+                    logger.error(
+                        "source could not be loaded for collection",
+                        extra={"job": "collect", "source_id": str(source_id)},
+                    )
+                    continue
+                _collect_one_source(session, service, source, ctx)
+    except Exception:
+        logger.exception("collection host group failed", extra={"job": "collect"})
+        for _ in source_ids[reached:]:
+            ctx.summary.add("failed")
+
+
 def collect_enabled_sources(
     engine: Engine,
     *,
@@ -518,6 +779,7 @@ def collect_enabled_sources(
     backoff_ceiling_seconds: float = 86400.0,
     source_deadline_seconds: float = 0.0,
     pass_deadline_seconds: float = 0.0,
+    host_concurrency: int = 1,
     monotonic_clock: Callable[[], float] = monotonic,
     utc_clock: Callable[[], datetime] | None = None,
     service_factory: Callable[[Session], AcquisitionService] = AcquisitionService,
@@ -527,199 +789,70 @@ def collect_enabled_sources(
     Each eligible source ends the pass in exactly one bucket. Silence about a source that
     did not run is what makes partial coverage look like full coverage, so a skip and a
     block are reported as deliberately as a failure.
+
+    With `host_concurrency` > 1 up to that many budget hosts are collected at once, each on
+    its own thread and database session; the sources of one host always run one after the
+    other, so a host never sees two runs at the same time. 1 is the original serial pass.
     """
     pass_started = monotonic_clock()
-    backoff_base = timedelta(seconds=backoff_base_seconds)
-    backoff_ceiling = timedelta(seconds=backoff_ceiling_seconds)
     with observe_job(
         engine, job_name="collect_enabled_sources", interval=timedelta(seconds=60)
     ) as correlation_id:
+        summary = _PassSummary()
+        ctx = _PassContext(
+            correlation_id=correlation_id,
+            timezone=timezone,
+            now=now,
+            utc_clock=utc_clock,
+            backoff_base=timedelta(seconds=backoff_base_seconds),
+            backoff_ceiling=timedelta(seconds=backoff_ceiling_seconds),
+            source_deadline_seconds=source_deadline_seconds,
+            pass_deadline_seconds=pass_deadline_seconds,
+            pass_started=pass_started,
+            monotonic_clock=monotonic_clock,
+            summary=summary,
+        )
+        groups: dict[str, list[UUID]] = {}
         with Session(engine) as session:
             service = service_factory(session)
             # Not the paginated listing: a page cut dropped every eligible source past it (F48-01).
             sources = service.list_collectable_sources()
-            summary = {"completed": 0, "failed": 0, "skipped": 0, "blocked": 0}
-            for source in sources:
-                moment = now or (
-                    utc_clock() if utc_clock is not None else datetime.now(ZoneInfo(timezone))
-                )
-                pass_remaining = (
-                    pass_deadline_seconds - (monotonic_clock() - pass_started)
-                    if pass_deadline_seconds > 0
-                    else None
-                )
-                if pass_remaining is not None and pass_remaining <= 0:
-                    summary["skipped"] += 1
-                    logger.info(
-                        "scheduled collection skipped",
-                        extra={
-                            "job": "collect",
-                            "source_id": str(source.id),
-                            "outcome": "skipped",
-                            "reason": "pass_deadline",
-                        },
-                    )
-                    continue
-                try:
-                    # Read once per source, right before it is judged: the host's shared
-                    # budget (F20-38) is state committed by whichever earlier source in
-                    # this same pass already spent against it, so re-reading it here (not
-                    # once for the whole pass) is what keeps the running total correct
-                    # without one failing source blocking the others on its host.
-                    state = service.scheduling_state(source, timezone=timezone)
-                    gate = evaluate_gate(
-                        state,
-                        now=moment,
-                        backoff_base=backoff_base,
-                        backoff_ceiling=backoff_ceiling,
-                    )
-                except Exception:
-                    session.rollback()
-                    summary["failed"] += 1
-                    logger.exception(
-                        "source scheduling could not be evaluated",
-                        extra={"job": "collect", "source_id": str(source.id)},
-                    )
-                    continue
-                if gate is not CollectionGate.DUE:
-                    summary[gate.outcome] += 1
-                    _, reason = next_due_at(
-                        state,
-                        now=moment,
-                        backoff_base=backoff_base,
-                        backoff_ceiling=backoff_ceiling,
-                    )
-                    logger.info(
-                        "scheduled collection did not run",
-                        extra={
-                            "job": "collect",
-                            "source_id": str(source.id),
-                            "outcome": gate.outcome,
-                            "gate": gate.value,
-                            "reason": reason,
-                            "host": state.host,
-                        },
-                    )
-                    continue
-                request: CollectionRequest | None = None
-                try:
-                    request, rotation_state, term_count = _scheduled_request_with_rotation(
-                        service, source, correlation_id
-                    )
-                    pass_remaining = (
-                        pass_deadline_seconds - (monotonic_clock() - pass_started)
-                        if pass_deadline_seconds > 0
-                        else None
-                    )
-                    if pass_remaining is not None and pass_remaining <= 0:
-                        summary["skipped"] += 1
-                        logger.info(
-                            "scheduled collection skipped",
-                            extra={
-                                "job": "collect",
-                                "source_id": str(source.id),
-                                "outcome": "skipped",
-                                "reason": "pass_deadline",
-                            },
-                        )
-                        continue
-                    source_started = monotonic_clock()
-                    source_timeout = source_deadline_seconds or None
-                    if pass_remaining is not None:
-                        source_timeout = min(
-                            source_timeout
-                            if source_timeout is not None
-                            else pass_remaining,
-                            pass_remaining,
-                        )
-                    logger.info(
-                        "scheduled collection started",
-                        extra={
-                            "job": "collect",
-                            "source_id": str(source.id),
-                            "deadline_seconds": source_timeout,
-                        },
-                    )
-                    run = run_async(
-                        service.execute(
-                            source.id, request, deadline_seconds=source_timeout
-                        )
-                    )
-                    if rotation_state is not None:
-                        _advance_keyword_rotation_checkpoint(
-                            service, source, run, rotation_state, term_count=term_count
-                        )
-                except SourceClaimedElsewhereError:
-                    # Another execution (CLI/API/previous pass) owns this source right now.
-                    # It made no request, so it is a skip, not a failure.
-                    session.rollback()
-                    summary["skipped"] += 1
-                    logger.info(
-                        "scheduled collection skipped",
-                        extra={
-                            "job": "collect",
-                            "source_id": str(source.id),
-                            "outcome": "skipped",
-                            "reason": "claimed_elsewhere",
-                        },
-                    )
-                    continue
-                except Exception:
-                    # One unreachable source must not cost the others their pass.
-                    session.rollback()
-                    summary["failed"] += 1
-                    logger.exception(
-                        "scheduled collection failed",
-                        extra={
-                            "job": "collect",
-                            "source_id": str(source.id),
-                            "terms_used": list(request.keywords) if request is not None else [],
-                        },
-                    )
-                    continue
-                if run.complete:
-                    # Closure compares this run's occurrences against the previous complete
-                    # run, so its items must be normalized first: an occurrence that has
-                    # not been touched yet would read as absent and close by mistake.
-                    try:
-                        opportunity_service = OpportunityService(session)
-                        opportunity_service.normalize_run(run.id)
-                        opportunity_service.reconcile_run_closures(run.id)
-                    except Exception:
-                        session.rollback()
-                        logger.exception(
-                            "run closure reconciliation failed",
-                            extra={"job": "collect", "source_id": str(source.id)},
-                        )
-                outcome = "failed" if run.status == "FAILED" else "completed"
-                summary[outcome] += 1
-                logger.info(
-                    "scheduled collection finished",
-                    extra={
-                        "job": "collect",
-                        "source_id": str(source.id),
-                        "outcome": outcome,
-                        "run_status": run.status,
-                        "run_id": str(run.id),
-                        "terms_used": list(request.keywords) if request is not None else [],
-                        "items_persisted": run.items_persisted,
-                        "duration_ms": round(
-                            (monotonic_clock() - source_started) * 1000
-                        ),
-                        "last_activity_at": datetime.now(ZoneInfo(timezone)).isoformat(),
-                    },
-                )
-            # F48-07: DUE sources = the ones that reached execution (or failed doing so).
-            annotate_pass(
-                engine,
-                correlation_id,
-                due_sources=summary["completed"] + summary["failed"],
-                **summary,
+            if host_concurrency <= 1:
+                for source in sources:
+                    _collect_one_source(session, service, source, ctx)
+            else:
+                for source in sources:
+                    host = budget_host_for_source(source.source_type, source.configuration)
+                    groups.setdefault(host, []).append(source.id)
+        if groups:
+            _run_host_groups(
+                engine, service_factory, list(groups.values()), ctx, host_concurrency
             )
-            if any(summary.values()):
-                logger.info(
-                    "collection batch finished", extra={"job": "collect", **summary}
-                )
+        # F48-07: DUE sources = the ones that reached execution (or failed doing so).
+        counts = summary.counts
+        annotate_pass(
+            engine,
+            correlation_id,
+            due_sources=counts["completed"] + counts["failed"],
+            **counts,
+        )
+        if any(counts.values()):
+            logger.info("collection batch finished", extra={"job": "collect", **counts})
+
+
+def _run_host_groups(
+    engine: Engine,
+    service_factory: Callable[[Session], AcquisitionService],
+    groups: list[list[UUID]],
+    ctx: _PassContext,
+    host_concurrency: int,
+) -> None:
+    """Bounded pool over host groups: at most `host_concurrency` hosts in flight at once."""
+    with ThreadPoolExecutor(
+        max_workers=min(host_concurrency, len(groups)), thread_name_prefix="collect-host"
+    ) as pool:
+        for group in groups:
+            pool.submit(_collect_host_group, engine, service_factory, group, ctx)
 
 
 def collection_service_factory(settings: Settings) -> Callable[[Session], AcquisitionService]:
@@ -906,6 +1039,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
                 "backoff_ceiling_seconds": settings.collection_backoff_ceiling_seconds,
                 "source_deadline_seconds": settings.collection_source_deadline_seconds,
                 "pass_deadline_seconds": settings.collection_pass_deadline_seconds,
+                "host_concurrency": settings.collection_host_concurrency,
                 "service_factory": collection_service_factory(settings),
             },
             id="collect-enabled-sources",
