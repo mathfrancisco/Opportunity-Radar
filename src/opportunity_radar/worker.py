@@ -700,7 +700,9 @@ def collect_enabled_sources(
                     try:
                         opportunity_service = OpportunityService(session)
                         opportunity_service.normalize_run(run.id)
-                        opportunity_service.reconcile_run_closures(run.id)
+                        opportunity_service.reconcile_run_closures(
+                            run.id, may_close=service.run_may_close_absences
+                        )
                     except Exception:
                         session.rollback()
                         logger.exception(

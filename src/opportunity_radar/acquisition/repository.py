@@ -216,6 +216,25 @@ class AcquisitionRepository:
                 f"source {source_id} fencing token {fencing_token} is no longer current"
             )
 
+    def run_holds_latest_fence(self, run: SourceRunModel, *, task_key: str = "collect") -> bool:
+        """Whether no newer run of the source has claimed it since `run` did.
+
+        The claim row keeps the source's latest generation after the lease is released, so a
+        run whose token is below it was followed by another execution. The row stays locked
+        until the caller commits or rolls back, so no new claim can slip in meanwhile.
+        """
+        if run.fencing_token is None:
+            return True  # collected without a claim: nothing to compare
+        current = self.session.scalar(
+            select(SourceExecutionClaimModel.fencing_token)
+            .where(
+                SourceExecutionClaimModel.source_definition_id == run.source_definition_id,
+                SourceExecutionClaimModel.task_key == task_key,
+            )
+            .with_for_update()
+        )
+        return current is None or current <= run.fencing_token
+
     def get_source(self, source_id: UUID) -> SourceDefinitionModel | None:
         return self.session.scalar(
             select(SourceDefinitionModel)

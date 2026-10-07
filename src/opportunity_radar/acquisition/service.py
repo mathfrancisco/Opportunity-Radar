@@ -1201,6 +1201,25 @@ class AcquisitionService:
         self.session.flush()
         return probe
 
+    def run_may_close_absences(self, run: SourceRunModel) -> bool:
+        """The closure of a finished run is fenced like its writes were (F51-07 AC02).
+
+        The claim is released when `execute` returns, so a run that lost its lease afterwards
+        could still close postings while a newer run is in progress. Holds the claim row
+        locked on the caller's session until it commits or rolls back.
+        """
+        if not self._claims_enabled or self.repository.run_holds_latest_fence(run):
+            return True
+        self.session.rollback()
+        _ClaimScope._log(
+            "fence_rejected",
+            source_id=run.source_definition_id,
+            run_id=run.id,
+            reason="closure_superseded",
+            run_fencing_token=run.fencing_token,
+        )
+        return False
+
     def scheduling_state(
         self, source: SourceDefinitionModel, *, timezone: str
     ) -> SourceSchedulingState:

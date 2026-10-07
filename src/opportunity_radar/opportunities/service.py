@@ -5,7 +5,7 @@ from __future__ import annotations
 from base64 import b64decode
 from binascii import Error as Base64Error
 from collections import Counter
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
@@ -472,17 +472,26 @@ class OpportunityService:
             failed=sum(item.status == "FAILED" for item in results),
         )
 
-    def reconcile_run_closures(self, source_run_id: UUID) -> None:
+    def reconcile_run_closures(
+        self,
+        source_run_id: UUID,
+        *,
+        may_close: Callable[[SourceRunModel], bool] | None = None,
+    ) -> bool:
         """Close jobs that vanished for two complete runs in a row, and reopen ones back.
 
         Only a complete run may change anything here: a partial or failed run tells us
         nothing about what the board still has, so absence from it is not evidence.
+        `may_close` is the caller's fence (a newer run of the source has started): when it
+        says no, nothing changes and this returns False.
         """
         run = self.session.get(SourceRunModel, source_run_id)
         if run is None:
             raise SourceRunNotFoundError(source_run_id)
         if not run.complete:
-            return
+            return True
+        if may_close is not None and not may_close(run):
+            return False
         source_definition_id = run.source_definition_id
 
         for occurrence in self.repository.occurrences_seen_in_run(
@@ -526,6 +535,7 @@ class OpportunityService:
                 opportunity.version += 1
 
         self.session.commit()
+        return True
 
     def mark_relevance(
         self,
