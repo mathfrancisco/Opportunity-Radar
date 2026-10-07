@@ -1081,6 +1081,7 @@ def test_a_failed_suggestion_does_not_hide_the_next_candidate(
                 item for item in caplog.records if item.message == "suggest fields batch finished"
             )
             assert (summary.processed, summary.suggestions_created) == (2, 1)
+            assert summary.failure_classes == {"parse_error": 1}
             stored = session.scalars(
                 select(OpportunitySuggestionModel).where(
                     OpportunitySuggestionModel.opportunity_id.in_([first.id, second.id])
@@ -1091,5 +1092,45 @@ def test_a_failed_suggestion_does_not_hide_the_next_candidate(
             ]
         finally:
             _cleanup(session, [first.id, second.id])
+            with engine.begin() as connection:
+                connection.execute(text("TRUNCATE platform.ai_call_record"))
+
+
+def test_global_quota_exhaustion_defers_rest_of_batch(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Card F51-10 AC04: exactly one request, then none; the rest get no operation row."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    provider = _RecordingProvider()
+    router, _guard, _chain = _quota_router(engine, provider, day_requests=1)
+    with Session(engine) as session:
+        items = [
+            _opportunity(title=f"Engineer {n}", description=f"Engineer {n}, remote.", **_KNOWN)
+            for n in range(4)
+        ]
+        session.add_all(items)
+        session.commit()
+        monkeypatch.setattr(
+            worker, "candidates_needing_suggestion", lambda *_args, **_kwargs: items
+        )
+        operations_before = _classification_operations(engine)
+        try:
+            with caplog.at_level(logging.INFO, logger="opportunity_radar.worker"):
+                worker.suggest_fields_pending(engine, router, worker_requests_ceiling=1)
+
+            assert len(provider.requests) == 1
+            # The first candidate used the only request; the second found no balance, was
+            # deferred and ended the batch; the third and fourth were never started.
+            assert _classification_operations(engine) - operations_before == 2
+            summary = next(
+                item for item in caplog.records if item.message == "suggest fields batch finished"
+            )
+            assert (summary.not_attempted, summary.stopped_by) == (2, "quota")
+            assert summary.failure_classes == {"quota_defer": 1}
+        finally:
+            session.execute(text(
+                "DELETE FROM platform.ai_suggestion_defer WHERE opportunity_id = ANY(:ids)"
+            ), {"ids": [item.id for item in items]})
+            _cleanup(session, [item.id for item in items])
             with engine.begin() as connection:
                 connection.execute(text("TRUNCATE platform.ai_call_record"))

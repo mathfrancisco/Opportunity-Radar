@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import signal
 from asyncio import run as run_async
+from collections import Counter
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -402,8 +403,11 @@ def suggest_fields_pending(
                 prompt=prompt,
                 route=route,
             )
-            created = discarded = skipped_budget = failed = 0
+            created = discarded = skipped_budget = failed = attempted = 0
+            failure_classes = Counter[str]()
+            stopped_by: str | None = None
             for opportunity in candidates:
+                attempted += 1
                 try:
                     outcome = run_async(
                         suggest_fields(
@@ -417,6 +421,7 @@ def suggest_fields_pending(
                 except Exception:
                     session.rollback()
                     failed += 1
+                    failure_classes["internal_error"] += 1
                     logger.exception(
                         "field suggestion failed",
                         extra={"job": "suggest-fields", "opportunity_id": str(opportunity.id)},
@@ -424,6 +429,14 @@ def suggest_fields_pending(
                     continue
                 created += len(outcome.created)
                 discarded += len(outcome.discarded_fields)
+                if outcome.state == "deferred":
+                    failure_classes["quota_defer"] += 1
+                elif outcome.state in ("provider_error", "parse_error"):
+                    failure_classes[outcome.state] += 1
+                if outcome.quota_exhausted:
+                    # Every remaining candidate would only leave an operation row and a defer.
+                    stopped_by = "quota"
+                    break
             if candidates:
                 logger.info(
                     "suggest fields batch finished",
@@ -434,6 +447,9 @@ def suggest_fields_pending(
                         "discarded": discarded,
                         "skipped_budget": skipped_budget,
                         "failed": failed,
+                        "failure_classes": dict(failure_classes),
+                        "not_attempted": len(candidates) - attempted,
+                        "stopped_by": stopped_by,
                     },
                 )
 

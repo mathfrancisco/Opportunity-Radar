@@ -415,6 +415,7 @@ class SuggestionOutcome:
     state: str = "not_needed"
     error_kind: str | None = None
     next_attempt_at: datetime | None = None
+    quota_exhausted: bool = False  # the day/global balance is gone: no other call can pass
 
 
 async def suggest_fields(
@@ -554,6 +555,7 @@ async def suggest_fields(
             if error.attempts else ("deferred" if error.quota_exhausted else "preflight"),
             error_kind=error.kind.value,
             next_attempt_at=next_attempt_at,
+            quota_exhausted=error.quota_exhausted,
         )
     except asyncio.CancelledError as cancellation:
         cancelled_attempts = getattr(cancellation, "attempts", ())
