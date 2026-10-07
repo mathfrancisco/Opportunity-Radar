@@ -22,8 +22,10 @@ but never blanked.
 
 An edit that touches only the description changes no list field. So each known job is also
 re-read once every `_REFRESH_DAYS` days, on the day its id falls on, after every new or
-changed job got its detail and only with the room that is left. A re-read that finds the
-same content yields the same payload and hashes, so it creates no version.
+changed job got its detail and only with the room that is left. Only the source's first run
+of that day re-reads: a later run the same day (`CollectionRequest.previous_attempt_at` is
+today) would fetch the same detail again. A re-read that finds the same content yields the
+same payload and hashes, so it creates no version.
 
 E-mail addresses and phone numbers in the description are masked before anything is stored
 (the review's personal-data condition); the public page keeps the original text.
@@ -189,7 +191,11 @@ class InhireCollector:
         company_name = request.company_name or tenant_name
         known_items = request.known_items or {}
         detail = _DetailRun(request)
-        refresh_slot = self._today().toordinal() % _REFRESH_DAYS
+        today = self._today()
+        refresh_slot = today.toordinal() % _REFRESH_DAYS
+        previous = request.previous_attempt_at
+        # The day's re-reads were already tried by an earlier run of this source today.
+        refresh_done = previous is not None and previous.astimezone(UTC).date() == today
         # Jobs due for a re-read wait until every new or changed job had its turn.
         deferred: list[tuple[dict[str, Any], Mapping[str, Any]]] = []
         emitted = 0
@@ -208,6 +214,7 @@ class InhireCollector:
                 if (
                     known is not None
                     and detail.enabled
+                    and not refresh_done
                     and self._unchanged(known, listing)
                     and UUID(listing["jobId"]).int % _REFRESH_DAYS == refresh_slot
                 ):

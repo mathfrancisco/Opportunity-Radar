@@ -192,12 +192,13 @@ SCHEDULE_OVERRIDE_BY_SOURCE_TYPE = {
         "normal": "0 0 * * *",  # once a day
         "low": "0 0 * * 0",  # once a week
     },
-    # About 14 requests per run over 98 sources on one shared host is about 1,360 requests
-    # per pass against the 1,200 per hour ceiling: hourly would end in partial runs until the
-    # 304/delta contract (card F51-13) lands.
+    # One list request per run, plus one detail per new or changed job and one weekly
+    # re-read per known job on the day's first run. Measured on 2026-10-07 over 98 sources
+    # and 1,676 jobs: 98 list requests and at most about 240 re-reads in an hour, against
+    # the 1,200 per hour ceiling of the shared host.
     "inhire": {
-        "high": "0 */3 * * *",  # every 3 hours
-        "normal": "0 */3 * * *",  # every 3 hours
+        "high": "0 * * * *",  # every hour
+        "normal": "0 * * * *",  # every hour
         "low": "0 0 * * *",  # once a day
     },
 }

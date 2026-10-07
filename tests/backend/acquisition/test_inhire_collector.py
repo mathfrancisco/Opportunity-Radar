@@ -662,6 +662,31 @@ def test_refresh_that_finds_the_same_content_creates_no_new_version() -> None:
     assert {_hashes(item) for item in items} == {_hashes(item) for item in first}
 
 
+def test_refresh_runs_only_on_the_sources_first_run_of_the_day() -> None:
+    first, _, _ = _run(_Board(), fetch_detail=True)
+    day = _refresh_day(_IDS[0])
+    midnight = datetime(day.year, day.month, day.day, tzinfo=UTC)
+
+    def details(previous_attempt_at: datetime | None) -> list[str]:
+        board = _Board()
+        _, error, _ = _run(
+            board,
+            fetch_detail=True,
+            known_items=_stored(first),
+            today=day,
+            previous_attempt_at=previous_attempt_at,
+        )
+        assert error is None
+        return board.details
+
+    # Yesterday's last run, or no earlier run at all: this is the day's first run.
+    assert _IDS[0] in details(midnight - timedelta(minutes=1))
+    assert _IDS[0] in details(None)
+    # An earlier run today already re-read: an hourly cadence must not fetch it 24 times.
+    assert details(midnight) == []
+    assert details(midnight + timedelta(hours=23)) == []
+
+
 def test_refresh_only_uses_the_room_new_and_changed_jobs_leave() -> None:
     first, _, _ = _run(_Board(), fetch_detail=True)
     listing = deepcopy(_LIST)
@@ -907,6 +932,31 @@ def _service(board: _Board, *, configuration: dict[str, Any] | None = None, fami
         target_role_families=(lambda: families) if families is not None else None,
     )
     return service, source, repository, session, client
+
+
+@pytest.mark.parametrize(("hours_before_midnight", "re_read"), [(1, True), (-1, False)])
+def test_service_hands_the_sources_last_attempt_to_the_weekly_re_read(
+    hours_before_midnight: int, re_read: bool
+) -> None:
+    first, _, _ = _run(_Board(), fetch_detail=True)
+    day = _refresh_day(_IDS[0])
+    board = _Board()
+    service, source, repository, _, client = _service(board)
+    source.last_http_attempt_at = datetime(day.year, day.month, day.day, tzinfo=UTC) - timedelta(
+        hours=hours_before_midnight
+    )
+    repository.latest_raw_payloads = lambda source_id: _stored(first)  # type: ignore[method-assign]
+    collector = service.registry.resolve("inhire")
+    collector._today = lambda: day  # type: ignore[attr-defined]
+    try:
+        run = asyncio.run(
+            service.execute(source.id, CollectionRequest(mode=CollectionMode.DISCOVERY))
+        )
+    finally:
+        asyncio.run(client.aclose())
+
+    assert run.status == "SUCCEEDED"
+    assert (_IDS[0] in board.details) is re_read
 
 
 def test_service_runs_an_inhire_source_end_to_end_and_records_target_counts() -> None:
