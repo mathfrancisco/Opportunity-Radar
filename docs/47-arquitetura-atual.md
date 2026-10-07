@@ -384,7 +384,7 @@ passada imediata (`worker.py:683-806`). O estado de cada job é gravado em
 | `heartbeat` | 5 min | log de vida | — |
 | `normalize-opportunities` | 60 s | `normalize_pending` de raw_items sem resultado do normalizer atual | `WORKER_NORMALIZE_ENABLED` (true) |
 | `collect-enabled-sources` | 60 s | passada de coleta da §3.1 | `WORKER_COLLECT_ENABLED` (true) |
-| `evaluate-pending` | 60 s | avalia até `WORKER_EVALUATE_BATCH_SIZE`=50 oportunidades sem avaliação **do dia** | `WORKER_MATCH_ENABLED` (true) |
+| `evaluate-pending` | 60 s | avalia até `WORKER_EVALUATE_BATCH_SIZE`=500 oportunidades sem avaliação **do dia** | `WORKER_MATCH_ENABLED` (true) |
 | `analyze-pending` | 120 s | análise IA de até `WORKER_ANALYZE_BATCH_SIZE`=10 avaliações | `WORKER_ANALYZE_ENABLED` (true) |
 | `suggest-fields-pending` | 300 s | sugestões de campo por IA | **`WORKER_SUGGEST_ENABLED` (false)** |
 | `expire-raw-payloads` | 6 h | retenção de payload e poda de `ai_call_record` (30 dias) | `WORKER_RETENTION_ENABLED` (true) |

@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # prints them (e.g. `seniority:description_years_min,work_mode:description_phrase`).
     # The boolean above keeps meaning "every rule". Empty and False: none runs.
     content_classification_enabled_rules: str = ""
-    worker_evaluate_batch_size: int = 50
+    worker_evaluate_batch_size: int = 500
     # The local model competes with the rest of the machine for the GPU, so a pass is
     # capped well below the evaluation batch: analysis falls behind on purpose, never the
     # rules.
@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     # F51-06 deadlines are opt-in until a deployment has observed its source durations.
     collection_source_deadline_seconds: int = Field(default=0, ge=0)
     collection_pass_deadline_seconds: int = Field(default=0, ge=0)
+    # F51-08: how many budget hosts one collection pass works at once. A host never has two
+    # runs at the same time, and its request ceiling is enforced per request regardless.
+    # 1 is the original serial pass.
+    collection_host_concurrency: int = Field(default=4, ge=1)
     # F51-07: one claim/lease per source for every collection entry point (worker, CLI,
     # HTTP). False restores the unclaimed behaviour; it never changes presence, dedupe or
     # decisions, only whether concurrent runs of one source are refused and fenced.

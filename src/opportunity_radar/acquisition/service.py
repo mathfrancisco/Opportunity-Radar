@@ -159,6 +159,9 @@ def _budget_host_for_source(source_type: str, configuration: dict[str, Any] | No
     return _host_for_source_type(source_type)
 
 
+budget_host_for_source = _budget_host_for_source
+
+
 def _conditional_headers_for(
     source: SourceDefinitionModel, scope_hash: str | None = None
 ) -> ConditionalRequestHeaders | None:
@@ -498,7 +501,9 @@ class AcquisitionService:
                 normalized_type, source_rate_limit_policy
             )
         if schedule is None and company_source_id is not None:
-            schedule = self._default_schedule(company_source_id, resolved_network_policy)
+            schedule = self._default_schedule(
+                company_source_id, resolved_network_policy, normalized_type
+            )
         if normalized_type == "ashby":
             with _refusing_field("configuration.board_identifier"):
                 AshbyCollector.validate_board_identifier(
@@ -582,7 +587,10 @@ class AcquisitionService:
         return source
 
     def _default_schedule(
-        self, company_source_id: UUID, network_policy: CollectionNetworkPolicy
+        self,
+        company_source_id: UUID,
+        network_policy: CollectionNetworkPolicy,
+        source_type: str,
     ) -> str | None:
         priority = self.session.scalar(
             select(Company.priority)
@@ -594,6 +602,7 @@ class AcquisitionService:
         return default_schedule_for_priority(
             priority,
             minimum_run_interval_seconds=network_policy.minimum_run_interval_seconds,
+            source_type=source_type,
         )
 
     def list_sources(self, *, offset: int, limit: int) -> tuple[list[SourceDefinitionModel], int]:
