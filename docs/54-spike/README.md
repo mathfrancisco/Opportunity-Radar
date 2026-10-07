@@ -78,3 +78,21 @@ Esta decisão seleciona apenas o Dialog e não aprova uma distribuição shadcn,
 outros primitives, rotas, estilos globais ou a SPEC 54 como um todo. A
 evidência de bundle é específica à medição final acima; mudanças posteriores
 exigem nova validação proporcional.
+
+## Medição integrada após WP3-B
+
+Além do spike isolado, o build integrado no HEAD `a196780` mediu 163,65 kB de
+JS inicial gzip e 7,33 kB de CSS gzip. O `npm run check` terminou com exit 0; o
+Vitest reportou 42 arquivos e 336 testes. Esses resultados foram registrados
+para o checkout integrado e não substituem as medidas históricas isoladas.
+
+| Comparação integrada | JS inicial gzip | Delta |
+| --- | ---: | ---: |
+| Baseline aceito: 149,01 kB → 163,65 kB | 163,65 kB | +14,64 kB / **+9,83%** |
+| Último app integrado pré-WP3-B: 150,07 kB → 163,65 kB | 163,65 kB | +13,58 kB / **+9,05%** |
+
+Contra o limite de +10% sobre o baseline aceito, a medição integrada fica
+0,26 kB abaixo do limite. O resultado do spike isolado continua sendo
+149,01→161,62 kB (+12,61 kB / +8,54%); não deve ser apresentado como o delta
+integrado. O primeiro spike amplo de +20,64% permanece como registro histórico.
+As verificações visuais finais da aplicação não fazem parte dessa medição.

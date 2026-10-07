@@ -54,18 +54,24 @@ Inventário: URLs `/`, `/inbox`, `/opportunities/:opportunityId`, `/applications
 
 `docs/54-review` contém Inbox, detalhe, Pipeline e Overview estáticos/sintéticos, em preview loopback `127.0.0.1:54154`, sem API, rede externa, persistência ou autenticação. Os quatro protótipos receberam aceite visual explícito em 2026-10-07; o aceite é somente da direção visual para WP3–WP5. O runner registrou 45 capturas (13 padrão e 32 estados), zero erros de JavaScript, sem overflow nos viewports reportados e verificações de Escape/foco do menu, ordem do painel de decisão e sete etapas da Pipeline em 1440 e 1280 px. O WP3B agora usa somente o Dialog aprovado para a gaveta móvel; isso não amplia o alcance da revisão visual.
 
-Os ajustes aceitos estão refletidos no protótipo: a Pipeline comporta as sete etapas em desktop sem rolagem horizontal e o painel “Sua decisão” aparece antes de “O que a vaga pede” em até 900 px, também nessa ordem no DOM. O relatório continua limitado aos protótipos e às asserções do runner; não comprova regressões na aplicação migrada. Ainda não foram verificados zoom real do navegador, leitor de tela, reduced motion, dispositivos físicos ou E2E. Overview exibe “2 novas desde última abertura”, métrica que deve ser mapeada ao contrato ou removida antes da migração.
+As 45 evidências pertencem aos quatro protótipos e não equivalem à cobertura das 11 rotas finais (10 rotas e wildcard). As capturas da aplicação final para essas rotas em cinco larguras continuam pendentes. Os ajustes aceitos estão refletidos no protótipo: a Pipeline comporta as sete etapas em desktop sem rolagem horizontal e o painel “Sua decisão” aparece antes de “O que a vaga pede” em até 900 px, também nessa ordem no DOM. O relatório continua limitado aos protótipos e às asserções do runner; não comprova regressões na aplicação migrada. Zoom real do navegador, leitor de tela, reduced motion, dispositivos físicos e E2E continuam sem verificação. Overview exibe “2 novas desde última abertura”, métrica que deve ser mapeada ao contrato ou removida antes da migração.
 
 ## Spike de primitives
 
 O WP3B aprovou exclusivamente `@radix-ui/react-dialog` 1.2.0, sob wrapper local,
-para a gaveta de navegação móvel. A medição final do único Dialog foi
-149,01→161,62 kB de JS gzip (+12,61 kB / +8,54%), dentro do orçamento de 10%; a
-licença é MIT. A medição histórica de +20,64% corresponde ao primeiro spike
-mais amplo (Dialog, Dropdown e Slot), não ao estado aprovado. Restam cerca de
-2,2 kB até o limite; qualquer novo primitive exige medição comparável e o
-Dialog deve ser carregado sob demanda se o total exceder +10%. A aprovação não
-seleciona shadcn, outros primitives, rotas, estilos globais ou a SPEC 54.
+para a gaveta de navegação móvel; a licença é MIT. No spike isolado, o único
+Dialog mediu 149,01→161,62 kB de JS gzip (+12,61 kB / +8,54%), dentro do
+orçamento de +10%. Essa comparação isolada não representa o bundle integrado.
+
+Na medição integrada informada para o HEAD `a196780`, `npm run check` terminou
+com exit 0 e Vitest reportou 42 arquivos / 336 testes. O JS inicial gzip mediu
+163,65 kB e o CSS gzip, 7,33 kB. Contra o baseline aceito de 149,01 kB, o JS
+aumentou 14,64 kB / 9,83%; o limite de +10% deixa 0,26 kB de margem. Contra o
+último app integrado antes do WP3-B (150,07 kB), o aumento foi 13,58 kB / 9,05%.
+A medição histórica de +20,64% corresponde ao primeiro spike mais amplo
+(Dialog, Dropdown e Slot). Qualquer novo primitive exige medição comparável; se
+o bundle ultrapassar +10%, o Dialog deve ser carregado sob demanda. A aprovação
+não seleciona shadcn, outros primitives, rotas, estilos globais ou a SPEC 54.
 
 ## Validação e limites do ambiente
 
