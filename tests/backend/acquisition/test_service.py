@@ -33,6 +33,7 @@ from opportunity_radar.acquisition.models import (
     RawItemModel,
     SourceCheckpointModel,
     SourceDefinitionModel,
+    SourceRunModel,
 )
 from opportunity_radar.acquisition.probing import run_probe
 from opportunity_radar.acquisition.registry import build_collector_registry
@@ -360,6 +361,60 @@ def test_source_deadline_waits_for_generator_cleanup_and_finishes_partial(
     assert run.complete is False
     assert persisted_run.status == "PARTIAL"
     assert session.committed is True
+
+
+def test_deadline_cancels_then_closes_http_resource_then_persists_terminal_state() -> None:
+    """F51-06 AC02: cancel, then close the session/response, then the terminal state."""
+    events: list[str] = []
+
+    class _FakeResponse:
+        async def aclose(self) -> None:
+            # A real close awaits the transport; yielding makes the ordering meaningful.
+            await asyncio.sleep(0)
+            events.append("close")
+
+    class _EventSession(_MemorySession):
+        def commit(self) -> None:
+            super().commit()
+            run = next(item for item in self.added if isinstance(item, SourceRunModel))
+            if run.status != "RUNNING":  # the opening commit only records the started run
+                events.append(f"persist:{run.status}")
+
+    class _BlockedHttpCollector(_Collector):
+        async def discover(
+            self, request: CollectionRequest
+        ) -> AsyncIterator[CollectedItem]:
+            del request
+            response = _FakeResponse()
+            try:
+                await asyncio.Event().wait()  # the fake HTTP read never completes
+                yield CollectedItem(source_type=self.source_type, external_id="unused")
+            except asyncio.CancelledError:
+                events.append("cancel")
+                raise
+            finally:
+                await response.aclose()
+
+    source = SourceDefinitionModel(
+        id=uuid4(), source_type="example", name="Example", enabled=True, configuration={}
+    )
+    session = _EventSession()
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((_BlockedHttpCollector(),)),
+        repository=_MemoryRepository(source),  # type: ignore[arg-type]
+        alerts=SourceAlertService(session),  # type: ignore[arg-type]
+    )
+    run = asyncio.run(
+        service.execute(
+            source.id,
+            CollectionRequest(mode=CollectionMode.DISCOVERY),
+            deadline_seconds=0.01,
+        )
+    )
+
+    assert run.status == "PARTIAL"
+    assert events == ["cancel", "close", "persist:PARTIAL"]
 
 
 def test_source_deadline_is_partial_when_collector_suppresses_cancellation() -> None:
