@@ -190,6 +190,25 @@ O que não cabe mais na SPEC 50 continua em duas specs:
   fila `REVIEW_REQUIRED` continua sem tratamento. Detalhes na
   [SPEC 52](../52-spec-aderencia-ao-nivel.md), §4 (F52-05) e §5.
 
+## Sessões de 2026-10-06 (terceira e quarta) e 2026-10-07 (quinta), PRs #48 a #68
+
+Este arquivo não foi atualizado entre a segunda e a quinta sessão. O trabalho desse período é
+das SPECs 51 e 52; o detalhe está no
+[roadmap 51](../51-roadmap-coleta-confiavel/README.md), no
+[checkpoint](../51-roadmap-coleta-confiavel/implementation-checkpoint.md) e na
+[SPEC 52](../52-spec-aderencia-ao-nivel.md). O que toca a SPEC 50:
+
+- **Gold do F50-01:** rótulos aprovados pelo dono (PRs #48 e #49). Nenhuma regra por
+  descrição passou no portão; `GATED_RULES` não mudou. Uma amostra nova, com suporte, espera
+  rótulo do dono (PR #60).
+- **Fila `REVIEW_REQUIRED`:** tratada em 2026-10-07 (PR #67). De 5.607 linhas, 4.455 eram a
+  mesma vaga publicada por cidade ou modo e foram resolvidas em lote; ficaram 1.152 para
+  decisão caso a caso. Detalhe na SPEC 52, §5.
+- **inHire:** as 98 fontes passaram a coletar de hora em hora (PR #66), depois de medir que
+  230 de 244 requisições de detalhe de uma passada eram releitura de vaga já guardada.
+- **Stack de dev:** em 2026-10-07 roda o `main` com os PRs até o #66; `seniority-v6`
+  aplicado; 135 fontes de hora em hora, 98 do inHire de hora em hora, 18 a cada 6 horas.
+
 ## Stack de desenvolvimento `opportunity-radar-dev`
 
 É a base local de trabalho: o código do checkout sobre o catálogo real, em volumes próprios.
