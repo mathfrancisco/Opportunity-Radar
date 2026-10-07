@@ -300,3 +300,39 @@ def test_operation_cohort_reports_in_flight_in_grace_and_recovers_a_crashed_one(
 
     assert (after_grace.started, after_grace.terminal) == (3, 3)
     assert (after_grace.in_flight, after_grace.recovered) == (0, 1)
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("RUN_DATABASE_INTEGRATION") != "1",
+    reason="database integration is enabled only in the isolated CI database",
+)
+def test_operation_cohort_counts_a_recovered_crash_as_terminal_while_another_is_in_grace() -> None:
+    """F51-09 AC05 with the card's own numbers: one finished, one crashed before the grace
+    and one still inside it."""
+    engine = _engine()
+    with engine.begin() as connection:
+        connection.execute(text("TRUNCATE platform.ai_call_record, platform.ai_operation_record"))
+    now = datetime(2026, 10, 6, 12, 0, 0, tzinfo=UTC)
+    since = now - timedelta(hours=1)
+    finished, crashed, slow = uuid4(), uuid4(), uuid4()
+    for operation_id, minutes_ago in ((finished, 20), (crashed, 10), (slow, 2)):
+        start_operation(
+            engine, operation_id=operation_id, task="job_match",
+            now=now - timedelta(minutes=minutes_ago),
+        )
+    finish_operation(
+        engine, operation_id=finished, state="success", now=now - timedelta(minutes=19)
+    )
+
+    during_grace = operation_cohort(engine, since=since, now=now)
+
+    # The crash is older than the grace, so it is closed as recovered; the slow one waits.
+    assert (during_grace.started, during_grace.terminal, during_grace.in_flight) == (3, 2, 1)
+    assert during_grace.recovered == 1
+
+    finish_operation(engine, operation_id=slow, state="success", now=now + timedelta(minutes=1))
+    afterwards = operation_cohort(engine, since=since, now=now + timedelta(minutes=10))
+
+    assert (afterwards.started, afterwards.terminal, afterwards.in_flight) == (3, 3, 0)
+    assert afterwards.recovered == 1

@@ -333,6 +333,7 @@ class AcquisitionRepository:
                 SourceRunModel.status,
                 SourceRunModel.started_at,
                 SourceRunModel.finished_at,
+                SourceRunModel.id,
             )
             .where(SourceRunModel.source_definition_id == source_id)
             .order_by(SourceRunModel.started_at.desc(), SourceRunModel.id.desc())
@@ -340,9 +341,19 @@ class AcquisitionRepository:
         ).all()
         if not rows:
             return SourceRunHistory()
+        # A run whose owner died keeps its claim until the lease expires. After that it is
+        # not an attempt any more: counting it would keep the source "fresh" until its next
+        # cron fire (a day or a week away) instead of letting the next pass recover it.
+        abandoned_run_id = self.session.scalar(
+            select(SourceExecutionClaimModel.run_id).where(
+                SourceExecutionClaimModel.source_definition_id == source_id,
+                SourceExecutionClaimModel.owner_id.is_not(None),
+                SourceExecutionClaimModel.lease_expires_at <= datetime.now(UTC),
+            )
+        )
         consecutive_failures = 0
         last_failure_at: datetime | None = None
-        for status, started_at, finished_at in rows:
+        for status, started_at, finished_at, _ in rows:
             if status in _UNFINISHED_RUN_STATUSES:
                 # Still in flight: it has decided nothing yet, in either direction.
                 continue
@@ -351,8 +362,13 @@ class AcquisitionRepository:
             consecutive_failures += 1
             if last_failure_at is None:
                 last_failure_at = finished_at or started_at
+        attempts = [
+            row
+            for row in rows
+            if not (row.id == abandoned_run_id and row.status in _UNFINISHED_RUN_STATUSES)
+        ]
         return SourceRunHistory(
-            last_started_at=rows[0].started_at,
+            last_started_at=attempts[0].started_at if attempts else None,
             consecutive_failures=consecutive_failures,
             last_failure_at=last_failure_at,
         )
