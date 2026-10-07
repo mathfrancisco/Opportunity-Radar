@@ -1,0 +1,11 @@
+@opportunity-radar/web@0.1.0
+├─┬ @radix-ui/react-dialog@1.2.0
+│ ├─┬ @radix-ui/react-primitive@2.1.11
+│ │ └── @radix-ui/react-slot@1.4.0 deduped
+│ └── @radix-ui/react-slot@1.4.0 deduped
+├─┬ @radix-ui/react-dropdown-menu@2.1.25
+│ └─┬ @radix-ui/react-menu@2.1.25
+│   ├─┬ @radix-ui/react-collection@1.1.16
+│   │ └── @radix-ui/react-slot@1.4.0 deduped
+│   └── @radix-ui/react-slot@1.4.0 deduped
+└── @radix-ui/react-slot@1.4.0

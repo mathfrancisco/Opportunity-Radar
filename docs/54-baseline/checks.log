@@ -1,0 +1,15 @@
+
+> @opportunity-radar/web@0.1.0 check
+> npm run lint && npm run typecheck && npm run test && npm run build
+
+
+> @opportunity-radar/web@0.1.0 lint
+> eslint . --max-warnings=0
+
+
+> @opportunity-radar/web@0.1.0 typecheck
+> tsc -b --pretty false
+
+error TS2688: Cannot find type definition file for 'node'.
+  The file is in the program because:
+    Entry point of type library 'node' specified in compilerOptions

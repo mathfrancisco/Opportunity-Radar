@@ -1,0 +1,53 @@
+# 48 named component exports from src/components/*.tsx, counted by exported React component (not by file). AnalysisPanel is separately listed because it lives under features/matching.
+component	path	kind	responsibility	queries_or_mutations	test
+ApplicationPanel	src/components/ApplicationPanel.tsx	data	Opportunity application detail and stage changes	useOpportunityApplication; useStartApplication; useTransitionApplication; useSetNextAction	—
+AppShell	src/components/AppShell.tsx	shell	Application landmarks and responsive shell	—	AppShell.test.tsx
+Button	src/components/Button.tsx	primitive	Button variants and sizing	—	Button.test.tsx
+Card	src/components/Card.tsx	primitive	Surface container	—	Card.test.tsx
+PrimaryText	src/components/cells.tsx	data-cell	Primary table text	—	cells.test.tsx
+SecondaryText	src/components/cells.tsx	data-cell	Secondary table text	—	cells.test.tsx
+DateTimeCell	src/components/cells.tsx	data-cell	Localized date and time	—	cells.test.tsx
+Avatar	src/components/cells.tsx	data-cell	Initials avatar	—	cells.test.tsx
+Chip	src/components/Chip.tsx	primitive	Status and metadata label	—	Chip.test.tsx
+CompanyForm	src/components/CompanyForm.tsx	form	Create and edit company details	useRegisterCompany; useUpdateCompany	—
+CompanySourceForm	src/components/CompanySourceForm.tsx	form	Company career source registration	useSaveCompanySource	—
+RowSelect	src/components/DataTable.tsx	data-table	Table row selection control	—	DataTable.test.tsx
+DataTable	src/components/DataTable.tsx	data-table	Responsive tabular records	—	DataTable.test.tsx
+Field	src/components/Field.tsx	form	Labeled input and field guidance	—	Field.test.tsx
+FilterBar	src/components/FilterBar.tsx	filter	Filter and search layout	—	—
+FilterPill	src/components/FilterPill.tsx	filter	Removable active filter	—	FilterPill.test.tsx
+HomologationQueue	src/components/HomologationQueue.tsx	workflow	Proposed source review and probes	useSourceHealth; useProbeQueue; useSource; useProbeSource; useUpdateSourceControls; useReopenHomologation	HomologationQueue.test.tsx
+OverviewIcon	src/components/icons.tsx	icon	Overview navigation icon	—	—
+InboxIcon	src/components/icons.tsx	icon	Inbox navigation icon	—	—
+ApplicationsIcon	src/components/icons.tsx	icon	Pipeline navigation icon	—	—
+CompaniesIcon	src/components/icons.tsx	icon	Companies navigation icon	—	—
+SourcesIcon	src/components/icons.tsx	icon	Sources navigation icon	—	—
+ProfileIcon	src/components/icons.tsx	icon	Profile navigation icon	—	—
+StatusIcon	src/components/icons.tsx	icon	Status navigation icon	—	—
+SearchIcon	src/components/icons.tsx	icon	Search action icon	—	—
+ChevronDownIcon	src/components/icons.tsx	icon	Disclosure and select indicator	—	—
+FilterIcon	src/components/icons.tsx	icon	Filter action icon	—	—
+ManualIntakePanel	src/components/ManualIntakePanel.tsx	workflow	Manual source intake	useManualIntake	—
+PageHeader	src/components/PageHeader.tsx	shell	Page title, description, and actions	—	PageHeader.test.tsx
+PageShell	src/components/PageShell.tsx	shell	Consistent page layout and navigation	—	PageShell.test.tsx
+PageSizeSelect	src/components/PageSizeSelect.tsx	pagination	Page size selection	—	—
+Pagination	src/components/Pagination.tsx	pagination	Page navigation and totals	—	Pagination.test.tsx
+SearchInput	src/components/SearchInput.tsx	filter	Search input with submit affordance	—	—
+Sidebar	src/components/Sidebar.tsx	navigation	Primary application navigation	—	Sidebar.test.tsx
+Skeleton	src/components/skeletons.tsx	loading	Accessible loading container	—	skeletons.test.tsx
+Bone	src/components/skeletons.tsx	loading	Placeholder block	—	skeletons.test.tsx
+CardListSkeleton	src/components/skeletons.tsx	loading	Card list placeholder	—	skeletons.test.tsx
+TableSkeleton	src/components/skeletons.tsx	loading	Table placeholder	—	skeletons.test.tsx
+PanelSkeleton	src/components/skeletons.tsx	loading	Panel placeholder	—	skeletons.test.tsx
+SourceControlsPanel	src/components/SourceControlsPanel.tsx	workflow	Source enablement controls and probe	useSource; useUpdateSourceControls; useProbeSource	SourceControlsPanel.test.tsx
+SourceCreateForm	src/components/SourceCreateForm.tsx	form	Create source definition	useCreateSource	—
+LoadingState	src/components/states.tsx	state	Loading feedback	—	states.test.tsx
+EmptyState	src/components/states.tsx	state	Empty result feedback	—	states.test.tsx
+ErrorState	src/components/states.tsx	state	Recoverable error feedback	—	states.test.tsx
+ConflictNotice	src/components/states.tsx	state	Optimistic concurrency conflict feedback	—	states.test.tsx
+StatusBadge	src/components/StatusBadge.tsx	status	Semantic status label	—	StatusBadge.test.tsx
+Toolbar	src/components/Toolbar.tsx	filter	Search, filters, and toolbar actions	—	Toolbar.test.tsx
+Unavailable	src/components/Unavailable.tsx	state	Unavailable data explanation	—	Unavailable.test.tsx
+AnalysisPanel	src/features/matching/AnalysisPanel.tsx	feature	Assessment analysis and AI evidence display	useAnalyzeAssessment	—
+# Test-only support file, not counted as a UI component export.
+render	src/components/testing.tsx	test-helper	Shared render wrapper for component and route tests	—	used by component and route tests
