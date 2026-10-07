@@ -157,6 +157,7 @@ class WorkdayCollector:
         emitted: int,
     ) -> AsyncIterator[CollectedItem]:
         seen_pages: set[tuple[str, ...]] = set()
+        seen_ids: set[str] = set()
         total_fetched = 0
         board_total: int | None = None
         detail = _DetailRun(request)
@@ -184,12 +185,22 @@ class WorkdayCollector:
             if board_total is None and total is not None and offset == 0:
                 board_total = total
             page_signature = tuple(str(posting.get("externalPath")) for posting in postings)
-            if postings and page_signature in seen_pages:
+            page_ids = {
+                str(posting["externalPath"])
+                for posting in postings
+                if posting.get("externalPath") is not None
+            }
+            # F51-13: a page repeated whole, or made only of postings already read, is no
+            # progress; stop at once, the run stays partial and closes nothing.
+            if postings and (
+                page_signature in seen_pages or (page_ids and page_ids <= seen_ids)
+            ):
                 raise AcquisitionError(
                     AcquisitionErrorCode.PARSER_SCHEMA_CHANGED,
                     "Workday pagination repeated a page without making progress",
                 )
             seen_pages.add(page_signature)
+            seen_ids |= page_ids
             total_fetched += len(postings)
             for index, posting in enumerate(postings):
                 if not self._has_title(posting):
