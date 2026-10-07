@@ -18,6 +18,10 @@ function menuButton(container: HTMLElement) {
   return container.querySelector<HTMLButtonElement>('button[aria-controls]')!
 }
 
+function drawer() {
+  return document.querySelector<HTMLElement>('[role="dialog"][id="sidebar"]')!
+}
+
 describe('AppShell', () => {
   it('põe o link de pular como primeiro alvo de tabulação', () => {
     const container = renderShell()
@@ -56,25 +60,43 @@ describe('AppShell', () => {
     expect(renderShell().querySelector('header p')?.textContent).toBe('Fontes ativas')
   })
 
-  it('abre a gaveta pelo botão, com aria-expanded e aria-controls', () => {
+  it('abre a gaveta pelo botão, com aria-expanded, aria-controls e nome acessível', () => {
     const container = renderShell()
     const button = menuButton(container)
 
     expect(button.getAttribute('aria-expanded')).toBe('false')
-    expect(container.querySelector(`#${button.getAttribute('aria-controls')}`)).not.toBeNull()
     expect(container.querySelector('aside')?.className).toContain('hidden')
 
     act(() => button.click())
 
     expect(button.getAttribute('aria-expanded')).toBe('true')
-    expect(container.querySelector('aside')?.className).toContain('fixed')
+    expect(drawer().id).toBe(button.getAttribute('aria-controls'))
+    expect(drawer().getAttribute('aria-labelledby')).not.toBeNull()
+    expect(drawer().textContent).toContain('Navegação principal')
+  })
+
+  it('foca a navegação e mantém Tab e Shift+Tab dentro da gaveta', () => {
+    const container = renderShell()
+    const button = menuButton(container)
+    act(() => button.click())
+
+    const links = drawer().querySelectorAll<HTMLElement>('a')
+    const guards = document.querySelectorAll<HTMLElement>('[data-radix-focus-guard]')
+
+    expect(document.activeElement).toBe(links[0])
+
+    act(() => guards[1].focus())
+    expect(document.activeElement).toBe(links[0])
+
+    act(() => guards[0].focus())
+    expect(document.activeElement).toBe(links[links.length - 1])
   })
 
   it('fecha a gaveta com Esc e devolve o foco ao botão', () => {
     const container = renderShell()
     const button = menuButton(container)
     act(() => button.click())
-    container.querySelector<HTMLElement>('aside a')?.focus()
+    drawer().querySelector<HTMLElement>('a')?.focus()
 
     act(() => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
@@ -89,7 +111,17 @@ describe('AppShell', () => {
     const button = menuButton(container)
     act(() => button.click())
 
-    act(() => container.querySelector<HTMLElement>('aside nav a')?.click())
+    act(() => drawer().querySelector<HTMLElement>('nav a')?.click())
+
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('fecha a gaveta pelo fundo modal', () => {
+    const container = renderShell()
+    const button = menuButton(container)
+    act(() => button.click())
+
+    act(() => document.querySelector<HTMLElement>('[data-testid="drawer-backdrop"]')?.click())
 
     expect(button.getAttribute('aria-expanded')).toBe('false')
   })

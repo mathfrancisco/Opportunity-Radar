@@ -52,9 +52,9 @@ Inventário: URLs `/`, `/inbox`, `/opportunities/:opportunityId`, `/applications
 
 ## Revisão visual
 
-`docs/54-review` contém Inbox, detalhe, Pipeline e Overview estáticos/sintéticos, preview loopback `127.0.0.1:54154`, sem API, rede externa, persistência ou auth. Relatório registra 44 capturas: 12 padrão (4 páginas em 1440/768/360) e 32 estados (4 em 1440/360), sem overflow nos viewports normais reportados. `verification.json`: zero erros JS; Escape fecha menu e devolve foco. Teste CSS zoom 200% em viewport 360 resultou 545/360 overflow; não é zoom real. Relatório não prova que o runner detecta regressões.
+`docs/54-review` contém Inbox, detalhe, Pipeline e Overview estáticos/sintéticos, em preview loopback `127.0.0.1:54154`, sem API, rede externa, persistência ou autenticação. Os quatro protótipos receberam aceite visual explícito em 2026-10-07; o aceite é somente da direção visual para WP3–WP5. O runner registrou 45 capturas (13 padrão e 32 estados), zero erros de JavaScript, sem overflow nos viewports reportados e verificações de Escape/foco do menu, ordem do painel de decisão e sete etapas da Pipeline em 1440 e 1280 px.
 
-Pendências observadas: `.inbox-table thead` some em mobile e remove cabeçalhos para tecnologias assistivas; runner precisa assertions que falhem por regressão; timeout intermitente `[data-state]` sem causa diagnosticada; CSS/JS de alguns templates minificado. Overview exibe “2 novas desde última abertura”, métrica possivelmente sem dado; mapear ao contrato ou remover antes de migrar. Leitor de tela, zoom real, reduced-motion e dispositivos físicos não foram comprovados manualmente. Aceite visual registrado em 2026-10-07 (ver `docs/54-review/README.md`, "Aceite visual").
+Os ajustes aceitos estão refletidos no protótipo: a Pipeline comporta as sete etapas em desktop sem rolagem horizontal e o painel “Sua decisão” aparece antes de “O que a vaga pede” em até 900 px, também nessa ordem no DOM. O relatório continua limitado aos protótipos e às asserções do runner; não comprova regressões na aplicação migrada. Ainda não foram verificados zoom real do navegador, leitor de tela, reduced motion, dispositivos físicos ou E2E. Overview exibe “2 novas desde última abertura”, métrica que deve ser mapeada ao contrato ou removida antes da migração.
 
 ## Spike de primitives
 

@@ -94,10 +94,10 @@ tocar telas.
 5. Estado nunca só por cor: texto no chip, `aria-current` e marcador mais peso no item atual.
 6. Sem animação nova; `prefers-reduced-motion: reduce` neutraliza animação e transição
    globalmente.
-7. Primitivas de acessibilidade (diálogo, menu, seleção) podem vir de exatamente uma
-   biblioteca, somente atrás de wrappers em `apps/web/src/components/ui/`; rotas,
-   formulários e módulos de feature nunca a importam diretamente. Biblioteca em seleção,
-   registrada em docs/54-spike. Textos da interface em português.
+7. A única primitiva de acessibilidade aprovada é `@radix-ui/react-dialog@1.2.0`,
+   somente atrás de wrappers em `apps/web/src/components/ui/`; rotas, formulários e
+   módulos de feature nunca a importam diretamente. Não adicionar outro primitive Radix
+   sem nova medição; textos da interface permanecem em português.
 8. Migração por valores, não por nomes: `canvas`, `surface`, `ink`, `muted`, `line`,
    `accent` e tons semânticos mantêm o nome; token novo só quando o papel não tem nome.
 9. Somente tema claro; modo escuro está fora de escopo.

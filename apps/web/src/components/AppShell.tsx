@@ -1,6 +1,7 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useRef, useState } from 'react'
 import { PageHeader } from './PageHeader'
 import { Sidebar, type NavigationPath } from './Sidebar'
+import { MobileNavigationDialog } from './ui/MobileNavigationDialog'
 
 export interface AppShellProps {
   /** Omitted on pages that are reached from a link rather than from the nav. */
@@ -39,20 +40,6 @@ export function AppShell({
   const [open, setOpen] = useState(false)
   const menuButton = useRef<HTMLButtonElement>(null)
 
-  const close = useCallback((restoreFocus: boolean) => {
-    setOpen(false)
-    if (restoreFocus) menuButton.current?.focus()
-  }, [])
-
-  useEffect(() => {
-    if (!open) return
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') close(true)
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [open, close])
-
   return (
     <div className="min-h-screen bg-canvas text-ink md:flex">
       {/* Primeiro alvo de tabulação: sem isto, a sidebar inteira vem antes do conteúdo em
@@ -65,33 +52,31 @@ export function AppShell({
       </a>
 
       <div className="flex items-center gap-3 border-b border-line-strong bg-sidebar px-4 py-2 md:hidden">
-        <button
-          aria-controls={drawerId}
-          aria-expanded={open}
-          className="min-h-11 rounded-control border border-line-strong bg-surface px-4 text-sm font-medium"
-          onClick={() => setOpen((value) => !value)}
-          ref={menuButton}
-          type="button"
+        <MobileNavigationDialog
+          contentClassName="fixed inset-y-0 left-0 z-20 w-60 overflow-y-auto border-r border-line-strong bg-sidebar p-3 shadow-overlay md:hidden"
+          onOpenChange={setOpen}
+          open={open}
+          title="Navegação principal"
+          trigger={
+            <button
+              aria-controls={drawerId}
+              aria-expanded={open}
+              className="min-h-11 rounded-control border border-line-strong bg-surface px-4 text-sm font-medium"
+              ref={menuButton}
+              type="button"
+            >
+              Menu
+            </button>
+          }
         >
-          Menu
-        </button>
+          <Sidebar current={current} onNavigate={() => setOpen(false)} />
+        </MobileNavigationDialog>
       </div>
 
-      {open && (
-        <div
-          aria-hidden="true"
-          className="fixed inset-0 z-10 bg-ink/30 md:hidden"
-          data-testid="drawer-backdrop"
-          onClick={() => close(false)}
-        />
-      )}
       <aside
-        className={`${
-          open ? 'fixed inset-y-0 left-0 z-20 block overflow-y-auto shadow-overlay' : 'hidden'
-        } w-60 shrink-0 border-r border-line-strong bg-sidebar p-3 md:sticky md:top-0 md:block md:h-screen md:overflow-y-auto`}
-        id={drawerId}
+        className="hidden w-60 shrink-0 border-r border-line-strong bg-sidebar p-3 md:sticky md:top-0 md:block md:h-screen md:overflow-y-auto"
       >
-        <Sidebar current={current} onNavigate={() => close(false)} />
+        <Sidebar current={current} />
       </aside>
 
       <main className="min-w-0 flex-1 p-4 md:p-8">
