@@ -52,15 +52,20 @@ Inventário: URLs `/`, `/inbox`, `/opportunities/:opportunityId`, `/applications
 
 ## Revisão visual
 
-`docs/54-review` contém Inbox, detalhe, Pipeline e Overview estáticos/sintéticos, em preview loopback `127.0.0.1:54154`, sem API, rede externa, persistência ou autenticação. Os quatro protótipos receberam aceite visual explícito em 2026-10-07; o aceite é somente da direção visual para WP3–WP5. O runner registrou 45 capturas (13 padrão e 32 estados), zero erros de JavaScript, sem overflow nos viewports reportados e verificações de Escape/foco do menu, ordem do painel de decisão e sete etapas da Pipeline em 1440 e 1280 px.
+`docs/54-review` contém Inbox, detalhe, Pipeline e Overview estáticos/sintéticos, em preview loopback `127.0.0.1:54154`, sem API, rede externa, persistência ou autenticação. Os quatro protótipos receberam aceite visual explícito em 2026-10-07; o aceite é somente da direção visual para WP3–WP5. O runner registrou 45 capturas (13 padrão e 32 estados), zero erros de JavaScript, sem overflow nos viewports reportados e verificações de Escape/foco do menu, ordem do painel de decisão e sete etapas da Pipeline em 1440 e 1280 px. O WP3B agora usa somente o Dialog aprovado para a gaveta móvel; isso não amplia o alcance da revisão visual.
 
 Os ajustes aceitos estão refletidos no protótipo: a Pipeline comporta as sete etapas em desktop sem rolagem horizontal e o painel “Sua decisão” aparece antes de “O que a vaga pede” em até 900 px, também nessa ordem no DOM. O relatório continua limitado aos protótipos e às asserções do runner; não comprova regressões na aplicação migrada. Ainda não foram verificados zoom real do navegador, leitor de tela, reduced motion, dispositivos físicos ou E2E. Overview exibe “2 novas desde última abertura”, métrica que deve ser mapeada ao contrato ou removida antes da migração.
 
 ## Spike de primitives
 
-Radix descartável baseado em `e84be68`: Dialog 1.2.0, Dropdown 2.1.25, Slot 1.4.0, MIT. Wrappers manuais inspirados em shadcn, sem proveniência de registry. Reporte local: 43 arquivos/294 testes, `npm check` e build passaram; JS gzip 149,01→179,77 kB (+20,64%, acima do orçamento de 10%). Não aprovar/selecionar sem resolver custo e proveniência. React Aria 1.21.1 e MUI 9.4.0 foram apenas pesquisados por metadados.
-
-Segundo relato do worker, spike Base UI 1.8.0 teve testes unitários aprovados, mas Shift+Tab falhou no smoke real; check completo teria falhado por ESLint percorrer `node_modules.radix-archived`; limpeza parcial por binário bloqueado no Windows. Não há log literal completo desse relato. Fontes/manifests/teste/runner textuais estão em `docs/54-spike/artifacts/base-ui-source.patch`; diff usa paths relativos e `git apply --check` passou no momento da publicação. Arquivo é referência de revisão, sem dependências, binários ou worktree. Não publicar/reparar a worktree nem fazer terceira tentativa automática.
+O WP3B aprovou exclusivamente `@radix-ui/react-dialog` 1.2.0, sob wrapper local,
+para a gaveta de navegação móvel. A medição final do único Dialog foi
+149,01→161,62 kB de JS gzip (+12,61 kB / +8,54%), dentro do orçamento de 10%; a
+licença é MIT. A medição histórica de +20,64% corresponde ao primeiro spike
+mais amplo (Dialog, Dropdown e Slot), não ao estado aprovado. Restam cerca de
+2,2 kB até o limite; qualquer novo primitive exige medição comparável e o
+Dialog deve ser carregado sob demanda se o total exceder +10%. A aprovação não
+seleciona shadcn, outros primitives, rotas, estilos globais ou a SPEC 54.
 
 ## Validação e limites do ambiente
 

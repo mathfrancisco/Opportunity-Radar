@@ -1,4 +1,4 @@
-import { type ReactNode, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { PageHeader } from './PageHeader'
 import { Sidebar, type NavigationPath } from './Sidebar'
 import { MobileNavigationDialog } from './ui/MobileNavigationDialog'
@@ -40,6 +40,23 @@ export function AppShell({
   const [open, setOpen] = useState(false)
   const menuButton = useRef<HTMLButtonElement>(null)
 
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 768px)')
+    const closeOnDesktop = (event: MediaQueryListEvent) => {
+      if (event.matches) {
+        setOpen(false)
+      }
+    }
+
+    if (desktop.addEventListener) {
+      desktop.addEventListener('change', closeOnDesktop)
+      return () => desktop.removeEventListener('change', closeOnDesktop)
+    }
+
+    desktop.addListener(closeOnDesktop)
+    return () => desktop.removeListener(closeOnDesktop)
+  }, [])
+
   return (
     <div className="min-h-screen bg-canvas text-ink md:flex">
       {/* Primeiro alvo de tabulação: sem isto, a sidebar inteira vem antes do conteúdo em
@@ -59,7 +76,7 @@ export function AppShell({
           title="Navegação principal"
           trigger={
             <button
-              aria-controls={drawerId}
+              aria-controls={open ? drawerId : undefined}
               aria-expanded={open}
               className="min-h-11 rounded-control border border-line-strong bg-surface px-4 text-sm font-medium"
               ref={menuButton}
