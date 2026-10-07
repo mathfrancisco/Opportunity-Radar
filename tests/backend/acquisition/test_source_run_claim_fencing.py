@@ -424,6 +424,72 @@ def test_fenced_item_write_is_rejected_after_the_lease_is_recovered(
     assert "claim_recovered" in events and "fence_rejected" in events
 
 
+def test_stale_owner_leaves_no_occurrence_or_observation_rows_after_recovery(
+    board: _Board, caplog: pytest.LogCaptureFixture
+) -> None:
+    """AC02 (occurrence/presence): once B recovered the lease, A's late items leave no
+    observation of A's run and no new occurrence; the rejection is logged as FENCE_REJECTED."""
+    caplog.set_level(logging.INFO)
+    board.run_one(board.board_of("seen-by-a", "seen-by-b"))
+    with Session(board.engine) as session:
+        _normalize_source(session, board)  # occurrences exist, so presence updates have a target
+
+    async def scenario() -> tuple[UUID, SourceRunModel]:
+        blocked, release = asyncio.Event(), asyncio.Event()
+
+        async def a_script(request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+            del request
+            yield board.item("seen-by-a")
+            blocked.set()
+            await release.wait()
+            yield board.item("seen-by-b")  # a row B also reports, written after the loss
+            yield board.item("a-after-loss")  # a row nobody else reports
+
+        with Session(board.engine) as a_session, Session(board.engine) as b_session:
+            a = board.service(board.collector(a_script), a_session)
+            b = board.service(board.board_of("seen-by-b"), b_session)
+            a_task = asyncio.create_task(a.execute(board.source_id, _REQUEST))
+            await blocked.wait()
+            claim = board.claim_row()
+            assert claim is not None and claim.run_id is not None
+            board.expire_lease()
+            b_run = await b.execute(board.source_id, _REQUEST)
+            release.set()
+            with pytest.raises(FencedWriteRejected):
+                await a_task
+            return claim.run_id, b_run
+
+    a_run_id, b_run = asyncio.run(scenario())
+
+    with Session(board.engine) as session:
+        occurrences = {
+            occurrence.external_id: occurrence
+            for occurrence in session.scalars(
+                select(SourceOccurrenceModel).where(
+                    SourceOccurrenceModel.source_definition_id == board.source_id
+                )
+            )
+        }
+        assert set(occurrences) == {"seen-by-a", "seen-by-b"}  # nothing created by A's late item
+        observed = list(
+            session.execute(
+                select(
+                    SourceOccurrenceObservationModel.source_run_id,
+                    SourceOccurrenceObservationModel.source_occurrence_id,
+                ).where(SourceOccurrenceObservationModel.source_run_id.in_([a_run_id, b_run.id]))
+            )
+        )
+        id_to_external = {occurrence.id: key for key, occurrence in occurrences.items()}
+        # A has no observation of the row it tried to write after the loss.
+        assert sorted(
+            (str(run_id), id_to_external[occurrence_id]) for run_id, occurrence_id in observed
+        ) == sorted([(str(a_run_id), "seen-by-a"), (str(b_run.id), "seen-by-b")])
+        assert occurrences["seen-by-b"].last_seen_run_id == b_run.id
+    assert board.run(a_run_id).error_code == "FENCE_REJECTED"
+    assert "a-after-loss" not in board.external_ids()
+    assert "fence_rejected" in _events(caplog)
+
+
 def test_fenced_terminal_write_leaves_run_checkpoint_and_inventory_untouched(
     board: _Board,
 ) -> None:
@@ -839,6 +905,51 @@ def test_stale_complete_run_does_not_close_absences_once_a_newer_run_started(
             fourth.id, may_close=guard.run_may_close_absences
         ) is True
         assert _absent_status(session, board) == "CLOSED"
+
+
+def test_closure_is_refused_for_a_run_whose_expired_lease_was_recovered(
+    board: _Board, caplog: pytest.LogCaptureFixture
+) -> None:
+    """F51-07 AC02 (closure): a lease that expired and was taken over by a recoverer, which
+    has not finished anything yet, already stops the earlier run from closing absences."""
+    caplog.set_level(logging.INFO)
+    board.run_one(board.board_of("present", "absent"))
+    board.run_one(board.board_of("present"))
+    third = board.run_one(board.board_of("present"))  # would close it: absent from two in a row
+    assert third.complete is True
+    with Session(board.engine) as session:
+        _normalize_source(session, board)
+        guard = board.service(board.board_of(), session)
+
+        # Nothing newer has claimed the source yet, so the guard still lets `third` close.
+        assert guard.run_may_close_absences(board.run(third.id)) is True
+        session.rollback()
+
+        # A newer owner claims, its lease lapses and a recoverer takes it over: no run of
+        # either has completed, yet the generation moved past `third`.
+        with Session(board.engine) as claimant:
+            first_claim = AcquisitionRepository(claimant).claim_source_execution(
+                source_id=board.source_id, run_id=uuid4()
+            )
+        board.expire_lease()
+        with Session(board.engine) as recoverer:
+            recovered = AcquisitionRepository(recoverer).claim_source_execution(
+                source_id=board.source_id, run_id=uuid4()
+            )
+        assert recovered.fencing_token > first_claim.fencing_token > third.fencing_token  # type: ignore[operator]
+        board.expire_lease()
+
+        closed = OpportunityService(session).reconcile_run_closures(
+            third.id, may_close=guard.run_may_close_absences
+        )
+
+        assert closed is False
+        assert _absent_status(session, board) != "CLOSED"
+        assert [
+            record.__dict__["reason"]
+            for record in caplog.records
+            if record.__dict__.get("event") == "fence_rejected"
+        ] == ["closure_superseded"]
 
 
 def test_closure_without_claims_behaves_as_before(board: _Board) -> None:

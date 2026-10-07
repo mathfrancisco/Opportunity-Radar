@@ -8,13 +8,15 @@ of `tests/backend/opportunities/` by `RUN_DATABASE_INTEGRATION`.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
 from contextlib import nullcontext
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.engine import Engine
@@ -29,22 +31,27 @@ from opportunity_radar.opportunities.suggestions import (
     OpportunitySuggestionModel,
     SuggestibleField,
     SuggestionAlreadyDecidedError,
+    SuggestionDeferModel,
     SuggestionNotFoundError,
     SuggestionStatus,
     _suggestion_content_hash,
     accept_suggestion,
     candidates_needing_suggestion,
+    load_classification_prompt,
     reject_suggestion,
     suggest_fields,
     unknown_fields,
 )
+from opportunity_radar.platform.ai.breaker import CircuitBreaker
 from opportunity_radar.platform.ai.errors import ErrorKind, ProviderError
+from opportunity_radar.platform.ai.metrics import ai_period_comparison
 from opportunity_radar.platform.ai.providers.base import (
     LLMRequest,
     LLMResponse,
     RateLimit,
     Usage,
 )
+from opportunity_radar.platform.ai.providers.groq import GroqProvider
 from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits
 from opportunity_radar.platform.ai.router import AIRouter
 from opportunity_radar.platform.ai.tasks import AITask, default_routes
@@ -1207,3 +1214,429 @@ def test_suggestion_claim_prevents_duplicate_provider_call() -> None:
         finally:
             _cleanup(session, [opportunity.id])
     other_engine.dispose()
+
+
+# --- F51-09 / F51-10 acceptance criteria: operations, attempts and defers -----------
+
+
+class _SteppedClock:
+    """A monotonic clock that advances 50 ms per reading, so a measured latency is known."""
+
+    def __init__(self) -> None:
+        self._now = 0.0
+
+    def __call__(self) -> float:
+        self._now += 0.05
+        return self._now
+
+
+def _groq_router(
+    handler, *, fallback_enabled: bool = False
+) -> tuple[AIRouter, list[httpx.Request]]:
+    """The real Groq adapter over a fake HTTP transport: whatever `handler` answers (or
+    raises) is what the router sees, and `requests` is what reached the transport."""
+    requests: list[httpx.Request] = []
+
+    def recording(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return handler(request)
+
+    provider = GroqProvider(
+        api_key="k",
+        base_url="https://groq.test",
+        clock=_SteppedClock(),
+        client_factory=lambda: httpx.AsyncClient(transport=httpx.MockTransport(recording)),
+    )
+    router = AIRouter(
+        provider, default_routes(_settings()), fallback_enabled=fallback_enabled, max_retries=0
+    )
+    return router, requests
+
+
+def _groq_body(model: str, content: str, usage: dict | None = None) -> dict:
+    body: dict = {
+        "model": model,
+        "choices": [{"message": {"content": content}, "finish_reason": "stop"}],
+    }
+    if usage is not None:
+        body["usage"] = usage
+    return body
+
+
+def _classification_operation_ids(engine: Engine) -> set[UUID]:
+    with engine.connect() as connection:
+        return set(connection.execute(text(
+            "SELECT id FROM platform.ai_operation_record WHERE task = 'job_classification'"
+        )).scalars())
+
+
+def _operations_after(engine: Engine, known: set[UUID]) -> list:
+    with engine.connect() as connection:
+        rows = connection.execute(text(
+            "SELECT id, state, error_kind FROM platform.ai_operation_record "
+            "WHERE task = 'job_classification' ORDER BY started_at"
+        )).all()
+    return [row for row in rows if row.id not in known]
+
+
+def _attempts_of(engine: Engine, operation_id: UUID) -> list:
+    with engine.connect() as connection:
+        return list(connection.execute(text(
+            "SELECT operation_ordinal, model, success, error_kind, http_status, latency_ms, "
+            "prompt_tokens, completion_tokens, transport_started, attempt_state "
+            "FROM platform.ai_call_record WHERE operation_id = :id ORDER BY operation_ordinal"
+        ), {"id": operation_id}).all())
+
+
+def _forget_calls(engine: Engine) -> None:
+    with engine.begin() as connection:
+        connection.execute(text("TRUNCATE platform.ai_call_record"))
+
+
+def _drop_defers(session: Session, opportunity_ids: list[UUID]) -> None:
+    session.rollback()
+    session.execute(text(
+        "DELETE FROM platform.ai_suggestion_defer WHERE opportunity_id = ANY(:ids)"
+    ), {"ids": opportunity_ids})
+    session.commit()
+
+
+def test_a_connection_error_after_transport_start_is_one_failed_attempt_of_one_operation(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """F51-09 AC01: the request left, then the connection broke. One `provider_error`
+    operation, one failed attempt with `transport_started`, correlated by operation id."""
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    router, requests = _groq_router(refuse)
+    _forget_calls(engine)
+    with Session(engine) as session:
+        item = _opportunity(
+            title="Backend Engineer", description="Remote role building Python APIs.", **_KNOWN
+        )
+        session.add(item)
+        session.commit()
+        monkeypatch.setattr(worker, "candidates_needing_suggestion", lambda *_a, **_k: [item])
+        known = _classification_operation_ids(engine)
+        try:
+            with caplog.at_level(logging.INFO, logger="opportunity_radar.worker"):
+                worker.suggest_fields_pending(engine, router)
+
+            assert len(requests) == 1
+            [operation] = _operations_after(engine, known)
+            assert (operation.state, operation.error_kind) == ("provider_error", "transient")
+            [attempt] = _attempts_of(engine, operation.id)
+            assert attempt.transport_started is True
+            assert (attempt.success, attempt.error_kind, attempt.attempt_state) == (
+                False, "transient", "completed"
+            )
+            assert attempt.operation_ordinal == 0 and attempt.http_status is None
+            summary = next(
+                record for record in caplog.records
+                if record.message == "suggest fields batch finished"
+            )
+            # `failed` counts only unexpected exceptions; a provider error is a failure
+            # class of its own, so the card's "failed=1" is not what the batch reports.
+            assert (summary.processed, summary.failed) == (1, 0)
+            assert summary.failure_classes == {"provider_error": 1}
+        finally:
+            _drop_defers(session, [item.id])
+            _cleanup(session, [item.id])
+            _forget_calls(engine)
+
+
+def test_http_200_with_an_unparseable_body_and_no_usage_keeps_status_and_unknown_tokens() -> None:
+    """F51-09 AC02: one `parse_error` operation; its attempt keeps status 200 and latency,
+    and the tokens the provider never reported stay unknown (NULL), not zero."""
+
+    def unparseable(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_groq_body(_FAST_MODEL, "this is not json"))
+
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    router, requests = _groq_router(unparseable)
+    _forget_calls(engine)
+    since = datetime.now(UTC) - timedelta(minutes=1)
+    with Session(engine) as session:
+        item = _opportunity(role_family="UNKNOWN")
+        session.add(item)
+        session.commit()
+        known = _classification_operation_ids(engine)
+        try:
+            outcome = _run(suggest_fields(session, router, item, prompt=_PROMPT))
+
+            assert (outcome.state, outcome.called) == ("parse_error", True)
+            assert len(requests) == 1
+            [operation] = _operations_after(engine, known)
+            assert (operation.state, operation.error_kind) == ("parse_error", "parse_error")
+            [attempt] = _attempts_of(engine, operation.id)
+            assert (attempt.http_status, attempt.latency_ms) == (200, 50)
+            assert (attempt.prompt_tokens, attempt.completion_tokens) == (None, None)
+            assert attempt.transport_started is True
+            window = (since, datetime.now(UTC) + timedelta(minutes=1))
+            totals = ai_period_comparison(
+                engine, task="job_classification", baseline=(since, since), pilot=window
+            )
+            assert (totals.pilot.requests, totals.pilot.recorded_tokens) == (1, 0)
+            assert totals.pilot.requests_without_tokens == 1  # unknown, reported as a gap
+            assert "pilot.tokens" in totals.gaps
+        finally:
+            _drop_defers(session, [item.id])
+            _cleanup(session, [item.id])
+            _forget_calls(engine)
+
+
+def test_an_open_breaker_is_decided_before_transport_and_records_no_attempt() -> None:
+    """F51-09 AC03 (breaker): every model of the route is open, so the operation ends
+    `preflight`: no transport call, no attempt row, no token recorded as zero."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    provider = _RecordingProvider()
+    breaker = CircuitBreaker(failures=1, cooldown_seconds=3600)
+    router = AIRouter(provider, default_routes(_settings()), max_retries=0, breaker=breaker)
+    for model in router.route(AITask.JOB_CLASSIFICATION).chain:
+        breaker.record_failure(model)
+    _forget_calls(engine)
+    with Session(engine) as session:
+        item = _opportunity(role_family="UNKNOWN")
+        session.add(item)
+        session.commit()
+        known = _classification_operation_ids(engine)
+        try:
+            outcome = _run(suggest_fields(session, router, item, prompt=_PROMPT))
+
+            assert provider.requests == []
+            # The router reports "no model available" as a quota error: an open breaker and
+            # an exhausted balance are told apart only by the operation's `preflight` state.
+            assert (outcome.state, outcome.called, outcome.error_kind) == (
+                "preflight", False, "quota"
+            )
+            [operation] = _operations_after(engine, known)
+            assert operation.state == "preflight"
+            assert _attempts_of(engine, operation.id) == []
+            with engine.connect() as connection:
+                assert connection.scalar(text(
+                    "SELECT count(*) FROM platform.ai_call_record WHERE task = 'job_classification'"
+                )) == 0
+        finally:
+            _drop_defers(session, [item.id])
+            _cleanup(session, [item.id])
+            _forget_calls(engine)
+
+
+@pytest.mark.parametrize("fallback_usage", [30, None])
+def test_a_rate_limited_primary_and_a_fallback_answer_are_one_operation_with_summed_usage(
+    fallback_usage: int | None,
+) -> None:
+    """F51-09 AC04: primary 429 reporting 12 tokens, fallback 200 reporting 30: one
+    operation, two ordered attempts, 42 recorded tokens; usage the provider never sent is
+    unknown, and the failed attempt's tokens are not discarded."""
+    primary, fallback = _CHAIN[0], _CHAIN[1]
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if json.loads(request.content)["model"] == primary:
+            return httpx.Response(429, json={
+                "error": {"message": "rate limit reached"},
+                "usage": {"prompt_tokens": 8, "completion_tokens": 4, "total_tokens": 12},
+            })
+        usage = (
+            None if fallback_usage is None
+            else {"prompt_tokens": 20, "completion_tokens": 10, "total_tokens": fallback_usage}
+        )
+        return httpx.Response(200, json=_groq_body(fallback, "{}", usage))
+
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    router, requests = _groq_router(answer, fallback_enabled=True)
+    _forget_calls(engine)
+    since = datetime.now(UTC) - timedelta(minutes=1)
+    with Session(engine) as session:
+        item = _opportunity(role_family="UNKNOWN")
+        session.add(item)
+        session.commit()
+        known = _classification_operation_ids(engine)
+        try:
+            outcome = _run(suggest_fields(session, router, item, prompt=_PROMPT))
+
+            assert outcome.state == "success"
+            assert [json.loads(request.content)["model"] for request in requests] == [
+                primary, fallback
+            ]
+            [operation] = _operations_after(engine, known)
+            assert operation.state == "success"
+            first, second = _attempts_of(engine, operation.id)
+            assert (first.operation_ordinal, first.model, first.http_status) == (0, primary, 429)
+            assert (first.error_kind, first.prompt_tokens, first.completion_tokens) == (
+                "quota", 8, 4
+            )
+            assert (second.operation_ordinal, second.model, second.http_status) == (
+                1, fallback, 200
+            )
+            assert second.success is True
+            window = (since, datetime.now(UTC) + timedelta(minutes=1))
+            totals = ai_period_comparison(
+                engine, task="job_classification", baseline=(since, since), pilot=window
+            )
+            assert totals.pilot.requests == 2
+            if fallback_usage is None:
+                assert (second.prompt_tokens, second.completion_tokens) == (None, None)
+                assert totals.pilot.recorded_tokens == 12  # the failed attempt still counts
+                assert totals.pilot.requests_without_tokens == 1
+                assert "pilot.tokens" in totals.gaps
+            else:
+                assert (second.prompt_tokens, second.completion_tokens) == (20, 10)
+                assert totals.pilot.recorded_tokens == 42
+                assert totals.pilot.requests_without_tokens == 0
+                assert "pilot.tokens" not in totals.gaps
+        finally:
+            _drop_defers(session, [item.id])
+            _cleanup(session, [item.id])
+            _forget_calls(engine)
+
+
+def test_quota_exhaustion_persists_one_coherent_defer_and_a_rerun_waits_for_availability(
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F51-10 AC04: after the shared balance is gone no second request is sent. The persisted
+    defer is scoped to the content, prompt and route, and ends at the real availability; the
+    posting is not asked about again until then. Candidates the batch never reached get no
+    defer row (the card says every candidate does)."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    provider = _RecordingProvider()
+    router, guard, chain = _quota_router(engine, provider, day_requests=1)
+    prompt = load_classification_prompt()
+    with Session(engine) as session:
+        items = [
+            _opportunity(title=f"Engineer {n}", description=f"Engineer {n}, remote.", **_KNOWN)
+            for n in range(4)
+        ]
+        session.add_all(items)
+        session.commit()
+        ids = [item.id for item in items]
+        monkeypatch.setattr(
+            worker, "candidates_needing_suggestion", lambda *_args, **_kwargs: items
+        )
+        started = datetime.now(UTC)
+        try:
+            worker.suggest_fields_pending(engine, router, worker_requests_ceiling=1)
+
+            assert len(provider.requests) == 1
+            defers = session.scalars(
+                select(SuggestionDeferModel).where(SuggestionDeferModel.opportunity_id.in_(ids))
+            ).all()
+            # Only the candidate that met the exhausted balance is deferred; the third and
+            # fourth were never attempted and have no row.
+            assert [defer.opportunity_id for defer in defers] == [items[1].id]
+            defer = defers[0]
+            assert (defer.reason, defer.attempt_count, defer.prompt_version) == (
+                "quota", 1, prompt.version
+            )
+            assert defer.route_hash == hashlib.sha256("\0".join(chain).encode()).hexdigest()
+            assert defer.content_hash == _suggestion_content_hash(
+                "Engineer 1", "Engineer 1, remote.", [SuggestibleField.SENIORITY]
+            )
+            availability = guard.next_available_at(chain[0])
+            assert defer.next_attempt_at > started
+            assert abs((defer.next_attempt_at - availability).total_seconds()) < 5
+
+            # Before `next_attempt_at` the deferred posting makes no request, whatever the
+            # balance: the provider behind a router with plenty of quota is never reached.
+            quiet = _RecordingProvider()
+            open_router = AIRouter(quiet, default_routes(_settings()), max_retries=0)
+            blocked = _run(suggest_fields(session, open_router, items[1], prompt=prompt))
+            assert (blocked.state, blocked.error_kind, blocked.called) == (
+                "deferred", "quota", False
+            )
+            assert blocked.next_attempt_at == defer.next_attempt_at
+            assert quiet.requests == []
+
+            # Once the availability time has passed the same content is attempted again.
+            session.execute(text(
+                "UPDATE platform.ai_suggestion_defer "
+                "SET next_attempt_at = now() - interval '1 second' WHERE opportunity_id = :id"
+            ), {"id": items[1].id})
+            session.commit()
+            session.expire_all()
+            retried = _run(suggest_fields(session, open_router, items[1], prompt=prompt))
+            assert (retried.state, retried.called) == ("success", True)
+            assert len(quiet.requests) == 1
+            assert session.scalars(
+                select(SuggestionDeferModel).where(SuggestionDeferModel.opportunity_id == ids[1])
+            ).all() == []
+        finally:
+            _drop_defers(session, ids)
+            _cleanup(session, ids)
+            _forget_calls(engine)
+
+
+def test_a_defer_is_scoped_to_its_content_hash_and_changed_content_is_selectable() -> None:
+    """F51-10 AC05: a defer for hash H keeps that content out of the queue and out of the
+    provider until it expires; the same posting with content hashing to H2 is selected and
+    asked about, while H's defer stays untouched."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    provider = _RecordingProvider()
+    router = AIRouter(provider, default_routes(_settings()), max_retries=0)
+    route = router.route(AITask.JOB_CLASSIFICATION)
+    route_hash = hashlib.sha256("\0".join(route.chain).encode()).hexdigest()
+    pending = [SuggestibleField.SENIORITY]
+
+    def selected(session: Session) -> set[UUID]:
+        return {
+            candidate.id
+            for candidate in candidates_needing_suggestion(
+                session, limit=100_000, prompt_version=_PROMPT.version,
+                route_hash=route_hash, prompt=_PROMPT, route=route,
+            )
+        }
+
+    with Session(engine) as session:
+        profile_id = _ensure_active_profile(session)
+        item = _opportunity(
+            title="Backend Engineer", description="We build APIs in Python.", **_KNOWN
+        )
+        session.add(item)
+        session.flush()
+        _rank(session, profile_id, [item])
+        first_hash = _suggestion_content_hash(
+            "Backend Engineer", "We build APIs in Python.", pending
+        )
+        changed_description = "We build APIs in Python and Go."
+        changed_hash = _suggestion_content_hash("Backend Engineer", changed_description, pending)
+        assert changed_hash != first_hash
+        expires_at = datetime.now(UTC) + timedelta(hours=1)
+        defer = SuggestionDeferModel(
+            opportunity_id=item.id, content_hash=first_hash, prompt_version=_PROMPT.version,
+            route_hash=route_hash, attempt_count=1, reason="transient", next_attempt_at=expires_at,
+        )
+        session.add(defer)
+        session.flush()
+        try:
+            # H, before it expires: out of the queue, and no request even if asked directly.
+            assert item.id not in selected(session)
+            blocked = _run(suggest_fields(session, router, item, prompt=_PROMPT))
+            assert (blocked.state, blocked.error_kind, blocked.called) == (
+                "deferred", "transient", False
+            )
+            assert blocked.next_attempt_at == expires_at
+            assert provider.requests == []
+
+            # H2: the same posting with other content is a different key.
+            item.description = changed_description
+            session.flush()
+            assert item.id in selected(session)
+            asked = _run(suggest_fields(session, router, item, prompt=_PROMPT))
+            assert asked.called is True
+            assert len(provider.requests) == 1
+            assert changed_description in provider.requests[0].user
+            assert session.get(SuggestionDeferModel, (
+                item.id, first_hash, _PROMPT.version, route_hash
+            )).next_attempt_at == expires_at
+
+            # Back to H once its defer has expired: selectable again.
+            item.description = "We build APIs in Python."
+            defer.next_attempt_at = datetime.now(UTC) - timedelta(seconds=1)
+            session.flush()
+            assert item.id in selected(session)
+        finally:
+            session.rollback()
+            _forget_calls(engine)

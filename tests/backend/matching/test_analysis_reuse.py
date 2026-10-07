@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from test_analysis_persistence import _completed, _seed_assessment, _StubAdapter
 
@@ -107,3 +108,43 @@ def test_a_new_rules_version_reuses_the_completed_analysis_without_a_provider_ca
         assert reused.id != original_id
         assert reused.cache_key == original.cache_key
         assert is_reused_analysis(reused)
+
+
+def test_a_valid_cached_analysis_is_a_cache_hit_with_no_attempt_and_no_zero_tokens() -> None:
+    """F51-09 AC03 (cache): the cache answers before any transport. The operation ends
+    `cache_hit`, no HTTP attempt row exists for it, and the cache event records no tokens
+    at all (NULL), never a zero."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        repository, record = _seed_assessment(session)
+        assessment = repository.get_existing(input_hash=record.input_hash)
+        assert assessment is not None
+        adapter = _StubAdapter(_completed())
+        asyncio.run(MatchingService(session).analyze(assessment.id, adapter))  # type: ignore[arg-type]
+        assert adapter.calls == 1
+
+        def match_operations() -> set[object]:
+            with engine.connect() as connection:
+                return set(connection.execute(text(
+                    "SELECT id FROM platform.ai_operation_record WHERE task = 'job_match'"
+                )).scalars())
+
+        known = match_operations()
+        asyncio.run(MatchingService(session).analyze(assessment.id, adapter))  # type: ignore[arg-type]
+
+        assert adapter.calls == 1  # the stub stands for the transport: it was not reached
+        [operation_id] = match_operations() - known
+        with engine.connect() as connection:
+            operation = connection.execute(text(
+                "SELECT state, error_kind FROM platform.ai_operation_record WHERE id = :id"
+            ), {"id": operation_id}).one()
+            events = connection.execute(text(
+                "SELECT provider, cache_hit, success, transport_started, operation_ordinal, "
+                "prompt_tokens, completion_tokens FROM platform.ai_call_record "
+                "WHERE operation_id = :id"
+            ), {"id": operation_id}).all()
+        assert (operation.state, operation.error_kind) == ("cache_hit", None)
+        [event] = events  # the cache event is the only row: no HTTP attempt
+        assert (event.provider, event.cache_hit, event.success) == ("cache", True, True)
+        assert event.transport_started is False and event.operation_ordinal is None
+        assert (event.prompt_tokens, event.completion_tokens) == (None, None)
