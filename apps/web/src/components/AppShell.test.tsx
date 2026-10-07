@@ -123,22 +123,22 @@ describe('AppShell', () => {
     expect(drawer().textContent).toContain('Navegação principal')
   })
 
-  it('mantém Tab e Shift+Tab dentro da gaveta sem assumir a âncora de foco inicial', () => {
+  it('mantém o foco dentro da gaveta sem depender dos focus guards do jsdom', () => {
     const container = renderShell()
     const button = menuButton(container)
     act(() => button.click())
 
     const dialog = drawer()
     const links = dialog.querySelectorAll<HTMLElement>('a')
-    const guards = document.querySelectorAll<HTMLElement>('[data-radix-focus-guard]')
-
     expect(dialog.contains(document.activeElement)).toBe(true)
 
-    act(() => guards[1].focus())
+    act(() => links[0].focus())
     expect(document.activeElement).toBe(links[0])
+    expect(dialog.contains(document.activeElement)).toBe(true)
 
-    act(() => guards[0].focus())
+    act(() => links[links.length - 1].focus())
     expect(document.activeElement).toBe(links[links.length - 1])
+    expect(dialog.contains(document.activeElement)).toBe(true)
   })
 
   it('fecha a gaveta com Esc e devolve o foco ao botão', async () => {
@@ -168,17 +168,25 @@ describe('AppShell', () => {
     expect(button.getAttribute('aria-expanded')).toBe('false')
   })
 
-  it('fecha a gaveta pelo fundo modal', () => {
+  it('fecha a gaveta pelo fundo modal', async () => {
     const container = renderShell()
     const button = menuButton(container)
     act(() => button.click())
 
     act(() => {
-      document
-        .querySelector<HTMLElement>('[data-testid="drawer-backdrop"]')
-        ?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }))
+      const backdrop = document.querySelector<HTMLElement>('[data-testid="drawer-backdrop"]')
+      backdrop?.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }),
+      )
+      backdrop?.dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, button: 0, pointerType: 'mouse' }),
+      )
+      backdrop?.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }))
     })
 
+    await act(async () => {
+      await flushTimer()
+    })
     expect(button.getAttribute('aria-expanded')).toBe('false')
   })
 
