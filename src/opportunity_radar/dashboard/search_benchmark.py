@@ -6,7 +6,10 @@ import hashlib
 import inspect
 import json
 import math
+import re
 from collections import Counter
+from collections.abc import Callable
+from time import perf_counter
 from typing import Any
 from uuid import UUID
 
@@ -285,4 +288,208 @@ def compare_snapshots(left: dict[str, Any], right: dict[str, Any]) -> dict[str, 
             "comparable" if stable and same_corpus and same_algorithm else "not_comparable"
         ),
         "payload_changed": stable and not same_corpus,
+    }
+
+
+# --- latency groups (F51-17 AC04) ---------------------------------------------------------
+
+#: Compose projects that hold real data or an owner's work: never restarted by a benchmark.
+FORBIDDEN_RESTART_PROJECTS = frozenset({"opportunity-radar-dev", "opportunity-radar", "orf51terra"})
+MIN_COLD_RESTARTS = 5
+MIN_WARM_REPETITIONS = 10
+
+
+def validate_restart_project(project: str) -> str:
+    """The name of a disposable Compose project, or `ValueError`."""
+    name = project.strip()
+    if not name or not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", name):
+        raise ValueError("compose project name must be lowercase letters, digits, '-' or '_'")
+    if name in FORBIDDEN_RESTART_PROJECTS:
+        raise ValueError(f"refusing to restart postgres of compose project {name}")
+    return name
+
+
+def _group(raw: dict[str, list[float]], group: str) -> dict[str, Any]:
+    """Raw samples with p50/p95 per query and pooled over every query."""
+    pooled = [value for values in raw.values() for value in values]
+
+    def summary(values: list[float]) -> dict[str, Any]:
+        both = summarize_latencies(values, values)
+        return both[group]
+
+    return {
+        "raw_ms": raw,
+        "per_query": {query: summary(values) for query, values in raw.items()},
+        "all_queries": summary(pooled),
+    }
+
+
+def measure_latency_groups(
+    queries: list[str],
+    run: Callable[[str], object],
+    *,
+    warm_repetitions: int = MIN_WARM_REPETITIONS,
+    cold_restarts: int = 0,
+    restart: Callable[[], None] | None = None,
+    restart_method: str | None = None,
+    run_cold: Callable[[str], object] | None = None,
+    clock: Callable[[], float] = perf_counter,
+    environment: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Warm and cold timings, kept apart, with raw samples and p50/p95 per query and pooled.
+
+    Warm: one untimed run per query, then `warm_repetitions` (at least 10) timed runs. Cold:
+    `cold_restarts` times, `restart()` and then each query once, in order, timed with
+    `run_cold` (a fresh connection; the old ones die with the restart). Without a `restart`
+    there is no cold group: nothing is timed or invented, and the group says why. Each cold
+    sample records its position after the restart, since only the first query of a restart
+    meets a fully cold buffer cache.
+    """
+    if warm_repetitions < MIN_WARM_REPETITIONS:
+        raise ValueError(f"warm needs at least {MIN_WARM_REPETITIONS} repetitions per query")
+    if cold_restarts and restart is None:
+        raise ValueError("cold samples need a restart callable")
+    warm: dict[str, list[float]] = {}
+    for query in queries:
+        run(query)
+        samples = []
+        for _ in range(warm_repetitions):
+            started = clock()
+            run(query)
+            samples.append((clock() - started) * 1000)
+        warm[query] = samples
+    cold: dict[str, list[float]] = {query: [] for query in queries}
+    positions: list[dict[str, Any]] = []
+    evidence: list[dict[str, Any]] = []
+    measure = run_cold or run
+    if restart is not None:
+        for index in range(cold_restarts):
+            restart()
+            evidence.append(
+                {
+                    "isolated_test_environment": True,
+                    "cache_state": "cold",
+                    "cache_reset_performed": True,
+                    "method": restart_method or "postgres restart",
+                    "evidence_ref": f"restart-{index + 1}",
+                }
+            )
+            for position, query in enumerate(queries):
+                started = clock()
+                measure(query)
+                cold[query].append((clock() - started) * 1000)
+                positions.append({"restart": index + 1, "query": query, "position": position + 1})
+    cold_group = _group(cold, "cold")
+    if len(evidence) < MIN_COLD_RESTARTS:
+        # Many queries per restart would pool past five samples with fewer than five restarts.
+        cold_group["all_queries"] = {
+            "count": len(evidence),
+            "p50_ms": None,
+            "p95_ms": None,
+            "status": f"insufficient_need_{MIN_COLD_RESTARTS}_restarts",
+        }
+    return {
+        "warm": {"repetitions_per_query": warm_repetitions, **_group(warm, "warm")},
+        "cold": {
+            "restarts": len(evidence),
+            "condition": (
+                restart_method or "postgres restart"
+                if evidence
+                else "N/D: no restart of the postgres service was requested"
+            ),
+            "evidence": evidence,
+            "positions": positions,
+            **cold_group,
+        },
+        "environment": environment or {},
+    }
+
+
+# --- paired A/B report (F51-17 AC05) -------------------------------------------------------
+
+_PAIRED_METRICS = ("precision_at_k", "recall_at_k")
+
+
+def _snapshot_of(report: dict[str, Any]) -> dict[str, Any]:
+    hashes = report["hashes"]
+    return {
+        "cohort_hash": hashes["cohort"],
+        "query_hash": hashes["queries"],
+        "gold_hash": hashes["gold"],
+        "filter_hash": canonical_hash(
+            {row["query"]: row.get("filters", {}) for row in report["per_query"]}
+        ),
+        "corpus_hash": hashes["corpus"],
+        "index_config_hash": hashes["index_config"],
+    }
+
+
+def _delta(left: Any, right: Any) -> float | None:
+    if left is None or right is None:
+        return None
+    return float(right) - float(left)
+
+
+def paired_report(report_a: dict[str, Any], report_b: dict[str, Any]) -> dict[str, Any]:
+    """Compare two benchmark reports query by query, on the same cohort, queries and gold.
+
+    A delta is only attributed when its cause is isolated: the corpus hash changed and the
+    index configuration did not (content, the enrichment of F51-05), or the corpus hash is
+    the same and the configuration changed (algorithm). If the cohort, queries, filters or
+    gold differ, the pairing is refused and every delta is N/D.
+    """
+    left, right = _snapshot_of(report_a), _snapshot_of(report_b)
+    differing = [
+        key
+        for key in ("cohort_hash", "query_hash", "gold_hash", "filter_hash")
+        if left[key] != right[key]
+    ]
+    comparable = not differing
+    corpus_changed = left["corpus_hash"] != right["corpus_hash"]
+    algorithm_changed = left["index_config_hash"] != right["index_config_hash"]
+    if not comparable:
+        attribution = "N/D"
+    elif corpus_changed and algorithm_changed:
+        attribution = "confounded"
+    elif corpus_changed:
+        attribution = "content"
+    elif algorithm_changed:
+        attribution = "algorithm"
+    else:
+        attribution = "none"
+    by_query = {row["query"]: row for row in report_b["per_query"]}
+    rows = []
+    for row_a in report_a["per_query"]:
+        row_b = by_query.get(row_a["query"])
+        entry: dict[str, Any] = {"query": row_a["query"], "category": row_a["category"]}
+        for k in ("at_10", "at_20"):
+            entry[k] = {
+                metric: {
+                    "a": row_a["metrics"][k][metric],
+                    "b": row_b["metrics"][k][metric] if row_b else None,
+                    "delta": (
+                        _delta(row_a["metrics"][k][metric], row_b["metrics"][k][metric])
+                        if comparable and row_b
+                        else None
+                    ),
+                }
+                for metric in _PAIRED_METRICS
+            }
+        rows.append(entry)
+    return {
+        "version": "search-benchmark-paired-v1",
+        "comparison": "comparable" if comparable else "not_comparable",
+        "not_comparable_because": differing,
+        "payload_changed": comparable and corpus_changed,
+        "algorithm_changed": algorithm_changed,
+        "delta_attributed_to": attribution,
+        "algorithm_comparison": (
+            "comparable" if comparable and not corpus_changed else "not_comparable"
+        ),
+        "hashes": {"a": left, "b": right},
+        "parser_versions": {
+            "a": report_a.get("parser_version") or "N/D",
+            "b": report_b.get("parser_version") or "N/D",
+        },
+        "per_query": rows,
     }
