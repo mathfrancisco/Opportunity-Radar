@@ -135,6 +135,39 @@ describe('SourcesPage — novos ATS', () => {
 })
 
 describe('SourcesPage — tabela e ação de cabeçalho', () => {
+  it('expõe o kicker de aquisição e associa os erros do formulário aos campos', async () => {
+    stubFetch([healthItem('greenhouse')])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    expect(container.querySelector('header')?.textContent).toContain('Aquisição')
+
+    const add = [...container.querySelectorAll('header button')].find(
+      (button) => button.textContent === 'Adicionar fonte',
+    )
+    act(() => add?.click())
+    await flush()
+
+    const name = [...container.querySelectorAll('input')].find(
+      (input) => input.closest('label')?.textContent?.includes('Nome'),
+    )
+    expect(name?.closest('label')?.textContent).toContain('Nome')
+    expect(
+      container.querySelector(`#${name?.getAttribute('aria-labelledby')}`)?.textContent,
+    ).toBe('Nome')
+
+    const submit = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Criar fonte desabilitada',
+    )
+    act(() => submit?.click())
+    await flush()
+
+    const errorIds = name?.getAttribute('aria-describedby')?.split(' ') ?? []
+    expect(name?.getAttribute('aria-invalid')).toBe('true')
+    expect(errorIds.some((id) => container.querySelector(`#${id}`)?.textContent === 'Dê um nome à fonte.')).toBe(true)
+  })
+
   it('põe "Adicionar fonte" no cabeçalho, secundário, e abre o formulário de criação', async () => {
     stubFetch([healthItem('greenhouse')])
 

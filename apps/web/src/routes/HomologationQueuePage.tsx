@@ -15,6 +15,7 @@ export function HomologationQueuePage() {
 
   return (
     <PageShell
+      current="/sources/homologation-queue"
       eyebrow="Aquisição"
       title="Fila de homologação"
       description="Teste, revise os termos e habilite as propostas em sequência, sem abrir fonte por fonte."
