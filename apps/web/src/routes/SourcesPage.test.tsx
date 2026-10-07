@@ -143,7 +143,7 @@ describe('SourcesPage — tabela e ação de cabeçalho', () => {
 
     expect(container.querySelector('header')?.textContent).toContain('Aquisição')
 
-    const add = [...container.querySelectorAll('header button')].find(
+    const add = [...container.querySelectorAll<HTMLButtonElement>('header button')].find(
       (button) => button.textContent === 'Adicionar fonte',
     )
     act(() => add?.click())
