@@ -174,23 +174,31 @@ class SourceSchedulingState:
 #: Cron schedules for a company source that names no schedule of its own. Cadence follows
 #: `Company.priority` (the user's interest) and nothing else: `research_confidence` (how
 #: mature the catalogue is, F48-14) is operational and never lowers a company to weekly.
-#: A high-priority company is worth checking far more often than a low one: high every
-#: 2 hours, normal every 6 hours, low once a day. A source whose own minimum run interval
-#: is longer than a cadence steps down to the next one (see the fallback below).
+#: New postings should surface within about an hour: high and normal every hour, low every
+#: 6 hours. A source whose own minimum run interval is longer than a cadence steps down to
+#: the next one (see the fallback below).
 DEFAULT_SCHEDULE_BY_COMPANY_PRIORITY = {
-    "high": "0 */2 * * *",  # every 2 hours
-    "normal": "0 */6 * * *",  # every 6 hours
-    "low": "0 0 * * *",  # once a day
+    "high": "0 * * * *",  # every hour
+    "normal": "0 * * * *",  # every hour
+    "low": "0 */6 * * *",  # every 6 hours
 }
 
-#: Per-source-type cadences that replace the mapping above. Workday keeps the old, slower
-#: cadences: its detail fetch is one request per posting and its per-source approval
-#: (card F51-03) is still pending.
+#: Per-source-type cadences that replace the mapping above.
 SCHEDULE_OVERRIDE_BY_SOURCE_TYPE = {
+    # One detail request per posting, a pass over the 19 sources takes about 39 minutes
+    # serially, and per-source approval (card F51-03) is pending: keeps the old cadences.
     "workday": {
         "high": "0 */6 * * *",  # every 6 hours
         "normal": "0 0 * * *",  # once a day
         "low": "0 0 * * 0",  # once a week
+    },
+    # About 14 requests per run over 98 sources on one shared host is about 1,360 requests
+    # per pass against the 1,200 per hour ceiling: hourly would end in partial runs until the
+    # 304/delta contract (card F51-13) lands.
+    "inhire": {
+        "high": "0 */3 * * *",  # every 3 hours
+        "normal": "0 */3 * * *",  # every 3 hours
+        "low": "0 0 * * *",  # once a day
     },
 }
 
