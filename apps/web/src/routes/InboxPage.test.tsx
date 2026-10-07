@@ -677,7 +677,10 @@ describe('InboxPage table, pagination and filters', () => {
     // One DOM for every width: the layout is CSS, so there is no second list to announce.
     expect(container.querySelectorAll('table')).toHaveLength(1)
     expect(container.querySelector('article')).toBeNull()
-    expect(container.querySelector('thead')?.className).toContain('max-xl:sr-only')
+    const table = container.querySelector('table[role="table"]')
+    expect(table?.className).toContain('max-xl:block')
+    expect(table?.querySelector('thead')?.className).toContain('max-xl:sr-only')
+    expect(table?.parentElement?.className).toContain('xl:overflow-x-auto')
   })
 
   it('expõe cabeçalhos de coluna e linhas da tabela por papel ARIA', async () => {

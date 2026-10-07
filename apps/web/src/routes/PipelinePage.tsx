@@ -133,7 +133,7 @@ function Board({
               className={
                 empty
                   ? 'max-lg:hidden lg:w-28 lg:flex-none lg:rounded-panel lg:border lg:border-dashed lg:border-line-strong lg:p-2'
-                  : 'min-w-0 lg:flex-[1_1_9rem]'
+                  : 'min-w-0 lg:flex-[0_1_9rem]'
               }
               data-empty={empty ? 'true' : undefined}
               key={stage}

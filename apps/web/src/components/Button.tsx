@@ -1,4 +1,5 @@
 import { type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { Link, type LinkProps } from 'react-router-dom'
 
 export type ButtonVariant = 'primary' | 'secondary'
 export type ButtonSize = 'md' | 'sm'
@@ -7,6 +8,12 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant
   size?: ButtonSize
   children: ReactNode
+}
+
+interface ButtonLinkProps extends Omit<LinkProps, 'className'> {
+  variant?: ButtonVariant
+  size?: ButtonSize
+  className?: string
 }
 
 const base =
@@ -26,6 +33,10 @@ const sizes: Record<ButtonSize, string> = {
   sm: 'h-8 px-3',
 }
 
+function buttonClassName(variant: ButtonVariant, size: ButtonSize, className: string) {
+  return `${base} ${variants[variant]} ${sizes[size]} ${className}`.trim()
+}
+
 /**
  * The one button of the interface. `type` defaults to `button` because a button inside a
  * form that forgets it submits, and every accidental submit here is a write to the API.
@@ -40,11 +51,26 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`${base} ${variants[variant]} ${sizes[size]} ${className}`.trim()}
+      className={buttonClassName(variant, size, className)}
       type={type}
       {...rest}
     >
       {children}
     </button>
+  )
+}
+
+/** A real navigation link with the same visual intent and target size as a Button. */
+export function ButtonLink({
+  variant = 'primary',
+  size = 'md',
+  className = '',
+  children,
+  ...rest
+}: ButtonLinkProps) {
+  return (
+    <Link className={buttonClassName(variant, size, className)} {...rest}>
+      {children}
+    </Link>
   )
 }

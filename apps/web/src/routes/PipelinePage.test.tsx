@@ -95,6 +95,12 @@ describe('PipelinePage — quadro por etapa', () => {
     ])
     expect(stages.every((stage) => stage.labelled)).toBe(true)
     expect(stages.map((stage) => stage.cards)).toEqual([1, 0, 0, 2, 0, 0, 0])
+    expect(stages.filter((stage) => !stage.empty)).toHaveLength(2)
+    expect(
+      [...board.querySelectorAll('section')]
+        .filter((section) => section.getAttribute('data-empty') !== 'true')
+        .every((section) => section.className.includes('lg:flex-[0_1_9rem]')),
+    ).toBe(true)
     const emptyStageList = [...container.querySelectorAll('ul')].find((list) =>
       list.textContent?.includes('Candidatura enviada: 0'),
     )

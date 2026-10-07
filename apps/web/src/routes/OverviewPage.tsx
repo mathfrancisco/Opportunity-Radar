@@ -1,6 +1,7 @@
 import { useQueries } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ButtonLink } from '../components/Button'
 import { Card } from '../components/Card'
 import { Chip } from '../components/Chip'
 import { DataTable } from '../components/DataTable'
@@ -808,12 +809,9 @@ export function OverviewPage() {
   return (
     <PageShell
       actions={
-        <Link
-          className="inline-flex h-9 items-center justify-center rounded-control bg-accent px-4 text-sm font-semibold text-surface hover:bg-accent-hover max-md:min-h-11"
-          to="/inbox"
-        >
+        <ButtonLink to="/inbox">
           Abrir Inbox
-        </Link>
+        </ButtonLink>
       }
       current="/"
       eyebrow="Decidir"

@@ -1,5 +1,6 @@
+import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
-import { Button } from './Button'
+import { Button, ButtonLink } from './Button'
 import { render } from './testing'
 
 describe('Button', () => {
@@ -50,5 +51,18 @@ describe('Button', () => {
     const container = render(<Button className="self-end">Salvar</Button>)
 
     expect(container.querySelector('button')?.className).toContain('self-end')
+  })
+
+  it('compõe a ação primária como link real de navegação', () => {
+    const container = render(
+      <MemoryRouter>
+        <ButtonLink to="/inbox">Abrir Inbox</ButtonLink>
+      </MemoryRouter>,
+    )
+    const link = container.querySelector('a')
+
+    expect(link?.getAttribute('href')).toBe('/inbox')
+    expect(link?.className).toContain('bg-accent')
+    expect(link?.className).toContain('h-9')
   })
 })
