@@ -1,0 +1,1458 @@
+{
+  "isolated": true,
+  "generatedAt": "2026-10-07T21:44:19.175Z",
+  "buildIdentity": {
+    "repoSha": "7e65a06b48301ddbb4a94a554609e4483e61e5ad",
+    "index": {
+      "path": "/index.html",
+      "sha256": "3df7abe2a6d6e0035606cd49bb6478d38d8262d2905db8c7ad55adc9cdb3fe44"
+    },
+    "assets": [
+      {
+        "path": "/assets/index-BKfMgWoY.css",
+        "sha256": "1b9906dd5726308361c431650e4736a86bd0ed09058017b624dcea947b7557de"
+      },
+      {
+        "path": "/assets/index-CKDXJF33.js",
+        "sha256": "ebc11d79a007714ab90e44f67ad341dab9919ed49c3904cfcbec0b726596e51e"
+      },
+      {
+        "path": "/assets/inter-latin-wght-normal-Dx4kXJAl.woff2",
+        "sha256": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62"
+      }
+    ]
+  },
+  "routes": [
+    "/",
+    "/inbox",
+    "/opportunities/opportunity-1",
+    "/applications",
+    "/companies",
+    "/companies/company-1",
+    "/sources",
+    "/sources/homologation-queue",
+    "/profile",
+    "/status",
+    "/missing"
+  ],
+  "widths": [
+    320,
+    360,
+    768,
+    1280,
+    1440
+  ],
+  "assertions": {
+    "expectedCaptures": 55,
+    "captures": 55,
+    "directUrls": true,
+    "horizontalOverflow": [],
+    "pageErrors": [],
+    "consoleErrors": [],
+    "externalRequests": [],
+    "unmatchedApiRequests": [],
+    "non2xxFixtureResponses": []
+  },
+  "records": [
+    {
+      "width": 320,
+      "route": "/",
+      "directUrl": "http://127.0.0.1:55109/",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nDecidir\n\nO que move sua busca esta semana?\n\nUm ponto de partida calmo para escolher a próxima ação, com a origem dos dados à vista.\n\nAbrir Inbox\nDecisão de hoje\nAcervo\nOperação\nDecisão de hoje\nAlta prioridade\n0\nRecomendadas\n1\nNovas (7 dias)\n1\nFollow-ups devidos\nPróximos 7 dias\n0\nVagas avaliadas por decisão\nDecisão\tVagas\nRecomendadas\t1\n\nVer só startups\n\nAcervo\n\nO que o radar já coletou e decidiu, e que continua disponível para consulta.\n\n1\n\nAvaliadas\n\nCom decisão determinística registrada\n\n1\n\nCandidaturas ativas\n\nOportunidades ativas\n1de 1 no total\nItens brutos pendentes\n0Preservados, ainda sem normalização\n7 dias: vagas novas\n1sem marcação suficiente · 1 de 0 empresas cobertas\nOperação\n\nComo o ciclo está passando quando ninguém está olhando.\n\nFontes com falha na última execução\n0de 1 habilitadas, 1 no catálogo\nAnálises degradadas\n0IA (Groq) indisponível, sem quota ou desligada\nAnálise\nsem análise medida · 0 na fila, últimos 7 dias\nNenhuma fonte falhou na última execução.\n\nIA (Groq)\n\nDesligada (AI_ENABLED=false).\n\nMétricas operacionais por fonte\n\nSelecione uma janela quando as métricas estiverem disponíveis.\n\nDescubra oportunidades, preserve evidências e decida com contexto."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/overview",
+          "status": 200
+        },
+        {
+          "path": "/api/saved-searches",
+          "status": 200
+        },
+        {
+          "path": "/api/analysis-metrics",
+          "status": 200
+        },
+        {
+          "path": "/api/source-metrics",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 320,
+      "route": "/inbox",
+      "directUrl": "http://127.0.0.1:55109/inbox",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/inbox",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nDecidir\n\nQuais vagas merecem sua atenção agora?\n\nCompare sinais, evidências e recência antes de decidir o que acompanhar. Cada vaga mostra a decisão determinística mais recente; as ainda não avaliadas continuam visíveis.\n\nBuscas salvas\nBuscar oportunidades\nBuscar\nDecisão\nTodas\nAlta prioridade\nRecomendada\nObservação\nRevisão necessária\nBaixa aderência\nInelegível\nModalidade\nTodas\nREMOTE\nHYBRID\nONSITE\nUNKNOWN\nOrdenar por\nPrioridade\nMais recentes\nMaior score\nRecência\nÚltimos 30 dias\nNovas (14 dias)\nAbertas na fonte\n\nNenhum filtro ativo\n\nFiltros avançados\n\n1 oportunidade encontrada.\n\nOportunidades\nVaga\tScore e decisão\tSinais\tPublicada\tAções\nSenior Product Engineer\nAcme Labs · São Paulo, SP\nStartup · YC S26\n86.5\nRecomendada\nCandidatura: Entrevista\nHYBRID · SENIOR\nStatus ACTIVE\nBoa aderência entre experiência de produto e requisitos técnicos.\nPublicada 01/10/2026\nRelevante\nNão é para mim\n\nExibindo 1 a 1 de 1 oportunidades\n\n‹\n1\n›\nItens por página\n10\n25\n50\n100"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/inbox",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 320,
+      "route": "/opportunities/opportunity-1",
+      "directUrl": "http://127.0.0.1:55109/opportunities/opportunity-1",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/opportunities/opportunity-1",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n← Voltar para as oportunidades\n\nOportunidade\n\nSenior Product Engineer\n\nAcme Labs · São Paulo, SP · Publicada 01/10/2026, 09:00:00\n\nModalidade\nHíbrido\nSenioridade\nSênior\nContrato\nTempo integral\nStatus\nAtiva\nVersão do conteúdo\n1\nAvaliar agora\nSua decisão\n\nMarque a relevância e acompanhe a candidatura. A análise de IA é apoio, não decide por você.\n\nRelevância\nRelevante\nNão é para mim…\nÁrea\nSenioridade\nLocalização\nEmpresa\nRemuneração\nOutro\nCandidatura\nEntrevista\nIniciada em 02/10/2026, 09:00:00 · enviada em 02/10/2026, 09:00:00\nTeste técnico\nEtapa final\nRecusada\nDesistência\nPróxima ação\nQuando\nSalvar\nHistórico\nInteresse\n02/10/2026, 09:00:00\nInteresse → Entrevista\n05/10/2026, 09:00:00\nResumo\nDecisão\nCandidatura\nProcedência\nDescrição\n\nConstrua ferramentas de produto com uma equipe pequena e multidisciplinar.\n\nRemuneração\n\n150000 – 190000 USD (YEAR, GROSS)\n\nEvidência: — · raw item raw-1\n\nSkills\nTypeScript\nrequired · skills-v1\nDecisão\n\nMatching determinístico: score, veredito e elegibilidade calculados por regras, fora da IA.\n\n86.5\nRecomendada\nElegibilidade Atende aos filtros · confiança 0.92\n\nRegras matching-v1 · taxonomia skills-v1 · perfil profile- · avaliada em 06/10/2026, 09:00:00 · hash aaaaaaaaaaaa…\n\nFiltros eliminatórios\n\nNenhum filtro avaliado.\n\nFatores do score\n\nNenhum fator calculado.\n\nAnálise semântica\n\nComentário consultivo gerado por IA para apoiar sua leitura. Não é veredito nem aprovação, e não decide nada por você.\n\nBoa aderência entre experiência de produto e requisitos técnicos.\n\nPontos fortes\nExperiência alinhada ao produto\n\n· · analysis-v1 · 06/10/2026, 09:00:00\n\nCusto da chamada indisponível.\n\nAnalisar novamente\nA análise é consultiva: não altera score, verdict nem elegibilidade da avaliação assessme.\nPossível duplicata\nNenhum candidato a duplicata pendente para esta oportunidade.\nProcedência\n\nDe onde veio a vaga e quando foi vista pela última vez.\n\nhttps://jobs.example.test/acme-123\n\nPrimeira vez 01/10/2026, 09:00:00 · última 06/10/2026, 09:00:00\n\nraw item raw-1\n\nFingerprint synthetic-baseline-opportunity (v1) · 0 resultados de normalização."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/opportunities/opportunity-1",
+          "status": 200
+        },
+        {
+          "path": "/api/matches",
+          "status": 200
+        },
+        {
+          "path": "/api/applications",
+          "status": 200
+        },
+        {
+          "path": "/api/opportunities/opportunity-1/duplicate-candidates",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 320,
+      "route": "/applications",
+      "directUrl": "http://127.0.0.1:55109/applications",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/applications",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nDecidir\n\nOnde cada candidatura precisa de atenção?\n\nOrganize a próxima ação em cada etapa da sua busca. A oportunidade segue o ciclo dela; a candidatura segue o seu.\n\nEm andamento (1)\nEncerradas (0)\n1 no total\nEm andamento\n\nCandidaturas em andamento, organizadas pela etapa atual.\n\nEntrevista\n1\nSenior Product Engineer\n\nAcme Labs\n\nPróxima ação: Preparar conversa com a equipe de produto · 12/10/2026\n\n2 movimentos no histórico\n\nSem candidaturas em:\n\nInteresse: 0\nCandidatura enviada: 0\nTriagem: 0\nTeste técnico: 0\nEtapa final: 0\nOferta: 0\n\nExibindo 1 a 1 de 1 candidaturas\n\n‹\n1\n›"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/applications",
+          "status": 200
+        },
+        {
+          "path": "/api/applications",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 320,
+      "route": "/companies",
+      "directUrl": "http://127.0.0.1:55109/companies",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/companies",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nCatálogo local\n\nEmpresas\n\nConsulte as empresas monitoradas e as fontes associadas a cada uma.\n\nNova empresa\nPrioridade\nTodas as prioridades\nPrioridade alta\nPrioridade normal\nPrioridade baixa\nStatus\nTodos os status\nAtivas\nPausadas\nEm fila\nVerificação\nQualquer verificação\nAPI JSON confirmada\nATS identificado\nCarreiras confirmadas\nPesquisa registrada\nEm fila de homologação\nNão verificada\nBuscar empresas\nBuscar\n\n1 empresa encontrada.\n\nAcme Labs\n\nacme.example.test\n\nPrioridade\nAlta\nStatus\nAtiva\nVerificação\nCarreiras confirmadas\n\nFontes: Carreiras Acme (Carreiras confirmadas)\n\nExibindo 1 a 1 de 1 empresas\n\n‹\n1\n›\nItens por página\n10\n25\n50\n100"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/companies",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 320,
+      "route": "/companies/company-1",
+      "directUrl": "http://127.0.0.1:55109/companies/company-1",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/companies/company-1",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nCatálogo local\n\nAcme Labs\n\nacme.example.test\n\nEditar empresa\n\n← Voltar para as empresas\n\nResumo\nFontes\nVagas\nPrioridade\nAlta\nStatus no radar\nAtiva\nVerificação\nCarreiras confirmadas\nÚltima verificação\n05/10/2026, 09:00:00\nAliases\nAcme\nFontes\n\nRegistre ou corrija o ATS da empresa e proponha a fonte a partir dele. A proposta nasce desabilitada e é homologada na tela de fontes.\n\nPropor fonte a partir do ATS\nRegistrar ATS\nCarreiras Acme\nCarreiras confirmadas\n\nhttps://acme.example.test/careers\n\nVerificação: manual · última em 05/10/2026, 09:00:00\n\nPágina pública de carreiras.\n\nCorrigir\nÚltimas vagas\nÚltimas vagas desta empresa\nVaga\tModalidade\tDecisão\tScore\nSenior Product Engineer\tHYBRID\tRECOMMENDED\t86.5"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/companies/company-1",
+          "status": 200
+        },
+        {
+          "path": "/api/inbox",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 320,
+      "route": "/sources",
+      "directUrl": "http://127.0.0.1:55109/sources",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/sources",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nAquisição\n\nFontes e execuções\n\nO que cada fonte produziu na última execução, e o que fazer quando ela falha. Uma fonte só executa depois de habilitada.\n\nAdicionar fonte\n\nCatálogo\n1 empresas · 1 registros\n\nPropostas / homologadas\n0 / 1\n\nHabilitadas / elegíveis\n1 / 1\n\nFila de homologação\n\nPara registrar uma vaga avulsa é preciso uma fonte manual, e ainda não existe nenhuma. Criar a fonte manual\n\nEstado\nTodas\nCom falha ou parcial\nHabilitadas\nBuscar fontes\nBuscar\n\nExibindo 1 de 1 fontes carregadas. 0 com falha na última execução.\n\nFontes\nFonte\tEstado\tÚltima execução\tItens\tAgendamento\tAções\n\nFonte greenhouse\ngreenhouse\n\tNunca executada\nHabilitada · evidência confirmed\ntermos revisados · collector homologado\n\t—\nnunca executada\n—\nnunca executada\n\t—\nnunca executada\nsem vagas normalizadas\n\tmanual\t\nExecutar agora\nMais ações"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/source-health",
+          "status": 200
+        },
+        {
+          "path": "/api/source-coverage",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 320,
+      "route": "/sources/homologation-queue",
+      "directUrl": "http://127.0.0.1:55109/sources/homologation-queue",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/sources/homologation-queue",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nAquisição\n\nFila de homologação\n\nTeste, revise os termos e habilite as propostas em sequência, sem abrir fonte por fonte.\n\nNenhuma proposta aguardando homologação."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/source-health",
+          "status": 200
+        },
+        {
+          "path": "/api/profile",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 320,
+      "route": "/profile",
+      "directUrl": "http://127.0.0.1:55109/profile",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/profile",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nCritérios de decisão\n\nPerfil e preferências\n\nO que o matching considera ao avaliar uma vaga. Salvar cria uma nova versão e a ativa; as avaliações anteriores continuam apontando para a versão que as produziu.\n\nSkills e áreas\nTrabalho e localização\nRemuneração\nVersões\nSkills e áreas\n\nCritérios que orientam o encaixe técnico e a prioridade das vagas.\n\nSkills\nSeparadas por vírgula.\n\nNenhuma skill informada: o encaixe tecnológico das vagas fica desconhecido e pesa pouco no ranking.\n\nExperiências e projetos\n\nNão são editados nesta tela e seguem sem mudança para a nova versão.\n\nExperiências\n\nNenhuma experiência registrada.\n\nProjetos\n\nNenhum projeto registrado.\n\nÁreas de interesse\n\nNenhuma marcada vale como todas as áreas. Vagas sem área classificada aparecem sempre.\n\nEngenharia de software\nDados\nInfraestrutura\nSegurança\nQualidade (QA)\nProduto\nDesign\nVendas\nMarketing\nOperações\nPessoas\nFinanças\nJurídico\nSuporte\nOutras\nSenioridades aceitas\n\nNíveis fora da seleção ficam abaixo no ranking, nunca escondidos. Nenhuma marcada vale como não informado: nenhum nível perde posição.\n\nEstágio\nJúnior\nPleno\nSênior\nStaff\nLead\nGestão\nDireção\nNão informada\nCargos-alvo\nSeparados por vírgula.\nTrabalho e localização\n\nPreferências de modalidade, contrato, país e fuso.\n\nModalidades aceitas\nREMOTE\nHYBRID\nONSITE\nContratos aceitos\nFULL_TIME\nPART_TIME\nCONTRACT\nINTERNSHIP\nPaíses\nCódigos ISO separados por vírgula. Lista vazia mantém o país da vaga como desconhecido, e desconhecido não reprova.\nInício da janela de timezone\nFim da janela de timezone\nRemuneração\n\nFaixa desejada e condições de mobilidade para avaliar a elegibilidade.\n\nRemuneração mínima\nRemuneração máxima\nMoeda\nPeríodo\n—\nYEAR\nMONTH\nHOUR\nAceito relocação\nPreciso de patrocínio de visto\nSalvar como nova versão e ativar\nVersão ativa 0 · lock 0\nVersões\n\nNenhuma versão registrada."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/profile",
+          "status": 200
+        },
+        {
+          "path": "/api/profile/versions",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 320,
+      "route": "/status",
+      "directUrl": "http://127.0.0.1:55109/status",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/status",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nAmbiente local\n\nRadar pronto para começar\n\nA base local está conectada. O catálogo de empresas já pode ser importado e consultado no dashboard.\n\nProntidão do ambiente\n\nAPI pronta\n\nA base local está conectada. O catálogo de empresas já pode ser importado e consultado no dashboard.\n\nPróxima ação\n\nRevise as fontes ativas e inicie uma busca quando o catálogo estiver preparado.\n\nVer fontes\nComo interpretar este estado\n\nA prontidão confirma que a API e a conexão com o banco de dados estão disponíveis. O ambiente está pronto para consultar o catálogo local.\n\nDescubra oportunidades, preserve evidências e decida com contexto."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/health/ready",
+          "status": 200
+        },
+        {
+          "path": "/api/health",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 320,
+      "route": "/missing",
+      "directUrl": "http://127.0.0.1:55109/missing",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/missing",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nDecidir\n\nO que move sua busca esta semana?\n\nUm ponto de partida calmo para escolher a próxima ação, com a origem dos dados à vista.\n\nAbrir Inbox\nDecisão de hoje\nAcervo\nOperação\nDecisão de hoje\nAlta prioridade\n0\nRecomendadas\n1\nNovas (7 dias)\n1\nFollow-ups devidos\nPróximos 7 dias\n0\nVagas avaliadas por decisão\nDecisão\tVagas\nRecomendadas\t1\n\nVer só startups\n\nAcervo\n\nO que o radar já coletou e decidiu, e que continua disponível para consulta.\n\n1\n\nAvaliadas\n\nCom decisão determinística registrada\n\n1\n\nCandidaturas ativas\n\nOportunidades ativas\n1de 1 no total\nItens brutos pendentes\n0Preservados, ainda sem normalização\n7 dias: vagas novas\n1sem marcação suficiente · 1 de 0 empresas cobertas\nOperação\n\nComo o ciclo está passando quando ninguém está olhando.\n\nFontes com falha na última execução\n0de 1 habilitadas, 1 no catálogo\nAnálises degradadas\n0IA (Groq) indisponível, sem quota ou desligada\nAnálise\nsem análise medida · 0 na fila, últimos 7 dias\nNenhuma fonte falhou na última execução.\n\nIA (Groq)\n\nDesligada (AI_ENABLED=false).\n\nMétricas operacionais por fonte\n\nSelecione uma janela quando as métricas estiverem disponíveis.\n\nDescubra oportunidades, preserve evidências e decida com contexto."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/overview",
+          "status": 200
+        },
+        {
+          "path": "/api/saved-searches",
+          "status": 200
+        },
+        {
+          "path": "/api/analysis-metrics",
+          "status": 200
+        },
+        {
+          "path": "/api/source-metrics",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 360,
+      "route": "/",
+      "directUrl": "http://127.0.0.1:55109/",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nDecidir\n\nO que move sua busca esta semana?\n\nUm ponto de partida calmo para escolher a próxima ação, com a origem dos dados à vista.\n\nAbrir Inbox\nDecisão de hoje\nAcervo\nOperação\nDecisão de hoje\nAlta prioridade\n0\nRecomendadas\n1\nNovas (7 dias)\n1\nFollow-ups devidos\nPróximos 7 dias\n0\nVagas avaliadas por decisão\nDecisão\tVagas\nRecomendadas\t1\n\nVer só startups\n\nAcervo\n\nO que o radar já coletou e decidiu, e que continua disponível para consulta.\n\n1\n\nAvaliadas\n\nCom decisão determinística registrada\n\n1\n\nCandidaturas ativas\n\nOportunidades ativas\n1de 1 no total\nItens brutos pendentes\n0Preservados, ainda sem normalização\n7 dias: vagas novas\n1sem marcação suficiente · 1 de 0 empresas cobertas\nOperação\n\nComo o ciclo está passando quando ninguém está olhando.\n\nFontes com falha na última execução\n0de 1 habilitadas, 1 no catálogo\nAnálises degradadas\n0IA (Groq) indisponível, sem quota ou desligada\nAnálise\nsem análise medida · 0 na fila, últimos 7 dias\nNenhuma fonte falhou na última execução.\n\nIA (Groq)\n\nDesligada (AI_ENABLED=false).\n\nMétricas operacionais por fonte\n\nSelecione uma janela quando as métricas estiverem disponíveis.\n\nDescubra oportunidades, preserve evidências e decida com contexto."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/overview",
+          "status": 200
+        },
+        {
+          "path": "/api/saved-searches",
+          "status": 200
+        },
+        {
+          "path": "/api/analysis-metrics",
+          "status": 200
+        },
+        {
+          "path": "/api/source-metrics",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 360,
+      "route": "/inbox",
+      "directUrl": "http://127.0.0.1:55109/inbox",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/inbox",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nDecidir\n\nQuais vagas merecem sua atenção agora?\n\nCompare sinais, evidências e recência antes de decidir o que acompanhar. Cada vaga mostra a decisão determinística mais recente; as ainda não avaliadas continuam visíveis.\n\nBuscas salvas\nBuscar oportunidades\nBuscar\nDecisão\nTodas\nAlta prioridade\nRecomendada\nObservação\nRevisão necessária\nBaixa aderência\nInelegível\nModalidade\nTodas\nREMOTE\nHYBRID\nONSITE\nUNKNOWN\nOrdenar por\nPrioridade\nMais recentes\nMaior score\nRecência\nÚltimos 30 dias\nNovas (14 dias)\nAbertas na fonte\n\nNenhum filtro ativo\n\nFiltros avançados\n\n1 oportunidade encontrada.\n\nOportunidades\nVaga\tScore e decisão\tSinais\tPublicada\tAções\nSenior Product Engineer\nAcme Labs · São Paulo, SP\nStartup · YC S26\n86.5\nRecomendada\nCandidatura: Entrevista\nHYBRID · SENIOR\nStatus ACTIVE\nBoa aderência entre experiência de produto e requisitos técnicos.\nPublicada 01/10/2026\nRelevante\nNão é para mim\n\nExibindo 1 a 1 de 1 oportunidades\n\n‹\n1\n›\nItens por página\n10\n25\n50\n100"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/inbox",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 360,
+      "route": "/opportunities/opportunity-1",
+      "directUrl": "http://127.0.0.1:55109/opportunities/opportunity-1",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/opportunities/opportunity-1",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n← Voltar para as oportunidades\n\nOportunidade\n\nSenior Product Engineer\n\nAcme Labs · São Paulo, SP · Publicada 01/10/2026, 09:00:00\n\nModalidade\nHíbrido\nSenioridade\nSênior\nContrato\nTempo integral\nStatus\nAtiva\nVersão do conteúdo\n1\nAvaliar agora\nSua decisão\n\nMarque a relevância e acompanhe a candidatura. A análise de IA é apoio, não decide por você.\n\nRelevância\nRelevante\nNão é para mim…\nÁrea\nSenioridade\nLocalização\nEmpresa\nRemuneração\nOutro\nCandidatura\nEntrevista\nIniciada em 02/10/2026, 09:00:00 · enviada em 02/10/2026, 09:00:00\nTeste técnico\nEtapa final\nRecusada\nDesistência\nPróxima ação\nQuando\nSalvar\nHistórico\nInteresse\n02/10/2026, 09:00:00\nInteresse → Entrevista\n05/10/2026, 09:00:00\nResumo\nDecisão\nCandidatura\nProcedência\nDescrição\n\nConstrua ferramentas de produto com uma equipe pequena e multidisciplinar.\n\nRemuneração\n\n150000 – 190000 USD (YEAR, GROSS)\n\nEvidência: — · raw item raw-1\n\nSkills\nTypeScript\nrequired · skills-v1\nDecisão\n\nMatching determinístico: score, veredito e elegibilidade calculados por regras, fora da IA.\n\n86.5\nRecomendada\nElegibilidade Atende aos filtros · confiança 0.92\n\nRegras matching-v1 · taxonomia skills-v1 · perfil profile- · avaliada em 06/10/2026, 09:00:00 · hash aaaaaaaaaaaa…\n\nFiltros eliminatórios\n\nNenhum filtro avaliado.\n\nFatores do score\n\nNenhum fator calculado.\n\nAnálise semântica\n\nComentário consultivo gerado por IA para apoiar sua leitura. Não é veredito nem aprovação, e não decide nada por você.\n\nBoa aderência entre experiência de produto e requisitos técnicos.\n\nPontos fortes\nExperiência alinhada ao produto\n\n· · analysis-v1 · 06/10/2026, 09:00:00\n\nCusto da chamada indisponível.\n\nAnalisar novamente\nA análise é consultiva: não altera score, verdict nem elegibilidade da avaliação assessme.\nPossível duplicata\nNenhum candidato a duplicata pendente para esta oportunidade.\nProcedência\n\nDe onde veio a vaga e quando foi vista pela última vez.\n\nhttps://jobs.example.test/acme-123\n\nPrimeira vez 01/10/2026, 09:00:00 · última 06/10/2026, 09:00:00\n\nraw item raw-1\n\nFingerprint synthetic-baseline-opportunity (v1) · 0 resultados de normalização."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/opportunities/opportunity-1",
+          "status": 200
+        },
+        {
+          "path": "/api/matches",
+          "status": 200
+        },
+        {
+          "path": "/api/applications",
+          "status": 200
+        },
+        {
+          "path": "/api/opportunities/opportunity-1/duplicate-candidates",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 360,
+      "route": "/applications",
+      "directUrl": "http://127.0.0.1:55109/applications",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/applications",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nDecidir\n\nOnde cada candidatura precisa de atenção?\n\nOrganize a próxima ação em cada etapa da sua busca. A oportunidade segue o ciclo dela; a candidatura segue o seu.\n\nEm andamento (1)\nEncerradas (0)\n1 no total\nEm andamento\n\nCandidaturas em andamento, organizadas pela etapa atual.\n\nEntrevista\n1\nSenior Product Engineer\n\nAcme Labs\n\nPróxima ação: Preparar conversa com a equipe de produto · 12/10/2026\n\n2 movimentos no histórico\n\nSem candidaturas em:\n\nInteresse: 0\nCandidatura enviada: 0\nTriagem: 0\nTeste técnico: 0\nEtapa final: 0\nOferta: 0\n\nExibindo 1 a 1 de 1 candidaturas\n\n‹\n1\n›"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/applications",
+          "status": 200
+        },
+        {
+          "path": "/api/applications",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 360,
+      "route": "/companies",
+      "directUrl": "http://127.0.0.1:55109/companies",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/companies",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nCatálogo local\n\nEmpresas\n\nConsulte as empresas monitoradas e as fontes associadas a cada uma.\n\nNova empresa\nPrioridade\nTodas as prioridades\nPrioridade alta\nPrioridade normal\nPrioridade baixa\nStatus\nTodos os status\nAtivas\nPausadas\nEm fila\nVerificação\nQualquer verificação\nAPI JSON confirmada\nATS identificado\nCarreiras confirmadas\nPesquisa registrada\nEm fila de homologação\nNão verificada\nBuscar empresas\nBuscar\n\n1 empresa encontrada.\n\nAcme Labs\n\nacme.example.test\n\nPrioridade\nAlta\nStatus\nAtiva\nVerificação\nCarreiras confirmadas\n\nFontes: Carreiras Acme (Carreiras confirmadas)\n\nExibindo 1 a 1 de 1 empresas\n\n‹\n1\n›\nItens por página\n10\n25\n50\n100"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/companies",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 360,
+      "route": "/companies/company-1",
+      "directUrl": "http://127.0.0.1:55109/companies/company-1",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/companies/company-1",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nCatálogo local\n\nAcme Labs\n\nacme.example.test\n\nEditar empresa\n\n← Voltar para as empresas\n\nResumo\nFontes\nVagas\nPrioridade\nAlta\nStatus no radar\nAtiva\nVerificação\nCarreiras confirmadas\nÚltima verificação\n05/10/2026, 09:00:00\nAliases\nAcme\nFontes\n\nRegistre ou corrija o ATS da empresa e proponha a fonte a partir dele. A proposta nasce desabilitada e é homologada na tela de fontes.\n\nPropor fonte a partir do ATS\nRegistrar ATS\nCarreiras Acme\nCarreiras confirmadas\n\nhttps://acme.example.test/careers\n\nVerificação: manual · última em 05/10/2026, 09:00:00\n\nPágina pública de carreiras.\n\nCorrigir\nÚltimas vagas\nÚltimas vagas desta empresa\nVaga\tModalidade\tDecisão\tScore\nSenior Product Engineer\tHYBRID\tRECOMMENDED\t86.5"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/companies/company-1",
+          "status": 200
+        },
+        {
+          "path": "/api/inbox",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 360,
+      "route": "/sources",
+      "directUrl": "http://127.0.0.1:55109/sources",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/sources",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nAquisição\n\nFontes e execuções\n\nO que cada fonte produziu na última execução, e o que fazer quando ela falha. Uma fonte só executa depois de habilitada.\n\nAdicionar fonte\n\nCatálogo\n1 empresas · 1 registros\n\nPropostas / homologadas\n0 / 1\n\nHabilitadas / elegíveis\n1 / 1\n\nFila de homologação\n\nPara registrar uma vaga avulsa é preciso uma fonte manual, e ainda não existe nenhuma. Criar a fonte manual\n\nEstado\nTodas\nCom falha ou parcial\nHabilitadas\nBuscar fontes\nBuscar\n\nExibindo 1 de 1 fontes carregadas. 0 com falha na última execução.\n\nFontes\nFonte\tEstado\tÚltima execução\tItens\tAgendamento\tAções\n\nFonte greenhouse\ngreenhouse\n\tNunca executada\nHabilitada · evidência confirmed\ntermos revisados · collector homologado\n\t—\nnunca executada\n—\nnunca executada\n\t—\nnunca executada\nsem vagas normalizadas\n\tmanual\t\nExecutar agora\nMais ações"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/source-health",
+          "status": 200
+        },
+        {
+          "path": "/api/source-coverage",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 360,
+      "route": "/sources/homologation-queue",
+      "directUrl": "http://127.0.0.1:55109/sources/homologation-queue",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/sources/homologation-queue",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nAquisição\n\nFila de homologação\n\nTeste, revise os termos e habilite as propostas em sequência, sem abrir fonte por fonte.\n\nNenhuma proposta aguardando homologação."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/source-health",
+          "status": 200
+        },
+        {
+          "path": "/api/profile",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 360,
+      "route": "/profile",
+      "directUrl": "http://127.0.0.1:55109/profile",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/profile",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nCritérios de decisão\n\nPerfil e preferências\n\nO que o matching considera ao avaliar uma vaga. Salvar cria uma nova versão e a ativa; as avaliações anteriores continuam apontando para a versão que as produziu.\n\nSkills e áreas\nTrabalho e localização\nRemuneração\nVersões\nSkills e áreas\n\nCritérios que orientam o encaixe técnico e a prioridade das vagas.\n\nSkills\nSeparadas por vírgula.\n\nNenhuma skill informada: o encaixe tecnológico das vagas fica desconhecido e pesa pouco no ranking.\n\nExperiências e projetos\n\nNão são editados nesta tela e seguem sem mudança para a nova versão.\n\nExperiências\n\nNenhuma experiência registrada.\n\nProjetos\n\nNenhum projeto registrado.\n\nÁreas de interesse\n\nNenhuma marcada vale como todas as áreas. Vagas sem área classificada aparecem sempre.\n\nEngenharia de software\nDados\nInfraestrutura\nSegurança\nQualidade (QA)\nProduto\nDesign\nVendas\nMarketing\nOperações\nPessoas\nFinanças\nJurídico\nSuporte\nOutras\nSenioridades aceitas\n\nNíveis fora da seleção ficam abaixo no ranking, nunca escondidos. Nenhuma marcada vale como não informado: nenhum nível perde posição.\n\nEstágio\nJúnior\nPleno\nSênior\nStaff\nLead\nGestão\nDireção\nNão informada\nCargos-alvo\nSeparados por vírgula.\nTrabalho e localização\n\nPreferências de modalidade, contrato, país e fuso.\n\nModalidades aceitas\nREMOTE\nHYBRID\nONSITE\nContratos aceitos\nFULL_TIME\nPART_TIME\nCONTRACT\nINTERNSHIP\nPaíses\nCódigos ISO separados por vírgula. Lista vazia mantém o país da vaga como desconhecido, e desconhecido não reprova.\nInício da janela de timezone\nFim da janela de timezone\nRemuneração\n\nFaixa desejada e condições de mobilidade para avaliar a elegibilidade.\n\nRemuneração mínima\nRemuneração máxima\nMoeda\nPeríodo\n—\nYEAR\nMONTH\nHOUR\nAceito relocação\nPreciso de patrocínio de visto\nSalvar como nova versão e ativar\nVersão ativa 0 · lock 0\nVersões\n\nNenhuma versão registrada."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/profile",
+          "status": 200
+        },
+        {
+          "path": "/api/profile/versions",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 360,
+      "route": "/status",
+      "directUrl": "http://127.0.0.1:55109/status",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/status",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nAmbiente local\n\nRadar pronto para começar\n\nA base local está conectada. O catálogo de empresas já pode ser importado e consultado no dashboard.\n\nProntidão do ambiente\n\nAPI pronta\n\nA base local está conectada. O catálogo de empresas já pode ser importado e consultado no dashboard.\n\nPróxima ação\n\nRevise as fontes ativas e inicie uma busca quando o catálogo estiver preparado.\n\nVer fontes\nComo interpretar este estado\n\nA prontidão confirma que a API e a conexão com o banco de dados estão disponíveis. O ambiente está pronto para consultar o catálogo local.\n\nDescubra oportunidades, preserve evidências e decida com contexto."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/health/ready",
+          "status": 200
+        },
+        {
+          "path": "/api/health",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 360,
+      "route": "/missing",
+      "directUrl": "http://127.0.0.1:55109/missing",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/missing",
+        "overflow": false,
+        "text": "Pular para o conteúdo\nMenu\n\nDecidir\n\nO que move sua busca esta semana?\n\nUm ponto de partida calmo para escolher a próxima ação, com a origem dos dados à vista.\n\nAbrir Inbox\nDecisão de hoje\nAcervo\nOperação\nDecisão de hoje\nAlta prioridade\n0\nRecomendadas\n1\nNovas (7 dias)\n1\nFollow-ups devidos\nPróximos 7 dias\n0\nVagas avaliadas por decisão\nDecisão\tVagas\nRecomendadas\t1\n\nVer só startups\n\nAcervo\n\nO que o radar já coletou e decidiu, e que continua disponível para consulta.\n\n1\n\nAvaliadas\n\nCom decisão determinística registrada\n\n1\n\nCandidaturas ativas\n\nOportunidades ativas\n1de 1 no total\nItens brutos pendentes\n0Preservados, ainda sem normalização\n7 dias: vagas novas\n1sem marcação suficiente · 1 de 0 empresas cobertas\nOperação\n\nComo o ciclo está passando quando ninguém está olhando.\n\nFontes com falha na última execução\n0de 1 habilitadas, 1 no catálogo\nAnálises degradadas\n0IA (Groq) indisponível, sem quota ou desligada\nAnálise\nsem análise medida · 0 na fila, últimos 7 dias\nNenhuma fonte falhou na última execução.\n\nIA (Groq)\n\nDesligada (AI_ENABLED=false).\n\nMétricas operacionais por fonte\n\nSelecione uma janela quando as métricas estiverem disponíveis.\n\nDescubra oportunidades, preserve evidências e decida com contexto."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/overview",
+          "status": 200
+        },
+        {
+          "path": "/api/saved-searches",
+          "status": 200
+        },
+        {
+          "path": "/api/analysis-metrics",
+          "status": 200
+        },
+        {
+          "path": "/api/source-metrics",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 768,
+      "route": "/",
+      "directUrl": "http://127.0.0.1:55109/",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nDecidir\n\nO que move sua busca esta semana?\n\nUm ponto de partida calmo para escolher a próxima ação, com a origem dos dados à vista.\n\nAbrir Inbox\nDecisão de hoje\nAcervo\nOperação\nDecisão de hoje\nAlta prioridade\n0\nRecomendadas\n1\nNovas (7 dias)\n1\nFollow-ups devidos\nPróximos 7 dias\n0\nVagas avaliadas por decisão\nDecisão\tVagas\nRecomendadas\t1\n\nVer só startups\n\nAcervo\n\nO que o radar já coletou e decidiu, e que continua disponível para consulta.\n\n1\n\nAvaliadas\n\nCom decisão determinística registrada\n\n1\n\nCandidaturas ativas\n\nOportunidades ativas\n1de 1 no total\nItens brutos pendentes\n0Preservados, ainda sem normalização\n7 dias: vagas novas\n1sem marcação suficiente · 1 de 0 empresas cobertas\nOperação\n\nComo o ciclo está passando quando ninguém está olhando.\n\nFontes com falha na última execução\n0de 1 habilitadas, 1 no catálogo\nAnálises degradadas\n0IA (Groq) indisponível, sem quota ou desligada\nAnálise\nsem análise medida · 0 na fila, últimos 7 dias\nNenhuma fonte falhou na última execução.\n\nIA (Groq)\n\nDesligada (AI_ENABLED=false).\n\nMétricas operacionais por fonte\n\nSelecione uma janela quando as métricas estiverem disponíveis.\n\nDescubra oportunidades, preserve evidências e decida com contexto."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/overview",
+          "status": 200
+        },
+        {
+          "path": "/api/saved-searches",
+          "status": 200
+        },
+        {
+          "path": "/api/analysis-metrics",
+          "status": 200
+        },
+        {
+          "path": "/api/source-metrics",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 768,
+      "route": "/inbox",
+      "directUrl": "http://127.0.0.1:55109/inbox",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/inbox",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nDecidir\n\nQuais vagas merecem sua atenção agora?\n\nCompare sinais, evidências e recência antes de decidir o que acompanhar. Cada vaga mostra a decisão determinística mais recente; as ainda não avaliadas continuam visíveis.\n\nBuscas salvas\nBuscar oportunidades\nBuscar\nDecisão\nTodas\nAlta prioridade\nRecomendada\nObservação\nRevisão necessária\nBaixa aderência\nInelegível\nModalidade\nTodas\nREMOTE\nHYBRID\nONSITE\nUNKNOWN\nOrdenar por\nPrioridade\nMais recentes\nMaior score\nRecência\nÚltimos 30 dias\nNovas (14 dias)\nAbertas na fonte\n\nNenhum filtro ativo\n\nFiltros avançados\n\n1 oportunidade encontrada.\n\nOportunidades\nVaga\tScore e decisão\tSinais\tPublicada\tAções\nSenior Product Engineer\nAcme Labs · São Paulo, SP\nStartup · YC S26\n86.5\nRecomendada\nCandidatura: Entrevista\nHYBRID · SENIOR\nStatus ACTIVE\nBoa aderência entre experiência de produto e requisitos técnicos.\nPublicada 01/10/2026\nRelevante\nNão é para mim\n\nExibindo 1 a 1 de 1 oportunidades\n\n‹\n1\n›\nItens por página\n10\n25\n50\n100"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/inbox",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 768,
+      "route": "/opportunities/opportunity-1",
+      "directUrl": "http://127.0.0.1:55109/opportunities/opportunity-1",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/opportunities/opportunity-1",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n← Voltar para as oportunidades\n\nOportunidade\n\nSenior Product Engineer\n\nAcme Labs · São Paulo, SP · Publicada 01/10/2026, 09:00:00\n\nModalidade\nHíbrido\nSenioridade\nSênior\nContrato\nTempo integral\nStatus\nAtiva\nVersão do conteúdo\n1\nAvaliar agora\nSua decisão\n\nMarque a relevância e acompanhe a candidatura. A análise de IA é apoio, não decide por você.\n\nRelevância\nRelevante\nNão é para mim…\nÁrea\nSenioridade\nLocalização\nEmpresa\nRemuneração\nOutro\nCandidatura\nEntrevista\nIniciada em 02/10/2026, 09:00:00 · enviada em 02/10/2026, 09:00:00\nTeste técnico\nEtapa final\nRecusada\nDesistência\nPróxima ação\nQuando\nSalvar\nHistórico\nInteresse\n02/10/2026, 09:00:00\nInteresse → Entrevista\n05/10/2026, 09:00:00\nResumo\nDecisão\nCandidatura\nProcedência\nDescrição\n\nConstrua ferramentas de produto com uma equipe pequena e multidisciplinar.\n\nRemuneração\n\n150000 – 190000 USD (YEAR, GROSS)\n\nEvidência: — · raw item raw-1\n\nSkills\nTypeScript\nrequired · skills-v1\nDecisão\n\nMatching determinístico: score, veredito e elegibilidade calculados por regras, fora da IA.\n\n86.5\nRecomendada\nElegibilidade Atende aos filtros · confiança 0.92\n\nRegras matching-v1 · taxonomia skills-v1 · perfil profile- · avaliada em 06/10/2026, 09:00:00 · hash aaaaaaaaaaaa…\n\nFiltros eliminatórios\n\nNenhum filtro avaliado.\n\nFatores do score\n\nNenhum fator calculado.\n\nAnálise semântica\n\nComentário consultivo gerado por IA para apoiar sua leitura. Não é veredito nem aprovação, e não decide nada por você.\n\nBoa aderência entre experiência de produto e requisitos técnicos.\n\nPontos fortes\nExperiência alinhada ao produto\n\n· · analysis-v1 · 06/10/2026, 09:00:00\n\nCusto da chamada indisponível.\n\nAnalisar novamente\nA análise é consultiva: não altera score, verdict nem elegibilidade da avaliação assessme.\nPossível duplicata\nNenhum candidato a duplicata pendente para esta oportunidade.\nProcedência\n\nDe onde veio a vaga e quando foi vista pela última vez.\n\nhttps://jobs.example.test/acme-123\n\nPrimeira vez 01/10/2026, 09:00:00 · última 06/10/2026, 09:00:00\n\nraw item raw-1\n\nFingerprint synthetic-baseline-opportunity (v1) · 0 resultados de normalização."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/opportunities/opportunity-1",
+          "status": 200
+        },
+        {
+          "path": "/api/matches",
+          "status": 200
+        },
+        {
+          "path": "/api/applications",
+          "status": 200
+        },
+        {
+          "path": "/api/opportunities/opportunity-1/duplicate-candidates",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 768,
+      "route": "/applications",
+      "directUrl": "http://127.0.0.1:55109/applications",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/applications",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nDecidir\n\nOnde cada candidatura precisa de atenção?\n\nOrganize a próxima ação em cada etapa da sua busca. A oportunidade segue o ciclo dela; a candidatura segue o seu.\n\nEm andamento (1)\nEncerradas (0)\n1 no total\nEm andamento\n\nCandidaturas em andamento, organizadas pela etapa atual.\n\nEntrevista\n1\nSenior Product Engineer\n\nAcme Labs\n\nPróxima ação: Preparar conversa com a equipe de produto · 12/10/2026\n\n2 movimentos no histórico\n\nSem candidaturas em:\n\nInteresse: 0\nCandidatura enviada: 0\nTriagem: 0\nTeste técnico: 0\nEtapa final: 0\nOferta: 0\n\nExibindo 1 a 1 de 1 candidaturas\n\n‹\n1\n›"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/applications",
+          "status": 200
+        },
+        {
+          "path": "/api/applications",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 768,
+      "route": "/companies",
+      "directUrl": "http://127.0.0.1:55109/companies",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/companies",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nCatálogo local\n\nEmpresas\n\nConsulte as empresas monitoradas e as fontes associadas a cada uma.\n\nNova empresa\nPrioridade\nTodas as prioridades\nPrioridade alta\nPrioridade normal\nPrioridade baixa\nStatus\nTodos os status\nAtivas\nPausadas\nEm fila\nVerificação\nQualquer verificação\nAPI JSON confirmada\nATS identificado\nCarreiras confirmadas\nPesquisa registrada\nEm fila de homologação\nNão verificada\nBuscar empresas\nBuscar\n\n1 empresa encontrada.\n\nEmpresas\nEmpresa\tPrioridade\tStatus\tVerificação\tFontes\n\nAcme Labs\nacme.example.test\n\tAlta\tAtiva\tCarreiras confirmadas\tCarreiras Acme (Carreiras confirmadas)\n\nExibindo 1 a 1 de 1 empresas\n\n‹\n1\n›\nItens por página\n10\n25\n50\n100"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/companies",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 768,
+      "route": "/companies/company-1",
+      "directUrl": "http://127.0.0.1:55109/companies/company-1",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/companies/company-1",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nCatálogo local\n\nAcme Labs\n\nacme.example.test\n\nEditar empresa\n\n← Voltar para as empresas\n\nResumo\nFontes\nVagas\nPrioridade\nAlta\nStatus no radar\nAtiva\nVerificação\nCarreiras confirmadas\nÚltima verificação\n05/10/2026, 09:00:00\nAliases\nAcme\nFontes\n\nRegistre ou corrija o ATS da empresa e proponha a fonte a partir dele. A proposta nasce desabilitada e é homologada na tela de fontes.\n\nPropor fonte a partir do ATS\nRegistrar ATS\nCarreiras Acme\nCarreiras confirmadas\n\nhttps://acme.example.test/careers\n\nVerificação: manual · última em 05/10/2026, 09:00:00\n\nPágina pública de carreiras.\n\nCorrigir\nÚltimas vagas\nÚltimas vagas desta empresa\nVaga\tModalidade\tDecisão\tScore\nSenior Product Engineer\tHYBRID\tRECOMMENDED\t86.5"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/companies/company-1",
+          "status": 200
+        },
+        {
+          "path": "/api/inbox",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 768,
+      "route": "/sources",
+      "directUrl": "http://127.0.0.1:55109/sources",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/sources",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nAquisição\n\nFontes e execuções\n\nO que cada fonte produziu na última execução, e o que fazer quando ela falha. Uma fonte só executa depois de habilitada.\n\nAdicionar fonte\n\nCatálogo\n1 empresas · 1 registros\n\nPropostas / homologadas\n0 / 1\n\nHabilitadas / elegíveis\n1 / 1\n\nFila de homologação\n\nPara registrar uma vaga avulsa é preciso uma fonte manual, e ainda não existe nenhuma. Criar a fonte manual\n\nEstado\nTodas\nCom falha ou parcial\nHabilitadas\nBuscar fontes\nBuscar\n\nExibindo 1 de 1 fontes carregadas. 0 com falha na última execução.\n\nFontes\nFonte\tEstado\tÚltima execução\tItens\tAgendamento\tAções\n\nFonte greenhouse\ngreenhouse\n\tNunca executada\nHabilitada · evidência confirmed\ntermos revisados · collector homologado\n\t—\nnunca executada\n—\nnunca executada\n\t—\nnunca executada\nsem vagas normalizadas\n\tmanual\t\nExecutar agora\nMais ações"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/source-health",
+          "status": 200
+        },
+        {
+          "path": "/api/source-coverage",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 768,
+      "route": "/sources/homologation-queue",
+      "directUrl": "http://127.0.0.1:55109/sources/homologation-queue",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/sources/homologation-queue",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nAquisição\n\nFila de homologação\n\nTeste, revise os termos e habilite as propostas em sequência, sem abrir fonte por fonte.\n\nNenhuma proposta aguardando homologação."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/source-health",
+          "status": 200
+        },
+        {
+          "path": "/api/profile",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 768,
+      "route": "/profile",
+      "directUrl": "http://127.0.0.1:55109/profile",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/profile",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nCritérios de decisão\n\nPerfil e preferências\n\nO que o matching considera ao avaliar uma vaga. Salvar cria uma nova versão e a ativa; as avaliações anteriores continuam apontando para a versão que as produziu.\n\nSkills e áreas\nTrabalho e localização\nRemuneração\nVersões\nSkills e áreas\n\nCritérios que orientam o encaixe técnico e a prioridade das vagas.\n\nSkills\nSeparadas por vírgula.\n\nNenhuma skill informada: o encaixe tecnológico das vagas fica desconhecido e pesa pouco no ranking.\n\nExperiências e projetos\n\nNão são editados nesta tela e seguem sem mudança para a nova versão.\n\nExperiências\n\nNenhuma experiência registrada.\n\nProjetos\n\nNenhum projeto registrado.\n\nÁreas de interesse\n\nNenhuma marcada vale como todas as áreas. Vagas sem área classificada aparecem sempre.\n\nEngenharia de software\nDados\nInfraestrutura\nSegurança\nQualidade (QA)\nProduto\nDesign\nVendas\nMarketing\nOperações\nPessoas\nFinanças\nJurídico\nSuporte\nOutras\nSenioridades aceitas\n\nNíveis fora da seleção ficam abaixo no ranking, nunca escondidos. Nenhuma marcada vale como não informado: nenhum nível perde posição.\n\nEstágio\nJúnior\nPleno\nSênior\nStaff\nLead\nGestão\nDireção\nNão informada\nCargos-alvo\nSeparados por vírgula.\nTrabalho e localização\n\nPreferências de modalidade, contrato, país e fuso.\n\nModalidades aceitas\nREMOTE\nHYBRID\nONSITE\nContratos aceitos\nFULL_TIME\nPART_TIME\nCONTRACT\nINTERNSHIP\nPaíses\nCódigos ISO separados por vírgula. Lista vazia mantém o país da vaga como desconhecido, e desconhecido não reprova.\nInício da janela de timezone\nFim da janela de timezone\nRemuneração\n\nFaixa desejada e condições de mobilidade para avaliar a elegibilidade.\n\nRemuneração mínima\nRemuneração máxima\nMoeda\nPeríodo\n—\nYEAR\nMONTH\nHOUR\nAceito relocação\nPreciso de patrocínio de visto\nSalvar como nova versão e ativar\nVersão ativa 0 · lock 0\nVersões\n\nNenhuma versão registrada."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/profile",
+          "status": 200
+        },
+        {
+          "path": "/api/profile/versions",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 768,
+      "route": "/status",
+      "directUrl": "http://127.0.0.1:55109/status",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/status",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nAmbiente local\n\nRadar pronto para começar\n\nA base local está conectada. O catálogo de empresas já pode ser importado e consultado no dashboard.\n\nProntidão do ambiente\n\nAPI pronta\n\nA base local está conectada. O catálogo de empresas já pode ser importado e consultado no dashboard.\n\nPróxima ação\n\nRevise as fontes ativas e inicie uma busca quando o catálogo estiver preparado.\n\nVer fontes\nComo interpretar este estado\n\nA prontidão confirma que a API e a conexão com o banco de dados estão disponíveis. O ambiente está pronto para consultar o catálogo local.\n\nDescubra oportunidades, preserve evidências e decida com contexto."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/health/ready",
+          "status": 200
+        },
+        {
+          "path": "/api/health",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 768,
+      "route": "/missing",
+      "directUrl": "http://127.0.0.1:55109/missing",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/missing",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nDecidir\n\nO que move sua busca esta semana?\n\nUm ponto de partida calmo para escolher a próxima ação, com a origem dos dados à vista.\n\nAbrir Inbox\nDecisão de hoje\nAcervo\nOperação\nDecisão de hoje\nAlta prioridade\n0\nRecomendadas\n1\nNovas (7 dias)\n1\nFollow-ups devidos\nPróximos 7 dias\n0\nVagas avaliadas por decisão\nDecisão\tVagas\nRecomendadas\t1\n\nVer só startups\n\nAcervo\n\nO que o radar já coletou e decidiu, e que continua disponível para consulta.\n\n1\n\nAvaliadas\n\nCom decisão determinística registrada\n\n1\n\nCandidaturas ativas\n\nOportunidades ativas\n1de 1 no total\nItens brutos pendentes\n0Preservados, ainda sem normalização\n7 dias: vagas novas\n1sem marcação suficiente · 1 de 0 empresas cobertas\nOperação\n\nComo o ciclo está passando quando ninguém está olhando.\n\nFontes com falha na última execução\n0de 1 habilitadas, 1 no catálogo\nAnálises degradadas\n0IA (Groq) indisponível, sem quota ou desligada\nAnálise\nsem análise medida · 0 na fila, últimos 7 dias\nNenhuma fonte falhou na última execução.\n\nIA (Groq)\n\nDesligada (AI_ENABLED=false).\n\nMétricas operacionais por fonte\n\nSelecione uma janela quando as métricas estiverem disponíveis.\n\nDescubra oportunidades, preserve evidências e decida com contexto."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/overview",
+          "status": 200
+        },
+        {
+          "path": "/api/saved-searches",
+          "status": 200
+        },
+        {
+          "path": "/api/analysis-metrics",
+          "status": 200
+        },
+        {
+          "path": "/api/source-metrics",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1280,
+      "route": "/",
+      "directUrl": "http://127.0.0.1:55109/",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nDecidir\n\nO que move sua busca esta semana?\n\nUm ponto de partida calmo para escolher a próxima ação, com a origem dos dados à vista.\n\nAbrir Inbox\nDecisão de hoje\nAcervo\nOperação\nDecisão de hoje\nAlta prioridade\n0\nRecomendadas\n1\nNovas (7 dias)\n1\nFollow-ups devidos\nPróximos 7 dias\n0\nVagas avaliadas por decisão\nDecisão\tVagas\nRecomendadas\t1\n\nVer só startups\n\nAcervo\n\nO que o radar já coletou e decidiu, e que continua disponível para consulta.\n\n1\n\nAvaliadas\n\nCom decisão determinística registrada\n\n1\n\nCandidaturas ativas\n\nOportunidades ativas\n1de 1 no total\nItens brutos pendentes\n0Preservados, ainda sem normalização\n7 dias: vagas novas\n1sem marcação suficiente · 1 de 0 empresas cobertas\nOperação\n\nComo o ciclo está passando quando ninguém está olhando.\n\nFontes com falha na última execução\n0de 1 habilitadas, 1 no catálogo\nAnálises degradadas\n0IA (Groq) indisponível, sem quota ou desligada\nAnálise\nsem análise medida · 0 na fila, últimos 7 dias\nNenhuma fonte falhou na última execução.\n\nIA (Groq)\n\nDesligada (AI_ENABLED=false).\n\nMétricas operacionais por fonte\n\nSelecione uma janela quando as métricas estiverem disponíveis.\n\nDescubra oportunidades, preserve evidências e decida com contexto."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/overview",
+          "status": 200
+        },
+        {
+          "path": "/api/saved-searches",
+          "status": 200
+        },
+        {
+          "path": "/api/analysis-metrics",
+          "status": 200
+        },
+        {
+          "path": "/api/source-metrics",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1280,
+      "route": "/inbox",
+      "directUrl": "http://127.0.0.1:55109/inbox",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/inbox",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nDecidir\n\nQuais vagas merecem sua atenção agora?\n\nCompare sinais, evidências e recência antes de decidir o que acompanhar. Cada vaga mostra a decisão determinística mais recente; as ainda não avaliadas continuam visíveis.\n\nBuscas salvas\nBuscar oportunidades\nBuscar\nDecisão\nTodas\nAlta prioridade\nRecomendada\nObservação\nRevisão necessária\nBaixa aderência\nInelegível\nModalidade\nTodas\nREMOTE\nHYBRID\nONSITE\nUNKNOWN\nOrdenar por\nPrioridade\nMais recentes\nMaior score\nRecência\nÚltimos 30 dias\nNovas (14 dias)\nAbertas na fonte\n\nNenhum filtro ativo\n\nFiltros avançados\n\n1 oportunidade encontrada.\n\nOportunidades\nVaga\tScore e decisão\tSinais\tPublicada\tAções\n\nSenior Product Engineer\nAcme Labs · São Paulo, SP\nStartup · YC S26\n\t\n86.5\nRecomendada\nCandidatura: Entrevista\n\t\nHYBRID · SENIOR\nStatus ACTIVE\nBoa aderência entre experiência de produto e requisitos técnicos.\n\t01/10/2026\t\nRelevante\nNão é para mim\n\nExibindo 1 a 1 de 1 oportunidades\n\n‹\n1\n›\nItens por página\n10\n25\n50\n100"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/inbox",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1280,
+      "route": "/opportunities/opportunity-1",
+      "directUrl": "http://127.0.0.1:55109/opportunities/opportunity-1",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/opportunities/opportunity-1",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n← Voltar para as oportunidades\n\nOportunidade\n\nSenior Product Engineer\n\nAcme Labs · São Paulo, SP · Publicada 01/10/2026, 09:00:00\n\nModalidade\nHíbrido\nSenioridade\nSênior\nContrato\nTempo integral\nStatus\nAtiva\nVersão do conteúdo\n1\nAvaliar agora\nSua decisão\n\nMarque a relevância e acompanhe a candidatura. A análise de IA é apoio, não decide por você.\n\nRelevância\nRelevante\nNão é para mim…\nÁrea\nSenioridade\nLocalização\nEmpresa\nRemuneração\nOutro\nCandidatura\nEntrevista\nIniciada em 02/10/2026, 09:00:00 · enviada em 02/10/2026, 09:00:00\nTeste técnico\nEtapa final\nRecusada\nDesistência\nPróxima ação\nQuando\nSalvar\nHistórico\nInteresse\n02/10/2026, 09:00:00\nInteresse → Entrevista\n05/10/2026, 09:00:00\nResumo\nDecisão\nCandidatura\nProcedência\nDescrição\n\nConstrua ferramentas de produto com uma equipe pequena e multidisciplinar.\n\nRemuneração\n\n150000 – 190000 USD (YEAR, GROSS)\n\nEvidência: — · raw item raw-1\n\nSkills\nTypeScript\nrequired · skills-v1\nDecisão\n\nMatching determinístico: score, veredito e elegibilidade calculados por regras, fora da IA.\n\n86.5\nRecomendada\nElegibilidade Atende aos filtros · confiança 0.92\n\nRegras matching-v1 · taxonomia skills-v1 · perfil profile- · avaliada em 06/10/2026, 09:00:00 · hash aaaaaaaaaaaa…\n\nFiltros eliminatórios\n\nNenhum filtro avaliado.\n\nFatores do score\n\nNenhum fator calculado.\n\nAnálise semântica\n\nComentário consultivo gerado por IA para apoiar sua leitura. Não é veredito nem aprovação, e não decide nada por você.\n\nBoa aderência entre experiência de produto e requisitos técnicos.\n\nPontos fortes\nExperiência alinhada ao produto\n\n· · analysis-v1 · 06/10/2026, 09:00:00\n\nCusto da chamada indisponível.\n\nAnalisar novamente\nA análise é consultiva: não altera score, verdict nem elegibilidade da avaliação assessme.\nPossível duplicata\nNenhum candidato a duplicata pendente para esta oportunidade.\nProcedência\n\nDe onde veio a vaga e quando foi vista pela última vez.\n\nhttps://jobs.example.test/acme-123\n\nPrimeira vez 01/10/2026, 09:00:00 · última 06/10/2026, 09:00:00\n\nraw item raw-1\n\nFingerprint synthetic-baseline-opportunity (v1) · 0 resultados de normalização."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/opportunities/opportunity-1",
+          "status": 200
+        },
+        {
+          "path": "/api/matches",
+          "status": 200
+        },
+        {
+          "path": "/api/applications",
+          "status": 200
+        },
+        {
+          "path": "/api/opportunities/opportunity-1/duplicate-candidates",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1280,
+      "route": "/applications",
+      "directUrl": "http://127.0.0.1:55109/applications",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/applications",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nDecidir\n\nOnde cada candidatura precisa de atenção?\n\nOrganize a próxima ação em cada etapa da sua busca. A oportunidade segue o ciclo dela; a candidatura segue o seu.\n\nEm andamento (1)\nEncerradas (0)\n1 no total\nEm andamento\n\nCandidaturas em andamento, organizadas pela etapa atual.\n\nInteresse\n0\nCandidatura enviada\n0\nTriagem\n0\nEntrevista\n1\nSenior Product Engineer\n\nAcme Labs\n\nPróxima ação: Preparar conversa com a equipe de produto · 12/10/2026\n\n2 movimentos no histórico\n\nTeste técnico\n0\nEtapa final\n0\nOferta\n0\n\nExibindo 1 a 1 de 1 candidaturas\n\n‹\n1\n›"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/applications",
+          "status": 200
+        },
+        {
+          "path": "/api/applications",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1280,
+      "route": "/companies",
+      "directUrl": "http://127.0.0.1:55109/companies",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/companies",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nCatálogo local\n\nEmpresas\n\nConsulte as empresas monitoradas e as fontes associadas a cada uma.\n\nNova empresa\nPrioridade\nTodas as prioridades\nPrioridade alta\nPrioridade normal\nPrioridade baixa\nStatus\nTodos os status\nAtivas\nPausadas\nEm fila\nVerificação\nQualquer verificação\nAPI JSON confirmada\nATS identificado\nCarreiras confirmadas\nPesquisa registrada\nEm fila de homologação\nNão verificada\nBuscar empresas\nBuscar\n\n1 empresa encontrada.\n\nEmpresas\nEmpresa\tPrioridade\tStatus\tVerificação\tFontes\n\nAcme Labs\nacme.example.test\n\tAlta\tAtiva\tCarreiras confirmadas\tCarreiras Acme (Carreiras confirmadas)\n\nExibindo 1 a 1 de 1 empresas\n\n‹\n1\n›\nItens por página\n10\n25\n50\n100"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/companies",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1280,
+      "route": "/companies/company-1",
+      "directUrl": "http://127.0.0.1:55109/companies/company-1",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/companies/company-1",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nCatálogo local\n\nAcme Labs\n\nacme.example.test\n\nEditar empresa\n\n← Voltar para as empresas\n\nResumo\nFontes\nVagas\nPrioridade\nAlta\nStatus no radar\nAtiva\nVerificação\nCarreiras confirmadas\nÚltima verificação\n05/10/2026, 09:00:00\nAliases\nAcme\nFontes\n\nRegistre ou corrija o ATS da empresa e proponha a fonte a partir dele. A proposta nasce desabilitada e é homologada na tela de fontes.\n\nPropor fonte a partir do ATS\nRegistrar ATS\nCarreiras Acme\nCarreiras confirmadas\n\nhttps://acme.example.test/careers\n\nVerificação: manual · última em 05/10/2026, 09:00:00\n\nPágina pública de carreiras.\n\nCorrigir\nÚltimas vagas\nÚltimas vagas desta empresa\nVaga\tModalidade\tDecisão\tScore\nSenior Product Engineer\tHYBRID\tRECOMMENDED\t86.5"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/companies/company-1",
+          "status": 200
+        },
+        {
+          "path": "/api/inbox",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1280,
+      "route": "/sources",
+      "directUrl": "http://127.0.0.1:55109/sources",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/sources",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nAquisição\n\nFontes e execuções\n\nO que cada fonte produziu na última execução, e o que fazer quando ela falha. Uma fonte só executa depois de habilitada.\n\nAdicionar fonte\n\nCatálogo\n1 empresas · 1 registros\n\nPropostas / homologadas\n0 / 1\n\nHabilitadas / elegíveis\n1 / 1\n\nFila de homologação\n\nPara registrar uma vaga avulsa é preciso uma fonte manual, e ainda não existe nenhuma. Criar a fonte manual\n\nEstado\nTodas\nCom falha ou parcial\nHabilitadas\nBuscar fontes\nBuscar\n\nExibindo 1 de 1 fontes carregadas. 0 com falha na última execução.\n\nFontes\nFonte\tEstado\tÚltima execução\tItens\tAgendamento\tAções\n\nFonte greenhouse\ngreenhouse\n\tNunca executada\nHabilitada · evidência confirmed\ntermos revisados · collector homologado\n\t—\nnunca executada\n—\nnunca executada\n\t—\nnunca executada\nsem vagas normalizadas\n\tmanual\t\nExecutar agora\nMais ações"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/source-health",
+          "status": 200
+        },
+        {
+          "path": "/api/source-coverage",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1280,
+      "route": "/sources/homologation-queue",
+      "directUrl": "http://127.0.0.1:55109/sources/homologation-queue",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/sources/homologation-queue",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nAquisição\n\nFila de homologação\n\nTeste, revise os termos e habilite as propostas em sequência, sem abrir fonte por fonte.\n\nNenhuma proposta aguardando homologação."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/source-health",
+          "status": 200
+        },
+        {
+          "path": "/api/profile",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1280,
+      "route": "/profile",
+      "directUrl": "http://127.0.0.1:55109/profile",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/profile",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nCritérios de decisão\n\nPerfil e preferências\n\nO que o matching considera ao avaliar uma vaga. Salvar cria uma nova versão e a ativa; as avaliações anteriores continuam apontando para a versão que as produziu.\n\nSkills e áreas\nTrabalho e localização\nRemuneração\nVersões\nSkills e áreas\n\nCritérios que orientam o encaixe técnico e a prioridade das vagas.\n\nSkills\nSeparadas por vírgula.\n\nNenhuma skill informada: o encaixe tecnológico das vagas fica desconhecido e pesa pouco no ranking.\n\nExperiências e projetos\n\nNão são editados nesta tela e seguem sem mudança para a nova versão.\n\nExperiências\n\nNenhuma experiência registrada.\n\nProjetos\n\nNenhum projeto registrado.\n\nÁreas de interesse\n\nNenhuma marcada vale como todas as áreas. Vagas sem área classificada aparecem sempre.\n\nEngenharia de software\nDados\nInfraestrutura\nSegurança\nQualidade (QA)\nProduto\nDesign\nVendas\nMarketing\nOperações\nPessoas\nFinanças\nJurídico\nSuporte\nOutras\nSenioridades aceitas\n\nNíveis fora da seleção ficam abaixo no ranking, nunca escondidos. Nenhuma marcada vale como não informado: nenhum nível perde posição.\n\nEstágio\nJúnior\nPleno\nSênior\nStaff\nLead\nGestão\nDireção\nNão informada\nCargos-alvo\nSeparados por vírgula.\nTrabalho e localização\n\nPreferências de modalidade, contrato, país e fuso.\n\nModalidades aceitas\nREMOTE\nHYBRID\nONSITE\nContratos aceitos\nFULL_TIME\nPART_TIME\nCONTRACT\nINTERNSHIP\nPaíses\nCódigos ISO separados por vírgula. Lista vazia mantém o país da vaga como desconhecido, e desconhecido não reprova.\nInício da janela de timezone\nFim da janela de timezone\nRemuneração\n\nFaixa desejada e condições de mobilidade para avaliar a elegibilidade.\n\nRemuneração mínima\nRemuneração máxima\nMoeda\nPeríodo\n—\nYEAR\nMONTH\nHOUR\nAceito relocação\nPreciso de patrocínio de visto\nSalvar como nova versão e ativar\nVersão ativa 0 · lock 0\nVersões\n\nNenhuma versão registrada."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/profile",
+          "status": 200
+        },
+        {
+          "path": "/api/profile/versions",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1280,
+      "route": "/status",
+      "directUrl": "http://127.0.0.1:55109/status",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/status",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nAmbiente local\n\nRadar pronto para começar\n\nA base local está conectada. O catálogo de empresas já pode ser importado e consultado no dashboard.\n\nProntidão do ambiente\n\nAPI pronta\n\nA base local está conectada. O catálogo de empresas já pode ser importado e consultado no dashboard.\n\nPróxima ação\n\nRevise as fontes ativas e inicie uma busca quando o catálogo estiver preparado.\n\nVer fontes\nComo interpretar este estado\n\nA prontidão confirma que a API e a conexão com o banco de dados estão disponíveis. O ambiente está pronto para consultar o catálogo local.\n\nDescubra oportunidades, preserve evidências e decida com contexto."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/health/ready",
+          "status": 200
+        },
+        {
+          "path": "/api/health",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1280,
+      "route": "/missing",
+      "directUrl": "http://127.0.0.1:55109/missing",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/missing",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nDecidir\n\nO que move sua busca esta semana?\n\nUm ponto de partida calmo para escolher a próxima ação, com a origem dos dados à vista.\n\nAbrir Inbox\nDecisão de hoje\nAcervo\nOperação\nDecisão de hoje\nAlta prioridade\n0\nRecomendadas\n1\nNovas (7 dias)\n1\nFollow-ups devidos\nPróximos 7 dias\n0\nVagas avaliadas por decisão\nDecisão\tVagas\nRecomendadas\t1\n\nVer só startups\n\nAcervo\n\nO que o radar já coletou e decidiu, e que continua disponível para consulta.\n\n1\n\nAvaliadas\n\nCom decisão determinística registrada\n\n1\n\nCandidaturas ativas\n\nOportunidades ativas\n1de 1 no total\nItens brutos pendentes\n0Preservados, ainda sem normalização\n7 dias: vagas novas\n1sem marcação suficiente · 1 de 0 empresas cobertas\nOperação\n\nComo o ciclo está passando quando ninguém está olhando.\n\nFontes com falha na última execução\n0de 1 habilitadas, 1 no catálogo\nAnálises degradadas\n0IA (Groq) indisponível, sem quota ou desligada\nAnálise\nsem análise medida · 0 na fila, últimos 7 dias\nNenhuma fonte falhou na última execução.\n\nIA (Groq)\n\nDesligada (AI_ENABLED=false).\n\nMétricas operacionais por fonte\n\nSelecione uma janela quando as métricas estiverem disponíveis.\n\nDescubra oportunidades, preserve evidências e decida com contexto."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/overview",
+          "status": 200
+        },
+        {
+          "path": "/api/saved-searches",
+          "status": 200
+        },
+        {
+          "path": "/api/analysis-metrics",
+          "status": 200
+        },
+        {
+          "path": "/api/source-metrics",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1440,
+      "route": "/",
+      "directUrl": "http://127.0.0.1:55109/",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nDecidir\n\nO que move sua busca esta semana?\n\nUm ponto de partida calmo para escolher a próxima ação, com a origem dos dados à vista.\n\nAbrir Inbox\nDecisão de hoje\nAcervo\nOperação\nDecisão de hoje\nAlta prioridade\n0\nRecomendadas\n1\nNovas (7 dias)\n1\nFollow-ups devidos\nPróximos 7 dias\n0\nVagas avaliadas por decisão\nDecisão\tVagas\nRecomendadas\t1\n\nVer só startups\n\nAcervo\n\nO que o radar já coletou e decidiu, e que continua disponível para consulta.\n\n1\n\nAvaliadas\n\nCom decisão determinística registrada\n\n1\n\nCandidaturas ativas\n\nOportunidades ativas\n1de 1 no total\nItens brutos pendentes\n0Preservados, ainda sem normalização\n7 dias: vagas novas\n1sem marcação suficiente · 1 de 0 empresas cobertas\nOperação\n\nComo o ciclo está passando quando ninguém está olhando.\n\nFontes com falha na última execução\n0de 1 habilitadas, 1 no catálogo\nAnálises degradadas\n0IA (Groq) indisponível, sem quota ou desligada\nAnálise\nsem análise medida · 0 na fila, últimos 7 dias\nNenhuma fonte falhou na última execução.\n\nIA (Groq)\n\nDesligada (AI_ENABLED=false).\n\nMétricas operacionais por fonte\n\nSelecione uma janela quando as métricas estiverem disponíveis.\n\nDescubra oportunidades, preserve evidências e decida com contexto."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/overview",
+          "status": 200
+        },
+        {
+          "path": "/api/saved-searches",
+          "status": 200
+        },
+        {
+          "path": "/api/analysis-metrics",
+          "status": 200
+        },
+        {
+          "path": "/api/source-metrics",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1440,
+      "route": "/inbox",
+      "directUrl": "http://127.0.0.1:55109/inbox",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/inbox",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nDecidir\n\nQuais vagas merecem sua atenção agora?\n\nCompare sinais, evidências e recência antes de decidir o que acompanhar. Cada vaga mostra a decisão determinística mais recente; as ainda não avaliadas continuam visíveis.\n\nBuscas salvas\nBuscar oportunidades\nBuscar\nDecisão\nTodas\nAlta prioridade\nRecomendada\nObservação\nRevisão necessária\nBaixa aderência\nInelegível\nModalidade\nTodas\nREMOTE\nHYBRID\nONSITE\nUNKNOWN\nOrdenar por\nPrioridade\nMais recentes\nMaior score\nRecência\nÚltimos 30 dias\nNovas (14 dias)\nAbertas na fonte\n\nNenhum filtro ativo\n\nFiltros avançados\n\n1 oportunidade encontrada.\n\nOportunidades\nVaga\tScore e decisão\tSinais\tPublicada\tAções\n\nSenior Product Engineer\nAcme Labs · São Paulo, SP\nStartup · YC S26\n\t\n86.5\nRecomendada\nCandidatura: Entrevista\n\t\nHYBRID · SENIOR\nStatus ACTIVE\nBoa aderência entre experiência de produto e requisitos técnicos.\n\t01/10/2026\t\nRelevante\nNão é para mim\n\nExibindo 1 a 1 de 1 oportunidades\n\n‹\n1\n›\nItens por página\n10\n25\n50\n100"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/inbox",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1440,
+      "route": "/opportunities/opportunity-1",
+      "directUrl": "http://127.0.0.1:55109/opportunities/opportunity-1",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/opportunities/opportunity-1",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n← Voltar para as oportunidades\n\nOportunidade\n\nSenior Product Engineer\n\nAcme Labs · São Paulo, SP · Publicada 01/10/2026, 09:00:00\n\nModalidade\nHíbrido\nSenioridade\nSênior\nContrato\nTempo integral\nStatus\nAtiva\nVersão do conteúdo\n1\nAvaliar agora\nSua decisão\n\nMarque a relevância e acompanhe a candidatura. A análise de IA é apoio, não decide por você.\n\nRelevância\nRelevante\nNão é para mim…\nÁrea\nSenioridade\nLocalização\nEmpresa\nRemuneração\nOutro\nCandidatura\nEntrevista\nIniciada em 02/10/2026, 09:00:00 · enviada em 02/10/2026, 09:00:00\nTeste técnico\nEtapa final\nRecusada\nDesistência\nPróxima ação\nQuando\nSalvar\nHistórico\nInteresse\n02/10/2026, 09:00:00\nInteresse → Entrevista\n05/10/2026, 09:00:00\nResumo\nDecisão\nCandidatura\nProcedência\nDescrição\n\nConstrua ferramentas de produto com uma equipe pequena e multidisciplinar.\n\nRemuneração\n\n150000 – 190000 USD (YEAR, GROSS)\n\nEvidência: — · raw item raw-1\n\nSkills\nTypeScript\nrequired · skills-v1\nDecisão\n\nMatching determinístico: score, veredito e elegibilidade calculados por regras, fora da IA.\n\n86.5\nRecomendada\nElegibilidade Atende aos filtros · confiança 0.92\n\nRegras matching-v1 · taxonomia skills-v1 · perfil profile- · avaliada em 06/10/2026, 09:00:00 · hash aaaaaaaaaaaa…\n\nFiltros eliminatórios\n\nNenhum filtro avaliado.\n\nFatores do score\n\nNenhum fator calculado.\n\nAnálise semântica\n\nComentário consultivo gerado por IA para apoiar sua leitura. Não é veredito nem aprovação, e não decide nada por você.\n\nBoa aderência entre experiência de produto e requisitos técnicos.\n\nPontos fortes\nExperiência alinhada ao produto\n\n· · analysis-v1 · 06/10/2026, 09:00:00\n\nCusto da chamada indisponível.\n\nAnalisar novamente\nA análise é consultiva: não altera score, verdict nem elegibilidade da avaliação assessme.\nPossível duplicata\nNenhum candidato a duplicata pendente para esta oportunidade.\nProcedência\n\nDe onde veio a vaga e quando foi vista pela última vez.\n\nhttps://jobs.example.test/acme-123\n\nPrimeira vez 01/10/2026, 09:00:00 · última 06/10/2026, 09:00:00\n\nraw item raw-1\n\nFingerprint synthetic-baseline-opportunity (v1) · 0 resultados de normalização."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/opportunities/opportunity-1",
+          "status": 200
+        },
+        {
+          "path": "/api/matches",
+          "status": 200
+        },
+        {
+          "path": "/api/applications",
+          "status": 200
+        },
+        {
+          "path": "/api/opportunities/opportunity-1/duplicate-candidates",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1440,
+      "route": "/applications",
+      "directUrl": "http://127.0.0.1:55109/applications",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/applications",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nDecidir\n\nOnde cada candidatura precisa de atenção?\n\nOrganize a próxima ação em cada etapa da sua busca. A oportunidade segue o ciclo dela; a candidatura segue o seu.\n\nEm andamento (1)\nEncerradas (0)\n1 no total\nEm andamento\n\nCandidaturas em andamento, organizadas pela etapa atual.\n\nInteresse\n0\nCandidatura enviada\n0\nTriagem\n0\nEntrevista\n1\nSenior Product Engineer\n\nAcme Labs\n\nPróxima ação: Preparar conversa com a equipe de produto · 12/10/2026\n\n2 movimentos no histórico\n\nTeste técnico\n0\nEtapa final\n0\nOferta\n0\n\nExibindo 1 a 1 de 1 candidaturas\n\n‹\n1\n›"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/applications",
+          "status": 200
+        },
+        {
+          "path": "/api/applications",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1440,
+      "route": "/companies",
+      "directUrl": "http://127.0.0.1:55109/companies",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/companies",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nCatálogo local\n\nEmpresas\n\nConsulte as empresas monitoradas e as fontes associadas a cada uma.\n\nNova empresa\nPrioridade\nTodas as prioridades\nPrioridade alta\nPrioridade normal\nPrioridade baixa\nStatus\nTodos os status\nAtivas\nPausadas\nEm fila\nVerificação\nQualquer verificação\nAPI JSON confirmada\nATS identificado\nCarreiras confirmadas\nPesquisa registrada\nEm fila de homologação\nNão verificada\nBuscar empresas\nBuscar\n\n1 empresa encontrada.\n\nEmpresas\nEmpresa\tPrioridade\tStatus\tVerificação\tFontes\n\nAcme Labs\nacme.example.test\n\tAlta\tAtiva\tCarreiras confirmadas\tCarreiras Acme (Carreiras confirmadas)\n\nExibindo 1 a 1 de 1 empresas\n\n‹\n1\n›\nItens por página\n10\n25\n50\n100"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/companies",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1440,
+      "route": "/companies/company-1",
+      "directUrl": "http://127.0.0.1:55109/companies/company-1",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/companies/company-1",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nCatálogo local\n\nAcme Labs\n\nacme.example.test\n\nEditar empresa\n\n← Voltar para as empresas\n\nResumo\nFontes\nVagas\nPrioridade\nAlta\nStatus no radar\nAtiva\nVerificação\nCarreiras confirmadas\nÚltima verificação\n05/10/2026, 09:00:00\nAliases\nAcme\nFontes\n\nRegistre ou corrija o ATS da empresa e proponha a fonte a partir dele. A proposta nasce desabilitada e é homologada na tela de fontes.\n\nPropor fonte a partir do ATS\nRegistrar ATS\nCarreiras Acme\nCarreiras confirmadas\n\nhttps://acme.example.test/careers\n\nVerificação: manual · última em 05/10/2026, 09:00:00\n\nPágina pública de carreiras.\n\nCorrigir\nÚltimas vagas\nÚltimas vagas desta empresa\nVaga\tModalidade\tDecisão\tScore\nSenior Product Engineer\tHYBRID\tRECOMMENDED\t86.5"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/companies/company-1",
+          "status": 200
+        },
+        {
+          "path": "/api/inbox",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1440,
+      "route": "/sources",
+      "directUrl": "http://127.0.0.1:55109/sources",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/sources",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nAquisição\n\nFontes e execuções\n\nO que cada fonte produziu na última execução, e o que fazer quando ela falha. Uma fonte só executa depois de habilitada.\n\nAdicionar fonte\n\nCatálogo\n1 empresas · 1 registros\n\nPropostas / homologadas\n0 / 1\n\nHabilitadas / elegíveis\n1 / 1\n\nFila de homologação\n\nPara registrar uma vaga avulsa é preciso uma fonte manual, e ainda não existe nenhuma. Criar a fonte manual\n\nEstado\nTodas\nCom falha ou parcial\nHabilitadas\nBuscar fontes\nBuscar\n\nExibindo 1 de 1 fontes carregadas. 0 com falha na última execução.\n\nFontes\nFonte\tEstado\tÚltima execução\tItens\tAgendamento\tAções\n\nFonte greenhouse\ngreenhouse\n\tNunca executada\nHabilitada · evidência confirmed\ntermos revisados · collector homologado\n\t—\nnunca executada\n—\nnunca executada\n\t—\nnunca executada\nsem vagas normalizadas\n\tmanual\t\nExecutar agora\nMais ações"
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/source-health",
+          "status": 200
+        },
+        {
+          "path": "/api/source-coverage",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1440,
+      "route": "/sources/homologation-queue",
+      "directUrl": "http://127.0.0.1:55109/sources/homologation-queue",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/sources/homologation-queue",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nAquisição\n\nFila de homologação\n\nTeste, revise os termos e habilite as propostas em sequência, sem abrir fonte por fonte.\n\nNenhuma proposta aguardando homologação."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/source-health",
+          "status": 200
+        },
+        {
+          "path": "/api/profile",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1440,
+      "route": "/profile",
+      "directUrl": "http://127.0.0.1:55109/profile",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/profile",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nCritérios de decisão\n\nPerfil e preferências\n\nO que o matching considera ao avaliar uma vaga. Salvar cria uma nova versão e a ativa; as avaliações anteriores continuam apontando para a versão que as produziu.\n\nSkills e áreas\nTrabalho e localização\nRemuneração\nVersões\nSkills e áreas\n\nCritérios que orientam o encaixe técnico e a prioridade das vagas.\n\nSkills\nSeparadas por vírgula.\n\nNenhuma skill informada: o encaixe tecnológico das vagas fica desconhecido e pesa pouco no ranking.\n\nExperiências e projetos\n\nNão são editados nesta tela e seguem sem mudança para a nova versão.\n\nExperiências\n\nNenhuma experiência registrada.\n\nProjetos\n\nNenhum projeto registrado.\n\nÁreas de interesse\n\nNenhuma marcada vale como todas as áreas. Vagas sem área classificada aparecem sempre.\n\nEngenharia de software\nDados\nInfraestrutura\nSegurança\nQualidade (QA)\nProduto\nDesign\nVendas\nMarketing\nOperações\nPessoas\nFinanças\nJurídico\nSuporte\nOutras\nSenioridades aceitas\n\nNíveis fora da seleção ficam abaixo no ranking, nunca escondidos. Nenhuma marcada vale como não informado: nenhum nível perde posição.\n\nEstágio\nJúnior\nPleno\nSênior\nStaff\nLead\nGestão\nDireção\nNão informada\nCargos-alvo\nSeparados por vírgula.\nTrabalho e localização\n\nPreferências de modalidade, contrato, país e fuso.\n\nModalidades aceitas\nREMOTE\nHYBRID\nONSITE\nContratos aceitos\nFULL_TIME\nPART_TIME\nCONTRACT\nINTERNSHIP\nPaíses\nCódigos ISO separados por vírgula. Lista vazia mantém o país da vaga como desconhecido, e desconhecido não reprova.\nInício da janela de timezone\nFim da janela de timezone\nRemuneração\n\nFaixa desejada e condições de mobilidade para avaliar a elegibilidade.\n\nRemuneração mínima\nRemuneração máxima\nMoeda\nPeríodo\n—\nYEAR\nMONTH\nHOUR\nAceito relocação\nPreciso de patrocínio de visto\nSalvar como nova versão e ativar\nVersão ativa 0 · lock 0\nVersões\n\nNenhuma versão registrada."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/profile",
+          "status": 200
+        },
+        {
+          "path": "/api/profile/versions",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1440,
+      "route": "/status",
+      "directUrl": "http://127.0.0.1:55109/status",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/status",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nAmbiente local\n\nRadar pronto para começar\n\nA base local está conectada. O catálogo de empresas já pode ser importado e consultado no dashboard.\n\nProntidão do ambiente\n\nAPI pronta\n\nA base local está conectada. O catálogo de empresas já pode ser importado e consultado no dashboard.\n\nPróxima ação\n\nRevise as fontes ativas e inicie uma busca quando o catálogo estiver preparado.\n\nVer fontes\nComo interpretar este estado\n\nA prontidão confirma que a API e a conexão com o banco de dados estão disponíveis. O ambiente está pronto para consultar o catálogo local.\n\nDescubra oportunidades, preserve evidências e decida com contexto."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/health/ready",
+          "status": 200
+        },
+        {
+          "path": "/api/health",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    },
+    {
+      "width": 1440,
+      "route": "/missing",
+      "directUrl": "http://127.0.0.1:55109/missing",
+      "navigationStatus": 200,
+      "dom": {
+        "path": "/missing",
+        "overflow": false,
+        "text": "Pular para o conteúdo\n◉\nOpportunity Radar\n\nDecidir\n\nVisão geral\nInbox\nPipeline\n\nPesquisar\n\nEmpresas\n\nOperar\n\nFontes\nHomologação\nPerfil\nStatus\n\nDecidir\n\nO que move sua busca esta semana?\n\nUm ponto de partida calmo para escolher a próxima ação, com a origem dos dados à vista.\n\nAbrir Inbox\nDecisão de hoje\nAcervo\nOperação\nDecisão de hoje\nAlta prioridade\n0\nRecomendadas\n1\nNovas (7 dias)\n1\nFollow-ups devidos\nPróximos 7 dias\n0\nVagas avaliadas por decisão\nDecisão\tVagas\nRecomendadas\t1\n\nVer só startups\n\nAcervo\n\nO que o radar já coletou e decidiu, e que continua disponível para consulta.\n\n1\n\nAvaliadas\n\nCom decisão determinística registrada\n\n1\n\nCandidaturas ativas\n\nOportunidades ativas\n1de 1 no total\nItens brutos pendentes\n0Preservados, ainda sem normalização\n7 dias: vagas novas\n1sem marcação suficiente · 1 de 0 empresas cobertas\nOperação\n\nComo o ciclo está passando quando ninguém está olhando.\n\nFontes com falha na última execução\n0de 1 habilitadas, 1 no catálogo\nAnálises degradadas\n0IA (Groq) indisponível, sem quota ou desligada\nAnálise\nsem análise medida · 0 na fila, últimos 7 dias\nNenhuma fonte falhou na última execução.\n\nIA (Groq)\n\nDesligada (AI_ENABLED=false).\n\nMétricas operacionais por fonte\n\nSelecione uma janela quando as métricas estiverem disponíveis.\n\nDescubra oportunidades, preserve evidências e decida com contexto."
+      },
+      "pageErrors": [],
+      "consoleErrors": [],
+      "apiResponses": [
+        {
+          "path": "/api/overview",
+          "status": 200
+        },
+        {
+          "path": "/api/saved-searches",
+          "status": 200
+        },
+        {
+          "path": "/api/analysis-metrics",
+          "status": 200
+        },
+        {
+          "path": "/api/source-metrics",
+          "status": 200
+        }
+      ],
+      "externalRequests": []
+    }
+  ]
+}

@@ -81,20 +81,25 @@ outros primitives, rotas, estilos globais ou a SPEC 54 como um todo. A
 evidência de bundle é específica à medição final acima; mudanças posteriores
 exigem nova validação proporcional.
 
-## Medição integrada após WP3-B
+## Medição integrada final local
 
-Além do spike isolado, o build integrado no HEAD `a196780` mediu 163,65 kB de
-JS inicial gzip e 7,33 kB de CSS gzip. O `npm run check` terminou com exit 0; o
-Vitest reportou 42 arquivos e 336 testes. Esses resultados foram registrados
-para o checkout integrado e não substituem as medidas históricas isoladas.
+Além do spike isolado, o build integrado após WP5 mediu 163,64 kB de JS inicial
+gzip e 7,33 kB de CSS gzip. O `npm run check` terminou com exit 0; o Vitest
+reportou 44 arquivos e 343 testes. Esses resultados pertencem ao checkout
+integrado final local e não substituem as medidas históricas isoladas.
 
 | Comparação integrada | JS inicial gzip | Delta |
 | --- | ---: | ---: |
-| Baseline aceito: 149,01 kB → 163,65 kB | 163,65 kB | +14,64 kB / **+9,83%** |
-| Último app integrado pré-WP3-B: 150,07 kB → 163,65 kB | 163,65 kB | +13,58 kB / **+9,05%** |
+| Baseline aceito: 149,01 kB → 163,64 kB | 163,64 kB | +14,63 kB / **+9,82%** |
 
 Contra o limite de +10% sobre o baseline aceito, a medição integrada fica
-0,26 kB abaixo do limite. O resultado do spike isolado continua sendo
+0,27 kB abaixo do limite. O resultado do spike isolado continua sendo
 149,01→161,62 kB (+12,61 kB / +8,54%); não deve ser apresentado como o delta
 integrado. O primeiro spike amplo de +20,64% permanece como registro histórico.
-As verificações visuais finais da aplicação não fazem parte dessa medição.
+
+As verificações visuais finais locais da aplicação estão em `docs/54-final`:
+55 capturas da aplicação construída, com fixtures locais, 11 URLs diretas
+(incluindo wildcard) e cinco larguras. Elas verificam carregamento direto,
+overflow horizontal, page/console errors, mapeamento de API e respostas fixture;
+não comprovam WCAG global, zoom real, leitor de tela, reduced motion,
+dispositivos físicos, E2E Compose, F53, WP6 ou WP7.
