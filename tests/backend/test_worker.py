@@ -131,7 +131,9 @@ def test_suggest_fields_batch_summary_uses_non_reserved_log_fields(
     opportunity = SimpleNamespace(id="opportunity-1")
 
     async def suggest_fields(*_args: object, **_kwargs: object) -> SimpleNamespace:
-        return SimpleNamespace(created=(), discarded_fields=())
+        return SimpleNamespace(
+            created=(), discarded_fields=(), state="success", quota_exhausted=False
+        )
 
     monkeypatch.setattr(worker, "observe_job", lambda *_args, **_kwargs: nullcontext())
     monkeypatch.setattr(worker, "Session", lambda _engine: nullcontext(object()))

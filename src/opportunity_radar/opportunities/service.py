@@ -5,8 +5,8 @@ from __future__ import annotations
 from base64 import b64decode
 from binascii import Error as Base64Error
 from collections import Counter
-from collections.abc import Collection, Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Collection, Mapping
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -472,17 +472,26 @@ class OpportunityService:
             failed=sum(item.status == "FAILED" for item in results),
         )
 
-    def reconcile_run_closures(self, source_run_id: UUID) -> None:
+    def reconcile_run_closures(
+        self,
+        source_run_id: UUID,
+        *,
+        may_close: Callable[[SourceRunModel], bool] | None = None,
+    ) -> bool:
         """Close jobs that vanished for two complete runs in a row, and reopen ones back.
 
         Only a complete run may change anything here: a partial or failed run tells us
         nothing about what the board still has, so absence from it is not evidence.
+        `may_close` is the caller's fence (a newer run of the source has started): when it
+        says no, nothing changes and this returns False.
         """
         run = self.session.get(SourceRunModel, source_run_id)
         if run is None:
             raise SourceRunNotFoundError(source_run_id)
         if not run.complete:
-            return
+            return True
+        if may_close is not None and not may_close(run):
+            return False
         source_definition_id = run.source_definition_id
 
         for occurrence in self.repository.occurrences_seen_in_run(
@@ -526,6 +535,7 @@ class OpportunityService:
                 opportunity.version += 1
 
         self.session.commit()
+        return True
 
     def mark_relevance(
         self,
@@ -1353,6 +1363,53 @@ def retag_skills(
     }
 
 
+def recompute_from_stored_description(session: Session, opportunity_id: UUID) -> bool:
+    """Redo skills and seniority from the description now stored on the opportunity.
+
+    A description written outside normalization (the Workday detail backfill) is not in the
+    raw evidence the retag scripts read, so they would never see it. Each occurrence's evidence
+    is normalized again with the stored description in its place; only skills, `search_skills`
+    and seniority are applied. Bumps `version` once if anything changed; the caller commits.
+    """
+    opportunity = session.get(OpportunityModel, opportunity_id)
+    if opportunity is None or not (opportunity.description or "").strip():
+        return False
+    repository = OpportunityRepository(session)
+    state = _enrichment_state(opportunity)[1]
+    seniority = opportunity.seniority
+    for occurrence in session.scalars(
+        select(SourceOccurrenceModel)
+        .where(SourceOccurrenceModel.opportunity_id == opportunity.id)
+        .order_by(SourceOccurrenceModel.last_seen_at, SourceOccurrenceModel.id)
+    ).all():
+        evidence = repository.raw_item_evidence(occurrence.raw_item_id)
+        if evidence is None:
+            continue
+        try:
+            candidate = build_candidate(
+                replace(_normalization_input(evidence), description=opportunity.description),
+                content_rules=get_settings().content_rules,
+            )
+        except (NormalizationError, TypeError, ValueError):
+            continue
+        _reconcile_skills(
+            opportunity=opportunity,
+            occurrence=occurrence,
+            candidate=candidate,
+            raw_item_id=occurrence.raw_item_id,
+        )
+        seniority = candidate.seniority.value  # the occurrence last seen decides
+    changed = state != _enrichment_state(opportunity)[1]
+    if changed:
+        opportunity.search_skills = _search_skills_text(opportunity.skills)
+    if seniority != opportunity.seniority:
+        opportunity.seniority = seniority
+        changed = True
+    if changed:
+        opportunity.version += 1
+    return changed
+
+
 _SENIORITY_REASON_CODE = "SENIORITY_CLASSIFICATION"
 
 
@@ -1626,7 +1683,10 @@ def _apply_evidence_fields(opportunity: OpportunityModel, candidate: CanonicalCa
     )
     changed |= _set_if_changed(opportunity, "location_text", candidate.location_text)
     changed |= _set_if_changed(opportunity, "normalized_location", candidate.normalized_location)
-    changed |= _set_if_changed(opportunity, "description", candidate.description)
+    # A candidate without a description (detail fetch off for the source) says nothing about
+    # one a backfill stored: it must not erase it.
+    if candidate.description is not None and candidate.description.strip():
+        changed |= _set_if_changed(opportunity, "description", candidate.description)
     changed |= _set_if_changed(opportunity, "published_at", candidate.published_at)
     changed |= _set_if_changed(opportunity, "source_updated_at", candidate.source_updated_at)
     changed |= _set_if_changed(

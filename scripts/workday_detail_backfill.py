@@ -16,7 +16,9 @@ HTTP request goes through the host budget reservation and the persisted 429 cool
 manifest resumes. Only `opportunity.description` is written, and only while it is still empty:
 a description present at apply time is a conflict and is left as it is. Presence, timestamps,
 `updated_at`, the raw payload and the occurrences are not touched, and no source run is created,
-so a backfill is never an inventory. Derived fields (skills, seniority) are not recomputed.
+so a backfill is never an inventory. Skills and seniority are recomputed from the written
+description (the retag scripts read raw evidence, which a backfill does not touch); rollback
+restores only the description.
 """
 
 from __future__ import annotations
@@ -52,6 +54,7 @@ from opportunity_radar.acquisition.service import (
 from opportunity_radar.acquisition.workday import _PARSER_VERSION, WorkdayCollector, _DetailRun
 from opportunity_radar.companies.models import CompanySource  # noqa: F401
 from opportunity_radar.opportunities.models import OpportunityModel, SourceOccurrenceModel
+from opportunity_radar.opportunities.service import recompute_from_stored_description
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 
@@ -192,6 +195,12 @@ def _write_description(session: Session, opportunity_id: str, description: str) 
     return bool(cast(CursorResult[Any], result).rowcount)
 
 
+def _recompute_derived(session: Session, opportunity_id: str) -> bool:
+    changed = recompute_from_stored_description(session, UUID(opportunity_id))
+    session.commit()
+    return changed
+
+
 def run_backfill(
     session: Session,
     *,
@@ -311,6 +320,8 @@ def run_backfill(
                             written_at=datetime.now(UTC).isoformat(),
                         )
                         outcomes["applied"] += 1
+                        if _recompute_derived(session, target["opportunity_id"]):
+                            outcomes["derived_changed"] += 1
                     else:
                         entry["status"] = "conflict"
                         outcomes["conflict"] += 1
@@ -341,6 +352,7 @@ def run_backfill(
         details_fetched=telemetry.detail_requests,
         http_requests=telemetry.http_requests,
         applied=outcomes["applied"],
+        derived_changed=outcomes["derived_changed"],
         conflicts=outcomes["conflict"],
         failed=outcomes["failed"],
         no_description=outcomes["no_description"],

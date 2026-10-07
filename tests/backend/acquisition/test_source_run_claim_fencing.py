@@ -760,3 +760,78 @@ def test_worker_timeout_preserves_positive_presence_only(board: _Board) -> None:
         session.refresh(absent)
         assert absent.opportunity.lifecycle_status != "CLOSED"
         assert absent.opportunity.closure_evidence is None
+
+
+def _normalize_source(session: Session, board: _Board) -> None:
+    for raw_item in session.scalars(
+        select(RawItemModel).where(RawItemModel.source_definition_id == board.source_id)
+    ):
+        OpportunityService(session).normalize(raw_item.id)
+
+
+def _absent_status(session: Session, board: _Board) -> str:
+    session.expire_all()
+    raw_item = session.scalar(
+        select(RawItemModel).where(
+            RawItemModel.source_definition_id == board.source_id,
+            RawItemModel.external_id == "absent",
+        )
+    )
+    assert raw_item is not None
+    occurrence = session.scalar(
+        select(SourceOccurrenceModel).where(SourceOccurrenceModel.raw_item_id == raw_item.id)
+    )
+    assert occurrence is not None
+    return occurrence.opportunity.lifecycle_status
+
+
+def test_stale_complete_run_does_not_close_absences_once_a_newer_run_started(
+    board: _Board, caplog: pytest.LogCaptureFixture
+) -> None:
+    """F51-07 AC02 (closure): the claim is gone after `execute`, the fencing generation is not."""
+    caplog.set_level(logging.INFO)
+    board.run_one(board.board_of("present", "absent"))
+    board.run_one(board.board_of("present"))
+    third = board.run_one(board.board_of("present"))  # would close it: absent from two in a row
+    fourth = board.run_one(board.board_of("present"))  # a newer run of the same source
+    assert third.complete is True and fourth.complete is True
+    with Session(board.engine) as session:
+        _normalize_source(session, board)
+        guard = board.service(board.board_of(), session)
+
+        closed = OpportunityService(session).reconcile_run_closures(
+            third.id, may_close=guard.run_may_close_absences
+        )
+
+        assert closed is False
+        assert _absent_status(session, board) != "CLOSED"
+        rejected = [
+            record
+            for record in caplog.records
+            if record.__dict__.get("event") == "fence_rejected"
+            and record.__dict__.get("reason") == "closure_superseded"
+        ]
+        assert [record.__dict__["run_id"] for record in rejected] == [str(third.id)]
+
+        # The newest complete run still closes it, with the same guard.
+        assert OpportunityService(session).reconcile_run_closures(
+            fourth.id, may_close=guard.run_may_close_absences
+        ) is True
+        assert _absent_status(session, board) == "CLOSED"
+
+
+def test_closure_without_claims_behaves_as_before(board: _Board) -> None:
+    """`collection_claim_enabled=false`: runs carry no token and the guard never refuses."""
+    board.run_one(board.board_of("present", "absent"), claims=False)
+    board.run_one(board.board_of("present"), claims=False)
+    third = board.run_one(board.board_of("present"), claims=False)
+    board.run_one(board.board_of("present"), claims=False)
+    assert third.fencing_token is None
+    with Session(board.engine) as session:
+        _normalize_source(session, board)
+        guard = board.service(board.board_of(), session, claims=False)
+
+        assert OpportunityService(session).reconcile_run_closures(
+            third.id, may_close=guard.run_may_close_absences
+        ) is True
+        assert _absent_status(session, board) == "CLOSED"

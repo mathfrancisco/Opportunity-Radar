@@ -132,6 +132,45 @@ def test_evidence_fields_apply_when_candidate_has_no_freshness_signal() -> None:
     assert opportunity.location_text == "Remote — Brazil"
 
 
+def _described_candidate(description: str | None):
+    return build_candidate(
+        NormalizationInput(
+            raw_item_id=uuid4(),
+            source_definition_id=uuid4(),
+            source_type="lever",
+            external_id="job-1",
+            title="Backend Engineer",
+            description=description,
+        )
+    )
+
+
+@pytest.mark.parametrize("incoming", [None, "", "   "])
+def test_recollection_without_a_description_keeps_the_stored_one(incoming: str | None) -> None:
+    opportunity = _opportunity(description="Backfilled detail text.")
+
+    _apply_evidence_fields(opportunity, _described_candidate(incoming))
+
+    assert opportunity.description == "Backfilled detail text."
+
+
+def test_recollection_with_a_new_description_replaces_the_stored_one() -> None:
+    opportunity = _opportunity(description="Old text.")
+
+    changed = _apply_evidence_fields(opportunity, _described_candidate("New text."))
+
+    assert changed is True
+    assert opportunity.description == "New text."
+
+
+def test_posting_that_never_had_a_description_still_has_none() -> None:
+    opportunity = _opportunity(description=None)
+
+    _apply_evidence_fields(opportunity, _described_candidate(None))
+
+    assert opportunity.description is None
+
+
 def test_out_of_order_replay_does_not_regress_evidence_fields() -> None:
     """Criterion: 'Replay fora de ordem não regride conteúdo/última observação.'"""
     fresher_at = NOW
