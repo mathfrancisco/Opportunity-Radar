@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     # losses instead of only ever spending the model on what already ranks highest (SPEC
     # 39 section 9; card F20-24).
     worker_analyze_aging_sample_ratio: float = 0.10
+    # Share of a model's daily token limit the automatic analysis job may spend; the rest
+    # is slack for interactive analysis. At the line the job idles until the next day
+    # window, leaving assessments pending (no AI_FAILED, no attempt, no cooldown).
+    worker_analyze_daily_cap_fraction: float = 0.8
     analysis_retry_cooldown_seconds: int = 3600
     analysis_retry_attempt_window_seconds: int = 86400
     analysis_retry_max_attempts: int = 3
@@ -254,6 +258,11 @@ class Settings(BaseSettings):
             raise ValueError(
                 "WORKER_ANALYZE_AGING_SAMPLE_RATIO must be between 0 and 1, got "
                 f"{self.worker_analyze_aging_sample_ratio!r}"
+            )
+        if not 0 < self.worker_analyze_daily_cap_fraction <= 1:
+            raise ValueError(
+                "WORKER_ANALYZE_DAILY_CAP_FRACTION must be above 0 and at most 1, got "
+                f"{self.worker_analyze_daily_cap_fraction!r}"
             )
         if not 0 <= self.collection_target_area_floor <= 1:
             raise ValueError(

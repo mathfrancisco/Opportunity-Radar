@@ -20,9 +20,12 @@ from opportunity_radar.platform.ai.errors import ErrorKind
 from opportunity_radar.platform.ai.router import Attempt
 from opportunity_radar.platform.ai.telemetry import (
     AICallRecord,
+    finish_operation,
+    operation_cohort,
     purge_older_than,
     record_calls,
     records_from_attempts,
+    start_operation,
 )
 from opportunity_radar.platform.database import create_database_engine
 
@@ -249,3 +252,51 @@ def test_purge_removes_only_records_older_than_the_limit() -> None:
             text("SELECT count(*) FROM platform.ai_call_record")
         ).scalar_one()
     assert remaining == 1
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("RUN_DATABASE_INTEGRATION") != "1",
+    reason="database integration is enabled only in the isolated CI database",
+)
+def test_operation_cohort_reports_in_flight_in_grace_and_recovers_a_crashed_one() -> None:
+    engine = _engine()
+    with engine.begin() as connection:
+        connection.execute(text("TRUNCATE platform.ai_call_record, platform.ai_operation_record"))
+    now = datetime(2026, 10, 6, 12, 0, 0, tzinfo=UTC)
+    since = now - timedelta(hours=1)
+    finished, slow, crashed = uuid4(), uuid4(), uuid4()
+    start_operation(engine, operation_id=finished, task="job_match", now=now - timedelta(minutes=4))
+    finish_operation(engine, operation_id=finished, state="success", now=now - timedelta(minutes=3))
+    start_operation(engine, operation_id=slow, task="job_match", now=now - timedelta(minutes=2))
+    start_operation(engine, operation_id=crashed, task="job_match", now=now - timedelta(minutes=1))
+    record_calls(
+        engine,
+        [
+            AICallRecord(
+                task="job_match", provider="groq", model="model-a", attempt=0, success=True,
+                fallback_used=False, cache_hit=False, operation_id=finished,
+                transport_started=True,
+            ),
+            AICallRecord(
+                task="job_match", provider="groq", model="model-a", attempt=0, success=False,
+                fallback_used=False, cache_hit=False, operation_id=slow,
+                transport_started=False,
+            ),
+        ],
+        now=now,
+    )
+
+    inside_grace = operation_cohort(engine, since=since, now=now)
+
+    # Inside the grace a crashed operation cannot be told from a slow one: both in flight.
+    assert (inside_grace.started, inside_grace.terminal) == (3, 1)
+    assert (inside_grace.in_flight, inside_grace.recovered) == (2, 0)
+    # Only an attempt that reached transport counts as an attempt.
+    assert inside_grace.attempts == 1
+
+    finish_operation(engine, operation_id=slow, state="success", now=now + timedelta(minutes=1))
+    after_grace = operation_cohort(engine, since=since, now=now + timedelta(minutes=10))
+
+    assert (after_grace.started, after_grace.terminal) == (3, 3)
+    assert (after_grace.in_flight, after_grace.recovered) == (0, 1)

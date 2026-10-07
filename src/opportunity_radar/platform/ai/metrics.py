@@ -63,6 +63,107 @@ class AIMetricsReport:
     cache_hit_rate: float | None
 
 
+@dataclass(frozen=True, slots=True)
+class PeriodTotals:
+    """Absolute numbers for one period of one cohort; nothing here is a percentage."""
+
+    requests: int
+    cache_hits: int
+    recorded_tokens: int
+    requests_without_tokens: int
+    useful_results: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class AIPeriodComparison:
+    """Two periods of the same task (and prompt version) side by side (card F51-12).
+
+    `gaps` names what could not be measured, so a missing number is never read as zero.
+    """
+
+    task: str
+    prompt_version: str | None
+    baseline: PeriodTotals
+    pilot: PeriodTotals
+    gaps: tuple[str, ...]
+
+
+def ai_period_comparison(
+    engine: Engine,
+    *,
+    task: str,
+    baseline: tuple[datetime, datetime],
+    pilot: tuple[datetime, datetime],
+    prompt_version: str | None = None,
+    baseline_useful_results: int | None = None,
+    pilot_useful_results: int | None = None,
+) -> AIPeriodComparison:
+    """Compare `[since, until)` periods of one cohort with no derived rate.
+
+    A request is a recorded provider call that is not a cache reuse. `useful_results` has
+    no telemetry (what counts as useful is a human definition), so the caller supplies it
+    or it is reported as a gap, as are tokens a period's requests never recorded.
+    """
+    totals = (
+        _period_totals(engine, task, prompt_version, *baseline, baseline_useful_results),
+        _period_totals(engine, task, prompt_version, *pilot, pilot_useful_results),
+    )
+    gaps = []
+    if baseline_useful_results is None or pilot_useful_results is None:
+        gaps.append("useful_results")
+    for label, period in zip(("baseline", "pilot"), totals, strict=True):
+        if period.requests_without_tokens:
+            gaps.append(f"{label}.tokens")
+    return AIPeriodComparison(
+        task=task,
+        prompt_version=prompt_version,
+        baseline=totals[0],
+        pilot=totals[1],
+        gaps=tuple(gaps),
+    )
+
+
+def _period_totals(
+    engine: Engine,
+    task: str,
+    prompt_version: str | None,
+    since: datetime,
+    until: datetime,
+    useful_results: int | None,
+) -> PeriodTotals:
+    fresh = ai_call_record.c.cache_hit.is_(False)
+    untracked = sa.and_(
+        ai_call_record.c.prompt_tokens.is_(None), ai_call_record.c.completion_tokens.is_(None)
+    )
+    statement = sa.select(
+        sa.func.count().filter(fresh).label("requests"),
+        sa.func.count().filter(ai_call_record.c.cache_hit.is_(True)).label("cache_hits"),
+        sa.func.coalesce(
+            sa.func.sum(
+                sa.func.coalesce(ai_call_record.c.prompt_tokens, 0)
+                + sa.func.coalesce(ai_call_record.c.completion_tokens, 0)
+            ).filter(fresh),
+            0,
+        ).label("tokens"),
+        sa.func.count().filter(fresh, untracked).label("without_tokens"),
+    ).where(
+        ai_call_record.c.task == task,
+        ai_call_record.c.created_at >= since,
+        ai_call_record.c.created_at < until,
+    )
+    if prompt_version is not None:
+        statement = statement.where(ai_call_record.c.prompt_version == prompt_version)
+    with engine.connect() as connection:
+        row = connection.execute(statement).one()
+    return PeriodTotals(
+        requests=int(row.requests),
+        cache_hits=int(row.cache_hits),
+        recorded_tokens=int(row.tokens),
+        requests_without_tokens=int(row.without_tokens),
+        useful_results=useful_results,
+    )
+
+
 def ai_metrics(
     engine: Engine,
     *,
@@ -173,4 +274,12 @@ def _optional(value: Any) -> float | None:
     return None if value is None else float(value)
 
 
-__all__ = ["DEFAULT_WINDOW_HOURS", "AIMetricsReport", "ModelAIMetrics", "ai_metrics"]
+__all__ = [
+    "DEFAULT_WINDOW_HOURS",
+    "AIMetricsReport",
+    "AIPeriodComparison",
+    "ModelAIMetrics",
+    "PeriodTotals",
+    "ai_metrics",
+    "ai_period_comparison",
+]

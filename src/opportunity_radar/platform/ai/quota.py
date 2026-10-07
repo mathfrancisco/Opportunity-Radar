@@ -289,6 +289,44 @@ class QuotaGuard:
                     },
                 )
 
+    def has_day_balance(
+        self,
+        model: str,
+        *,
+        estimated_tokens: int = 0,
+        ceiling_requests: int | None = None,
+        token_fraction: float = 1.0,
+    ) -> bool:
+        """Read-only: would one more call of `estimated_tokens` fit today's window?
+
+        Reserves nothing. `ceiling_requests` narrows the day request budget the way
+        `reserve` does; `token_fraction` keeps a share of the day's token limit unspent
+        (the worker's slack for interactive analysis). The minute window is not read: it
+        clears within a minute, so it never justifies skipping the whole day's work.
+        """
+        day_start = day_window(self._now())
+        with self._engine.connect() as connection:
+            row = (
+                connection.execute(
+                    _SELECT_SQL,
+                    {"model": model, "window_kind": "day", "window_start": day_start},
+                )
+                .mappings()
+                .first()
+            )
+        requests_limit = (
+            self._limits.day_requests
+            if ceiling_requests is None
+            else min(self._limits.day_requests, ceiling_requests)
+        )
+        requests_used = 0 if row is None else row["requests"]
+        tokens_used = 0 if row is None else row["tokens"]
+        requests_ceiling = None if row is None else row["requests_ceiling"]
+        requests_cap = effective_ceiling(requests_limit, requests_ceiling)
+        tokens_ceiling = None if row is None else row["tokens_ceiling"]
+        tokens_cap = effective_ceiling(self._limits.day_tokens, tokens_ceiling) * token_fraction
+        return requests_used + 1 <= requests_cap and tokens_used + estimated_tokens <= tokens_cap
+
     def next_available_at(self, model: str) -> datetime:
         """Best-guess time a reservation might succeed again: the next window boundary."""
         now = self._now()
