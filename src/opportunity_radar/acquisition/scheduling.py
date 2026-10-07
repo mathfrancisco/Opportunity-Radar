@@ -174,33 +174,50 @@ class SourceSchedulingState:
 #: Cron schedules for a company source that names no schedule of its own. Cadence follows
 #: `Company.priority` (the user's interest) and nothing else: `research_confidence` (how
 #: mature the catalogue is, F48-14) is operational and never lowers a company to weekly.
-#: A high-priority company is worth checking far more often than a low one; every
-#: cadence here stays well inside a source's own minimum run interval for any policy
-#: this codebase configures.
+#: A high-priority company is worth checking far more often than a low one: high every
+#: 2 hours, normal every 6 hours, low once a day. A source whose own minimum run interval
+#: is longer than a cadence steps down to the next one (see the fallback below).
 DEFAULT_SCHEDULE_BY_COMPANY_PRIORITY = {
-    "high": "0 */6 * * *",  # every 6 hours
-    "normal": "0 0 * * *",  # once a day
-    "low": "0 0 * * 0",  # once a week
+    "high": "0 */2 * * *",  # every 2 hours
+    "normal": "0 */6 * * *",  # every 6 hours
+    "low": "0 0 * * *",  # once a day
+}
+
+#: Per-source-type cadences that replace the mapping above. Workday keeps the old, slower
+#: cadences: its detail fetch is one request per posting and its per-source approval
+#: (card F51-03) is still pending.
+SCHEDULE_OVERRIDE_BY_SOURCE_TYPE = {
+    "workday": {
+        "high": "0 */6 * * *",  # every 6 hours
+        "normal": "0 0 * * *",  # once a day
+        "low": "0 0 * * 0",  # once a week
+    },
 }
 
 
 def default_schedule_for_priority(
-    priority: str, *, minimum_run_interval_seconds: float | None = None
+    priority: str,
+    *,
+    minimum_run_interval_seconds: float | None = None,
+    source_type: str | None = None,
 ) -> str:
     """The default cron schedule for a company source of this priority.
 
     Falls back to the next cadence down whenever the network policy's own minimum run
     interval would make the priority's usual cadence tighter than the source allows.
     """
+    cadences = SCHEDULE_OVERRIDE_BY_SOURCE_TYPE.get(
+        source_type or "", DEFAULT_SCHEDULE_BY_COMPANY_PRIORITY
+    )
     order = ("high", "normal", "low")
     start = order.index(priority) if priority in order else order.index("normal")
     for candidate in order[start:]:
-        schedule = DEFAULT_SCHEDULE_BY_COMPANY_PRIORITY[candidate]
+        schedule = cadences[candidate]
         if minimum_run_interval_seconds is None or _cron_interval_seconds(
             schedule
         ) >= minimum_run_interval_seconds:
             return schedule
-    return DEFAULT_SCHEDULE_BY_COMPANY_PRIORITY["low"]
+    return cadences["low"]
 
 
 def _cron_interval_seconds(schedule: str) -> float:
