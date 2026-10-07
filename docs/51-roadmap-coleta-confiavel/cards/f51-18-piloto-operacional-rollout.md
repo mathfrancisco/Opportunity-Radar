@@ -46,3 +46,31 @@ Produzir runbook reproduzível de sete dias, pacote de evidências por fonte e d
 ## Falhas, interrupção e rollback
 
 Abortar expansão diante de run parcial, divergência de imagem, N/D, queda abaixo dos limiares, erro de permissão/SSRF ou restore não verificado. Parar novas claims, drenar trabalho elegível e aplicar fencing antes de liberar ownership; não marcar ausentes em run parcial. Rollback limita-se às flags/coorte e versão do manifesto, preservando payload bruto, evidência e alterações humanas. Restore é validado isoladamente antes de qualquer plano operacional. Entregáveis: runbook de sete dias, pacote CI/runtime, tabela de métricas, inventários por fonte, prova de restore/rollback isolada e decisão assinada. Nenhuma implementação ou execução operacional é declarada por este card.
+
+## Preparação do pacote (2026-10-07, sexta sessão)
+
+Feito antes do fim da janela, sem dado estimado:
+
+- **Coorte congelada:** as 276 fontes habilitadas e criadas antes da abertura da janela
+  (2026-10-07 13:23:48 UTC), em [f51-18-coorte-2026-10-07.tsv](../f51-18-coorte-2026-10-07.tsv):
+  98 inHire, 65 Ashby, 56 Greenhouse, 19 Workday, 15 Lever, 11 Workable, 7 Teamtailor, 2
+  Factorial, 1 Remotive, 1 Hacker News e 1 manual. As fontes inHire cadastradas depois (lote
+  do F52-06) ficam fora da coorte.
+- **Runtime no início:** stack `opportunity-radar-dev` construída em 2026-10-07 13:24:18 UTC
+  a partir de `b6d25ae`; imagem do worker
+  `sha256:dd316ee9512d1addf0a1918ecb925f36927e013a4034420a5f2b8dd5d803a764`, da API
+  `sha256:80304800993d5ea875e5384fb1e35902fdf36156eeeeb8ac5eabd647e10b6b4b`.
+- **Linha de base:** a medição do [F51-01](f51-01-baseline-benchmark-auditavel.md).
+
+**O que o validador vai exigir e hoje não existe:**
+
+- recall humano de 95% ou mais por fonte: depende da amostra do dono (F51-02). Sem ela o
+  validador devolve N/D e a decisão é no-go, mesmo com a janela completa;
+- restauração e rollback demonstrados em ambiente `_test`, com hashes comparados;
+- aprovação assinada pelo responsável;
+- três inventários completos por fonte dentro da janela. Em 2026-10-07 havia 43 fontes sem
+  três execuções completas em sete dias; as que só respondem `304` sem reuso de inventário
+  não acumulam execução completa.
+
+Qualquer PR de código da SPEC 51 mesclado reabre a janela na data do merge e troca o SHA e a
+imagem acima. A data vigente está no [README do roadmap](../README.md).
