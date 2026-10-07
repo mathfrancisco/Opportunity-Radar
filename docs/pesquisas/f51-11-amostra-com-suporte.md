@@ -161,7 +161,7 @@ distância entre dois julgamentos (modelo e regra); não são precisão.
 - Nada mudou em `GATED_RULES`, nos limites (20 emissões, 90%), no código do portão ou em
   alguma regra. Nenhum rótulo foi alterado. Os arquivos antigos de gold, amostra e proposta
   não foram editados.
-- A amostra e a proposta trazem a descrição inteira de vagas públicas; 7 endereços de e-mail
-  corporativo de contato (candidatos e RH) aparecem dentro dos textos. Nenhum comentário de
-  Hacker News entrou. O aviso do F50-01 sobre comentários do Hacker News pessoais não se
-  aplica a estes arquivos, mas vale revisar antes de qualquer publicação.
+- A amostra e a proposta trazem a descrição de vagas públicas. Os endereços de e-mail que
+  apareciam dentro dos textos (37 ocorrências em cada arquivo) foram trocados por
+  `[email removido]` antes da publicação; é a única diferença para a descrição original.
+  Nenhum comentário de Hacker News entrou.
