@@ -1,11 +1,412 @@
 {
+  "passed": true,
+  "failures": [],
+  "captures": 45,
   "javascriptErrors": [],
+  "blockedExternalRequests": [],
   "keyboardMenu": {
-    "expanded": "false",
-    "drawerHidden": true,
-    "focusReturned": true
+    "afterClick": {
+      "drawerVisible": true,
+      "expanded": "true"
+    },
+    "afterEscape": {
+      "drawerHidden": true,
+      "expanded": "false",
+      "focusReturned": true
+    }
   },
-  "zoom200": {
+  "inboxTableRoles": [
+    {
+      "viewport": "768",
+      "columnHeaders": 5,
+      "rows": 4,
+      "cells": 15
+    },
+    {
+      "viewport": "360",
+      "columnHeaders": 5,
+      "rows": 4,
+      "cells": 15
+    }
+  ],
+  "pipelineBoardChecks": [
+    {
+      "viewport": "1440",
+      "scrollWidth": 1084,
+      "clientWidth": 1084,
+      "headings": [
+        {
+          "text": "Intere e 1",
+          "left": 300,
+          "right": 510.65625,
+          "visible": true
+        },
+        {
+          "text": "Candidatura enviada 1",
+          "left": 524.65625,
+          "right": 735.328125,
+          "visible": true
+        },
+        {
+          "text": "Triagem 0",
+          "left": 758.328125,
+          "right": 832.328125,
+          "visible": true
+        },
+        {
+          "text": "Entrevi ta 0",
+          "left": 864.328125,
+          "right": 938.328125,
+          "visible": true
+        },
+        {
+          "text": "Te te técnico 1",
+          "left": 961.328125,
+          "right": 1172,
+          "visible": true
+        },
+        {
+          "text": "Etapa final 0",
+          "left": 1195,
+          "right": 1269,
+          "visible": true
+        },
+        {
+          "text": "Oferta 0",
+          "left": 1301,
+          "right": 1375,
+          "visible": true
+        }
+      ]
+    },
+    {
+      "viewport": "1280",
+      "scrollWidth": 934,
+      "clientWidth": 934,
+      "headings": [
+        {
+          "text": "Intere e 1",
+          "left": 295.1875,
+          "right": 455.734375,
+          "visible": true
+        },
+        {
+          "text": "Candidatura enviada 1",
+          "left": 469.734375,
+          "right": 630.265625,
+          "visible": true
+        },
+        {
+          "text": "Triagem 0",
+          "left": 653.265625,
+          "right": 727.265625,
+          "visible": true
+        },
+        {
+          "text": "Entrevi ta 0",
+          "left": 759.265625,
+          "right": 833.265625,
+          "visible": true
+        },
+        {
+          "text": "Te te técnico 1",
+          "left": 856.265625,
+          "right": 1016.8125,
+          "visible": true
+        },
+        {
+          "text": "Etapa final 0",
+          "left": 1039.8125,
+          "right": 1113.8125,
+          "visible": true
+        },
+        {
+          "text": "Oferta 0",
+          "left": 1145.8125,
+          "right": 1219.8125,
+          "visible": true
+        }
+      ]
+    }
+  ],
+  "detailDecisionOrderChecks": [
+    {
+      "viewport": "768",
+      "titleBottom": 341.390625,
+      "decisionTop": 369.390625,
+      "sectionTop": 702.890625,
+      "domPrecedes": true
+    },
+    {
+      "viewport": "360",
+      "titleBottom": 405.390625,
+      "decisionTop": 433.390625,
+      "sectionTop": 766.890625,
+      "domPrecedes": true
+    }
+  ],
+  "stateChecks": [
+    {
+      "page": "inbox",
+      "viewport": "1440",
+      "state": "loading",
+      "panelVisible": true,
+      "heading": "Carregando informações"
+    },
+    {
+      "page": "inbox",
+      "viewport": "360",
+      "state": "loading",
+      "panelVisible": true,
+      "heading": "Carregando informações"
+    },
+    {
+      "page": "inbox",
+      "viewport": "1440",
+      "state": "empty",
+      "panelVisible": true,
+      "heading": "Ainda não há itens neste recorte"
+    },
+    {
+      "page": "inbox",
+      "viewport": "360",
+      "state": "empty",
+      "panelVisible": true,
+      "heading": "Ainda não há itens neste recorte"
+    },
+    {
+      "page": "inbox",
+      "viewport": "1440",
+      "state": "error",
+      "panelVisible": true,
+      "heading": "Não foi possível carregar este conteúdo",
+      "retryButtons": 1,
+      "panelHiddenAfterRetry": true,
+      "selectValueAfterRetry": "default",
+      "contentVisibleAfterRetry": true
+    },
+    {
+      "page": "inbox",
+      "viewport": "360",
+      "state": "error",
+      "panelVisible": true,
+      "heading": "Não foi possível carregar este conteúdo",
+      "retryButtons": 1,
+      "panelHiddenAfterRetry": true,
+      "selectValueAfterRetry": "default",
+      "contentVisibleAfterRetry": true
+    },
+    {
+      "page": "inbox",
+      "viewport": "1440",
+      "state": "partial",
+      "panelVisible": true,
+      "heading": "Alguns sinais estão incompletos ou desatualizados"
+    },
+    {
+      "page": "inbox",
+      "viewport": "360",
+      "state": "partial",
+      "panelVisible": true,
+      "heading": "Alguns sinais estão incompletos ou desatualizados"
+    },
+    {
+      "page": "detail",
+      "viewport": "1440",
+      "state": "loading",
+      "panelVisible": true,
+      "heading": "Carregando informações"
+    },
+    {
+      "page": "detail",
+      "viewport": "360",
+      "state": "loading",
+      "panelVisible": true,
+      "heading": "Carregando informações"
+    },
+    {
+      "page": "detail",
+      "viewport": "1440",
+      "state": "empty",
+      "panelVisible": true,
+      "heading": "Ainda não há itens neste recorte"
+    },
+    {
+      "page": "detail",
+      "viewport": "360",
+      "state": "empty",
+      "panelVisible": true,
+      "heading": "Ainda não há itens neste recorte"
+    },
+    {
+      "page": "detail",
+      "viewport": "1440",
+      "state": "error",
+      "panelVisible": true,
+      "heading": "Não foi possível carregar este conteúdo",
+      "retryButtons": 1,
+      "panelHiddenAfterRetry": true,
+      "selectValueAfterRetry": "default",
+      "contentVisibleAfterRetry": true
+    },
+    {
+      "page": "detail",
+      "viewport": "360",
+      "state": "error",
+      "panelVisible": true,
+      "heading": "Não foi possível carregar este conteúdo",
+      "retryButtons": 1,
+      "panelHiddenAfterRetry": true,
+      "selectValueAfterRetry": "default",
+      "contentVisibleAfterRetry": true
+    },
+    {
+      "page": "detail",
+      "viewport": "1440",
+      "state": "partial",
+      "panelVisible": true,
+      "heading": "Alguns sinais estão incompletos ou desatualizados",
+      "aiWarningVisible": true
+    },
+    {
+      "page": "detail",
+      "viewport": "360",
+      "state": "partial",
+      "panelVisible": true,
+      "heading": "Alguns sinais estão incompletos ou desatualizados",
+      "aiWarningVisible": true
+    },
+    {
+      "page": "pipeline",
+      "viewport": "1440",
+      "state": "loading",
+      "panelVisible": true,
+      "heading": "Carregando informações"
+    },
+    {
+      "page": "pipeline",
+      "viewport": "360",
+      "state": "loading",
+      "panelVisible": true,
+      "heading": "Carregando informações"
+    },
+    {
+      "page": "pipeline",
+      "viewport": "1440",
+      "state": "empty",
+      "panelVisible": true,
+      "heading": "Ainda não há itens neste recorte"
+    },
+    {
+      "page": "pipeline",
+      "viewport": "360",
+      "state": "empty",
+      "panelVisible": true,
+      "heading": "Ainda não há itens neste recorte"
+    },
+    {
+      "page": "pipeline",
+      "viewport": "1440",
+      "state": "error",
+      "panelVisible": true,
+      "heading": "Não foi possível carregar este conteúdo",
+      "retryButtons": 1,
+      "panelHiddenAfterRetry": true,
+      "selectValueAfterRetry": "default",
+      "contentVisibleAfterRetry": true
+    },
+    {
+      "page": "pipeline",
+      "viewport": "360",
+      "state": "error",
+      "panelVisible": true,
+      "heading": "Não foi possível carregar este conteúdo",
+      "retryButtons": 1,
+      "panelHiddenAfterRetry": true,
+      "selectValueAfterRetry": "default",
+      "contentVisibleAfterRetry": true
+    },
+    {
+      "page": "pipeline",
+      "viewport": "1440",
+      "state": "partial",
+      "panelVisible": true,
+      "heading": "Alguns sinais estão incompletos ou desatualizados"
+    },
+    {
+      "page": "pipeline",
+      "viewport": "360",
+      "state": "partial",
+      "panelVisible": true,
+      "heading": "Alguns sinais estão incompletos ou desatualizados"
+    },
+    {
+      "page": "overview",
+      "viewport": "1440",
+      "state": "loading",
+      "panelVisible": true,
+      "heading": "Carregando informações"
+    },
+    {
+      "page": "overview",
+      "viewport": "360",
+      "state": "loading",
+      "panelVisible": true,
+      "heading": "Carregando informações"
+    },
+    {
+      "page": "overview",
+      "viewport": "1440",
+      "state": "empty",
+      "panelVisible": true,
+      "heading": "Ainda não há itens neste recorte"
+    },
+    {
+      "page": "overview",
+      "viewport": "360",
+      "state": "empty",
+      "panelVisible": true,
+      "heading": "Ainda não há itens neste recorte"
+    },
+    {
+      "page": "overview",
+      "viewport": "1440",
+      "state": "error",
+      "panelVisible": true,
+      "heading": "Não foi possível carregar este conteúdo",
+      "retryButtons": 1,
+      "panelHiddenAfterRetry": true,
+      "selectValueAfterRetry": "default",
+      "contentVisibleAfterRetry": true
+    },
+    {
+      "page": "overview",
+      "viewport": "360",
+      "state": "error",
+      "panelVisible": true,
+      "heading": "Não foi possível carregar este conteúdo",
+      "retryButtons": 1,
+      "panelHiddenAfterRetry": true,
+      "selectValueAfterRetry": "default",
+      "contentVisibleAfterRetry": true
+    },
+    {
+      "page": "overview",
+      "viewport": "1440",
+      "state": "partial",
+      "panelVisible": true,
+      "heading": "Alguns sinais estão incompletos ou desatualizados"
+    },
+    {
+      "page": "overview",
+      "viewport": "360",
+      "state": "partial",
+      "panelVisible": true,
+      "heading": "Alguns sinais estão incompletos ou desatualizados"
+    }
+  ],
+  "cssZoom2MeasurementNonAssertion": {
+    "note": "CSS body zoom:2 is NOT real browser zoom; recorded for information only and not asserted.",
     "scrollWidth": 545,
     "clientWidth": 360,
     "overflow": true

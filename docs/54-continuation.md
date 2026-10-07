@@ -4,7 +4,7 @@ Copie este documento como prompt inicial da próxima sessão. Ele descreve o est
 
 ## Objetivo e regras de execução
 
-Continue a entrega local completa da SPEC 54 (WP0-WP7), respeitando os gates abaixo. O usuário priorizou F54 local e informou que nada da F53 foi implementado. Os protótipos ainda precisam de aceite visual explícito conforme SPEC §7 antes de WP3-WP5. Solicite uma revisão visual concreta; depois do aceite, a autorização existente cobre a migração local sem nova confirmação para cada etapa prevista. Não deduza aceite de PR/capturas. Não crie cloud, Clerk real, deploy, serviços, migrações, alterações de API/banco ou dados reais sem gates e autorização específica.
+Continue a entrega local completa da SPEC 54 (WP0-WP7), respeitando os gates abaixo. O usuário priorizou F54 local e informou que nada da F53 foi implementado. Os protótipos receberam aceite visual explícito do dono do repositório em 2026-10-07 (ver `docs/54-review/README.md`, seção "Aceite visual"); o aceite é apenas visual. A autorização existente cobre a migração local sem nova confirmação para cada etapa prevista. Não deduza aceite de PR/capturas. Não crie cloud, Clerk real, deploy, serviços, migrações, alterações de API/banco ou dados reais sem gates e autorização específica.
 
 Leia `AGENTS.md`, `C:\Users\mathf\.codex\RTK.md`, `DESIGN.md`, SPEC54, plano e roadmap F53, os READMEs e artefatos `docs/54-baseline`, `docs/54-review` e `docs/54-spike`. Use RTK em comandos suportados. Para mudanças criativas, escolha skills de engenharia/design adequadas; use `cavecrew-reviewer` para revisão read-only de diff. Consulte Context7 para documentação de versões atuais se a implementação depender disso. Identidade Git em Documents/GitHub: `mathfrancisco` / `math.francisco2@gmail.com`. Não reautentique nem faça logout de `gh`: sandbox falhou e auth existente funcionou elevado.
 
@@ -27,8 +27,8 @@ Inventário: URLs `/`, `/inbox`, `/opportunities/:opportunityId`, `/applications
 | Pacote | Estado verificado | Próxima evidência |
 | --- | --- | --- |
 | WP0 baseline/inventário | Preparação local validada; não AC54 | Rever contratos e polling na base aceita sem reescrever hashes históricos |
-| WP1 spike | Parcial, nenhum kit selecionado | Proveniência, acessibilidade e bundle dentro do orçamento |
-| WP2 protótipos | 4 protótipos aguardam aceite explícito | Revisão visual e decisão registrada |
+| WP1 spike | Parcial, nenhum kit selecionado; seleção de biblioteca em andamento por autorização do dono em 2026-10-07 | Proveniência, acessibilidade e bundle dentro do orçamento |
+| WP2 protótipos | 4 protótipos aceitos visualmente em 2026-10-07, com 2 ajustes aplicados e verificados pelo runner (ver `docs/54-review/README.md`, "Aceite visual") | Nenhuma para WP2; aceite não cobre F53, AC54-01/08/10 nem a SPEC como um todo |
 | WP3 sistema/wrappers | Não iniciado; depende de WP2 | DESIGN.md e CSS juntos, tokens, foco, contraste, motion, wrappers e testes |
 | WP4 rotas prioritárias | Não iniciado; depende de WP2/WP3 | Overview, Inbox, detalhe e Pipeline com contratos preservados |
 | WP5 rotas restantes | Não iniciado; depende de WP2/WP3 | Companies, Company Detail, Sources, Homologation, Profile, Status e wildcard |
@@ -40,8 +40,8 @@ Inventário: URLs `/`, `/inbox`, `/opportunities/:opportunityId`, `/applications
 | Critério | Estado e evidência faltante |
 | --- | --- |
 | AC54-01 F53 operacional | Hosting, Clerk, backup/restore e aceite F53 ausentes |
-| AC54-02 identidade aprovada | Falta aceite explícito dos 4 protótipos |
-| AC54-03 biblioteca | Nenhum kit selecionado; spikes inconclusivas |
+| AC54-02 identidade aprovada | Aceite visual explícito dos 4 protótipos em 2026-10-07 (`docs/54-review/README.md`, "Aceite visual"); a identidade final ainda depende de WP3 (DESIGN.md/CSS) |
+| AC54-03 biblioteca | Nenhum kit selecionado; spikes inconclusivas; seleção em andamento por autorização do dono em 2026-10-07 |
 | AC54-04 componentes/tokens | Não iniciado; faltam wrappers, WCAG, testes e regressão |
 | AC54-05 contratos/domínio | Não migrado; faltam testes de queries, filtros, scores, IA, forms e mutations |
 | AC54-06 responsividade | Baseline não prova migração; faltam 10 rotas × 5 larguras e URL direta |
@@ -54,7 +54,7 @@ Inventário: URLs `/`, `/inbox`, `/opportunities/:opportunityId`, `/applications
 
 `docs/54-review` contém Inbox, detalhe, Pipeline e Overview estáticos/sintéticos, preview loopback `127.0.0.1:54154`, sem API, rede externa, persistência ou auth. Relatório registra 44 capturas: 12 padrão (4 páginas em 1440/768/360) e 32 estados (4 em 1440/360), sem overflow nos viewports normais reportados. `verification.json`: zero erros JS; Escape fecha menu e devolve foco. Teste CSS zoom 200% em viewport 360 resultou 545/360 overflow; não é zoom real. Relatório não prova que o runner detecta regressões.
 
-Pendências observadas: `.inbox-table thead` some em mobile e remove cabeçalhos para tecnologias assistivas; runner precisa assertions que falhem por regressão; timeout intermitente `[data-state]` sem causa diagnosticada; CSS/JS de alguns templates minificado. Overview exibe “2 novas desde última abertura”, métrica possivelmente sem dado; mapear ao contrato ou remover antes de migrar. Leitor de tela, zoom real, reduced-motion e dispositivos físicos não foram comprovados manualmente. Protótipos seguem sem aceite.
+Pendências observadas: `.inbox-table thead` some em mobile e remove cabeçalhos para tecnologias assistivas; runner precisa assertions que falhem por regressão; timeout intermitente `[data-state]` sem causa diagnosticada; CSS/JS de alguns templates minificado. Overview exibe “2 novas desde última abertura”, métrica possivelmente sem dado; mapear ao contrato ou remover antes de migrar. Leitor de tela, zoom real, reduced-motion e dispositivos físicos não foram comprovados manualmente. Aceite visual registrado em 2026-10-07 (ver `docs/54-review/README.md`, "Aceite visual").
 
 ## Spike de primitives
 
@@ -66,11 +66,11 @@ Segundo relato do worker, spike Base UI 1.8.0 teve testes unitários aprovados, 
 
 Node 24.12.0/npm 11.6.2. Relatos do ambiente dizem que runtime checks mostraram “not recognized” no sandbox e passaram elevados; não repita checks amplos sem motivo. Playwright está em `tests/e2e/browser/node_modules`; browser da CUA indisponível. Evite E2E com Compose operacional. Integração DB somente banco terminado em `_test` e `RUN_DATABASE_INTEGRATION=1`, `DATABASE_INTEGRATION_ISOLATED=1`; nunca usar banco operacional. `git diff --cached --check` da publicação encontrou whitespace literal preservado no log de check e em linha de contexto do patch; não alegar check limpo sem resolver com cuidado, sem alterar logs literais.
 
-Retome pelo aceite visual e pelo próximo menor pacote que satisfaça os gates. Registre evidência literal e incerteza; PR draft, baseline, captura ou protótipo não fecha F54.
+Retome pela seleção de biblioteca e pelo próximo menor pacote que satisfaça os gates. Registre evidência literal e incerteza; PR draft, baseline, captura ou protótipo não fecha F54.
 ## Branch e sequência prática
 
 Este handoff foi publicado na branch `docs/f54-preparation-handoff-20261007`, criada sobre `3aaca63` (merge #70). Confirme o estado da branch e do PR ao retomar.
 
-Ordem de trabalho: corrigir as pendências dos protótipos e do runner em escopo local; validar os protótipos localmente; apresentar as telas para revisão concreta e obter aceite explícito; escolher biblioteca somente com orçamento e proveniência comprovados; então WP3 atualiza `DESIGN.md` e CSS juntos, seguido por WP4/WP5 nas dez rotas. WP6/WP7 continuam dependentes de F53 e autorização para preview/release. Preserve aplicação manual, filtros, scores, matching determinístico separado de IA e polling atual até decisão baseada em evidência.
+Ordem de trabalho: corrigir as pendências dos protótipos e do runner em escopo local; validar os protótipos localmente (concluído, com aceite visual em 2026-10-07); escolher biblioteca somente com orçamento e proveniência comprovados; então WP3 atualiza `DESIGN.md` e CSS juntos, seguido por WP4/WP5 nas dez rotas. WP6/WP7 continuam dependentes de F53 e autorização para preview/release. Preserve aplicação manual, filtros, scores, matching determinístico separado de IA e polling atual até decisão baseada em evidência.
 
 Modelo de ownership: Sol/Astra coordenam e revisam read-only. Alteração de uma linha pode ser direta; trabalho maior deve ir para Luna/Terra (Luna como fallback), com arquivos/responsabilidade delimitados. No máximo três workers em tarefas independentes; workers não delegam. Faça revisão de diff separada e reporte os comandos/saídas realmente observados.
