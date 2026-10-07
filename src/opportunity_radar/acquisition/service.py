@@ -1774,7 +1774,12 @@ class AcquisitionService:
             and error.code is AcquisitionErrorCode.SOURCE_RATE_LIMITED
         ):
             final_status = SourceRunStatus.PARTIAL
-        elif run.items_persisted:
+        elif run.items_persisted or (
+            self._inventory_contract_enabled
+            # Items already stored are valid evidence too: the run saw them even though it
+            # persisted nothing new, so a later failure leaves a partial inventory, not none.
+            and run.items_skipped > run_telemetry.skipped_items
+        ):
             final_status = SourceRunStatus.PARTIAL
         else:
             final_status = SourceRunStatus.FAILED
