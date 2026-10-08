@@ -1,0 +1,342 @@
+[
+  {
+    "page": "inbox",
+    "viewport": "1440",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "inbox",
+    "viewport": "768",
+    "overflow": false,
+    "scrollWidth": 768,
+    "clientWidth": 768
+  },
+  {
+    "page": "inbox",
+    "viewport": "360",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "detail",
+    "viewport": "1440",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "detail",
+    "viewport": "768",
+    "overflow": false,
+    "scrollWidth": 768,
+    "clientWidth": 768
+  },
+  {
+    "page": "detail",
+    "viewport": "360",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "pipeline",
+    "viewport": "1440",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "pipeline",
+    "viewport": "768",
+    "overflow": false,
+    "scrollWidth": 768,
+    "clientWidth": 768
+  },
+  {
+    "page": "pipeline",
+    "viewport": "360",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "overview",
+    "viewport": "1440",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "overview",
+    "viewport": "768",
+    "overflow": false,
+    "scrollWidth": 768,
+    "clientWidth": 768
+  },
+  {
+    "page": "overview",
+    "viewport": "360",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "inbox",
+    "viewport": "1440",
+    "state": "loading",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "inbox",
+    "viewport": "360",
+    "state": "loading",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "inbox",
+    "viewport": "1440",
+    "state": "empty",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "inbox",
+    "viewport": "360",
+    "state": "empty",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "inbox",
+    "viewport": "1440",
+    "state": "error",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "inbox",
+    "viewport": "360",
+    "state": "error",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "inbox",
+    "viewport": "1440",
+    "state": "partial",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "inbox",
+    "viewport": "360",
+    "state": "partial",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "detail",
+    "viewport": "1440",
+    "state": "loading",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "detail",
+    "viewport": "360",
+    "state": "loading",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "detail",
+    "viewport": "1440",
+    "state": "empty",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "detail",
+    "viewport": "360",
+    "state": "empty",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "detail",
+    "viewport": "1440",
+    "state": "error",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "detail",
+    "viewport": "360",
+    "state": "error",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "detail",
+    "viewport": "1440",
+    "state": "partial",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "detail",
+    "viewport": "360",
+    "state": "partial",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "pipeline",
+    "viewport": "1440",
+    "state": "loading",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "pipeline",
+    "viewport": "360",
+    "state": "loading",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "pipeline",
+    "viewport": "1440",
+    "state": "empty",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "pipeline",
+    "viewport": "360",
+    "state": "empty",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "pipeline",
+    "viewport": "1440",
+    "state": "error",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "pipeline",
+    "viewport": "360",
+    "state": "error",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "pipeline",
+    "viewport": "1440",
+    "state": "partial",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "pipeline",
+    "viewport": "360",
+    "state": "partial",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "overview",
+    "viewport": "1440",
+    "state": "loading",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "overview",
+    "viewport": "360",
+    "state": "loading",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "overview",
+    "viewport": "1440",
+    "state": "empty",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "overview",
+    "viewport": "360",
+    "state": "empty",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "overview",
+    "viewport": "1440",
+    "state": "error",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "overview",
+    "viewport": "360",
+    "state": "error",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  {
+    "page": "overview",
+    "viewport": "1440",
+    "state": "partial",
+    "overflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440
+  },
+  {
+    "page": "overview",
+    "viewport": "360",
+    "state": "partial",
+    "overflow": false,
+    "scrollWidth": 360,
+    "clientWidth": 360
+  }
+]

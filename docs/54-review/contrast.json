@@ -1,0 +1,122 @@
+[
+  {
+    "name": "ink on paper",
+    "foreground": "#132229",
+    "background": "#f7f8f8",
+    "ratio": 15.32,
+    "minimum": 4.5,
+    "passes": true
+  },
+  {
+    "name": "slate on paper",
+    "foreground": "#52626a",
+    "background": "#f7f8f8",
+    "ratio": 5.96,
+    "minimum": 4.5,
+    "passes": true
+  },
+  {
+    "name": "petrol on paper",
+    "foreground": "#0b5d66",
+    "background": "#f7f8f8",
+    "ratio": 7.12,
+    "minimum": 4.5,
+    "passes": true
+  },
+  {
+    "name": "white on petrol",
+    "foreground": "#ffffff",
+    "background": "#0b5d66",
+    "ratio": 7.58,
+    "minimum": 4.5,
+    "passes": true
+  },
+  {
+    "name": "focus petrol on paper",
+    "foreground": "#0b5d66",
+    "background": "#f7f8f8",
+    "ratio": 7.12,
+    "minimum": 3,
+    "passes": true
+  },
+  {
+    "name": "decorative divider on white",
+    "foreground": "#6f8588",
+    "background": "#ffffff",
+    "ratio": 3.9,
+    "minimum": null,
+    "passes": true
+  },
+  {
+    "name": "control border on white",
+    "foreground": "#71878a",
+    "background": "#ffffff",
+    "ratio": 3.79,
+    "minimum": 3,
+    "passes": true
+  },
+  {
+    "name": "warning text on warning surface",
+    "foreground": "#704015",
+    "background": "#fdf3e9",
+    "ratio": 7.88,
+    "minimum": 4.5,
+    "passes": true
+  },
+  {
+    "name": "AI note text on AI surface",
+    "foreground": "#314a4d",
+    "background": "#edf5f4",
+    "ratio": 8.55,
+    "minimum": 4.5,
+    "passes": true
+  },
+  {
+    "name": "navigation text on navigation surface",
+    "foreground": "#405159",
+    "background": "#eef3f3",
+    "ratio": 7.38,
+    "minimum": 4.5,
+    "passes": true
+  },
+  {
+    "name": "green score on green surface",
+    "foreground": "#14553c",
+    "background": "#e3f1ed",
+    "ratio": 7.55,
+    "minimum": 4.5,
+    "passes": true
+  },
+  {
+    "name": "orange score on orange surface",
+    "foreground": "#854312",
+    "background": "#f5eadc",
+    "ratio": 6.3,
+    "minimum": 4.5,
+    "passes": true
+  },
+  {
+    "name": "red score on red surface",
+    "foreground": "#8c3030",
+    "background": "#f7e4e4",
+    "ratio": 6.65,
+    "minimum": 4.5,
+    "passes": true
+  },
+  {
+    "name": "link text on white",
+    "foreground": "#314148",
+    "background": "#ffffff",
+    "ratio": 10.6,
+    "minimum": 4.5,
+    "passes": true
+  },
+  {
+    "name": "white text on ink",
+    "foreground": "#ffffff",
+    "background": "#132229",
+    "ratio": 16.3,
+    "minimum": 4.5,
+    "passes": true
+  }
+]

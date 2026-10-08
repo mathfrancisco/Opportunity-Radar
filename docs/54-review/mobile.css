@@ -1,0 +1,1 @@
+.mobile-drawer{display:none}@media(max-width:900px){.mobile-drawer{display:block;position:fixed;inset:56px 0 auto 0;background:#eef3f3;border-bottom:1px solid var(--line);z-index:3;padding:12px 18px;box-shadow:0 14px 22px rgba(19,34,41,.13)}.mobile-drawer[hidden]{display:none}.mobile-drawer .nav-link{max-width:360px}}

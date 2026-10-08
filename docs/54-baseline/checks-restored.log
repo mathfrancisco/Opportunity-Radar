@@ -1,0 +1,49 @@
+
+> @opportunity-radar/web@0.1.0 check
+> npm run lint && npm run typecheck && npm run test && npm run build
+
+
+> @opportunity-radar/web@0.1.0 lint
+> eslint . --max-warnings=0
+
+
+> @opportunity-radar/web@0.1.0 typecheck
+> tsc -b --pretty false
+
+
+> @opportunity-radar/web@0.1.0 test
+> vitest run
+
+
+ RUN  v5.0.1 C:/Users/mathf/Documents/GitHub/Opportunity-Radar/apps/web
+
+
+ Test Files  42 passed (42)
+      Tests  292 passed (292)
+   Start at  10:51:47
+   Duration  13.16s (environment 76%, transform 10%, import 7%, tests 6%, worker 1%)
+
+Environment  jsdom was created 42 times · 215.70s total, 76% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+
+> @opportunity-radar/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.0 building client environment for production...
+transforming...
+✓ 133 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                       0.45 kB │ gzip:   0.29 kB
+dist/assets/inter-latin-wght-normal-Dx4kXJAl.woff2   48.25 kB
+dist/assets/index-Bt7hp3LE.css                       28.89 kB │ gzip:   6.65 kB
+dist/assets/index-BjRkyt8Y.js                       520.35 kB │ gzip: 149.01 kB
+
+✓ built in 673ms
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.

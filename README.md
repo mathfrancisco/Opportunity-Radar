@@ -140,6 +140,8 @@ Segredos ficam só no `.env` local (ignorado pelo Git e pelo Docker); somente AP
 - [Arquitetura atual](docs/47-arquitetura-atual.md): como o sistema funciona hoje, módulos, regras, medições, limitações e melhorias priorizadas.
 - [Runbook](docs/30-runbook.md): operar, diagnosticar, backup e restauração.
 - [SPEC 46 — redesenho da interface](docs/46-spec-redesign-ui.md) e [tokens de design](docs/35-design-tokens.md).
+- [Plano de hospedagem Cloudflare, Oracle, Neon e Clerk](docs/53-plano-hospedagem-cloudflare-oracle-neon-clerk.md) (planejado; implantação e Clerk pendentes).
+- [SPEC 54 — redesign completo do frontend](docs/54-spec-redesign-completo-frontend.md) (planejada após aceite operacional de F53 e aprovação visual dos protótipos).
 
 **Especificações e roadmaps vigentes**
 

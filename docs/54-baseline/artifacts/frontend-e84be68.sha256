@@ -1,0 +1,7 @@
+﻿{
+    "file":  "frontend-e84be68.zip",
+    "sha256":  "4f46a5ae2e342a174ad302873acdefdc0019c75d18dc377d0afb37b2dabeb1d3",
+    "sourceGitSha":  "b6d25ae96701398fa91e9214fe2a07985957cd19",
+    "frontendBuild":  "apps/web/dist after npm run check",
+    "assetIdentity":  "8f94b29a6074b52c72905e7ba304c05ae1e67cd8f9afb7acd60b9ce65a834051"
+}

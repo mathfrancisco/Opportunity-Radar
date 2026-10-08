@@ -1,0 +1,451 @@
+diff --git a/apps/web/package.json b/apps/web/package.json
+index 1d25e77..acb0649 100644
+--- a/apps/web/package.json
++++ b/apps/web/package.json
+@@ -12,6 +12,7 @@
+     "check": "npm run lint && npm run typecheck && npm run test && npm run build"
+   },
+   "dependencies": {
++    "@base-ui/react": "1.8.0",
+     "@fontsource-variable/inter": "^5.3.0",
+     "@tanstack/react-query": "^5.66.8",
+     "react": "^19.0.0",
+
+diff --git a/apps/web/package-lock.json b/apps/web/package-lock.json
+index 6259545..fa7260b 100644
+--- a/apps/web/package-lock.json
++++ b/apps/web/package-lock.json
+@@ -8,6 +8,7 @@
+       "name": "@opportunity-radar/web",
+       "version": "0.1.0",
+       "dependencies": {
++        "@base-ui/react": "1.8.0",
+         "@fontsource-variable/inter": "^5.3.0",
+         "@tanstack/react-query": "^5.66.8",
+         "react": "^19.0.0",
+@@ -117,6 +118,7 @@
+       "integrity": "sha512-RgHBCvtjbOK2gXSNBNIkNoEc9qoVEtau3hj8gEqKQuL3HZAibKarWFEI3Lfm6EYKkLalOh8eSrj9b+ch9H/VBA==",
+       "dev": true,
+       "license": "MIT",
++      "peer": true,
+       "dependencies": {
+         "@babel/code-frame": "^7.29.7",
+         "@babel/generator": "^7.29.7",
+@@ -278,6 +280,15 @@
+         "node": ">=6.0.0"
+       }
+     },
++    "node_modules/@babel/runtime": {
++      "version": "7.29.10",
++      "resolved": "https://registry.npmjs.org/@babel/runtime/-/runtime-7.29.10.tgz",
++      "integrity": "sha512-NpugTzbKgGrNe45Ui32cN8vCFFMxVtP/9rtfwv0nP5FRDAjvYBxJcLVpYA9mr1jxP6cnIT7x9LUzuDTbWYYNRA==",
++      "license": "MIT",
++      "engines": {
++        "node": ">=6.9.0"
++      }
++    },
+     "node_modules/@babel/template": {
+       "version": "7.29.7",
+       "resolved": "https://registry.npmjs.org/@babel/template/-/template-7.29.7.tgz",
+@@ -326,6 +337,66 @@
+         "node": ">=6.9.0"
+       }
+     },
++    "node_modules/@base-ui/react": {
++      "version": "1.8.0",
++      "resolved": "https://registry.npmjs.org/@base-ui/react/-/react-1.8.0.tgz",
++      "integrity": "sha512-P0/1sxo6SBVZOklKMIedvTWqw2s2IQzi9x5bIVsXu980cuSOD4NeuRSs+/L7LZQfDkZP/uRZyGPyfFl/B1oH+Q==",
++      "license": "MIT",
++      "dependencies": {
++        "@babel/runtime": "^7.29.7",
++        "@base-ui/utils": "0.4.0",
++        "@floating-ui/react-dom": "^2.1.9",
++        "@floating-ui/utils": "^0.2.12",
++        "use-sync-external-store": "^1.6.0"
++      },
++      "engines": {
++        "node": ">=14.0.0"
++      },
++      "funding": {
++        "type": "opencollective",
++        "url": "https://opencollective.com/mui-org"
++      },
++      "peerDependencies": {
++        "@date-fns/tz": "^1.2.0",
++        "@types/react": "^17 || ^18 || ^19",
++        "date-fns": "^4.0.0",
++        "react": "^17 || ^18 || ^19",
++        "react-dom": "^17 || ^18 || ^19"
++      },
++      "peerDependenciesMeta": {
++        "@date-fns/tz": {
++          "optional": true
++        },
++        "@types/react": {
++          "optional": true
++        },
++        "date-fns": {
++          "optional": true
++        }
++      }
++    },
++    "node_modules/@base-ui/utils": {
++      "version": "0.4.0",
++      "resolved": "https://registry.npmjs.org/@base-ui/utils/-/utils-0.4.0.tgz",
++      "integrity": "sha512-bO9fz25kKtPf+aZVyfQrC0PDmJdmVni31W2hCS5/Owb+inwdIL3XU26pCPRPlt4LSxZrBgLwubXQXQlKaFEZzw==",
++      "license": "MIT",
++      "dependencies": {
++        "@babel/runtime": "^7.29.7",
++        "@floating-ui/utils": "^0.2.12",
++        "reselect": "^5.2.0",
++        "use-sync-external-store": "^1.6.0"
++      },
++      "peerDependencies": {
++        "@types/react": "^17 || ^18 || ^19",
++        "react": "^17 || ^18 || ^19",
++        "react-dom": "^17 || ^18 || ^19"
++      },
++      "peerDependenciesMeta": {
++        "@types/react": {
++          "optional": true
++        }
++      }
++    },
+     "node_modules/@bramus/specificity": {
+       "version": "2.4.2",
+       "resolved": "https://registry.npmjs.org/@bramus/specificity/-/specificity-2.4.2.tgz",
+@@ -451,6 +522,7 @@
+         }
+       ],
+       "license": "MIT",
++      "peer": true,
+       "engines": {
+         "node": ">=20.19.0"
+       },
+@@ -499,6 +571,7 @@
+         }
+       ],
+       "license": "MIT",
++      "peer": true,
+       "engines": {
+         "node": ">=20.19.0"
+       }
+@@ -649,6 +722,44 @@
+         }
+       }
+     },
++    "node_modules/@floating-ui/core": {
++      "version": "1.8.0",
++      "resolved": "https://registry.npmjs.org/@floating-ui/core/-/core-1.8.0.tgz",
++      "integrity": "sha512-0CIZ5itps/8x7BG8dEIhs53BvCUH2PCoogtakwRTut+Arm58sJooJ0AuZhLw2HJYIR5cMLNPBSS728sPho2khQ==",
++      "license": "MIT",
++      "dependencies": {
++        "@floating-ui/utils": "^0.2.12"
++      }
++    },
++    "node_modules/@floating-ui/dom": {
++      "version": "1.8.0",
++      "resolved": "https://registry.npmjs.org/@floating-ui/dom/-/dom-1.8.0.tgz",
++      "integrity": "sha512-yXSrzeHZBTZadLOlfyhCkJHNeLJnHRnRInwdZ40L7ZiaAtrBwoYlsDrX3v5zB1Utk7CLfzcOVnVVWoXEky7Ceg==",
++      "license": "MIT",
++      "dependencies": {
++        "@floating-ui/core": "^1.8.0",
++        "@floating-ui/utils": "^0.2.12"
++      }
++    },
++    "node_modules/@floating-ui/react-dom": {
++      "version": "2.1.9",
++      "resolved": "https://registry.npmjs.org/@floating-ui/react-dom/-/react-dom-2.1.9.tgz",
++      "integrity": "sha512-JDjEFGCpImxDCA7JJKviA0M9+RtmJdj0m/NVU5IMgBK+AmZouAQQ7/+2GLH0GXXY0YMw9oXPB8hKdbPYg5QLYg==",
++      "license": "MIT",
++      "dependencies": {
++        "@floating-ui/dom": "^1.8.0"
++      },
++      "peerDependencies": {
++        "react": ">=16.8.0",
++        "react-dom": ">=16.8.0"
++      }
++    },
++    "node_modules/@floating-ui/utils": {
++      "version": "0.2.12",
++      "resolved": "https://registry.npmjs.org/@floating-ui/utils/-/utils-0.2.12.tgz",
++      "integrity": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
++      "license": "MIT"
++    },
+     "node_modules/@fontsource-variable/inter": {
+       "version": "5.3.0",
+       "resolved": "https://registry.npmjs.org/@fontsource-variable/inter/-/inter-5.3.0.tgz",
+@@ -1293,27 +1404,6 @@
+         "node": ">=14.0.0"
+       }
+     },
+-    "node_modules/@tailwindcss/oxide-wasm32-wasi/node_modules/@emnapi/core": {
+-      "version": "1.11.1",
+-      "dev": true,
+-      "inBundle": true,
+-      "license": "MIT",
+-      "optional": true,
+-      "dependencies": {
+-        "@emnapi/wasi-threads": "1.2.2",
+-        "tslib": "^2.4.0"
+-      }
+-    },
+-    "node_modules/@tailwindcss/oxide-wasm32-wasi/node_modules/@emnapi/runtime": {
+-      "version": "1.11.1",
+-      "dev": true,
+-      "inBundle": true,
+-      "license": "MIT",
+-      "optional": true,
+-      "dependencies": {
+-        "tslib": "^2.4.0"
+-      }
+-    },
+     "node_modules/@tailwindcss/oxide-wasm32-wasi/node_modules/@emnapi/wasi-threads": {
+       "version": "1.2.2",
+       "dev": true,
+@@ -1479,6 +1569,7 @@
+       "integrity": "sha512-dsqMQQoeTLqu9wynDD00q573mNzso3IdQOAfHRJqLCcmCFPoGo9A1bDpUcv/9tnKpErQWv9uKeGfl37EIS02Yg==",
+       "dev": true,
+       "license": "MIT",
++      "peer": true,
+       "dependencies": {
+         "undici-types": "~8.9.0"
+       }
+@@ -1487,8 +1578,9 @@
+       "version": "19.3.0",
+       "resolved": "https://registry.npmjs.org/@types/react/-/react-19.3.0.tgz",
+       "integrity": "sha512-N0rFCuH9YoxG9/m61l9MfpJKfmLOVU0em7ipIz6TRgSSkvReLB9vL85GB+yr8Bs5leqpvg96JSwF4ZS1s4viQg==",
+-      "dev": true,
++      "devOptional": true,
+       "license": "MIT",
++      "peer": true,
+       "dependencies": {
+         "csstype": "^3.2.2"
+       }
+@@ -1637,6 +1729,7 @@
+       "integrity": "sha512-lGq+9yr1/GuAWaVYIHRjvvySG5/4VfKIvC8EWxStPdcDh/Ka7FG3twP6v4d5BkravUilhIAsG4Qj83t02LWUPQ==",
+       "dev": true,
+       "license": "MIT",
++      "peer": true,
+       "bin": {
+         "acorn": "bin/acorn"
+       },
+@@ -1747,6 +1840,7 @@
+         }
+       ],
+       "license": "MIT",
++      "peer": true,
+       "dependencies": {
+         "baseline-browser-mapping": "^2.11.23",
+         "caniuse-lite": "^1.0.30001810",
+@@ -1859,7 +1953,7 @@
+       "version": "3.2.3",
+       "resolved": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz",
+       "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
+-      "dev": true,
++      "devOptional": true,
+       "license": "MIT"
+     },
+     "node_modules/data-urls": {
+@@ -2003,6 +2097,7 @@
+       "integrity": "sha512-NPXn6r5zl4uET1DAVPaOwzX3rut4c0wcmw3dWJAfOsTM5+TogXo0DDjz8pwm/hL8cyVNpHqeK4JpN0NjnyFFNw==",
+       "dev": true,
+       "license": "MIT",
++      "peer": true,
+       "workspaces": [
+         "packages/*"
+       ],
+@@ -2566,6 +2661,7 @@
+       "integrity": "sha512-CYDD3SOtsHtyXeEORYRx2qBtpDJFjRTGXUtmNEMGyzYOKj1TE3tycdlho7kA1Ufx9OYWZzg52QFBGALTirzDSw==",
+       "dev": true,
+       "license": "MIT",
++      "peer": true,
+       "dependencies": {
+         "@keyv/serialize": "^1.1.1"
+       }
+@@ -3138,6 +3234,7 @@
+       "resolved": "https://registry.npmjs.org/react/-/react-19.3.0.tgz",
+       "integrity": "sha512-E8LUcbtBWt20bbl2YoHfx4ZDBdxVTfOKtCZn9cDSJ4l6/nuoApcpIBcj47t2wZoVX8g2ZHuMHbiShgCR1T5Sog==",
+       "license": "MIT",
++      "peer": true,
+       "engines": {
+         "node": ">=0.10.0"
+       }
+@@ -3147,6 +3244,7 @@
+       "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-19.3.0.tgz",
+       "integrity": "sha512-JDk8dgif51OjFoDE70+OT9ICyYr+69HlmihNwp1+Nsfbna3t5sIiCa9ZJktDmQ4/1b/rn26hIAR2uYXDMr5r0Q==",
+       "license": "MIT",
++      "peer": true,
+       "dependencies": {
+         "scheduler": "^0.28.0"
+       },
+@@ -3202,6 +3300,12 @@
+         "node": ">=0.10.0"
+       }
+     },
++    "node_modules/reselect": {
++      "version": "5.3.0",
++      "resolved": "https://registry.npmjs.org/reselect/-/reselect-5.3.0.tgz",
++      "integrity": "sha512-XGoLeRAVzUTcJ1qkxPQhDJyIZ5d6zzZD9nT7AEZOaaU9UbWclhycElmhO+VD5bFeLuzhPBaOV2oXC8uG35ZSpg==",
++      "license": "MIT"
++    },
+     "node_modules/rolldown": {
+       "version": "1.2.8",
+       "resolved": "https://registry.npmjs.org/rolldown/-/rolldown-1.2.8.tgz",
+@@ -3468,6 +3572,7 @@
+       "integrity": "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==",
+       "dev": true,
+       "license": "Apache-2.0",
++      "peer": true,
+       "bin": {
+         "tsc": "bin/tsc",
+         "tsserver": "bin/tsserver"
+@@ -3560,6 +3665,7 @@
+       "integrity": "sha512-zYvrmj9Yxd63UGaXw+kdt6A0F0s0qveJyuatIM77bYC2DE4pgmg7a50u8LR7PRtXd0x+h+Tl3eXabGm06SWd3Q==",
+       "dev": true,
+       "license": "MIT",
++      "peer": true,
+       "dependencies": {
+         "@typescript-eslint/scope-manager": "8.70.0",
+         "@typescript-eslint/types": "8.70.0",
+@@ -3751,12 +3857,22 @@
+         "punycode": "^2.1.0"
+       }
+     },
++    "node_modules/use-sync-external-store": {
++      "version": "1.7.0",
++      "resolved": "https://registry.npmjs.org/use-sync-external-store/-/use-sync-external-store-1.7.0.tgz",
++      "integrity": "sha512-6L+EeigHMQhdaIPNIFUKwfWJSwWFQ8gJbJ2DLOs5sDIegTwR9fRxvnM3uciHKjIZhFz+KAv2emhWMRvDmMcY8A==",
++      "license": "MIT",
++      "peerDependencies": {
++        "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0"
++      }
++    },
+     "node_modules/vite": {
+       "version": "8.3.0",
+       "resolved": "https://registry.npmjs.org/vite/-/vite-8.3.0.tgz",
+       "integrity": "sha512-lhZBVvEHefgE+HQZC9O7EBJgCU/nVzFNl7vkS4RE0APtWLP02/8QVIkQtzBxPquh7lq5/78NHipTj7ODQ6XuyQ==",
+       "dev": true,
+       "license": "MIT",
++      "peer": true,
+       "dependencies": {
+         "lightningcss": "^1.33.0",
+         "picomatch": "^4.0.7",
+@@ -4317,6 +4433,7 @@
+       "integrity": "sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==",
+       "dev": true,
+       "license": "MIT",
++      "peer": true,
+       "funding": {
+         "url": "https://github.com/sponsors/colinhacks"
+       }
+
+diff --git a/apps/web/src/app/App.tsx b/apps/web/src/app/App.tsx
+index 65a7d38..7a4c329 100644
+--- a/apps/web/src/app/App.tsx
++++ b/apps/web/src/app/App.tsx
+@@ -9,6 +9,7 @@ import { PipelinePage } from '../routes/PipelinePage'
+ import { ProfilePage } from '../routes/ProfilePage'
+ import { SourcesPage } from '../routes/SourcesPage'
+ import { StatusPage } from '../routes/StatusPage'
++import { PrimitiveSpikePage } from '../routes/PrimitiveSpikePage'
+ 
+ export function App() {
+   return (
+@@ -23,6 +24,7 @@ export function App() {
+       <Route path="/sources/homologation-queue" element={<HomologationQueuePage />} />
+       <Route path="/profile" element={<ProfilePage />} />
+       <Route path="/status" element={<StatusPage />} />
++      <Route path="/__f54-primitives" element={<PrimitiveSpikePage />} />
+       <Route path="*" element={<OverviewPage />} />
+     </Routes>
+   )
+
+diff --git a/apps/web/src/routes/PrimitiveSpikePage.tsx b/apps/web/src/routes/PrimitiveSpikePage.tsx
+new file mode 100644
+index 0000000..3dd28bb
+--- /dev/null
++++ b/apps/web/src/routes/PrimitiveSpikePage.tsx
+@@ -0,0 +1,12 @@
++import { Dialog } from '@base-ui/react/dialog'
++import { Field } from '@base-ui/react/field'
++import { Menu } from '@base-ui/react/menu'
++
++export function PrimitiveSpikePage() {
++  return <main className="mx-auto grid max-w-3xl gap-6 p-6" aria-labelledby="spike-title">
++    <h1 id="spike-title">Primitives Base UI</h1>
++    <section><h2>Ações e foco</h2><Menu.Root><Menu.Trigger aria-label="Abrir ações da spike">Ações</Menu.Trigger><Menu.Portal><Menu.Positioner><Menu.Popup><Menu.Item>Marcar para revisar</Menu.Item><Menu.Item>Copiar link</Menu.Item></Menu.Popup></Menu.Positioner></Menu.Portal></Menu.Root><Dialog.Root><Dialog.Trigger>Abrir confirmação</Dialog.Trigger><Dialog.Portal><Dialog.Backdrop /><Dialog.Viewport><Dialog.Popup><Dialog.Title>Confirmar ação</Dialog.Title><Dialog.Description>Este diálogo testa Escape, contenção e retorno de foco.</Dialog.Description><Dialog.Close>Fechar</Dialog.Close></Dialog.Popup></Dialog.Viewport></Dialog.Portal></Dialog.Root></section>
++    <section><h2>Campo</h2><Field.Root><Field.Label>Busca salva</Field.Label><Field.Control placeholder="Ex.: engenharia de dados" /><Field.Description>Apenas demonstração local; não envia requisições.</Field.Description></Field.Root></section>
++    <section><h2>Tabela</h2><table><caption>Vagas de exemplo</caption><thead><tr><th scope="col">Vaga</th><th scope="col">Estado</th></tr></thead><tbody><tr><td>Analista</td><td>Revisar</td></tr></tbody></table></section>
++  </main>
++}
+
+diff --git a/apps/web/src/routes/PrimitiveSpikePage.test.tsx b/apps/web/src/routes/PrimitiveSpikePage.test.tsx
+new file mode 100644
+index 0000000..0433388
+--- /dev/null
++++ b/apps/web/src/routes/PrimitiveSpikePage.test.tsx
+@@ -0,0 +1,18 @@
++import { act } from 'react'
++import { describe, expect, it } from 'vitest'
++import { render } from '../components/testing'
++import { PrimitiveSpikePage } from './PrimitiveSpikePage'
++
++describe('PrimitiveSpikePage Base UI', () => {
++  it('expõe label, tabela, menu e diálogo com Escape', async () => {
++    const container = render(<PrimitiveSpikePage />)
++    expect(container.querySelector('label')?.textContent).toBe('Busca salva')
++    expect(container.querySelector('caption')?.textContent).toBe('Vagas de exemplo')
++    const dialogTrigger = [...container.querySelectorAll('button')].find((button) => button.textContent === 'Abrir confirmação')!
++    act(() => dialogTrigger.click())
++    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
++    act(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
++    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
++    expect(document.activeElement).toBe(dialogTrigger)
++  })
++})
+
+diff --git a/tests/e2e/browser/primitive-spike.mjs b/tests/e2e/browser/primitive-spike.mjs
+new file mode 100644
+index 0000000..5d24c15
+--- /dev/null
++++ b/tests/e2e/browser/primitive-spike.mjs
+@@ -0,0 +1,38 @@
++import { chromium } from '@playwright/test'
++
++const browser = await chromium.launch()
++const page = await browser.newPage({ viewport: { width: 1280, height: 800 } })
++const allowedOrigin = 'http://127.0.0.1:4173'
++const blockedRequests = []
++await page.route('**/*', async (route) => {
++  const requestUrl = new URL(route.request().url())
++  if (requestUrl.origin !== allowedOrigin || requestUrl.pathname.startsWith('/api')) {
++    blockedRequests.push(requestUrl.href)
++    await route.abort()
++    return
++  }
++  await route.continue()
++})
++await page.goto('http://127.0.0.1:4173/__f54-primitives', { waitUntil: 'networkidle' })
++await page.getByRole('button', { name: 'Abrir confirmação' }).focus()
++await page.keyboard.press('Enter')
++await page.getByRole('dialog').waitFor()
++await page.keyboard.press('Tab')
++const tabFocusInDialog = await page.evaluate(() => document.activeElement?.closest('[role="dialog"]') !== null)
++await page.keyboard.press('Shift+Tab')
++const shiftTabFocusInDialog = await page.evaluate(() => document.activeElement?.closest('[role="dialog"]') !== null)
++await page.keyboard.press('Escape')
++await page.getByRole('dialog').waitFor({ state: 'detached' })
++const returnedFocus = await page.evaluate(() => document.activeElement?.textContent)
++await page.getByRole('button', { name: 'Abrir ações da spike' }).focus()
++await page.keyboard.press('ArrowDown')
++await page.getByRole('menu').waitFor()
++await page.keyboard.press('Escape')
++await page.getByRole('menu').waitFor({ state: 'detached' })
++const menuFocusReturned = await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))
++const labels = await page.locator('label').allTextContents()
++if (blockedRequests.length > 0 || !tabFocusInDialog || !shiftTabFocusInDialog || returnedFocus !== 'Abrir confirmação' || menuFocusReturned !== 'Abrir ações da spike') {
++  throw new Error(JSON.stringify({ blockedRequests, tabFocusInDialog, shiftTabFocusInDialog, returnedFocus, menuFocusReturned }))
++}
++console.log(JSON.stringify({ route: await page.title(), returnedFocus, menuFocusReturned, tabFocusInDialog, shiftTabFocusInDialog, labels, blockedRequests }))
++await browser.close()
