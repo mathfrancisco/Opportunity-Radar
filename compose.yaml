@@ -84,12 +84,11 @@ x-app-environment: &app-environment
   ASSESSMENT_RETENTION_DAYS: ${ASSESSMENT_RETENTION_DAYS:-7}
   ASSESSMENT_RETENTION_BATCH_SIZE: ${ASSESSMENT_RETENTION_BATCH_SIZE:-500}
   API_STATEMENT_TIMEOUT_MS: ${API_STATEMENT_TIMEOUT_MS:-15000}
-  # Production uses only runtime-provided Clerk configuration. These defaults are inert
-  # placeholders so an accidental local production entrypoint cannot authenticate anyone.
-  CLERK_ISSUER: ${CLERK_ISSUER:-https://clerk.example.invalid}
-  CLERK_JWKS_URL: ${CLERK_JWKS_URL:-https://clerk.example.invalid/.well-known/jwks.json}
-  CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES:-https://app.example.invalid}
-  CLERK_OWNER_SUB: ${CLERK_OWNER_SUB:-local-owner-placeholder}
+  # Empty defaults make the production app factory fail closed until Clerk is configured.
+  CLERK_ISSUER: ${CLERK_ISSUER:-}
+  CLERK_JWKS_URL: ${CLERK_JWKS_URL:-}
+  CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES:-}
+  CLERK_OWNER_SUB: ${CLERK_OWNER_SUB:-}
 
 services:
   postgres:

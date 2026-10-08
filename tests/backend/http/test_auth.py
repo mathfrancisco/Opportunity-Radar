@@ -289,4 +289,12 @@ def test_production_factory_leaves_only_liveness_public(keypair, monkeypatch) ->
 
 def test_production_factory_rejects_missing_clerk_configuration() -> None:
     with pytest.raises(RuntimeError, match="requires Clerk"):
-        create_app(Settings(database_url="postgresql+psycopg://test:test@localhost/test"))
+        create_app(
+            Settings(
+                database_url="postgresql+psycopg://test:test@localhost/test",
+                clerk_issuer="",
+                clerk_jwks_url="",
+                clerk_authorized_parties="",
+                clerk_owner_sub="",
+            )
+        )
