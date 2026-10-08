@@ -8,7 +8,8 @@ has passed its owner-isolation tests and independent review.
 
 The existing `.github/workflows/pipeline.yml` image-publication job runs
 `scripts/check_tenancy_release_gate.py` before publishing any image. It fails closed while
-the repository Actions variable `TENANCY_OWNER_API_READY` is absent or not exactly `true`.
+the repository Actions variable `TENANCY_OWNER_API_READY` is absent or does not resolve to
+the boolean value `true` (case-insensitive and surrounding whitespace ignored).
 Set that variable only after Package 3 is integrated, the two-user authorization tests
 pass, and the independent review accepts the evidence. The check blocks GHCR publication
 through this workflow; it cannot technically stop a manual deployment or another pipeline

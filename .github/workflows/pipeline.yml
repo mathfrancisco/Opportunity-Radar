@@ -64,6 +64,9 @@ jobs:
       DATABASE_URL: postgresql+psycopg://opportunity_radar:ci-password@127.0.0.1:5432/opportunity_radar_test
       RUN_DATABASE_INTEGRATION: "1"
       DATABASE_INTEGRATION_ISOLATED: "1"
+      # Synthetic subject for the isolated database only. Migration 0069 refuses an
+      # implicit backfill, so CI must make this test-only value explicit.
+      OWNER_SUB_BACKFILL: ci-owner-sub
     services:
       postgres:
         # Always an empty database here, so the official pgvector image is safe to use; the
@@ -106,11 +109,15 @@ jobs:
         run: |
           python -m pip install -r requirements-dev.txt
           python -m pip install --no-deps .
-      - name: Verify migration round trip
+      - name: Verify reversible migrations and the tenancy downgrade guard
         run: |
-          alembic upgrade head
+          alembic upgrade 20261006_0068
           alembic downgrade base
           alembic upgrade head
+          if alembic downgrade 20261006_0068; then
+            echo "Expected migration 0069 downgrade to be refused" >&2
+            exit 1
+          fi
           test "$(alembic current | awk '{print $1}')" = "$(alembic heads | awk '{print $1}')"
       - name: Run backend tests
         run: pytest -q

@@ -1,4 +1,17 @@
 services:
+  # CI owns an ephemeral database whose name makes the isolation guard explicit. Keep
+  # this override here rather than giving the operational Compose file a test backfill.
+  postgres:
+    environment:
+      POSTGRES_DB: opportunity_radar_test
+      POSTGRES_USER: opportunity_radar
+      POSTGRES_PASSWORD: ci-password
+
+  migrate:
+    environment:
+      DATABASE_URL: postgresql+psycopg://opportunity_radar:ci-password@postgres:5432/opportunity_radar_test
+      OWNER_SUB_BACKFILL: ci-owner-sub
+
   # Stands in for Groq on the OpenAI-compatible chat-completions endpoint (card F20-17,
   # tests/e2e/fake_groq.py), so the CI gate proves the worker's own analysis wiring
   # instead of proving a real Groq quota was available that morning.
@@ -38,6 +51,7 @@ services:
     # CI exercises the explicit local-only factory; production always starts app:create_app.
     command: ["uvicorn", "opportunity_radar.dev.local_app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
     environment:
+      DATABASE_URL: postgresql+psycopg://opportunity_radar:ci-password@postgres:5432/opportunity_radar_test
       GREENHOUSE_BASE_URL: http://jobboard:8477
       GROQ_BASE_URL: http://groq:8080/openai/v1
       GROQ_API_KEY: ci-fake
@@ -50,6 +64,7 @@ services:
 
   worker:
     environment:
+      DATABASE_URL: postgresql+psycopg://opportunity_radar:ci-password@postgres:5432/opportunity_radar_test
       GREENHOUSE_BASE_URL: http://jobboard:8477
       GROQ_BASE_URL: http://groq:8080/openai/v1
       GROQ_API_KEY: ci-fake
