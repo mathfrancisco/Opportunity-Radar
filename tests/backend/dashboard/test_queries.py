@@ -52,12 +52,13 @@ pytestmark = [
 ]
 
 NOW = datetime.now(UTC)
+TEST_OWNER_SUB = "dashboard-test-owner"
 
 
 def _profile_version(session: Session) -> ProfileVersionModel:
     profile = session.scalar(select(CareerProfileModel).limit(1))
     if profile is None:
-        profile = CareerProfileModel(version=1)
+        profile = CareerProfileModel(version=1, owner_sub=TEST_OWNER_SUB)
         session.add(profile)
         session.flush()
     version = ProfileVersionModel(
@@ -138,6 +139,7 @@ def _assessment(
     assessed_at: datetime,
 ) -> MatchAssessmentModel:
     assessment = MatchAssessmentModel(
+        owner_sub=TEST_OWNER_SUB,
         opportunity_id=opportunity.id,
         opportunity_version=opportunity.version,
         profile_version_id=profile_version_id,

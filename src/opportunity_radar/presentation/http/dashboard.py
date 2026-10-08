@@ -382,6 +382,21 @@ class OverviewResponse(BaseModel):
     companies_with_ats: int
 
 
+class PersonalOverviewResponse(BaseModel):
+    """Member projection: shared vacancies plus only this member's activity."""
+
+    opportunities_total: int
+    opportunities_active: int
+    new_opportunities: int
+    new_opportunity_window_days: int
+    assessed_opportunities: int
+    verdict_counts: dict[str, int]
+    applications_active: int
+    applications_by_stage: dict[str, int]
+    follow_ups_due: int
+    follow_up_window_days: int
+
+
 class SourceCoverageMetricResponse(BaseModel):
     source_definition_id: UUID
     name: str
@@ -588,11 +603,17 @@ def list_inbox(
     #: Card F20-54: only companies with at least one startup-evidence row.
     only_startups: bool = False,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> InboxPageResponse:
     role_families = tuple(role_family or ())
+    if profile_version_id is not None:
+        try:
+            ProfileService(session, identity.sub).get_version(profile_version_id)
+        except ProfileNotFoundError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from error
     if not role_families and not all_areas:
         try:
-            active = ProfileService(session).get_active()
+            active = ProfileService(session, identity.sub).get_active()
             role_families = tuple(active.snapshot.preferences.target_role_families)
         except ProfileNotFoundError:
             role_families = ()
@@ -623,6 +644,7 @@ def list_inbox(
             open_at_source=open_at_source,
             only_startups=only_startups,
         ),
+        owner_sub=identity.sub,
     )
     return InboxPageResponse(
         items=[_inbox_item_response(item) for item in page.items],
@@ -807,12 +829,25 @@ def get_search_metrics(
     )
 
 
-@router.get("/overview", response_model=OverviewResponse)
+@router.get("/overview", response_model=OverviewResponse | PersonalOverviewResponse)
 def get_overview(
     profile_version_id: UUID | None = None,
     session: Session = Depends(get_session),
-) -> OverviewResponse:
-    return _overview_response(summarize_overview(session, profile_version_id=profile_version_id))
+    identity: RequestIdentity = Depends(authenticated_identity),
+) -> OverviewResponse | PersonalOverviewResponse:
+    if profile_version_id is not None:
+        try:
+            ProfileService(session, identity.sub).get_version(profile_version_id)
+        except ProfileNotFoundError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from error
+    summary = summarize_overview(
+        session,
+        profile_version_id=profile_version_id,
+        owner_sub=None if identity.is_owner else identity.sub,
+    )
+    if identity.is_owner:
+        return _overview_response(summary)
+    return _personal_overview_response(summary)
 
 
 def _selected_window(window: str | None) -> dict[str, timedelta] | None:
@@ -969,6 +1004,21 @@ def _overview_response(summary: OverviewSummary) -> OverviewResponse:
         precision_marked_count=summary.precision_marked_count,
         companies_covered=summary.companies_covered,
         companies_with_ats=summary.companies_with_ats,
+    )
+
+
+def _personal_overview_response(summary: OverviewSummary) -> PersonalOverviewResponse:
+    return PersonalOverviewResponse(
+        opportunities_total=summary.opportunities_total,
+        opportunities_active=summary.opportunities_active,
+        new_opportunities=summary.new_opportunities,
+        new_opportunity_window_days=summary.new_opportunity_window_days,
+        assessed_opportunities=summary.assessed_opportunities,
+        verdict_counts=summary.verdict_counts,
+        applications_active=summary.applications_active,
+        applications_by_stage=summary.applications_by_stage,
+        follow_ups_due=summary.follow_ups_due,
+        follow_up_window_days=summary.follow_up_window_days,
     )
 
 

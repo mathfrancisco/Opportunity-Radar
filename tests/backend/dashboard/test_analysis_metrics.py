@@ -33,6 +33,7 @@ pytestmark = [
 ]
 
 NOW = datetime.now(UTC)
+TEST_OWNER_SUB = "dashboard-analysis-test-owner"
 
 
 def _session() -> Session:
@@ -42,7 +43,7 @@ def _session() -> Session:
 def _assessment(session: Session) -> UUID:
     profile = session.scalar(select(CareerProfileModel).limit(1))
     if profile is None:
-        profile = CareerProfileModel(version=1)
+        profile = CareerProfileModel(version=1, owner_sub=TEST_OWNER_SUB)
         session.add(profile)
         session.flush()
     number = (
@@ -69,6 +70,7 @@ def _assessment(session: Session) -> UUID:
     session.flush()
     assessment = SqlAlchemyMatchingRepository(session).add(
         AssessmentRecord(
+            owner_sub=TEST_OWNER_SUB,
             opportunity_id=opportunity.id,
             opportunity_version=1,
             profile_version_id=version.id,
