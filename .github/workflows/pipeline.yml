@@ -114,6 +114,8 @@ jobs:
           test "$(alembic current | awk '{print $1}')" = "$(alembic heads | awk '{print $1}')"
       - name: Run backend tests
         run: pytest -q
+      - name: Smoke the fail-closed production factory offline
+        run: pytest -q tests/backend/http/test_auth.py -k production_factory_leaves_only_liveness_public
       - name: Measure content classification on the versioned gold
         run: python scripts/measure_content_classification.py --gold docs/50-roadmap-motor-de-busca/rotulagem/f50-01-gold.json --gold-text
       - name: Measure the seniority classifier on the versioned title sample

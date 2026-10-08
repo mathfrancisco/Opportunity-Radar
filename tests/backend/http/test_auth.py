@@ -158,6 +158,73 @@ def test_unknown_kid_refreshes_a_valid_jwks_cache_once(keypair) -> None:
     assert requests == 2
 
 
+def test_unknown_kid_refreshes_stale_cache_at_most_once(keypair) -> None:
+    private, jwks = keypair
+    requests = 0
+
+    def transport(*_: object) -> bytes:
+        nonlocal requests
+        requests += 1
+        return json.dumps(jwks).encode()
+
+    client = JwksClient(
+        f"{ISSUER}/.well-known/jwks.json", transport=transport, ttl_seconds=0
+    )
+    unknown = jwt.encode(
+        {"iss": ISSUER, "sub": OWNER, "azp": PARTY, "exp": int(time.time()) + 60},
+        private,
+        algorithm="RS256",
+        headers={"kid": "rotated-key"},
+    )
+    verifier = JwtVerifier(
+        AuthConfig(
+            issuer=ISSUER,
+            jwks_url=f"{ISSUER}/.well-known/jwks.json",
+            authorized_parties=frozenset({PARTY}),
+            owner_sub=OWNER,
+        ),
+        client,
+    )
+
+    with pytest.raises(AuthenticationError, match="jwks_unknown_kid"):
+        verifier.verify(unknown)
+
+    assert requests == 1
+
+
+def test_repeated_unknown_kid_uses_a_cooldown(keypair) -> None:
+    private, jwks = keypair
+    requests = 0
+
+    def transport(*_: object) -> bytes:
+        nonlocal requests
+        requests += 1
+        return json.dumps(jwks).encode()
+
+    client = JwksClient(f"{ISSUER}/.well-known/jwks.json", transport=transport)
+    verifier = JwtVerifier(
+        AuthConfig(
+            issuer=ISSUER,
+            jwks_url=f"{ISSUER}/.well-known/jwks.json",
+            authorized_parties=frozenset({PARTY}),
+            owner_sub=OWNER,
+        ),
+        client,
+    )
+    unknown = jwt.encode(
+        {"iss": ISSUER, "sub": OWNER, "azp": PARTY, "exp": int(time.time()) + 60},
+        private,
+        algorithm="RS256",
+        headers={"kid": "rotated-key"},
+    )
+
+    for _ in range(2):
+        with pytest.raises(AuthenticationError, match="jwks_unknown_kid"):
+            verifier.verify(unknown)
+
+    assert requests == 1
+
+
 def test_valid_token_returns_identity_and_non_owner_is_forbidden(keypair) -> None:
     private, _ = keypair
     client = _client(_verifier(keypair))

@@ -88,22 +88,43 @@ def _fetch_jwks(url: str, timeout_seconds: float, max_bytes: int) -> bytes:
 
 class JwksClient:
     def __init__(
-        self, url: str, *, transport: JwksTransport = _fetch_jwks, ttl_seconds: float = 300
+        self,
+        url: str,
+        *,
+        transport: JwksTransport = _fetch_jwks,
+        ttl_seconds: float = 300,
+        retry_cooldown_seconds: float = 30,
     ) -> None:
         self._url, self._transport, self._ttl_seconds = url, transport, ttl_seconds
+        self._retry_cooldown_seconds = retry_cooldown_seconds
         self._keys: dict[str, dict[str, Any]] = {}
         self._expires_at = 0.0
+        self._refresh_retry_at = 0.0
+        self._unknown_kid_retry_at = 0.0
         self._lock = Lock()
 
     def get(self, kid: str) -> dict[str, Any]:
         with self._lock:
-            if time.monotonic() >= self._expires_at:
+            now = time.monotonic()
+            refreshed = False
+            if now >= self._expires_at:
+                if now < self._refresh_retry_at:
+                    raise AuthenticationError("jwks_unavailable")
+                self._refresh_retry_at = now + self._retry_cooldown_seconds
                 self._refresh()
+                refreshed = True
             key = self._keys.get(kid)
             if key is None:
-                # A key rotation can add a kid before this bounded cache expires.
-                # Refresh once while holding the lock; a still-unknown key fails closed.
-                self._refresh()
+                # A key rotation can add a kid before this bounded cache expires. One
+                # refresh per lookup is enough; cooldown prevents unknown kids from
+                # turning every request into a serialized outbound fetch.
+                if refreshed:
+                    self._unknown_kid_retry_at = now + self._retry_cooldown_seconds
+                else:
+                    if now < self._unknown_kid_retry_at:
+                        raise AuthenticationError("jwks_unknown_kid")
+                    self._unknown_kid_retry_at = now + self._retry_cooldown_seconds
+                    self._refresh()
                 key = self._keys.get(kid)
             if key is None:
                 raise AuthenticationError("jwks_unknown_kid")
