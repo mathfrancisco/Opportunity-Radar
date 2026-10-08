@@ -46,3 +46,38 @@ Produzir runbook reproduzível de sete dias, pacote de evidências por fonte e d
 ## Falhas, interrupção e rollback
 
 Abortar expansão diante de run parcial, divergência de imagem, N/D, queda abaixo dos limiares, erro de permissão/SSRF ou restore não verificado. Parar novas claims, drenar trabalho elegível e aplicar fencing antes de liberar ownership; não marcar ausentes em run parcial. Rollback limita-se às flags/coorte e versão do manifesto, preservando payload bruto, evidência e alterações humanas. Restore é validado isoladamente antes de qualquer plano operacional. Entregáveis: runbook de sete dias, pacote CI/runtime, tabela de métricas, inventários por fonte, prova de restore/rollback isolada e decisão assinada. Nenhuma implementação ou execução operacional é declarada por este card.
+
+## Preparação do pacote (2026-10-07, sexta sessão)
+
+Feito antes do fim da janela, sem dado estimado:
+
+- **Coorte congelada:** as 276 fontes habilitadas e criadas antes da abertura da janela
+  (2026-10-07 13:23:48 UTC), em [f51-18-coorte-2026-10-07.tsv](../f51-18-coorte-2026-10-07.tsv):
+  98 inHire, 65 Ashby, 56 Greenhouse, 19 Workday, 15 Lever, 11 Workable, 7 Teamtailor, 2
+  Factorial, 1 Remotive, 1 Hacker News e 1 manual. As fontes inHire cadastradas depois (lote
+  do F52-06) ficam fora da coorte.
+- **Janela:** aberta em 2026-10-07 13:23:48 UTC (merge do PR #68) e **reaberta em 2026-10-07
+  14:28:49 UTC**, no merge do PR #70, que só traz testes. Fecha em 2026-10-14 14:28:49 UTC. A
+  coorte continua a das 276 fontes: as 45 fontes inHire habilitadas entre 14:07 e 14:09 UTC
+  e as seguintes do lote do F52-06 ficam fora, por decisão registrada aqui.
+- **Runtime:** stack `opportunity-radar-dev` reconstruída em 2026-10-07 14:29 UTC a partir de
+  `3aaca63`. A API foi recriada (imagem
+  `sha256:9c108df19168573978a6eb5e5cdde74dd236f7e9f3b1cc57c5277c3b7bf73425`). O contêiner do
+  worker não foi recriado: continua o iniciado às 13:25:06 UTC a partir de `b6d25ae` (imagem
+  `sha256:dd316ee9512d1addf0a1918ecb925f36927e013a4034420a5f2b8dd5d803a764`). Conferido: o
+  hash de todos os `.py` de `src` é igual nos dois contêineres, e `src` não muda entre
+  `b6d25ae` e `3aaca63`. CI: os quatro checks do PR #70 verdes no commit `e3d3294`, o topo do PR.
+- **Linha de base:** a medição do [F51-01](f51-01-baseline-benchmark-auditavel.md).
+
+**O que o validador vai exigir e hoje não existe:**
+
+- recall humano de 95% ou mais por fonte: depende da amostra do dono (F51-02). Sem ela o
+  validador devolve N/D e a decisão é no-go, mesmo com a janela completa;
+- restauração e rollback demonstrados em ambiente `_test`, com hashes comparados;
+- aprovação assinada pelo responsável;
+- três inventários completos por fonte dentro da janela. Em 2026-10-07 havia 43 fontes sem
+  três execuções completas em sete dias; na passada das 14:00 UTC, 86 das 264 respostas foram
+  `304`, e essas execuções saem com `complete=false`.
+
+Qualquer outro PR de código da SPEC 51 mesclado reabre a janela na data do merge e troca o
+SHA e a imagem acima. A data vigente está no [README do roadmap](../README.md).

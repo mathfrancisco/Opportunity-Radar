@@ -54,3 +54,19 @@ Iniciar com relatório aditivo e leitura operacional; não mudar alarmes nem cad
 ## Entregáveis
 
 Matriz de origem/fórmula, relatório por fonte e janela, testes para estados completos/parciais e NULLs, decisão documentada sobre necessidade de migração e comparação de três runs completos quando disponíveis. O relatório deve deixar visível quando uma métrica é proposta, não mensurável ou baseada em amostra manual.
+
+## Medição na abertura da janela (2026-10-07, sexta sessão)
+
+Do mesmo artefato do `scripts/source_baseline.py` registrado no
+[F51-01](f51-01-baseline-benchmark-auditavel.md), seção `source_quality` (`source-quality-v2`),
+capturado em 2026-10-07 13:53:53 UTC:
+
+- **Frescor:** 274 de 276 fontes elegíveis com inventário completo dentro de sete dias;
+  nenhuma marcada como degradada por cooldown ou orçamento.
+- **Execuções completas:** 233 de 276 fontes com três ou mais em sete dias.
+- **Descrição útil:** 15.428 de 32.023 vagas canônicas; 12.813 sem descrição e 3.782 com
+  descrição inválida. A regra é a `useful-description-v1`.
+- **Recall:** não medido. Não existe amostra humana.
+
+**Estado: parcial.** Falta a amostra humana de recall, que depende do dono, e a mesma medição
+no fim da janela de sete dias.

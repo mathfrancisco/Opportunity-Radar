@@ -52,3 +52,37 @@ O primeiro rollout é consulta read-only no banco operacional autorizado e amost
 ## Entregáveis
 
 Contrato e consulta versionados, regra de descrição útil, amostra manual datada com rótulos/exclusões, relatório por fonte com unidades separadas, testes propostos implementados na fase de código e evidência de leitura operacional sem mutação. A saída deve declarar limites, contagens não mensuráveis e fonte do dado; baseline não equivale a aprovação de expansão.
+
+## Medição na abertura da janela (2026-10-07, sexta sessão)
+
+`scripts/source_baseline.py`, rodado no contêiner da API contra a base de dev, em transação
+`REPEATABLE READ READ ONLY` (snapshot `420150:420150:`), capturado em 2026-10-07 13:53:53 UTC,
+janela de sete dias corridos até esse instante. `query_hash`
+`ad4a673821dc5329ce66d626f889db58db46a8641f60fd38c31c91d571d6e105`, coletor
+`source-baseline-collector-v1`. O artefato JSON não foi versionado: lista as 32.023 vagas.
+
+| Medida | Valor |
+|---|---:|
+| Fontes na base | 283 |
+| Fontes elegíveis (habilitadas) | 276 |
+| Fontes com três execuções completas em sete dias | 233 |
+| Fontes sem três execuções completas | 43 (25 com duas, 16 com uma, 2 com nenhuma) |
+| Vagas canônicas | 32.023 |
+| Com descrição útil (`useful-description-v1`) | 15.428 |
+| Sem descrição | 12.813 |
+| Com descrição inválida | 3.782 |
+
+O estado da base de execuções é "insuficiente": 43 fontes ainda não têm três execuções
+completas. Dessas, 42 têm a última tentativa `SUCCEEDED` e uma `PARTIAL`; em 29 a última
+tentativa não é inventário completo (causa não conferida fonte a fonte). Entre elas
+estão Santander, NVIDIA e SUSE (Workday), Hacker News e as fontes Teamtailor.
+
+`scripts/measure_descriptions.py`, 2026-10-07 14:13 UTC: 32.249 vagas, 19.436 com descrição;
+texto limpo (`cleaner-v2`) com mediana de 4.630 caracteres e p95 de 9.167; 397 descrições
+passam sozinhas do orçamento de 3.600 tokens.
+
+**Estado: parcial.** As três execuções completas por fonte e a contagem de descrição útil têm
+de ser medidas de novo no fim da janela, com a coorte de 276 fontes congelada em
+[f51-18-coorte-2026-10-07.tsv](../f51-18-coorte-2026-10-07.tsv). O recall do AC03 depende da
+amostra humana do dono. `scripts/benchmark_report.py` compara relatórios do
+`eval_analysis.py` e não mede nada deste card.

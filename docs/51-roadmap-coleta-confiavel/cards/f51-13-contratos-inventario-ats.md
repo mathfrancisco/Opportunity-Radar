@@ -39,3 +39,24 @@ Coletores existentes declaram capacidades diferentes: Workday pagina por offset;
 ## Negativos e rollout
 
 Não reinterpretar 304 como zero, ausência de total como zero, um lote de detalhe como inventário, nem ausência de cursor como API paginada. Não alterar limite/fechamento sem caso reproduzível. Implementar documentação e regressões por adaptador; qualquer migration só se provar lacuna de telemetria que não possa ser derivada. Integração mutável usa `_test`. Rollback reverte somente uma interpretação nova; manter dados históricos e marcar a métrica como não comparável se contrato mudou. Entregáveis: matriz, fixtures e regressões, reason codes e relatório de gaps. Não há defeito de produção provado antes da execução dos cenários.
+
+## Conferência dos critérios contra os testes (2026-10-07, sexta sessão)
+
+Conferido critério por critério, lendo o corpo de cada teste. Caminhos relativos a
+`tests/backend/`. "banco" é teste de integração com PostgreSQL real
+(`RUN_DATABASE_INTEGRATION=1`); "unidade" usa dublês. Os marcados com PR #70 foram
+escritos nesta sessão, sem mudança em `src`.
+
+| AC | Teste | Tipo | Observação |
+| --- | --- | --- | --- |
+| AC01 | `acquisition/test_service.py::test_adapter_inventory_contract_matrix` | unidade | Percorre a matriz, não o registro: um coletor registrado fora da matriz passaria |
+| AC02 | `acquisition/test_service.py::test_missing_announced_total_is_not_zero` | unidade |  |
+| AC03 | `acquisition/test_delta_presence_resume.py::test_304_requires_matching_inventory_scope`; `::test_inventory_scope_hash_changes_with_every_dimension_of_the_scope` (PR #70); `::test_304_validator_and_inventory_reuse_are_scoped_to_filters_region_and_contract` (PR #70) | banco; unidade | Os testes novos variam palavras-chave, locais, região e versão do contrato |
+| AC04 | `acquisition/test_service.py::test_repeated_cursor_is_bounded_and_partial`; `::test_lever_page_of_already_read_postings_is_no_progress`; `acquisition/test_workday_collector.py::test_repeated_page_raises_instead_of_claiming_complete_board` | unidade | O motivo gravado é `PARSER_SCHEMA_CHANGED`. Só página inteira repetida é detectada |
+| AC05 | `acquisition/test_delta_presence_resume.py::test_timeout_after_valid_page_keeps_presence_and_closes_nothing`; `acquisition/test_run_telemetry.py::test_timeout_after_page_preserves_positive_presence` | banco; unidade |  |
+
+Todos os critérios têm teste; os cinco nomes propostos no card existem. O relatório de lacunas listado nos entregáveis não tem teste.
+
+**Observado na base de dev (2026-10-07, 13:25 UTC):** a execução da Accenture (Workday) terminou `PARTIAL` com `PARSER_SCHEMA_CHANGED` e o resumo "Workday pagination repeated a page without making progress", com 1.480 de 2.000 itens. É o comportamento do AC04: limitado, parcial e sem fechamento.
+
+**Risco relatado pelo worker que escreveu os testes, não reproduzido pelo coordenador:** duas execuções seguidas de reuso por `304` com manifesto todo revalidado saem as duas `complete=True`, e `reconcile_run_closures` na segunda fecha as vagas vistas antes, porque a execução de reuso não grava observações (`opportunities/service.py`, por volta das linhas 510 a 535). Uma execução de reuso sozinha não fecha nada, e é isso que o teste confere. Na base de dev nenhuma vaga foi fechada por execução sem itens, e as execuções `304` de hoje saem `complete=false`. Precisa de teste que reproduza e, se confirmar, de correção: é código da SPEC 51 e pede decisão do dono, porque reabre a janela. O card não fecha enquanto isso não for conferido.
