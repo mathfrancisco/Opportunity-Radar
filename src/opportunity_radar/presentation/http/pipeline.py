@@ -30,6 +30,7 @@ from opportunity_radar.pipeline.service import (
     ApplicationOpportunityNotFoundError,
     PipelineService,
 )
+from opportunity_radar.presentation.http.auth import RequestIdentity, authenticated_identity
 from opportunity_radar.presentation.http.dependencies import get_session
 from opportunity_radar.profile.domain import ProfileNotFoundError
 
@@ -101,9 +102,10 @@ class ApplicationPageResponse(BaseModel):
 def start_application(
     body: StartApplicationBody,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> ApplicationResponse:
     try:
-        application = PipelineService(session).start(
+        application = PipelineService(session, identity.sub).start(
             body.opportunity_id,
             profile_version_id=body.profile_version_id,
             stage=body.stage,
@@ -139,8 +141,9 @@ def list_applications(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> ApplicationPageResponse:
-    items, total = PipelineService(session).list(
+    items, total = PipelineService(session, identity.sub).list(
         opportunity_id=opportunity_id,
         profile_version_id=profile_version_id,
         status=application_status.value if application_status else None,
@@ -161,9 +164,12 @@ def list_applications(
 def get_application(
     application_id: UUID,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> ApplicationResponse:
     try:
-        return _application_responses([PipelineService(session).get(application_id)], session)[0]
+        return _application_responses(
+            [PipelineService(session, identity.sub).get(application_id)], session
+        )[0]
     except ApplicationNotFoundError as error:
         _raise_pipeline_error(error)
 
@@ -173,9 +179,10 @@ def transition_application(
     application_id: UUID,
     body: TransitionBody,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> ApplicationResponse:
     try:
-        application = PipelineService(session).transition(
+        application = PipelineService(session, identity.sub).transition(
             application_id,
             target=body.stage,
             expected_version=body.expected_version,
@@ -192,9 +199,10 @@ def set_next_action(
     application_id: UUID,
     body: NextActionBody,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> ApplicationResponse:
     try:
-        application = PipelineService(session).set_next_action(
+        application = PipelineService(session, identity.sub).set_next_action(
             application_id,
             expected_version=body.expected_version,
             next_action=body.next_action,
@@ -249,9 +257,7 @@ def _application_response(
         allowed_transitions=sorted(item.value for item in ALLOWED_TRANSITIONS[stage]),
         history=[
             _history_response(entry)
-            for entry in sorted(
-                application.history, key=lambda item: (item.occurred_at, item.id)
-            )
+            for entry in sorted(application.history, key=lambda item: (item.occurred_at, item.id))
         ],
     )
 

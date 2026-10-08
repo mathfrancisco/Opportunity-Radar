@@ -45,8 +45,12 @@ def _saved_search(model: SavedSearchModel) -> SavedSearch:
     )
 
 
-def _find_saved_search(session: Session, saved_search_id: UUID) -> SavedSearchModel:
-    saved_search = session.get(SavedSearchModel, saved_search_id)
+def _find_saved_search(session: Session, saved_search_id: UUID, owner_sub: str) -> SavedSearchModel:
+    saved_search = session.scalar(
+        select(SavedSearchModel).where(
+            SavedSearchModel.id == saved_search_id, SavedSearchModel.owner_sub == owner_sub
+        )
+    )
     if saved_search is None:
         raise SavedSearchNotFoundError(str(saved_search_id))
     return saved_search
@@ -58,8 +62,9 @@ def create_saved_search(
     name: str,
     term: str | None,
     filters: dict[str, Any],
+    owner_sub: str,
 ) -> SavedSearch:
-    saved_search = SavedSearchModel(name=name, term=term, filters=filters)
+    saved_search = SavedSearchModel(owner_sub=owner_sub, name=name, term=term, filters=filters)
     session.add(saved_search)
     session.flush()
     result = _saved_search(saved_search)
@@ -67,19 +72,19 @@ def create_saved_search(
     return result
 
 
-def list_saved_searches(session: Session) -> tuple[SavedSearch, ...]:
+def list_saved_searches(session: Session, *, owner_sub: str) -> tuple[SavedSearch, ...]:
     rows = session.scalars(
-        select(SavedSearchModel).order_by(
-            SavedSearchModel.created_at.desc(), SavedSearchModel.id
-        )
+        select(SavedSearchModel)
+        .where(SavedSearchModel.owner_sub == owner_sub)
+        .order_by(SavedSearchModel.created_at.desc(), SavedSearchModel.id)
     )
     return tuple(_saved_search(row) for row in rows)
 
 
 def rename_saved_search(
-    session: Session, saved_search_id: UUID, *, name: str
+    session: Session, saved_search_id: UUID, *, name: str, owner_sub: str
 ) -> SavedSearch:
-    saved_search = _find_saved_search(session, saved_search_id)
+    saved_search = _find_saved_search(session, saved_search_id, owner_sub)
     saved_search.name = name
     session.flush()
     result = _saved_search(saved_search)
@@ -87,14 +92,14 @@ def rename_saved_search(
     return result
 
 
-def delete_saved_search(session: Session, saved_search_id: UUID) -> None:
-    saved_search = _find_saved_search(session, saved_search_id)
+def delete_saved_search(session: Session, saved_search_id: UUID, *, owner_sub: str) -> None:
+    saved_search = _find_saved_search(session, saved_search_id, owner_sub)
     session.delete(saved_search)
     session.commit()
 
 
-def open_saved_search(session: Session, saved_search_id: UUID) -> SavedSearch:
-    saved_search = _find_saved_search(session, saved_search_id)
+def open_saved_search(session: Session, saved_search_id: UUID, *, owner_sub: str) -> SavedSearch:
+    saved_search = _find_saved_search(session, saved_search_id, owner_sub)
     saved_search.last_opened_at = datetime.now(UTC)
     session.flush()
     result = _saved_search(saved_search)
@@ -102,7 +107,7 @@ def open_saved_search(session: Session, saved_search_id: UUID) -> SavedSearch:
     return result
 
 
-def new_count(session: Session, saved_search: SavedSearch) -> int:
+def new_count(session: Session, saved_search: SavedSearch, *, owner_sub: str) -> int:
     filters = saved_search.filters
     known_filter_keys = {
         "verdict",
@@ -164,7 +169,7 @@ def new_count(session: Session, saved_search: SavedSearch) -> int:
     all_areas = filters.get("all_areas") is True or filters.get("all_areas") == "true"
     if not role_families and not all_areas:
         try:
-            active = ProfileService(session).get_active()
+            active = ProfileService(session, owner_sub).get_active()
             role_families = tuple(active.snapshot.preferences.target_role_families)
         except ProfileNotFoundError:
             role_families = ()
@@ -210,9 +215,7 @@ def new_count(session: Session, saved_search: SavedSearch) -> int:
         salary_max=Decimal(str(salary_max_value)) if salary_max_value else None,
         source_definition_ids=tuple(UUID(str(value)) for value in source_ids),
         profile_version_id=(
-            UUID(str(filters["profile_version_id"]))
-            if filters.get("profile_version_id")
-            else None
+            UUID(str(filters["profile_version_id"])) if filters.get("profile_version_id") else None
         ),
         order=InboxOrder(str(filters.get("order", InboxOrder.PRIORITY.value))),
         limit=200,

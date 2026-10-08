@@ -178,9 +178,7 @@ class OpportunityRepository:
         for identity in sorted(identities):
             digest = hashlib.sha256(identity.encode("utf-8")).digest()
             lock_key = int.from_bytes(digest[:8], byteorder="big", signed=True)
-            self.session.execute(
-                select(func.pg_advisory_xact_lock(lock_key))
-            ).scalar_one()
+            self.session.execute(select(func.pg_advisory_xact_lock(lock_key))).scalar_one()
 
     def run_raw_items(self, source_run_id: UUID) -> list[RawItemModel]:
         """The evidence one run preserved, in the order it arrived."""
@@ -189,35 +187,28 @@ class OpportunityRepository:
                 select(RawItemModel)
                 .where(
                     RawItemModel.source_run_id == source_run_id,
-                    RawItemModel.item_metadata[
-                        "source_proposal_candidate"
-                    ].as_boolean().is_not(True),
+                    RawItemModel.item_metadata["source_proposal_candidate"]
+                    .as_boolean()
+                    .is_not(True),
                 )
                 .order_by(RawItemModel.fetched_at, RawItemModel.id)
             ).unique()
         )
 
-    def pending_raw_item_ids(
-        self, limit: int, normalizer_version: str
-    ) -> list[UUID]:
+    def pending_raw_item_ids(self, limit: int, normalizer_version: str) -> list[UUID]:
         return list(
             self.session.scalars(
                 select(RawItemModel.id)
                 .outerjoin(
                     NormalizationResultModel,
-                    (
-                        NormalizationResultModel.raw_item_id == RawItemModel.id
-                    )
-                    & (
-                        NormalizationResultModel.normalizer_version
-                        == normalizer_version
-                    ),
+                    (NormalizationResultModel.raw_item_id == RawItemModel.id)
+                    & (NormalizationResultModel.normalizer_version == normalizer_version),
                 )
                 .where(NormalizationResultModel.id.is_(None))
                 .where(
-                    RawItemModel.item_metadata[
-                        "source_proposal_candidate"
-                    ].as_boolean().is_not(True)
+                    RawItemModel.item_metadata["source_proposal_candidate"]
+                    .as_boolean()
+                    .is_not(True)
                 )
                 .order_by(RawItemModel.fetched_at, RawItemModel.id)
                 .limit(limit)
@@ -234,9 +225,7 @@ class OpportunityRepository:
         if external_id:
             identity_filter = SourceOccurrenceModel.external_id == external_id
         elif normalized_url:
-            identity_filter = (
-                SourceOccurrenceModel.normalized_source_url == normalized_url
-            )
+            identity_filter = SourceOccurrenceModel.normalized_source_url == normalized_url
         else:
             return None
         return self.session.scalar(
@@ -248,17 +237,19 @@ class OpportunityRepository:
             .options(joinedload(SourceOccurrenceModel.opportunity))
         )
 
-    def opportunity_by_normalized_url(
-        self, normalized_url: str | None
-    ) -> OpportunityModel | None:
+    def opportunity_by_normalized_url(self, normalized_url: str | None) -> OpportunityModel | None:
         if normalized_url is None:
             return None
-        return self.session.scalars(
-            select(OpportunityModel)
-            .join(SourceOccurrenceModel)
-            .where(SourceOccurrenceModel.normalized_source_url == normalized_url)
-            .options(selectinload(OpportunityModel.occurrences))
-        ).unique().first()
+        return (
+            self.session.scalars(
+                select(OpportunityModel)
+                .join(SourceOccurrenceModel)
+                .where(SourceOccurrenceModel.normalized_source_url == normalized_url)
+                .options(selectinload(OpportunityModel.occurrences))
+            )
+            .unique()
+            .first()
+        )
 
     def opportunity_by_fingerprint(
         self, *, fingerprint: str, fingerprint_version: str
@@ -278,8 +269,7 @@ class OpportunityRepository:
         company_filter = (
             OpportunityModel.canonical_company_id == candidate.company_id
             if candidate.company_id is not None
-            else OpportunityModel.normalized_company_name
-            == candidate.normalized_company_name
+            else OpportunityModel.normalized_company_name == candidate.normalized_company_name
         )
         if candidate.company_id is None and candidate.normalized_company_name is None:
             return []
@@ -291,8 +281,7 @@ class OpportunityRepository:
                     OpportunityModel.normalized_title == candidate.normalized_title,
                     or_(
                         OpportunityModel.fingerprint != candidate.fingerprint,
-                        OpportunityModel.fingerprint_version
-                        != candidate.fingerprint_version,
+                        OpportunityModel.fingerprint_version != candidate.fingerprint_version,
                     ),
                 )
                 .order_by(OpportunityModel.created_at.desc())
@@ -372,9 +361,7 @@ class OpportunityRepository:
                     SourceOccurrenceModel.opportunity_id,
                     func.min(SourceOccurrenceModel.source_url),
                 )
-                .where(
-                    SourceOccurrenceModel.opportunity_id.in_([item.id for item in siblings])
-                )
+                .where(SourceOccurrenceModel.opportunity_id.in_([item.id for item in siblings]))
                 .group_by(SourceOccurrenceModel.opportunity_id)
             )
         }
@@ -424,9 +411,11 @@ class OpportunityRepository:
         reason: str | None,
         note: str | None,
         profile_version_id: UUID | None,
+        owner_sub: str,
     ) -> RelevanceMarkModel:
         """Append a judgement. History is never updated or deleted (F17-01)."""
         mark = RelevanceMarkModel(
+            owner_sub=owner_sub,
             opportunity_id=opportunity_id,
             relevant=relevant,
             reason=reason,
@@ -438,24 +427,28 @@ class OpportunityRepository:
         return mark
 
     def current_relevance_mark(
-        self, opportunity_id: UUID
+        self, opportunity_id: UUID, *, owner_sub: str | None = None
     ) -> RelevanceMarkModel | None:
         return self.session.scalar(
             select(RelevanceMarkModel)
-            .where(RelevanceMarkModel.opportunity_id == opportunity_id)
-            .order_by(
-                RelevanceMarkModel.marked_at.desc(), RelevanceMarkModel.id.desc()
+            .where(
+                RelevanceMarkModel.opportunity_id == opportunity_id,
+                *([RelevanceMarkModel.owner_sub == owner_sub] if owner_sub is not None else []),
             )
+            .order_by(RelevanceMarkModel.marked_at.desc(), RelevanceMarkModel.id.desc())
             .limit(1)
         )
 
     def relevance_mark_history(
-        self, opportunity_id: UUID
+        self, opportunity_id: UUID, *, owner_sub: str | None = None
     ) -> list[RelevanceMarkModel]:
         return list(
             self.session.scalars(
                 select(RelevanceMarkModel)
-                .where(RelevanceMarkModel.opportunity_id == opportunity_id)
+                .where(
+                    RelevanceMarkModel.opportunity_id == opportunity_id,
+                    *([RelevanceMarkModel.owner_sub == owner_sub] if owner_sub is not None else []),
+                )
                 .order_by(RelevanceMarkModel.marked_at.desc())
             )
         )
@@ -483,9 +476,7 @@ class OpportunityRepository:
             filters.append(OpportunityModel.canonical_company_id == company_id)
         if only_recent:
             filters.append(
-                recency_condition(
-                    now=now or datetime.now(UTC), window_days=recency_window_days
-                )
+                recency_condition(now=now or datetime.now(UTC), window_days=recency_window_days)
             )
         items = list(
             self.session.scalars(
@@ -504,7 +495,5 @@ class OpportunityRepository:
                 .limit(limit)
             )
         )
-        total = self.session.scalar(
-            select(func.count(OpportunityModel.id)).where(*filters)
-        ) or 0
+        total = self.session.scalar(select(func.count(OpportunityModel.id)).where(*filters)) or 0
         return items, total

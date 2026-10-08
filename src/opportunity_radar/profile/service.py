@@ -38,24 +38,25 @@ _CONFLICT = "career profile was changed by another edit; nothing was saved"
 
 
 class ProfileService:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, owner_sub: str | None = None) -> None:
         self.session = session
+        self.owner_sub = owner_sub
         self.repository = SqlAlchemyProfileRepository(session)
 
     def get_active(self) -> ProfileVersion:
-        version = self.repository.active_version()
+        version = self.repository.active_version(self.owner_sub)
         if version is None:
             raise ProfileNotFoundError("no active profile version")
         return self._to_domain(version)
 
     def get_version(self, version_id: UUID) -> ProfileVersion:
-        version = self.repository.version(version_id)
+        version = self.repository.version(version_id, self.owner_sub)
         if version is None:
             raise ProfileNotFoundError("profile version not found")
         return self._to_domain(version)
 
     def list_versions(self) -> list[ProfileVersion]:
-        return [self._to_domain(version) for version in self.repository.versions()]
+        return [self._to_domain(version) for version in self.repository.versions(self.owner_sub)]
 
     def create_version(
         self,
@@ -149,13 +150,13 @@ class ProfileService:
 
     def _claim_profile(self, expected: int) -> CareerProfileModel:
         """Advance the profile lock from `expected`, creating the profile on its first write."""
-        profile = self.repository.career_profile_for_update()
+        profile = self.repository.career_profile_for_update(self.owner_sub)
         if profile is not None:
             self._advance_profile(profile, expected)
             return profile
         if expected != 0:
             raise ProfileConflictError(_CONFLICT)
-        profile = CareerProfileModel(version=1)
+        profile = CareerProfileModel(version=1, owner_sub=self.owner_sub or "local-system")
         self.session.add(profile)
         try:
             self.session.flush()
@@ -165,12 +166,12 @@ class ProfileService:
         return profile
 
     def _career_profile(self) -> CareerProfileModel:
-        profile = self.repository.career_profile_for_update()
+        profile = self.repository.career_profile_for_update(self.owner_sub)
         assert profile is not None
         return profile
 
     def _version_for_update(self, version_id: UUID) -> ProfileVersionModel:
-        version = self.repository.version_for_update(version_id)
+        version = self.repository.version_for_update(version_id, self.owner_sub)
         if version is None:
             raise ProfileNotFoundError("profile version not found")
         return version

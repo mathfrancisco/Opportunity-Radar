@@ -204,7 +204,12 @@ class RequireAuthenticated:
         if scheme.lower() != "bearer" or not separator or not token or token.strip() != token:
             self._reject("malformed_authorization")
         try:
-            return self._verifier.verify(token)
+            identity = self._verifier.verify(token)
+            # The application-wide dependency authenticates every private route once.
+            # Endpoint handlers consume this verified value; they never trust a subject
+            # supplied by a path, query, or request body.
+            request.state.identity = identity
+            return identity
         except AuthenticationError as error:
             self._reject(error.reason)
 
@@ -238,3 +243,15 @@ class RequireOwner:
             )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         return identity
+
+
+def authenticated_identity(request: Request) -> RequestIdentity:
+    """Return the identity established by the private-router dependency.
+
+    This deliberately has no fallback: if a route is accidentally mounted outside the
+    protected router it fails closed instead of accepting an anonymous owner.
+    """
+    identity = getattr(request.state, "identity", None)
+    if not isinstance(identity, RequestIdentity):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+    return identity
