@@ -358,6 +358,7 @@ def list_opportunities(
     #: The client's "mostrar tudo" toggle passes `only_recent=false`.
     only_recent: bool = Query(default=True),
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> OpportunityPageResponse:
     items, total = OpportunityRepository(session).list(
         offset=(page - 1) * page_size,
@@ -368,7 +369,10 @@ def list_opportunities(
         only_recent=only_recent,
     )
     return OpportunityPageResponse(
-        items=[_opportunity_response(item, session=session) for item in items],
+        items=[
+            _opportunity_response(item, session=session, owner_sub=identity.sub)
+            for item in items
+        ],
         page=page,
         page_size=page_size,
         total=total,
@@ -379,6 +383,7 @@ def list_opportunities(
 def get_opportunity(
     opportunity_id: UUID,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> OpportunityDetailResponse:
     opportunity = OpportunityRepository(session).get(opportunity_id)
     if opportunity is None:
@@ -389,7 +394,7 @@ def get_opportunity(
                 "message": "Opportunity not found.",
             },
         )
-    basic = _opportunity_response(opportunity, session=session)
+    basic = _opportunity_response(opportunity, session=session, owner_sub=identity.sub)
     return OpportunityDetailResponse(
         **basic.model_dump(),
         normalization_results=[
@@ -700,11 +705,16 @@ def _relevance_mark_response(mark: RelevanceMarkModel) -> RelevanceMarkResponse:
 
 
 def _opportunity_response(
-    opportunity: OpportunityModel, *, session: Session | None = None
+    opportunity: OpportunityModel,
+    *,
+    session: Session | None = None,
+    owner_sub: str | None = None,
 ) -> OpportunityResponse:
     current_mark = None
-    if session is not None:
-        current_mark = OpportunityRepository(session).current_relevance_mark(opportunity.id)
+    if session is not None and owner_sub is not None:
+        current_mark = OpportunityRepository(session).current_relevance_mark(
+            opportunity.id, owner_sub=owner_sub
+        )
     return OpportunityResponse(
         id=opportunity.id,
         fingerprint=opportunity.fingerprint,

@@ -427,27 +427,27 @@ class OpportunityRepository:
         return mark
 
     def current_relevance_mark(
-        self, opportunity_id: UUID, *, owner_sub: str | None = None
+        self, opportunity_id: UUID, *, owner_sub: str
     ) -> RelevanceMarkModel | None:
         return self.session.scalar(
             select(RelevanceMarkModel)
             .where(
                 RelevanceMarkModel.opportunity_id == opportunity_id,
-                *([RelevanceMarkModel.owner_sub == owner_sub] if owner_sub is not None else []),
+                RelevanceMarkModel.owner_sub == owner_sub,
             )
             .order_by(RelevanceMarkModel.marked_at.desc(), RelevanceMarkModel.id.desc())
             .limit(1)
         )
 
     def relevance_mark_history(
-        self, opportunity_id: UUID, *, owner_sub: str | None = None
+        self, opportunity_id: UUID, *, owner_sub: str
     ) -> list[RelevanceMarkModel]:
         return list(
             self.session.scalars(
                 select(RelevanceMarkModel)
                 .where(
                     RelevanceMarkModel.opportunity_id == opportunity_id,
-                    *([RelevanceMarkModel.owner_sub == owner_sub] if owner_sub is not None else []),
+                    RelevanceMarkModel.owner_sub == owner_sub,
                 )
                 .order_by(RelevanceMarkModel.marked_at.desc())
             )
