@@ -19,9 +19,9 @@ def pytest_collection_modifyitems(
     random.Random(int(seed)).shuffle(items)
 
 
-#: compose passes the operator's AI and Tavily settings into every container, including the
-#: one tests run in. Tests must see defaults, never the real key or AI_ENABLED=true.
-_OPERATOR_ENV_PREFIXES = ("AI_", "GROQ_", "TAVILY_")
+#: Compose passes operator runtime settings into every container, including the one tests
+#: run in. Tests must use their explicit development factory or synthetic Clerk settings.
+_OPERATOR_ENV_PREFIXES = ("AI_", "GROQ_", "TAVILY_", "CLERK_")
 _DATABASE_INTEGRATION_MARKER = "DATABASE_INTEGRATION_ISOLATED"
 
 

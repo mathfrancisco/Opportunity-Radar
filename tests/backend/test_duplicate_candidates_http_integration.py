@@ -22,7 +22,7 @@ from opportunity_radar.opportunities.duplicates import find_title_location_windo
 from opportunity_radar.opportunities.models import DuplicateCandidateModel, OpportunityModel
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
+from opportunity_radar.presentation.http.app import create_development_app as create_app
 
 pytestmark = [
     pytest.mark.integration,

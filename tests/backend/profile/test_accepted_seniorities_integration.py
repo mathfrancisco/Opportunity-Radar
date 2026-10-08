@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
+from opportunity_radar.presentation.http.app import create_development_app as create_app
 from opportunity_radar.profile.models import CareerProfileModel
 from scripts.seed_profile_target_areas import SEED_ROLE_FAMILIES, seed
 

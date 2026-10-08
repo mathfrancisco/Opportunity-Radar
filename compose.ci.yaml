@@ -35,6 +35,8 @@ services:
   # The API probes and runs sources on demand, so it has to read the same local board the
   # worker does: a probe that reached the real Greenhouse would make the gate depend on it.
   api:
+    # CI exercises the explicit local-only factory; production always starts app:create_app.
+    command: ["uvicorn", "opportunity_radar.dev.local_app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       GREENHOUSE_BASE_URL: http://jobboard:8477
       GROQ_BASE_URL: http://groq:8080/openai/v1

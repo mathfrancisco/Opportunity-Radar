@@ -19,6 +19,7 @@ services:
     volumes: *dev-mounts
 
   api:
+    command: ["uvicorn", "opportunity_radar.dev.local_app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       PYTHONPATH: /app/src
       RUFF_CACHE_DIR: /tmp/ruff

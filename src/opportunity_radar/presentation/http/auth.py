@@ -101,6 +101,11 @@ class JwksClient:
                 self._refresh()
             key = self._keys.get(kid)
             if key is None:
+                # A key rotation can add a kid before this bounded cache expires.
+                # Refresh once while holding the lock; a still-unknown key fails closed.
+                self._refresh()
+                key = self._keys.get(kid)
+            if key is None:
                 raise AuthenticationError("jwks_unknown_kid")
             return key
 

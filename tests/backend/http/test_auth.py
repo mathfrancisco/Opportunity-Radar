@@ -12,6 +12,7 @@ from opportunity_radar.platform.config import Settings
 from opportunity_radar.presentation.http.app import create_app
 from opportunity_radar.presentation.http.auth import (
     AuthConfig,
+    AuthenticationError,
     JwksClient,
     JwtVerifier,
     RequireAuthenticated,
@@ -125,6 +126,36 @@ def test_unknown_kid_and_jwks_outage_are_unauthorized(keypair) -> None:
         .status_code
         == 401
     )
+
+
+def test_unknown_kid_refreshes_a_valid_jwks_cache_once(keypair) -> None:
+    private, jwks = keypair
+    requests = 0
+
+    def transport(*_: object) -> bytes:
+        nonlocal requests
+        requests += 1
+        return json.dumps(jwks).encode()
+
+    config = AuthConfig(
+        issuer=ISSUER,
+        jwks_url=f"{ISSUER}/.well-known/jwks.json",
+        authorized_parties=frozenset({PARTY}),
+        owner_sub=OWNER,
+    )
+    verifier = JwtVerifier(config, JwksClient(config.jwks_url, transport=transport))
+    assert verifier.verify(_token(private)).sub == OWNER
+
+    unknown = jwt.encode(
+        {"iss": ISSUER, "sub": OWNER, "azp": PARTY, "exp": int(time.time()) + 60},
+        private,
+        algorithm="RS256",
+        headers={"kid": "rotated-key"},
+    )
+    with pytest.raises(AuthenticationError, match="jwks_unknown_kid"):
+        verifier.verify(unknown)
+
+    assert requests == 2
 
 
 def test_valid_token_returns_identity_and_non_owner_is_forbidden(keypair) -> None:

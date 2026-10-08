@@ -171,11 +171,11 @@ jobs:
         run: docker compose -f compose.yaml -f compose.ci.yaml config --quiet
       - name: Start application
         run: docker compose -f compose.yaml -f compose.ci.yaml up --detach --build api worker frontend
-      - name: Verify API, frontend and AI mode against the fake Groq stub
+      - name: Verify public API liveness and frontend against the fake Groq stub
         run: |
-          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
+          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/live
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:3000/
-          curl --fail http://127.0.0.1:8000/health | python -c "import json,sys; data=json.load(sys.stdin); assert data['ai']['status'] == 'healthy'"
+          curl --fail http://127.0.0.1:8000/health/live | python -c "import json,sys; assert json.load(sys.stdin)['status'] == 'ok'"
           test "$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose -f compose.yaml -f compose.ci.yaml ps -q worker)")" = "healthy"
       - name: Import and expose the researched company catalog
         run: |
@@ -333,7 +333,7 @@ jobs:
           applications_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM crm.application_process')"
           history_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM crm.stage_history')"
           docker compose -f compose.yaml -f compose.ci.yaml restart postgres
-          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
+          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/live
           after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
           companies_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM company_radar.company')"
           raw_items_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM acquisition.raw_item')"
@@ -451,7 +451,7 @@ jobs:
           assessments_before="$(count_rows 'SELECT count(*) FROM matching.match_assessment')"
           analyses_before="$(count_rows "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
           $compose restart worker
-          curl --fail --retry 30 --retry-all-errors --retry-delay 2 --silent --output /dev/null http://127.0.0.1:8000/health/ready
+          curl --fail --retry 30 --retry-all-errors --retry-delay 2 --silent --output /dev/null http://127.0.0.1:8000/health/live
           sleep 150
           test "$assessments_before" = "$(count_rows 'SELECT count(*) FROM matching.match_assessment')"
           test "$analyses_before" = "$(count_rows "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
@@ -534,7 +534,7 @@ jobs:
         # normalization, evaluation and analysis all running on their own schedule.
         run: |
           docker compose -f compose.yaml -f compose.ci.yaml up --detach --force-recreate worker
-          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
+          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/live
       - name: Set up Node.js for the browser journey
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:

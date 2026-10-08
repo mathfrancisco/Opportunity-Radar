@@ -23,7 +23,7 @@ from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.opportunities.repository import posting_group_key
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
+from opportunity_radar.presentation.http.app import create_development_app as create_app
 from opportunity_radar.presentation.http.dependencies import get_session
 from tests.backend.dashboard.test_coverage_funnel import (
     _company,

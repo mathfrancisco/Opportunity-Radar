@@ -28,7 +28,7 @@ from opportunity_radar.acquisition.models import (
 )
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
+from opportunity_radar.presentation.http.app import create_development_app as create_app
 from opportunity_radar.presentation.http.dependencies import get_collector_registry
 
 pytestmark = [

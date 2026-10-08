@@ -21,7 +21,7 @@ from opportunity_radar.matching.repository import (
 from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
+from opportunity_radar.presentation.http.app import create_development_app as create_app
 from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
 
 pytestmark = [
