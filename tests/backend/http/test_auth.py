@@ -5,7 +5,7 @@ import time
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from opportunity_radar.platform.config import Settings
@@ -15,7 +15,9 @@ from opportunity_radar.presentation.http.auth import (
     AuthenticationError,
     JwksClient,
     JwtVerifier,
+    RequestIdentity,
     RequireAuthenticated,
+    RequireOperationalOwner,
     RequireOwner,
 )
 
@@ -257,7 +259,7 @@ def test_auth_settings_are_required_and_jwks_must_belong_to_https_issuer() -> No
 
 
 def test_production_factory_leaves_only_liveness_public(keypair, monkeypatch) -> None:
-    _, jwks = keypair
+    private, jwks = keypair
     from opportunity_radar.presentation.http import app as app_module
 
     monkeypatch.setattr(
@@ -279,6 +281,20 @@ def test_production_factory_leaves_only_liveness_public(keypair, monkeypatch) ->
     assert client.get("/health/live").status_code == 200
     assert client.get("/health").status_code == 401
     assert client.get("/docs").status_code == 404
+    # A valid non-owner can use private personal routes, but never shared catalogue or
+    # operational routes. The guard runs before these endpoints open a database session.
+    normal_headers = {
+        "Authorization": f"Bearer {_token(private, sub='user_normal_synthetic')}"
+    }
+    for method, path in (
+        ("GET", "/sources"),
+        ("GET", "/source-runs"),
+        ("GET", "/companies"),
+        ("GET", "/source-metrics"),
+        ("POST", "/opportunities/normalizations/pending"),
+        ("PATCH", "/opportunities/00000000-0000-0000-0000-000000000000/status"),
+    ):
+        assert client.request(method, path, headers=normal_headers).status_code == 403
     assert (
         client.get("/health/live", headers={"X-Correlation-ID": "unsafe\r\nvalue"}).headers[
             "X-Correlation-ID"
@@ -298,3 +314,39 @@ def test_production_factory_rejects_missing_clerk_configuration() -> None:
                 clerk_owner_sub="",
             )
         )
+
+
+@pytest.mark.parametrize(
+    ("path", "method", "expected"),
+    [
+        ("/sources", "GET", True),
+        ("/companies", "GET", True),
+        ("/source-metrics", "GET", True),
+        ("/opportunities/a/status", "PATCH", True),
+        ("/opportunities/a/relevance", "POST", False),
+        ("/profile", "GET", False),
+    ],
+)
+def test_operational_owner_guard_has_no_request_body_bypass(
+    path: str, method: str, expected: bool
+) -> None:
+    from starlette.requests import Request
+
+    request = Request({"type": "http", "method": method, "path": path, "headers": []})
+    request.state.identity = RequestIdentity(sub="user_normal_synthetic", is_owner=False)
+
+    if expected:
+        with pytest.raises(HTTPException) as error:
+            RequireOperationalOwner()(request)
+        assert error.value.status_code == 403
+    else:
+        assert RequireOperationalOwner()(request).sub == "user_normal_synthetic"
+
+
+def test_operational_owner_guard_allows_the_configured_owner() -> None:
+    from starlette.requests import Request
+
+    request = Request({"type": "http", "method": "POST", "path": "/sources", "headers": []})
+    request.state.identity = RequestIdentity(sub=OWNER, is_owner=True)
+
+    assert RequireOperationalOwner()(request).sub == OWNER

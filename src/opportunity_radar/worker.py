@@ -132,13 +132,28 @@ def normalize_opportunities(engine: Engine) -> None:
             )
 
 
-def evaluate_pending(engine: Engine, *, batch_size: int = 50) -> None:
+def _operational_owner(owner_sub: str | None, *, job: str) -> str | None:
+    owner = ProfileService.operational_owner(owner_sub)
+    if owner is None:
+        logger.warning(
+            "worker job skipped: no operational owner configured",
+            extra={"job": job, "reason": "missing_worker_owner"},
+        )
+    return owner
+
+
+def evaluate_pending(
+    engine: Engine, *, batch_size: int = 50, owner_sub: str | None = None
+) -> None:
     """Evaluate each eligible opportunity independently for the current identity."""
+    owner = _operational_owner(owner_sub, job="evaluate")
+    if owner is None:
+        return
     with observe_job(
         engine, job_name="evaluate_pending", interval=timedelta(seconds=60)
     ):
         with Session(engine) as session:
-            service = MatchingService(session)
+            service = MatchingService(session, owner)
             try:
                 pending_ids = service.pending_evaluation_ids(limit=batch_size)
             except ProfileNotFoundError:
@@ -185,6 +200,7 @@ def analyze_pending(
     aging_sample_ratio: float = 0.0,
     worker_requests_ceiling: int | None = None,
     daily_cap_fraction: float | None = None,
+    owner_sub: str | None = None,
 ) -> None:
     """Attach the semantic layer to current assessments, one claim at a time.
 
@@ -210,6 +226,9 @@ def analyze_pending(
     item; reaching it writes nothing, so assessments stay pending in queue order for the
     next day window. An explicit analysis never goes through this job, so it is not capped.
     """
+    owner = _operational_owner(owner_sub, job="analyze")
+    if owner is None:
+        return
     with observe_job(
         engine, job_name="analyze_pending", interval=timedelta(seconds=120)
     ) as correlation_id:
@@ -237,7 +256,7 @@ def analyze_pending(
             )
             return
         with Session(engine) as session:
-            service = MatchingService(session)
+            service = MatchingService(session, owner)
             pending = service.pending_analysis_ids(
                 limit=batch_size,
                 eligible_verdicts=eligible_verdicts or DEFAULT_ANALYSIS_VERDICTS,
@@ -364,6 +383,7 @@ def suggest_fields_pending(
     *,
     batch_size: int = 20,
     worker_requests_ceiling: int | None = None,
+    owner_sub: str | None = None,
 ) -> None:
     """Suggest `role_family`/`seniority`/`work_mode` for opportunities the deterministic
     rules left `UNKNOWN` (card F20-23). Off by default (`worker_suggest_enabled`): the
@@ -373,6 +393,9 @@ def suggest_fields_pending(
     with a top verdict under the active profile are taken (`candidates_needing_suggestion`).
     """
     if router is None:
+        return
+    owner = _operational_owner(owner_sub, job="suggest-fields")
+    if owner is None:
         return
     with observe_job(
         engine, job_name="suggest_fields_pending", interval=timedelta(seconds=300)
@@ -402,6 +425,7 @@ def suggest_fields_pending(
             candidates = candidates_needing_suggestion(
                 session,
                 limit=batch_size,
+                owner_sub=owner,
                 prompt_version=prompt.version,
                 route_hash=route_hash,
                 prompt=prompt,
@@ -1067,12 +1091,15 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             next_run_time=first_run,
         )
     if settings.worker_match_enabled:
+        evaluate_kwargs: dict[str, object] = {"batch_size": settings.worker_evaluate_batch_size}
+        if settings.worker_owner_sub:
+            evaluate_kwargs["owner_sub"] = settings.worker_owner_sub
         scheduler.add_job(
             evaluate_pending,
             "interval",
             seconds=60,
             args=(engine,),
-            kwargs={"batch_size": settings.worker_evaluate_batch_size},
+            kwargs=evaluate_kwargs,
             id="evaluate-pending",
             replace_existing=True,
             coalesce=True,
@@ -1081,25 +1108,28 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
         )
     if settings.worker_analyze_enabled:
         adapter = build_analysis_adapter(settings, engine)
+        analyze_kwargs: dict[str, object] = {
+            "batch_size": settings.worker_analyze_batch_size,
+            "eligible_verdicts": settings.analysis_eligible_verdicts,
+            "cooldown_seconds": settings.analysis_retry_cooldown_seconds,
+            "attempt_window_seconds": settings.analysis_retry_attempt_window_seconds,
+            "max_attempts": settings.analysis_retry_max_attempts,
+            "lease_seconds": settings.analysis_claim_lease_seconds,
+            "aging_sample_ratio": settings.worker_analyze_aging_sample_ratio,
+            "daily_cap_fraction": settings.worker_analyze_daily_cap_fraction,
+            "worker_requests_ceiling": (
+                settings.ai_daily_requests_soft_limit
+                - settings.ai_interactive_reserve_requests
+            ),
+        }
+        if settings.worker_owner_sub:
+            analyze_kwargs["owner_sub"] = settings.worker_owner_sub
         scheduler.add_job(
             analyze_pending,
             "interval",
             seconds=120,
             args=(engine, adapter),
-            kwargs={
-                "batch_size": settings.worker_analyze_batch_size,
-                "eligible_verdicts": settings.analysis_eligible_verdicts,
-                "cooldown_seconds": settings.analysis_retry_cooldown_seconds,
-                "attempt_window_seconds": settings.analysis_retry_attempt_window_seconds,
-                "max_attempts": settings.analysis_retry_max_attempts,
-                "lease_seconds": settings.analysis_claim_lease_seconds,
-                "aging_sample_ratio": settings.worker_analyze_aging_sample_ratio,
-                "daily_cap_fraction": settings.worker_analyze_daily_cap_fraction,
-                "worker_requests_ceiling": (
-                    settings.ai_daily_requests_soft_limit
-                    - settings.ai_interactive_reserve_requests
-                ),
-            },
+            kwargs=analyze_kwargs,
             id="analyze-pending",
             replace_existing=True,
             coalesce=True,
@@ -1108,18 +1138,21 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
         )
     if settings.worker_suggest_enabled:
         classification_router = build_classification_router(settings, engine)
+        suggest_kwargs: dict[str, object] = {
+            "batch_size": settings.worker_suggest_batch_size,
+            "worker_requests_ceiling": (
+                settings.ai_daily_requests_soft_limit
+                - settings.ai_interactive_reserve_requests
+            ),
+        }
+        if settings.worker_owner_sub:
+            suggest_kwargs["owner_sub"] = settings.worker_owner_sub
         scheduler.add_job(
             suggest_fields_pending,
             "interval",
             seconds=300,
             args=(engine, classification_router),
-            kwargs={
-                "batch_size": settings.worker_suggest_batch_size,
-                "worker_requests_ceiling": (
-                    settings.ai_daily_requests_soft_limit
-                    - settings.ai_interactive_reserve_requests
-                ),
-            },
+            kwargs=suggest_kwargs,
             id="suggest-fields-pending",
             replace_existing=True,
             coalesce=True,

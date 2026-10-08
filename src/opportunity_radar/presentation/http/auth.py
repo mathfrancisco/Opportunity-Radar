@@ -245,6 +245,57 @@ class RequireOwner:
         return identity
 
 
+# These routes administer the shared catalogue and its operational telemetry.  They
+# are deliberately named here, at the HTTP boundary, so a new handler cannot make a
+# catalogue mutation available merely by omitting an endpoint-level dependency.
+_OPERATIONAL_METRIC_PATHS = frozenset(
+    {
+        "/source-health",
+        "/source-coverage",
+        "/source-metrics",
+        "/funnel-metrics",
+        "/analysis-metrics",
+        "/search-metrics",
+    }
+)
+
+
+def _requires_owner(request: Request) -> bool:
+    path = request.url.path
+    if path.startswith(("/sources", "/source-runs", "/companies")):
+        return True
+    if path in _OPERATIONAL_METRIC_PATHS:
+        return True
+    if path.startswith("/opportunities/normalizations"):
+        return True
+    if path.startswith("/opportunities/duplicate-candidates/"):
+        return request.method != "GET"
+    if path.startswith("/opportunities/field-suggestions/"):
+        return request.method != "GET"
+    return request.method == "PATCH" and path.startswith("/opportunities/") and path.endswith(
+        "/status"
+    )
+
+
+class RequireOperationalOwner:
+    """Require the configured owner for shared operations and catalogue writes.
+
+    ``RequireAuthenticated`` runs first on the production private router and
+    establishes ``request.state.identity``.  Keeping this dependency separate means
+    ordinary users retain access to their own profile, pipeline and relevance data.
+    """
+
+    def __call__(self, request: Request) -> RequestIdentity:
+        identity = authenticated_identity(request)
+        if _requires_owner(request) and not identity.is_owner:
+            logger.warning(
+                "authorization denied",
+                extra={"auth_reason": "owner_required", "correlation_id": CORRELATION_ID.get()},
+            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+        return identity
+
+
 def authenticated_identity(request: Request) -> RequestIdentity:
     """Return the identity established by the private-router dependency.
 

@@ -17,6 +17,7 @@ from opportunity_radar.presentation.http.auth import (
     JwksClient,
     JwtVerifier,
     RequireAuthenticated,
+    RequireOperationalOwner,
 )
 from opportunity_radar.presentation.http.routes import private_router, public_router
 
@@ -128,11 +129,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app = _base_app(settings)
     app.include_router(public_router)
+    authenticated = RequireAuthenticated(JwtVerifier(config, JwksClient(config.jwks_url)))
     app.include_router(
         private_router,
-        dependencies=[
-            Depends(RequireAuthenticated(JwtVerifier(config, JwksClient(config.jwks_url))))
-        ],
+        dependencies=[Depends(authenticated), Depends(RequireOperationalOwner())],
     )
     return app
 

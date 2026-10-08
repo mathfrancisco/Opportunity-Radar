@@ -38,6 +38,56 @@ def test_worker_scheduler_has_a_heartbeat_job() -> None:
     assert scheduler.get_job("expire-raw-payloads") is not None
 
 
+def test_worker_jobs_receive_an_explicit_operational_owner() -> None:
+    scheduler = build_scheduler(
+        Settings(database_url=_DATABASE_URL, worker_owner_sub="worker-owner-synthetic")
+    )
+
+    assert scheduler.get_job("evaluate-pending").kwargs["owner_sub"] == "worker-owner-synthetic"
+    assert scheduler.get_job("analyze-pending").kwargs["owner_sub"] == "worker-owner-synthetic"
+
+
+def test_evaluation_skips_without_operational_owner(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        worker,
+        "Session",
+        lambda _engine: pytest.fail("an ownerless worker must not open a database session"),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="opportunity_radar.worker"):
+        worker.evaluate_pending(object())
+
+    assert any(
+        record.message == "worker job skipped: no operational owner configured"
+        and getattr(record, "reason") == "missing_worker_owner"
+        for record in caplog.records
+    )
+
+
+def test_evaluation_uses_the_configured_operational_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owners: list[str | None] = []
+
+    class Service:
+        def __init__(self, _session: object, owner_sub: str | None) -> None:
+            owners.append(owner_sub)
+
+        def pending_evaluation_ids(self, *, limit: int) -> list[object]:
+            assert limit == 3
+            return []
+
+    monkeypatch.setattr(worker, "observe_job", lambda *_args, **_kwargs: nullcontext())
+    monkeypatch.setattr(worker, "Session", lambda _engine: nullcontext(object()))
+    monkeypatch.setattr(worker, "MatchingService", Service)
+
+    worker.evaluate_pending(object(), batch_size=3, owner_sub="worker-owner-synthetic")
+
+    assert owners == ["worker-owner-synthetic"]
+
+
 def test_worker_scheduler_has_no_embedding_job() -> None:
     scheduler = build_scheduler(Settings(database_url=_DATABASE_URL))
 
@@ -149,7 +199,9 @@ def test_suggest_fields_batch_summary_uses_non_reserved_log_fields(
     )
 
     with caplog.at_level(logging.INFO, logger="opportunity_radar.worker"):
-        worker.suggest_fields_pending(object(), router)
+        worker.suggest_fields_pending(
+            object(), router, owner_sub="worker-owner-synthetic"
+        )
 
     record = next(
         item

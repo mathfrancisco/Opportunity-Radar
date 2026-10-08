@@ -348,6 +348,7 @@ class SqlAlchemyMatchingRepository:
         max_attempts: int,
         aging_sample_ratio: float = 0.0,
         role_families: Sequence[str] = (),
+        owner_sub: str | None = None,
         # `Sequence` rather than `list`: the class already binds `list` to a method above,
         # which shadows the builtin for every annotation declared after it.
     ) -> Sequence[UUID]:
@@ -369,6 +370,9 @@ class SqlAlchemyMatchingRepository:
             value=MatchAssessmentModel.verdict,
             else_=len(ANALYSIS_VERDICT_PRIORITY),
         )
+        owner_filter = (
+            (MatchAssessmentModel.owner_sub == owner_sub,) if owner_sub is not None else ()
+        )
         base_query = (
             select(MatchAssessmentModel.id)
             .join(
@@ -384,7 +388,8 @@ class SqlAlchemyMatchingRepository:
                     attempt_window=attempt_window,
                     max_attempts=max_attempts,
                     role_families=role_families,
-                )
+                ),
+                *owner_filter,
             )
         )
         # Value first (verdict, then company priority, then score), then the freshest
@@ -420,10 +425,14 @@ class SqlAlchemyMatchingRepository:
         attempt_window: timedelta,
         max_attempts: int,
         role_families: Sequence[str] = (),
+        owner_sub: str | None = None,
     ) -> int:
         """How far behind the queue is: the same selection, without the batch cap."""
         if not eligible_verdicts or max_attempts <= 0:
             return 0
+        owner_filter = (
+            (MatchAssessmentModel.owner_sub == owner_sub,) if owner_sub is not None else ()
+        )
         total = self.session.scalar(
             select(func.count())
             .select_from(MatchAssessmentModel)
@@ -435,7 +444,8 @@ class SqlAlchemyMatchingRepository:
                     attempt_window=attempt_window,
                     max_attempts=max_attempts,
                     role_families=role_families,
-                )
+                ),
+                *owner_filter,
             )
         )
         return total or 0

@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     collection_timezone: str = "UTC"
     worker_collect_enabled: bool = True
     worker_normalize_enabled: bool = True
+    # Matching, analysis and suggestions act on one person's private profile.  A worker
+    # must never select an arbitrary active profile, so these jobs skip unless this
+    # deployment explicitly designates their subject.
+    worker_owner_sub: str | None = None
     worker_match_enabled: bool = True
     worker_analyze_enabled: bool = True
     worker_retention_enabled: bool = True

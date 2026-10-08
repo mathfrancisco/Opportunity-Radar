@@ -482,6 +482,7 @@ class MatchingService:
                 max_attempts=max_attempts,
                 aging_sample_ratio=aging_sample_ratio,
                 role_families=self._target_role_families(),
+                owner_sub=self.owner_sub,
             )
         )
 
@@ -501,6 +502,7 @@ class MatchingService:
             attempt_window=attempt_window,
             max_attempts=max_attempts,
             role_families=self._target_role_families(),
+            owner_sub=self.owner_sub,
         )
 
     def _target_role_families(self) -> tuple[str, ...]:

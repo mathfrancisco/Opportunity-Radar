@@ -43,6 +43,14 @@ class ProfileService:
         self.owner_sub = owner_sub
         self.repository = SqlAlchemyProfileRepository(session)
 
+    @staticmethod
+    def operational_owner(owner_sub: str | None) -> str | None:
+        """Return a safe worker subject, never a synthetic fallback identity."""
+        if owner_sub is None:
+            return None
+        normalized = owner_sub.strip()
+        return normalized or None
+
     def get_active(self) -> ProfileVersion:
         version = self.repository.active_version(self.owner_sub)
         if version is None:

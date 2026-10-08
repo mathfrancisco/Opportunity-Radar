@@ -259,6 +259,7 @@ def candidates_needing_suggestion(
     session: Session,
     *,
     limit: int,
+    owner_sub: str | None = None,
     over_fetch_factor: int = 5,
     after: tuple[datetime, UUID] | None = None,
     prompt_version: str | None = None,
@@ -307,8 +308,23 @@ def candidates_needing_suggestion(
         pointer.c.opportunity_id == OpportunityModel.id,
         pointer.c.verdict.in_(SUGGESTION_VERDICTS),
         currency.is_current_assessment(pointer, rules_version=RULES_VERSION),
+        *(
+            (pointer.c.owner_sub == owner_sub,)
+            if owner_sub is not None
+            else ()
+        ),
     )
-    query = select(OpportunityModel).where(or_(*pending_fields), has_top_assessment)
+    selection = or_(*pending_fields, has_top_assessment)
+    if owner_sub is not None:
+        # The worker runs under one configured operational identity.  Do not let the
+        # global "unknown field" branch select postings that identity has not matched.
+        has_owner_assessment = exists().where(
+            pointer.c.opportunity_id == OpportunityModel.id,
+            pointer.c.owner_sub == owner_sub,
+            currency.is_current_assessment(pointer, rules_version=RULES_VERSION),
+        )
+        selection = and_(selection, has_owner_assessment)
+    query = select(OpportunityModel).where(selection)
     rows: list[OpportunityModel] = []
     cursor = after
     page_size = max(limit, 100)
