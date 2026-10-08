@@ -8,6 +8,7 @@ x-dev-mounts: &dev-mounts
   - ./migrations:/app/migrations:ro
   - ./scripts:/app/scripts:ro
   - ./prompts:/app/prompts:ro
+  - ./docs:/app/docs:ro
   - ./pyproject.toml:/app/pyproject.toml:ro
   - ./alembic.ini:/app/alembic.ini:ro
 
