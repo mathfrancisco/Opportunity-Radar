@@ -149,7 +149,9 @@ def _owner_indexes(connection, schema: str, table: str) -> set[str]:
     )
 
 
-def test_upgrade_backfills_audits_and_preserves_owner_data_on_downgrade(scratch: str) -> None:
+def test_upgrade_backfills_audits_and_refused_downgrade_preserves_owner_data(
+    scratch: str,
+) -> None:
     assert _alembic(scratch, "upgrade", PREVIOUS).returncode == 0
     engine = create_database_engine(scratch)
     career_id = uuid4()
@@ -204,71 +206,24 @@ def test_upgrade_backfills_audits_and_preserves_owner_data_on_downgrade(scratch:
                     )
 
         result = _alembic(scratch, "downgrade", PREVIOUS)
-        assert result.returncode == 0, result.stderr
+        assert result.returncode != 0
+        assert "owner_sub tenancy downgrade is refused" in result.stderr
         with engine.connect() as connection:
             assert _column_is_required(connection, "dashboard", "saved_search")
+            assert _owner_indexes(connection, "dashboard", "saved_search")
             assert connection.execute(
                 text("SELECT owner_sub FROM dashboard.saved_search WHERE id = :id"),
                 {"id": saved_search_id},
             ).scalar_one() == BACKFILL_OWNER
-    finally:
-        engine.dispose()
-
-
-def test_downgrade_restores_legacy_writes_for_a_single_audited_owner(scratch: str) -> None:
-    assert _alembic(scratch, "upgrade", PREVIOUS).returncode == 0
-    assert _alembic(scratch, "upgrade", REVISION).returncode == 0
-    result = _alembic(scratch, "downgrade", PREVIOUS)
-    assert result.returncode == 0, result.stderr
-
-    engine = create_database_engine(scratch)
-    try:
-        with engine.begin() as connection:
-            legacy_profile_id = uuid4()
-            connection.execute(
-                text(
-                    "INSERT INTO profile.career_profile (id, singleton_key, version) "
-                    "VALUES (:id, true, 0)"
-                ),
-                {"id": legacy_profile_id},
-            )
-            assert connection.execute(
-                text("SELECT owner_sub FROM profile.career_profile WHERE id = :id"),
-                {"id": legacy_profile_id},
-            ).scalar_one() == BACKFILL_OWNER
             assert connection.execute(
                 text(
                     "SELECT count(*) FROM pg_constraint "
-                    "WHERE conname = 'uq_career_profile_singleton_key' "
+                    "WHERE conname = 'uq_career_profile_owner_singleton_key' "
                     "AND conrelid = 'profile.career_profile'::regclass"
                 )
             ).scalar_one() == 1
     finally:
         engine.dispose()
-
-
-def test_downgrade_refuses_to_route_legacy_writes_to_one_of_multiple_owners(
-    scratch: str,
-) -> None:
-    assert _alembic(scratch, "upgrade", PREVIOUS).returncode == 0
-    assert _alembic(scratch, "upgrade", REVISION).returncode == 0
-
-    engine = create_database_engine(scratch)
-    try:
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "INSERT INTO dashboard.saved_search (id, owner_sub, name, filters) "
-                    "VALUES (:id, 'synthetic-owner-b', 'other tenant', '{}'::jsonb)"
-                ),
-                {"id": uuid4()},
-            )
-    finally:
-        engine.dispose()
-
-    result = _alembic(scratch, "downgrade", PREVIOUS)
-    assert result.returncode != 0
-    assert "controlled rollback refused" in result.stderr
 
 
 def test_upgrade_refuses_to_backfill_without_an_explicit_subject(scratch: str) -> None:

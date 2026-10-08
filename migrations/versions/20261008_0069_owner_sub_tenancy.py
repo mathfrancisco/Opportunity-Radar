@@ -8,9 +8,10 @@ tries to infer an identity from a profile, e-mail, or other personal content.  O
 must run the audited backfill only after a tested restore; Package 2 exercises this only
 against synthetic `_test` databases.
 
-Downgrade is intentionally data-preserving: application rollback may move the Alembic
-revision back, but it must not discard `owner_sub` or reopen an existing row to a different
-owner.  The preceding application version ignores these extra columns and constraints.
+Downgrade is intentionally refused.  The preceding application version does not enforce
+tenant scoping, so moving the Alembic revision back could let it access rows without an
+owner filter.  Recovery must roll forward to an owner-aware application or restore an
+approved isolated backup.
 """
 
 from __future__ import annotations
@@ -148,66 +149,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Make the preceding single-owner app writable without discarding ownership.
+    """Refuse downgrade because revision 0068 lacks mandatory owner scoping.
 
-    The old application does not supply ``owner_sub``.  A rollback therefore requires the
-    same explicitly audited subject and is refused if data belongs to more than that one
-    subject.  This keeps the old global profile singleton invariant and prevents silently
-    routing legacy writes to an arbitrary tenant.
+    This does not execute DDL, leaving the owner constraints and data unchanged.  Operators
+    must roll forward with a compatible application, or perform an approved isolated restore
+    instead of running a pre-tenancy application against this database.
     """
-    owner_sub = _backfill_owner_sub()
-    connection = op.get_bind()
-    for schema, table in _PERSONAL_TABLES:
-        qualified = f"{schema}.{table}"
-        other_owners = connection.execute(
-            sa.text(
-                f"SELECT count(*) FROM {qualified} "
-                "WHERE owner_sub IS DISTINCT FROM :owner_sub"
-            ),
-            {"owner_sub": owner_sub},
-        ).scalar_one()
-        if other_owners:
-            raise RuntimeError(
-                f"controlled rollback refused for {qualified}: ownership is not single-subject"
-            )
-
-    # Keep the value out of generated DDL/log output while making it available to the
-    # legacy application's INSERTs for the duration of this transaction.
-    connection.execute(
-        sa.text("SELECT set_config('app.owner_sub_backfill', :owner_sub, true)"),
-        {"owner_sub": owner_sub},
-    )
-    for schema, table in _PERSONAL_TABLES:
-        op.execute(
-            f"""
-            DO $$
-            BEGIN
-                EXECUTE format(
-                    'ALTER TABLE %I.%I ALTER COLUMN owner_sub SET DEFAULT %L',
-                    '{schema}', '{table}', current_setting('app.owner_sub_backfill')
-                );
-            END
-            $$
-            """
-        )
-
-    # Revision 0068 expects the original global singleton constraint.  Preserve the
-    # owner-aware constraint as well, but restore the older contract only after the
-    # single-subject audit above made it valid.
-    op.execute(
-        """
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint
-                WHERE conname = 'uq_career_profile_singleton_key'
-                  AND conrelid = 'profile.career_profile'::regclass
-            ) THEN
-                ALTER TABLE profile.career_profile
-                    ADD CONSTRAINT uq_career_profile_singleton_key
-                    UNIQUE (singleton_key);
-            END IF;
-        END
-        $$
-        """
+    raise RuntimeError(
+        "owner_sub tenancy downgrade is refused: roll forward to an owner-aware "
+        "application or use an approved isolated restore"
     )
