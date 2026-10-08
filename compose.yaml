@@ -116,7 +116,11 @@ services:
     build:
       context: .
       dockerfile: docker/api/Dockerfile
-    environment: *app-environment
+    environment:
+      <<: *app-environment
+      # Migration 0069 requires an explicit operator-supplied identity for its controlled
+      # backfill. Keep it on the one-shot migration container only.
+      OWNER_SUB_BACKFILL: ${OWNER_SUB_BACKFILL:-}
     command: ["alembic", "upgrade", "head"]
     depends_on:
       postgres:
