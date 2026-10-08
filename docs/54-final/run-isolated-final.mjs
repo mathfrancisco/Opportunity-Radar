@@ -24,6 +24,19 @@ const routes = [
   '/companies/company-1', '/sources', '/sources/homologation-queue', '/profile',
   '/status', '/missing',
 ]
+const expectedRouteContent = {
+  '/': 'O que move sua busca esta semana?',
+  '/inbox': 'Quais vagas merecem sua atenção agora?',
+  '/opportunities/opportunity-1': 'A análise de IA é apoio, não decide por você.',
+  '/applications': 'Organize a próxima ação em cada etapa da sua busca.',
+  '/companies': 'Consulte as empresas monitoradas e as fontes associadas a cada uma.',
+  '/companies/company-1': 'Registre ou corrija o ATS da empresa e proponha a fonte a partir dele.',
+  '/sources': 'O que cada fonte produziu na última execução, e o que fazer quando ela falha.',
+  '/sources/homologation-queue': 'Teste, revise os termos e habilite as propostas em sequência, sem abrir fonte por fonte.',
+  '/profile': 'O que o matching considera ao avaliar uma vaga.',
+  '/status': 'A base local está conectada. O catálogo de empresas já pode ser importado e consultado no dashboard.',
+  '/missing': 'O que move sua busca esta semana?',
+}
 const widths = [320, 360, 768, 1280, 1440]
 
 function sha256(buffer) {
@@ -139,6 +152,12 @@ try {
         overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
         text: document.body.innerText.slice(0, 4000),
       }))
+      const expectedText = expectedRouteContent[route]
+      const routeContentAssertion = {
+        name: `routeContent:${route}`,
+        expectedText,
+        passed: dom.text.includes(expectedText),
+      }
       await page.screenshot({ path: resolve(output, screenshotName(width, route)), fullPage: true })
       records.push({
         width,
@@ -146,6 +165,7 @@ try {
         directUrl: `${origin}${route}`,
         navigationStatus: navigation?.status() ?? null,
         dom,
+        routeContentAssertion,
         pageErrors,
         consoleErrors,
         apiResponses,
@@ -163,6 +183,9 @@ const assertions = {
   expectedCaptures: routes.length * widths.length,
   captures: records.length,
   directUrls: records.every((record) => record.navigationStatus === 200 && record.dom.path === record.route),
+  routeContentFailures: records
+    .filter((record) => !record.routeContentAssertion.passed)
+    .map(({ width, route, routeContentAssertion }) => ({ width, route, ...routeContentAssertion })),
   horizontalOverflow: records.filter((record) => record.dom.overflow).map(({ width, route }) => ({ width, route })),
   pageErrors: records.flatMap(({ width, route, pageErrors }) => pageErrors.map((message) => ({ width, route, message }))),
   consoleErrors: records.flatMap(({ width, route, consoleErrors }) => consoleErrors.map((message) => ({ width, route, message }))),
@@ -175,6 +198,7 @@ const assertions = {
 const failedAssertions = [
   assertions.captures !== assertions.expectedCaptures && `expected ${assertions.expectedCaptures} captures, got ${assertions.captures}`,
   !assertions.directUrls && 'a direct URL did not load with status 200 and its requested pathname',
+  assertions.routeContentFailures.length && 'route-specific visible content assertions failed',
   assertions.horizontalOverflow.length && 'horizontal overflow detected',
   assertions.pageErrors.length && 'page errors detected',
   assertions.consoleErrors.length && 'console errors detected',
@@ -188,8 +212,10 @@ const result = {
   generatedAt: new Date().toISOString(),
   buildIdentity,
   routes,
+  expectedRouteContent,
   widths,
   assertions,
+  failedAssertions,
   records,
 }
 await writeFile(resultPath, JSON.stringify(result, null, 2))
