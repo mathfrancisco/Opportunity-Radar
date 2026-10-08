@@ -66,7 +66,7 @@ class ApplicationProcessModel(Base):
         ),
         Index("ix_application_stage_updated", "current_stage", "updated_at"),
         Index("ix_application_next_action_at", "next_action_at"),
-        Index("ix_application_owner_sub", "owner_sub"),
+        Index("ix_application_process_owner_sub", "owner_sub"),
         {"schema": SCHEMA},
     )
 

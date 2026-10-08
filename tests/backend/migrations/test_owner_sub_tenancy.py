@@ -35,6 +35,58 @@ PERSONAL_TABLES = (
 )
 
 
+def _seed_preexisting_assessment(connection, career_id: object) -> object:
+    """Create an immutable assessment before the ownership migration runs."""
+    version_id, opportunity_id, assessment_id = (uuid4() for _ in range(3))
+    connection.execute(
+        text(
+            "INSERT INTO profile.career_profile (id, singleton_key, version) "
+            "VALUES (:id, true, 0)"
+        ),
+        {"id": career_id},
+    )
+    connection.execute(
+        text(
+            "INSERT INTO profile.profile_version (id, career_profile_id, number, status) "
+            "VALUES (:id, :career_id, 1, 'DRAFT')"
+        ),
+        {"id": version_id, "career_id": career_id},
+    )
+    connection.execute(
+        text(
+            "INSERT INTO opportunities.opportunity ("
+            "id, fingerprint, fingerprint_version, canonical_title, normalized_title, "
+            "work_mode, seniority, contract_type, lifecycle_status, first_seen_at, "
+            "version, role_family"
+            ") VALUES ("
+            ":id, :fingerprint, 'v1', 'Synthetic role', 'synthetic role', "
+            "'REMOTE', 'UNKNOWN', 'FULL_TIME', 'ACTIVE', now(), 1, 'UNKNOWN'"
+            ")"
+        ),
+        {"id": opportunity_id, "fingerprint": uuid4().hex},
+    )
+    connection.execute(
+        text(
+            "INSERT INTO matching.match_assessment ("
+            "id, opportunity_id, opportunity_version, profile_version_id, input_hash, "
+            "rules_version, taxonomy_version, opportunity_snapshot, profile_snapshot, "
+            "eligibility, verdict, score, confidence, assessed_at"
+            ") VALUES ("
+            ":id, :opportunity_id, 1, :profile_version_id, :input_hash, "
+            "'matching-v1', 'taxonomy-v1', '{}'::jsonb, '{}'::jsonb, "
+            "'ELIGIBLE', 'RECOMMENDED', 50, 0.9, now()"
+            ")"
+        ),
+        {
+            "id": assessment_id,
+            "opportunity_id": opportunity_id,
+            "profile_version_id": version_id,
+            "input_hash": uuid4().hex + uuid4().hex,
+        },
+    )
+    return assessment_id
+
+
 def _assert_isolated_test_url(url: str) -> None:
     database = url.rsplit("/", maxsplit=1)[-1].split("?", maxsplit=1)[0]
     if not database.endswith("_test"):
@@ -104,13 +156,7 @@ def test_upgrade_backfills_audits_and_preserves_owner_data_on_downgrade(scratch:
     saved_search_id = uuid4()
     try:
         with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "INSERT INTO profile.career_profile (id, singleton_key, version) "
-                    "VALUES (:id, true, 0)"
-                ),
-                {"id": career_id},
-            )
+            assessment_id = _seed_preexisting_assessment(connection, career_id)
             connection.execute(
                 text(
                     "INSERT INTO dashboard.saved_search (id, name, filters) "
@@ -137,17 +183,16 @@ def test_upgrade_backfills_audits_and_preserves_owner_data_on_downgrade(scratch:
                 text("SELECT owner_sub FROM dashboard.saved_search WHERE id = :id"),
                 {"id": saved_search_id},
             ).scalar_one() == BACKFILL_OWNER
-            connection.execute(
-                text(
-                    "INSERT INTO dashboard.saved_search (id, owner_sub, name, filters) "
-                    "VALUES (:id, 'synthetic-owner-b', 'other tenant', '{}'::jsonb)"
-                ),
-                {"id": uuid4()},
-            )
             assert connection.execute(
-                text("SELECT count(*) FROM dashboard.saved_search WHERE owner_sub = :owner"),
-                {"owner": BACKFILL_OWNER},
-            ).scalar_one() == 1
+                text("SELECT owner_sub FROM matching.match_assessment WHERE id = :id"),
+                {"id": assessment_id},
+            ).scalar_one() == BACKFILL_OWNER
+            with pytest.raises(DBAPIError, match="match assessments are immutable"):
+                with connection.begin_nested():
+                    connection.execute(
+                        text("UPDATE matching.match_assessment SET score = 1 WHERE id = :id"),
+                        {"id": assessment_id},
+                    )
             with pytest.raises(DBAPIError, match="owner_sub is immutable"):
                 with connection.begin_nested():
                     connection.execute(
@@ -168,6 +213,62 @@ def test_upgrade_backfills_audits_and_preserves_owner_data_on_downgrade(scratch:
             ).scalar_one() == BACKFILL_OWNER
     finally:
         engine.dispose()
+
+
+def test_downgrade_restores_legacy_writes_for_a_single_audited_owner(scratch: str) -> None:
+    assert _alembic(scratch, "upgrade", PREVIOUS).returncode == 0
+    assert _alembic(scratch, "upgrade", REVISION).returncode == 0
+    result = _alembic(scratch, "downgrade", PREVIOUS)
+    assert result.returncode == 0, result.stderr
+
+    engine = create_database_engine(scratch)
+    try:
+        with engine.begin() as connection:
+            legacy_profile_id = uuid4()
+            connection.execute(
+                text(
+                    "INSERT INTO profile.career_profile (id, singleton_key, version) "
+                    "VALUES (:id, true, 0)"
+                ),
+                {"id": legacy_profile_id},
+            )
+            assert connection.execute(
+                text("SELECT owner_sub FROM profile.career_profile WHERE id = :id"),
+                {"id": legacy_profile_id},
+            ).scalar_one() == BACKFILL_OWNER
+            assert connection.execute(
+                text(
+                    "SELECT count(*) FROM pg_constraint "
+                    "WHERE conname = 'uq_career_profile_singleton_key' "
+                    "AND conrelid = 'profile.career_profile'::regclass"
+                )
+            ).scalar_one() == 1
+    finally:
+        engine.dispose()
+
+
+def test_downgrade_refuses_to_route_legacy_writes_to_one_of_multiple_owners(
+    scratch: str,
+) -> None:
+    assert _alembic(scratch, "upgrade", PREVIOUS).returncode == 0
+    assert _alembic(scratch, "upgrade", REVISION).returncode == 0
+
+    engine = create_database_engine(scratch)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO dashboard.saved_search (id, owner_sub, name, filters) "
+                    "VALUES (:id, 'synthetic-owner-b', 'other tenant', '{}'::jsonb)"
+                ),
+                {"id": uuid4()},
+            )
+    finally:
+        engine.dispose()
+
+    result = _alembic(scratch, "downgrade", PREVIOUS)
+    assert result.returncode != 0
+    assert "controlled rollback refused" in result.stderr
 
 
 def test_upgrade_refuses_to_backfill_without_an_explicit_subject(scratch: str) -> None:

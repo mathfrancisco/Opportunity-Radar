@@ -49,25 +49,45 @@ def _add_owner_column(schema: str, table: str) -> None:
         f"ALTER TABLE {schema}.{table} "
         "ADD COLUMN IF NOT EXISTS owner_sub VARCHAR(255)"
     )
+    # A controlled downgrade installs a temporary legacy-write default.  The current
+    # application must never rely on it, so remove it again before re-enabling tenancy.
+    op.execute(f"ALTER TABLE {schema}.{table} ALTER COLUMN owner_sub DROP DEFAULT")
 
 
 def _backfill_and_audit(schema: str, table: str, owner_sub: str) -> None:
     connection = op.get_bind()
     qualified = f"{schema}.{table}"
-    connection.execute(
-        sa.text(f"UPDATE {qualified} SET owner_sub = :owner_sub WHERE owner_sub IS NULL"),
-        {"owner_sub": owner_sub},
-    )
-    missing = connection.execute(
-        sa.text(f"SELECT count(*) FROM {qualified} WHERE owner_sub IS NULL")
-    ).scalar_one()
-    if missing:
-        raise RuntimeError(f"owner_sub audit failed for {qualified}: {missing} rows are unowned")
-    op.execute(f"ALTER TABLE {qualified} ALTER COLUMN owner_sub SET NOT NULL")
-    op.execute(
-        f"CREATE INDEX IF NOT EXISTS ix_{table}_owner_sub "
-        f"ON {qualified} (owner_sub)"
-    )
+    immutable_assessment = schema == "matching" and table == "match_assessment"
+    if immutable_assessment:
+        # The assessment history is immutable.  This single transaction is the explicit
+        # schema migration exception; re-enable the pre-existing guard before returning.
+        op.execute(
+            "ALTER TABLE matching.match_assessment "
+            "DISABLE TRIGGER trg_match_assessment_immutable"
+        )
+    try:
+        connection.execute(
+            sa.text(f"UPDATE {qualified} SET owner_sub = :owner_sub WHERE owner_sub IS NULL"),
+            {"owner_sub": owner_sub},
+        )
+        missing = connection.execute(
+            sa.text(f"SELECT count(*) FROM {qualified} WHERE owner_sub IS NULL")
+        ).scalar_one()
+        if missing:
+            raise RuntimeError(
+                f"owner_sub audit failed for {qualified}: {missing} rows are unowned"
+            )
+        op.execute(f"ALTER TABLE {qualified} ALTER COLUMN owner_sub SET NOT NULL")
+        op.execute(
+            f"CREATE INDEX IF NOT EXISTS ix_{table}_owner_sub "
+            f"ON {qualified} (owner_sub)"
+        )
+    finally:
+        if immutable_assessment:
+            op.execute(
+                "ALTER TABLE matching.match_assessment "
+                "ENABLE TRIGGER trg_match_assessment_immutable"
+            )
 
 
 def _ensure_immutable_owner_sub() -> None:
@@ -128,4 +148,66 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Keep ownership data/constraints intact so application rollback stays safe."""
+    """Make the preceding single-owner app writable without discarding ownership.
+
+    The old application does not supply ``owner_sub``.  A rollback therefore requires the
+    same explicitly audited subject and is refused if data belongs to more than that one
+    subject.  This keeps the old global profile singleton invariant and prevents silently
+    routing legacy writes to an arbitrary tenant.
+    """
+    owner_sub = _backfill_owner_sub()
+    connection = op.get_bind()
+    for schema, table in _PERSONAL_TABLES:
+        qualified = f"{schema}.{table}"
+        other_owners = connection.execute(
+            sa.text(
+                f"SELECT count(*) FROM {qualified} "
+                "WHERE owner_sub IS DISTINCT FROM :owner_sub"
+            ),
+            {"owner_sub": owner_sub},
+        ).scalar_one()
+        if other_owners:
+            raise RuntimeError(
+                f"controlled rollback refused for {qualified}: ownership is not single-subject"
+            )
+
+    # Keep the value out of generated DDL/log output while making it available to the
+    # legacy application's INSERTs for the duration of this transaction.
+    connection.execute(
+        sa.text("SELECT set_config('app.owner_sub_backfill', :owner_sub, true)"),
+        {"owner_sub": owner_sub},
+    )
+    for schema, table in _PERSONAL_TABLES:
+        op.execute(
+            f"""
+            DO $$
+            BEGIN
+                EXECUTE format(
+                    'ALTER TABLE %I.%I ALTER COLUMN owner_sub SET DEFAULT %L',
+                    '{schema}', '{table}', current_setting('app.owner_sub_backfill')
+                );
+            END
+            $$
+            """
+        )
+
+    # Revision 0068 expects the original global singleton constraint.  Preserve the
+    # owner-aware constraint as well, but restore the older contract only after the
+    # single-subject audit above made it valid.
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conname = 'uq_career_profile_singleton_key'
+                  AND conrelid = 'profile.career_profile'::regclass
+            ) THEN
+                ALTER TABLE profile.career_profile
+                    ADD CONSTRAINT uq_career_profile_singleton_key
+                    UNIQUE (singleton_key);
+            END IF;
+        END
+        $$
+        """
+    )
