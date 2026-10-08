@@ -23,11 +23,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy import create_engine, text
 
@@ -54,7 +56,11 @@ def newest_dump(directory: Path) -> Path:
 
 
 def scratch_name(prefix: str = "restore_check") -> str:
-    return f"{prefix}_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+    if not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*", prefix):
+        raise ValueError("scratch database prefix must be a safe SQL identifier")
+    prefix = re.sub(r"_test$", "", prefix, flags=re.IGNORECASE)[:24]
+    timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+    return f"{prefix}_{timestamp}_{uuid4().hex[:12]}_test"
 
 
 def admin_engine(url: str) -> Any:
@@ -62,12 +68,19 @@ def admin_engine(url: str) -> Any:
     return create_engine(with_database(url, "postgres"), isolation_level="AUTOCOMMIT")
 
 
+def _validate_scratch_name(name: str) -> None:
+    if len(name) > 63 or not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*_test", name):
+        raise ValueError("scratch database name must be a safe identifier ending in _test")
+
+
 def create_database(url: str, name: str) -> None:
+    _validate_scratch_name(name)
     with admin_engine(url).connect() as connection:
         connection.execute(text(f'CREATE DATABASE "{name}"'))
 
 
 def drop_database(url: str, name: str) -> None:
+    _validate_scratch_name(name)
     with admin_engine(url).connect() as connection:
         connection.execute(
             text(

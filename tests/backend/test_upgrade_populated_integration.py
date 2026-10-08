@@ -203,7 +203,7 @@ def _current_revision(url: str) -> str:
 @pytest.fixture
 def scratch_database() -> Any:
     url = os.environ["DATABASE_URL"]
-    name = f"f2048_upgrade_{uuid4().hex[:12]}"
+    name = f"f2048_upgrade_{uuid4().hex[:12]}_test"
     create_database(url, name)
     scratch_url = with_database(url, name)
     try:

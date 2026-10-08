@@ -67,7 +67,7 @@ def _pointers(connection: Any) -> set[tuple[Any, Any, Any]]:
 @pytest.fixture
 def scratch_database() -> Any:
     url = os.environ["DATABASE_URL"]
-    name = f"f5010_pointer_{uuid4().hex[:12]}"
+    name = f"f5010_pointer_{uuid4().hex[:12]}_test"
     create_database(url, name)
     try:
         yield with_database(url, name)

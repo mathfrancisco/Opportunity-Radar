@@ -55,6 +55,28 @@ def test_sha256_file_matches_hashlib(tmp_path: Path) -> None:
     assert sha256_file(path) == hashlib.sha256(b"some deterministic bytes").hexdigest()
 
 
+def test_scratch_database_names_are_unique_safe_and_isolated() -> None:
+    first = restore_check.scratch_name("restore_check_test")
+    second = restore_check.scratch_name("restore_check_test")
+
+    assert first.endswith("_test")
+    assert second.endswith("_test")
+    assert first != second
+    assert len(first) <= 63
+    assert first.replace("_", "").isalnum()
+    with pytest.raises(ValueError, match="safe SQL identifier"):
+        restore_check.scratch_name('restore";drop_database')
+
+
+def test_create_database_rejects_non_test_or_unsafe_name() -> None:
+    with pytest.raises(ValueError, match="ending in _test"):
+        restore_check.create_database("unused", "opportunity_radar")
+    with pytest.raises(ValueError, match="ending in _test"):
+        restore_check.create_database("unused", 'scratch";DROP DATABASE postgres')
+    with pytest.raises(ValueError, match="ending in _test"):
+        restore_check.drop_database("unused", "opportunity_radar")
+
+
 def test_run_pg_dump_passes_the_snapshot_flag_when_given(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, Any] = {}
 
