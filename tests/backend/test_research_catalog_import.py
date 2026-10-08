@@ -163,7 +163,7 @@ def test_known_brand_transitions_are_reconciled_as_aliases() -> None:
 def test_default_studies_contain_the_researched_catalog() -> None:
     counts = [len(list(read_research_rows(path))) for path in DEFAULT_INPUTS]
 
-    assert counts == [186, 36]
+    assert counts == [186, 195]
 
 
 def test_extract_ats_key_validates_each_ats_board_link_shape() -> None:
