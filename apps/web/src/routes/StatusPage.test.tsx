@@ -40,12 +40,15 @@ describe('StatusPage', () => {
     await flush()
 
     expect(container.textContent).toContain('Radar pronto para começar')
+    expect(container.textContent).toContain('Ambiente local')
     expect(container.textContent).toContain('Próxima ação')
     expect(container.textContent).toContain('A prontidão confirma que a API e a conexão com o banco de dados estão disponíveis.')
     expect(container.textContent).not.toContain('IA está indisponível')
     expect(
       [...container.querySelectorAll('a')].find((link) => link.textContent === 'Ver fontes')?.getAttribute('href'),
     ).toBe('/sources')
+    expect(container.querySelector('a[href="/status"]')?.getAttribute('aria-current')).toBe('page')
+    expect(container.querySelectorAll('nav [aria-current="page"]')).toHaveLength(1)
   })
 
   it('apresenta estado degradado quando os sinais de saúde não estão completos', async () => {

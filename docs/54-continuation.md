@@ -4,7 +4,7 @@ Copie este documento como prompt inicial da próxima sessão. Ele descreve o est
 
 ## Objetivo e regras de execução
 
-Continue a entrega local completa da SPEC 54 (WP0-WP7), respeitando os gates abaixo. O usuário priorizou F54 local e informou que nada da F53 foi implementado. Os protótipos ainda precisam de aceite visual explícito conforme SPEC §7 antes de WP3-WP5. Solicite uma revisão visual concreta; depois do aceite, a autorização existente cobre a migração local sem nova confirmação para cada etapa prevista. Não deduza aceite de PR/capturas. Não crie cloud, Clerk real, deploy, serviços, migrações, alterações de API/banco ou dados reais sem gates e autorização específica.
+Continue a entrega local completa da SPEC 54 (WP0-WP7), respeitando os gates abaixo. O usuário priorizou F54 local e informou que nada da F53 foi implementado. Os protótipos receberam aceite visual explícito do dono do repositório em 2026-10-07 (ver `docs/54-review/README.md`, seção "Aceite visual"); o aceite é apenas visual. A autorização existente cobre a migração local sem nova confirmação para cada etapa prevista. Não deduza aceite de PR/capturas. Não crie cloud, Clerk real, deploy, serviços, migrações, alterações de API/banco ou dados reais sem gates e autorização específica.
 
 Leia `AGENTS.md`, `C:\Users\mathf\.codex\RTK.md`, `DESIGN.md`, SPEC54, plano e roadmap F53, os READMEs e artefatos `docs/54-baseline`, `docs/54-review` e `docs/54-spike`. Use RTK em comandos suportados. Para mudanças criativas, escolha skills de engenharia/design adequadas; use `cavecrew-reviewer` para revisão read-only de diff. Consulte Context7 para documentação de versões atuais se a implementação depender disso. Identidade Git em Documents/GitHub: `mathfrancisco` / `math.francisco2@gmail.com`. Não reautentique nem faça logout de `gh`: sandbox falhou e auth existente funcionou elevado.
 
@@ -27,50 +27,62 @@ Inventário: URLs `/`, `/inbox`, `/opportunities/:opportunityId`, `/applications
 | Pacote | Estado verificado | Próxima evidência |
 | --- | --- | --- |
 | WP0 baseline/inventário | Preparação local validada; não AC54 | Rever contratos e polling na base aceita sem reescrever hashes históricos |
-| WP1 spike | Parcial, nenhum kit selecionado | Proveniência, acessibilidade e bundle dentro do orçamento |
-| WP2 protótipos | 4 protótipos aguardam aceite explícito | Revisão visual e decisão registrada |
-| WP3 sistema/wrappers | Não iniciado; depende de WP2 | DESIGN.md e CSS juntos, tokens, foco, contraste, motion, wrappers e testes |
-| WP4 rotas prioritárias | Não iniciado; depende de WP2/WP3 | Overview, Inbox, detalhe e Pipeline com contratos preservados |
-| WP5 rotas restantes | Não iniciado; depende de WP2/WP3 | Companies, Company Detail, Sources, Homologation, Profile, Status e wildcard |
-| WP6 auth/regressão | Pendente de F53 real | Clerk real e testes offline/estados de autorização |
-| WP7 preview/release | Pendente de gates/autorização | Preview, smoke, comparação e rollback demonstrados |
+| WP1 spike | Concluído para o recorte aprovado: `@radix-ui/react-dialog@1.2.0` selecionado para a gaveta móvel; licença MIT | Reavaliar apenas se outro primitive entrar no escopo |
+| WP2 protótipos | 4 protótipos aceitos visualmente em 2026-10-07, com 2 ajustes aplicados e verificados pelo runner (ver `docs/54-review/README.md`, "Aceite visual") | Nenhuma para WP2; aceite não cobre F53, AC54-01/08/10 nem a SPEC como um todo |
+| WP3 sistema/wrappers | Implementado localmente | Manter validação proporcional para mudanças futuras; os limites de acessibilidade continuam abertos |
+| WP4 rotas prioritárias | Migrado e revisado localmente | Evidência final local registrada em `docs/54-final`; preservar contratos de domínio em mudanças futuras |
+| WP5 rotas restantes | Companies, Company Detail, Sources, Homologation, Profile, Status e wildcard migrados e revisados localmente | Evidência final local registrada em `docs/54-final`; não abre WP6/WP7 |
+| WP6 auth/regressão | Bloqueado por F53, ainda não implementada | Clerk real e testes offline/estados de autorização após F53 |
+| WP7 preview/release | Bloqueado por F53 e pelos gates/autorização | Preview, smoke, comparação e rollback demonstrados após F53 |
 
 ### Critérios AC54
 
 | Critério | Estado e evidência faltante |
 | --- | --- |
 | AC54-01 F53 operacional | Hosting, Clerk, backup/restore e aceite F53 ausentes |
-| AC54-02 identidade aprovada | Falta aceite explícito dos 4 protótipos |
-| AC54-03 biblioteca | Nenhum kit selecionado; spikes inconclusivas |
-| AC54-04 componentes/tokens | Não iniciado; faltam wrappers, WCAG, testes e regressão |
-| AC54-05 contratos/domínio | Não migrado; faltam testes de queries, filtros, scores, IA, forms e mutations |
-| AC54-06 responsividade | Baseline não prova migração; faltam 10 rotas × 5 larguras e URL direta |
+| AC54-02 identidade aprovada | Identidade implementada localmente em WP3; o aceite visual explícito dos 4 protótipos em 2026-10-07 (`docs/54-review/README.md`, "Aceite visual") permanece limitado aos protótipos. A aplicação final tem evidência local de 55 capturas em `docs/54-final`, sem que isso seja novo aceite de produto ou da SPEC |
+| AC54-03 biblioteca | Seleção aprovada: somente `@radix-ui/react-dialog@1.2.0` sob wrapper local para a gaveta móvel; licença MIT |
+| AC54-04 componentes/tokens | Parcial: WP3 implementado localmente e `npm run check` passou; a captura final não prova WCAG 2.2 AA, zoom real, leitor de tela, reduced motion ou todos os contrastes |
+| AC54-05 contratos/domínio | Parcial: WP4/WP5 foram migrados com testes de rota focados; o harness final usa somente fixtures e não prova dados reais, mutações em produção, IA ou comportamento contra backend |
+| AC54-06 responsividade | Evidência local concluída: 55 capturas da aplicação final (11 URLs diretas, incluindo wildcard, × 320/360/768/1280/1440) sem overflow, erros de página/console, APIs sem fixture ou fixture não-2xx; não substitui validação em dispositivos físicos |
 | AC54-07 WCAG 2.2 AA | Não provado: leitor de tela, zoom real, teclado, labels e contraste final |
 | AC54-08 autenticação | Não iniciado; depende de Clerk/F53 real |
-| AC54-09 performance | Sem bundle pós-migração; spike Radix aumentou JS gzip inicial 30,76 kB/20,64%, acima do limite +10% |
+| AC54-09 performance | Medição integrada final local: `npm run check` exit 0, Vitest 44 arquivos / 343 testes; JS inicial gzip 163,64 kB e CSS gzip 7,33 kB. Contra o baseline aceito de 149,01 kB, o JS continua dentro do limite histórico de +10%, mas qualquer mudança futura exige nova medição comparável |
 | AC54-10 release/rollback | ZIP local não prova preview, release ou rollback cloud |
 
-## Revisão visual
+## Evidência visual final local
 
-`docs/54-review` contém Inbox, detalhe, Pipeline e Overview estáticos/sintéticos, preview loopback `127.0.0.1:54154`, sem API, rede externa, persistência ou auth. Relatório registra 44 capturas: 12 padrão (4 páginas em 1440/768/360) e 32 estados (4 em 1440/360), sem overflow nos viewports normais reportados. `verification.json`: zero erros JS; Escape fecha menu e devolve foco. Teste CSS zoom 200% em viewport 360 resultou 545/360 overflow; não é zoom real. Relatório não prova que o runner detecta regressões.
+`docs/54-final/run-isolated-final.mjs` serviu o `apps/web/dist` já construído por loopback, sem Vite, Docker, API, backend ou rede externa. As respostas `/api` foram satisfeitas por `docs/54-baseline/fixtures.mjs`; o runner bloqueia qualquer outra origem e grava em `docs/54-final/result.json` a identidade do bundle, os requests e as asserções.
 
-Pendências observadas: `.inbox-table thead` some em mobile e remove cabeçalhos para tecnologias assistivas; runner precisa assertions que falhem por regressão; timeout intermitente `[data-state]` sem causa diagnosticada; CSS/JS de alguns templates minificado. Overview exibe “2 novas desde última abertura”, métrica possivelmente sem dado; mapear ao contrato ou remover antes de migrar. Leitor de tela, zoom real, reduced-motion e dispositivos físicos não foram comprovados manualmente. Protótipos seguem sem aceite.
+O resultado no commit `7e65a06b48301ddbb4a94a554609e4483e61e5ad` contém 55 screenshots em `docs/54-final/screenshots`: as 11 URLs diretas (`/`, `/inbox`, `/opportunities/opportunity-1`, `/applications`, `/companies`, `/companies/company-1`, `/sources`, `/sources/homologation-queue`, `/profile`, `/status` e `/missing` como wildcard) em 320, 360, 768, 1280 e 1440 px. Todas carregaram diretamente com status 200 e pathname solicitado, sem overflow horizontal, page errors, console errors, requests externos, APIs sem fixture ou respostas fixture não-2xx. A identidade gravada é `index.html` SHA-256 `3df7abe2a6d6e0035606cd49bb6478d38d8262d2905db8c7ad55adc9cdb3fe44`, mais hashes dos três assets servidos.
+
+Esta é evidência local automatizada, não aceite visual adicional, WCAG global ou prova de produção. Zoom real, leitor de tela, reduced motion, dispositivos físicos e E2E Compose não foram exercitados. F53 permanece sem hosting, Clerk real, backup/restore e cutover; WP6 e WP7 continuam bloqueados por esses gates e por autorização específica.
 
 ## Spike de primitives
 
-Radix descartável baseado em `e84be68`: Dialog 1.2.0, Dropdown 2.1.25, Slot 1.4.0, MIT. Wrappers manuais inspirados em shadcn, sem proveniência de registry. Reporte local: 43 arquivos/294 testes, `npm check` e build passaram; JS gzip 149,01→179,77 kB (+20,64%, acima do orçamento de 10%). Não aprovar/selecionar sem resolver custo e proveniência. React Aria 1.21.1 e MUI 9.4.0 foram apenas pesquisados por metadados.
+O WP3B aprovou exclusivamente `@radix-ui/react-dialog` 1.2.0, sob wrapper local,
+para a gaveta de navegação móvel; a licença é MIT. No spike isolado, o único
+Dialog mediu 149,01→161,62 kB de JS gzip (+12,61 kB / +8,54%), dentro do
+orçamento de +10%. Essa comparação isolada não representa o bundle integrado.
 
-Segundo relato do worker, spike Base UI 1.8.0 teve testes unitários aprovados, mas Shift+Tab falhou no smoke real; check completo teria falhado por ESLint percorrer `node_modules.radix-archived`; limpeza parcial por binário bloqueado no Windows. Não há log literal completo desse relato. Fontes/manifests/teste/runner textuais estão em `docs/54-spike/artifacts/base-ui-source.patch`; diff usa paths relativos e `git apply --check` passou no momento da publicação. Arquivo é referência de revisão, sem dependências, binários ou worktree. Não publicar/reparar a worktree nem fazer terceira tentativa automática.
+Na medição integrada final após WP5, `npm run check` terminou com exit 0 e
+Vitest reportou 44 arquivos / 343 testes. O JS inicial gzip mediu 163,64 kB e o
+CSS gzip, 7,33 kB. Contra o baseline aceito de 149,01 kB, o JS permanece dentro
+do limite histórico de +10%. A medição histórica de +20,64% corresponde ao
+primeiro spike mais amplo (Dialog, Dropdown e Slot). Qualquer novo primitive
+exige medição comparável; se o bundle ultrapassar +10%, o Dialog deve ser
+carregado sob demanda. A aprovação não seleciona shadcn, outros primitives,
+rotas, estilos globais ou a SPEC 54.
 
 ## Validação e limites do ambiente
 
 Node 24.12.0/npm 11.6.2. Relatos do ambiente dizem que runtime checks mostraram “not recognized” no sandbox e passaram elevados; não repita checks amplos sem motivo. Playwright está em `tests/e2e/browser/node_modules`; browser da CUA indisponível. Evite E2E com Compose operacional. Integração DB somente banco terminado em `_test` e `RUN_DATABASE_INTEGRATION=1`, `DATABASE_INTEGRATION_ISOLATED=1`; nunca usar banco operacional. `git diff --cached --check` da publicação encontrou whitespace literal preservado no log de check e em linha de contexto do patch; não alegar check limpo sem resolver com cuidado, sem alterar logs literais.
 
-Retome pelo aceite visual e pelo próximo menor pacote que satisfaça os gates. Registre evidência literal e incerteza; PR draft, baseline, captura ou protótipo não fecha F54.
+WP5 e a evidência final local estão concluídos. Registre evidência literal e incerteza em qualquer mudança futura; PR draft, baseline, captura ou protótipo não fecha F54.
 ## Branch e sequência prática
 
-Este handoff foi publicado na branch `docs/f54-preparation-handoff-20261007`, criada sobre `3aaca63` (merge #70). Confirme o estado da branch e do PR ao retomar.
+O estado de continuação verificado está na branch local `feat/f54-redesign-frontend`. Este pacote de evidências é local; nenhuma ação de PR ou publicação remota está autorizada.
 
-Ordem de trabalho: corrigir as pendências dos protótipos e do runner em escopo local; validar os protótipos localmente; apresentar as telas para revisão concreta e obter aceite explícito; escolher biblioteca somente com orçamento e proveniência comprovados; então WP3 atualiza `DESIGN.md` e CSS juntos, seguido por WP4/WP5 nas dez rotas. WP6/WP7 continuam dependentes de F53 e autorização para preview/release. Preserve aplicação manual, filtros, scores, matching determinístico separado de IA e polling atual até decisão baseada em evidência.
+Ordem de trabalho: não reabrir WP4/WP5 sem uma regressão concreta; manter evidência comparável após qualquer mudança relevante de bundle ou rota. WP6/WP7 continuam bloqueados por F53 e autorização específica. Preserve aplicação manual, filtros, scores, matching determinístico separado de IA e polling atual.
 
 Modelo de ownership: Sol/Astra coordenam e revisam read-only. Alteração de uma linha pode ser direta; trabalho maior deve ir para Luna/Terra (Luna como fallback), com arquivos/responsabilidade delimitados. No máximo três workers em tarefas independentes; workers não delegam. Faça revisão de diff separada e reporte os comandos/saídas realmente observados.

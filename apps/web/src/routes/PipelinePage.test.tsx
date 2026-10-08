@@ -46,6 +46,124 @@ function application(id: string, stage: string) {
   }
 }
 
+function stubApplications(
+  active: ReturnType<typeof application>[],
+  closed: ReturnType<typeof application>[] = [],
+) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: unknown) => {
+      const url = new URL(String(input), 'http://localhost')
+      const items = url.searchParams.get('application_status') === 'CLOSED' ? closed : active
+      return new Response(JSON.stringify({ items, total: items.length, offset: 0, limit: 12 }), {
+        status: 200,
+      })
+    }),
+  )
+}
+
+describe('PipelinePage — quadro por etapa', () => {
+  it('mostra toda etapa com nome e contagem, marca as vazias pelos dados e expõe cada uma como grupo rotulado', async () => {
+    stubApplications([
+      application('a', 'INTERESTED'),
+      application('b', 'INTERVIEW'),
+      application('c', 'INTERVIEW'),
+    ])
+
+    const container = renderPage(<PipelinePage />)
+    await flush()
+
+    expect(container.querySelector('h1')?.textContent).toBe(
+      'Onde cada candidatura precisa de atenção?',
+    )
+    const board = container.querySelector('[role="group"][aria-label="Candidaturas por etapa"]')!
+    const stages = [...board.querySelectorAll('section')].map((section) => ({
+      name: section.querySelector('h3')?.firstElementChild?.textContent,
+      count: section.querySelector('h3')?.lastElementChild?.textContent,
+      empty: section.getAttribute('data-empty') === 'true',
+      labelled: section.getAttribute('aria-labelledby') === section.querySelector('h3')?.id,
+      cards: section.querySelectorAll('li').length,
+    }))
+    expect(stages.map(({ name, count, empty }) => [name, count, empty])).toEqual([
+      ['Interesse', '1', false],
+      ['Candidatura enviada', '0', true],
+      ['Triagem', '0', true],
+      ['Entrevista', '2', false],
+      ['Teste técnico', '0', true],
+      ['Etapa final', '0', true],
+      ['Oferta', '0', true],
+    ])
+    expect(stages.every((stage) => stage.labelled)).toBe(true)
+    expect(stages.map((stage) => stage.cards)).toEqual([1, 0, 0, 2, 0, 0, 0])
+    expect(stages.filter((stage) => !stage.empty)).toHaveLength(2)
+    expect(
+      [...board.querySelectorAll('section')]
+        .filter((section) => section.getAttribute('data-empty') !== 'true')
+        .every((section) => section.className.includes('lg:flex-[0_1_9rem]')),
+    ).toBe(true)
+    const emptyStageList = [...container.querySelectorAll('ul')].find((list) =>
+      list.textContent?.includes('Candidatura enviada: 0'),
+    )
+    expect(emptyStageList).toBeDefined()
+    expect(emptyStageList?.parentElement?.textContent).toContain('Sem candidaturas em')
+    expect([...emptyStageList?.querySelectorAll('li') ?? []].map((item) => item.textContent)).toEqual([
+      'Candidatura enviada: 0',
+      'Triagem: 0',
+      'Teste técnico: 0',
+      'Etapa final: 0',
+      'Oferta: 0',
+    ])
+    expect(emptyStageList?.textContent).not.toContain('Interesse')
+    expect(emptyStageList?.textContent).not.toContain('Entrevista')
+  })
+
+  it('o seletor de visão troca o que é mostrado e expõe o estado em aria-pressed', async () => {
+    stubApplications([application('a', 'INTERVIEW')], [application('z', 'REJECTED')])
+
+    const container = renderPage(<PipelinePage />)
+    await flush()
+
+    const group = container.querySelector('[role="group"][aria-label="Visão das candidaturas"]')!
+    const [active, closed] = [...group.querySelectorAll('button')]
+    expect(active.getAttribute('aria-pressed')).toBe('true')
+    expect(closed.getAttribute('aria-pressed')).toBe('false')
+    expect(container.textContent).toContain('Vaga a')
+    expect(container.textContent).not.toContain('Vaga z')
+
+    act(() => closed.click())
+    await flush()
+
+    expect(active.getAttribute('aria-pressed')).toBe('false')
+    expect(closed.getAttribute('aria-pressed')).toBe('true')
+    expect(container.textContent).toContain('Vaga z')
+    expect(container.textContent).not.toContain('Vaga a')
+  })
+
+  it('mostra o estado vazio quando não há candidatura alguma', async () => {
+    stubApplications([])
+
+    const container = renderPage(<PipelinePage />)
+    await flush()
+
+    expect(container.textContent).toContain('Nenhuma candidatura em andamento.')
+    expect(
+      container.querySelector('[role="group"][aria-label="Candidaturas por etapa"]'),
+    ).toBeNull()
+  })
+
+  it('oferece nova tentativa quando o carregamento falha', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
+
+    const container = renderPage(<PipelinePage />)
+    await flush()
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Não foi possível carregar',
+    )
+    expect(container.textContent).toContain('Tentar novamente')
+  })
+})
+
 describe('PipelinePage', () => {
   it('alterna entre candidaturas em andamento e encerradas, mantendo os cartões de cada visão', async () => {
     vi.stubGlobal(

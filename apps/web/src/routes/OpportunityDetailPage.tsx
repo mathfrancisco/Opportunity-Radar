@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { type ReactNode, useId } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ApplicationPanel } from '../components/ApplicationPanel'
 import { Button } from '../components/Button'
@@ -147,70 +147,77 @@ function descriptionAsPlainText(description: string) {
 
 export function OpportunityDescription({ description }: { description: string }) {
   return (
-    <p className="break-anywhere whitespace-pre-line text-body text-subtle" data-testid="opportunity-description">
+    <p className="break-anywhere max-w-[72ch] whitespace-pre-line text-body text-subtle" data-testid="opportunity-description">
       {descriptionAsPlainText(description)}
     </p>
   )
 }
 
-function Section({ id, title, children }: { id?: string; title: string; children: ReactNode }) {
+/**
+ * A labelled region of the page. Top-level sections are ruled (SPEC 54: separation by rule,
+ * not by card); `nested` is a sub-block of one of them, one heading level down.
+ */
+function Section({
+  id,
+  title,
+  lead,
+  nested = false,
+  children,
+}: {
+  id?: string
+  title: string
+  /** One sentence under the heading that says what kind of information the section is. */
+  lead?: string
+  nested?: boolean
+  children: ReactNode
+}) {
+  const headingId = useId()
+  const Heading = nested ? 'h3' : 'h2'
   return (
-    <section className="mt-10 scroll-mt-6" id={id}>
-      <h2 className="text-section">{title}</h2>
+    <section
+      aria-labelledby={headingId}
+      className={
+        nested ? 'scroll-mt-6' : 'scroll-mt-6 border-t border-line pt-6 first:border-t-0 first:pt-0'
+      }
+      id={id}
+    >
+      <Heading className={nested ? 'text-body font-semibold' : 'text-section'} id={headingId}>
+        {title}
+      </Heading>
+      {lead && <p className="mt-1 max-w-[72ch] text-body-sm text-subtle">{lead}</p>}
       <div className="mt-4">{children}</div>
     </section>
   )
 }
 
-function Facts({ opportunity }: { opportunity: OpportunityDetail }) {
+/** Meta line and fact chips of the title block; `#resumo` is the local-navigation anchor. */
+function TitleFacts({ opportunity }: { opportunity: OpportunityDetail }) {
+  const facts = [
+    ['Modalidade', label(opportunity.workMode, workModeLabels)],
+    ['Senioridade', label(opportunity.seniority, seniorityLabels)],
+    ['Contrato', label(opportunity.contractType, contractLabels)],
+    ['Status', label(opportunity.lifecycleStatus, lifecycleLabels)],
+    ['Versão do conteúdo', String(opportunity.version)],
+  ]
   return (
-    <div className="mt-6 scroll-mt-6" id="resumo">
-    <Card>
-      <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-      <div>
-        <dt className="text-muted">Empresa</dt>
-        <dd className="mt-1 font-medium">{display(opportunity.companyName)}</dd>
-      </div>
-      <div>
-        <dt className="text-muted">Localização</dt>
-        <dd className="mt-1 font-medium">{display(opportunity.location)}</dd>
-      </div>
-      <div>
-        <dt className="text-muted">Modalidade</dt>
-        <dd className="mt-1 break-words font-medium">{label(opportunity.workMode, workModeLabels)}</dd>
-      </div>
-      <div>
-        <dt className="text-muted">Senioridade</dt>
-        <dd className="mt-1 break-words font-medium">{label(opportunity.seniority, seniorityLabels)}</dd>
-      </div>
-      <div>
-        <dt className="text-muted">Contrato</dt>
-        <dd className="mt-1 break-words font-medium">{label(opportunity.contractType, contractLabels)}</dd>
-      </div>
-      <div>
-        <dt className="text-muted">Status</dt>
-        <dd className="mt-1 break-words font-medium">{label(opportunity.lifecycleStatus, lifecycleLabels)}</dd>
-      </div>
-      <div>
-        <dt className="text-muted">Publicada</dt>
-        <dd className="mt-1 font-medium">
-          {formatDate(opportunity.recencyEffectiveDate)}
-          {opportunity.recencyBasis !== 'published' && (
-            <span
-              className="ml-1 text-xs font-normal text-subtle"
-              title={estimatedDateHint(opportunity.recencyBasis)}
-            >
-              (estimada)
-            </span>
-          )}
-        </dd>
-      </div>
-      <div>
-        <dt className="text-muted">Versão do conteúdo</dt>
-        <dd className="mt-1 font-medium">{opportunity.version}</dd>
-      </div>
-      </dl>
-    </Card>
+    <div className="mt-3 scroll-mt-6" id="resumo">
+      <p className="break-anywhere text-body-sm text-subtle">
+        {display(opportunity.companyName)} · {display(opportunity.location)} · Publicada{' '}
+        {formatDate(opportunity.recencyEffectiveDate)}
+        {opportunity.recencyBasis !== 'published' && (
+          <span title={estimatedDateHint(opportunity.recencyBasis)}> (estimada)</span>
+        )}
+      </p>
+      <ul className="mt-3 flex flex-wrap gap-2">
+        {facts.map(([name, value]) => (
+          <li key={name}>
+            <Chip className="break-anywhere text-body-sm">
+              <span className="text-muted">{name}</span>
+              <span className="font-medium">{value}</span>
+            </Chip>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -368,7 +375,7 @@ function RelevanceMark({ opportunity }: { opportunity: OpportunityDetail }) {
         </Button>
         <select
           aria-label="Motivo de não ser para mim"
-          className="h-9 rounded-control border border-line-strong bg-surface px-3 text-sm"
+          className="h-9 rounded-control border border-line-strong bg-surface px-3 text-sm max-md:h-11"
           disabled={mark.isPending}
           onChange={(event) => {
             const reason = event.target.value
@@ -609,14 +616,8 @@ function Factors({ factors }: { factors: MatchFactor[] }) {
   )
 }
 
-function Decision({
-  assessment,
-  opportunityId,
-}: {
-  assessment: MatchAssessment
-  opportunityId: string
-}) {
-  const analyze = useAnalyzeAssessment(opportunityId)
+/** Deterministic matching: score, verdict, eligibility and factors, computed outside the AI. */
+function Decision({ assessment }: { assessment: MatchAssessment }) {
   return (
     <>
       <div className="flex flex-wrap items-baseline gap-4">
@@ -637,32 +638,48 @@ function Decision({
           os detalhes abaixo permanecem disponíveis como histórico.
         </p>
       )}
-      <p className="mt-2 text-xs text-muted">
+      <p className="break-anywhere mt-2 text-xs text-muted">
         Regras {assessment.rulesVersion} · taxonomia {assessment.taxonomyVersion} · perfil{' '}
         {assessment.profileVersionId.slice(0, 8)} · avaliada em{' '}
         {formatDate(assessment.assessedAt)} · hash {assessment.inputHash.slice(0, 12)}…
       </p>
 
-      <Section title="Filtros eliminatórios">
-        <Eligibility details={assessment.eligibilityDetails} />
-      </Section>
+      <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6">
+        <Section nested title="Filtros eliminatórios">
+          <Eligibility details={assessment.eligibilityDetails} />
+        </Section>
 
-      <Section title="Fatores do score">
-        <Factors factors={assessment.factors} />
-      </Section>
-
-      <Section title="Análise semântica">
-        <AnalysisPanel
-          analysis={assessment.analysis}
-          assessment={assessment}
-          failed={analyze.isError}
-          onRun={(refresh) =>
-            analyze.mutate({ assessmentId: assessment.id, refresh })
-          }
-          running={analyze.isPending}
-        />
-      </Section>
+        <Section nested title="Fatores do score">
+          <Factors factors={assessment.factors} />
+        </Section>
+      </div>
     </>
+  )
+}
+
+/** The advisory AI layer, apart from the deterministic decision: it never changes it. */
+function AnalysisSection({
+  assessment,
+  opportunityId,
+}: {
+  assessment: MatchAssessment
+  opportunityId: string
+}) {
+  const analyze = useAnalyzeAssessment(opportunityId)
+  return (
+    <Section
+      id="analise"
+      lead="Comentário consultivo gerado por IA para apoiar sua leitura. Não é veredito nem aprovação, e não decide nada por você."
+      title="Análise semântica"
+    >
+      <AnalysisPanel
+        analysis={assessment.analysis}
+        assessment={assessment}
+        failed={analyze.isError}
+        onRun={(refresh) => analyze.mutate({ assessmentId: assessment.id, refresh })}
+        running={analyze.isPending}
+      />
+    </Section>
   )
 }
 
@@ -685,7 +702,16 @@ export function OpportunityDetailPage() {
           </Button>
         )
       }
+      back={
+        <Link
+          className="text-sm text-subtle underline decoration-accent decoration-2 underline-offset-4"
+          to="/inbox"
+        >
+          ← Voltar para as oportunidades
+        </Link>
+      }
       eyebrow="Oportunidade"
+      meta={opportunity.data && <TitleFacts opportunity={opportunity.data} />}
       title={opportunity.data?.title ?? 'Detalhe da oportunidade'}
       description={
         opportunity.data
@@ -693,87 +719,105 @@ export function OpportunityDetailPage() {
           : 'Carregando os dados preservados desta oportunidade.'
       }
     >
-      <p className="mt-2">
-        <Link
-          className="text-sm text-subtle underline decoration-accent decoration-2 underline-offset-4"
-          to="/inbox"
-        >
-          ← Voltar para as oportunidades
-        </Link>
-      </p>
-
       <div>
         {opportunity.isPending && (
-          <LoadingState className="mt-8">Carregando oportunidade…</LoadingState>
+          <LoadingState className="mt-2">Carregando oportunidade…</LoadingState>
         )}
         {opportunity.isError && (
-          <ErrorState className="mt-8" onRetry={() => void opportunity.refetch()}>{opportunity.error.message}</ErrorState>
+          <ErrorState className="mt-2" onRetry={() => void opportunity.refetch()}>{opportunity.error.message}</ErrorState>
         )}
 
         {opportunity.data && (
-          <>
-            <nav aria-label="Navegar nesta oportunidade" className="mt-6 flex flex-wrap gap-x-4 gap-y-2 text-sm">
-              <a className="underline decoration-accent decoration-2 underline-offset-4" href="#resumo">Resumo</a>
-              <a className="underline decoration-accent decoration-2 underline-offset-4" href="#decisao">Decisão</a>
-              <a className="underline decoration-accent decoration-2 underline-offset-4" href="#candidatura">Candidatura</a>
-              <a className="underline decoration-accent decoration-2 underline-offset-4" href="#procedencia">Procedência</a>
-            </nav>
-            <Facts opportunity={opportunity.data} />
-
-            <SiblingLocations opportunity={opportunity.data} />
-
-            <Section title="Relevância">
-              <RelevanceMark opportunity={opportunity.data} />
-            </Section>
-
-            <Section title="Possível duplicata">
-              <DuplicateCandidates opportunity={opportunity.data} />
-            </Section>
-
-            {opportunity.data.description && (
-              <Section title="Descrição">
-                <OpportunityDescription description={opportunity.data.description} />
-              </Section>
-            )}
-
-            <Section title="Remuneração">
-              <Compensation opportunity={opportunity.data} />
-            </Section>
-
-            <Section title="Skills">
-              <Skills opportunity={opportunity.data} />
-            </Section>
-
-            <Section id="procedencia" title="Procedência">
-              <Provenance opportunity={opportunity.data} />
-            </Section>
-
-            <Section id="decisao" title="Decisão">
-              <div className="mb-4 flex flex-wrap items-center gap-3">
-                {evaluate.isSuccess && <span className="text-sm text-subtle">Avaliação atualizada.</span>}
-                {evaluate.isError && <span className="text-sm text-danger-ink">Não foi possível avaliar agora.</span>}
+          /* DOM order is the visual order at every width: title block (the header), decision
+             panel, then the content. From `lg` the grid puts the panel in the right column. */
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+            <aside
+              aria-labelledby="painel-decisao"
+              className="grid grid-cols-[minmax(0,1fr)] gap-6 rounded-panel border border-line-strong bg-surface p-5 lg:col-start-2 lg:row-start-1"
+            >
+              <div>
+                <h2 className="text-section" id="painel-decisao">
+                  Sua decisão
+                </h2>
+                <p className="mt-1 text-body-sm text-subtle">
+                  Marque a relevância e acompanhe a candidatura. A análise de IA é apoio, não decide por você.
+                </p>
               </div>
-              {assessment.isPending && (
-                <LoadingState>Carregando a avaliação…</LoadingState>
-              )}
-              {assessment.isError && (
-                <ErrorState onRetry={() => void assessment.refetch()}>Não foi possível carregar a avaliação.</ErrorState>
-              )}
-              {assessment.data === null && (
-                <EmptyState>Esta oportunidade ainda não foi avaliada contra o perfil ativo.</EmptyState>
-              )}
-              {assessment.data && (
-                <Decision
-                  assessment={assessment.data}
-                  opportunityId={opportunity.data.id}
-                />
-              )}
-            </Section>
+              <Section nested title="Relevância">
+                <RelevanceMark opportunity={opportunity.data} />
+              </Section>
+              <Section id="candidatura" nested title="Candidatura">
+                <ApplicationPanel bare opportunityId={opportunity.data.id} />
+              </Section>
+            </aside>
 
-            <Section id="candidatura" title="Candidatura">
-              <ApplicationPanel opportunityId={opportunity.data.id} />
-            </Section>
-          </>
+            <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8 lg:col-start-1 lg:row-start-1">
+              <nav aria-label="Navegar nesta oportunidade" className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+                <a className="underline decoration-accent decoration-2 underline-offset-4" href="#resumo">Resumo</a>
+                <a className="underline decoration-accent decoration-2 underline-offset-4" href="#decisao">Decisão</a>
+                <a className="underline decoration-accent decoration-2 underline-offset-4" href="#candidatura">Candidatura</a>
+                <a className="underline decoration-accent decoration-2 underline-offset-4" href="#procedencia">Procedência</a>
+              </nav>
+
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
+                {opportunity.data.description && (
+                  <Section title="Descrição">
+                    <OpportunityDescription description={opportunity.data.description} />
+                  </Section>
+                )}
+
+                <Section title="Remuneração">
+                  <Compensation opportunity={opportunity.data} />
+                </Section>
+
+                <Section title="Skills">
+                  <Skills opportunity={opportunity.data} />
+                </Section>
+
+                <Section
+                  id="decisao"
+                  lead="Matching determinístico: score, veredito e elegibilidade calculados por regras, fora da IA."
+                  title="Decisão"
+                >
+                  <div className="mb-4 flex flex-wrap items-center gap-3 empty:hidden">
+                    {evaluate.isSuccess && <span className="text-sm text-subtle">Avaliação atualizada.</span>}
+                    {evaluate.isError && <span className="text-sm text-danger-ink">Não foi possível avaliar agora.</span>}
+                  </div>
+                  {assessment.isPending && (
+                    <LoadingState>Carregando a avaliação…</LoadingState>
+                  )}
+                  {assessment.isError && (
+                    <ErrorState onRetry={() => void assessment.refetch()}>Não foi possível carregar a avaliação.</ErrorState>
+                  )}
+                  {assessment.data === null && (
+                    <EmptyState>Esta oportunidade ainda não foi avaliada contra o perfil ativo.</EmptyState>
+                  )}
+                  {assessment.data && <Decision assessment={assessment.data} />}
+                </Section>
+
+                {assessment.data && (
+                  <AnalysisSection
+                    assessment={assessment.data}
+                    opportunityId={opportunity.data.id}
+                  />
+                )}
+
+                <SiblingLocations opportunity={opportunity.data} />
+
+                <Section title="Possível duplicata">
+                  <DuplicateCandidates opportunity={opportunity.data} />
+                </Section>
+
+                <Section
+                  id="procedencia"
+                  lead="De onde veio a vaga e quando foi vista pela última vez."
+                  title="Procedência"
+                >
+                  <Provenance opportunity={opportunity.data} />
+                </Section>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </PageShell>

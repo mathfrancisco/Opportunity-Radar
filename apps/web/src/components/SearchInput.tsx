@@ -11,6 +11,8 @@ interface SearchInputProps {
   onSubmit: () => void
   /** Accessible name of the submit button. Never visible (SPEC 46, D11). */
   action?: string
+  /** Fills its container instead of the fixed `md` width, for a toolbar that sizes it. */
+  fullWidth?: boolean
   className?: string
 }
 
@@ -29,6 +31,7 @@ export function SearchInput({
   onChange,
   onSubmit,
   action = 'Buscar',
+  fullWidth = false,
   className = '',
 }: SearchInputProps) {
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -38,7 +41,7 @@ export function SearchInput({
 
   return (
     <form
-      className={`relative flex w-full items-center md:w-80 ${className}`.trim()}
+      className={`relative flex w-full items-center ${fullWidth ? '' : 'md:w-80'} ${className}`.trim()}
       onSubmit={submit}
       role="search"
     >
@@ -53,7 +56,7 @@ export function SearchInput({
         <span className="sr-only">{action}</span>
       </button>
       <input
-        className="h-8 w-full min-w-0 rounded-control border border-control-line bg-surface pr-3 pl-9 text-body-sm text-ink outline-none placeholder:text-muted focus:border-ink focus:ring-2 focus:ring-ink max-md:h-11"
+        className="h-8 w-full min-w-0 rounded-control border border-control-line bg-surface pr-3 pl-9 text-body-sm text-ink placeholder:text-muted max-md:h-11"
         id={id}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}

@@ -22,9 +22,9 @@ describe('PageShell', () => {
     })
 
     expect(groups).toEqual([
-      ['Dia a dia', ['Visão geral', 'Oportunidades', 'Candidaturas']],
-      ['Catálogo', ['Empresas', 'Fontes', 'Perfil']],
-      ['Diagnóstico', ['Status']],
+      ['Decidir', ['Visão geral', 'Inbox', 'Pipeline']],
+      ['Pesquisar', ['Empresas']],
+      ['Operar', ['Fontes', 'Homologação', 'Perfil', 'Status']],
     ])
   })
 
@@ -61,7 +61,7 @@ describe('PageShell', () => {
     expect(container.querySelector('#conteudo')).not.toBeNull()
   })
 
-  it('mantém a API antiga: eyebrow é aceito e não aparece; description e footer sim', () => {
+  it('desenha o eyebrow como kicker acima do título só quando é dado; description e footer também', () => {
     const container = render(
       <MemoryRouter>
         <PageShell
@@ -76,10 +76,21 @@ describe('PageShell', () => {
       </MemoryRouter>,
     )
 
-    expect(container.textContent).not.toContain('Operação')
+    const kicker = container.querySelector('header p')
+    expect(kicker?.textContent).toBe('Operação')
+    expect(kicker?.nextElementSibling?.tagName).toBe('H1')
     expect(container.textContent).toContain('Subtítulo')
     expect(container.querySelector('footer')?.textContent).toBe('Rodapé')
     expect(container.querySelector('h1')?.textContent).toBe('Fontes')
+
+    const withoutKicker = render(
+      <MemoryRouter>
+        <PageShell title="Fontes">
+          <p>conteúdo</p>
+        </PageShell>
+      </MemoryRouter>,
+    )
+    expect(withoutKicker.querySelector('header p')).toBeNull()
   })
 
   it('repassa `actions` ao cabeçalho, e sem ele não desenha o espaço da ação', () => {

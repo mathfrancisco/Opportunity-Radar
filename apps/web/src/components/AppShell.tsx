@@ -1,14 +1,19 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { PageHeader } from './PageHeader'
 import { Sidebar, type NavigationPath } from './Sidebar'
+import { MobileNavigationDialog } from './ui/MobileNavigationDialog'
 
 export interface AppShellProps {
   /** Omitted on pages that are reached from a link rather than from the nav. */
   current?: NavigationPath
-  /** Kept for API compatibility with the old shell; no longer shown (SPEC 46, D10). */
+  /** Petrol kicker above the title (SPEC 54: "Decidir"); drawn only when given. */
   eyebrow?: string
   title: string
   description?: string
+  /** Back link, drawn above the title block. */
+  back?: ReactNode
+  /** Facts that belong to the title block (meta line, chips), drawn under the title. */
+  meta?: ReactNode
   /** Header action slot: at most one secondary Button (SPEC 46, 7.1). */
   actions?: ReactNode
   children: ReactNode
@@ -18,26 +23,43 @@ export interface AppShellProps {
 const drawerId = 'sidebar'
 
 /**
- * Sidebar + white content panel. From `md` up the sidebar is a fixed column; below it, it
+ * Sidebar + content on the canvas. From `md` up the sidebar is a fixed column; below it, it
  * is a drawer opened by the menu button.
  */
-export function AppShell({ current, title, description, actions, children, footer }: AppShellProps) {
+export function AppShell({
+  current,
+  eyebrow,
+  title,
+  description,
+  back,
+  meta,
+  actions,
+  children,
+  footer,
+}: AppShellProps) {
   const [open, setOpen] = useState(false)
   const menuButton = useRef<HTMLButtonElement>(null)
 
-  const close = useCallback((restoreFocus: boolean) => {
-    setOpen(false)
-    if (restoreFocus) menuButton.current?.focus()
-  }, [])
-
   useEffect(() => {
-    if (!open) return
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') close(true)
+    if (typeof window.matchMedia !== 'function') {
+      return
     }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [open, close])
+
+    const desktop = window.matchMedia('(min-width: 768px)')
+    const closeOnDesktop = (event: MediaQueryListEvent) => {
+      if (event.matches) {
+        setOpen(false)
+      }
+    }
+
+    if (desktop.addEventListener) {
+      desktop.addEventListener('change', closeOnDesktop)
+      return () => desktop.removeEventListener('change', closeOnDesktop)
+    }
+
+    desktop.addListener(closeOnDesktop)
+    return () => desktop.removeListener(closeOnDesktop)
+  }, [])
 
   return (
     <div className="min-h-screen bg-canvas text-ink md:flex">
@@ -50,40 +72,45 @@ export function AppShell({ current, title, description, actions, children, foote
         Pular para o conteúdo
       </a>
 
-      <div className="flex items-center gap-3 border-b border-line px-4 py-2 md:hidden">
-        <button
-          aria-controls={drawerId}
-          aria-expanded={open}
-          className="min-h-11 rounded-control border border-line-strong bg-surface px-4 text-sm font-medium"
-          onClick={() => setOpen((value) => !value)}
-          ref={menuButton}
-          type="button"
+      <div className="flex items-center gap-3 border-b border-line-strong bg-sidebar px-4 py-2 md:hidden">
+        <MobileNavigationDialog
+          contentClassName="fixed inset-y-0 left-0 z-20 w-60 overflow-y-auto border-r border-line-strong bg-sidebar p-3 shadow-overlay md:hidden"
+          onOpenChange={setOpen}
+          open={open}
+          title="Navegação principal"
+          trigger={
+            <button
+              aria-controls={open ? drawerId : undefined}
+              aria-expanded={open}
+              className="min-h-11 rounded-control border border-line-strong bg-surface px-4 text-sm font-medium"
+              ref={menuButton}
+              type="button"
+            >
+              Menu
+            </button>
+          }
         >
-          Menu
-        </button>
+          <Sidebar current={current} onNavigate={() => setOpen(false)} />
+        </MobileNavigationDialog>
       </div>
 
-      {open && (
-        <div
-          aria-hidden="true"
-          className="fixed inset-0 z-10 bg-ink/30 md:hidden"
-          data-testid="drawer-backdrop"
-          onClick={() => close(false)}
-        />
-      )}
       <aside
-        className={`${
-          open ? 'fixed inset-y-0 left-0 z-20 block overflow-y-auto' : 'hidden'
-        } w-60 shrink-0 border-r border-line bg-canvas p-3 md:sticky md:top-0 md:block md:h-screen md:overflow-y-auto md:border-r-0`}
-        id={drawerId}
+        className="hidden w-60 shrink-0 border-r border-line-strong bg-sidebar p-3 md:sticky md:top-0 md:block md:h-screen md:overflow-y-auto"
       >
-        <Sidebar current={current} onNavigate={() => close(false)} />
+        <Sidebar current={current} />
       </aside>
 
-      <main className="min-w-0 flex-1 md:p-3 md:pl-0">
-        <div className="min-h-[calc(100vh-1.5rem)] border-line bg-surface p-4 md:rounded-panel md:border md:p-6">
+      <main className="min-w-0 flex-1 p-4 md:p-8">
+        <div className="min-h-[calc(100vh-4rem)]">
           <section id="conteudo" tabIndex={-1}>
-            <PageHeader actions={actions} description={description} title={title} />
+            {back && <div className="mb-4">{back}</div>}
+            <PageHeader
+              actions={actions}
+              description={description}
+              eyebrow={eyebrow}
+              meta={meta}
+              title={title}
+            />
             <div className="mt-6">{children}</div>
           </section>
           {footer && (

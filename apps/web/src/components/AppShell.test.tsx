@@ -1,8 +1,19 @@
-import { act } from 'react'
-import { describe, expect, it } from 'vitest'
+import { act, type ReactElement } from 'react'
+import { createRoot } from 'react-dom/client'
+import { afterEach, describe, expect, it } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { AppShell } from './AppShell'
-import { render } from './testing'
+
+const roots: ReturnType<typeof createRoot>[] = []
+
+function render(element: ReactElement) {
+  const container = document.createElement('div')
+  document.body.append(container)
+  const root = createRoot(container)
+  roots.push(root)
+  act(() => root.render(element))
+  return container
+}
 
 function renderShell() {
   return render(
@@ -15,8 +26,48 @@ function renderShell() {
 }
 
 function menuButton(container: HTMLElement) {
-  return container.querySelector<HTMLButtonElement>('button[aria-controls]')!
+  return container.querySelector<HTMLButtonElement>('button[type="button"]')!
 }
+
+function drawer() {
+  return document.querySelector<HTMLElement>('[role="dialog"][id="sidebar"]')!
+}
+
+function flushTimer() {
+  return new Promise((resolve) => window.setTimeout(resolve, 0))
+}
+
+function stubMatchMedia() {
+  let matches = false
+  const listeners = new Set<(event: MediaQueryListEvent) => void>()
+  const mediaQuery = {
+    addEventListener: (_: string, listener: (event: MediaQueryListEvent) => void) => listeners.add(listener),
+    matches,
+    media: '(min-width: 768px)',
+    removeEventListener: (_: string, listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener),
+  } as unknown as MediaQueryList
+
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: () => mediaQuery,
+  })
+
+  return (nextMatches: boolean) => {
+    matches = nextMatches
+    Object.defineProperty(mediaQuery, 'matches', { configurable: true, value: matches })
+    listeners.forEach((listener) => listener({ matches } as MediaQueryListEvent))
+  }
+}
+
+const originalMatchMedia = window.matchMedia
+
+afterEach(() => {
+  act(() => {
+    roots.splice(0).forEach((root) => root.unmount())
+  })
+  document.body.replaceChildren()
+  Object.defineProperty(window, 'matchMedia', { configurable: true, value: originalMatchMedia })
+})
 
 describe('AppShell', () => {
   it('põe o link de pular como primeiro alvo de tabulação', () => {
@@ -41,31 +92,68 @@ describe('AppShell', () => {
     expect(container.innerHTML).not.toContain('shadow-shell')
   })
 
-  it('abre a gaveta pelo botão, com aria-expanded e aria-controls', () => {
+  it('desenha o link de volta acima do título e o eyebrow só quando dado', () => {
+    const container = render(
+      <MemoryRouter>
+        <AppShell back={<a href="/inbox">Voltar</a>} eyebrow="Oportunidade" title="Vaga">
+          <p>conteúdo</p>
+        </AppShell>
+      </MemoryRouter>,
+    )
+    const back = container.querySelector('a[href="/inbox"]') as HTMLElement
+    const h1 = container.querySelector('h1') as HTMLElement
+    expect(back.compareDocumentPosition(h1) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(container.querySelector('header p')?.textContent).toBe('Oportunidade')
+    expect(renderShell().querySelector('header p')?.textContent).toBe('Fontes ativas')
+  })
+
+  it('abre a gaveta pelo botão, com relação aria válida e nome acessível', () => {
     const container = renderShell()
     const button = menuButton(container)
 
     expect(button.getAttribute('aria-expanded')).toBe('false')
-    expect(container.querySelector(`#${button.getAttribute('aria-controls')}`)).not.toBeNull()
+    expect(button.hasAttribute('aria-controls')).toBe(false)
     expect(container.querySelector('aside')?.className).toContain('hidden')
 
     act(() => button.click())
 
     expect(button.getAttribute('aria-expanded')).toBe('true')
-    expect(container.querySelector('aside')?.className).toContain('fixed')
+    expect(drawer().id).toBe(button.getAttribute('aria-controls'))
+    expect(drawer().getAttribute('aria-labelledby')).not.toBeNull()
+    expect(drawer().textContent).toContain('Navegação principal')
   })
 
-  it('fecha a gaveta com Esc e devolve o foco ao botão', () => {
+  it('redireciona o foco para a gaveta quando um controle externo recebe foco', async () => {
     const container = renderShell()
     const button = menuButton(container)
     act(() => button.click())
-    container.querySelector<HTMLElement>('aside a')?.focus()
+
+    const dialog = drawer()
+    await act(async () => {
+      await flushTimer()
+    })
+
+    act(() => button.focus())
+    await act(async () => {
+      await flushTimer()
+    })
+    expect(dialog.contains(document.activeElement)).toBe(true)
+  })
+
+  it('fecha a gaveta com Esc e devolve o foco ao botão', async () => {
+    const container = renderShell()
+    const button = menuButton(container)
+    act(() => button.click())
+    drawer().querySelector<HTMLElement>('a')?.focus()
 
     act(() => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     })
 
     expect(button.getAttribute('aria-expanded')).toBe('false')
+    await act(async () => {
+      await flushTimer()
+    })
     expect(document.activeElement).toBe(button)
   })
 
@@ -74,8 +162,46 @@ describe('AppShell', () => {
     const button = menuButton(container)
     act(() => button.click())
 
-    act(() => container.querySelector<HTMLElement>('aside nav a')?.click())
+    act(() => drawer().querySelector<HTMLElement>('nav a')?.click())
 
     expect(button.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('fecha a gaveta pelo fundo modal', async () => {
+    const container = renderShell()
+    const button = menuButton(container)
+    act(() => button.click())
+
+    await act(async () => {
+      await flushTimer()
+    })
+
+    act(() => {
+      const backdrop = document.querySelector<HTMLElement>('[data-testid="drawer-backdrop"]')
+      backdrop?.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }),
+      )
+      backdrop?.dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, button: 0, pointerType: 'mouse' }),
+      )
+      backdrop?.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }))
+    })
+
+    await act(async () => {
+      await flushTimer()
+    })
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('fecha a gaveta ao cruzar o breakpoint desktop', () => {
+    const setMatches = stubMatchMedia()
+    const container = renderShell()
+    const button = menuButton(container)
+    act(() => button.click())
+
+    act(() => setMatches(true))
+
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+    expect(document.querySelector('[role="dialog"][id="sidebar"]')).toBeNull()
   })
 })

@@ -140,7 +140,7 @@ test.describe('keyboard and focus', () => {
   test('mobile drawer opens by button, Escape closes and returns focus', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 800 })
     await page.goto('/')
-    const menu = page.getByRole('button', { name: 'Menu' })
+    const menu = page.getByRole('button', { name: 'Menu', includeHidden: true })
     await expect(menu).toHaveAttribute('aria-expanded', 'false')
     await menu.click()
     await expect(menu).toHaveAttribute('aria-expanded', 'true')

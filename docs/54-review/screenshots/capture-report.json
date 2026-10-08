@@ -50,6 +50,13 @@
   },
   {
     "page": "pipeline",
+    "viewport": "1280",
+    "overflow": false,
+    "scrollWidth": 1280,
+    "clientWidth": 1280
+  },
+  {
+    "page": "pipeline",
     "viewport": "768",
     "overflow": false,
     "scrollWidth": 768,

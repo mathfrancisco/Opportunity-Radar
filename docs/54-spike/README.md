@@ -1,94 +1,105 @@
 # WP1 — spike de primitives da SPEC 54
 
 **Estado:** evidência local e descartável; não é implementação do produto, nem
-aceite visual, nem seleção final.
+aceite visual, nem seleção final de um kit completo.
 
 ## Escopo executado
 
-O experimento vive somente no worktree descartável
+O experimento original viveu somente no worktree descartável
 `.worktrees/f54-primitives`, branch `spike/f54-primitives-20261007`, criado no
-commit `e84be68`. Ele adiciona a rota isolada `/__f54-primitives`, sem chamadas
-de API, banco ou alteração de CSS de produção. A rota exercita wrappers locais
+commit `e84be68`. Ele adicionou a rota isolada `/__f54-primitives`, sem chamadas
+de API, banco ou alteração de CSS de produção. A rota exercitou wrappers locais
 de `Button`, `Field`, `Dropdown`, `Dialog` e `Table` em `components/ui`.
 
-Os wrappers são uma **prova de viabilidade Radix com estilo local inspirado na
+Os wrappers eram uma **prova de viabilidade Radix com estilo local inspirado na
 arquitetura shadcn**, escritos manualmente. Nenhum arquivo de registry shadcn,
-CLI ou `components.json` foi copiado/gerado. Portanto, isto não valida uma
-proveniência shadcn ou uma versão de registry para integração futura.
+CLI ou `components.json` foi copiado/gerado; isso não valida proveniência shadcn
+nem uma versão de registry para integração futura.
 
-## Baseline e resultado mensurado
+## Baseline histórico e comparação
 
-| Medida | Base `e84be68` | Spike Radix | Delta |
+| Medida | Base `e84be68` | Primeiro spike Radix | Delta |
 | --- | ---: | ---: | ---: |
 | módulos Vite | 133 | 207 | +74 |
-| CSS gzip | 6.65 kB | 7.24 kB | +0.59 kB |
-| JS inicial gzip | 149.01 kB | 179.77 kB | +30.76 kB / **20.64%** |
+| CSS gzip | 6,65 kB | 7,24 kB | +0,59 kB |
+| JS inicial gzip | 149,01 kB | 179,77 kB | +30,76 kB / **20,64%** |
 | testes | 42 arquivos / 292 testes | 43 / 294 | +1 / +2 |
 
-O aumento de JS excede o orçamento AC54-09 de 10%. Como a rota foi incluída no
-bundle inicial apenas para medir o custo total, ela não mascara o custo por lazy
-loading. A spike não libera merge nem escolhe Radix/shadcn; qualquer adoção
-futura precisa reduzir/justificar esse delta e repetir a medida no conjunto de
-rotas aprovado.
+Essa primeira medição incluiu Dialog, Dropdown e Slot e excedeu o orçamento
+AC54-09 de 10%; permanece como fato histórico, não como a medida do recorte
+aprovado abaixo. React Aria Components 1.21.1 e MUI Material 9.4.0 foram apenas
+pesquisados por metadados, sem instalação, árvore, medição de bundle ou teste de
+teclado. A compatibilidade Radix então observada foi no app React 19 / Vite 8 /
+Tailwind 4 existente, usando somente classes Tailwind nos wrappers.
 
-## Comparação de candidatos
+## Verificações e limites preservados
 
-| Candidato | Versão consultada | Licença | peer React 19 | Evidência de execução |
-| --- | --- | --- | --- | --- |
-| Radix Dialog + Dropdown + Slot | 1.2.0 / 2.1.25 / 1.4.0 | MIT | `^19.0` aceito | instalada com versões exatas, typecheck/build/test e smoke Playwright |
-| React Aria Components | 1.21.1 | Apache-2.0 | `^19.0.0-rc.1` aceito | apenas metadados e documentação Context7 |
-| MUI Material | 9.4.0 | MIT | `^19.0.0` aceito | apenas metadados e documentação Context7; declara `@emotion/react`, `@emotion/styled` e `@mui/material-pigment-css` como peers |
-
-As versões, licenças e peers vêm de `npm view` em 2026-10-07. A compatibilidade
-Radix foi provada no app React 19 / Vite 8 / Tailwind 4 existente; Tailwind foi
-usado somente para classes dos wrappers, sem alterar `styles.css`. React Aria e
-MUI não receberam instalação, árvore, medição de bundle ou teste de teclado, e
-não podem ser considerados comparados de forma completa.
-
-## Acessibilidade e isolamento verificados
-
-- Vitest exercitou label de campo, tabela com `caption`, abertura por ArrowDown,
+- Vitest do spike exercitou label de campo, `caption` de tabela, ArrowDown,
   Escape e retorno de foco do diálogo ao gatilho.
-- Smoke Playwright em `127.0.0.1:4173/__f54-primitives` confirmou
-  `returnedFocus: "Abrir confirmação"`, abriu o menu por teclado e bloqueou toda
-  chamada `/api`; o resultado foi `apiRequests: []`.
-- O browser check é de teclado e DOM. Revisão manual por leitor de tela,
-  contraste final, zoom, mobile e aprovação visual continuam pendentes.
+- O smoke Playwright em `127.0.0.1:4173/__f54-primitives` bloqueou qualquer
+  origem diferente de `http://127.0.0.1:4173` e todo caminho `/api` antes de
+  navegar; a execução persistida registrou `apiRequests: []`, Tab, Shift+Tab,
+  Escape e retorno de foco.
+- Revisão manual por leitor de tela, contraste final, zoom, mobile e aprovação
+  visual continuam pendentes; o browser check não prova esses pontos.
+- `npm audit --omit=dev --json` registrou zero vulnerabilidades de produção
+  após instalar Radix. O audit completo manteve um aviso alto do baseline, fora
+  do escopo, e houve aviso de engine de `jsdom@30.0.1` com Node 24.12.0.
 
-## Dependências e segurança
+Uma segunda tentativa descartável com Base UI 1.8.0 teve testes unitários, mas
+falhou em Shift+Tab no smoke real; o check completo também teria falhado porque
+ESLint percorreu `node_modules.radix-archived`, e a limpeza parcial foi bloqueada
+por binário no Windows. Não há log literal completo desse relato. As fontes,
+manifestos, teste e runner estão em
+`artifacts/base-ui-source.patch`: é referência de revisão, sem dependências,
+binários ou worktree, e não deve ser publicada/reparada nem receber uma terceira
+tentativa automática.
 
-A árvore local direta está em [artifacts/dependency-tree.txt](artifacts/dependency-tree.txt).
-`npm audit --omit=dev --json` retornou 0 vulnerabilidades de produção após a
-instalação Radix. O `npm ci` do baseline e o install avisaram uma vulnerabilidade
-alta no audit completo, que não foi corrigida por estar fora da spike; esta não
-aparece no audit de produção. Houve também aviso de engine de `jsdom@30.0.1`
-com Node 24.12.0, já presente no baseline.
+## Decisão aprovada para WP3B
 
-## Próxima decisão
+O produto adota somente `@radix-ui/react-dialog@1.2.0`, por meio de um wrapper
+local em `apps/web/src/components/ui/`, para a gaveta de navegação móvel. Não
+há menu, popover, combobox ou tabs no app que justifiquem outro primitive.
 
-Manter a escolha em aberto. Antes de WP1 ser aceita, registrar proveniência
-shadcn (registry/revisão e licenças dos arquivos copiados) se essa distribuição
-for escolhida, medir alternativas executáveis quando necessário e cumprir o
-orçamento de bundle. F53 e os três protótipos visuais continuam gates pendentes
-da SPEC 54.
+| Candidato | Delta JS gzip sobre 149,01 kB | Resultado |
+| --- | ---: | --- |
+| Radix Dialog 1.2.0 | +12,61 kB / **+8,54%** | aprovado; dentro do orçamento de +10% |
+| Base UI | +13,35% | reprovado; Shift+Tab falhou |
+| React Aria | +16,73% | fora do orçamento |
+| MUI | +24,13% | fora do orçamento |
 
-## Correção do smoke de rede
+A margem histórica de aproximadamente 2,2 kB pertence ao spike isolado
+(149,01→161,62 kB). Na medição integrada, restam 0,26 kB até o limite de +10%;
+essa margem não autoriza adicionar outro primitive Radix sem nova medição
+comparável. Caso o total futuro exceda +10%, o Dialog da gaveta deve ser
+carregado sob demanda.
 
-O smoke inicial foi reforçado antes da segunda comparação: **antes de navegar**,
-o Playwright agora aborta qualquer origem diferente de
-`http://127.0.0.1:4173` e qualquer caminho `/api`. Ele também falha se houver
-uma tentativa bloqueada. A execução literal persistida confirma zero tentativas,
-Tab e Shift+Tab dentro do diálogo, Escape e retorno de foco tanto no diálogo
-quanto no menu. O servidor local não abriu a visão geral nem qualquer rota de
-domínio.
+## Limites da decisão
 
-Enquanto a spike estava em andamento, `main` avançou externamente para
-`b6d25ae`; não há mudança de frontend dessa revisão no worktree baseado em
-`e84be68`. Os únicos arquivos deliberadamente criados em `main` por esta spike
-são os desta pasta `docs/54-spike`.
+Esta decisão seleciona apenas o Dialog e não aprova uma distribuição shadcn,
+outros primitives, rotas, estilos globais ou a SPEC 54 como um todo. A
+evidência de bundle é específica à medição final acima; mudanças posteriores
+exigem nova validação proporcional.
 
-## Segundo spike: Base UI (resultado nao aprovado)
+## Medição integrada final local
 
-Uma tentativa adicional usou Base UI 1.8.0 em worktree descartavel baseada em `e84be68`. Rota, botao nativo, tabela, campo, dialogo e menu foram exercitados; testes unitarios passaram. No smoke real, Tab, Escape, foco restaurado e bloqueio de rede passaram, mas **Shift+Tab dentro do dialogo falhou**. O check completo tambem falhou: ESLint percorreu `node_modules.radix-archived` dentro do app. A limpeza ficou parcial por bloqueio de binario no Windows. Nao considerar o candidato aprovado nem o check completo verde.
+Além do spike isolado, o build integrado após WP5 mediu 163,64 kB de JS inicial
+gzip e 7,33 kB de CSS gzip. O `npm run check` terminou com exit 0; o Vitest
+reportou 44 arquivos e 343 testes. Esses resultados pertencem ao checkout
+integrado final local e não substituem as medidas históricas isoladas.
 
-Fontes, manifestos, teste e smoke estao preservados em `artifacts/base-ui-source.patch`. E arquivo de referencia para revisao, nao pacote pronto para aplicar sobre `main`; nao inclui dependencias, binarios ou worktree. Nao houve terceira comparacao nem selecao de kit. Radix cresceu 20,64% (+30,76 kB gzip de JS inicial), acima do orcamento maximo de +10%; Base UI tem falha de teclado; React Aria e MUI foram pesquisados somente por metadados. A decisao permanece aberta.
+| Comparação integrada | JS inicial gzip | Delta |
+| --- | ---: | ---: |
+| Baseline aceito: 149,01 kB → 163,64 kB | 163,64 kB | +14,63 kB / **+9,82%** |
+
+Contra o limite de +10% sobre o baseline aceito, a medição integrada fica
+0,27 kB abaixo do limite. O resultado do spike isolado continua sendo
+149,01→161,62 kB (+12,61 kB / +8,54%); não deve ser apresentado como o delta
+integrado. O primeiro spike amplo de +20,64% permanece como registro histórico.
+
+As verificações visuais finais locais da aplicação estão em `docs/54-final`:
+55 capturas da aplicação construída, com fixtures locais, 11 URLs diretas
+(incluindo wildcard) e cinco larguras. Elas verificam carregamento direto,
+overflow horizontal, page/console errors, mapeamento de API e respostas fixture;
+não comprovam WCAG global, zoom real, leitor de tela, reduced motion,
+dispositivos físicos, E2E Compose, F53, WP6 ou WP7.

@@ -28,6 +28,16 @@ function contrast(fg: string, bg: string): number {
 }
 
 const TEXT_PAIRS: Array<[string, string]> = [
+  ['ink', 'sidebar'],
+  ['subtle', 'sidebar'],
+  ['muted', 'sidebar'],
+  ['accent-ink', 'sidebar'],
+  ['subtle', 'panel'],
+  ['accent-ink', 'panel'],
+  ['accent-ink', 'accent-surface'],
+  ['ink', 'accent-surface'],
+  ['muted', 'accent-surface'],
+  ['neutral-ink', 'surface'],
   ['ink', 'canvas'],
   ['ink', 'surface'],
   ['ink', 'raised'],
@@ -50,13 +60,22 @@ const TEXT_PAIRS: Array<[string, string]> = [
   ['info-ink', 'info-surface'],
   ['surface', 'ink'],
   ['surface', 'ink-hover'],
-  ['ink', 'brand'],
+  ['surface', 'accent'],
+  ['surface', 'accent-hover'],
+  ['surface', 'brand'],
 ]
 
 const CONTROL_PAIRS: Array<[string, string]> = [
   ['control-line', 'surface'],
+  ['control-line', 'canvas'],
   ['accent', 'surface'],
   ['ink', 'surface'],
+  // Anel de foco (:focus-visible usa `accent`): contra cada fundo em que um alvo pode estar.
+  ['accent', 'canvas'],
+  ['accent', 'panel'],
+  ['accent', 'sidebar'],
+  ['accent', 'accent-surface'],
+  ['accent-hover', 'surface'],
 ]
 
 describe('contraste dos tokens de styles.css', () => {
@@ -68,8 +87,26 @@ describe('contraste dos tokens de styles.css', () => {
     expect(contrast(fg, bg)).toBeGreaterThanOrEqual(3)
   })
 
+  it('usa accent como anel de foco e respeita prefers-reduced-motion', () => {
+    const focus = /:focus-visible {([^}]*)}/.exec(css)?.[1] ?? ''
+    expect(focus).toContain('outline: 3px solid var(--color-accent)')
+    expect(focus).toContain('outline-offset: 3px')
+    const motion = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'))
+    expect(motion).toContain('transition-duration')
+    expect(motion).toContain('animation-duration')
+  })
+
   it('declara os tokens novos do redesenho', () => {
-    for (const name of ['control-line', 'accent-surface', 'accent-ink', 'ink-hover', 'subtle', 'brand']) {
+    for (const name of [
+      'control-line',
+      'accent-surface',
+      'accent-ink',
+      'accent-hover',
+      'ink-hover',
+      'subtle',
+      'brand',
+      'sidebar',
+    ]) {
       expect(() => token(name)).not.toThrow()
     }
     for (const t of [
@@ -79,6 +116,7 @@ describe('contraste dos tokens de styles.css', () => {
       '--text-page-title:',
       '--text-body-sm:',
       '--text-caption:',
+      '--shadow-overlay:',
     ]) {
       expect(css).toContain(t)
     }

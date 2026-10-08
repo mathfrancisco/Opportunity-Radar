@@ -23,6 +23,14 @@ interface DataTableProps {
   onToggleAll?: (selected: boolean) => void
   /** Visible to assistive tech only; the header cell has no room for text. */
   selectAllLabel?: string
+  /**
+   * Below `xl` each row becomes a card (`display: block`) and the header row is hidden
+   * visually, not from the accessibility tree. `display: block` drops the native table
+   * semantics, so the table, its groups, its header cells and the header row carry explicit
+   * ARIA roles here; the caller gives its own `<tr>` `role="row"` and each `<td>`
+   * `role="cell"`, and styles the card face.
+   */
+  stackBelowXl?: boolean
   /** Lets a disclosure button point at this table with `aria-controls`. */
   id?: string
   className?: string
@@ -69,6 +77,7 @@ export function DataTable({
   someSelected = false,
   onToggleAll,
   selectAllLabel = 'Selecionar todas',
+  stackBelowXl = false,
   id,
   className = '',
 }: DataTableProps) {
@@ -82,22 +91,33 @@ export function DataTable({
     ? ' [&_td:first-child]:sticky [&_td:first-child]:left-0 [&_td:first-child]:bg-surface' +
       ' [&_th:first-child]:sticky [&_th:first-child]:left-0 [&_th:first-child]:bg-panel'
     : ''
+  const frame = stackBelowXl
+    ? 'xl:overflow-x-auto rounded-panel xl:border xl:border-line xl:bg-surface'
+    : 'overflow-x-auto rounded-control border border-line bg-surface'
+  const tableClass = stackBelowXl
+    ? 'w-full text-left text-body-sm max-xl:block max-xl:[&_tbody]:block max-xl:[&_tr]:block ' +
+      'max-xl:[&_td]:block max-xl:[&_tbody_tr]:mb-3 max-xl:[&_tbody_tr]:rounded-panel ' +
+      'max-xl:[&_tbody_tr]:border max-xl:[&_tbody_tr]:border-line max-xl:[&_tbody_tr]:bg-surface ' +
+      'max-xl:[&_tbody_tr]:py-2 max-xl:[&_td]:px-4 max-xl:[&_td]:py-1.5 xl:border-collapse ' +
+      'xl:[&_tbody_td]:px-4 xl:[&_tbody_td]:py-3 xl:[&_tbody_tr]:border-t xl:[&_tbody_tr]:border-divider ' +
+      'xl:[&_tbody_tr:first-child]:border-t-0'
+    : 'w-full border-collapse text-left text-body-sm [&_tbody_td]:h-11 [&_tbody_td]:px-4 ' +
+      `[&_tbody_td]:py-2 [&_tbody_tr]:border-t [&_tbody_tr]:border-line${sticky}`
   return (
-    <div
-      className={`relative overflow-x-auto rounded-control border border-line bg-surface ${className}`.trim()}
-      id={id}
-    >
-      <table
-        className={
-          'w-full border-collapse text-left text-body-sm [&_tbody_td]:h-11 [&_tbody_td]:px-4 ' +
-          `[&_tbody_td]:py-2 [&_tbody_tr]:border-t [&_tbody_tr]:border-line${sticky}`
-        }
-      >
+    <div className={`relative ${frame} ${className}`.trim()} id={id}>
+      <table className={tableClass} role={stackBelowXl ? 'table' : undefined}>
         {caption && <caption className="sr-only">{caption}</caption>}
-        <thead className="bg-panel text-caption text-muted">
-          <tr>
+        <thead
+          className={`bg-panel text-caption text-muted${stackBelowXl ? ' max-xl:sr-only' : ''}`}
+          role={stackBelowXl ? 'rowgroup' : undefined}
+        >
+          <tr role={stackBelowXl ? 'row' : undefined}>
             {selectable && (
-              <th className="w-10 px-4 py-2.5" scope="col">
+              <th
+                className="w-10 px-4 py-2.5"
+                role={stackBelowXl ? 'columnheader' : undefined}
+                scope="col"
+              >
                 <input
                   aria-label={selectAllLabel}
                   checked={allSelected}
@@ -109,13 +129,18 @@ export function DataTable({
               </th>
             )}
             {columns.map((column, index) => (
-              <th className="px-4 py-2.5 font-medium" key={index} scope="col">
+              <th
+                className="px-4 py-2.5 font-medium"
+                key={index}
+                role={stackBelowXl ? 'columnheader' : undefined}
+                scope="col"
+              >
                 {column}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody>{children}</tbody>
+        <tbody role={stackBelowXl ? 'rowgroup' : undefined}>{children}</tbody>
       </table>
     </div>
   )

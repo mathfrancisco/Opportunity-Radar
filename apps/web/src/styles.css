@@ -24,51 +24,56 @@
 @theme {
   --font-sans: "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
 
-  --color-canvas: #f4f4f5;
+  --color-canvas: #f7f8f8;
   --color-surface: #ffffff;
   /* Mantido por compatibilidade; igual a `surface` (SPEC 46, 4.3). */
   --color-raised: #ffffff;
-  --color-panel: #fafafa;
+  --color-panel: #f1f5f5;
+  /* Fundo da sidebar: um tom abaixo de `canvas`, para separar navegação de conteúdo. */
+  --color-sidebar: #eef3f3;
 
-  --color-ink: #171717;
-  --color-ink-hover: #404040;
-  --color-subtle: #525252;
-  --color-muted: #6b6b6b;
-  --color-neutral-ink: #404040;
+  --color-ink: #132229;
+  --color-ink-hover: #2a3b42;
+  --color-subtle: #405159;
+  --color-muted: #52626a;
+  --color-neutral-ink: #405159;
 
-  --color-line: #e4e4e7;
-  --color-line-strong: #d4d4d8;
-  /* Borda de campo de texto e checkbox: 3.45:1 sobre `surface` (WCAG 1.4.11). */
-  --color-control-line: #8a8a8a;
-  --color-divider: #ececee;
+  /* Borda estrutural silenciosa (painel, divisão da sidebar); decorativa, sem mínimo WCAG. */
+  --color-line: #cbd7d8;
+  /* Borda de botão outlined, pílula e chip; o rótulo, não a borda, carrega o significado. */
+  --color-line-strong: #9fb2b4;
+  /* Borda de campo de texto e checkbox: 3.79:1 sobre `surface` (WCAG 1.4.11). */
+  --color-control-line: #71878a;
+  --color-divider: #dde7e7;
 
-  /* Acento de estado de UI (D5, D14): página atual, ativo, atenção. Nunca identidade. */
-  --color-accent: #c2410c;
-  --color-accent-ink: #c2410c;
-  --color-accent-surface: #fff1ea;
-  /* Cor de marca do logotipo: mantém o lima original (D13), independente do acento. */
-  --color-brand: #d7f06f;
+  /* Acento petróleo (SPEC 54): orientação, item atual, link, foco e ação primária. */
+  --color-accent: #0b5d66;
+  --color-accent-hover: #084b52;
+  --color-accent-ink: #0b5d66;
+  --color-accent-surface: #edf5f4;
+  /* Marca do logotipo: petróleo com glifo `surface`; sem lima. */
+  --color-brand: #0b5d66;
 
-  --color-success-surface: #eef4ec;
-  --color-success-surface-soft: #f4f8f2;
-  --color-success-surface-strong: #e0eede;
-  --color-success-line: #a3c29a;
-  --color-success-ink: #2f4a2a;
-  --color-success-ink-strong: #1f5a35;
+  --color-success-surface: #e3f1ed;
+  --color-success-surface-soft: #eef7f4;
+  --color-success-surface-strong: #d3e9e1;
+  --color-success-line: #8fbfae;
+  --color-success-ink: #14553c;
+  --color-success-ink-strong: #0f4a33;
 
-  --color-warning-surface: #faf4e6;
-  --color-warning-surface-strong: #f5ebc8;
-  --color-warning-line: #dcc98e;
-  --color-warning-ink: #6f5214;
-  --color-warning-ink-strong: #7f5410;
+  --color-warning-surface: #fdf3e9;
+  --color-warning-surface-strong: #f5eadc;
+  --color-warning-line: #e9c89d;
+  --color-warning-ink: #704015;
+  --color-warning-ink-strong: #854312;
 
-  --color-danger-surface: #fbf1ef;
-  --color-danger-surface-strong: #f7e2de;
-  --color-danger-line: #e4c8c2;
-  --color-danger-ink: #9b3e2e;
+  --color-danger-surface: #fbeeee;
+  --color-danger-surface-strong: #f7e4e4;
+  --color-danger-line: #e2b8b8;
+  --color-danger-ink: #8c3030;
 
-  --color-info-surface: #eef1f5;
-  --color-info-ink: #48566a;
+  --color-info-surface: #edf5f4;
+  --color-info-ink: #314a4d;
 
   /*
    * Escala de texto por papel. Tamanho, entrelinha, espaçamento e peso andam juntos
@@ -101,15 +106,16 @@
   --text-prose: 0.875rem;
   --text-prose--line-height: 1.5;
 
-  /* Forma. Elevação é só por borda: não há token de sombra. */
-  --radius-panel: 1rem;
-  --radius-control: 0.5rem;
-  --radius-chip: 0.375rem;
+  /* Forma. Elevação é por borda; a única sombra é a de sobreposição real (gaveta, menu). */
+  --radius-panel: 0.5rem;
+  --radius-control: 0.375rem;
+  --radius-chip: 0.25rem;
+  --shadow-overlay: 0 4px 12px rgb(19 34 41 / 0.12);
 
-  /* Papéis novos do redesenho (SPEC 46, 4.3). */
-  --text-page-title: 1.25rem;
-  --text-page-title--line-height: 1.75rem;
-  --text-page-title--letter-spacing: -0.01em;
+  /* Papéis novos do redesenho (SPEC 46, 4.3; título ajustado pela SPEC 54, 5.2). */
+  --text-page-title: 1.5rem;
+  --text-page-title--line-height: 2rem;
+  --text-page-title--letter-spacing: -0.02em;
   --text-page-title--font-weight: 600;
 
   --text-body-sm: 0.875rem;
@@ -132,15 +138,29 @@ body { margin: 0; min-width: 320px; }
 /*
  * Foco visível por padrão, em tudo.
  *
- * O anel usa `ink` e não `accent`: o contorno precisa contrastar com o que está atrás
- * dele, e o verde-limão sobre superfície clara fica em torno de 1.2:1 — visível para quem
- * já sabe onde procurar, invisível para quem navega por teclado. Sobre fundo escuro o
- * botão inverte o anel para `accent`, pelo mesmo motivo.
+ * O anel é `accent` (petróleo, mais de 6.7:1 sobre canvas, surface, panel e sidebar). Ele
+ * é desenhado fora do elemento, com 3px de afastamento, então também fica visível ao redor
+ * de um botão petróleo: o contraste é com o que está atrás do anel, não com o botão.
  */
 :focus-visible {
-  outline: 3px solid var(--color-ink);
+  outline: 3px solid var(--color-accent);
   outline-offset: 3px;
   border-radius: 0.35rem;
+}
+
+/* Números de métrica não dançam quando o valor muda. */
+@layer base {
+  .text-metric-lg, .text-metric, .text-metric-sm { font-variant-numeric: tabular-nums; }
+}
+
+/* Sem animação nem transição para quem pediu menos movimento. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Um endereço de vaga não pode empurrar a página inteira para o lado. */

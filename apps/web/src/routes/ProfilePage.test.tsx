@@ -64,6 +64,38 @@ async function flush(times = 4) {
 }
 
 describe('ProfilePage', () => {
+  it('mostra o contexto de decisão e marca Perfil na navegação', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.endsWith('/profile/versions')) return new Response('[]')
+        return new Response(JSON.stringify(version('version-1', 3, [])))
+      }),
+    )
+
+    const container = renderPage(<ProfilePage />)
+    await flush()
+
+    expect(container.textContent).toContain('Critérios de decisão')
+    expect(
+      container.querySelector('a[href="/profile"]')?.getAttribute('aria-current'),
+    ).toBe('page')
+    expect(container.querySelectorAll('nav [aria-current="page"]')).toHaveLength(1)
+
+    const skillsLabel = [...container.querySelectorAll('label')].find(
+      (label) => label.textContent?.includes('Skills'),
+    )
+    const skills = skillsLabel?.querySelector('input')
+    expect(skills).not.toBeNull()
+    expect(
+      container.querySelector(`#${CSS.escape(skills!.getAttribute('aria-labelledby')!)}`)?.textContent,
+    ).toBe('Skills')
+    expect(
+      container.querySelector(`#${CSS.escape(skills!.getAttribute('aria-describedby')!)}`)?.textContent,
+    ).toBe('Separadas por vírgula.')
+  })
+
   it('organizes the mounted form into reachable sections without losing a draft', async () => {
     vi.stubGlobal(
       'fetch',

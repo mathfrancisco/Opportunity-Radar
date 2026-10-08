@@ -661,7 +661,7 @@ describe('InboxPage table, pagination and filters', () => {
     expect(container.textContent).toContain('1 oportunidade encontrada.')
   })
 
-  it('abaixo de md mantém a visão em cartões', async () => {
+  it('abaixo de xl a mesma tabela vira cartões sem perder a semântica de tabela', async () => {
     vi.stubGlobal(
       'matchMedia',
       vi.fn(() => ({
@@ -674,8 +674,87 @@ describe('InboxPage table, pagination and filters', () => {
     const container = renderAt('/inbox')
     await flush()
 
-    expect(container.querySelector('table')).toBeNull()
-    expect(container.querySelector('article')).not.toBeNull()
+    // One DOM for every width: the layout is CSS, so there is no second list to announce.
+    expect(container.querySelectorAll('table')).toHaveLength(1)
+    expect(container.querySelector('article')).toBeNull()
+    const table = container.querySelector('table[role="table"]')
+    expect(table?.className).toContain('max-xl:block')
+    expect(table?.querySelector('thead')?.className).toContain('max-xl:sr-only')
+    expect(table?.parentElement?.className).toContain('xl:overflow-x-auto')
+  })
+
+  it('expõe cabeçalhos de coluna e linhas da tabela por papel ARIA', async () => {
+    stubInbox(2, [], [inboxItem(), inboxItem({ opportunity_id: 'opp-2', title: 'Data Engineer' })])
+    const container = renderAt('/inbox')
+    await flush()
+
+    const table = container.querySelector('[role="table"]') as HTMLElement
+    expect(table).not.toBeNull()
+    expect(table.querySelector('caption')?.textContent).toBe('Oportunidades')
+    expect(
+      [...table.querySelectorAll('[role="columnheader"]')].map((header) => header.textContent),
+    ).toEqual(['Vaga', 'Score e decisão', 'Sinais', 'Publicada', 'Ações'])
+    const rows = [...table.querySelectorAll('tbody [role="row"]')]
+    expect(rows).toHaveLength(2)
+    for (const row of rows) {
+      expect(row.querySelectorAll('[role="cell"]')).toHaveLength(5)
+    }
+    expect(table.querySelectorAll('[role="rowgroup"]')).toHaveLength(2)
+  })
+
+  it('mostra o score em caixa tabular e, ao lado, o nome do veredito', async () => {
+    stubInbox(1, [], [inboxItem({ score: '82', verdict: 'RECOMMENDED' })])
+    const container = renderAt('/inbox')
+    await flush()
+
+    const cell = container.querySelectorAll('tbody [role="cell"]')[1] as HTMLElement
+    expect(cell.textContent).toContain('82.0')
+    expect(cell.querySelector('.tabular-nums')?.textContent).toBe('82.0')
+    expect(cell.textContent).toContain('Recomendada')
+  })
+
+  it('desenha o kicker "Decidir", o título novo e as buscas salvas no cabeçalho', async () => {
+    stubInbox(1, [])
+    const container = renderAt('/inbox')
+    await flush()
+
+    const header = container.querySelector('header') as HTMLElement
+    expect(header.querySelector('p')?.textContent).toBe('Decidir')
+    expect(header.querySelector('h1')?.textContent).toBe('Quais vagas merecem sua atenção agora?')
+    expect(
+      [...header.querySelectorAll('button')].some((button) => button.textContent === 'Buscas salvas'),
+    ).toBe(true)
+  })
+
+  it('distingue o vazio sem dados do vazio por filtro', async () => {
+    stubInbox(0, [], [])
+    const bare = renderAt('/inbox')
+    await flush()
+    expect(bare.textContent).toContain('Ainda não há oportunidades para mostrar')
+    expect(bare.textContent).not.toContain('Nenhuma oportunidade encontrada com esses filtros.')
+
+    const filtered = renderAt('/inbox?work_mode=REMOTE')
+    await flush()
+    expect(filtered.textContent).toContain('Nenhuma oportunidade encontrada com esses filtros.')
+  })
+
+  it('envia à API os mesmos parâmetros de sempre para os filtros primários e avançados', async () => {
+    const urls: string[] = []
+    stubInbox(
+      1,
+      urls,
+      [inboxItem()],
+    )
+    renderAt('/inbox?verdict=RECOMMENDED&work_mode=REMOTE&order=score&minimum_score=60&seniority=SENIOR&search=backend&size=50')
+    await flush()
+
+    const inbox = new URL(urls.find((url) => url.includes('/inbox')) as string, 'http://localhost')
+    expect(inbox.searchParams.getAll('verdict')).toEqual(['RECOMMENDED'])
+    expect(inbox.searchParams.get('work_mode')).toBe('REMOTE')
+    expect(inbox.searchParams.get('order')).toBe('score')
+    expect(inbox.searchParams.get('minimum_score')).toBe('60')
+    expect(inbox.searchParams.get('search')).toBe('backend')
+    expect(inbox.searchParams.get('limit')).toBe('50')
   })
 
   it('pagina pelo Pagination, preserva ?page= e envia a página à API', async () => {
