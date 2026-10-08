@@ -2,17 +2,15 @@ from fastapi.testclient import TestClient
 
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.health import DependencyHealth, ai_health
-from opportunity_radar.presentation.http.app import create_app
+from opportunity_radar.presentation.http.app import create_development_app
 
 
 def settings(**overrides: object) -> Settings:
-    return Settings(
-        database_url="postgresql+psycopg://test:test@localhost/test", **overrides
-    )
+    return Settings(database_url="postgresql+psycopg://test:test@localhost/test", **overrides)
 
 
 def test_live_health_does_not_require_dependencies() -> None:
-    response = TestClient(create_app(settings())).get("/health/live")
+    response = TestClient(create_development_app(settings())).get("/health/live")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
@@ -24,7 +22,7 @@ def test_ready_is_healthy_when_database_is_current(monkeypatch) -> None:
         lambda _: DependencyHealth("healthy"),
     )
 
-    response = TestClient(create_app(settings())).get("/health/ready")
+    response = TestClient(create_development_app(settings())).get("/health/ready")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ready"}
@@ -36,7 +34,7 @@ def test_ready_returns_503_when_database_is_unavailable(monkeypatch) -> None:
         lambda _: DependencyHealth("unhealthy"),
     )
 
-    response = TestClient(create_app(settings())).get("/health/ready")
+    response = TestClient(create_development_app(settings())).get("/health/ready")
 
     assert response.status_code == 503
     assert response.json() == {"status": "not_ready"}
@@ -52,7 +50,7 @@ def test_ai_degradation_does_not_make_api_unready(monkeypatch) -> None:
         lambda _: DependencyHealth("degraded", "ai disabled"),
     )
 
-    response = TestClient(create_app(settings())).get("/health")
+    response = TestClient(create_development_app(settings())).get("/health")
 
     assert response.status_code == 200
     assert response.json()["ai"]["status"] == "degraded"
