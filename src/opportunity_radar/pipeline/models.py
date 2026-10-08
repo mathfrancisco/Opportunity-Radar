@@ -66,12 +66,15 @@ class ApplicationProcessModel(Base):
         ),
         Index("ix_application_stage_updated", "current_stage", "updated_at"),
         Index("ix_application_next_action_at", "next_action_at"),
+        Index("ix_application_owner_sub", "owner_sub"),
         {"schema": SCHEMA},
     )
 
     id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), primary_key=True, default=uuid4
     )
+    #: Set exclusively from the validated server-side Clerk identity.
+    owner_sub: Mapped[str] = mapped_column(String(255), nullable=False)
     opportunity_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("opportunities.opportunity.id", ondelete="RESTRICT"),
