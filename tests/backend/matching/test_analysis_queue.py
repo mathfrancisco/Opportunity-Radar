@@ -64,6 +64,7 @@ pytestmark = [
 
 _MODEL = "llama3.2:3b"
 _PROMPT_VERSION = "opportunity_analysis/v1"
+_TEST_OWNER_SUB = "test-analysis-queue-owner"
 # One character over the F51-12 floor: the automatic queue skips shorter descriptions.
 _USABLE_DESCRIPTION = "x" * (MIN_ANALYSIS_DESCRIPTION_CHARS + 1)
 
@@ -90,7 +91,9 @@ def _retire_pending_assessments_left_by_this_test() -> Iterator[None]:
     yield
     with Session(engine) as session:
         pending_now = set(
-            MatchingService(session).pending_analysis_ids(limit=1_000_000)
+            MatchingService(session, owner_sub=_TEST_OWNER_SUB).pending_analysis_ids(
+                limit=1_000_000
+            )
         )
         leaked = pending_now - before_ids
         if not leaked:
@@ -228,10 +231,12 @@ def _failed() -> AnalysisOutcome:
 
 
 def _profile_version(session: Session) -> ProfileVersionModel:
-    """The career profile is a singleton, so each test appends a version to the same row."""
-    profile = session.scalar(select(CareerProfileModel).limit(1))
+    """Each test appends a version to this suite's explicit owner profile."""
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == _TEST_OWNER_SUB)
+    )
     if profile is None:
-        profile = CareerProfileModel(version=1)
+        profile = CareerProfileModel(version=1, owner_sub=_TEST_OWNER_SUB)
         session.add(profile)
         session.flush()
     next_number = (
@@ -242,9 +247,7 @@ def _profile_version(session: Session) -> ProfileVersionModel:
         )
         or 0
     ) + 1
-    version = ProfileVersionModel(
-        career_profile_id=profile.id, number=next_number, status="DRAFT"
-    )
+    version = ProfileVersionModel(career_profile_id=profile.id, number=next_number, status="DRAFT")
     session.add(version)
     session.flush()
     return version
@@ -288,6 +291,7 @@ def _seed_assessment(
     repository = SqlAlchemyMatchingRepository(session)
     assessment = repository.add(
         AssessmentRecord(
+            owner_sub=_TEST_OWNER_SUB,
             opportunity_id=opportunity.id,
             opportunity_version=opportunity.version,
             profile_version_id=version.id,
@@ -311,8 +315,10 @@ def _seed_assessment(
 
 def _profile_version_with_preference(session: Session) -> ProfileVersionModel:
     """A version `evaluate()` can use directly: it needs a persisted preference row."""
-    service = ProfileService(session)
-    profile = session.scalar(select(CareerProfileModel).limit(1))
+    service = ProfileService(session, owner_sub=_TEST_OWNER_SUB)
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == _TEST_OWNER_SUB)
+    )
     expected = profile.version if profile is not None else 0
     snapshot = ProfileSnapshot(
         skills=(Skill(canonical_name="python"),),
@@ -365,7 +371,9 @@ def test_only_configured_verdicts_are_queued() -> None:
             for verdict in ("LOW_MATCH", "INELIGIBLE")
         }
 
-        queued = set(MatchingService(session).pending_analysis_ids(limit=100))
+        queued = set(
+            MatchingService(session, owner_sub=_TEST_OWNER_SUB).pending_analysis_ids(limit=100)
+        )
 
         assert set(eligible.values()) <= queued
         assert queued.isdisjoint(ignored.values())
@@ -393,12 +401,8 @@ def _opportunity(session: Session, *, role_family: str) -> OpportunityModel:
 
 def test_the_queue_keeps_to_the_requested_role_families() -> None:
     with _session() as session:
-        inside = _seed_assessment(
-            session, opportunity=_opportunity(session, role_family="DATA")
-        )
-        outside = _seed_assessment(
-            session, opportunity=_opportunity(session, role_family="SALES")
-        )
+        inside = _seed_assessment(session, opportunity=_opportunity(session, role_family="DATA"))
+        outside = _seed_assessment(session, opportunity=_opportunity(session, role_family="SALES"))
         repository = SqlAlchemyMatchingRepository(session)
         now = datetime.now(UTC)
 
@@ -441,7 +445,9 @@ def test_the_queue_serves_the_most_valuable_verdict_first_then_the_newest_postin
             for age in (5, 1)
         }
 
-        queued = MatchingService(session).pending_analysis_ids(limit=10_000)
+        queued = MatchingService(session, owner_sub=_TEST_OWNER_SUB).pending_analysis_ids(
+            limit=10_000
+        )
 
         ours = [item for item in queued if item in set(seeded.values())]
         assert ours == [
@@ -488,7 +494,7 @@ def test_pending_analysis_orders_by_value() -> None:
             low_priority_top_score,
         }
 
-        queued = MatchingService(session).pending_analysis_ids(limit=100)
+        queued = MatchingService(session, owner_sub=_TEST_OWNER_SUB).pending_analysis_ids(limit=100)
 
         ours = [item for item in queued if item in ours_ids]
         assert ours == [
@@ -563,7 +569,7 @@ def test_pending_analysis_skips_without_material_change() -> None:
         )
         session.add(opportunity)
         session.flush()
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
         first = service.evaluate(opportunity.id, profile_version_id=version.id)
         session.commit()
 
@@ -602,7 +608,7 @@ def test_pending_analysis_reserves_aging_sample() -> None:
             )
             for i in range(20)
         ]
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
 
         without_aging = service.pending_analysis_ids(limit=10, aging_sample_ratio=0.0)
         with_aging = service.pending_analysis_ids(limit=10, aging_sample_ratio=0.1)
@@ -644,7 +650,7 @@ def test_the_backlog_count_matches_the_uncapped_queue() -> None:
     with _session() as session:
         for _ in range(3):
             _seed_assessment(session)
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
 
         assert service.count_pending_analysis() == len(
             service.pending_analysis_ids(limit=1_000_000)
@@ -657,7 +663,7 @@ def test_a_batch_warms_the_model_before_analyzing() -> None:
         _seed_assessment(session, verdict="HIGH_PRIORITY")
     adapter = _StubAdapter(_completed())
 
-    analyze_pending(engine, adapter, batch_size=1)
+    analyze_pending(engine, adapter, batch_size=1, owner_sub=_TEST_OWNER_SUB)
 
     assert adapter.warm_ups == 1
     assert adapter.calls == 1
@@ -666,7 +672,7 @@ def test_a_batch_warms_the_model_before_analyzing() -> None:
 def test_a_completed_analysis_leaves_the_queue_and_is_not_re_prompted() -> None:
     with _session() as session:
         assessment_id = _seed_assessment(session)
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
         adapter = _StubAdapter(_completed())
 
         assert assessment_id in service.pending_analysis_ids(limit=100)
@@ -681,7 +687,7 @@ def test_a_completed_analysis_leaves_the_queue_and_is_not_re_prompted() -> None:
 def test_a_completed_analysis_is_repeated_only_with_refresh() -> None:
     with _session() as session:
         assessment_id = _seed_assessment(session)
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
         adapter = _StubAdapter(_completed())
 
         asyncio.run(service.analyze(assessment_id, adapter))
@@ -689,9 +695,7 @@ def test_a_completed_analysis_is_repeated_only_with_refresh() -> None:
 
         assert adapter.calls == 2
         stored = session.scalars(
-            select(MatchAnalysisModel).where(
-                MatchAnalysisModel.assessment_id == assessment_id
-            )
+            select(MatchAnalysisModel).where(MatchAnalysisModel.assessment_id == assessment_id)
         ).all()
         assert len(stored) == 2
 
@@ -699,7 +703,7 @@ def test_a_completed_analysis_is_repeated_only_with_refresh() -> None:
 def test_a_failure_holds_the_assessment_until_the_cooldown_elapses() -> None:
     with _session() as session:
         assessment_id = _seed_assessment(session)
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
         now = datetime.now(UTC)
         _record_attempt(
             session,
@@ -718,7 +722,7 @@ def test_a_failure_holds_the_assessment_until_the_cooldown_elapses() -> None:
 def test_the_attempt_ceiling_applies_only_inside_its_window() -> None:
     with _session() as session:
         assessment_id = _seed_assessment(session)
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
         now = datetime.now(UTC)
         for hours in (2, 4, 6):
             _record_attempt(
@@ -739,7 +743,7 @@ def test_the_attempt_ceiling_applies_only_inside_its_window() -> None:
 def test_a_success_clears_the_retry_state_left_by_earlier_failures() -> None:
     with _session() as session:
         assessment_id = _seed_assessment(session)
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
         now = datetime.now(UTC)
         for hours in (2, 4):
             _record_attempt(
@@ -754,9 +758,7 @@ def test_a_success_clears_the_retry_state_left_by_earlier_failures() -> None:
         # Two failures would still be within budget, but a completed analysis ends the
         # queue membership outright rather than leaving a countdown behind.
         assert assessment_id not in service.pending_analysis_ids(limit=100)
-        assert assessment_id not in service.pending_analysis_ids(
-            limit=100, max_attempts=1
-        )
+        assert assessment_id not in service.pending_analysis_ids(limit=100, max_attempts=1)
 
 
 def test_a_superseded_assessment_is_not_analyzed() -> None:
@@ -790,7 +792,7 @@ def test_a_superseded_assessment_is_not_analyzed() -> None:
             profile_version=version,
         )
 
-        queued = MatchingService(session).pending_analysis_ids(limit=100)
+        queued = MatchingService(session, owner_sub=_TEST_OWNER_SUB).pending_analysis_ids(limit=100)
 
         assert newer in queued
         assert older not in queued
@@ -801,13 +803,16 @@ def test_the_pass_limit_caps_how_many_assessments_are_queued() -> None:
         for _ in range(4):
             _seed_assessment(session)
 
-        assert len(MatchingService(session).pending_analysis_ids(limit=2)) == 2
+        assert (
+            len(MatchingService(session, owner_sub=_TEST_OWNER_SUB).pending_analysis_ids(limit=2))
+            == 2
+        )
 
 
 def test_a_live_claim_blocks_a_concurrent_analysis_of_the_same_assessment() -> None:
     with _session() as session:
         assessment_id = _seed_assessment(session)
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
         now = datetime.now(UTC)
         assert service.repository.acquire_analysis_claim(
             assessment_id, owner="worker", now=now, lease=timedelta(minutes=15)
@@ -832,7 +837,7 @@ def test_a_live_claim_blocks_a_concurrent_analysis_of_the_same_assessment() -> N
 def test_an_expired_claim_is_taken_over_instead_of_blocking_forever() -> None:
     with _session() as session:
         assessment_id = _seed_assessment(session)
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
         expired_at = datetime.now(UTC) - timedelta(hours=2)
         assert service.repository.acquire_analysis_claim(
             assessment_id, owner="crashed", now=expired_at, lease=timedelta(minutes=15)
@@ -849,7 +854,7 @@ def test_an_expired_claim_is_taken_over_instead_of_blocking_forever() -> None:
 def test_the_claim_is_released_after_the_analysis_completes() -> None:
     with _session() as session:
         assessment_id = _seed_assessment(session)
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
 
         asyncio.run(service.analyze(assessment_id, _StubAdapter(_completed())))
 
@@ -866,7 +871,7 @@ def test_the_claim_is_released_after_the_analysis_completes() -> None:
 def test_a_model_failure_records_history_and_releases_the_claim() -> None:
     with _session() as session:
         assessment_id = _seed_assessment(session)
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
 
         degraded = asyncio.run(service.analyze(assessment_id, _StubAdapter(_failed())))
 
@@ -887,7 +892,7 @@ def test_the_job_analyzes_a_bounded_batch_and_commits_each_result() -> None:
         seeded = [_seed_assessment(session, verdict="HIGH_PRIORITY") for _ in range(3)]
     adapter = _StubAdapter(_completed())
 
-    analyze_pending(engine, adapter, batch_size=2)
+    analyze_pending(engine, adapter, batch_size=2, owner_sub=_TEST_OWNER_SUB)
 
     assert adapter.calls == 2
     with Session(engine) as session:
@@ -903,22 +908,20 @@ def test_the_job_skips_a_claimed_assessment_without_failing_the_pass() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         claimed = _seed_assessment(session, verdict="HIGH_PRIORITY")
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
         assert service.repository.acquire_analysis_claim(
             claimed, owner="other", now=datetime.now(UTC), lease=timedelta(minutes=15)
         )
         session.commit()
     adapter = _StubAdapter(_completed())
 
-    analyze_pending(engine, adapter, batch_size=1)
+    analyze_pending(engine, adapter, batch_size=1, owner_sub=_TEST_OWNER_SUB)
 
     assert adapter.calls == 0
     with Session(engine) as session:
         assert (
             session.scalar(
-                select(MatchAnalysisModel.id).where(
-                    MatchAnalysisModel.assessment_id == claimed
-                )
+                select(MatchAnalysisModel.id).where(MatchAnalysisModel.assessment_id == claimed)
             )
             is None
         )
@@ -932,7 +935,9 @@ def test_the_job_defers_a_pending_id_when_the_worker_ceiling_is_exhausted() -> N
     guard = _FakeQuotaGuard(allow=False)
     adapter = _StubAdapter(_completed(), quota_guard=guard)
 
-    analyze_pending(engine, adapter, batch_size=1, worker_requests_ceiling=1)
+    analyze_pending(
+        engine, adapter, batch_size=1, worker_requests_ceiling=1, owner_sub=_TEST_OWNER_SUB
+    )
 
     assert adapter.calls == 0
     with Session(engine) as session:
@@ -945,7 +950,9 @@ def test_the_job_defers_a_pending_id_when_the_worker_ceiling_is_exhausted() -> N
             is None
         )
         # Not discarded, not counted against the retry budget: still queued next pass.
-        assert assessment_id in MatchingService(session).pending_analysis_ids(limit=100)
+        assert assessment_id in MatchingService(
+            session, owner_sub=_TEST_OWNER_SUB
+        ).pending_analysis_ids(limit=100)
 
         # This assessment is deliberately left pending above (that's what the test
         # proves), but at the default `score=100.0000` it would then rank at the very
@@ -977,7 +984,9 @@ def test_the_worker_budget_probe_never_consumes_quota() -> None:
     guard = _FakeQuotaGuard(allow=True)
     adapter = _StubAdapter(_completed(), quota_guard=guard)
 
-    analyze_pending(engine, adapter, batch_size=1, worker_requests_ceiling=100)
+    analyze_pending(
+        engine, adapter, batch_size=1, worker_requests_ceiling=100, owner_sub=_TEST_OWNER_SUB
+    )
 
     assert adapter.calls == 1
     assert guard.reserved == 1
@@ -1036,7 +1045,13 @@ def test_the_probe_reserves_the_model_estimate_and_defers_without_ai_failed_rows
             analyses_before = session.scalar(select(func.count(MatchAnalysisModel.id)))
         adapter = _TokenAwareAdapter(_completed(), model=model, quota_guard=guard)
 
-        analyze_pending(engine, adapter, batch_size=1, worker_requests_ceiling=1_000_000)
+        analyze_pending(
+            engine,
+            adapter,
+            batch_size=1,
+            worker_requests_ceiling=1_000_000,
+            owner_sub=_TEST_OWNER_SUB,
+        )
 
         assert adapter.calls == 0
         with Session(engine) as session:
@@ -1049,7 +1064,9 @@ def test_the_probe_reserves_the_model_estimate_and_defers_without_ai_failed_rows
                 )
                 is None
             )
-            assert assessment_id in MatchingService(session).pending_analysis_ids(limit=100)
+            assert assessment_id in MatchingService(
+                session, owner_sub=_TEST_OWNER_SUB
+            ).pending_analysis_ids(limit=100)
     finally:
         _forget_quota(model)
 
@@ -1063,18 +1080,25 @@ def test_the_probe_lets_a_batch_through_when_the_estimate_fits() -> None:
             _seed_assessment(session, verdict="HIGH_PRIORITY")
         adapter = _TokenAwareAdapter(_completed(), model=model, quota_guard=guard)
 
-        analyze_pending(engine, adapter, batch_size=1, worker_requests_ceiling=1_000_000)
+        analyze_pending(
+            engine,
+            adapter,
+            batch_size=1,
+            worker_requests_ceiling=1_000_000,
+            owner_sub=_TEST_OWNER_SUB,
+        )
 
         assert adapter.calls == 1
     finally:
         _forget_quota(model)
+
 
 def test_an_unavailable_model_degrades_the_job_without_raising() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         assessment_id = _seed_assessment(session, verdict="HIGH_PRIORITY")
 
-    analyze_pending(engine, _StubAdapter(_failed()), batch_size=1)
+    analyze_pending(engine, _StubAdapter(_failed()), batch_size=1, owner_sub=_TEST_OWNER_SUB)
 
     with Session(engine) as session:
         statuses = session.scalars(
@@ -1137,7 +1161,9 @@ def test_the_daily_cap_lets_a_batch_through_just_under_the_line() -> None:
             _seed_assessment(session, verdict="HIGH_PRIORITY")
         adapter = _TokenAwareAdapter(_completed(), model=model, quota_guard=guard)
 
-        analyze_pending(engine, adapter, batch_size=1, daily_cap_fraction=0.8)
+        analyze_pending(
+            engine, adapter, batch_size=1, daily_cap_fraction=0.8, owner_sub=_TEST_OWNER_SUB
+        )
 
         assert adapter.calls == 1
     finally:
@@ -1151,29 +1177,29 @@ def test_the_daily_cap_idles_the_job_without_failures_and_resumes_next_day_by_sc
     guard = _cap_guard(model, clock, tokens_used=_JUST_UNDER_CAP + 1)
     try:
         with Session(engine) as session:
-            lower = _seed_assessment(
-                session, verdict="HIGH_PRIORITY", score=Decimal("99.0000")
-            )
-            higher = _seed_assessment(
-                session, verdict="HIGH_PRIORITY", score=Decimal("100.0000")
-            )
-            service = MatchingService(session)
+            lower = _seed_assessment(session, verdict="HIGH_PRIORITY", score=Decimal("99.0000"))
+            higher = _seed_assessment(session, verdict="HIGH_PRIORITY", score=Decimal("100.0000"))
+            service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
             analyses_before = session.scalar(select(func.count(MatchAnalysisModel.id)))
             pending_before = service.count_pending_analysis()
         adapter = _TokenAwareAdapter(_completed(), model=model, quota_guard=guard)
 
-        analyze_pending(engine, adapter, batch_size=2, daily_cap_fraction=0.8)
+        analyze_pending(
+            engine, adapter, batch_size=2, daily_cap_fraction=0.8, owner_sub=_TEST_OWNER_SUB
+        )
 
         assert adapter.calls == 0
         with Session(engine) as session:
-            service = MatchingService(session)
+            service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
             # No row at all: no AI_FAILED, hence no attempt and no cooldown either.
             assert session.scalar(select(func.count(MatchAnalysisModel.id))) == analyses_before
             assert service.count_pending_analysis() == pending_before
             assert {higher, lower} <= set(service.pending_analysis_ids(limit=100))
 
         clock.moment = _CAP_DAY + timedelta(days=1)
-        analyze_pending(engine, adapter, batch_size=1, daily_cap_fraction=0.8)
+        analyze_pending(
+            engine, adapter, batch_size=1, daily_cap_fraction=0.8, owner_sub=_TEST_OWNER_SUB
+        )
 
         assert adapter.calls == 1
         with Session(engine) as session:
@@ -1208,13 +1234,17 @@ def test_the_daily_cap_is_rechecked_before_each_item_of_a_batch() -> None:
             ]
         adapter = _ConsumingAdapter(_completed(), model=model, quota_guard=guard)
 
-        analyze_pending(engine, adapter, batch_size=3, daily_cap_fraction=0.8)
+        analyze_pending(
+            engine, adapter, batch_size=3, daily_cap_fraction=0.8, owner_sub=_TEST_OWNER_SUB
+        )
 
         assert adapter.calls == 2
         with Session(engine) as session:
             assert _analyses_for(session, seeded[:2]) == [AnalysisStatus.AI_COMPLETED.value] * 2
             assert _analyses_for(session, seeded[2:]) == []
-            assert seeded[2] in MatchingService(session).pending_analysis_ids(limit=100)
+            assert seeded[2] in MatchingService(
+                session, owner_sub=_TEST_OWNER_SUB
+            ).pending_analysis_ids(limit=100)
     finally:
         _forget_quota(model)
 
@@ -1228,11 +1258,15 @@ def test_an_explicit_analysis_ignores_the_background_cap() -> None:
             assessment_id = _seed_assessment(session, verdict="HIGH_PRIORITY")
         adapter = _TokenAwareAdapter(_completed(), model=model, quota_guard=guard)
 
-        analyze_pending(engine, adapter, batch_size=1, daily_cap_fraction=0.8)
+        analyze_pending(
+            engine, adapter, batch_size=1, daily_cap_fraction=0.8, owner_sub=_TEST_OWNER_SUB
+        )
         assert adapter.calls == 0
 
         with Session(engine) as session:
-            analysis = asyncio.run(MatchingService(session).analyze(assessment_id, adapter))
+            analysis = asyncio.run(
+                MatchingService(session, owner_sub=_TEST_OWNER_SUB).analyze(assessment_id, adapter)
+            )
             status = analysis.status
 
         assert adapter.calls == 1
@@ -1269,7 +1303,11 @@ def test_background_ai_respects_interactive_reserve() -> None:
         adapter = _TokenAwareAdapter(_completed(), model=model, quota_guard=guard)
 
         analyze_pending(
-            engine, adapter, batch_size=1, worker_requests_ceiling=worker_ceiling
+            engine,
+            adapter,
+            batch_size=1,
+            worker_requests_ceiling=worker_ceiling,
+            owner_sub=_TEST_OWNER_SUB,
         )
 
         assert adapter.calls == 0
@@ -1303,7 +1341,7 @@ def test_a_failing_item_does_not_stop_or_poison_the_batch() -> None:
         second = _seed_assessment(session, verdict="HIGH_PRIORITY", score=Decimal("99.0000"))
     adapter = _FlakyAdapter(_completed())
 
-    analyze_pending(engine, adapter, batch_size=2)
+    analyze_pending(engine, adapter, batch_size=2, owner_sub=_TEST_OWNER_SUB)
 
     assert adapter.calls == 2
     with Session(engine) as session:
@@ -1319,7 +1357,9 @@ def test_a_failing_item_does_not_stop_or_poison_the_batch() -> None:
             ).all()
             == []
         )
-        assert first in MatchingService(session).pending_analysis_ids(limit=100)
+        assert first in MatchingService(session, owner_sub=_TEST_OWNER_SUB).pending_analysis_ids(
+            limit=100
+        )
 
 
 class _SlowAdapter(_StubAdapter):
@@ -1357,7 +1397,7 @@ def test_two_workers_on_the_same_assessment_run_it_once() -> None:
     def work() -> None:
         try:
             start.wait(timeout=10)
-            analyze_pending(engine, adapter, batch_size=1)
+            analyze_pending(engine, adapter, batch_size=1, owner_sub=_TEST_OWNER_SUB)
         except BaseException as error:  # noqa: BLE001 - surfaced after the join
             errors.append(error)
 

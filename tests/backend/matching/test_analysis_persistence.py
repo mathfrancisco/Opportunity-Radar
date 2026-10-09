@@ -45,6 +45,8 @@ pytestmark = [
     ),
 ]
 
+_TEST_OWNER_SUB = "test-analysis-persistence-owner"
+
 _MODEL = "llama3.2:3b"
 _PROMPT_VERSION = "opportunity_analysis/v1"
 
@@ -133,9 +135,11 @@ def _failed() -> AnalysisOutcome:
 
 
 def _seed_assessment(session: Session) -> tuple[SqlAlchemyMatchingRepository, AssessmentRecord]:
-    profile = session.scalar(select(CareerProfileModel).limit(1))
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == _TEST_OWNER_SUB)
+    )
     if profile is None:
-        profile = CareerProfileModel(version=1)
+        profile = CareerProfileModel(version=1, owner_sub=_TEST_OWNER_SUB)
         session.add(profile)
         session.flush()
     profile_version = ProfileVersionModel(
@@ -166,6 +170,7 @@ def _seed_assessment(session: Session) -> tuple[SqlAlchemyMatchingRepository, As
     session.flush()
 
     record = AssessmentRecord(
+        owner_sub=_TEST_OWNER_SUB,
         opportunity_id=opportunity.id,
         opportunity_version=opportunity.version,
         profile_version_id=profile_version.id,
@@ -206,7 +211,7 @@ def test_completed_analysis_persists_and_is_reused_without_a_second_call() -> No
         score_before, verdict_before = assessment.score, assessment.verdict
 
         adapter = _StubAdapter(_completed())
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
         first = asyncio.run(service.analyze(assessment.id, adapter))
         second = asyncio.run(service.analyze(assessment.id, adapter))
 
@@ -238,7 +243,7 @@ def test_failed_analysis_is_recorded_and_does_not_block_a_retry() -> None:
         assert assessment is not None
 
         failing = _StubAdapter(_failed())
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
         degraded = asyncio.run(service.analyze(assessment.id, failing))
 
         assert degraded.status == AnalysisStatus.AI_FAILED.value
@@ -267,7 +272,9 @@ def test_disabled_semantic_layer_skips_without_failing() -> None:
         assert assessment is not None
 
         analysis = asyncio.run(
-            MatchingService(session).analyze(assessment.id, NullAnalysisAdapter())
+            MatchingService(session, owner_sub=_TEST_OWNER_SUB).analyze(
+                assessment.id, NullAnalysisAdapter()
+            )
         )
 
         assert analysis.status == AnalysisStatus.AI_SKIPPED.value
@@ -283,7 +290,7 @@ def test_refresh_appends_a_new_analysis_instead_of_editing_the_previous_one() ->
         assert assessment is not None
 
         adapter = _StubAdapter(_completed())
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
         first = asyncio.run(service.analyze(assessment.id, adapter))
         second = asyncio.run(service.analyze(assessment.id, adapter, refresh=True))
 
@@ -321,7 +328,9 @@ def test_the_cost_of_a_call_is_recorded_with_the_analysis() -> None:
         )
 
         analysis = asyncio.run(
-            MatchingService(session).analyze(assessment.id, _StubAdapter(costed), refresh=True)
+            MatchingService(session, owner_sub=_TEST_OWNER_SUB).analyze(
+                assessment.id, _StubAdapter(costed), refresh=True
+            )
         )
 
         assert (analysis.total_ms, analysis.load_ms, analysis.prompt_tokens) == (4200, 150, 1830)
@@ -340,7 +349,9 @@ def test_a_failure_before_the_model_answered_records_no_cost() -> None:
         assert assessment is not None
 
         analysis = asyncio.run(
-            MatchingService(session).analyze(assessment.id, _StubAdapter(_failed()), refresh=True)
+            MatchingService(session, owner_sub=_TEST_OWNER_SUB).analyze(
+                assessment.id, _StubAdapter(_failed()), refresh=True
+            )
         )
 
         assert analysis.total_ms is None
@@ -353,7 +364,7 @@ def test_an_analysis_under_the_same_key_is_reused_across_a_restart() -> None:
         repository, record = _seed_assessment(session)
         first = repository.get_existing(input_hash=record.input_hash)
         assert first is not None
-        service = MatchingService(session)
+        service = MatchingService(session, owner_sub=_TEST_OWNER_SUB)
         original = asyncio.run(service.analyze(first.id, _StubAdapter(_completed())))
         # A re-evaluation of the same opportunity and profile version: same cache key.
         second_record = replace(record, input_hash=uuid4().hex + uuid4().hex)
@@ -366,7 +377,9 @@ def test_an_analysis_under_the_same_key_is_reused_across_a_restart() -> None:
     # A new session, service and adapter: nothing in memory survives the restart.
     with Session(engine) as session:
         adapter = _StubAdapter(_completed())
-        reused = asyncio.run(MatchingService(session).analyze(second_id, adapter))
+        reused = asyncio.run(
+            MatchingService(session, owner_sub=_TEST_OWNER_SUB).analyze(second_id, adapter)
+        )
 
         assert adapter.calls == 0
         assert reused.assessment_id == second_id
@@ -384,7 +397,11 @@ def test_refresh_does_not_reuse_another_assessments_analysis() -> None:
         repository, record = _seed_assessment(session)
         first = repository.get_existing(input_hash=record.input_hash)
         assert first is not None
-        asyncio.run(MatchingService(session).analyze(first.id, _StubAdapter(_completed())))
+        asyncio.run(
+            MatchingService(session, owner_sub=_TEST_OWNER_SUB).analyze(
+                first.id, _StubAdapter(_completed())
+            )
+        )
         second_record = replace(record, input_hash=uuid4().hex + uuid4().hex)
         repository.add(second_record, [])
         session.commit()
@@ -392,7 +409,11 @@ def test_refresh_does_not_reuse_another_assessments_analysis() -> None:
         assert second is not None
 
         adapter = _StubAdapter(_completed())
-        asyncio.run(MatchingService(session).analyze(second.id, adapter, refresh=True))
+        asyncio.run(
+            MatchingService(session, owner_sub=_TEST_OWNER_SUB).analyze(
+                second.id, adapter, refresh=True
+            )
+        )
 
         assert adapter.calls == 1
 
@@ -433,6 +454,8 @@ def test_the_request_carries_no_ratio_while_the_model_has_no_history() -> None:
         assert assessment is not None
         adapter = _StubAdapter(_completed())
 
-        asyncio.run(MatchingService(session).analyze(assessment.id, adapter))
+        asyncio.run(
+            MatchingService(session, owner_sub=_TEST_OWNER_SUB).analyze(assessment.id, adapter)
+        )
 
         assert adapter.requests[0].tokens_per_char is None

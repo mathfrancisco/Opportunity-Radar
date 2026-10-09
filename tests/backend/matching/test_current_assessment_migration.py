@@ -27,6 +27,7 @@ from tests.backend.dashboard.test_queries import (
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATION = REPO_ROOT / "migrations" / "versions" / "20261005_0063_current_assessment.py"
 BEFORE = "20261005_0062"
+_BACKFILL_OWNER_SUB = "test-current-assessment-migration-owner"
 
 pytestmark = [
     pytest.mark.integration,
@@ -37,15 +38,21 @@ pytestmark = [
 ]
 
 
-def _alembic(url: str, *args: str) -> None:
+def _alembic(url: str, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         ["alembic", *args],
         cwd=REPO_ROOT,
-        env={**os.environ, "DATABASE_URL": url},
+        env={
+            **os.environ,
+            "DATABASE_URL": url,
+            "OWNER_SUB_BACKFILL": _BACKFILL_OWNER_SUB,
+        },
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0, result.stderr
+    if check:
+        assert result.returncode == 0, result.stderr
+    return result
 
 
 def _table_exists(connection: Any) -> bool:
@@ -75,7 +82,7 @@ def scratch_database() -> Any:
         drop_database(url, name)
 
 
-def test_backfill_picks_the_latest_per_posting_and_profile_and_round_trips(
+def test_backfill_picks_the_latest_per_posting_and_profile_and_refuses_owner_downgrade(
     scratch_database: str,
 ) -> None:
     spec = importlib.util.spec_from_file_location("migration_0063", MIGRATION)
@@ -95,12 +102,20 @@ def test_backfill_picks_the_latest_per_posting_and_profile_and_round_trips(
                 posting = _opportunity(session, company, title=title, published_at=now)
                 for profile in (first, second):
                     older = _assessment(
-                        session, posting, profile.id,
-                        verdict="WATCHLIST", score="40.0000", assessed_at=now - timedelta(hours=2),
+                        session,
+                        posting,
+                        profile.id,
+                        verdict="WATCHLIST",
+                        score="40.0000",
+                        assessed_at=now - timedelta(hours=2),
                     )
                     newest = _assessment(
-                        session, posting, profile.id,
-                        verdict="RECOMMENDED", score="70.0000", assessed_at=now,
+                        session,
+                        posting,
+                        profile.id,
+                        verdict="RECOMMENDED",
+                        score="70.0000",
+                        assessed_at=now,
                     )
                     assert older.id != newest.id
                     expected.add((posting.id, profile.id, newest.id))
@@ -111,11 +126,9 @@ def test_backfill_picks_the_latest_per_posting_and_profile_and_round_trips(
             connection.execute(text(migration.BACKFILL_SQL))
             assert _pointers(connection) == expected
 
-        _alembic(scratch_database, "downgrade", BEFORE)
-        with engine.connect() as connection:
-            assert not _table_exists(connection)
-
-        _alembic(scratch_database, "upgrade", "head")
+        result = _alembic(scratch_database, "downgrade", BEFORE, check=False)
+        assert result.returncode != 0
+        assert "owner_sub tenancy downgrade is refused" in result.stderr
         with engine.connect() as connection:
             assert _table_exists(connection)
             assert _pointers(connection) == expected

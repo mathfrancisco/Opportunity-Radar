@@ -53,6 +53,7 @@ pytestmark = [
 ]
 
 _TAXONOMY = SKILL_TAXONOMY_VERSION
+_TEST_OWNER_SUB = "test-currency-owner"
 
 
 def _session() -> Session:
@@ -60,9 +61,11 @@ def _session() -> Session:
 
 
 def _profile_version(session: Session) -> ProfileVersionModel:
-    profile = session.scalar(select(CareerProfileModel).limit(1))
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == _TEST_OWNER_SUB)
+    )
     if profile is None:
-        profile = CareerProfileModel(version=1)
+        profile = CareerProfileModel(version=1, owner_sub=_TEST_OWNER_SUB)
         session.add(profile)
         session.flush()
     highest = session.scalar(
@@ -80,7 +83,10 @@ def _profile_version(session: Session) -> ProfileVersionModel:
 
 
 def _opportunity(
-    session: Session, *, version: int = 1, taxonomies: tuple[str, ...] = (_TAXONOMY,),
+    session: Session,
+    *,
+    version: int = 1,
+    taxonomies: tuple[str, ...] = (_TAXONOMY,),
     published_at: datetime | None = None,
 ) -> OpportunityModel:
     opportunity = OpportunityModel(
@@ -126,6 +132,7 @@ def _assessment(
     repository = SqlAlchemyMatchingRepository(session)
     assessment = repository.add(
         AssessmentRecord(
+            owner_sub=_TEST_OWNER_SUB,
             opportunity_id=opportunity.id,
             opportunity_version=opportunity_version or opportunity.version,
             profile_version_id=profile_version_id,
@@ -223,10 +230,7 @@ def test_the_recency_bands_are_the_score_steps_of_the_scoring_code() -> None:
         assert score(limit) == score(limit - 1 if limit > 1 else 0)
         assert score(limit + 1) != score(limit)
         assert recency_band(published, (published + timedelta(days=limit)).date()) == index
-        assert (
-            recency_band(published, (published + timedelta(days=limit + 1)).date())
-            == index + 1
-        )
+        assert recency_band(published, (published + timedelta(days=limit + 1)).date()) == index + 1
     assert recency_band(None, published.date()) is None
     assert recency_band(published, (published - timedelta(days=1)).date()) is None
 
@@ -276,18 +280,12 @@ def test_a_multi_taxonomy_opportunity_agrees_between_sql_and_the_service() -> No
         profile = _profile_version(session)
         opportunity = _opportunity(session, taxonomies=("skills-v2", "skills-v1"))
         combined = session.scalar(
-            select(opportunity_taxonomy_version()).where(
-                OpportunityModel.id == opportunity.id
-            )
+            select(opportunity_taxonomy_version()).where(OpportunityModel.id == opportunity.id)
         )
         assert combined == "skills-v1+skills-v2"
-        assessment = _assessment(
-            session, opportunity, profile.id, taxonomy_version=combined
-        )
+        assessment = _assessment(session, opportunity, profile.id, taxonomy_version=combined)
 
-        assert _identity(opportunity, profile.id, taxonomy_version=combined).describes(
-            assessment
-        )
+        assert _identity(opportunity, profile.id, taxonomy_version=combined).describes(assessment)
         assert _sql_says_current(session, opportunity, assessment, profile.id)
 
 
@@ -296,9 +294,7 @@ def test_an_opportunity_without_skills_falls_back_to_the_current_taxonomy() -> N
         opportunity = _opportunity(session, taxonomies=())
 
         combined = session.scalar(
-            select(opportunity_taxonomy_version()).where(
-                OpportunityModel.id == opportunity.id
-            )
+            select(opportunity_taxonomy_version()).where(OpportunityModel.id == opportunity.id)
         )
 
         assert combined == _TAXONOMY
@@ -336,9 +332,7 @@ def test_crossing_a_recency_band_makes_the_assessment_stale_in_both_implementati
         # Measured at the day it was assessed, the same assessment is still current.
         earlier = now - timedelta(days=1)
         assert _identity(opportunity, profile.id, assessed_at=earlier).describes(assessment)
-        assert _sql_says_current(
-            session, opportunity, assessment, profile.id, reference=earlier
-        )
+        assert _sql_says_current(session, opportunity, assessment, profile.id, reference=earlier)
 
 
 def test_an_opportunity_without_a_publication_date_never_crosses_a_band() -> None:
@@ -366,9 +360,7 @@ def test_the_same_inputs_on_the_same_day_stay_current() -> None:
 def test_the_reference_day_is_utc_on_both_sides() -> None:
     # 23:30 in Sao Paulo is already the next UTC day. Taking the server's local date
     # instead would move the daily cap by a day for half the evening.
-    late = datetime(2026, 9, 21, 23, 30, tzinfo=UTC).astimezone(
-        ZoneInfo("America/Sao_Paulo")
-    )
+    late = datetime(2026, 9, 21, 23, 30, tzinfo=UTC).astimezone(ZoneInfo("America/Sao_Paulo"))
     assert reference_day(late) == datetime(2026, 9, 21, 23, 30, tzinfo=UTC).date()
 
     with _session() as session:
