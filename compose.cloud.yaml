@@ -17,7 +17,7 @@ x-runtime-environment: &runtime-environment
 
 services:
   migrate:
-    image: ${API_IMAGE:?API_IMAGE must be an approved immutable linux/arm64 digest}
+    image: ${API_IMAGE:?API_IMAGE must be an approved immutable linux/arm64 image@sha256:<64 hex> digest}
     environment:
       <<: *runtime-environment
       OWNER_SUB_BACKFILL: ${OWNER_SUB_BACKFILL:?OWNER_SUB_BACKFILL is required by migration 0069}
@@ -26,7 +26,7 @@ services:
     networks: [runtime]
 
   api:
-    image: ${API_IMAGE:?API_IMAGE must be an approved immutable linux/arm64 digest}
+    image: ${API_IMAGE:?API_IMAGE must be an approved immutable linux/arm64 image@sha256:<64 hex> digest}
     environment: *runtime-environment
     command: ["uvicorn", "opportunity_radar.presentation.http.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
     expose: ["8000"]
@@ -43,7 +43,7 @@ services:
     networks: [runtime]
 
   worker:
-    image: ${WORKER_IMAGE:?WORKER_IMAGE must be an approved immutable linux/arm64 digest}
+    image: ${WORKER_IMAGE:?WORKER_IMAGE must be an approved immutable linux/arm64 image@sha256:<64 hex> digest}
     environment:
       <<: *runtime-environment
       WORKER_OWNER_SUB: ${WORKER_OWNER_SUB:?WORKER_OWNER_SUB is required for a finite personal pipeline}
@@ -55,7 +55,9 @@ services:
     networks: [runtime]
 
   proxy:
-    image: ${PROXY_IMAGE:?PROXY_IMAGE must be an approved immutable linux/arm64 digest}
+    image: ${PROXY_IMAGE:?PROXY_IMAGE must be an approved immutable linux/arm64 image@sha256:<64 hex> digest}
+    environment:
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME must be the exact public API hostname}
     depends_on:
       api:
         condition: service_healthy
@@ -64,8 +66,8 @@ services:
       - "443:443"
     volumes:
       - type: bind
-        source: ./docker/proxy/nginx.conf
-        target: /etc/nginx/conf.d/default.conf
+        source: ./docker/proxy/nginx.conf.template
+        target: /etc/nginx/templates/default.conf.template
         read_only: true
       - type: bind
         source: ${TLS_FULLCHAIN_PATH:?TLS_FULLCHAIN_PATH must name a readable fullchain PEM file}

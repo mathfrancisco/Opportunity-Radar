@@ -1,12 +1,16 @@
+import json
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
 from fastapi.testclient import TestClient
 
 from opportunity_radar.platform.config import Settings
-from opportunity_radar.presentation.http.app import create_development_app
+from opportunity_radar.presentation.http.app import create_app, create_development_app
 
 ROOT = Path(__file__).resolve().parents[2]
+PREFLIGHT = ROOT / "scripts" / "validate_cloud_images.py"
 
 
 def _settings(**overrides: object) -> Settings:
@@ -27,7 +31,22 @@ def test_cloud_compose_only_exposes_proxy_and_uses_finite_worker() -> None:
         "--deadline-seconds",
     ]
     assert services["proxy"]["ports"] == ["80:80", "443:443"]
+    assert "PUBLIC_HOSTNAME" in services["proxy"]["environment"]
+    for service in services.values():
+        assert "@sha256:" in service["image"]
     assert "volumes" not in cloud
+
+
+def test_cloud_proxy_template_rejects_foreign_host_and_never_redirects_it() -> None:
+    proxy = (ROOT / "docker" / "proxy" / "nginx.conf.template").read_text(encoding="utf-8")
+
+    assert "listen 80 default_server" in proxy
+    assert "listen 443 ssl default_server" in proxy
+    assert proxy.count("return 444;") == 2
+    assert "server_name ${PUBLIC_HOSTNAME};" in proxy
+    assert "https://${PUBLIC_HOSTNAME}$request_uri" in proxy
+    assert "https://$host" not in proxy
+    assert "proxy_set_header Host ${PUBLIC_HOSTNAME};" in proxy
 
 
 def test_cors_allows_only_the_configured_origin_and_headers() -> None:
@@ -65,3 +84,61 @@ def test_cors_rejects_wildcard_and_url_path() -> None:
             assert "FRONTEND_ORIGIN" in str(error)
         else:
             raise AssertionError("invalid frontend origin was accepted")
+
+
+def test_production_cors_requires_https_but_development_allows_local_http() -> None:
+    development = create_development_app(_settings(frontend_origin="http://localhost:3000"))
+    assert development is not None
+
+    try:
+        create_app(
+            _settings(
+                frontend_origin="http://localhost:3000",
+                clerk_issuer="https://issuer.example.test",
+                clerk_jwks_url="https://issuer.example.test/jwks",
+                clerk_authorized_parties="https://app.example.test",
+                clerk_owner_sub="owner_synthetic",
+            )
+        )
+    except RuntimeError as error:
+        assert "https" in str(error)
+    else:
+        raise AssertionError("production accepted an HTTP FRONTEND_ORIGIN")
+
+
+def test_image_preflight_requires_digests_and_arm64_manifests(tmp_path: Path) -> None:
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps({"manifests": [{"platform": {"os": "linux", "architecture": "arm64"}}]}),
+        encoding="utf-8",
+    )
+    image = "registry.example.test/opportunity-radar/api@sha256:" + "a" * 64
+    command = [
+        sys.executable,
+        str(PREFLIGHT),
+        "--api-image",
+        image,
+        "--worker-image",
+        image.replace("/api@", "/worker@"),
+        "--proxy-image",
+        image.replace("/api@", "/proxy@"),
+        "--manifest",
+        f"api={manifest}",
+        "--manifest",
+        f"worker={manifest}",
+        "--manifest",
+        f"proxy={manifest}",
+    ]
+    result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False)
+
+    assert result.returncode == 0, result.stderr
+
+    rejected = subprocess.run(
+        [*command[:3], "registry.example.test/opportunity-radar/api:mutable", *command[4:]],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert rejected.returncode != 0
+    assert "@sha256" in rejected.stderr

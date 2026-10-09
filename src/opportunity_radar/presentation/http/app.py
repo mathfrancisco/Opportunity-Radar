@@ -33,18 +33,20 @@ _CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 _CORS_HEADERS = ["Authorization", "Content-Type", CORRELATION_HEADER]
 
 
-def _frontend_origin(value: str) -> str:
+def _frontend_origin(value: str, *, require_https: bool = False) -> str:
     """Accept one concrete browser origin, never a wildcard or a URL path."""
     origin = value.strip()
     parsed = urlsplit(origin)
     if (
         parsed.scheme not in {"http", "https"}
+        or (require_https and parsed.scheme != "https")
         or not parsed.netloc
         or parsed.path not in {"", "/"}
         or parsed.query
         or parsed.fragment
     ):
-        raise RuntimeError("FRONTEND_ORIGIN must be one exact http(s) origin")
+        scheme = "https" if require_https else "http(s)"
+        raise RuntimeError(f"FRONTEND_ORIGIN must be one exact {scheme} origin")
     return origin.rstrip("/")
 
 
@@ -61,7 +63,12 @@ async def database_error_handler(request: Request, error: DBAPIError) -> Respons
     raise error
 
 
-def _base_app(settings: Settings | None = None, *, docs: bool = False) -> FastAPI:
+def _base_app(
+    settings: Settings | None = None,
+    *,
+    docs: bool = False,
+    require_https_frontend_origin: bool = False,
+) -> FastAPI:
     """Build the HTTP application without initializing external dependencies."""
     settings = settings or get_settings()
     configure_logging(settings.log_level)
@@ -74,7 +81,9 @@ def _base_app(settings: Settings | None = None, *, docs: bool = False) -> FastAP
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[_frontend_origin(settings.frontend_origin)],
+        allow_origins=[
+            _frontend_origin(settings.frontend_origin, require_https=require_https_frontend_origin)
+        ],
         allow_credentials=False,
         allow_methods=_CORS_METHODS,
         allow_headers=_CORS_HEADERS,
@@ -147,7 +156,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         authorized_parties=parties,
         owner_sub=owner_sub.strip(),
     )
-    app = _base_app(settings)
+    app = _base_app(settings, require_https_frontend_origin=True)
     app.include_router(public_router)
     authenticated = RequireAuthenticated(JwtVerifier(config, JwksClient(config.jwks_url)))
     app.include_router(
