@@ -50,9 +50,32 @@ from opportunity_radar.platform.backup import (
 
 DEFAULT_BACKUP_DIR = Path("data/backups")
 
+# libpq reads these from the process environment. In particular, PGHOSTADDR can
+# redirect a connection even when the URL contains the expected host.
+_LIBPQ_TARGET_OVERRIDES = (
+    "PGHOST",
+    "PGHOSTADDR",
+    "PGPORT",
+    "PGDATABASE",
+    "PGUSER",
+    "PGSERVICE",
+    "PGSERVICEFILE",
+    "PGSYSCONFDIR",
+)
+
+
+def _reject_libpq_target_overrides() -> None:
+    present = [name for name in _LIBPQ_TARGET_OVERRIDES if os.environ.get(name)]
+    if present:
+        raise SystemExit(
+            "restore refuses inherited libpq connection overrides: "
+            + ", ".join(present)
+        )
+
 
 def guard_isolation(url: str, target_name: str) -> None:
     """Reject restore before connecting unless the isolated-test contract is explicit."""
+    _reject_libpq_target_overrides()
     _validate_scratch_name(target_name)
     if not database_name(url).lower().endswith("_test"):
         raise SystemExit("restore base database must end in _test")
@@ -79,6 +102,7 @@ def scratch_name(prefix: str = "restore_check") -> str:
 
 def admin_engine(url: str) -> Any:
     """Connect to `postgres` so the scratch database can be created and dropped."""
+    _reject_libpq_target_overrides()
     return create_engine(with_database(url, "postgres"), isolation_level="AUTOCOMMIT")
 
 
@@ -129,6 +153,7 @@ def restore(dump: Path, url: str, name: str) -> None:
 
 
 def smoke_queries(url: str, name: str) -> dict[str, Any]:
+    _reject_libpq_target_overrides()
     engine = create_engine(with_database(url, name))
     counts: dict[str, int] = {}
     relationships: dict[str, int] = {}

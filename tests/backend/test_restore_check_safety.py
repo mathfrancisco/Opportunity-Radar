@@ -87,6 +87,23 @@ def test_restore_isolation_accepts_explicit_test_contract(monkeypatch: pytest.Mo
     restore_check.guard_isolation("postgresql://u:p@host/source_test", "scratch_test")
 
 
+@pytest.mark.parametrize("connector", [restore_check.admin_engine, restore_check.smoke_queries])
+def test_restore_connections_reject_libpq_hostaddr_before_connecting(
+    monkeypatch: pytest.MonkeyPatch, connector: Any
+) -> None:
+    def unexpected_connect(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("connection factory must not run with an inherited PGHOSTADDR")
+
+    monkeypatch.setenv("PGHOSTADDR", "203.0.113.8")
+    monkeypatch.setattr(restore_check, "create_engine", unexpected_connect)
+
+    with pytest.raises(SystemExit, match="PGHOSTADDR"):
+        if connector is restore_check.admin_engine:
+            connector("postgresql://u:p@expected-host/source_test")
+        else:
+            connector("postgresql://u:p@expected-host/scratch_test", "scratch_test")
+
+
 def test_tool_failure_is_redacted(monkeypatch: pytest.MonkeyPatch) -> None:
     def fail(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         raise subprocess.CalledProcessError(1, command, stderr="password=secret")
