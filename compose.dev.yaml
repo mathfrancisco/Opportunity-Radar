@@ -9,6 +9,8 @@ x-dev-mounts: &dev-mounts
   - ./scripts:/app/scripts:ro
   - ./prompts:/app/prompts:ro
   - ./docs:/app/docs:ro
+  - ./compose.cloud.yaml:/app/compose.cloud.yaml:ro
+  - ./docker/proxy:/app/docker/proxy:ro
   - ./pyproject.toml:/app/pyproject.toml:ro
   - ./alembic.ini:/app/alembic.ini:ro
 
