@@ -220,4 +220,4 @@ def new_count(session: Session, saved_search: SavedSearch, *, owner_sub: str) ->
         order=InboxOrder(str(filters.get("order", InboxOrder.PRIORITY.value))),
         limit=200,
     )
-    return list_opportunity_inbox(session, query).total
+    return list_opportunity_inbox(session, query, owner_sub=owner_sub).total

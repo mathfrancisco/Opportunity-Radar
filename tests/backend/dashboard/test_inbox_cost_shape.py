@@ -13,7 +13,6 @@ import os
 from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
@@ -21,10 +20,9 @@ from opportunity_radar.dashboard import queries
 from opportunity_radar.dashboard.queries import InboxQuery
 from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.opportunities.repository import posting_group_key
-from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_development_app as create_app
-from opportunity_radar.presentation.http.dependencies import get_session
+from opportunity_radar.presentation.http.auth import RequestIdentity
+from opportunity_radar.presentation.http.dashboard import list_inbox
 from tests.backend.dashboard.test_coverage_funnel import (
     _company,
     _company_source,
@@ -45,10 +43,11 @@ pytestmark = [
 
 #: What a per-page lookup may read. Anything else under a SubPlan is per-row work.
 _PAGE_LOOKUPS = {"duplicate_candidate", "company_startup_evidence"}
+OWNER_SUB = "user-inbox-cost-shape"
 
 
 def _plan(session: Session, query: InboxQuery) -> dict[str, Any]:
-    statement, page_position = queries._inbox_statement(query)
+    statement, page_position = queries._inbox_statement(query, owner_sub=OWNER_SUB)
     compiled = (
         statement.order_by(page_position)
         .limit(50)
@@ -182,23 +181,36 @@ def _inbox_statements(session: Session, **params: Any) -> list[str]:
         del conn, cursor, args
         statements.append(statement)
 
-    app = create_app(Settings(database_url=os.environ["DATABASE_URL"]))
-    app.dependency_overrides[get_session] = lambda: session
     engine = session.get_bind()
     event.listen(engine, "before_cursor_execute", record)
     try:
-        response = TestClient(app).get("/inbox", params=params)
+        request_params = {
+            "verdict": None,
+            "minimum_score": None,
+            "role_family": None,
+            "seniority": None,
+            "salary_min": None,
+            "salary_max": None,
+            "source_definition_id": None,
+            "offset": 0,
+            "recency_window_days": 30,
+        }
+        request_params.update(params)
+        response = list_inbox(
+            session=session,
+            identity=RequestIdentity(sub=OWNER_SUB, is_owner=False),
+            **request_params,
+        )
     finally:
         event.remove(engine, "before_cursor_execute", record)
-        app.dependency_overrides.pop(get_session)
-    assert response.status_code == 200
+    assert response.total >= 0
     return statements
 
 
 def test_inbox_request_runs_one_statement_for_the_list_and_totals() -> None:
     with Session(create_database_engine(os.environ["DATABASE_URL"])) as session:
         fixture = _Fixture(session)
-        params = {"company_id": str(fixture.company.id), "only_recent": "false", "limit": 20}
+        params = {"company_id": fixture.company.id, "only_recent": False, "limit": 20}
 
         every_area = _inbox_statements(session, all_areas=True, **params)
         assert len(every_area) == 1

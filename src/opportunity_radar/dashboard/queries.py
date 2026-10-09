@@ -427,13 +427,10 @@ def _latest_assessments(
     # pointer row by a correlated subquery (that ran once per row as soon as the rules
     # version matched, i.e. on every row once the worker had caught up).
     taxonomy = currency.opportunity_taxonomy_versions()
-    current = currency.is_current_assessment(
-        pointer.__table__,
-        rules_version=RULES_VERSION,
-        taxonomy_version=currency.with_taxonomy_fallback(taxonomy.c.taxonomy_version),
-    )
     current_profile_version_id = (
-        select(ProfileVersionModel.id)
+        literal(profile_version_id)
+        if profile_version_id is not None
+        else select(ProfileVersionModel.id)
         .join(CareerProfileModel)
         .where(
             CareerProfileModel.owner_sub == owner_sub,
@@ -442,6 +439,12 @@ def _latest_assessments(
         .scalar_subquery()
         if owner_sub is not None
         else currency.active_profile_version_id()
+    )
+    current = currency.is_current_assessment(
+        pointer.__table__,
+        rules_version=RULES_VERSION,
+        profile_version_id=current_profile_version_id,
+        taxonomy_version=currency.with_taxonomy_fallback(taxonomy.c.taxonomy_version),
     )
     ranked = select(
         pointer.assessment_id.label("assessment_id"),
@@ -569,7 +572,7 @@ def _priority_rank() -> Any:
 def _inbox_statement(
     query: InboxQuery,
     *,
-    owner_sub: str | None = None,
+    owner_sub: str,
     totals_only: bool = False,
 ) -> tuple[Select[Any], Any]:
     """The Inbox rows for `query`, the column that puts them in the requested order, and
@@ -606,6 +609,7 @@ def _inbox_statement(
         assessments,
         (query.search or "").strip(),
         query.profile_version_id,
+        owner_sub,
     )
     in_area = (
         OpportunityModel.role_family.in_(query.role_families)
@@ -861,6 +865,7 @@ def _inbox_ordering(
     assessments: Any,
     search_term: str = "",
     profile_version_id: UUID | None = None,
+    owner_sub: str | None = None,
 ) -> list[Any]:
     recency = OpportunityModel.published_at.desc().nulls_last()
     score = assessments.c.score.desc().nulls_last()
@@ -889,6 +894,14 @@ def _inbox_ordering(
             == (
                 profile_version_id
                 if profile_version_id is not None
+                else select(ProfileVersionModel.id)
+                .join(CareerProfileModel)
+                .where(
+                    CareerProfileModel.owner_sub == owner_sub,
+                    ProfileVersionModel.status == "ACTIVE",
+                )
+                .scalar_subquery()
+                if owner_sub is not None
                 else currency.active_profile_version_id()
             )
         )
@@ -912,7 +925,7 @@ def list_opportunity_inbox(
     session: Session,
     query: InboxQuery,
     *,
-    owner_sub: str | None = None,
+    owner_sub: str,
 ) -> InboxPage:
     statement, page_position = _inbox_statement(query, owner_sub=owner_sub)
     rows = session.execute(
@@ -983,6 +996,7 @@ def summarize_overview(
     *,
     profile_version_id: UUID | None = None,
     owner_sub: str | None = None,
+    include_operational_metrics: bool = False,
     now: datetime | None = None,
 ) -> OverviewSummary:
     reference = now or datetime.now(UTC)
@@ -990,7 +1004,7 @@ def summarize_overview(
     assessments = _latest_assessments(profile_version_id, owner_sub=owner_sub)
     # A common member overview intentionally has no analysis diagnostics. Do
     # not query that operational read model for the reduced response.
-    analyses = _latest_analyses() if owner_sub is None else None
+    analyses = _latest_analyses() if include_operational_metrics else None
 
     verdict_rows = session.execute(
         select(assessments.c.verdict, func.count()).group_by(assessments.c.verdict)
@@ -1008,7 +1022,7 @@ def summarize_overview(
     )
     # A member's overview is intentionally vacancy/application-only. Do not even query
     # source, normalization, coverage or precision diagnostics for this projection.
-    failing = list_source_health(session, only_failing=True) if owner_sub is None else []
+    failing = list_source_health(session, only_failing=True) if include_operational_metrics else []
     stage_rows = session.execute(
         select(ApplicationProcessModel.current_stage, func.count())
         .where(
@@ -1023,12 +1037,16 @@ def summarize_overview(
     ).all()
     applications_by_stage = {str(stage): int(total) for stage, total in stage_rows}
     precision = (
-        _precision_metrics(session, profile_version_id=profile_version_id)
-        if owner_sub is None
+        _precision_metrics(
+            session,
+            profile_version_id=profile_version_id,
+            owner_sub=owner_sub,
+        )
+        if include_operational_metrics
         else PrecisionMetrics(sample_size=0, marked_count=0, relevant_count=0, precision=None)
     )
     companies_covered, companies_with_ats = (
-        _companies_coverage(session) if owner_sub is None else (0, 0)
+        _companies_coverage(session) if include_operational_metrics else (0, 0)
     )
     return OverviewSummary(
         opportunities_total=_count(session, select(func.count(OpportunityModel.id))),
@@ -1051,7 +1069,7 @@ def summarize_overview(
         analyses_degraded=int(degraded or 0),
         sources_total=(
             _count(session, select(func.count(SourceDefinitionModel.id)))
-            if owner_sub is None
+            if include_operational_metrics
             else 0
         ),
         sources_enabled=(
@@ -1061,12 +1079,14 @@ def summarize_overview(
                     SourceDefinitionModel.enabled.is_(True)
                 ),
             )
-            if owner_sub is None
+            if include_operational_metrics
             else 0
         ),
         sources_failing=len(failing),
         failing_sources=failing,
-        pending_normalizations=_pending_normalizations(session) if owner_sub is None else 0,
+        pending_normalizations=(
+            _pending_normalizations(session) if include_operational_metrics else 0
+        ),
         applications_active=sum(applications_by_stage.values()),
         applications_by_stage=applications_by_stage,
         follow_ups_due=_count(
@@ -1585,6 +1605,7 @@ def _percentile(values: list[float], percentile: float) -> float | None:
 def _precision_metrics(
     session: Session,
     *,
+    owner_sub: str,
     profile_version_id: UUID | None = None,
     sample_size: int = PRECISION_SAMPLE_SIZE,
 ) -> PrecisionMetrics:
@@ -1596,6 +1617,7 @@ def _precision_metrics(
     page = list_opportunity_inbox(
         session,
         InboxQuery(order=InboxOrder.PRIORITY, limit=sample_size, offset=0),
+        owner_sub=owner_sub,
     )
     opportunity_ids = [item.opportunity_id for item in page.items]
     if not opportunity_ids:
@@ -1616,7 +1638,10 @@ def _precision_metrics(
             )
             .label("position"),
         )
-        .where(RelevanceMarkModel.opportunity_id.in_(opportunity_ids))
+        .where(
+            RelevanceMarkModel.opportunity_id.in_(opportunity_ids),
+            RelevanceMarkModel.owner_sub == owner_sub,
+        )
         .subquery("ranked_marks")
     )
     marks = session.execute(
@@ -1638,6 +1663,7 @@ def _precision_metrics(
 def search_metrics(
     session: Session,
     *,
+    owner_sub: str,
     window_days: int = 7,
     profile_version_id: UUID | None = None,
     now: datetime | None = None,
@@ -1737,7 +1763,11 @@ def search_metrics(
         role_family_unknown_rate=role_family_unknown_rate,
         by_source=by_source,
     )
-    precision = _precision_metrics(session, profile_version_id=profile_version_id)
+    precision = _precision_metrics(
+        session,
+        profile_version_id=profile_version_id,
+        owner_sub=owner_sub,
+    )
     return SearchMetricsReport(
         window_days=window_days,
         generated_at=reference,

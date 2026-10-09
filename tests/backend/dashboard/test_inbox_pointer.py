@@ -13,18 +13,23 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from sqlalchemy import event, select, update
+from sqlalchemy import event, literal, select, update
 from sqlalchemy.orm import Session
 
 from opportunity_radar.dashboard import queries
-from opportunity_radar.dashboard.queries import InboxOrder, InboxQuery, list_opportunity_inbox
+from opportunity_radar.dashboard.queries import (
+    InboxOrder,
+    InboxQuery,
+)
+from opportunity_radar.dashboard.queries import list_opportunity_inbox as _list_opportunity_inbox
 from opportunity_radar.matching import currency
 from opportunity_radar.matching.models import MatchAssessmentModel
 from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.profile.models import ProfileVersionModel
+from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
 from tests.backend.dashboard.test_queries import (
+    TEST_OWNER_SUB,
     _assessment,
     _company,
     _opportunity,
@@ -42,17 +47,40 @@ pytestmark = [
 NOW = datetime.now(UTC)
 
 
-def _legacy_latest_assessments(profile_version_id: UUID | None) -> Any:
+def list_opportunity_inbox(session: Session, query: InboxQuery):
+    return _list_opportunity_inbox(session, query, owner_sub=TEST_OWNER_SUB)
+
+
+def _legacy_latest_assessments(
+    profile_version_id: UUID | None, *, owner_sub: str | None = None
+) -> Any:
     """`_latest_assessments` as it was before F50-10, verbatim."""
+    current_profile_version_id = (
+        literal(profile_version_id)
+        if profile_version_id is not None
+        else select(ProfileVersionModel.id)
+        .join(CareerProfileModel)
+        .where(
+            CareerProfileModel.owner_sub == owner_sub,
+            ProfileVersionModel.status == "ACTIVE",
+        )
+        .scalar_subquery()
+        if owner_sub is not None
+        else currency.active_profile_version_id()
+    )
+    taxonomy = currency.opportunity_taxonomy_versions()
     current = currency.is_current_assessment(
-        MatchAssessmentModel.__table__, rules_version=RULES_VERSION
+        MatchAssessmentModel.__table__,
+        rules_version=RULES_VERSION,
+        profile_version_id=current_profile_version_id,
+        taxonomy_version=currency.with_taxonomy_fallback(taxonomy.c.taxonomy_version),
     )
     ranked = select(
         MatchAssessmentModel.id.label("assessment_id"),
         MatchAssessmentModel.opportunity_id.label("opportunity_id"),
         MatchAssessmentModel.opportunity_version.label("assessment_opportunity_version"),
         MatchAssessmentModel.profile_version_id.label("assessment_profile_version_id"),
-        currency.active_profile_version_id().label("current_profile_version_id"),
+        current_profile_version_id.label("current_profile_version_id"),
         MatchAssessmentModel.verdict.label("verdict"),
         MatchAssessmentModel.eligibility.label("eligibility"),
         MatchAssessmentModel.score.label("score"),
@@ -66,6 +94,11 @@ def _legacy_latest_assessments(profile_version_id: UUID | None) -> Any:
     ranked = ranked.join(
         OpportunityModel, OpportunityModel.id == MatchAssessmentModel.opportunity_id
     )
+    ranked = ranked.outerjoin(
+        taxonomy, taxonomy.c.opportunity_id == MatchAssessmentModel.opportunity_id
+    )
+    if owner_sub is not None:
+        ranked = ranked.where(MatchAssessmentModel.owner_sub == owner_sub)
     return (
         ranked.distinct(MatchAssessmentModel.opportunity_id)
         .order_by(
@@ -233,7 +266,8 @@ def test_inbox_query_does_not_touch_match_assessment() -> None:
         fixture = _Fixture(session)
         # `EXPLAIN` of the very statement the Inbox runs; no timing involved.
         statement, page_position = queries._inbox_statement(
-            InboxQuery(company_id=fixture.company.id, role_families=("UNKNOWN",))
+            InboxQuery(company_id=fixture.company.id, role_families=("UNKNOWN",)),
+            owner_sub=TEST_OWNER_SUB,
         )
         compiled = (
             statement.order_by(page_position)
@@ -250,14 +284,22 @@ def test_inbox_query_does_not_touch_match_assessment() -> None:
         )
 
         relations: set[str] = set()
+        historical_assessment_ranks: list[dict[str, Any]] = []
 
         def walk(node: dict[str, Any]) -> None:
             if "Relation Name" in node:
                 relations.add(node["Relation Name"])
+            if node["Node Type"] in {"Sort", "Unique", "WindowAgg"} and "match_assessment" in str(
+                node.get("Sort Key", ())
+            ):
+                historical_assessment_ranks.append(node)
             for child in node.get("Plans", []):
                 walk(child)
 
         walk(plan[0]["Plan"])
         assert "current_assessment" in relations
-        assert "match_assessment" not in relations
+        # Ownership requires a pointer-to-assessment lookup. It must not revive the old
+        # per-posting ranking over the assessment history.
+        assert "match_assessment" in relations
+        assert historical_assessment_ranks == []
         session.rollback()

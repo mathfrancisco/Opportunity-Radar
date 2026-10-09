@@ -818,10 +818,16 @@ def get_search_metrics(
     window: str = Query(default="7d", pattern=r"^\d+d$"),
     profile_version_id: UUID | None = None,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> SearchMetricsResponse:
     """`GET /search-metrics?window=7d` — SPEC §3, card F17-01."""
     window_days = int(window[:-1])
-    report = search_metrics(session, window_days=window_days, profile_version_id=profile_version_id)
+    report = search_metrics(
+        session,
+        owner_sub=identity.sub,
+        window_days=window_days,
+        profile_version_id=profile_version_id,
+    )
     return _search_metrics_response(
         report,
         company_coverage_funnel(session, window_days=window_days),
@@ -843,7 +849,8 @@ def get_overview(
     summary = summarize_overview(
         session,
         profile_version_id=profile_version_id,
-        owner_sub=None if identity.is_owner else identity.sub,
+        owner_sub=identity.sub,
+        include_operational_metrics=identity.is_owner,
     )
     if identity.is_owner:
         return _overview_response(summary)
