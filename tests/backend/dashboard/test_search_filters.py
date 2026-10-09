@@ -21,7 +21,10 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
     SourceRunModel,
 )
-from opportunity_radar.dashboard.queries import InboxQuery, list_opportunity_inbox
+from opportunity_radar.dashboard.queries import (
+    InboxQuery,
+)
+from opportunity_radar.dashboard.queries import list_opportunity_inbox as _list_opportunity_inbox
 from opportunity_radar.opportunities.models import (
     OpportunityCompensationModel,
     OpportunityModel,
@@ -30,6 +33,12 @@ from opportunity_radar.opportunities.models import (
 from opportunity_radar.platform.database import create_database_engine
 
 from .test_queries import _company, _opportunity
+
+OWNER_SUB = "user-search-filters"
+
+
+def list_opportunity_inbox(session: Session, query: InboxQuery):
+    return _list_opportunity_inbox(session, query, owner_sub=OWNER_SUB)
 
 pytestmark = [
     pytest.mark.integration,

@@ -158,6 +158,7 @@ class _Harness:
             object(),  # type: ignore[arg-type]
             service_factory=self.service(),  # type: ignore[arg-type]
             utc_clock=lambda: _NOON,
+            owner_sub="collection-host-test-owner",
             **kwargs,  # type: ignore[arg-type]
         )
 
@@ -412,6 +413,7 @@ def test_in_flight_runs_get_the_remaining_pass_time_as_their_deadline(
         utc_clock=lambda: _NOON,
         host_concurrency=2,
         source_deadline_seconds=600.0,
+        owner_sub="collection-host-test-owner",
         pass_deadline_seconds=100.0,
         monotonic_clock=clock,
     )
@@ -494,6 +496,7 @@ def test_a_host_that_cannot_start_fails_only_its_own_sources(
         service_factory=flaky_factory,  # type: ignore[arg-type]
         utc_clock=lambda: _NOON,
         host_concurrency=1 + 1,
+        owner_sub="collection-host-test-owner",
     )
 
     # One host group failed to start (two sources if it was the shared host, one otherwise);

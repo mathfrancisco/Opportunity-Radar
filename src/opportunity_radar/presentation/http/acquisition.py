@@ -38,6 +38,7 @@ from opportunity_radar.acquisition.service import (
     active_profile_target_role_families,
 )
 from opportunity_radar.platform.config import get_settings
+from opportunity_radar.presentation.http.auth import RequestIdentity, authenticated_identity
 from opportunity_radar.presentation.http.dependencies import (
     get_alert_service,
     get_collector_registry,
@@ -346,6 +347,7 @@ async def execute_source(
     session: Session = Depends(get_session),
     alerts: SourceAlertService = Depends(get_alert_service),
     registry: CollectorRegistry = Depends(get_collector_registry),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> SourceRunResponse:
     try:
         manual_inputs = tuple(_manual_input(item) for item in body.inputs)
@@ -364,7 +366,7 @@ async def execute_source(
             session,
             registry=registry,
             alerts=alerts,
-            target_role_families=active_profile_target_role_families(session),
+            target_role_families=active_profile_target_role_families(session, identity.sub),
             target_area_floor=get_settings().collection_target_area_floor,
             claims_enabled=get_settings().collection_claim_enabled,
             inventory_contract_enabled=get_settings().collection_inventory_contract_enabled,

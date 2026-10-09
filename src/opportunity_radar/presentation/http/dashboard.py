@@ -65,6 +65,7 @@ from opportunity_radar.opportunities.domain import (
 from opportunity_radar.platform.ai.config import ai_status
 from opportunity_radar.platform.ai.metrics import ModelAIMetrics, ai_metrics
 from opportunity_radar.platform.config import Settings, get_settings
+from opportunity_radar.presentation.http.auth import RequestIdentity, authenticated_identity
 from opportunity_radar.presentation.http.dependencies import get_analysis_adapter, get_session
 from opportunity_radar.profile.domain import ProfileNotFoundError
 from opportunity_radar.profile.service import ProfileService
@@ -381,6 +382,21 @@ class OverviewResponse(BaseModel):
     companies_with_ats: int
 
 
+class PersonalOverviewResponse(BaseModel):
+    """Member projection: shared vacancies plus only this member's activity."""
+
+    opportunities_total: int
+    opportunities_active: int
+    new_opportunities: int
+    new_opportunity_window_days: int
+    assessed_opportunities: int
+    verdict_counts: dict[str, int]
+    applications_active: int
+    applications_by_stage: dict[str, int]
+    follow_ups_due: int
+    follow_up_window_days: int
+
+
 class SourceCoverageMetricResponse(BaseModel):
     source_definition_id: UUID
     name: str
@@ -469,6 +485,7 @@ def _saved_search_response(saved_search: SavedSearch) -> SavedSearchResponse:
 def post_saved_search(
     request: SavedSearchCreateRequest,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> SavedSearchResponse:
     return _saved_search_response(
         create_saved_search(
@@ -476,13 +493,20 @@ def post_saved_search(
             name=request.name,
             term=request.term,
             filters=request.filters,
+            owner_sub=identity.sub,
         )
     )
 
 
 @router.get("/saved-searches", response_model=list[SavedSearchResponse])
-def get_saved_searches(session: Session = Depends(get_session)) -> list[SavedSearchResponse]:
-    return [_saved_search_response(item) for item in list_saved_searches(session)]
+def get_saved_searches(
+    session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
+) -> list[SavedSearchResponse]:
+    return [
+        _saved_search_response(item)
+        for item in list_saved_searches(session, owner_sub=identity.sub)
+    ]
 
 
 @router.patch("/saved-searches/{saved_search_id}", response_model=SavedSearchResponse)
@@ -490,17 +514,22 @@ def patch_saved_search(
     saved_search_id: UUID,
     request: SavedSearchPatchRequest,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> SavedSearchResponse:
     if request.name is None and not request.open:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
     try:
         saved_search = (
-            rename_saved_search(session, saved_search_id, name=request.name)
+            rename_saved_search(
+                session, saved_search_id, name=request.name, owner_sub=identity.sub
+            )
             if request.name is not None
             else None
         )
         if request.open:
-            saved_search = open_saved_search(session, saved_search_id)
+            saved_search = open_saved_search(
+                session, saved_search_id, owner_sub=identity.sub
+            )
         if saved_search is None:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
     except SavedSearchNotFoundError as error:
@@ -512,9 +541,10 @@ def patch_saved_search(
 def remove_saved_search(
     saved_search_id: UUID,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> Response:
     try:
-        delete_saved_search(session, saved_search_id)
+        delete_saved_search(session, saved_search_id, owner_sub=identity.sub)
     except SavedSearchNotFoundError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from error
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -527,12 +557,16 @@ def remove_saved_search(
 def get_saved_search_new_count(
     saved_search_id: UUID,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> SavedSearchNewCountResponse:
-    saved_searches = {item.id: item for item in list_saved_searches(session)}
+    saved_searches = {
+        item.id: item for item in list_saved_searches(session, owner_sub=identity.sub)
+    }
     saved_search = saved_searches.get(saved_search_id)
     if saved_search is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    return SavedSearchNewCountResponse(new_count=new_count(session, saved_search))
+    count = new_count(session, saved_search, owner_sub=identity.sub)
+    return SavedSearchNewCountResponse(new_count=count)
 
 
 @router.get("/inbox", response_model=InboxPageResponse)
@@ -569,11 +603,17 @@ def list_inbox(
     #: Card F20-54: only companies with at least one startup-evidence row.
     only_startups: bool = False,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> InboxPageResponse:
     role_families = tuple(role_family or ())
+    if profile_version_id is not None:
+        try:
+            ProfileService(session, identity.sub).get_version(profile_version_id)
+        except ProfileNotFoundError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from error
     if not role_families and not all_areas:
         try:
-            active = ProfileService(session).get_active()
+            active = ProfileService(session, identity.sub).get_active()
             role_families = tuple(active.snapshot.preferences.target_role_families)
         except ProfileNotFoundError:
             role_families = ()
@@ -604,6 +644,7 @@ def list_inbox(
             open_at_source=open_at_source,
             only_startups=only_startups,
         ),
+        owner_sub=identity.sub,
     )
     return InboxPageResponse(
         items=[_inbox_item_response(item) for item in page.items],
@@ -628,8 +669,7 @@ def list_sources_health(
     overdue = gap.overdue_source_ids
     return SourceHealthListResponse(
         items=[
-            _source_response(item, overdue=item.source_definition_id in overdue)
-            for item in items
+            _source_response(item, overdue=item.source_definition_id in overdue) for item in items
         ],
         total=len(items),
         failing=failing,
@@ -650,9 +690,7 @@ def get_source_coverage(
     correlation_id: str | None = None,
     session: Session = Depends(get_session),
 ) -> SourceCoverageReportResponse:
-    return _source_coverage_response(
-        source_coverage_report(session, correlation_id=correlation_id)
-    )
+    return _source_coverage_response(source_coverage_report(session, correlation_id=correlation_id))
 
 
 @router.get("/source-metrics", response_model=SourceMetricsReportResponse)
@@ -671,10 +709,13 @@ def get_source_metrics(
 
 
 @router.get("/funnel-metrics", response_model=FunnelReportResponse)
-def get_funnel_metrics(session: Session = Depends(get_session)) -> FunnelReportResponse:
+def get_funnel_metrics(
+    session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
+) -> FunnelReportResponse:
     """F48-06: the SPEC 48 funnel, the north-star and its guards, from persisted rows."""
     try:
-        active = ProfileService(session).get_active()
+        active = ProfileService(session, identity.sub).get_active()
         families = tuple(active.snapshot.preferences.target_role_families)
     except ProfileNotFoundError:
         families = ()
@@ -780,11 +821,15 @@ def get_search_metrics(
     window: str = Query(default="7d", pattern=r"^\d+d$"),
     profile_version_id: UUID | None = None,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> SearchMetricsResponse:
     """`GET /search-metrics?window=7d` — SPEC §3, card F17-01."""
     window_days = int(window[:-1])
     report = search_metrics(
-        session, window_days=window_days, profile_version_id=profile_version_id
+        session,
+        owner_sub=identity.sub,
+        window_days=window_days,
+        profile_version_id=profile_version_id,
     )
     return _search_metrics_response(
         report,
@@ -793,14 +838,26 @@ def get_search_metrics(
     )
 
 
-@router.get("/overview", response_model=OverviewResponse)
+@router.get("/overview", response_model=OverviewResponse | PersonalOverviewResponse)
 def get_overview(
     profile_version_id: UUID | None = None,
     session: Session = Depends(get_session),
-) -> OverviewResponse:
-    return _overview_response(
-        summarize_overview(session, profile_version_id=profile_version_id)
+    identity: RequestIdentity = Depends(authenticated_identity),
+) -> OverviewResponse | PersonalOverviewResponse:
+    if profile_version_id is not None:
+        try:
+            ProfileService(session, identity.sub).get_version(profile_version_id)
+        except ProfileNotFoundError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from error
+    summary = summarize_overview(
+        session,
+        profile_version_id=profile_version_id,
+        owner_sub=identity.sub,
+        include_operational_metrics=identity.is_owner,
     )
+    if identity.is_owner:
+        return _overview_response(summary)
+    return _personal_overview_response(summary)
 
 
 def _selected_window(window: str | None) -> dict[str, timedelta] | None:
@@ -952,13 +1009,26 @@ def _overview_response(summary: OverviewSummary) -> OverviewResponse:
         follow_ups_due=summary.follow_ups_due,
         follow_up_window_days=summary.follow_up_window_days,
         precision_percent=(
-            str(summary.precision_percent * 100)
-            if summary.precision_percent is not None
-            else None
+            str(summary.precision_percent * 100) if summary.precision_percent is not None else None
         ),
         precision_marked_count=summary.precision_marked_count,
         companies_covered=summary.companies_covered,
         companies_with_ats=summary.companies_with_ats,
+    )
+
+
+def _personal_overview_response(summary: OverviewSummary) -> PersonalOverviewResponse:
+    return PersonalOverviewResponse(
+        opportunities_total=summary.opportunities_total,
+        opportunities_active=summary.opportunities_active,
+        new_opportunities=summary.new_opportunities,
+        new_opportunity_window_days=summary.new_opportunity_window_days,
+        assessed_opportunities=summary.assessed_opportunities,
+        verdict_counts=summary.verdict_counts,
+        applications_active=summary.applications_active,
+        applications_by_stage=summary.applications_by_stage,
+        follow_ups_due=summary.follow_ups_due,
+        follow_up_window_days=summary.follow_up_window_days,
     )
 
 
@@ -1010,9 +1080,7 @@ def _search_metrics_response(
             sample_size=precision.sample_size,
             marked_count=precision.marked_count,
             relevant_count=precision.relevant_count,
-            precision=(
-                str(precision.precision) if precision.precision is not None else None
-            ),
+            precision=(str(precision.precision) if precision.precision is not None else None),
         ),
         company_coverage_funnel=CompanyCoverageFunnelResponse(
             window_days=funnel.window_days,

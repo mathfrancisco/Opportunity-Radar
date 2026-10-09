@@ -1,0 +1,41 @@
+# The official nginx image expands this template at startup. PUBLIC_HOSTNAME is
+# required by compose.cloud.yaml, so an arbitrary Host can neither become a
+# redirect destination nor reach the API.
+server {
+    listen 80 default_server;
+    server_name _;
+    return 444;
+}
+
+server {
+    listen 80;
+    server_name ${PUBLIC_HOSTNAME};
+    return 301 https://${PUBLIC_HOSTNAME}$request_uri;
+}
+
+server {
+    listen 443 ssl default_server;
+    server_name _;
+
+    ssl_certificate /run/tls/fullchain.pem;
+    ssl_certificate_key /run/tls/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    return 444;
+}
+
+server {
+    listen 443 ssl;
+    server_name ${PUBLIC_HOSTNAME};
+
+    ssl_certificate /run/tls/fullchain.pem;
+    ssl_certificate_key /run/tls/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://api:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host ${PUBLIC_HOSTNAME};
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}

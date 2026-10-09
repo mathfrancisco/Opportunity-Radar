@@ -19,7 +19,7 @@ from opportunity_radar.platform.database import (
     create_database_engine,
     open_session,
 )
-from opportunity_radar.presentation.http.app import create_app
+from opportunity_radar.presentation.http.app import create_development_app as create_app
 from opportunity_radar.presentation.http.dependencies import get_session
 
 integration = pytest.mark.skipif(

@@ -164,8 +164,13 @@ def run_soak(
     correctly — would be no, for every pass after the first.
     """
     started_at = start or datetime.now(UTC)
+    owner = ProfileService.operational_owner(settings.worker_owner_sub)
+    if owner is None:
+        raise ValueError("soak requires an explicit operational owner")
     steps = max(1, (hours * 60) // step_minutes)
-    bootstrap = _bootstrap(engine, settings, started_at, retention_days=retention_days)
+    bootstrap = _bootstrap(
+        engine, settings, started_at, owner_sub=owner, retention_days=retention_days
+    )
     adapter = build_analysis_adapter(settings, engine)
 
     clock = started_at
@@ -180,14 +185,18 @@ def run_soak(
             backoff_base_seconds=settings.collection_backoff_base_seconds,
             backoff_ceiling_seconds=settings.collection_backoff_ceiling_seconds,
             service_factory=bootstrap.service_factory,
+            owner_sub=owner,
         )
         worker.normalize_opportunities(engine)
-        worker.evaluate_pending(engine, batch_size=settings.worker_evaluate_batch_size)
+        worker.evaluate_pending(
+            engine, batch_size=settings.worker_evaluate_batch_size, owner_sub=owner
+        )
         worker.analyze_pending(
             engine,
             adapter,
             batch_size=settings.worker_analyze_batch_size,
             eligible_verdicts=settings.analysis_eligible_verdicts,
+            owner_sub=owner,
         )
         # Retention runs on its own slower cadence, exactly as the scheduler drives it.
         if step % 6 == 0:
@@ -213,6 +222,7 @@ def _bootstrap(
     settings: Settings,
     started_at: datetime,
     *,
+    owner_sub: str,
     retention_days: int,
 ) -> _Bootstrap:
     """Everything the gate is allowed to do by hand. After this, only jobs run."""
@@ -228,10 +238,14 @@ def _bootstrap(
                 notifier=None,
                 threshold=settings.source_alert_failure_threshold,
             ),
+            target_role_families=worker.active_profile_target_role_families(
+                session, owner_sub
+            ),
+            profile_owner_sub=owner_sub,
         )
 
     with Session(engine) as session:
-        _ensure_active_profile(session)
+        _ensure_active_profile(session, owner_sub)
         source = SourceDefinitionModel(
             id=uuid4(),
             source_type=SOAK_SOURCE_TYPE,
@@ -257,8 +271,8 @@ def _bootstrap(
         )
 
 
-def _ensure_active_profile(session: Session) -> None:
-    service = ProfileService(session)
+def _ensure_active_profile(session: Session, owner_sub: str) -> None:
+    service = ProfileService(session, owner_sub)
     try:
         service.get_active()
         return

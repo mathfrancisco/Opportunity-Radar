@@ -12,7 +12,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from opportunity_radar.matching.currency import active_profile_version_id
 from opportunity_radar.opportunities.domain import (
     NormalizationError,
     OpportunityStatus,
@@ -53,7 +52,10 @@ from opportunity_radar.opportunities.suggestions import (
     accept_suggestion,
     reject_suggestion,
 )
+from opportunity_radar.presentation.http.auth import RequestIdentity, authenticated_identity
 from opportunity_radar.presentation.http.dependencies import get_session
+from opportunity_radar.profile.domain import ProfileNotFoundError
+from opportunity_radar.profile.service import ProfileService
 
 _RELEVANCE_REASONS = (
     "AREA",
@@ -288,9 +290,7 @@ def normalize_pending(
     return _batch_response(batch)
 
 
-@router.post(
-    "/normalizations/runs/{source_run_id}", response_model=RunNormalizationResponse
-)
+@router.post("/normalizations/runs/{source_run_id}", response_model=RunNormalizationResponse)
 def normalize_run(
     source_run_id: UUID,
     session: Session = Depends(get_session),
@@ -358,6 +358,7 @@ def list_opportunities(
     #: The client's "mostrar tudo" toggle passes `only_recent=false`.
     only_recent: bool = Query(default=True),
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> OpportunityPageResponse:
     items, total = OpportunityRepository(session).list(
         offset=(page - 1) * page_size,
@@ -368,7 +369,10 @@ def list_opportunities(
         only_recent=only_recent,
     )
     return OpportunityPageResponse(
-        items=[_opportunity_response(item, session=session) for item in items],
+        items=[
+            _opportunity_response(item, session=session, owner_sub=identity.sub)
+            for item in items
+        ],
         page=page,
         page_size=page_size,
         total=total,
@@ -379,6 +383,7 @@ def list_opportunities(
 def get_opportunity(
     opportunity_id: UUID,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> OpportunityDetailResponse:
     opportunity = OpportunityRepository(session).get(opportunity_id)
     if opportunity is None:
@@ -389,12 +394,11 @@ def get_opportunity(
                 "message": "Opportunity not found.",
             },
         )
-    basic = _opportunity_response(opportunity, session=session)
+    basic = _opportunity_response(opportunity, session=session, owner_sub=identity.sub)
     return OpportunityDetailResponse(
         **basic.model_dump(),
         normalization_results=[
-            _normalization_response(item)
-            for item in opportunity.normalization_results
+            _normalization_response(item) for item in opportunity.normalization_results
         ],
         sibling_locations=[
             SiblingLocationResponse(
@@ -402,9 +406,7 @@ def get_opportunity(
                 location=sibling.location_text,
                 source_url=url,
             )
-            for sibling, url in OpportunityRepository(session).posting_group_siblings(
-                opportunity
-            )
+            for sibling, url in OpportunityRepository(session).posting_group_siblings(opportunity)
         ],
     )
 
@@ -447,6 +449,7 @@ def mark_relevance(
     opportunity_id: UUID,
     body: RelevanceMarkBody,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> RelevanceMarkResponse:
     try:
         reason = body.validated_reason()
@@ -455,7 +458,10 @@ def mark_relevance(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={"code": "invalid_reason", "message": str(error)},
         ) from error
-    profile_version_id = session.scalar(select(active_profile_version_id()))
+    try:
+        profile_version_id = ProfileService(session, identity.sub).get_active().id
+    except ProfileNotFoundError:
+        profile_version_id = None
     try:
         mark = OpportunityService(session).mark_relevance(
             opportunity_id,
@@ -463,6 +469,7 @@ def mark_relevance(
             reason=reason,
             note=body.note,
             profile_version_id=profile_version_id,
+            owner_sub=identity.sub,
         )
     except OpportunityNotFoundError as error:
         raise HTTPException(
@@ -698,12 +705,15 @@ def _relevance_mark_response(mark: RelevanceMarkModel) -> RelevanceMarkResponse:
 
 
 def _opportunity_response(
-    opportunity: OpportunityModel, *, session: Session | None = None
+    opportunity: OpportunityModel,
+    *,
+    session: Session | None = None,
+    owner_sub: str | None = None,
 ) -> OpportunityResponse:
     current_mark = None
-    if session is not None:
+    if session is not None and owner_sub is not None:
         current_mark = OpportunityRepository(session).current_relevance_mark(
-            opportunity.id
+            opportunity.id, owner_sub=owner_sub
         )
     return OpportunityResponse(
         id=opportunity.id,

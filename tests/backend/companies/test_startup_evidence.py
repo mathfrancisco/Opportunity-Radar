@@ -32,7 +32,7 @@ from opportunity_radar.matching.service import MatchingService
 from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
+from opportunity_radar.presentation.http.app import create_development_app as create_app
 from opportunity_radar.profile.domain import EmploymentPreference, ProfileSnapshot, Skill
 from opportunity_radar.profile.models import CareerProfileModel
 from opportunity_radar.profile.service import ProfileService

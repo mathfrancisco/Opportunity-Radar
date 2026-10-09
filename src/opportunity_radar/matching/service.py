@@ -107,8 +107,9 @@ class AnalysisInProgressError(RuntimeError):
 
 
 class MatchingService:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, owner_sub: str | None = None) -> None:
         self.session = session
+        self.owner_sub = owner_sub
         self.repository = SqlAlchemyMatchingRepository(session)
 
     def evaluate(
@@ -120,7 +121,7 @@ class MatchingService:
         opportunity = OpportunityRepository(self.session).get(opportunity_id)
         if opportunity is None:
             raise MatchOpportunityNotFoundError(str(opportunity_id))
-        profile_service = ProfileService(self.session)
+        profile_service = ProfileService(self.session, self.owner_sub)
         profile = (
             profile_service.get_version(profile_version_id)
             if profile_version_id is not None
@@ -132,6 +133,7 @@ class MatchingService:
         )
         existing = self.repository.get_existing(
             input_hash=input_hash,
+            owner_sub=self.owner_sub,
         )
         if existing is not None:
             return existing
@@ -150,6 +152,7 @@ class MatchingService:
                 taxonomy_version,
                 input_hash,
                 assessed_at,
+                self.owner_sub or "local-system",
             ),
             [_factor_record(factor) for factor in result.factors],
         )
@@ -159,11 +162,12 @@ class MatchingService:
             self.session.rollback()
             existing = self.repository.get_existing(
                 input_hash=input_hash,
+                owner_sub=self.owner_sub,
             )
             if existing is None:
                 raise
             return existing
-        loaded = self.repository.get(assessment.id)
+        loaded = self.repository.get(assessment.id, owner_sub=self.owner_sub)
         assert loaded is not None
         return loaded
 
@@ -176,14 +180,12 @@ class MatchingService:
         eventually disagree on. An assessment stops being current when the posting crosses
         a RECENCY band, so a new UTC day alone queues nothing (card F50-07).
         """
-        profile = ProfileService(self.session).get_active()
+        profile = ProfileService(self.session, self.owner_sub).get_active()
         # F50-04: with declared target areas, a posting outside them is not evaluated
         # automatically; UNKNOWN (stored as 'UNKNOWN', never NULL) stays in.
         target_areas = tuple(profile.snapshot.preferences.target_role_families)
         in_target_areas = (
-            (OpportunityModel.role_family.in_((*target_areas, "UNKNOWN")),)
-            if target_areas
-            else ()
+            (OpportunityModel.role_family.in_((*target_areas, "UNKNOWN")),) if target_areas else ()
         )
         target_first = (
             (case((OpportunityModel.role_family.in_(target_areas), 0), else_=1),)
@@ -244,11 +246,11 @@ class MatchingService:
         opportunity = OpportunityRepository(self.session).get(opportunity_id)
         if opportunity is None:
             raise MatchOpportunityNotFoundError(str(opportunity_id))
-        profile = ProfileService(self.session).get_active()
-        identity = self.evaluation_identity(
-            opportunity, profile, assessed_at=datetime.now(UTC)
+        profile = ProfileService(self.session, self.owner_sub).get_active()
+        identity = self.evaluation_identity(opportunity, profile, assessed_at=datetime.now(UTC))
+        assessments, _ = self.repository.list(
+            opportunity_id=opportunity_id, limit=200, owner_sub=self.owner_sub
         )
-        assessments, _ = self.repository.list(opportunity_id=opportunity_id, limit=200)
         return next(
             (item for item in assessments if identity.describes(item)),
             None,
@@ -260,7 +262,7 @@ class MatchingService:
         if opportunity is None:
             return True
         try:
-            profile = ProfileService(self.session).get_active()
+            profile = ProfileService(self.session, self.owner_sub).get_active()
         except ProfileNotFoundError:
             return True
         return self.evaluation_identity(
@@ -290,7 +292,7 @@ class MatchingService:
         )
 
     def get(self, assessment_id: UUID) -> MatchAssessmentModel:
-        assessment = self.repository.get(assessment_id)
+        assessment = self.repository.get(assessment_id, owner_sub=self.owner_sub)
         if assessment is None:
             raise MatchNotFoundError(str(assessment_id))
         return assessment
@@ -334,7 +336,9 @@ class MatchingService:
                 },
             )
         if "profile_history" in needs:
-            profile = ProfileService(self.session).get_version(assessment.profile_version_id)
+            profile = ProfileService(self.session, self.owner_sub).get_version(
+                assessment.profile_version_id
+            )
             request = replace(request, profile_history=profile_history(profile))
         if "similar_decisions" in needs:
             request = replace(
@@ -432,9 +436,14 @@ class MatchingService:
                         assessment_id=assessment_id,
                         prepared=prepared,
                         outcome=await adapter.analyze(
-                            request, prepared=prepared, use_cache=not refresh,
-                            **({"quota_ceiling_requests": quota_ceiling_requests}
-                               if quota_ceiling_requests is not None else {}),
+                            request,
+                            prepared=prepared,
+                            use_cache=not refresh,
+                            **(
+                                {"quota_ceiling_requests": quota_ceiling_requests}
+                                if quota_ceiling_requests is not None
+                                else {}
+                            ),
                         ),
                         analyzed_at=datetime.now(UTC),
                         model_id=adapter.model,
@@ -473,6 +482,7 @@ class MatchingService:
                 max_attempts=max_attempts,
                 aging_sample_ratio=aging_sample_ratio,
                 role_families=self._target_role_families(),
+                owner_sub=self.owner_sub,
             )
         )
 
@@ -492,12 +502,13 @@ class MatchingService:
             attempt_window=attempt_window,
             max_attempts=max_attempts,
             role_families=self._target_role_families(),
+            owner_sub=self.owner_sub,
         )
 
     def _target_role_families(self) -> tuple[str, ...]:
         """Areas the active profile declared; empty (no restriction) when it declared none."""
         try:
-            profile = ProfileService(self.session).get_active()
+            profile = ProfileService(self.session, self.owner_sub).get_active()
         except ProfileNotFoundError:
             return ()
         return tuple(profile.snapshot.preferences.target_role_families)
@@ -518,6 +529,7 @@ class MatchingService:
             profile_version_id=profile_version_id,
             offset=offset,
             limit=limit,
+            owner_sub=self.owner_sub,
         )
 
 
@@ -532,8 +544,8 @@ def _opportunity_snapshot(
             select(Company.priority).where(Company.id == opportunity.canonical_company_id)
         )
     priority = _optional_enum(CompanyPriority, priority_value)
-    compensation, compensation_conflict, compensation_candidates = (
-        _opportunity_compensation(opportunity)
+    compensation, compensation_conflict, compensation_candidates = _opportunity_compensation(
+        opportunity
     )
     skills = sorted(opportunity.skills, key=lambda item: item.canonical_name)
     return OpportunitySnapshot(
@@ -564,10 +576,7 @@ def _opportunity_snapshot(
 def _profile_snapshot(profile: ProfileVersion) -> ProfileSnapshot:
     preferences = profile.snapshot.preferences
     profile_compensation = None
-    if (
-        preferences.compensation_min is not None
-        or preferences.compensation_max is not None
-    ):
+    if preferences.compensation_min is not None or preferences.compensation_max is not None:
         profile_compensation = CompensationSnapshot(
             minimum=preferences.compensation_min,
             maximum=preferences.compensation_max,
@@ -576,9 +585,7 @@ def _profile_snapshot(profile: ProfileVersion) -> ProfileSnapshot:
                 if preferences.compensation_currency
                 else None
             ),
-            period=_optional_enum(
-                CompensationPeriod, preferences.compensation_period
-            ),
+            period=_optional_enum(CompensationPeriod, preferences.compensation_period),
         )
     return ProfileSnapshot(
         profile_version_id=profile.id,
@@ -616,9 +623,7 @@ def _profile_role_families(profile: ProfileVersion) -> tuple[str, ...]:
     """Areas the profile's experiences and projects evidence, by the posting classifier."""
     families: set[str] = set()
     for experience in profile.snapshot.experiences:
-        decision = classify_role_family(
-            title=experience.title, description=experience.summary
-        )
+        decision = classify_role_family(title=experience.title, description=experience.summary)
         families.add(decision.role_family.value)
     for project in profile.snapshot.projects:
         decision = classify_role_family(title=project.name, description=project.description)
@@ -627,7 +632,9 @@ def _profile_role_families(profile: ProfileVersion) -> tuple[str, ...]:
     return tuple(sorted(families))
 
 
-def _opportunity_compensation(opportunity: OpportunityModel) -> tuple[
+def _opportunity_compensation(
+    opportunity: OpportunityModel,
+) -> tuple[
     CompensationSnapshot | None,
     bool,
     tuple[CompensationEvidenceSnapshot, ...],
@@ -658,21 +665,11 @@ def _opportunity_compensation(opportunity: OpportunityModel) -> tuple[
         for right in candidates[index + 1 :]
     ):
         return None, True, evidence
-    minimum = next(
-        (item.amount_min for item in candidates if item.amount_min is not None), None
-    )
-    maximum = next(
-        (item.amount_max for item in candidates if item.amount_max is not None), None
-    )
-    currency = next(
-        (item.currency for item in candidates if item.currency is not None), None
-    )
+    minimum = next((item.amount_min for item in candidates if item.amount_min is not None), None)
+    maximum = next((item.amount_max for item in candidates if item.amount_max is not None), None)
+    currency = next((item.currency for item in candidates if item.currency is not None), None)
     known_period = next(
-        (
-            item.period
-            for item in candidates
-            if item.period != CompensationPeriod.UNKNOWN.value
-        ),
+        (item.period for item in candidates if item.period != CompensationPeriod.UNKNOWN.value),
         None,
     )
     return (
@@ -709,11 +706,7 @@ def _compensation_conflicts(
         return True
     if left.currency and right.currency and left.currency != right.currency:
         return True
-    if (
-        left.period != "UNKNOWN"
-        and right.period != "UNKNOWN"
-        and left.period != right.period
-    ):
+    if left.period != "UNKNOWN" and right.period != "UNKNOWN" and left.period != right.period:
         return True
     return (
         left.gross_net != "UNKNOWN"
@@ -742,8 +735,7 @@ def _skill_evidence_refs(
             digest = hashlib.sha256(encoded).hexdigest()
             raw_item_id = evidence.get("raw_item_id") if isinstance(evidence, dict) else None
             refs.add(
-                f"raw-item:{raw_item_id or 'unknown'}:skill:{skill.canonical_name}:"
-                f"sha256:{digest}"
+                f"raw-item:{raw_item_id or 'unknown'}:skill:{skill.canonical_name}:sha256:{digest}"
             )
     return tuple(sorted(refs))
 
@@ -755,6 +747,7 @@ def _assessment_record(
     taxonomy_version: str,
     input_hash: str,
     assessed_at: datetime,
+    owner_sub: str,
 ) -> AssessmentRecord:
     eligibility_details = tuple(
         {
@@ -768,6 +761,7 @@ def _assessment_record(
         for item in result.eligibility.filters
     )
     return AssessmentRecord(
+        owner_sub=owner_sub,
         opportunity_id=result.opportunity_id,
         opportunity_version=result.opportunity_content_version,
         profile_version_id=result.profile_version_id,
@@ -810,31 +804,36 @@ PROFILE_HISTORY_ITEMS = 5
 _HISTORY_LINE_LENGTH = 200
 
 
-def _record_analysis_cache_hit(
-    session: Session, *, model: str, prompt_version: str
-) -> None:
+def _record_analysis_cache_hit(session: Session, *, model: str, prompt_version: str) -> None:
     """Record cache reuse as one operation and a zero-transport cache event."""
     bind = session.get_bind()
     engine = bind.engine if isinstance(bind, Connection) else bind
     operation_id = uuid4()
     try:
         start_operation(
-            engine, operation_id=operation_id, task=AITask.JOB_MATCH.value,
+            engine,
+            operation_id=operation_id,
+            task=AITask.JOB_MATCH.value,
             prompt_version=prompt_version,
         )
-        record_calls(engine, [AICallRecord(
-            task=AITask.JOB_MATCH.value,
-            provider="cache",
-            model=model,
-            attempt=0,
-            success=True,
-            fallback_used=False,
-            cache_hit=True,
-            prompt_version=prompt_version,
-            operation_id=operation_id,
-            operation_ordinal=None,
-            transport_started=False,
-        )])
+        record_calls(
+            engine,
+            [
+                AICallRecord(
+                    task=AITask.JOB_MATCH.value,
+                    provider="cache",
+                    model=model,
+                    attempt=0,
+                    success=True,
+                    fallback_used=False,
+                    cache_hit=True,
+                    prompt_version=prompt_version,
+                    operation_id=operation_id,
+                    operation_ordinal=None,
+                    transport_started=False,
+                )
+            ],
+        )
         finish_operation(engine, operation_id=operation_id, state="cache_hit")
     except Exception:
         logger.warning("AI cache-hit telemetry write failed", exc_info=True)
@@ -941,9 +940,7 @@ def _skipped_record(
     """A skip decided before any payload existed, keyed the pre-v2 way for the audit."""
     return AnalysisRecord(
         assessment_id=assessment_id,
-        cache_key=analysis_cache_key(
-            request, model_id=model_id, prompt_version=prompt_version
-        ),
+        cache_key=analysis_cache_key(request, model_id=model_id, prompt_version=prompt_version),
         status=AnalysisStatus.AI_SKIPPED.value,
         schema_version=ANALYSIS_SCHEMA_VERSION,
         analyzed_at=analyzed_at,
@@ -1064,8 +1061,7 @@ def _snapshot_dict(snapshot: OpportunitySnapshot | ProfileSnapshot) -> dict[str,
             ),
             "compensation": _compensation_dict(snapshot.compensation),
             "compensation_candidates": [
-                _compensation_evidence_dict(item)
-                for item in snapshot.compensation_candidates
+                _compensation_evidence_dict(item) for item in snapshot.compensation_candidates
             ],
             "compensation_conflict": snapshot.compensation_conflict,
             "work_authorization": snapshot.work_authorization.value,
@@ -1079,9 +1075,7 @@ def _snapshot_dict(snapshot: OpportunitySnapshot | ProfileSnapshot) -> dict[str,
                 if snapshot.required_timezone_overlap_hours is not None
                 else None
             ),
-            "published_at": (
-                snapshot.published_at.isoformat() if snapshot.published_at else None
-            ),
+            "published_at": (snapshot.published_at.isoformat() if snapshot.published_at else None),
             "evidence_refs": list(snapshot.evidence_refs),
         }
     return {
@@ -1089,9 +1083,7 @@ def _snapshot_dict(snapshot: OpportunitySnapshot | ProfileSnapshot) -> dict[str,
         "skills": list(snapshot.skills),
         "countries": list(snapshot.countries),
         "accepted_work_modes": [item.value for item in snapshot.accepted_work_modes],
-        "accepted_contract_types": [
-            item.value for item in snapshot.accepted_contract_types
-        ],
+        "accepted_contract_types": [item.value for item in snapshot.accepted_contract_types],
         "accepted_seniorities": [item.value for item in snapshot.accepted_seniorities],
         "role_families": list(snapshot.role_families),
         "compensation": _compensation_dict(snapshot.compensation),
@@ -1144,8 +1136,7 @@ def _known_work_modes(values: tuple[str, ...]) -> tuple[WorkMode, ...]:
     return tuple(
         item
         for value in values
-        if (item := _optional_enum(WorkMode, value)) is not None
-        and item is not WorkMode.UNKNOWN
+        if (item := _optional_enum(WorkMode, value)) is not None and item is not WorkMode.UNKNOWN
     )
 
 

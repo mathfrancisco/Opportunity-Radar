@@ -16,10 +16,19 @@ class PipelineRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def get(self, application_id: UUID) -> ApplicationProcessModel | None:
+    def get(
+        self, application_id: UUID, *, owner_sub: str | None = None
+    ) -> ApplicationProcessModel | None:
         return (
             self.session.scalars(
-                self._applications().where(ApplicationProcessModel.id == application_id)
+                self._applications().where(
+                    ApplicationProcessModel.id == application_id,
+                    *(
+                        [ApplicationProcessModel.owner_sub == owner_sub]
+                        if owner_sub is not None
+                        else []
+                    ),
+                )
             )
             .unique()
             .one_or_none()
@@ -30,6 +39,7 @@ class PipelineRepository:
         *,
         opportunity_id: UUID,
         profile_version_id: UUID,
+        owner_sub: str | None = None,
     ) -> ApplicationProcessModel | None:
         return (
             self.session.scalars(
@@ -37,6 +47,11 @@ class PipelineRepository:
                     ApplicationProcessModel.opportunity_id == opportunity_id,
                     ApplicationProcessModel.profile_version_id == profile_version_id,
                     ApplicationProcessModel.status == "ACTIVE",
+                    *(
+                        [ApplicationProcessModel.owner_sub == owner_sub]
+                        if owner_sub is not None
+                        else []
+                    ),
                 )
             )
             .unique()
@@ -53,14 +68,13 @@ class PipelineRepository:
         due_before: datetime | None = None,
         offset: int = 0,
         limit: int = 50,
+        owner_sub: str | None = None,
     ) -> tuple[list[ApplicationProcessModel], int]:
-        filters = []
+        filters = [ApplicationProcessModel.owner_sub == owner_sub] if owner_sub is not None else []
         if opportunity_id is not None:
             filters.append(ApplicationProcessModel.opportunity_id == opportunity_id)
         if profile_version_id is not None:
-            filters.append(
-                ApplicationProcessModel.profile_version_id == profile_version_id
-            )
+            filters.append(ApplicationProcessModel.profile_version_id == profile_version_id)
         if status is not None:
             filters.append(ApplicationProcessModel.status == status)
         if stage is not None:
@@ -80,10 +94,7 @@ class PipelineRepository:
             ).unique()
         )
         total = (
-            self.session.scalar(
-                select(func.count(ApplicationProcessModel.id)).where(*filters)
-            )
-            or 0
+            self.session.scalar(select(func.count(ApplicationProcessModel.id)).where(*filters)) or 0
         )
         return items, total
 
@@ -102,8 +113,10 @@ class PipelineRepository:
         next_action_at: datetime | None,
         notes: str | None,
         history_notes: str | None,
+        owner_sub: str,
     ) -> ApplicationProcessModel:
         application = ApplicationProcessModel(
+            owner_sub=owner_sub,
             opportunity_id=opportunity_id,
             profile_version_id=profile_version_id,
             current_stage=stage,
@@ -152,10 +165,20 @@ class PipelineRepository:
         application.history.append(entry)
         return entry
 
-    def history(self, application_id: UUID) -> Sequence[StageHistoryModel]:
+    def history(
+        self, application_id: UUID, *, owner_sub: str | None = None
+    ) -> Sequence[StageHistoryModel]:
         return self.session.scalars(
             select(StageHistoryModel)
-            .where(StageHistoryModel.application_id == application_id)
+            .join(ApplicationProcessModel)
+            .where(
+                StageHistoryModel.application_id == application_id,
+                *(
+                    [ApplicationProcessModel.owner_sub == owner_sub]
+                    if owner_sub is not None
+                    else []
+                ),
+            )
             .order_by(StageHistoryModel.occurred_at, StageHistoryModel.id)
         ).all()
 

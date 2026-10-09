@@ -60,7 +60,7 @@ def _shape(url: str) -> tuple[set[str], bool]:
 @pytest.fixture
 def scratch() -> Iterator[str]:
     url = os.environ["DATABASE_URL"]
-    name = f"f4807_mig_{uuid4().hex[:12]}"
+    name = f"f4807_mig_{uuid4().hex[:12]}_test"
     create_database(url, name)
     try:
         yield with_database(url, name)

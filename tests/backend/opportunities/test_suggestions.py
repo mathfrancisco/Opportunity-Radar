@@ -57,7 +57,9 @@ from opportunity_radar.platform.ai.router import AIRouter
 from opportunity_radar.platform.ai.tasks import AITask, default_routes
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.profile.models import ProfileVersionModel
+from opportunity_radar.profile.domain import ProfileNotFoundError
+from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
+from opportunity_radar.profile.service import ProfileService
 from tests.backend.dashboard.test_queries import _assessment
 from tests.backend.matching.test_evaluation_queue import _ensure_active_profile
 
@@ -72,6 +74,7 @@ pytestmark = [
 NOW = datetime.now(UTC)
 
 _FAST_MODEL = "openai/gpt-oss-20b"
+_SUGGESTION_OWNER = "suggestions-test-owner"
 
 _PROMPT = ClassificationPrompt(
     version="job_classification/v1",
@@ -83,6 +86,18 @@ _PROMPT = ClassificationPrompt(
     schema_version="job_classification-v1",
     output_schema={"type": "object"},
 )
+
+
+def _ensure_suggestion_profile(session: Session) -> UUID:
+    """Use a stable synthetic owner for the worker's profile-scoped candidate query."""
+    _ensure_active_profile(session)
+    service = ProfileService(session, _SUGGESTION_OWNER)
+    try:
+        return service.get_active().id
+    except ProfileNotFoundError:
+        pass
+    snapshot = ProfileService(session).get_active().snapshot
+    return service.create_active_version(snapshot, 0).id
 
 
 def response(model: str, content: str, latency_ms: int = 10) -> LLMResponse:
@@ -205,6 +220,57 @@ def test_unknown_fields_empty_when_everything_resolved() -> None:
         work_mode=WorkMode.REMOTE.value,
     )
     assert unknown_fields(opportunity) == []
+
+
+def test_candidates_scope_current_assessments_to_the_configured_owner() -> None:
+    """A worker owner never borrows another owner's active profile or queue."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        first_profile = CareerProfileModel(owner_sub="suggestion-owner-one")
+        second_profile = CareerProfileModel(owner_sub="suggestion-owner-two")
+        session.add_all((first_profile, second_profile))
+        session.flush()
+        first_version = ProfileVersionModel(
+            career_profile_id=first_profile.id, number=1, status="ACTIVE"
+        )
+        second_version = ProfileVersionModel(
+            career_profile_id=second_profile.id, number=1, status="ACTIVE"
+        )
+        first = _opportunity(title="Owner one")
+        second = _opportunity(title="Owner two")
+        session.add_all((first_version, second_version, first, second))
+        session.flush()
+        _rank(session, first_version.id, [first])
+        _rank(session, second_version.id, [second])
+
+        selected_one = {
+            item.id
+            for item in candidates_needing_suggestion(
+                session, limit=10, owner_sub="suggestion-owner-one"
+            )
+        }
+        selected_two = {
+            item.id
+            for item in candidates_needing_suggestion(
+                session, limit=10, owner_sub="suggestion-owner-two"
+            )
+        }
+
+        assert selected_one == {first.id}
+        assert selected_two == {second.id}
+
+        first_version.status = "ARCHIVED"
+        session.flush()
+        assert candidates_needing_suggestion(
+            session, limit=10, owner_sub="suggestion-owner-one"
+        ) == []
+        assert {
+            item.id
+            for item in candidates_needing_suggestion(
+                session, limit=10, owner_sub="suggestion-owner-two"
+            )
+        } == {second.id}
+        session.rollback()
 
 
 def test_defer_content_hash_changes_with_content_or_pending_fields() -> None:
@@ -577,7 +643,7 @@ def test_accept_suggestion_not_found() -> None:
 def test_candidates_needing_suggestion_skips_opportunities_already_suggested() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
-        profile_id = _ensure_active_profile(session)
+        profile_id = _ensure_suggestion_profile(session)
         needs_suggestion = _opportunity(
             role_family=RoleFamily.DATA.value,
             seniority="UNKNOWN",
@@ -613,7 +679,9 @@ def test_candidates_needing_suggestion_skips_opportunities_already_suggested() -
             # The query is catalogue-wide and ordered by creation; rows other tests left
             # in the shared database would push this test's rows out of a small window,
             # so the limit must cover every candidate that could exist.
-            candidates = candidates_needing_suggestion(session, limit=100_000)
+            candidates = candidates_needing_suggestion(
+                session, limit=100_000, owner_sub=_SUGGESTION_OWNER
+            )
             candidate_ids = {opportunity.id for opportunity in candidates}
             assert needs_suggestion.id in candidate_ids
             assert already_suggested.id not in candidate_ids
@@ -626,7 +694,7 @@ def test_candidates_needing_suggestion_skips_opportunities_already_suggested() -
 def test_suggestion_queue_filters_before_limit_and_pages_stably() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
-        profile_id = _ensure_active_profile(session)
+        profile_id = _ensure_suggestion_profile(session)
         # Older than any row another test may have left in the shared database.
         created_at = datetime(2000, 1, 1, tzinfo=UTC)
         known = {
@@ -655,13 +723,16 @@ def test_suggestion_queue_filters_before_limit_and_pages_stably() -> None:
         )
         session.flush()
         try:
-            first_page = candidates_needing_suggestion(session, limit=2)
+            first_page = candidates_needing_suggestion(
+                session, limit=2, owner_sub=_SUGGESTION_OWNER
+            )
             assert [item.id for item in first_page] == [
                 item.id for item in sorted(eligible, key=lambda row: row.id)[:2]
             ]
             last = first_page[-1]
             second_page = candidates_needing_suggestion(
-                session, limit=2, after=(last.created_at, last.id)
+                session, limit=2, after=(last.created_at, last.id),
+                owner_sub=_SUGGESTION_OWNER,
             )
             # The shared database may hold newer candidates from other tests; they come
             # after this test's rows and never include a resolved one.
@@ -858,7 +929,7 @@ def test_ai_runs_only_for_pending_suggestion_fields() -> None:
 def test_suggestion_candidates_need_an_unknown_field_and_a_top_verdict() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
-        profile_id = _ensure_active_profile(session)
+        profile_id = _ensure_suggestion_profile(session)
         high = _opportunity(seniority="UNKNOWN", **_KNOWN)
         recommended = _opportunity(seniority="UNKNOWN", **_KNOWN)
         watchlist = _opportunity(seniority="UNKNOWN", **_KNOWN)
@@ -871,7 +942,12 @@ def test_suggestion_candidates_need_an_unknown_field_and_a_top_verdict() -> None
         _rank(session, profile_id, [watchlist], verdict="WATCHLIST")
         _rank(session, profile_id, [resolved_top])
         try:
-            ids = {item.id for item in candidates_needing_suggestion(session, limit=100_000)}
+            ids = {
+                item.id
+                for item in candidates_needing_suggestion(
+                    session, limit=100_000, owner_sub=_SUGGESTION_OWNER
+                )
+            }
 
             assert {high.id, recommended.id} <= ids
             # Top verdict without an UNKNOWN field, an UNKNOWN field without a top verdict
@@ -884,18 +960,25 @@ def test_suggestion_candidates_need_an_unknown_field_and_a_top_verdict() -> None
 def test_no_background_suggestion_without_an_active_profile() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
-        profile_id = _ensure_active_profile(session)
+        profile_id = _ensure_suggestion_profile(session)
         item = _opportunity(seniority="UNKNOWN", **_KNOWN)
         session.add(item)
         session.flush()
         _rank(session, profile_id, [item])
         try:
-            assert item.id in {c.id for c in candidates_needing_suggestion(session, limit=100_000)}
+            assert item.id in {
+                c.id
+                for c in candidates_needing_suggestion(
+                    session, limit=100_000, owner_sub=_SUGGESTION_OWNER
+                )
+            }
 
             session.execute(update(ProfileVersionModel).values(status="ARCHIVED"))
             session.flush()
 
-            assert candidates_needing_suggestion(session, limit=100_000) == []
+            assert candidates_needing_suggestion(
+                session, limit=100_000, owner_sub=_SUGGESTION_OWNER
+            ) == []
         finally:
             session.rollback()
 
@@ -906,7 +989,7 @@ def test_the_suggestion_job_skips_postings_outside_the_automatic_queue(
     engine = create_database_engine(os.environ["DATABASE_URL"])
     marker = uuid4().hex[:10]
     with Session(engine) as session:
-        profile_id = _ensure_active_profile(session)
+        profile_id = _ensure_suggestion_profile(session)
         queued = _opportunity(title=f"Queued {marker}", seniority="UNKNOWN", **_KNOWN)
         unassessed = _opportunity(title=f"Unassessed {marker}", seniority="UNKNOWN", **_KNOWN)
         watched = _opportunity(title=f"Watched {marker}", seniority="UNKNOWN", **_KNOWN)
@@ -923,7 +1006,9 @@ def test_the_suggestion_job_skips_postings_outside_the_automatic_queue(
         try:
             provider = _RecordingProvider()
 
-            worker.suggest_fields_pending(engine, _router(provider), batch_size=50)
+            worker.suggest_fields_pending(
+                engine, _router(provider), batch_size=50, owner_sub=_SUGGESTION_OWNER
+            )
 
             asked = " ".join(request.user for request in provider.requests)
             assert f"Queued {marker}" in asked
@@ -977,7 +1062,7 @@ def test_the_suggestion_job_does_nothing_without_day_quota(
     monkeypatch.setattr(worker, "candidates_needing_suggestion", select_candidates)
     operations_before = _classification_operations(engine)
 
-    worker.suggest_fields_pending(engine, router)
+    worker.suggest_fields_pending(engine, router, owner_sub=_SUGGESTION_OWNER)
 
     # No candidate is even read, so no operation row is written per candidate.
     assert selections == []
@@ -990,7 +1075,7 @@ def test_the_suggestion_job_does_nothing_without_day_quota(
             connection.execute(text("DELETE FROM platform.ai_quota_usage WHERE model = :m"),
                                {"m": model})
 
-    worker.suggest_fields_pending(engine, router)
+    worker.suggest_fields_pending(engine, router, owner_sub=_SUGGESTION_OWNER)
 
     assert selections == [1]
 
@@ -1012,7 +1097,10 @@ def test_background_suggestions_respect_interactive_reserve(
         lambda *_args, **_kwargs: pytest.fail("the job read candidates with no worker budget"),
     )
 
-    worker.suggest_fields_pending(engine, router, worker_requests_ceiling=worker_ceiling)
+    worker.suggest_fields_pending(
+        engine, router, worker_requests_ceiling=worker_ceiling,
+        owner_sub=_SUGGESTION_OWNER,
+    )
 
     assert provider.requests == []
     assert [_day_requests(guard, model) for model in chain] == [worker_ceiling] * len(chain)
@@ -1081,7 +1169,9 @@ def test_a_failed_suggestion_does_not_hide_the_next_candidate(
         ]})
         try:
             with caplog.at_level(logging.INFO, logger="opportunity_radar.worker"):
-                worker.suggest_fields_pending(engine, _router(provider))
+                worker.suggest_fields_pending(
+                    engine, _router(provider), owner_sub=_SUGGESTION_OWNER
+                )
 
             assert len(provider.requests) == 2
             summary = next(
@@ -1123,7 +1213,10 @@ def test_global_quota_exhaustion_defers_rest_of_batch(
         operations_before = _classification_operations(engine)
         try:
             with caplog.at_level(logging.INFO, logger="opportunity_radar.worker"):
-                worker.suggest_fields_pending(engine, router, worker_requests_ceiling=1)
+                worker.suggest_fields_pending(
+                    engine, router, worker_requests_ceiling=1,
+                    owner_sub=_SUGGESTION_OWNER,
+                )
 
             assert len(provider.requests) == 1
             # The first candidate used the only request; the second found no balance, was
@@ -1323,7 +1416,9 @@ def test_a_connection_error_after_transport_start_is_one_failed_attempt_of_one_o
         known = _classification_operation_ids(engine)
         try:
             with caplog.at_level(logging.INFO, logger="opportunity_radar.worker"):
-                worker.suggest_fields_pending(engine, router)
+                worker.suggest_fields_pending(
+                    engine, router, owner_sub=_SUGGESTION_OWNER
+                )
 
             assert len(requests) == 1
             [operation] = _operations_after(engine, known)
@@ -1518,7 +1613,10 @@ def test_quota_exhaustion_persists_one_coherent_defer_and_a_rerun_waits_for_avai
         )
         started = datetime.now(UTC)
         try:
-            worker.suggest_fields_pending(engine, router, worker_requests_ceiling=1)
+            worker.suggest_fields_pending(
+                engine, router, worker_requests_ceiling=1,
+                owner_sub=_SUGGESTION_OWNER,
+            )
 
             assert len(provider.requests) == 1
             defers = session.scalars(
@@ -1586,11 +1684,12 @@ def test_a_defer_is_scoped_to_its_content_hash_and_changed_content_is_selectable
             for candidate in candidates_needing_suggestion(
                 session, limit=100_000, prompt_version=_PROMPT.version,
                 route_hash=route_hash, prompt=_PROMPT, route=route,
+                owner_sub=_SUGGESTION_OWNER,
             )
         }
 
     with Session(engine) as session:
-        profile_id = _ensure_active_profile(session)
+        profile_id = _ensure_suggestion_profile(session)
         item = _opportunity(
             title="Backend Engineer", description="We build APIs in Python.", **_KNOWN
         )

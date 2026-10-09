@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from opportunity_radar.opportunities.role_family import PROFILE_ROLE_FAMILIES
+from opportunity_radar.presentation.http.auth import RequestIdentity, authenticated_identity
 from opportunity_radar.presentation.http.dependencies import get_session
 from opportunity_radar.profile.domain import (
     DEFAULT_ACCEPTED_SENIORITIES,
@@ -126,14 +127,21 @@ class ProfileVersionResponse(BaseModel):
 
 
 @router.get("", response_model=ProfileVersionResponse)
-def get_profile(session: Session = Depends(get_session)) -> ProfileVersionResponse:
-    return _execute(lambda: ProfileService(session).get_active())
+def get_profile(
+    session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
+) -> ProfileVersionResponse:
+    return _execute(lambda: ProfileService(session, identity.sub).get_active())
 
 
 @router.get("/versions", response_model=list[ProfileVersionResponse])
-def list_profile_versions(session: Session = Depends(get_session)) -> list[ProfileVersionResponse]:
+def list_profile_versions(
+    session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
+) -> list[ProfileVersionResponse]:
     try:
-        return [_serialize(version) for version in ProfileService(session).list_versions()]
+        versions = ProfileService(session, identity.sub).list_versions()
+        return [_serialize(version) for version in versions]
     except ProfileError as error:
         _raise_http(error)
 
@@ -144,9 +152,11 @@ def list_profile_versions(session: Session = Depends(get_session)) -> list[Profi
     status_code=status.HTTP_201_CREATED,
 )
 def create_profile_version(
-    body: CreateVersionBody, session: Session = Depends(get_session)
+    body: CreateVersionBody,
+    session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> ProfileVersionResponse:
-    service = ProfileService(session)
+    service = ProfileService(session, identity.sub)
 
     def create() -> ProfileVersion:
         base: ProfileSnapshot | None = None
@@ -165,19 +175,29 @@ def create_profile_version(
 
 @router.post("/versions/{version_id}/publish", response_model=ProfileVersionResponse)
 def publish_profile_version(
-    version_id: UUID, body: VersionOperationBody, session: Session = Depends(get_session)
+    version_id: UUID,
+    body: VersionOperationBody,
+    session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> ProfileVersionResponse:
     return _execute(
-        lambda: ProfileService(session).publish(version_id, body.expected_profile_version)
+        lambda: ProfileService(session, identity.sub).publish(
+            version_id, body.expected_profile_version
+        )
     )
 
 
 @router.post("/versions/{version_id}/activate", response_model=ProfileVersionResponse)
 def activate_profile_version(
-    version_id: UUID, body: VersionOperationBody, session: Session = Depends(get_session)
+    version_id: UUID,
+    body: VersionOperationBody,
+    session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> ProfileVersionResponse:
     return _execute(
-        lambda: ProfileService(session).activate(version_id, body.expected_profile_version)
+        lambda: ProfileService(session, identity.sub).activate(
+            version_id, body.expected_profile_version
+        )
     )
 
 
@@ -261,8 +281,7 @@ def _serialize(version: ProfileVersion) -> ProfileVersionResponse:
         profile_lock_version=version.profile_lock_version,
         skills=[SkillBody(**asdict(skill)) for skill in version.snapshot.skills],
         experiences=[
-            ExperienceBody(**asdict(experience))
-            for experience in version.snapshot.experiences
+            ExperienceBody(**asdict(experience)) for experience in version.snapshot.experiences
         ],
         projects=[ProjectBody(**asdict(project)) for project in version.snapshot.projects],
         preferences=PreferenceBody(**asdict(version.snapshot.preferences)),

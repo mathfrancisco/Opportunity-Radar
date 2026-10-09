@@ -18,7 +18,7 @@ from opportunity_radar.opportunities.domain import SKILL_TAXONOMY_VERSION
 from opportunity_radar.opportunities.models import OpportunityModel, OpportunitySkillModel
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
+from opportunity_radar.presentation.http.app import create_development_app as create_app
 from scripts.retag_skills import main
 
 pytestmark = [

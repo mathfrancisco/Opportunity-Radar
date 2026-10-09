@@ -23,11 +23,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy import create_engine, text
 
@@ -37,13 +40,49 @@ from opportunity_radar.platform.backup import (
     FORMAT_VERSION,
     MANIFEST_QUERIES,
     RELATIONSHIP_QUERIES,
+    database_name,
     database_url,
-    postgres_dsn,
+    pgpassfile_for_url,
+    postgres_tool_environment,
     sha256_file,
     with_database,
 )
 
 DEFAULT_BACKUP_DIR = Path("data/backups")
+
+# libpq reads these from the process environment. In particular, PGHOSTADDR can
+# redirect a connection even when the URL contains the expected host.
+_LIBPQ_TARGET_OVERRIDES = (
+    "PGHOST",
+    "PGHOSTADDR",
+    "PGPORT",
+    "PGDATABASE",
+    "PGUSER",
+    "PGSERVICE",
+    "PGSERVICEFILE",
+    "PGSYSCONFDIR",
+)
+
+
+def _reject_libpq_target_overrides() -> None:
+    present = [name for name in _LIBPQ_TARGET_OVERRIDES if os.environ.get(name)]
+    if present:
+        raise SystemExit(
+            "restore refuses inherited libpq connection overrides: "
+            + ", ".join(present)
+        )
+
+
+def guard_isolation(url: str, target_name: str) -> None:
+    """Reject restore before connecting unless the isolated-test contract is explicit."""
+    _reject_libpq_target_overrides()
+    _validate_scratch_name(target_name)
+    if not database_name(url).lower().endswith("_test"):
+        raise SystemExit("restore base database must end in _test")
+    if os.environ.get("RUN_DATABASE_INTEGRATION") != "1":
+        raise SystemExit("restore requires RUN_DATABASE_INTEGRATION=1")
+    if os.environ.get("DATABASE_INTEGRATION_ISOLATED") != "1":
+        raise SystemExit("restore requires DATABASE_INTEGRATION_ISOLATED=1")
 
 
 def newest_dump(directory: Path) -> Path:
@@ -54,20 +93,32 @@ def newest_dump(directory: Path) -> Path:
 
 
 def scratch_name(prefix: str = "restore_check") -> str:
-    return f"{prefix}_{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+    if not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*", prefix):
+        raise ValueError("scratch database prefix must be a safe SQL identifier")
+    prefix = re.sub(r"_test$", "", prefix, flags=re.IGNORECASE)[:24]
+    timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+    return f"{prefix}_{timestamp}_{uuid4().hex[:12]}_test"
 
 
 def admin_engine(url: str) -> Any:
     """Connect to `postgres` so the scratch database can be created and dropped."""
+    _reject_libpq_target_overrides()
     return create_engine(with_database(url, "postgres"), isolation_level="AUTOCOMMIT")
 
 
+def _validate_scratch_name(name: str) -> None:
+    if len(name) > 63 or not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*_test", name):
+        raise ValueError("scratch database name must be a safe identifier ending in _test")
+
+
 def create_database(url: str, name: str) -> None:
+    guard_isolation(url, name)
     with admin_engine(url).connect() as connection:
         connection.execute(text(f'CREATE DATABASE "{name}"'))
 
 
 def drop_database(url: str, name: str) -> None:
+    guard_isolation(url, name)
     with admin_engine(url).connect() as connection:
         connection.execute(
             text(
@@ -80,25 +131,29 @@ def drop_database(url: str, name: str) -> None:
 
 
 def restore(dump: Path, url: str, name: str) -> None:
+    _validate_scratch_name(name)
     command = [
         "pg_restore",
+        f"--dbname={name}",
         "--no-owner",
         "--no-privileges",
         "--exit-on-error",
-        f"--dbname={postgres_dsn(with_database(url, name))}",
         str(dump),
     ]
-    try:
-        subprocess.run(command, check=True, capture_output=True, text=True)
-    except FileNotFoundError as error:
-        raise SystemExit(
-            "pg_restore is not available; run this through `make restore-check`"
-        ) from error
-    except subprocess.CalledProcessError as error:
-        raise SystemExit(f"pg_restore failed: {error.stderr.strip()}") from error
+    with pgpassfile_for_url(url, database=name) as env_overrides:
+        env = postgres_tool_environment(env_overrides)
+        try:
+            subprocess.run(command, check=True, capture_output=True, text=True, env=env)
+        except FileNotFoundError as error:
+            raise SystemExit(
+                "pg_restore is not available; run this through `make restore-check`"
+            ) from error
+        except subprocess.CalledProcessError as error:
+            raise SystemExit("pg_restore failed; command output was redacted") from error
 
 
 def smoke_queries(url: str, name: str) -> dict[str, Any]:
+    _reject_libpq_target_overrides()
     engine = create_engine(with_database(url, name))
     counts: dict[str, int] = {}
     relationships: dict[str, int] = {}
@@ -204,13 +259,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     url = database_url()
+    name = scratch_name()
+    guard_isolation(url, name)
     dump = args.dump or newest_dump(args.backup_dir)
     manifest_path = dump.with_suffix(".manifest.json")
     manifest = load_manifest(manifest_path, allow_missing=args.allow_missing_manifest)
     if manifest is not None:
         verify_checksum(dump, manifest)
 
-    name = scratch_name()
     print(f"restoring {dump} into {name}")
     create_database(url, name)
     try:

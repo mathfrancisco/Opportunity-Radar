@@ -551,7 +551,7 @@ def test_the_setting_does_not_leak_to_the_next_transaction(
 
 def test_the_migration_round_trips() -> None:
     url = os.environ["DATABASE_URL"]
-    name = f"f5008_mig_{uuid4().hex[:12]}"
+    name = f"f5008_mig_{uuid4().hex[:12]}_test"
     create_database(url, name)
     try:
         scratch = with_database(url, name)

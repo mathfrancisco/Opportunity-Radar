@@ -1,0 +1,500 @@
+import base64
+import json
+import time
+from datetime import UTC, datetime
+from types import SimpleNamespace
+from uuid import uuid4
+
+import jwt
+import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.testclient import TestClient
+
+from opportunity_radar.platform.config import Settings
+from opportunity_radar.presentation.http.app import create_app
+from opportunity_radar.presentation.http.auth import (
+    AuthConfig,
+    AuthenticationError,
+    JwksClient,
+    JwtVerifier,
+    RequestIdentity,
+    RequireAuthenticated,
+    RequireOperationalOwner,
+    RequireOwner,
+)
+
+ISSUER = "https://issuer.example.test"
+PARTY = "https://app.example.test"
+OWNER = "user_owner_synthetic"
+KID = "test-key-1"
+
+
+def _b64(value: int) -> str:
+    return (
+        base64.urlsafe_b64encode(value.to_bytes((value.bit_length() + 7) // 8, "big"))
+        .rstrip(b"=")
+        .decode()
+    )
+
+
+@pytest.fixture
+def keypair():
+    private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public = private.public_key().public_numbers()
+    return private, {
+        "keys": [{"kty": "RSA", "kid": KID, "use": "sig", "n": _b64(public.n), "e": _b64(public.e)}]
+    }
+
+
+def _verifier(keypair) -> JwtVerifier:
+    _, jwks = keypair
+    config = AuthConfig(
+        issuer=ISSUER,
+        jwks_url=f"{ISSUER}/.well-known/jwks.json",
+        authorized_parties=frozenset({PARTY}),
+        owner_sub=OWNER,
+    )
+    return JwtVerifier(
+        config, JwksClient(config.jwks_url, transport=lambda *_: json.dumps(jwks).encode())
+    )
+
+
+def _token(private, **claims: object) -> str:
+    payload = {"iss": ISSUER, "sub": OWNER, "azp": PARTY, "exp": int(time.time()) + 60, **claims}
+    return jwt.encode(payload, private, algorithm="RS256", headers={"kid": KID})
+
+
+def _client(verifier: JwtVerifier) -> TestClient:
+    app = FastAPI()
+
+    @app.get("/private")
+    def private(identity=Depends(RequireAuthenticated(verifier))):
+        return {"sub": identity.sub}
+
+    @app.get("/owner")
+    def owner(identity=Depends(RequireOwner(RequireAuthenticated(verifier)))):
+        return {"owner": identity.is_owner}
+
+    return TestClient(app)
+
+
+def _production_client(keypair, monkeypatch: pytest.MonkeyPatch, owner_sub: str) -> TestClient:
+    _, jwks = keypair
+    from opportunity_radar.presentation.http import app as app_module
+
+    monkeypatch.setattr(
+        app_module,
+        "JwksClient",
+        lambda url: JwksClient(url, transport=lambda *_: json.dumps(jwks).encode()),
+    )
+    return TestClient(
+        create_app(
+            Settings(
+                database_url="postgresql+psycopg://test:test@localhost/test",
+                clerk_issuer=ISSUER,
+                clerk_jwks_url=f"{ISSUER}/.well-known/jwks.json",
+                clerk_authorized_parties=PARTY,
+                clerk_owner_sub=owner_sub,
+            )
+        )
+    )
+
+
+def test_missing_or_malformed_bearer_is_unauthorized(keypair) -> None:
+    client = _client(_verifier(keypair))
+
+    assert client.get("/private").status_code == 401
+    assert client.get("/private", headers={"Authorization": "Basic nope"}).status_code == 401
+    assert client.get("/private", headers={"Authorization": "Bearer not-a-jwt"}).status_code == 401
+
+
+@pytest.mark.parametrize(
+    ("claims", "expected"),
+    [
+        ({"exp": int(time.time()) - 1}, 401),
+        ({"iss": "https://other.example.test"}, 401),
+        ({"azp": None}, 401),
+        ({"azp": "https://other-app.example.test"}, 401),
+    ],
+)
+def test_invalid_claims_are_unauthorized(keypair, claims: dict[str, object], expected: int) -> None:
+    private, _ = keypair
+    response = _client(_verifier(keypair)).get(
+        "/private", headers={"Authorization": f"Bearer {_token(private, **claims)}"}
+    )
+
+    assert response.status_code == expected
+
+
+def test_unknown_kid_and_jwks_outage_are_unauthorized(keypair) -> None:
+    private, _ = keypair
+    verifier = _verifier(keypair)
+    unknown = jwt.encode(
+        {"iss": ISSUER, "sub": OWNER, "azp": PARTY, "exp": int(time.time()) + 60},
+        private,
+        algorithm="RS256",
+        headers={"kid": "unknown"},
+    )
+    assert (
+        _client(verifier)
+        .get("/private", headers={"Authorization": f"Bearer {unknown}"})
+        .status_code
+        == 401
+    )
+
+    config = verifier.config
+    unavailable = JwtVerifier(
+        config, JwksClient(config.jwks_url, transport=lambda *_: (_ for _ in ()).throw(OSError()))
+    )
+    assert (
+        _client(unavailable)
+        .get("/private", headers={"Authorization": f"Bearer {_token(private)}"})
+        .status_code
+        == 401
+    )
+
+
+def test_unknown_kid_refreshes_a_valid_jwks_cache_once(keypair) -> None:
+    private, jwks = keypair
+    requests = 0
+
+    def transport(*_: object) -> bytes:
+        nonlocal requests
+        requests += 1
+        return json.dumps(jwks).encode()
+
+    config = AuthConfig(
+        issuer=ISSUER,
+        jwks_url=f"{ISSUER}/.well-known/jwks.json",
+        authorized_parties=frozenset({PARTY}),
+        owner_sub=OWNER,
+    )
+    verifier = JwtVerifier(config, JwksClient(config.jwks_url, transport=transport))
+    assert verifier.verify(_token(private)).sub == OWNER
+
+    unknown = jwt.encode(
+        {"iss": ISSUER, "sub": OWNER, "azp": PARTY, "exp": int(time.time()) + 60},
+        private,
+        algorithm="RS256",
+        headers={"kid": "rotated-key"},
+    )
+    with pytest.raises(AuthenticationError, match="jwks_unknown_kid"):
+        verifier.verify(unknown)
+
+    assert requests == 2
+
+
+def test_unknown_kid_refreshes_stale_cache_at_most_once(keypair) -> None:
+    private, jwks = keypair
+    requests = 0
+
+    def transport(*_: object) -> bytes:
+        nonlocal requests
+        requests += 1
+        return json.dumps(jwks).encode()
+
+    client = JwksClient(
+        f"{ISSUER}/.well-known/jwks.json", transport=transport, ttl_seconds=0
+    )
+    unknown = jwt.encode(
+        {"iss": ISSUER, "sub": OWNER, "azp": PARTY, "exp": int(time.time()) + 60},
+        private,
+        algorithm="RS256",
+        headers={"kid": "rotated-key"},
+    )
+    verifier = JwtVerifier(
+        AuthConfig(
+            issuer=ISSUER,
+            jwks_url=f"{ISSUER}/.well-known/jwks.json",
+            authorized_parties=frozenset({PARTY}),
+            owner_sub=OWNER,
+        ),
+        client,
+    )
+
+    with pytest.raises(AuthenticationError, match="jwks_unknown_kid"):
+        verifier.verify(unknown)
+
+    assert requests == 1
+
+
+def test_repeated_unknown_kid_uses_a_cooldown(keypair) -> None:
+    private, jwks = keypair
+    requests = 0
+
+    def transport(*_: object) -> bytes:
+        nonlocal requests
+        requests += 1
+        return json.dumps(jwks).encode()
+
+    client = JwksClient(f"{ISSUER}/.well-known/jwks.json", transport=transport)
+    verifier = JwtVerifier(
+        AuthConfig(
+            issuer=ISSUER,
+            jwks_url=f"{ISSUER}/.well-known/jwks.json",
+            authorized_parties=frozenset({PARTY}),
+            owner_sub=OWNER,
+        ),
+        client,
+    )
+    unknown = jwt.encode(
+        {"iss": ISSUER, "sub": OWNER, "azp": PARTY, "exp": int(time.time()) + 60},
+        private,
+        algorithm="RS256",
+        headers={"kid": "rotated-key"},
+    )
+
+    for _ in range(2):
+        with pytest.raises(AuthenticationError, match="jwks_unknown_kid"):
+            verifier.verify(unknown)
+
+    assert requests == 1
+
+
+def test_valid_token_returns_identity_and_non_owner_is_forbidden(keypair) -> None:
+    private, _ = keypair
+    client = _client(_verifier(keypair))
+    owner = {"Authorization": f"Bearer {_token(private)}"}
+    normal = {"Authorization": f"Bearer {_token(private, sub='user_normal_synthetic')}"}
+
+    assert client.get("/private", headers=owner).json() == {"sub": OWNER}
+    assert client.get("/owner", headers=owner).json() == {"owner": True}
+    assert client.get("/owner", headers=normal).status_code == 403
+
+
+def test_auth_settings_are_required_and_jwks_must_belong_to_https_issuer() -> None:
+    with pytest.raises(ValueError):
+        AuthConfig(
+            issuer="http://issuer.example.test",
+            jwks_url="http://issuer.example.test/keys",
+            authorized_parties=frozenset({PARTY}),
+            owner_sub=OWNER,
+        )
+    with pytest.raises(ValueError):
+        AuthConfig(
+            issuer=ISSUER,
+            jwks_url="https://elsewhere.example.test/keys",
+            authorized_parties=frozenset({PARTY}),
+            owner_sub=OWNER,
+        )
+
+    settings = Settings(database_url="postgresql+psycopg://test:test@localhost/test")
+    assert settings.clerk_issuer is None
+
+
+def test_production_factory_leaves_only_liveness_public(keypair, monkeypatch) -> None:
+    private, jwks = keypair
+    from opportunity_radar.presentation.http import app as app_module
+
+    monkeypatch.setattr(
+        app_module,
+        "JwksClient",
+        lambda url: JwksClient(url, transport=lambda *_: json.dumps(jwks).encode()),
+    )
+    app = create_app(
+        Settings(
+            database_url="postgresql+psycopg://test:test@localhost/test",
+            clerk_issuer=ISSUER,
+            clerk_jwks_url=f"{ISSUER}/.well-known/jwks.json",
+            clerk_authorized_parties=PARTY,
+            clerk_owner_sub=OWNER,
+        )
+    )
+    client = TestClient(app)
+
+    assert client.get("/health/live").status_code == 200
+    assert client.get("/health").status_code == 401
+    assert client.get("/docs").status_code == 404
+    # A valid non-owner can use private personal routes, but never shared catalogue or
+    # operational routes. The guard runs before these endpoints open a database session.
+    normal_headers = {
+        "Authorization": f"Bearer {_token(private, sub='user_normal_synthetic')}"
+    }
+    for method, path in (
+        ("GET", "/sources"),
+        ("GET", "/source-runs"),
+        ("GET", "/companies"),
+        ("GET", "/source-metrics"),
+        ("POST", "/opportunities/normalizations/pending"),
+        ("PATCH", "/opportunities/00000000-0000-0000-0000-000000000000/status"),
+    ):
+        assert client.request(method, path, headers=normal_headers).status_code == 403
+    assert (
+        client.get("/health/live", headers={"X-Correlation-ID": "unsafe\r\nvalue"}).headers[
+            "X-Correlation-ID"
+        ]
+        != "unsafe\r\nvalue"
+    )
+
+
+def test_production_factory_rejects_missing_clerk_configuration() -> None:
+    with pytest.raises(RuntimeError, match="requires Clerk"):
+        create_app(
+            Settings(
+                database_url="postgresql+psycopg://test:test@localhost/test",
+                clerk_issuer="",
+                clerk_jwks_url="",
+                clerk_authorized_parties="",
+                clerk_owner_sub="",
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("path", "method", "expected"),
+    [
+        ("/sources", "GET", True),
+        ("/companies", "GET", True),
+        ("/source-metrics", "GET", True),
+        ("/opportunities/a/status", "PATCH", True),
+        ("/opportunities/a/relevance", "POST", False),
+        ("/profile", "GET", False),
+    ],
+)
+def test_operational_owner_guard_has_no_request_body_bypass(
+    path: str, method: str, expected: bool
+) -> None:
+    from starlette.requests import Request
+
+    request = Request({"type": "http", "method": method, "path": path, "headers": []})
+    request.state.identity = RequestIdentity(sub="user_normal_synthetic", is_owner=False)
+
+    if expected:
+        with pytest.raises(HTTPException) as error:
+            RequireOperationalOwner()(request)
+        assert error.value.status_code == 403
+    else:
+        assert RequireOperationalOwner()(request).sub == "user_normal_synthetic"
+
+
+def test_operational_owner_guard_allows_the_configured_owner() -> None:
+    from starlette.requests import Request
+
+    request = Request({"type": "http", "method": "POST", "path": "/sources", "headers": []})
+    request.state.identity = RequestIdentity(sub=OWNER, is_owner=True)
+
+    assert RequireOperationalOwner()(request).sub == OWNER
+
+
+@pytest.mark.parametrize("owner_sub", ["owner-a-synthetic", "owner-b-synthetic"])
+def test_execute_source_uses_the_verified_owner_for_target_roles(
+    keypair, monkeypatch: pytest.MonkeyPatch, owner_sub: str
+) -> None:
+    """A source run never falls back to a different active profile."""
+    from opportunity_radar.presentation.http import acquisition
+    from opportunity_radar.presentation.http.dependencies import (
+        get_alert_service,
+        get_collector_registry,
+        get_session,
+    )
+
+    captured: list[str | None] = []
+
+    def target_roles(session: object, owner: str | None = None):
+        captured.append(owner)
+        return lambda: ()
+
+    class FakeAcquisitionService:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        async def execute(self, *args: object) -> object:
+            return object()
+
+    client = _production_client(keypair, monkeypatch, owner_sub)
+    client.app.dependency_overrides.update(
+        {
+            get_session: lambda: object(),
+            get_alert_service: lambda: object(),
+            get_collector_registry: lambda: object(),
+        }
+    )
+    monkeypatch.setattr(acquisition, "active_profile_target_role_families", target_roles)
+    monkeypatch.setattr(acquisition, "AcquisitionService", FakeAcquisitionService)
+    monkeypatch.setattr(
+        acquisition,
+        "_run_response",
+        lambda _: acquisition.SourceRunResponse(
+            id=uuid4(),
+            source_definition_id=uuid4(),
+            source_name=None,
+            execution_trigger="ON_DEMAND",
+            status="COMPLETED",
+            started_at=None,
+            finished_at=None,
+            items_seen=0,
+            items_persisted=0,
+            items_skipped=0,
+            items_invalid=0,
+            http_requests=0,
+            retry_count=0,
+            rate_limit_events=0,
+            error_code=None,
+            error_summary=None,
+            checkpoint_before=None,
+            checkpoint_after=None,
+            correlation_id=None,
+        ),
+    )
+
+    response = client.post(
+        f"/sources/{uuid4()}/runs",
+        headers={"Authorization": f"Bearer {_token(keypair[0], sub=owner_sub)}"},
+        json={},
+    )
+
+    assert response.status_code == 201
+    assert captured == [owner_sub]
+
+
+@pytest.mark.parametrize("owner_sub", ["owner-a-synthetic", "owner-b-synthetic"])
+def test_funnel_metrics_uses_the_verified_owner_profile(
+    keypair, monkeypatch: pytest.MonkeyPatch, owner_sub: str
+) -> None:
+    """A successful metrics response uses the caller's active profile, never a global one."""
+    from opportunity_radar.dashboard.funnel import FunnelReport, NorthStar
+    from opportunity_radar.presentation.http import dashboard
+    from opportunity_radar.presentation.http.dependencies import get_session
+
+    captured: list[str | None] = []
+
+    class FakeProfileService:
+        def __init__(self, session: object, owner: str | None = None) -> None:
+            captured.append(owner)
+
+        def get_active(self) -> SimpleNamespace:
+            return SimpleNamespace(
+                snapshot=SimpleNamespace(
+                    preferences=SimpleNamespace(target_role_families=("DATA",))
+                )
+            )
+
+    client = _production_client(keypair, monkeypatch, owner_sub)
+    client.app.dependency_overrides[get_session] = lambda: object()
+    monkeypatch.setattr(dashboard, "ProfileService", FakeProfileService)
+    monkeypatch.setattr(
+        dashboard,
+        "funnel_report",
+        lambda _session, *, target_role_families: FunnelReport(
+            generated_at=datetime.now(UTC),
+            stages=(),
+            north_star=NorthStar(
+                role_families=tuple(target_role_families),
+                proxy=False,
+                stock=0,
+                new_in_window=0,
+                window_hours=24,
+                stack=(),
+            ),
+        ),
+    )
+
+    response = client.get(
+        "/funnel-metrics",
+        headers={"Authorization": f"Bearer {_token(keypair[0], sub=owner_sub)}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["north_star"]["role_families"] == ["DATA"]
+    assert captured == [owner_sub]

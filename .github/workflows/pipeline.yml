@@ -64,6 +64,9 @@ jobs:
       DATABASE_URL: postgresql+psycopg://opportunity_radar:ci-password@127.0.0.1:5432/opportunity_radar_test
       RUN_DATABASE_INTEGRATION: "1"
       DATABASE_INTEGRATION_ISOLATED: "1"
+      # Synthetic subject for the isolated database only. Migration 0069 refuses an
+      # implicit backfill, so CI must make this test-only value explicit.
+      OWNER_SUB_BACKFILL: ci-owner-sub
     services:
       postgres:
         # Always an empty database here, so the official pgvector image is safe to use; the
@@ -106,14 +109,20 @@ jobs:
         run: |
           python -m pip install -r requirements-dev.txt
           python -m pip install --no-deps .
-      - name: Verify migration round trip
+      - name: Verify reversible migrations and the tenancy downgrade guard
         run: |
-          alembic upgrade head
+          alembic upgrade 20261006_0068
           alembic downgrade base
           alembic upgrade head
+          if alembic downgrade 20261006_0068; then
+            echo "Expected migration 0069 downgrade to be refused" >&2
+            exit 1
+          fi
           test "$(alembic current | awk '{print $1}')" = "$(alembic heads | awk '{print $1}')"
       - name: Run backend tests
         run: pytest -q
+      - name: Smoke the fail-closed production factory offline
+        run: pytest -q tests/backend/http/test_auth.py -k production_factory_leaves_only_liveness_public
       - name: Measure content classification on the versioned gold
         run: python scripts/measure_content_classification.py --gold docs/50-roadmap-motor-de-busca/rotulagem/f50-01-gold.json --gold-text
       - name: Measure the seniority classifier on the versioned title sample
@@ -171,11 +180,11 @@ jobs:
         run: docker compose -f compose.yaml -f compose.ci.yaml config --quiet
       - name: Start application
         run: docker compose -f compose.yaml -f compose.ci.yaml up --detach --build api worker frontend
-      - name: Verify API, frontend and AI mode against the fake Groq stub
+      - name: Verify public API liveness and frontend against the fake Groq stub
         run: |
-          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
+          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/live
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:3000/
-          curl --fail http://127.0.0.1:8000/health | python -c "import json,sys; data=json.load(sys.stdin); assert data['ai']['status'] == 'healthy'"
+          curl --fail http://127.0.0.1:8000/health/live | python -c "import json,sys; assert json.load(sys.stdin)['status'] == 'ok'"
           test "$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose -f compose.yaml -f compose.ci.yaml ps -q worker)")" = "healthy"
       - name: Import and expose the researched company catalog
         run: |
@@ -319,34 +328,34 @@ jobs:
             python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; matched=[line for line in lines if line.get('correlation_id') == '$correlation_id']; assert matched, 'no structured log carried the correlation id'; assert any(line.get('path') == '/overview' and line.get('status_code') == 200 for line in matched), matched"
       - name: Verify PostgreSQL persistence after restart
         run: |
-          before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
-          companies_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM company_radar.company')"
-          raw_items_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM acquisition.raw_item')"
-          payloads_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM acquisition.raw_item_payload WHERE payload IS NOT NULL')"
-          opportunities_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity')"
-          occurrences_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.source_occurrence')"
-          compensations_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_compensation')"
-          skills_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_skill')"
-          matches_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_assessment')"
-          factors_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_factor')"
-          analyses_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
-          applications_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM crm.application_process')"
-          history_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM crm.stage_history')"
+          before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT version_num FROM alembic_version')"
+          companies_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM company_radar.company')"
+          raw_items_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM acquisition.raw_item')"
+          payloads_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM acquisition.raw_item_payload WHERE payload IS NOT NULL')"
+          opportunities_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM opportunities.opportunity')"
+          occurrences_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM opportunities.source_occurrence')"
+          compensations_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM opportunities.opportunity_compensation')"
+          skills_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM opportunities.opportunity_skill')"
+          matches_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM matching.match_assessment')"
+          factors_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM matching.match_factor')"
+          analyses_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
+          applications_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM crm.application_process')"
+          history_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM crm.stage_history')"
           docker compose -f compose.yaml -f compose.ci.yaml restart postgres
-          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
-          after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT version_num FROM alembic_version')"
-          companies_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM company_radar.company')"
-          raw_items_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM acquisition.raw_item')"
-          payloads_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM acquisition.raw_item_payload WHERE payload IS NOT NULL')"
-          opportunities_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity')"
-          occurrences_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.source_occurrence')"
-          compensations_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_compensation')"
-          skills_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM opportunities.opportunity_skill')"
-          matches_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_assessment')"
-          factors_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM matching.match_factor')"
-          analyses_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
-          applications_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM crm.application_process')"
-          history_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc 'SELECT count(*) FROM crm.stage_history')"
+          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/live
+          after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT version_num FROM alembic_version')"
+          companies_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM company_radar.company')"
+          raw_items_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM acquisition.raw_item')"
+          payloads_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM acquisition.raw_item_payload WHERE payload IS NOT NULL')"
+          opportunities_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM opportunities.opportunity')"
+          occurrences_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM opportunities.source_occurrence')"
+          compensations_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM opportunities.opportunity_compensation')"
+          skills_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM opportunities.opportunity_skill')"
+          matches_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM matching.match_assessment')"
+          factors_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM matching.match_factor')"
+          analyses_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
+          applications_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM crm.application_process')"
+          history_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM crm.stage_history')"
           test -n "$before"
           test "$before" = "$after"
           test "$companies_before" = "379"
@@ -402,7 +411,7 @@ jobs:
             return 1
           }
           count_rows() {
-            $compose exec -T postgres psql -U opportunity_radar -d opportunity_radar -tAc "$1" | tr -d '[:space:]'
+            $compose exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc "$1" | tr -d '[:space:]'
           }
 
           # The three preconditions the compose stack deliberately does not bootstrap.
@@ -451,7 +460,7 @@ jobs:
           assessments_before="$(count_rows 'SELECT count(*) FROM matching.match_assessment')"
           analyses_before="$(count_rows "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
           $compose restart worker
-          curl --fail --retry 30 --retry-all-errors --retry-delay 2 --silent --output /dev/null http://127.0.0.1:8000/health/ready
+          curl --fail --retry 30 --retry-all-errors --retry-delay 2 --silent --output /dev/null http://127.0.0.1:8000/health/live
           sleep 150
           test "$assessments_before" = "$(count_rows 'SELECT count(*) FROM matching.match_assessment')"
           test "$analyses_before" = "$(count_rows "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
@@ -534,7 +543,7 @@ jobs:
         # normalization, evaluation and analysis all running on their own schedule.
         run: |
           docker compose -f compose.yaml -f compose.ci.yaml up --detach --force-recreate worker
-          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/ready
+          curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/live
       - name: Set up Node.js for the browser journey
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -596,6 +605,10 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Block image publication until owner-scoped API is proven
+        env:
+          TENANCY_OWNER_API_READY: ${{ vars.TENANCY_OWNER_API_READY }}
+        run: python scripts/check_tenancy_release_gate.py
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4
       - name: Log in to GHCR

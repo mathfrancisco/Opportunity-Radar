@@ -17,9 +17,19 @@ class Settings(BaseSettings):
     api_statement_timeout_ms: int = Field(default=15000, ge=0)
     log_level: str = "INFO"
     frontend_origin: str = "http://localhost:3000"
+    # Required by the production HTTP factory. They remain optional here so workers and
+    # migrations do not require an HTTP identity configuration.
+    clerk_issuer: str | None = None
+    clerk_jwks_url: str | None = None
+    clerk_authorized_parties: str = ""
+    clerk_owner_sub: str | None = None
     collection_timezone: str = "UTC"
     worker_collect_enabled: bool = True
     worker_normalize_enabled: bool = True
+    # Matching, analysis and suggestions act on one person's private profile.  A worker
+    # must never select an arbitrary active profile, so these jobs skip unless this
+    # deployment explicitly designates their subject.
+    worker_owner_sub: str | None = None
     worker_match_enabled: bool = True
     worker_analyze_enabled: bool = True
     worker_retention_enabled: bool = True

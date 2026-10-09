@@ -108,37 +108,79 @@ def heartbeat() -> None:
     logger.debug("worker heartbeat")
 
 
-def normalize_opportunities(engine: Engine) -> None:
+def normalize_opportunities(
+    engine: Engine, *, stop_requested: Callable[[], bool] | None = None
+) -> dict[str, int]:
     """Each pass gets its own correlation id, so one batch is greppable end to end."""
+    if stop_requested is not None and stop_requested():
+        return {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 1}
     with observe_job(
         engine, job_name="normalize_opportunities", interval=timedelta(seconds=60)
     ):
         with Session(engine) as session:
             try:
-                batch = OpportunityService(session).normalize_pending()
+                service = OpportunityService(session)
+                totals = {"processed": 0, "succeeded": 0, "review_required": 0, "failed": 0}
+                remaining = 100
+                while remaining and (stop_requested is None or not stop_requested()):
+                    batch = service.normalize_pending(
+                        limit=1 if stop_requested is not None else remaining
+                    )
+                    totals["processed"] += batch.processed
+                    totals["succeeded"] += batch.succeeded
+                    totals["review_required"] += batch.review_required
+                    totals["failed"] += batch.failed
+                    remaining -= batch.processed
+                    if not batch.processed:
+                        break
             except Exception:
                 logger.exception("normalization batch failed", extra={"job": "normalize"})
                 raise
-        if batch.processed:
+        if totals["processed"]:
             logger.info(
                 "normalization batch finished",
                 extra={
                     "job": "normalize",
-                    "processed": batch.processed,
-                    "succeeded": batch.succeeded,
-                    "review_required": batch.review_required,
-                    "failed": batch.failed,
+                    **totals,
                 },
             )
+        return {
+            "input": totals["processed"],
+            "completed": totals["succeeded"],
+            "failed": totals["failed"],
+            "skipped": totals["review_required"],
+            "stopped": int(stop_requested is not None and stop_requested()),
+        }
 
 
-def evaluate_pending(engine: Engine, *, batch_size: int = 50) -> None:
+def _operational_owner(owner_sub: str | None, *, job: str) -> str | None:
+    owner = ProfileService.operational_owner(owner_sub)
+    if owner is None:
+        logger.warning(
+            "worker job skipped: no operational owner configured",
+            extra={"job": job, "reason": "missing_worker_owner"},
+        )
+    return owner
+
+
+def evaluate_pending(
+    engine: Engine,
+    *,
+    batch_size: int = 50,
+    owner_sub: str | None = None,
+    stop_requested: Callable[[], bool] | None = None,
+) -> dict[str, int]:
     """Evaluate each eligible opportunity independently for the current identity."""
+    owner = _operational_owner(owner_sub, job="evaluate")
+    if owner is None:
+        return {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 0}
+    if stop_requested is not None and stop_requested():
+        return {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 1}
     with observe_job(
         engine, job_name="evaluate_pending", interval=timedelta(seconds=60)
     ):
         with Session(engine) as session:
-            service = MatchingService(session)
+            service = MatchingService(session, owner)
             try:
                 pending_ids = service.pending_evaluation_ids(limit=batch_size)
             except ProfileNotFoundError:
@@ -147,9 +189,13 @@ def evaluate_pending(engine: Engine, *, batch_size: int = 50) -> None:
                     "matching batch degraded",
                     extra={"job": "evaluate", "reason": "no_active_profile"},
                 )
-                return
+                return {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 0}
             completed = failed = 0
+            stopped = 0
             for opportunity_id in pending_ids:
+                if stop_requested is not None and stop_requested():
+                    stopped = 1
+                    break
                 try:
                     service.evaluate(opportunity_id)
                     completed += 1
@@ -170,6 +216,13 @@ def evaluate_pending(engine: Engine, *, batch_size: int = 50) -> None:
                         "failed": failed,
                     },
                 )
+            return {
+                "input": len(pending_ids),
+                "completed": completed,
+                "failed": failed,
+                "skipped": max(0, len(pending_ids) - completed - failed),
+                "stopped": stopped,
+            }
 
 
 def analyze_pending(
@@ -185,6 +238,7 @@ def analyze_pending(
     aging_sample_ratio: float = 0.0,
     worker_requests_ceiling: int | None = None,
     daily_cap_fraction: float | None = None,
+    owner_sub: str | None = None,
 ) -> None:
     """Attach the semantic layer to current assessments, one claim at a time.
 
@@ -210,6 +264,9 @@ def analyze_pending(
     item; reaching it writes nothing, so assessments stay pending in queue order for the
     next day window. An explicit analysis never goes through this job, so it is not capped.
     """
+    owner = _operational_owner(owner_sub, job="analyze")
+    if owner is None:
+        return
     with observe_job(
         engine, job_name="analyze_pending", interval=timedelta(seconds=120)
     ) as correlation_id:
@@ -237,7 +294,7 @@ def analyze_pending(
             )
             return
         with Session(engine) as session:
-            service = MatchingService(session)
+            service = MatchingService(session, owner)
             pending = service.pending_analysis_ids(
                 limit=batch_size,
                 eligible_verdicts=eligible_verdicts or DEFAULT_ANALYSIS_VERDICTS,
@@ -364,6 +421,7 @@ def suggest_fields_pending(
     *,
     batch_size: int = 20,
     worker_requests_ceiling: int | None = None,
+    owner_sub: str | None = None,
 ) -> None:
     """Suggest `role_family`/`seniority`/`work_mode` for opportunities the deterministic
     rules left `UNKNOWN` (card F20-23). Off by default (`worker_suggest_enabled`): the
@@ -372,6 +430,9 @@ def suggest_fields_pending(
     operator accepts or rejects each suggestion through the HTTP endpoints. Only postings
     with a top verdict under the active profile are taken (`candidates_needing_suggestion`).
     """
+    owner = _operational_owner(owner_sub, job="suggest-fields")
+    if owner is None:
+        return
     if router is None:
         return
     with observe_job(
@@ -402,6 +463,7 @@ def suggest_fields_pending(
             candidates = candidates_needing_suggestion(
                 session,
                 limit=batch_size,
+                owner_sub=owner,
                 prompt_version=prompt.version,
                 route_hash=route_hash,
                 prompt=prompt,
@@ -538,9 +600,9 @@ class _PassSummary:
     )
     _lock: Lock = field(default_factory=Lock, repr=False)
 
-    def add(self, outcome: str) -> None:
+    def add(self, outcome: str, count: int = 1) -> None:
         with self._lock:
-            self.counts[outcome] += 1
+            self.counts[outcome] += count
 
 
 @dataclass(frozen=True)
@@ -558,6 +620,7 @@ class _PassContext:
     pass_started: float
     monotonic_clock: Callable[[], float]
     summary: _PassSummary
+    stop_requested: Callable[[], bool] | None = None
 
 
 def _collect_one_source(
@@ -578,6 +641,9 @@ def _collect_one_source(
     pass_started = ctx.pass_started
     monotonic_clock = ctx.monotonic_clock
     correlation_id = ctx.correlation_id
+    if ctx.stop_requested is not None and ctx.stop_requested():
+        summary.add("skipped")
+        return
     moment = now or (
         utc_clock() if utc_clock is not None else datetime.now(ZoneInfo(timezone))
     )
@@ -660,6 +726,9 @@ def _collect_one_source(
                     "reason": "pass_deadline",
                 },
             )
+            return
+        if ctx.stop_requested is not None and ctx.stop_requested():
+            summary.add("skipped")
             return
         source_started = monotonic_clock()
         source_timeout = source_deadline_seconds or None
@@ -765,9 +834,15 @@ def _collect_host_group(
     """
     reached = 0
     try:
+        if ctx.stop_requested is not None and ctx.stop_requested():
+            ctx.summary.add("skipped", len(source_ids))
+            return
         with Session(engine) as session:
             service = service_factory(session)
             for source_id in source_ids:
+                if ctx.stop_requested is not None and ctx.stop_requested():
+                    ctx.summary.add("skipped", len(source_ids) - reached)
+                    return
                 reached += 1
                 try:
                     source = service.get_source(source_id)
@@ -801,7 +876,9 @@ def collect_enabled_sources(
     monotonic_clock: Callable[[], float] = monotonic,
     utc_clock: Callable[[], datetime] | None = None,
     service_factory: Callable[[Session], AcquisitionService] = AcquisitionService,
-) -> None:
+    owner_sub: str | None = None,
+    stop_requested: Callable[[], bool] | None = None,
+) -> dict[str, int]:
     """Run every eligible source whose schedule is due, and account for the ones that are not.
 
     Each eligible source ends the pass in exactly one bucket. Silence about a source that
@@ -812,6 +889,9 @@ def collect_enabled_sources(
     its own thread and database session; the sources of one host always run one after the
     other, so a host never sees two runs at the same time. 1 is the original serial pass.
     """
+    owner = _operational_owner(owner_sub, job="collect")
+    if owner is None:
+        return {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 0}
     pass_started = monotonic_clock()
     with observe_job(
         engine, job_name="collect_enabled_sources", interval=timedelta(seconds=60)
@@ -829,6 +909,7 @@ def collect_enabled_sources(
             pass_started=pass_started,
             monotonic_clock=monotonic_clock,
             summary=summary,
+            stop_requested=stop_requested,
         )
         groups: dict[str, list[UUID]] = {}
         with Session(engine) as session:
@@ -856,6 +937,13 @@ def collect_enabled_sources(
         )
         if any(counts.values()):
             logger.info("collection batch finished", extra={"job": "collect", **counts})
+        return {
+            "input": sum(counts.values()),
+            "completed": counts["completed"],
+            "failed": counts["failed"],
+            "skipped": counts["skipped"] + counts["blocked"],
+            "stopped": int(stop_requested is not None and stop_requested()),
+        }
 
 
 def _run_host_groups(
@@ -875,6 +963,7 @@ def _run_host_groups(
 
 def collection_service_factory(settings: Settings) -> Callable[[Session], AcquisitionService]:
     """Build the collectors once per worker, with the endpoints this deployment points at."""
+    owner = ProfileService.operational_owner(settings.worker_owner_sub)
     registry = build_collector_registry(
         greenhouse_base_url=settings.greenhouse_base_url,
         tavily_api_key=settings.tavily_api_key,
@@ -907,6 +996,9 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
     )
 
     def build(session: Session) -> AcquisitionService:
+        if owner is None:
+            raise ValueError("collection requires an explicit operational owner")
+        target_roles = active_profile_target_role_families(session, owner)
         return AcquisitionService(
             session,
             registry=registry,
@@ -917,7 +1009,8 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
             ),
             tavily_extraction=tavily_extraction,
             host_request_ceilings=settings.host_request_ceiling_map,
-            target_role_families=active_profile_target_role_families(session),
+            target_role_families=target_roles,
+            profile_owner_sub=owner,
             target_area_floor=settings.collection_target_area_floor,
             claims_enabled=settings.collection_claim_enabled,
             inventory_contract_enabled=settings.collection_inventory_contract_enabled,
@@ -957,14 +1050,16 @@ def _scheduled_request_with_rotation(
     term_count = 0
     if source.source_type == "remotive" and collector.capabilities.keyword_search:
         profile_keywords: tuple[str, ...] = ()
-        try:
-            profile = ProfileService(service.session).get_active()
-        except ProfileNotFoundError:
-            pass
-        else:
-            profile_keywords = derive_keywords(
-                profile.snapshot.preferences, profile.snapshot.skills
-            )
+        owner = ProfileService.operational_owner(service.profile_owner_sub)
+        if owner is not None:
+            try:
+                profile = ProfileService(service.session, owner).get_active()
+            except ProfileNotFoundError:
+                pass
+            else:
+                profile_keywords = derive_keywords(
+                    profile.snapshot.preferences, profile.snapshot.skills
+                )
         terms = _normalize_keywords((*profile_keywords, *configured_keywords))
         term_count = len(terms)
         checkpoint = source.checkpoint
@@ -1059,6 +1154,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
                 "pass_deadline_seconds": settings.collection_pass_deadline_seconds,
                 "host_concurrency": settings.collection_host_concurrency,
                 "service_factory": collection_service_factory(settings),
+                "owner_sub": settings.worker_owner_sub,
             },
             id="collect-enabled-sources",
             replace_existing=True,
@@ -1067,12 +1163,15 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             next_run_time=first_run,
         )
     if settings.worker_match_enabled:
+        evaluate_kwargs: dict[str, object] = {"batch_size": settings.worker_evaluate_batch_size}
+        if settings.worker_owner_sub:
+            evaluate_kwargs["owner_sub"] = settings.worker_owner_sub
         scheduler.add_job(
             evaluate_pending,
             "interval",
             seconds=60,
             args=(engine,),
-            kwargs={"batch_size": settings.worker_evaluate_batch_size},
+            kwargs=evaluate_kwargs,
             id="evaluate-pending",
             replace_existing=True,
             coalesce=True,
@@ -1081,25 +1180,28 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
         )
     if settings.worker_analyze_enabled:
         adapter = build_analysis_adapter(settings, engine)
+        analyze_kwargs: dict[str, object] = {
+            "batch_size": settings.worker_analyze_batch_size,
+            "eligible_verdicts": settings.analysis_eligible_verdicts,
+            "cooldown_seconds": settings.analysis_retry_cooldown_seconds,
+            "attempt_window_seconds": settings.analysis_retry_attempt_window_seconds,
+            "max_attempts": settings.analysis_retry_max_attempts,
+            "lease_seconds": settings.analysis_claim_lease_seconds,
+            "aging_sample_ratio": settings.worker_analyze_aging_sample_ratio,
+            "daily_cap_fraction": settings.worker_analyze_daily_cap_fraction,
+            "worker_requests_ceiling": (
+                settings.ai_daily_requests_soft_limit
+                - settings.ai_interactive_reserve_requests
+            ),
+        }
+        if settings.worker_owner_sub:
+            analyze_kwargs["owner_sub"] = settings.worker_owner_sub
         scheduler.add_job(
             analyze_pending,
             "interval",
             seconds=120,
             args=(engine, adapter),
-            kwargs={
-                "batch_size": settings.worker_analyze_batch_size,
-                "eligible_verdicts": settings.analysis_eligible_verdicts,
-                "cooldown_seconds": settings.analysis_retry_cooldown_seconds,
-                "attempt_window_seconds": settings.analysis_retry_attempt_window_seconds,
-                "max_attempts": settings.analysis_retry_max_attempts,
-                "lease_seconds": settings.analysis_claim_lease_seconds,
-                "aging_sample_ratio": settings.worker_analyze_aging_sample_ratio,
-                "daily_cap_fraction": settings.worker_analyze_daily_cap_fraction,
-                "worker_requests_ceiling": (
-                    settings.ai_daily_requests_soft_limit
-                    - settings.ai_interactive_reserve_requests
-                ),
-            },
+            kwargs=analyze_kwargs,
             id="analyze-pending",
             replace_existing=True,
             coalesce=True,
@@ -1108,18 +1210,21 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
         )
     if settings.worker_suggest_enabled:
         classification_router = build_classification_router(settings, engine)
+        suggest_kwargs: dict[str, object] = {
+            "batch_size": settings.worker_suggest_batch_size,
+            "worker_requests_ceiling": (
+                settings.ai_daily_requests_soft_limit
+                - settings.ai_interactive_reserve_requests
+            ),
+        }
+        if settings.worker_owner_sub:
+            suggest_kwargs["owner_sub"] = settings.worker_owner_sub
         scheduler.add_job(
             suggest_fields_pending,
             "interval",
             seconds=300,
             args=(engine, classification_router),
-            kwargs={
-                "batch_size": settings.worker_suggest_batch_size,
-                "worker_requests_ceiling": (
-                    settings.ai_daily_requests_soft_limit
-                    - settings.ai_interactive_reserve_requests
-                ),
-            },
+            kwargs=suggest_kwargs,
             id="suggest-fields-pending",
             replace_existing=True,
             coalesce=True,

@@ -21,7 +21,7 @@ from opportunity_radar.matching.repository import (
 from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
+from opportunity_radar.presentation.http.app import create_development_app as create_app
 from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
 
 pytestmark = [
@@ -33,6 +33,7 @@ pytestmark = [
 ]
 
 NOW = datetime.now(UTC)
+TEST_OWNER_SUB = "dashboard-analysis-test-owner"
 
 
 def _session() -> Session:
@@ -42,7 +43,7 @@ def _session() -> Session:
 def _assessment(session: Session) -> UUID:
     profile = session.scalar(select(CareerProfileModel).limit(1))
     if profile is None:
-        profile = CareerProfileModel(version=1)
+        profile = CareerProfileModel(version=1, owner_sub=TEST_OWNER_SUB)
         session.add(profile)
         session.flush()
     number = (
@@ -69,6 +70,7 @@ def _assessment(session: Session) -> UUID:
     session.flush()
     assessment = SqlAlchemyMatchingRepository(session).add(
         AssessmentRecord(
+            owner_sub=TEST_OWNER_SUB,
             opportunity_id=opportunity.id,
             opportunity_version=1,
             profile_version_id=version.id,
