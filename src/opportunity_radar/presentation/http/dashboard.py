@@ -709,10 +709,13 @@ def get_source_metrics(
 
 
 @router.get("/funnel-metrics", response_model=FunnelReportResponse)
-def get_funnel_metrics(session: Session = Depends(get_session)) -> FunnelReportResponse:
+def get_funnel_metrics(
+    session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
+) -> FunnelReportResponse:
     """F48-06: the SPEC 48 funnel, the north-star and its guards, from persisted rows."""
     try:
-        active = ProfileService(session).get_active()
+        active = ProfileService(session, identity.sub).get_active()
         families = tuple(active.snapshot.preferences.target_role_families)
     except ProfileNotFoundError:
         families = ()

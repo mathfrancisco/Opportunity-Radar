@@ -1,6 +1,9 @@
 import base64
 import json
 import time
+from datetime import UTC, datetime
+from types import SimpleNamespace
+from uuid import uuid4
 
 import jwt
 import pytest
@@ -74,6 +77,28 @@ def _client(verifier: JwtVerifier) -> TestClient:
         return {"owner": identity.is_owner}
 
     return TestClient(app)
+
+
+def _production_client(keypair, monkeypatch: pytest.MonkeyPatch, owner_sub: str) -> TestClient:
+    _, jwks = keypair
+    from opportunity_radar.presentation.http import app as app_module
+
+    monkeypatch.setattr(
+        app_module,
+        "JwksClient",
+        lambda url: JwksClient(url, transport=lambda *_: json.dumps(jwks).encode()),
+    )
+    return TestClient(
+        create_app(
+            Settings(
+                database_url="postgresql+psycopg://test:test@localhost/test",
+                clerk_issuer=ISSUER,
+                clerk_jwks_url=f"{ISSUER}/.well-known/jwks.json",
+                clerk_authorized_parties=PARTY,
+                clerk_owner_sub=owner_sub,
+            )
+        )
+    )
 
 
 def test_missing_or_malformed_bearer_is_unauthorized(keypair) -> None:
@@ -350,3 +375,126 @@ def test_operational_owner_guard_allows_the_configured_owner() -> None:
     request.state.identity = RequestIdentity(sub=OWNER, is_owner=True)
 
     assert RequireOperationalOwner()(request).sub == OWNER
+
+
+@pytest.mark.parametrize("owner_sub", ["owner-a-synthetic", "owner-b-synthetic"])
+def test_execute_source_uses_the_verified_owner_for_target_roles(
+    keypair, monkeypatch: pytest.MonkeyPatch, owner_sub: str
+) -> None:
+    """A source run never falls back to a different active profile."""
+    from opportunity_radar.presentation.http import acquisition
+    from opportunity_radar.presentation.http.dependencies import (
+        get_alert_service,
+        get_collector_registry,
+        get_session,
+    )
+
+    captured: list[str | None] = []
+
+    def target_roles(session: object, owner: str | None = None):
+        captured.append(owner)
+        return lambda: ()
+
+    class FakeAcquisitionService:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        async def execute(self, *args: object) -> object:
+            return object()
+
+    client = _production_client(keypair, monkeypatch, owner_sub)
+    client.app.dependency_overrides.update(
+        {
+            get_session: lambda: object(),
+            get_alert_service: lambda: object(),
+            get_collector_registry: lambda: object(),
+        }
+    )
+    monkeypatch.setattr(acquisition, "active_profile_target_role_families", target_roles)
+    monkeypatch.setattr(acquisition, "AcquisitionService", FakeAcquisitionService)
+    monkeypatch.setattr(
+        acquisition,
+        "_run_response",
+        lambda _: acquisition.SourceRunResponse(
+            id=uuid4(),
+            source_definition_id=uuid4(),
+            source_name=None,
+            execution_trigger="ON_DEMAND",
+            status="COMPLETED",
+            started_at=None,
+            finished_at=None,
+            items_seen=0,
+            items_persisted=0,
+            items_skipped=0,
+            items_invalid=0,
+            http_requests=0,
+            retry_count=0,
+            rate_limit_events=0,
+            error_code=None,
+            error_summary=None,
+            checkpoint_before=None,
+            checkpoint_after=None,
+            correlation_id=None,
+        ),
+    )
+
+    response = client.post(
+        f"/sources/{uuid4()}/runs",
+        headers={"Authorization": f"Bearer {_token(keypair[0], sub=owner_sub)}"},
+        json={},
+    )
+
+    assert response.status_code == 201
+    assert captured == [owner_sub]
+
+
+@pytest.mark.parametrize("owner_sub", ["owner-a-synthetic", "owner-b-synthetic"])
+def test_funnel_metrics_uses_the_verified_owner_profile(
+    keypair, monkeypatch: pytest.MonkeyPatch, owner_sub: str
+) -> None:
+    """A successful metrics response uses the caller's active profile, never a global one."""
+    from opportunity_radar.dashboard.funnel import FunnelReport, NorthStar
+    from opportunity_radar.presentation.http import dashboard
+    from opportunity_radar.presentation.http.dependencies import get_session
+
+    captured: list[str | None] = []
+
+    class FakeProfileService:
+        def __init__(self, session: object, owner: str | None = None) -> None:
+            captured.append(owner)
+
+        def get_active(self) -> SimpleNamespace:
+            return SimpleNamespace(
+                snapshot=SimpleNamespace(
+                    preferences=SimpleNamespace(target_role_families=("DATA",))
+                )
+            )
+
+    client = _production_client(keypair, monkeypatch, owner_sub)
+    client.app.dependency_overrides[get_session] = lambda: object()
+    monkeypatch.setattr(dashboard, "ProfileService", FakeProfileService)
+    monkeypatch.setattr(
+        dashboard,
+        "funnel_report",
+        lambda _session, *, target_role_families: FunnelReport(
+            generated_at=datetime.now(UTC),
+            stages=(),
+            north_star=NorthStar(
+                role_families=tuple(target_role_families),
+                proxy=False,
+                stock=0,
+                new_in_window=0,
+                window_hours=24,
+                stack=(),
+            ),
+        ),
+    )
+
+    response = client.get(
+        "/funnel-metrics",
+        headers={"Authorization": f"Bearer {_token(keypair[0], sub=owner_sub)}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["north_star"]["role_families"] == ["DATA"]
+    assert captured == [owner_sub]
