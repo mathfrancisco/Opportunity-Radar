@@ -108,8 +108,12 @@ def heartbeat() -> None:
     logger.debug("worker heartbeat")
 
 
-def normalize_opportunities(engine: Engine) -> None:
+def normalize_opportunities(
+    engine: Engine, *, stop_requested: Callable[[], bool] | None = None
+) -> dict[str, int]:
     """Each pass gets its own correlation id, so one batch is greppable end to end."""
+    if stop_requested is not None and stop_requested():
+        return {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 1}
     with observe_job(
         engine, job_name="normalize_opportunities", interval=timedelta(seconds=60)
     ):
@@ -130,6 +134,13 @@ def normalize_opportunities(engine: Engine) -> None:
                     "failed": batch.failed,
                 },
             )
+        return {
+            "input": batch.processed,
+            "completed": batch.succeeded,
+            "failed": batch.failed,
+            "skipped": batch.review_required,
+            "stopped": int(stop_requested is not None and stop_requested()),
+        }
 
 
 def _operational_owner(owner_sub: str | None, *, job: str) -> str | None:
@@ -143,12 +154,18 @@ def _operational_owner(owner_sub: str | None, *, job: str) -> str | None:
 
 
 def evaluate_pending(
-    engine: Engine, *, batch_size: int = 50, owner_sub: str | None = None
-) -> None:
+    engine: Engine,
+    *,
+    batch_size: int = 50,
+    owner_sub: str | None = None,
+    stop_requested: Callable[[], bool] | None = None,
+) -> dict[str, int]:
     """Evaluate each eligible opportunity independently for the current identity."""
     owner = _operational_owner(owner_sub, job="evaluate")
     if owner is None:
-        return
+        return {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 0}
+    if stop_requested is not None and stop_requested():
+        return {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 1}
     with observe_job(
         engine, job_name="evaluate_pending", interval=timedelta(seconds=60)
     ):
@@ -162,9 +179,13 @@ def evaluate_pending(
                     "matching batch degraded",
                     extra={"job": "evaluate", "reason": "no_active_profile"},
                 )
-                return
+                return {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 0}
             completed = failed = 0
+            stopped = 0
             for opportunity_id in pending_ids:
+                if stop_requested is not None and stop_requested():
+                    stopped = 1
+                    break
                 try:
                     service.evaluate(opportunity_id)
                     completed += 1
@@ -185,6 +206,13 @@ def evaluate_pending(
                         "failed": failed,
                     },
                 )
+            return {
+                "input": len(pending_ids),
+                "completed": completed,
+                "failed": failed,
+                "skipped": max(0, len(pending_ids) - completed - failed),
+                "stopped": stopped,
+            }
 
 
 def analyze_pending(
@@ -582,6 +610,7 @@ class _PassContext:
     pass_started: float
     monotonic_clock: Callable[[], float]
     summary: _PassSummary
+    stop_requested: Callable[[], bool] | None = None
 
 
 def _collect_one_source(
@@ -602,6 +631,9 @@ def _collect_one_source(
     pass_started = ctx.pass_started
     monotonic_clock = ctx.monotonic_clock
     correlation_id = ctx.correlation_id
+    if ctx.stop_requested is not None and ctx.stop_requested():
+        summary.add("skipped")
+        return
     moment = now or (
         utc_clock() if utc_clock is not None else datetime.now(ZoneInfo(timezone))
     )
@@ -684,6 +716,9 @@ def _collect_one_source(
                     "reason": "pass_deadline",
                 },
             )
+            return
+        if ctx.stop_requested is not None and ctx.stop_requested():
+            summary.add("skipped")
             return
         source_started = monotonic_clock()
         source_timeout = source_deadline_seconds or None
@@ -789,9 +824,13 @@ def _collect_host_group(
     """
     reached = 0
     try:
+        if ctx.stop_requested is not None and ctx.stop_requested():
+            return
         with Session(engine) as session:
             service = service_factory(session)
             for source_id in source_ids:
+                if ctx.stop_requested is not None and ctx.stop_requested():
+                    return
                 reached += 1
                 try:
                     source = service.get_source(source_id)
@@ -826,7 +865,8 @@ def collect_enabled_sources(
     utc_clock: Callable[[], datetime] | None = None,
     service_factory: Callable[[Session], AcquisitionService] = AcquisitionService,
     owner_sub: str | None = None,
-) -> None:
+    stop_requested: Callable[[], bool] | None = None,
+) -> dict[str, int]:
     """Run every eligible source whose schedule is due, and account for the ones that are not.
 
     Each eligible source ends the pass in exactly one bucket. Silence about a source that
@@ -839,7 +879,7 @@ def collect_enabled_sources(
     """
     owner = _operational_owner(owner_sub, job="collect")
     if owner is None:
-        return
+        return {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 0}
     pass_started = monotonic_clock()
     with observe_job(
         engine, job_name="collect_enabled_sources", interval=timedelta(seconds=60)
@@ -857,6 +897,7 @@ def collect_enabled_sources(
             pass_started=pass_started,
             monotonic_clock=monotonic_clock,
             summary=summary,
+            stop_requested=stop_requested,
         )
         groups: dict[str, list[UUID]] = {}
         with Session(engine) as session:
@@ -884,6 +925,13 @@ def collect_enabled_sources(
         )
         if any(counts.values()):
             logger.info("collection batch finished", extra={"job": "collect", **counts})
+        return {
+            "input": sum(counts.values()),
+            "completed": counts["completed"],
+            "failed": counts["failed"],
+            "skipped": counts["skipped"] + counts["blocked"],
+            "stopped": int(stop_requested is not None and stop_requested()),
+        }
 
 
 def _run_host_groups(
