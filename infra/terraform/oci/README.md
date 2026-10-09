@@ -24,8 +24,10 @@ or secrets. Terraform apply is not authorized by this source or this runbook.
 
 1. In OCI Console, create the approved pilot compartment, group/principal and
    Resource Manager stack. Do not automate bootstrap identity with this root.
-2. Apply the five least-privilege policy templates exposed by
-   `resource_manager_iam_policy_template` after replacing both placeholders.
+2. Review the five least-privilege policy statements in `iam.tf`, then replace
+   their placeholders with the approved group and compartment names in OCI
+   Console. The `resource_manager_iam_policy_template` output repeats those
+   statements for review; it does not create or apply IAM policies.
    Do not replace them with tenancy-wide or `manage all-resources` access.
 3. Confirm A1 capacity, ARM image, Resource Manager pricing/support and stack
    locking in the selected home region.

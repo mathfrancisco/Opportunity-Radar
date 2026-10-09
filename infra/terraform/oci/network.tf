@@ -36,11 +36,82 @@ resource "oci_core_route_table" "public" {
   }
 }
 
+# Associate an explicit security list instead of OCI's permissive default.
+# Stateful responses to the egress rules remain allowed; inbound SSH is handled
+# only by the NSG rule scoped to var.admin_cidr.
+resource "oci_core_security_list" "public" {
+  compartment_id = var.compartment_id
+  vcn_id         = oci_core_vcn.pilot.id
+  display_name   = "${var.resource_prefix}-public"
+  freeform_tags  = local.common_tags
+
+  egress_security_rules {
+    destination      = "0.0.0.0/0"
+    destination_type = "CIDR_BLOCK"
+    protocol         = "6"
+    stateless        = false
+    description      = "HTTPS for updates and approved external APIs."
+
+    tcp_options {
+      destination_port_range {
+        min = 443
+        max = 443
+      }
+    }
+  }
+
+  egress_security_rules {
+    destination      = "0.0.0.0/0"
+    destination_type = "CIDR_BLOCK"
+    protocol         = "6"
+    stateless        = false
+    description      = "HTTP for package mirrors that do not support HTTPS."
+
+    tcp_options {
+      destination_port_range {
+        min = 80
+        max = 80
+      }
+    }
+  }
+
+  egress_security_rules {
+    destination      = var.vcn_cidr
+    destination_type = "CIDR_BLOCK"
+    protocol         = "17"
+    stateless        = false
+    description      = "DNS to the VCN resolver."
+
+    udp_options {
+      destination_port_range {
+        min = 53
+        max = 53
+      }
+    }
+  }
+
+  egress_security_rules {
+    destination      = var.vcn_cidr
+    destination_type = "CIDR_BLOCK"
+    protocol         = "6"
+    stateless        = false
+    description      = "TCP DNS fallback to the VCN resolver."
+
+    tcp_options {
+      destination_port_range {
+        min = 53
+        max = 53
+      }
+    }
+  }
+}
+
 resource "oci_core_subnet" "public" {
   compartment_id             = var.compartment_id
   vcn_id                     = oci_core_vcn.pilot.id
   cidr_block                 = var.public_subnet_cidr
   route_table_id             = oci_core_route_table.public.id
+  security_list_ids          = [oci_core_security_list.public.id]
   display_name               = "${var.resource_prefix}-public"
   dns_label                  = "public"
   prohibit_public_ip_on_vnic = false

@@ -72,12 +72,12 @@ variable "public_subnet_cidr" {
 }
 
 variable "admin_cidr" {
-  description = "Required administrative source CIDR for SSH. It must never be open to the Internet."
+  description = "Canonical IPv4 administrative network for SSH, /24 or narrower."
   type        = string
 
   validation {
-    condition     = can(cidrhost(var.admin_cidr, 0)) && var.admin_cidr != "0.0.0.0/0" && var.admin_cidr != "::/0"
-    error_message = "admin_cidr must be a specific administrative CIDR, never 0.0.0.0/0 or ::/0."
+    condition     = can(regex("^([0-9]{1,3}\\.){3}[0-9]{1,3}/(2[4-9]|3[0-2])$", var.admin_cidr)) && can(cidrhost(var.admin_cidr, 0)) && cidrhost(var.admin_cidr, 0) == split("/", var.admin_cidr)[0]
+    error_message = "admin_cidr must be a canonical IPv4 network with prefix /24 through /32."
   }
 }
 
