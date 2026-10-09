@@ -76,6 +76,8 @@ from opportunity_radar.platform.ai.telemetry import (
 )
 from opportunity_radar.platform.database import Base
 from opportunity_radar.platform.logging import get_logger
+from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
+from opportunity_radar.profile.service import ProfileService
 
 logger = get_logger("opportunity_radar.opportunities.suggestions")
 
@@ -277,6 +279,9 @@ def candidates_needing_suggestion(
     `over_fetch_factor` remains accepted for callers using the previous signature.
     """
     del over_fetch_factor
+    owner_sub = ProfileService.operational_owner(owner_sub)
+    if owner_sub is None:
+        return []
     pending_fields = (
         and_(
             OpportunityModel.role_family == RoleFamily.UNKNOWN.value,
@@ -304,26 +309,32 @@ def candidates_needing_suggestion(
         ),
     )
     pointer = CurrentAssessmentModel.__table__
+    active_profile = currency.active_profile_version_id(owner_sub)
+    owner_assessment = exists().where(
+        ProfileVersionModel.id == pointer.c.profile_version_id,
+        ProfileVersionModel.career_profile_id == CareerProfileModel.id,
+        CareerProfileModel.owner_sub == owner_sub,
+    )
     has_top_assessment = exists().where(
         pointer.c.opportunity_id == OpportunityModel.id,
         pointer.c.verdict.in_(SUGGESTION_VERDICTS),
-        currency.is_current_assessment(pointer, rules_version=RULES_VERSION),
-        *(
-            (pointer.c.owner_sub == owner_sub,)
-            if owner_sub is not None
-            else ()
+        currency.is_current_assessment(
+            pointer, rules_version=RULES_VERSION, profile_version_id=active_profile
         ),
+        owner_assessment,
     )
     selection = or_(*pending_fields, has_top_assessment)
-    if owner_sub is not None:
-        # The worker runs under one configured operational identity.  Do not let the
-        # global "unknown field" branch select postings that identity has not matched.
-        has_owner_assessment = exists().where(
-            pointer.c.opportunity_id == OpportunityModel.id,
-            pointer.c.owner_sub == owner_sub,
-            currency.is_current_assessment(pointer, rules_version=RULES_VERSION),
-        )
-        selection = and_(selection, has_owner_assessment)
+    # The worker runs under one configured operational identity. Do not let the global
+    # "unknown field" branch select postings that identity has not matched.
+    has_owner_assessment = exists().where(
+        pointer.c.opportunity_id == OpportunityModel.id,
+        pointer.c.verdict.in_(SUGGESTION_VERDICTS),
+        currency.is_current_assessment(
+            pointer, rules_version=RULES_VERSION, profile_version_id=active_profile
+        ),
+        owner_assessment,
+    )
+    selection = and_(selection, has_owner_assessment)
     query = select(OpportunityModel).where(selection)
     rows: list[OpportunityModel] = []
     cursor = after
@@ -362,6 +373,8 @@ def candidates_needing_suggestion(
         for item in page:
             fields = [field for field in unknown_fields(item)
                       if field.value not in existing_suggestion_fields(session, item)]
+            if not fields:
+                continue
             sanitized = sanitize_for_llm({
                 "title": item.canonical_title or "", "description": item.description or ""
             })

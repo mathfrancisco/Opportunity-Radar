@@ -392,10 +392,10 @@ def suggest_fields_pending(
     operator accepts or rejects each suggestion through the HTTP endpoints. Only postings
     with a top verdict under the active profile are taken (`candidates_needing_suggestion`).
     """
-    if router is None:
-        return
     owner = _operational_owner(owner_sub, job="suggest-fields")
     if owner is None:
+        return
+    if router is None:
         return
     with observe_job(
         engine, job_name="suggest_fields_pending", interval=timedelta(seconds=300)
@@ -825,6 +825,7 @@ def collect_enabled_sources(
     monotonic_clock: Callable[[], float] = monotonic,
     utc_clock: Callable[[], datetime] | None = None,
     service_factory: Callable[[Session], AcquisitionService] = AcquisitionService,
+    owner_sub: str | None = None,
 ) -> None:
     """Run every eligible source whose schedule is due, and account for the ones that are not.
 
@@ -836,6 +837,9 @@ def collect_enabled_sources(
     its own thread and database session; the sources of one host always run one after the
     other, so a host never sees two runs at the same time. 1 is the original serial pass.
     """
+    owner = _operational_owner(owner_sub, job="collect")
+    if owner is None:
+        return
     pass_started = monotonic_clock()
     with observe_job(
         engine, job_name="collect_enabled_sources", interval=timedelta(seconds=60)
@@ -899,6 +903,7 @@ def _run_host_groups(
 
 def collection_service_factory(settings: Settings) -> Callable[[Session], AcquisitionService]:
     """Build the collectors once per worker, with the endpoints this deployment points at."""
+    owner = ProfileService.operational_owner(settings.worker_owner_sub)
     registry = build_collector_registry(
         greenhouse_base_url=settings.greenhouse_base_url,
         tavily_api_key=settings.tavily_api_key,
@@ -931,6 +936,9 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
     )
 
     def build(session: Session) -> AcquisitionService:
+        if owner is None:
+            raise ValueError("collection requires an explicit operational owner")
+        target_roles = active_profile_target_role_families(session, owner)
         return AcquisitionService(
             session,
             registry=registry,
@@ -941,7 +949,8 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
             ),
             tavily_extraction=tavily_extraction,
             host_request_ceilings=settings.host_request_ceiling_map,
-            target_role_families=active_profile_target_role_families(session),
+            target_role_families=target_roles,
+            profile_owner_sub=owner,
             target_area_floor=settings.collection_target_area_floor,
             claims_enabled=settings.collection_claim_enabled,
             inventory_contract_enabled=settings.collection_inventory_contract_enabled,
@@ -981,14 +990,16 @@ def _scheduled_request_with_rotation(
     term_count = 0
     if source.source_type == "remotive" and collector.capabilities.keyword_search:
         profile_keywords: tuple[str, ...] = ()
-        try:
-            profile = ProfileService(service.session).get_active()
-        except ProfileNotFoundError:
-            pass
-        else:
-            profile_keywords = derive_keywords(
-                profile.snapshot.preferences, profile.snapshot.skills
-            )
+        owner = ProfileService.operational_owner(service.profile_owner_sub)
+        if owner is not None:
+            try:
+                profile = ProfileService(service.session, owner).get_active()
+            except ProfileNotFoundError:
+                pass
+            else:
+                profile_keywords = derive_keywords(
+                    profile.snapshot.preferences, profile.snapshot.skills
+                )
         terms = _normalize_keywords((*profile_keywords, *configured_keywords))
         term_count = len(terms)
         checkpoint = source.checkpoint
@@ -1083,6 +1094,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
                 "pass_deadline_seconds": settings.collection_pass_deadline_seconds,
                 "host_concurrency": settings.collection_host_concurrency,
                 "service_factory": collection_service_factory(settings),
+                "owner_sub": settings.worker_owner_sub,
             },
             id="collect-enabled-sources",
             replace_existing=True,

@@ -392,12 +392,14 @@ class SourceDisabledError(AcquisitionError):
         )
 
 
-def active_profile_target_role_families(session: Session) -> Callable[[], tuple[str, ...]]:
+def active_profile_target_role_families(
+    session: Session, owner_sub: str | None = None
+) -> Callable[[], tuple[str, ...]]:
     """Read the active profile's target areas on demand; empty when none is active (F50-04)."""
 
     def read() -> tuple[str, ...]:
         try:
-            profile = ProfileService(session).get_active()
+            profile = ProfileService(session, owner_sub).get_active()
         except ProfileNotFoundError:
             return ()
         return tuple(profile.snapshot.preferences.target_role_families)
@@ -417,6 +419,7 @@ class AcquisitionService:
         tavily_extraction: TavilyExtractionSettings | None = None,
         host_request_ceilings: Mapping[str, int] | None = None,
         target_role_families: Callable[[], tuple[str, ...]] | None = None,
+        profile_owner_sub: str | None = None,
         target_area_floor: float = 0.0,
         claims_enabled: bool = False,
         claim_renew_interval_seconds: float | None = None,
@@ -440,6 +443,7 @@ class AcquisitionService:
         # disables it — the same "absent is a supported deployment" treatment
         # `tavily_api_key` gets elsewhere.
         self._tavily_extraction = tavily_extraction
+        self.profile_owner_sub = profile_owner_sub
         # F48-08: request ceiling per source_type for a host budget row created by this
         # service (an existing row keeps the ceiling it was persisted with).
         self._host_request_ceilings: Mapping[str, int] = (

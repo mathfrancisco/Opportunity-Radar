@@ -35,7 +35,7 @@ from sqlalchemy.dialects.postgresql import aggregate_order_by
 from opportunity_radar.matching.models import MatchAssessmentModel
 from opportunity_radar.opportunities.domain import SKILL_TAXONOMY_VERSION
 from opportunity_radar.opportunities.models import OpportunityModel, OpportunitySkillModel
-from opportunity_radar.profile.models import ProfileVersionModel
+from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
 
 #: The components that decide currency. The reference day is deliberately absent: a new
 #: day does not invalidate a score unless it moves the posting into another recency band.
@@ -125,18 +125,18 @@ def recency_band(published_at: datetime | None, reference: date) -> int | None:
     )
 
 
-def active_profile_version_id() -> Any:
-    """Scalar subquery for the single active `ProfileVersion`, or NULL when there is none.
+def active_profile_version_id(owner_sub: str | None = None) -> Any:
+    """Scalar subquery for an owner's active `ProfileVersion`, or NULL when absent.
 
     NULL is the honest answer: without an active profile nothing can be current, and every
     stored assessment is a statement about a profile that is no longer in force.
     """
-    return (
-        select(ProfileVersionModel.id)
-        .where(ProfileVersionModel.status == "ACTIVE")
-        .limit(1)
-        .scalar_subquery()
-    )
+    statement = select(ProfileVersionModel.id).where(ProfileVersionModel.status == "ACTIVE")
+    if owner_sub is not None:
+        statement = statement.join(CareerProfileModel).where(
+            CareerProfileModel.owner_sub == owner_sub
+        )
+    return statement.limit(1).scalar_subquery()
 
 
 def opportunity_taxonomy_version() -> Any:
