@@ -39,6 +39,7 @@ from opportunity_radar.platform.backup import (
     database_name,
     database_url,
     pgpassfile_for_url,
+    postgres_tool_environment,
     sha256_file,
 )
 from opportunity_radar.platform.database import create_database_engine
@@ -102,9 +103,7 @@ def run_pg_dump(url: str, target: Path, *, snapshot: str | None = None) -> None:
     if snapshot is not None:
         command.append(f"--snapshot={snapshot}")
     with pgpassfile_for_url(url) as env_overrides:
-        env = os.environ.copy()
-        env.pop("PGPASSWORD", None)
-        env.update(env_overrides)
+        env = postgres_tool_environment(env_overrides)
         try:
             subprocess.run(command, check=True, capture_output=True, text=True, env=env)
         except FileNotFoundError as error:

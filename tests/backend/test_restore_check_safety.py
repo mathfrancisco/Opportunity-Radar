@@ -15,12 +15,16 @@ from scripts import backup, restore_check
 
 
 def test_pgpassfile_keeps_password_out_of_environment_and_cleans_up() -> None:
-    with pgpassfile_for_url("postgresql://user:secret@host:5432/source_test") as env:
+    with pgpassfile_for_url(
+        "postgresql://user:p%40ss%3Aword@host:5432/source_test"
+    ) as env:
         passfile = Path(env["PGPASSFILE"])
         assert "PGPASSWORD" not in env
         if os.name != "nt":
             assert stat.S_IMODE(passfile.stat().st_mode) == stat.S_IRUSR | stat.S_IWUSR
-        assert "secret" in passfile.read_text(encoding="utf-8")
+        assert "host:5432:source_test:user:p@ss\\:word" in passfile.read_text(
+            encoding="utf-8"
+        )
     assert not passfile.exists()
 
 
@@ -45,12 +49,19 @@ def test_postgres_tools_do_not_receive_dsn_or_password_in_argv(
         return subprocess.CompletedProcess(command, 0, "", "")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setenv("PGHOSTADDR", "203.0.113.8")
+    monkeypatch.setenv("PGSERVICE", "unsafe-service")
+    monkeypatch.setenv("PGDATABASE", "unsafe_database")
     runner(*arguments)
 
     assert "secret" not in " ".join(captured["command"])
     assert "postgresql://" not in " ".join(captured["command"])
     assert "PGPASSWORD" not in captured["env"]
     assert captured["env"]["PGDATABASE"] in {"source_test", "scratch_test"}
+    assert "PGHOSTADDR" not in captured["env"]
+    assert "PGSERVICE" not in captured["env"]
+    if runner is restore_check.restore:
+        assert "--dbname=scratch_test" in captured["command"]
 
 
 @pytest.mark.parametrize("base_url", ["postgresql://u:p@host/source", "postgresql://u:p@host/source_test"])

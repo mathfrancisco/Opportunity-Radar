@@ -43,6 +43,7 @@ from opportunity_radar.platform.backup import (
     database_name,
     database_url,
     pgpassfile_for_url,
+    postgres_tool_environment,
     sha256_file,
     with_database,
 )
@@ -106,17 +107,17 @@ def drop_database(url: str, name: str) -> None:
 
 
 def restore(dump: Path, url: str, name: str) -> None:
+    _validate_scratch_name(name)
     command = [
         "pg_restore",
+        f"--dbname={name}",
         "--no-owner",
         "--no-privileges",
         "--exit-on-error",
         str(dump),
     ]
     with pgpassfile_for_url(url, database=name) as env_overrides:
-        env = os.environ.copy()
-        env.pop("PGPASSWORD", None)
-        env.update(env_overrides)
+        env = postgres_tool_environment(env_overrides)
         try:
             subprocess.run(command, check=True, capture_output=True, text=True, env=env)
         except FileNotFoundError as error:

@@ -21,7 +21,7 @@ import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
-from urllib.parse import parse_qs, urlparse, urlunparse
+from urllib.parse import parse_qs, unquote, urlparse, urlunparse
 
 #: Bumped whenever the manifest's shape changes in a way `restore_check.py` must not read
 #: as if it were the previous shape. A manifest with a different value is incompatible.
@@ -114,6 +114,41 @@ def _escape_pgpassfile_value(value: str) -> str:
     return value.replace("\\", "\\\\").replace(":", "\\:")
 
 
+_LIBPQ_CONNECTION_ENV = (
+    "PGHOST",
+    "PGHOSTADDR",
+    "PGPORT",
+    "PGDATABASE",
+    "PGUSER",
+    "PGPASSWORD",
+    "PGPASSFILE",
+    "PGSERVICE",
+    "PGSERVICEFILE",
+    "PGOPTIONS",
+    "PGSSLMODE",
+    "PGREQUIRESSL",
+    "PGSSLCOMPRESSION",
+    "PGSSLCERT",
+    "PGSSLKEY",
+    "PGSSLROOTCERT",
+    "PGSSLCRL",
+    "PGSSLCRLDIR",
+    "PGCHANNELBINDING",
+    "PGTARGETSESSIONATTRS",
+    "PGLOADBALANCEHOSTS",
+    "PGCONNECT_TIMEOUT",
+)
+
+
+def postgres_tool_environment(overrides: dict[str, str]) -> dict[str, str]:
+    """Build child env without inherited libpq settings that can redirect a tool."""
+    env = os.environ.copy()
+    for name in _LIBPQ_CONNECTION_ENV:
+        env.pop(name, None)
+    env.update(overrides)
+    return env
+
+
 @contextmanager
 def pgpassfile_for_url(
     url: str, *, database: str | None = None
@@ -128,9 +163,9 @@ def pgpassfile_for_url(
     if parsed.port:
         env["PGPORT"] = str(parsed.port)
     if parsed.username:
-        env["PGUSER"] = parsed.username
+        env["PGUSER"] = unquote(parsed.username)
     if target_database:
-        env["PGDATABASE"] = target_database
+        env["PGDATABASE"] = unquote(target_database)
     for parameter, environment in (("sslmode", "PGSSLMODE"), ("sslrootcert", "PGSSLROOTCERT")):
         values = parameters.get(parameter)
         if values:
@@ -146,7 +181,13 @@ def pgpassfile_for_url(
             user = env.get("PGUSER", "*")
             line = ":".join(
                 _escape_pgpassfile_value(value)
-                for value in (host, port, target_database or "*", user, parsed.password)
+                for value in (
+                    host,
+                    port,
+                    unquote(target_database) if target_database else "*",
+                    user,
+                    unquote(parsed.password),
+                )
             )
             try:
                 os.write(descriptor, f"{line}\n".encode("utf-8"))
@@ -206,6 +247,7 @@ __all__ = [
     "database_name",
     "database_url",
     "pgpassfile_for_url",
+    "postgres_tool_environment",
     "postgres_dsn",
     "sha256_file",
     "with_database",
