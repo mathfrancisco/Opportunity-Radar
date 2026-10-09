@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -39,13 +40,25 @@ from opportunity_radar.platform.backup import (
     FORMAT_VERSION,
     MANIFEST_QUERIES,
     RELATIONSHIP_QUERIES,
+    database_name,
     database_url,
-    postgres_dsn,
+    pgpassfile_for_url,
     sha256_file,
     with_database,
 )
 
 DEFAULT_BACKUP_DIR = Path("data/backups")
+
+
+def guard_isolation(url: str, target_name: str) -> None:
+    """Reject restore before connecting unless the isolated-test contract is explicit."""
+    _validate_scratch_name(target_name)
+    if not database_name(url).lower().endswith("_test"):
+        raise SystemExit("restore base database must end in _test")
+    if os.environ.get("RUN_DATABASE_INTEGRATION") != "1":
+        raise SystemExit("restore requires RUN_DATABASE_INTEGRATION=1")
+    if os.environ.get("DATABASE_INTEGRATION_ISOLATED") != "1":
+        raise SystemExit("restore requires DATABASE_INTEGRATION_ISOLATED=1")
 
 
 def newest_dump(directory: Path) -> Path:
@@ -74,13 +87,13 @@ def _validate_scratch_name(name: str) -> None:
 
 
 def create_database(url: str, name: str) -> None:
-    _validate_scratch_name(name)
+    guard_isolation(url, name)
     with admin_engine(url).connect() as connection:
         connection.execute(text(f'CREATE DATABASE "{name}"'))
 
 
 def drop_database(url: str, name: str) -> None:
-    _validate_scratch_name(name)
+    guard_isolation(url, name)
     with admin_engine(url).connect() as connection:
         connection.execute(
             text(
@@ -98,17 +111,20 @@ def restore(dump: Path, url: str, name: str) -> None:
         "--no-owner",
         "--no-privileges",
         "--exit-on-error",
-        f"--dbname={postgres_dsn(with_database(url, name))}",
         str(dump),
     ]
-    try:
-        subprocess.run(command, check=True, capture_output=True, text=True)
-    except FileNotFoundError as error:
-        raise SystemExit(
-            "pg_restore is not available; run this through `make restore-check`"
-        ) from error
-    except subprocess.CalledProcessError as error:
-        raise SystemExit(f"pg_restore failed: {error.stderr.strip()}") from error
+    with pgpassfile_for_url(url, database=name) as env_overrides:
+        env = os.environ.copy()
+        env.pop("PGPASSWORD", None)
+        env.update(env_overrides)
+        try:
+            subprocess.run(command, check=True, capture_output=True, text=True, env=env)
+        except FileNotFoundError as error:
+            raise SystemExit(
+                "pg_restore is not available; run this through `make restore-check`"
+            ) from error
+        except subprocess.CalledProcessError as error:
+            raise SystemExit("pg_restore failed; command output was redacted") from error
 
 
 def smoke_queries(url: str, name: str) -> dict[str, Any]:
@@ -217,13 +233,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     url = database_url()
+    name = scratch_name()
+    guard_isolation(url, name)
     dump = args.dump or newest_dump(args.backup_dir)
     manifest_path = dump.with_suffix(".manifest.json")
     manifest = load_manifest(manifest_path, allow_missing=args.allow_missing_manifest)
     if manifest is not None:
         verify_checksum(dump, manifest)
 
-    name = scratch_name()
     print(f"restoring {dump} into {name}")
     create_database(url, name)
     try:

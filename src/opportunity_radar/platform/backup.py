@@ -16,8 +16,12 @@ from __future__ import annotations
 
 import hashlib
 import os
+import stat
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
-from urllib.parse import urlparse, urlunparse
+from typing import Generator
+from urllib.parse import parse_qs, urlparse, urlunparse
 
 #: Bumped whenever the manifest's shape changes in a way `restore_check.py` must not read
 #: as if it were the previous shape. A manifest with a different value is incompatible.
@@ -105,6 +109,60 @@ EXTENSIONS_QUERY = "SELECT extname FROM pg_extension ORDER BY extname"
 ALEMBIC_REVISION_QUERY = "SELECT version_num FROM alembic_version"
 
 
+def _escape_pgpassfile_value(value: str) -> str:
+    """Escape a libpq .pgpass field without ever placing it in argv."""
+    return value.replace("\\", "\\\\").replace(":", "\\:")
+
+
+@contextmanager
+def pgpassfile_for_url(
+    url: str, *, database: str | None = None
+) -> Generator[dict[str, str], None, None]:
+    """Provide libpq settings with any password retained only in a 0600 temp file."""
+    parsed = urlparse(url)
+    parameters = parse_qs(parsed.query)
+    target_database = database or parsed.path.lstrip("/")
+    env: dict[str, str] = {}
+    if parsed.hostname:
+        env["PGHOST"] = parsed.hostname
+    if parsed.port:
+        env["PGPORT"] = str(parsed.port)
+    if parsed.username:
+        env["PGUSER"] = parsed.username
+    if target_database:
+        env["PGDATABASE"] = target_database
+    for parameter, environment in (("sslmode", "PGSSLMODE"), ("sslrootcert", "PGSSLROOTCERT")):
+        values = parameters.get(parameter)
+        if values:
+            env[environment] = values[0]
+
+    passfile: Path | None = None
+    try:
+        if parsed.password is not None:
+            descriptor, passfile_name = tempfile.mkstemp(prefix="opportunity-radar-pgpass-")
+            passfile = Path(passfile_name)
+            host = env.get("PGHOST", "localhost")
+            port = env.get("PGPORT", "5432")
+            user = env.get("PGUSER", "*")
+            line = ":".join(
+                _escape_pgpassfile_value(value)
+                for value in (host, port, target_database or "*", user, parsed.password)
+            )
+            try:
+                os.write(descriptor, f"{line}\n".encode("utf-8"))
+            finally:
+                os.close(descriptor)
+            os.chmod(passfile, stat.S_IRUSR | stat.S_IWUSR)
+            env["PGPASSFILE"] = str(passfile)
+        yield env
+    finally:
+        if passfile is not None:
+            try:
+                passfile.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
 def database_url() -> str:
     url = os.environ.get("DATABASE_URL")
     if not url:
@@ -147,6 +205,7 @@ __all__ = [
     "RELATIONSHIP_QUERIES",
     "database_name",
     "database_url",
+    "pgpassfile_for_url",
     "postgres_dsn",
     "sha256_file",
     "with_database",

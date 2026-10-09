@@ -229,7 +229,7 @@ def test_compare_flags_a_different_migration_revision() -> None:
     assert any("migration revision" in problem for problem in problems)
 
 
-def test_prune_removes_dumps_and_manifests_past_the_retention(tmp_path: Path) -> None:
+def test_prune_previews_dumps_and_manifests_past_the_retention(tmp_path: Path) -> None:
     import time
 
     old_dump = tmp_path / "old.dump"
@@ -244,9 +244,24 @@ def test_prune_removes_dumps_and_manifests_past_the_retention(tmp_path: Path) ->
     removed = backup.prune(tmp_path, retention_days=30)
 
     assert removed == [old_dump]
+    assert old_dump.exists()
+    assert old_manifest.exists()
+    assert new_dump.exists()
+
+
+def test_prune_requires_explicit_apply_to_delete(tmp_path: Path) -> None:
+    import time
+
+    old_dump = tmp_path / "old.dump"
+    old_manifest = tmp_path / "old.manifest.json"
+    for path in (old_dump, old_manifest):
+        path.write_text("x", encoding="utf-8")
+    old_time = time.time() - (40 * 86400)
+    os.utime(old_dump, (old_time, old_time))
+
+    assert backup.prune(tmp_path, retention_days=30, apply=True) == [old_dump]
     assert not old_dump.exists()
     assert not old_manifest.exists()
-    assert new_dump.exists()
 
 
 def test_manifest_includes_the_ai_quota_and_call_record_tables() -> None:

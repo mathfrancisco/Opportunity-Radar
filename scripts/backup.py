@@ -38,7 +38,7 @@ from opportunity_radar.platform.backup import (
     RELATIONSHIP_QUERIES,
     database_name,
     database_url,
-    postgres_dsn,
+    pgpassfile_for_url,
     sha256_file,
 )
 from opportunity_radar.platform.database import create_database_engine
@@ -101,18 +101,22 @@ def run_pg_dump(url: str, target: Path, *, snapshot: str | None = None) -> None:
     ]
     if snapshot is not None:
         command.append(f"--snapshot={snapshot}")
-    command.append(postgres_dsn(url))
-    try:
-        subprocess.run(command, check=True, capture_output=True, text=True)
-    except FileNotFoundError as error:
-        raise SystemExit(
-            "pg_dump is not available; run this through `make backup`"
-        ) from error
-    except subprocess.CalledProcessError as error:
-        raise SystemExit(f"pg_dump failed: {error.stderr.strip()}") from error
+    with pgpassfile_for_url(url) as env_overrides:
+        env = os.environ.copy()
+        env.pop("PGPASSWORD", None)
+        env.update(env_overrides)
+        try:
+            subprocess.run(command, check=True, capture_output=True, text=True, env=env)
+        except FileNotFoundError as error:
+            raise SystemExit(
+                "pg_dump is not available; run this through `make backup`"
+            ) from error
+        except subprocess.CalledProcessError as error:
+            raise SystemExit("pg_dump failed; command output was redacted") from error
 
 
-def prune(directory: Path, retention_days: int) -> list[Path]:
+def prune(directory: Path, retention_days: int, *, apply: bool = False) -> list[Path]:
+    """Return retention candidates; deletion is never coupled to taking a backup."""
     if retention_days <= 0:
         return []
     cutoff = datetime.now(UTC) - timedelta(days=retention_days)
@@ -120,8 +124,9 @@ def prune(directory: Path, retention_days: int) -> list[Path]:
     for dump in sorted(directory.glob("*.dump")):
         stamp = datetime.fromtimestamp(dump.stat().st_mtime, UTC)
         if stamp < cutoff:
-            dump.unlink()
-            dump.with_suffix(".manifest.json").unlink(missing_ok=True)
+            if apply:
+                dump.unlink()
+                dump.with_suffix(".manifest.json").unlink(missing_ok=True)
             removed.append(dump)
     return removed
 
@@ -157,11 +162,17 @@ def main(argv: list[str] | None = None) -> int:
     os.replace(target_tmp, target)
     os.replace(manifest_tmp, manifest_path)
 
-    removed = prune(args.output_dir, args.prune_days)
     print(f"wrote {target} ({manifest['bytes']} bytes, sha256 {manifest['sha256'][:12]}...)")
     print(f"wrote {manifest_path}")
-    for dump in removed:
-        print(f"pruned {dump}", file=sys.stderr)
+    if args.prune_days > 0:
+        candidates = prune(args.output_dir, args.prune_days)
+        print(
+            "retention was not applied; review candidates only after a validated "
+            "isolated restore",
+            file=sys.stderr,
+        )
+        for dump in candidates:
+            print(f"retention candidate {dump}", file=sys.stderr)
     return 0
 
 
