@@ -1,0 +1,19 @@
+# Public identifiers only. Copy outside the repository and replace placeholders.
+# Do not put API keys, private SSH keys, database URLs, Clerk keys, or passwords here.
+region                  = "<oci-home-region>"
+compartment_id          = "<ocid-do-compartment-piloto>"
+availability_domain     = "<AD-da-regiao-com-capacidade-A1>"
+arm_image_id            = "<ocid-da-imagem-ARM64-aprovada>"
+ssh_public_key          = "ssh-ed25519 <chave-publica-administrativa> opportunity-radar"
+admin_cidr              = "203.0.113.0/24"
+backup_bucket_name      = "opportunity-radar-backups-<identificador-unico>"
+
+vcn_cidr                     = "10.53.0.0/16"
+public_subnet_cidr           = "10.53.10.0/24"
+instance_shape               = "VM.Standard.A1.Flex"
+shape_ocpus                  = 2
+shape_memory_in_gbs          = 12
+boot_volume_size_gbs         = 50
+backup_storage_limit_gbs     = 20
+backup_monthly_request_limit = 50000
+resource_prefix              = "opportunity-radar"
