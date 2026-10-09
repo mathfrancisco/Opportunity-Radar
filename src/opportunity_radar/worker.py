@@ -119,26 +119,36 @@ def normalize_opportunities(
     ):
         with Session(engine) as session:
             try:
-                batch = OpportunityService(session).normalize_pending()
+                service = OpportunityService(session)
+                totals = {"processed": 0, "succeeded": 0, "review_required": 0, "failed": 0}
+                remaining = 100
+                while remaining and (stop_requested is None or not stop_requested()):
+                    batch = service.normalize_pending(
+                        limit=1 if stop_requested is not None else remaining
+                    )
+                    totals["processed"] += batch.processed
+                    totals["succeeded"] += batch.succeeded
+                    totals["review_required"] += batch.review_required
+                    totals["failed"] += batch.failed
+                    remaining -= batch.processed
+                    if not batch.processed:
+                        break
             except Exception:
                 logger.exception("normalization batch failed", extra={"job": "normalize"})
                 raise
-        if batch.processed:
+        if totals["processed"]:
             logger.info(
                 "normalization batch finished",
                 extra={
                     "job": "normalize",
-                    "processed": batch.processed,
-                    "succeeded": batch.succeeded,
-                    "review_required": batch.review_required,
-                    "failed": batch.failed,
+                    **totals,
                 },
             )
         return {
-            "input": batch.processed,
-            "completed": batch.succeeded,
-            "failed": batch.failed,
-            "skipped": batch.review_required,
+            "input": totals["processed"],
+            "completed": totals["succeeded"],
+            "failed": totals["failed"],
+            "skipped": totals["review_required"],
             "stopped": int(stop_requested is not None and stop_requested()),
         }
 
@@ -590,9 +600,9 @@ class _PassSummary:
     )
     _lock: Lock = field(default_factory=Lock, repr=False)
 
-    def add(self, outcome: str) -> None:
+    def add(self, outcome: str, count: int = 1) -> None:
         with self._lock:
-            self.counts[outcome] += 1
+            self.counts[outcome] += count
 
 
 @dataclass(frozen=True)
@@ -825,11 +835,13 @@ def _collect_host_group(
     reached = 0
     try:
         if ctx.stop_requested is not None and ctx.stop_requested():
+            ctx.summary.add("skipped", len(source_ids))
             return
         with Session(engine) as session:
             service = service_factory(session)
             for source_id in source_ids:
                 if ctx.stop_requested is not None and ctx.stop_requested():
+                    ctx.summary.add("skipped", len(source_ids) - reached)
                     return
                 reached += 1
                 try:

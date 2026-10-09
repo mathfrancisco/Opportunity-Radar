@@ -14,6 +14,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from enum import IntEnum
+from math import isfinite
 from time import monotonic
 from typing import Any
 from uuid import uuid4
@@ -60,8 +61,8 @@ class Deadline:
     """A monotonic budget; wall-clock changes cannot lengthen a run."""
 
     def __init__(self, seconds: float, *, clock: Callable[[], float] = monotonic) -> None:
-        if seconds <= 0:
-            raise ConfigurationError("deadline_seconds must be greater than zero")
+        if not isfinite(seconds) or seconds <= 0:
+            raise ConfigurationError("deadline_seconds must be a finite value greater than zero")
         self.seconds = seconds
         self._clock = clock
         self._ends_at = clock() + seconds
@@ -180,8 +181,8 @@ def validate_owner(owner_sub: str | None) -> str:
 def describe_pipeline(*, owner_sub: str | None, deadline_seconds: float) -> dict[str, Any]:
     """Pure dry-run description: no clock, database, claim, or network access."""
     owner = validate_owner(owner_sub)
-    if deadline_seconds <= 0:
-        raise ConfigurationError("deadline_seconds must be greater than zero")
+    if not isfinite(deadline_seconds) or deadline_seconds <= 0:
+        raise ConfigurationError("deadline_seconds must be a finite value greater than zero")
     return {
         "dry_run": True,
         "owner_configured": bool(owner),

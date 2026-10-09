@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import os
 from contextlib import nullcontext
+from datetime import timedelta
+from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
+from opportunity_radar import worker
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.pipeline import (
     ClaimBusyError,
@@ -17,6 +21,7 @@ from opportunity_radar.platform.pipeline import (
     describe_pipeline,
     run_pipeline,
 )
+from scripts import run_pipeline_once
 
 
 def _stages(events: list[str]) -> list[StageSpec]:
@@ -65,6 +70,65 @@ def test_dry_run_has_no_claim_or_clock() -> None:
     assert plan["dry_run"] is True
     assert plan["touches"] == "none"
     assert [stage["name"] for stage in plan["stages"][:3]] == [spec.name for spec in _stages([])]
+
+
+@pytest.mark.parametrize("deadline", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_deadline_is_refused_by_pure_description(deadline: float) -> None:
+    with pytest.raises(ConfigurationError):
+        describe_pipeline(owner_sub="owner", deadline_seconds=deadline)
+
+
+@pytest.mark.parametrize("deadline", ["nan", "inf", "-inf"])
+def test_cli_dry_run_refuses_non_finite_deadline(monkeypatch, deadline: str) -> None:
+    monkeypatch.setattr(
+        run_pipeline_once, "get_settings", lambda: SimpleNamespace(worker_owner_sub="owner")
+    )
+    assert run_pipeline_once.main([f"--deadline-seconds={deadline}", "--dry-run"]) == 2
+
+
+def test_normalize_stops_before_starting_the_next_item(monkeypatch) -> None:
+    calls: list[int] = []
+
+    class Service:
+        def normalize_pending(self, limit: int) -> SimpleNamespace:
+            calls.append(limit)
+            return SimpleNamespace(processed=1, succeeded=1, review_required=0, failed=0)
+
+    monkeypatch.setattr(worker, "Session", lambda _engine: nullcontext(object()))
+    monkeypatch.setattr(worker, "OpportunityService", lambda _session: Service())
+    monkeypatch.setattr(worker, "observe_job", lambda *_args, **_kwargs: nullcontext())
+
+    result = worker.normalize_opportunities(object(), stop_requested=lambda: bool(calls))
+
+    assert calls == [1]
+    assert result == {"input": 1, "completed": 1, "failed": 0, "skipped": 0, "stopped": 1}
+
+
+def test_parallel_collection_accounts_for_unstarted_host_group() -> None:
+    summary = worker._PassSummary()
+    context = worker._PassContext(
+        correlation_id="test",
+        timezone="UTC",
+        now=None,
+        utc_clock=None,
+        backoff_base=timedelta(seconds=1),
+        backoff_ceiling=timedelta(seconds=1),
+        source_deadline_seconds=0,
+        pass_deadline_seconds=0,
+        pass_started=0,
+        monotonic_clock=lambda: 0,
+        summary=summary,
+        stop_requested=lambda: True,
+    )
+
+    worker._collect_host_group(
+        object(),
+        lambda _session: pytest.fail("must not build service"),
+        [uuid4(), uuid4()],
+        context,
+    )
+
+    assert summary.counts == {"completed": 0, "failed": 0, "skipped": 2, "blocked": 0}
 
 
 def test_busy_claim_does_no_work() -> None:
