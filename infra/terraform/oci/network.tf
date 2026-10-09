@@ -65,6 +65,21 @@ resource "oci_core_security_list" "public" {
     destination_type = "CIDR_BLOCK"
     protocol         = "6"
     stateless        = false
+    description      = "PostgreSQL TLS connection to the configured Neon endpoint."
+
+    tcp_options {
+      destination_port_range {
+        min = 5432
+        max = 5432
+      }
+    }
+  }
+
+  egress_security_rules {
+    destination      = "0.0.0.0/0"
+    destination_type = "CIDR_BLOCK"
+    protocol         = "6"
+    stateless        = false
     description      = "HTTP for package mirrors that do not support HTTPS."
 
     tcp_options {
