@@ -7,6 +7,7 @@ from the published digests, and this command checks them before Compose can run.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -56,9 +57,19 @@ def main(argv: list[str] | None = None) -> int:
             errors.append(f"{role} requires an offline --manifest {role}=PATH")
             continue
         try:
-            document = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
+            raw_manifest = path.read_bytes()
+        except OSError as error:
             errors.append(f"{role} manifest cannot be read: {error}")
+            continue
+        digest = image.partition("@sha256:")[2]
+        actual_digest = hashlib.sha256(raw_manifest).hexdigest()
+        if actual_digest != digest:
+            errors.append(f"{role} manifest sha256 does not match its image digest")
+            continue
+        try:
+            document = json.loads(raw_manifest)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            errors.append(f"{role} manifest is not valid JSON: {error}")
             continue
         if not _has_linux_arm64(document):
             errors.append(f"{role} manifest lacks a linux/arm64 platform")

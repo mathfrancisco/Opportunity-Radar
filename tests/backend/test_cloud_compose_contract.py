@@ -1,3 +1,4 @@
+import hashlib
 import json
 import subprocess
 import sys
@@ -107,31 +108,73 @@ def test_production_cors_requires_https_but_development_allows_local_http() -> N
 
 
 def test_image_preflight_requires_digests_and_arm64_manifests(tmp_path: Path) -> None:
-    manifest = tmp_path / "manifest.json"
-    manifest.write_text(
-        json.dumps({"manifests": [{"platform": {"os": "linux", "architecture": "arm64"}}]}),
-        encoding="utf-8",
-    )
-    image = "registry.example.test/opportunity-radar/api@sha256:" + "a" * 64
+    images: dict[str, str] = {}
+    manifests: dict[str, Path] = {}
+    for role in ("api", "worker", "proxy"):
+        manifest = tmp_path / f"{role}.json"
+        raw_manifest = json.dumps(
+            {
+                "manifests": [
+                    {
+                        "digest": f"sha256:{role}",
+                        "platform": {"os": "linux", "architecture": "arm64"},
+                    }
+                ]
+            },
+            separators=(",", ":"),
+        ).encode()
+        manifest.write_bytes(raw_manifest)
+        digest = hashlib.sha256(raw_manifest).hexdigest()
+        images[role] = f"registry.example.test/opportunity-radar/{role}@sha256:{digest}"
+        manifests[role] = manifest
     command = [
         sys.executable,
         str(PREFLIGHT),
         "--api-image",
-        image,
+        images["api"],
         "--worker-image",
-        image.replace("/api@", "/worker@"),
+        images["worker"],
         "--proxy-image",
-        image.replace("/api@", "/proxy@"),
+        images["proxy"],
         "--manifest",
-        f"api={manifest}",
+        f"api={manifests['api']}",
         "--manifest",
-        f"worker={manifest}",
+        f"worker={manifests['worker']}",
         "--manifest",
-        f"proxy={manifest}",
+        f"proxy={manifests['proxy']}",
     ]
     result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False)
 
     assert result.returncode == 0, result.stderr
+
+    cross_image = subprocess.run(
+        [
+            *command[:11],
+            f"worker={manifests['api']}",
+            *command[12:],
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert cross_image.returncode != 0
+    assert "manifest sha256 does not match its image digest" in cross_image.stderr
+
+    reused_manifest = subprocess.run(
+        [
+            *command[:11],
+            f"worker={manifests['api']}",
+            "--manifest",
+            f"proxy={manifests['api']}",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert reused_manifest.returncode != 0
+    assert reused_manifest.stderr.count("manifest sha256 does not match its image digest") == 2
 
     rejected = subprocess.run(
         [*command[:3], "registry.example.test/opportunity-radar/api:mutable", *command[4:]],
