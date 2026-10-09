@@ -12,6 +12,7 @@ from typing import Any, NoReturn
 from urllib.parse import urlparse
 
 import jwt
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from fastapi import HTTPException, Request, status
 from jwt import (
     ExpiredSignatureError,
@@ -163,6 +164,8 @@ class JwtVerifier:
                 raise AuthenticationError("malformed_token")
             jwk = self._jwks.get(header["kid"])
             key = jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(jwk))
+            if not isinstance(key, RSAPublicKey):
+                raise AuthenticationError("malformed_token")
             claims = jwt.decode(
                 token,
                 key=key,

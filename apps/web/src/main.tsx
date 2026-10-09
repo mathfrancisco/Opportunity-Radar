@@ -12,7 +12,7 @@ const queryClient = new QueryClient({
   },
 })
 
-function AuthenticationControls() {
+export function AuthenticationControls() {
   return (
     <div aria-label="Autenticação" className="fixed right-4 top-4 z-20 flex items-center gap-2">
       <Show when="signed-out">

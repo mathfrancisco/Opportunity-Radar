@@ -1042,7 +1042,7 @@ def summarize_overview(
             profile_version_id=profile_version_id,
             owner_sub=owner_sub,
         )
-        if include_operational_metrics
+        if include_operational_metrics and owner_sub is not None
         else PrecisionMetrics(sample_size=0, marked_count=0, relevant_count=0, precision=None)
     )
     companies_covered, companies_with_ats = (
@@ -1083,7 +1083,7 @@ def summarize_overview(
             else 0
         ),
         sources_failing=len(failing),
-        failing_sources=failing,
+        failing_sources=tuple(failing),
         pending_normalizations=(
             _pending_normalizations(session) if include_operational_metrics else 0
         ),
