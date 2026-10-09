@@ -1,5 +1,6 @@
 import time
 from collections.abc import Awaitable, Callable
+from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,6 +29,24 @@ logger = get_logger("opportunity_radar.http")
 #: SQLSTATE of a statement Postgres cancelled (`statement_timeout`, card F50-10).
 _QUERY_CANCELED = "57014"
 
+_CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+_CORS_HEADERS = ["Authorization", "Content-Type", CORRELATION_HEADER]
+
+
+def _frontend_origin(value: str) -> str:
+    """Accept one concrete browser origin, never a wildcard or a URL path."""
+    origin = value.strip()
+    parsed = urlsplit(origin)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise RuntimeError("FRONTEND_ORIGIN must be one exact http(s) origin")
+    return origin.rstrip("/")
+
 
 async def database_error_handler(request: Request, error: DBAPIError) -> Response:
     """A query past the API's statement timeout is a 503; other errors propagate untouched."""
@@ -55,9 +74,10 @@ def _base_app(settings: Settings | None = None, *, docs: bool = False) -> FastAP
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[settings.frontend_origin],
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=[_frontend_origin(settings.frontend_origin)],
+        allow_credentials=False,
+        allow_methods=_CORS_METHODS,
+        allow_headers=_CORS_HEADERS,
     )
 
     @app.middleware("http")
