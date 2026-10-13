@@ -134,11 +134,13 @@ describe('App', () => {
     expect(container.querySelector('nav a[href="/sources"]')).toBeNull()
   })
 
-  it('mantém usuários sem capacidade verificada fora das rotas de owner', () => {
+  it.each(['/sources', '/sources/homologation-queue', '/companies', '/companies/owner', '/status'])(
+    'mantém usuários sem capacidade verificada fora da rota owner %s',
+    (path) => {
     const client = new QueryClient({ defaultOptions: { queries: { enabled: false } } })
     const container = render(
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/sources']}>
+        <MemoryRouter initialEntries={[path]}>
           <App />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -146,5 +148,8 @@ describe('App', () => {
 
     expect(container.querySelector('h1')?.textContent).toBe('O que move sua busca esta semana?')
     expect(container.querySelector('nav a[href="/sources"]')).toBeNull()
-  })
+    expect(container.querySelector('nav a[href="/companies"]')).toBeNull()
+    expect(container.querySelector('nav a[href="/status"]')).toBeNull()
+    },
+  )
 })

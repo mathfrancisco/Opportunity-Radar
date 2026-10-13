@@ -1,4 +1,4 @@
-import { apiUrl } from '../../lib/api'
+import { apiUrl, privateFetch } from '../../lib/api'
 
 export type ServiceHealth = 'ready' | 'degraded'
 
@@ -12,7 +12,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export async function getReadiness(): Promise<Readiness> {
-  const response = await fetch(apiUrl('/health/ready'), {
+  const response = await privateFetch(apiUrl('/health/ready'), {
     headers: { Accept: 'application/json' },
   })
 
@@ -29,7 +29,7 @@ export async function getReadiness(): Promise<Readiness> {
     throw new Error('A API ainda não está pronta.')
   }
 
-  const healthResponse = await fetch(apiUrl('/health'), {
+  const healthResponse = await privateFetch(apiUrl('/health'), {
     headers: { Accept: 'application/json' },
   })
 

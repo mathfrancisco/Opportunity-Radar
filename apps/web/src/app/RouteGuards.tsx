@@ -14,7 +14,9 @@ export function RequireSignedIn({ children }: { children: ReactNode }) {
   return children
 }
 
-// No owner-only verification endpoint exists yet, so owner capability stays disabled.
+// This web package has no API contract that confirms owner access. A successful general
+// request or Clerk metadata cannot prove ownership, so owner UI stays disabled until an
+// authenticated owner-only endpoint can supply that proof.
 const ownerUiAvailable = false
 
 export function RequireOwnerUi({ children }: { children: ReactNode }) {
