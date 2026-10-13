@@ -16,6 +16,7 @@ from opportunity_radar.profile.domain import (
     ImmutableProfileVersionError,
     ProfileConflictError,
     ProfileNotFoundError,
+    ProfileOwnerRequiredError,
     ProfileSnapshot,
     ProfileVersion,
     ProfileVersionStatus,
@@ -158,13 +159,15 @@ class ProfileService:
 
     def _claim_profile(self, expected: int) -> CareerProfileModel:
         """Advance the profile lock from `expected`, creating the profile on its first write."""
+        if self.owner_sub is None or not self.owner_sub.strip():
+            raise ProfileOwnerRequiredError("profile owner subject is required")
         profile = self.repository.career_profile_for_update(self.owner_sub)
         if profile is not None:
             self._advance_profile(profile, expected)
             return profile
         if expected != 0:
             raise ProfileConflictError(_CONFLICT)
-        profile = CareerProfileModel(version=1, owner_sub=self.owner_sub or "local-system")
+        profile = CareerProfileModel(version=1, owner_sub=self.owner_sub)
         self.session.add(profile)
         try:
             self.session.flush()

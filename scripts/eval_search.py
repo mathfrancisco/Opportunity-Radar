@@ -41,7 +41,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from opportunity_radar.dashboard.queries import InboxQuery, list_opportunity_inbox  # noqa: E402
 from opportunity_radar.opportunities.models import OpportunityModel  # noqa: E402
+from opportunity_radar.platform.config import get_settings  # noqa: E402
 from opportunity_radar.platform.database import create_database_engine  # noqa: E402
+from scripts.owner_context import require_operational_owner  # noqa: E402
 from scripts.search_reference import DEFAULT_PATH, resolve  # noqa: E402
 
 K = 10
@@ -80,9 +82,11 @@ def _like_ranked_ids(session: Session, query: str, limit: int = K) -> list[UUID]
     return [row[0] for row in rows]
 
 
-def _fulltext_ranked_ids(session: Session, query: str, limit: int = K) -> list[UUID]:
+def _fulltext_ranked_ids(
+    session: Session, query: str, limit: int = K, *, owner_sub: str
+) -> list[UUID]:
     page = list_opportunity_inbox(
-        session, InboxQuery(search=query, limit=limit, offset=0)
+        session, InboxQuery(search=query, limit=limit, offset=0), owner_sub=owner_sub
     )
     return [item.opportunity_id for item in page.items]
 
@@ -123,10 +127,18 @@ def reference_level_cases(path: Path) -> tuple[LevelCase, ...]:
 
 
 def evaluate_level_cases(
-    session: Session, mode: str, cases: tuple[LevelCase, ...]
+    session: Session, mode: str, cases: tuple[LevelCase, ...], *, owner_sub: str | None = None
 ) -> list[dict[str, object]]:
     """Per case: how many results came back and which forbidden levels sit in the top K."""
-    ranker = _fulltext_ranked_ids if mode == "fulltext" else _like_ranked_ids
+    if mode == "fulltext" and owner_sub is None:
+        raise ValueError("WORKER_OWNER_SUB is required for full-text evaluation.")
+    ranker = (
+        (lambda session, query, limit: _fulltext_ranked_ids(
+            session, query, limit, owner_sub=owner_sub
+        ))
+        if mode == "fulltext"
+        else _like_ranked_ids
+    )
     results: list[dict[str, object]] = []
     for case in cases:
         ranked = ranker(session, case.query, case.top_k)
@@ -156,8 +168,16 @@ def evaluate_level_cases(
     return results
 
 
-def evaluate(session: Session, mode: str, path: Path) -> dict[str, object]:
-    ranker = _fulltext_ranked_ids if mode == "fulltext" else _like_ranked_ids
+def evaluate(
+    session: Session, mode: str, path: Path, *, owner_sub: str | None = None
+) -> dict[str, object]:
+    if mode == "fulltext" and owner_sub is None:
+        raise ValueError("WORKER_OWNER_SUB is required for full-text evaluation.")
+    ranker = (
+        (lambda session, query: _fulltext_ranked_ids(session, query, owner_sub=owner_sub))
+        if mode == "fulltext"
+        else _like_ranked_ids
+    )
     per_query: list[dict[str, object]] = []
     for entry in resolve(session, path):
         query = str(entry["query"])
@@ -189,7 +209,7 @@ def evaluate(session: Session, mode: str, path: Path) -> dict[str, object]:
         "average_ndcg_at_10": average_ndcg,
         "per_query": per_query,
         "level_cases": evaluate_level_cases(
-            session, mode, LEVEL_CASES + reference_level_cases(path)
+            session, mode, LEVEL_CASES + reference_level_cases(path), owner_sub=owner_sub
         ),
     }
 
@@ -218,9 +238,15 @@ def main() -> int:
     if not database_url:
         raise SystemExit("DATABASE_URL is required.")
     modes = ["like", "fulltext"] if args.mode == "both" else [args.mode]
+    try:
+        owner_sub = (
+            require_operational_owner(get_settings()) if "fulltext" in modes else None
+        )
+    except ValueError as error:
+        parser.error(str(error))
     with Session(create_database_engine(database_url)) as session:
         for mode in modes:
-            _print_report(evaluate(session, mode, args.path))
+            _print_report(evaluate(session, mode, args.path, owner_sub=owner_sub))
     return 0
 
 

@@ -33,6 +33,7 @@ from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.profile.domain import ProfileNotFoundError
 from opportunity_radar.profile.service import ProfileService
+from scripts.owner_context import operational_owner
 
 #: Sources collected at once, default 1 (current sequential behavior unchanged). Same-
 #: host work still serializes at 1 request/second regardless of this setting.
@@ -42,14 +43,16 @@ DEFAULT_COLLECT_CONCURRENCY = 1
 NO_ACTIVE_PROFILE = "no_active_profile"
 
 
-def active_profile_accepted_seniorities(session: Session) -> tuple[str, ...] | None:
+def active_profile_accepted_seniorities(
+    session: Session, owner_sub: str
+) -> tuple[str, ...] | None:
     """The active profile's `accepted_seniorities` without `UNKNOWN` (F52-09).
 
     `None` when there is no active profile or it names no level: the report then says it
     cannot tell, instead of counting everything or nothing as the accepted level.
     """
     try:
-        profile = ProfileService(session).get_active()
+        profile = ProfileService(session, owner_sub).get_active()
     except ProfileNotFoundError:
         return None
     accepted = tuple(
@@ -178,10 +181,16 @@ async def _collect_one(
     reported as `ERROR`, so one bad source never sinks the batch."""
     try:
         with Session(engine) as session:
+            owner_sub = operational_owner(settings)
+            target_role_families = (
+                active_profile_target_role_families(session, owner_sub)
+                if owner_sub is not None
+                else lambda: ()
+            )
             service = AcquisitionService(
                 session,
                 registry=_registry(settings),
-                target_role_families=active_profile_target_role_families(session),
+                target_role_families=target_role_families,
                 target_area_floor=settings.collection_target_area_floor,
                 claims_enabled=settings.collection_claim_enabled,
                 inventory_contract_enabled=settings.collection_inventory_contract_enabled,
@@ -338,8 +347,13 @@ def main() -> int:
     ]
     try:
         with Session(engine) as session:
+            owner_sub = operational_owner(settings)
             level = add_level_column(
-                session, report, active_profile_accepted_seniorities(session)
+                session,
+                report,
+                active_profile_accepted_seniorities(session, owner_sub)
+                if owner_sub is not None
+                else None,
             )
     except Exception as error:  # noqa: BLE001 - the level column never fails the run
         level = {"status": "unavailable", "error_summary": str(error)}

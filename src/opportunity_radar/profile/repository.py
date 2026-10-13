@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, joinedload
 
+from opportunity_radar.profile.domain import ProfileOwnerRequiredError
 from opportunity_radar.profile.models import (
     CareerProfileModel,
     ProfileSkillModel,
@@ -17,9 +18,9 @@ class SqlAlchemyProfileRepository:
         self.session = session
 
     def career_profile_for_update(self, owner_sub: str | None = None) -> CareerProfileModel | None:
+        self._require_owner(owner_sub)
         statement = select(CareerProfileModel)
-        if owner_sub is not None:
-            statement = statement.where(CareerProfileModel.owner_sub == owner_sub)
+        statement = statement.where(CareerProfileModel.owner_sub == owner_sub)
         return self.session.scalar(statement.limit(1).with_for_update())
 
     def active_version(self, owner_sub: str | None = None) -> ProfileVersionModel | None:
@@ -50,13 +51,13 @@ class SqlAlchemyProfileRepository:
     def version_for_update(
         self, version_id: UUID, owner_sub: str | None = None
     ) -> ProfileVersionModel | None:
+        self._require_owner(owner_sub)
         statement = select(ProfileVersionModel.id).where(
             ProfileVersionModel.id == version_id
         )
-        if owner_sub is not None:
-            statement = statement.join(CareerProfileModel).where(
-                CareerProfileModel.owner_sub == owner_sub
-            )
+        statement = statement.join(CareerProfileModel).where(
+            CareerProfileModel.owner_sub == owner_sub
+        )
         locked_id = self.session.scalar(statement.with_for_update())
         if locked_id is None:
             return None
@@ -70,14 +71,16 @@ class SqlAlchemyProfileRepository:
 
     @staticmethod
     def _versions(owner_sub: str | None = None) -> Select[tuple[ProfileVersionModel]]:
+        SqlAlchemyProfileRepository._require_owner(owner_sub)
         statement = select(ProfileVersionModel).options(
             joinedload(ProfileVersionModel.skills).joinedload(ProfileSkillModel.skill),
             joinedload(ProfileVersionModel.experiences),
             joinedload(ProfileVersionModel.projects),
             joinedload(ProfileVersionModel.preference),
         )
-        if owner_sub is not None:
-            statement = statement.join(CareerProfileModel).where(
-                CareerProfileModel.owner_sub == owner_sub
-            )
-        return statement
+        return statement.join(CareerProfileModel).where(CareerProfileModel.owner_sub == owner_sub)
+
+    @staticmethod
+    def _require_owner(owner_sub: str | None) -> None:
+        if owner_sub is None or not owner_sub.strip():
+            raise ProfileOwnerRequiredError("profile owner subject is required")

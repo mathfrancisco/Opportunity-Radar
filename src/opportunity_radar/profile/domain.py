@@ -22,6 +22,10 @@ class ProfileNotFoundError(ProfileError):
     pass
 
 
+class ProfileOwnerRequiredError(ProfileError):
+    pass
+
+
 class ProfileConflictError(ProfileError):
     pass
 

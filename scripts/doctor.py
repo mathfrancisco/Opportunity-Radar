@@ -39,6 +39,7 @@ from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.health import database_health
 from opportunity_radar.profile.domain import ProfileNotFoundError
 from opportunity_radar.profile.service import ProfileService
+from scripts.owner_context import operational_owner
 
 OK = "ok"
 WARN = "warn"
@@ -562,11 +563,18 @@ def describe_funnel(report: FunnelReport) -> Check:
 
 
 def check_funnel(settings: Settings) -> Check:
+    owner_sub = operational_owner(settings)
+    if owner_sub is None:
+        return Check(
+            "funnel",
+            WARN,
+            "could not compute owner-scoped funnel: WORKER_OWNER_SUB is required",
+        )
     try:
         engine = create_database_engine(settings.database_url)
         with Session(engine) as session:
             try:
-                active = ProfileService(session).get_active()
+                active = ProfileService(session, owner_sub).get_active()
                 families = tuple(active.snapshot.preferences.target_role_families)
             except ProfileNotFoundError:
                 families = ()
