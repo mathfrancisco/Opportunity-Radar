@@ -192,7 +192,7 @@ def test_changing_only_countries_preserves_the_rest_of_the_profile(client: TestC
 
     # The previous version is archived, not rewritten: still readable, exactly as it was.
     with _session() as session:
-        previous = ProfileService(session).get_version(UUID(base["id"]))
+        previous = ProfileService(session, OWNER_SUB).get_version(UUID(base["id"]))
     assert previous.status is ProfileVersionStatus.ARCHIVED
     assert previous.snapshot.preferences.countries == ("BR",)
     assert len(previous.snapshot.experiences) == 2
@@ -272,7 +272,9 @@ def test_a_failure_after_the_draft_rolls_the_whole_write_back(
     )
     with _session() as session:
         with pytest.raises(RuntimeError, match="activation failed"):
-            ProfileService(session).create_active_version(snapshot, base["profile_lock_version"])
+            ProfileService(session, OWNER_SUB).create_active_version(
+                snapshot, base["profile_lock_version"]
+            )
         # A later commit by the same caller must find nothing of the failed write to persist.
         session.commit()
 
@@ -338,7 +340,7 @@ def test_target_titles_round_trip_through_database(client: TestClient) -> None:
     assert saved.json()["preferences"]["target_titles"] == titles
     assert client.get("/profile").json()["preferences"]["target_titles"] == titles
     with _session() as session:
-        persisted = ProfileService(session).get_version(UUID(saved.json()["id"]))
+        persisted = ProfileService(session, OWNER_SUB).get_version(UUID(saved.json()["id"]))
     assert persisted.snapshot.preferences.target_titles == tuple(titles)
 
 

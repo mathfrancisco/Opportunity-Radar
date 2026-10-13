@@ -27,6 +27,7 @@ from opportunity_radar.profile.models import (
     EmploymentPreferenceModel,
     ProfileVersionModel,
 )
+from tests.backend.support.auth import OWNER_SUB
 
 pytestmark = [
     pytest.mark.integration,
@@ -38,9 +39,11 @@ pytestmark = [
 
 
 def _fixtures(session: Session) -> tuple[OpportunityModel, ProfileVersionModel]:
-    profile = session.scalar(select(CareerProfileModel).limit(1))
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == OWNER_SUB)
+    )
     if profile is None:
-        profile = CareerProfileModel(version=1)
+        profile = CareerProfileModel(version=1, owner_sub=OWNER_SUB)
         session.add(profile)
         session.flush()
     version = ProfileVersionModel(
@@ -80,7 +83,7 @@ def test_starting_recording_and_closing_keeps_the_whole_history() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         opportunity, version = _fixtures(session)
-        service = PipelineService(session)
+        service = PipelineService(session, OWNER_SUB)
 
         application = service.start(
             opportunity.id,
@@ -137,7 +140,7 @@ def test_history_rows_cannot_be_edited() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         opportunity, version = _fixtures(session)
-        application = PipelineService(session).start(
+        application = PipelineService(session, OWNER_SUB).start(
             opportunity.id, profile_version_id=version.id
         )
         entry = application.history[0]
@@ -156,7 +159,7 @@ def test_only_one_active_application_per_opportunity_and_profile() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         opportunity, version = _fixtures(session)
-        service = PipelineService(session)
+        service = PipelineService(session, OWNER_SUB)
         first = service.start(opportunity.id, profile_version_id=version.id)
 
         with pytest.raises(DuplicateActiveApplicationError):
@@ -185,7 +188,7 @@ def test_illegal_moves_and_stale_versions_are_refused() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         opportunity, version = _fixtures(session)
-        service = PipelineService(session)
+        service = PipelineService(session, OWNER_SUB)
         application = service.start(opportunity.id, profile_version_id=version.id)
 
         with pytest.raises(InvalidStageTransitionError):
@@ -214,7 +217,7 @@ def test_next_action_is_editable_and_cleared_when_the_application_closes() -> No
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         opportunity, version = _fixtures(session)
-        service = PipelineService(session)
+        service = PipelineService(session, OWNER_SUB)
         application = service.start(opportunity.id, profile_version_id=version.id)
         due = datetime.now(UTC) + timedelta(days=2)
 

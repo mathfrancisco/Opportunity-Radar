@@ -152,6 +152,7 @@ def test_doctor_has_no_embedding_coverage_check(monkeypatch) -> None:
         "check_analysis",
         "check_ai",
         "check_ai_usage",
+        "check_funnel",
     ):
         monkeypatch.setattr(
             doctor,

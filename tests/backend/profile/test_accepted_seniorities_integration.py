@@ -99,11 +99,11 @@ def test_seed_dry_run_writes_nothing_and_real_run_never_overwrites(client: TestC
     lock_before = _lock()
 
     with _session() as session:
-        assert seed(session, dry_run=True)["result"] == "would write"
+        assert seed(session, dry_run=True, owner_sub=OWNER_SUB)["result"] == "would write"
     assert _lock() == lock_before
 
     with _session() as session:
-        assert seed(session, dry_run=False)["result"] == "written"
+        assert seed(session, dry_run=False, owner_sub=OWNER_SUB)["result"] == "written"
     active = client.get("/profile").json()
     assert active["preferences"]["target_role_families"] == list(SEED_ROLE_FAMILIES)
     assert active["skills"][0]["canonical_name"] == "python"
@@ -111,6 +111,6 @@ def test_seed_dry_run_writes_nothing_and_real_run_never_overwrites(client: TestC
     edited = _activate(client, {"target_role_families": ["DESIGN"]})
     lock_after_edit = _lock()
     with _session() as session:
-        assert seed(session, dry_run=False)["result"].startswith("skipped")
+        assert seed(session, dry_run=False, owner_sub=OWNER_SUB)["result"].startswith("skipped")
     assert _lock() == lock_after_edit
     assert client.get("/profile").json()["id"] == edited["id"]

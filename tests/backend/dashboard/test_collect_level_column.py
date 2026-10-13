@@ -36,13 +36,13 @@ class _Profiles:
 
 
 def _use_profile(monkeypatch: pytest.MonkeyPatch, accepted: tuple[str, ...] | None) -> None:
-    monkeypatch.setattr(collect, "ProfileService", lambda session: _Profiles(accepted))
+    monkeypatch.setattr(collect, "ProfileService", lambda session, owner_sub: _Profiles(accepted))
 
 
 def test_accepted_levels_drop_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
     _use_profile(monkeypatch, ("INTERN", "JUNIOR", "MID", "UNKNOWN"))
 
-    assert collect.active_profile_accepted_seniorities(object()) == (  # type: ignore[arg-type]
+    assert collect.active_profile_accepted_seniorities(object(), "owner") == (  # type: ignore[arg-type]
         "INTERN",
         "JUNIOR",
         "MID",
@@ -55,7 +55,7 @@ def test_no_active_profile_or_no_level_reads_as_unknown(
 ) -> None:
     _use_profile(monkeypatch, accepted)
 
-    assert collect.active_profile_accepted_seniorities(object()) is None  # type: ignore[arg-type]
+    assert collect.active_profile_accepted_seniorities(object(), "owner") is None  # type: ignore[arg-type]
 
 
 def test_column_says_no_active_profile_and_does_not_fail() -> None:
