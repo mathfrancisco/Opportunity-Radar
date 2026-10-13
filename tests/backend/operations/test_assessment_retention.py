@@ -569,7 +569,7 @@ def test_the_migration_round_trips() -> None:
     create_database(url, name)
     try:
         scratch = with_database(url, name)
-        _alembic(scratch, "upgrade", "head")
+        _alembic(scratch, "upgrade", "20261006_0068")
         scratch_engine = create_database_engine(scratch)
         fixture = _Fixture(scratch_engine)
         try:
@@ -587,13 +587,27 @@ def test_the_migration_round_trips() -> None:
                         params={"id": assessment_id},
                     )
 
-            result = _alembic(scratch, "downgrade", "20261005_0063", check=False)
-            assert result.returncode != 0
-            assert "owner_sub tenancy downgrade is refused" in result.stderr
+            _alembic(scratch, "downgrade", "20261005_0063")
+            assert "immutable" in (prune_one(ids[0]) or "")
+            _alembic(scratch, "upgrade", "20261006_0068")
             assert prune_one(ids[0]) is None
         finally:
             fixture.session.close()
             scratch_engine.dispose()
+    finally:
+        drop_database(url, name)
+
+
+def test_tenancy_downgrade_is_refused() -> None:
+    url = os.environ["DATABASE_URL"]
+    name = f"f5008_tenancy_{uuid4().hex[:12]}_test"
+    create_database(url, name)
+    try:
+        scratch = with_database(url, name)
+        _alembic(scratch, "upgrade", "head")
+        result = _alembic(scratch, "downgrade", "20261006_0068", check=False)
+        assert result.returncode != 0
+        assert "owner_sub tenancy downgrade is refused" in result.stderr
     finally:
         drop_database(url, name)
 

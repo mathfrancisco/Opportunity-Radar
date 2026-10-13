@@ -23,6 +23,7 @@ pytestmark = pytest.mark.skipif(
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REVISION = "20260929_0055"
 PREVIOUS = "20260929_0054"
+PRE_TENANCY_HEAD = "20261006_0068"
 _BACKFILL_OWNER_SUB = "test-collection-alarm-migration-owner"
 
 
@@ -76,12 +77,25 @@ def scratch() -> Iterator[str]:
 
 
 def test_migration_round_trip(scratch: str) -> None:
-    _alembic(scratch, "upgrade", "head")
+    _alembic(scratch, "upgrade", PRE_TENANCY_HEAD)
     columns, history = _shape(scratch)
     assert {"bytes_received", "newest_item_age_seconds"} <= columns
     assert history
 
-    result = _alembic(scratch, "downgrade", PREVIOUS, check=False)
+    _alembic(scratch, "downgrade", PREVIOUS)
+    columns, history = _shape(scratch)
+    assert not {"bytes_received", "newest_item_age_seconds"} & columns
+    assert not history
+
+    _alembic(scratch, "upgrade", PRE_TENANCY_HEAD)
+    columns, history = _shape(scratch)
+    assert {"bytes_received", "newest_item_age_seconds"} <= columns
+    assert history
+
+
+def test_tenancy_downgrade_is_refused(scratch: str) -> None:
+    _alembic(scratch, "upgrade", "head")
+    result = _alembic(scratch, "downgrade", PRE_TENANCY_HEAD, check=False)
     assert result.returncode != 0
     assert "owner_sub tenancy downgrade is refused" in result.stderr
     columns, history = _shape(scratch)
