@@ -1,0 +1,11 @@
+{
+  // Static Vite SPA served by Workers static assets.
+  // VITE_* values are build-time and are configured in the Cloudflare build settings, never in this file.
+  "name": "opportunity-radar",
+  "compatibility_date": "2026-10-13",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  },
+  "previews": {}
+}
