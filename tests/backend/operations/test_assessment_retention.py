@@ -584,20 +584,25 @@ def test_the_migration_round_trips() -> None:
                 )
                 connection.execute(
                     text(
-                        "INSERT INTO profile.profile_version (id, career_profile_id, number, status) "
+                        "INSERT INTO profile.profile_version "
+                        "(id, career_profile_id, number, status) "
                         "VALUES (:id, :career_profile_id, 1, 'DRAFT')"
                     ),
                     {"id": profile_version_id, "career_profile_id": profile_id},
                 )
                 connection.execute(
-                    text("INSERT INTO profile.employment_preference (id, profile_version_id) VALUES (:id, :profile_version_id)"),
+                    text(
+                        "INSERT INTO profile.employment_preference "
+                        "(id, profile_version_id) VALUES (:id, :profile_version_id)"
+                    ),
                     {"id": uuid4(), "profile_version_id": profile_version_id},
                 )
                 connection.execute(
                     text(
                         "INSERT INTO opportunities.opportunity ("
                         "id, fingerprint, fingerprint_version, canonical_title, normalized_title, "
-                        "company_name, normalized_company_name, work_mode, seniority, contract_type, "
+                        "company_name, normalized_company_name, work_mode, seniority, "
+                        "contract_type, "
                         "lifecycle_status, first_seen_at, version) VALUES ("
                         ":id, :fingerprint, 'v1', 'Prune probe', 'prune probe', 'Probe', 'probe', "
                         "'REMOTE', 'UNKNOWN', 'FULL_TIME', 'ACTIVE', :now, 1)"
@@ -609,11 +614,14 @@ def test_the_migration_round_trips() -> None:
                     connection.execute(
                         text(
                             "INSERT INTO matching.match_assessment ("
-                            "id, opportunity_id, opportunity_version, profile_version_id, input_hash, "
-                            "rules_version, taxonomy_version, opportunity_snapshot, profile_snapshot, "
-                            "eligibility, eligibility_details, verdict, score, confidence, assessed_at, created_at) "
+                            "id, opportunity_id, opportunity_version, profile_version_id, "
+                            "input_hash, rules_version, taxonomy_version, "
+                            "opportunity_snapshot, profile_snapshot, eligibility, "
+                            "eligibility_details, verdict, score, confidence, assessed_at, "
+                            "created_at) "
                             "VALUES (:id, :opportunity_id, 1, :profile_version_id, :input_hash, "
-                            "'matching-v1', :taxonomy_version, '{}'::jsonb, '{}'::jsonb, 'ELIGIBLE', "
+                            "'matching-v1', :taxonomy_version, '{}'::jsonb, '{}'::jsonb, "
+                            "'ELIGIBLE', "
                             "'[]'::jsonb, 'RECOMMENDED', 50, 0.9, :at, :at)"
                         ),
                         {
@@ -628,8 +636,9 @@ def test_the_migration_round_trips() -> None:
                     connection.execute(
                         text(
                             "INSERT INTO matching.match_factor ("
-                            "id, assessment_id, factor_code, weight, contribution, status, confidence, "
-                            "missing_policy, explanation) VALUES (:id, :assessment_id, 'SKILLS', 0.5, "
+                            "id, assessment_id, factor_code, weight, contribution, status, "
+                            "confidence, missing_policy, explanation) VALUES (:id, "
+                            ":assessment_id, 'SKILLS', 0.5, "
                             "10, 'KNOWN', 0.9, 'NEUTRAL', 'probe')"
                         ),
                         {"id": uuid4(), "assessment_id": assessment_id},
