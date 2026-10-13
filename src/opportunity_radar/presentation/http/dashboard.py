@@ -751,10 +751,11 @@ def get_analysis_metrics(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
     adapter: SemanticAnalysisPort = Depends(get_analysis_adapter),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> AnalysisMetricsReportResponse:
     """Grouped by model, because a window can span a model change."""
     selected = _selected_window(window)
-    pending = MatchingService(session).count_pending_analysis(
+    pending = MatchingService(session, identity.sub).count_pending_analysis(
         eligible_verdicts=settings.analysis_eligible_verdicts,
         cooldown=timedelta(seconds=settings.analysis_retry_cooldown_seconds),
         attempt_window=timedelta(seconds=settings.analysis_retry_attempt_window_seconds),
