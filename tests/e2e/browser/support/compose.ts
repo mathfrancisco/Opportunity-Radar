@@ -3,6 +3,8 @@ import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
+import { bearerHeader } from './auth'
+
 const run = promisify(execFile)
 
 /**
@@ -53,11 +55,15 @@ export async function restartWorkerMidCollection(): Promise<void> {
 }
 
 async function waitForReady(): Promise<void> {
-  const baseUrl = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3000'
+  const baseUrl = process.env.E2E_BASE_URL ?? 'https://127.0.0.1:8443'
   const deadline = Date.now() + 60_000
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(new URL('/api/overview', baseUrl))
+      // Private route, so readiness is proven through the authenticated path. The CI CA is
+      // trusted through NODE_EXTRA_CA_CERTS.
+      const response = await fetch(new URL('/api/overview', baseUrl), {
+        headers: { Authorization: bearerHeader() },
+      })
       if (response.ok) return
     } catch {
       // Not ready yet.
