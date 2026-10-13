@@ -11,7 +11,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from test_analysis_persistence import _completed, _seed_assessment, _StubAdapter
+from test_analysis_persistence import _TEST_OWNER_SUB, _completed, _seed_assessment, _StubAdapter
 
 from opportunity_radar.matching.analysis import AnalysisStatus
 from opportunity_radar.matching.service import (
@@ -29,9 +29,6 @@ pytestmark = [
         reason="database integration is enabled only in the isolated CI database",
     ),
 ]
-
-_TEST_OWNER_SUB = "test-analysis-persistence-owner"
-
 
 def _queued(session: Session) -> set[object]:
     return set(

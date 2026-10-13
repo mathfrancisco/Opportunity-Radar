@@ -38,24 +38,33 @@ pytestmark = [
     ),
 ]
 
+_TEST_OWNER_SUB = "test-evaluation-queue-owner"
+
 
 def _session() -> Session:
     return Session(create_database_engine(os.environ["DATABASE_URL"]))
 
 
-def _ensure_active_profile(session: Session) -> UUID:
+def _ensure_active_profile(session: Session, *, owner_sub: str = _TEST_OWNER_SUB) -> UUID:
     """Publish and activate a version, reusing the one already active when there is one.
 
     Only one version can be active at a time, so a test that unconditionally activated its
     own would archive whatever another test had just set up.
     """
     active = session.scalar(
-        select(ProfileVersionModel).where(ProfileVersionModel.status == "ACTIVE")
+        select(ProfileVersionModel)
+        .join(CareerProfileModel)
+        .where(
+            ProfileVersionModel.status == "ACTIVE",
+            CareerProfileModel.owner_sub == owner_sub,
+        )
     )
     if active is not None:
         return active.id
-    service = ProfileService(session)
-    profile = session.scalar(select(CareerProfileModel).limit(1))
+    service = ProfileService(session, owner_sub)
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == owner_sub)
+    )
     expected = profile.version if profile is not None else 0
     snapshot = ProfileSnapshot(
         skills=(Skill(canonical_name="python"),),
@@ -64,7 +73,9 @@ def _ensure_active_profile(session: Session) -> UUID:
         preferences=EmploymentPreference(work_modes=("REMOTE",), countries=("BR",)),
     )
     version = service.create_version(snapshot, expected)
-    profile = session.scalar(select(CareerProfileModel).limit(1))
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == owner_sub)
+    )
     assert profile is not None
     service.publish(version.id, profile.version)
     session.refresh(profile)
@@ -108,7 +119,7 @@ def test_only_discovered_and_active_opportunities_are_queued() -> None:
             for status in ("CLOSED", "ARCHIVED", "REJECTED")
         }
 
-        queued = set(MatchingService(session).pending_evaluation_ids(limit=500))
+        queued = set(MatchingService(session, _TEST_OWNER_SUB).pending_evaluation_ids(limit=500))
 
         assert set(eligible.values()) <= queued
         assert queued.isdisjoint(excluded.values())
@@ -118,7 +129,7 @@ def test_an_evaluated_opportunity_leaves_the_queue_until_its_inputs_change() -> 
     with _session() as session:
         _ensure_active_profile(session)
         opportunity = _opportunity(session)
-        service = MatchingService(session)
+        service = MatchingService(session, _TEST_OWNER_SUB)
         assert opportunity.id in service.pending_evaluation_ids(limit=500)
 
         service.evaluate(opportunity.id)
@@ -130,7 +141,7 @@ def test_evaluating_twice_in_a_day_returns_the_same_assessment() -> None:
     with _session() as session:
         _ensure_active_profile(session)
         opportunity = _opportunity(session)
-        service = MatchingService(session)
+        service = MatchingService(session, _TEST_OWNER_SUB)
 
         first = service.evaluate(opportunity.id)
         second = service.evaluate(opportunity.id)
@@ -150,7 +161,7 @@ def test_a_new_opportunity_version_is_queued_without_waiting_for_the_next_day() 
     with _session() as session:
         _ensure_active_profile(session)
         opportunity = _opportunity(session)
-        service = MatchingService(session)
+        service = MatchingService(session, _TEST_OWNER_SUB)
         service.evaluate(opportunity.id)
         assert opportunity.id not in service.pending_evaluation_ids(limit=500)
 
@@ -178,14 +189,14 @@ def test_the_batch_limit_caps_how_many_opportunities_are_queued() -> None:
         for _ in range(3):
             _opportunity(session)
 
-        assert len(MatchingService(session).pending_evaluation_ids(limit=2)) == 2
+        assert len(MatchingService(session, _TEST_OWNER_SUB).pending_evaluation_ids(limit=2)) == 2
 
 
 def test_assessments_are_immutable_history_rather_than_a_mutable_row() -> None:
     with _session() as session:
         _ensure_active_profile(session)
         opportunity = _opportunity(session)
-        service = MatchingService(session)
+        service = MatchingService(session, _TEST_OWNER_SUB)
 
         first = service.evaluate(opportunity.id)
         assessed_at, input_hash = first.assessed_at, first.input_hash
@@ -204,12 +215,17 @@ def test_a_pass_without_an_active_profile_is_a_degraded_state_not_a_crash() -> N
 
     with _session() as session:
         active = session.scalar(
-            select(ProfileVersionModel).where(ProfileVersionModel.status == "ACTIVE")
+            select(ProfileVersionModel)
+            .join(CareerProfileModel)
+            .where(
+                ProfileVersionModel.status == "ACTIVE",
+                CareerProfileModel.owner_sub == _TEST_OWNER_SUB,
+            )
         )
         if active is None:
             # The worker turns this into a logged degraded state instead of an exception.
             with pytest.raises(ProfileNotFoundError):
-                MatchingService(session).pending_evaluation_ids(limit=1)
+                MatchingService(session, _TEST_OWNER_SUB).pending_evaluation_ids(limit=1)
         else:
             pytest.skip("another test left an active profile version in place")
 
@@ -218,7 +234,7 @@ def test_the_evaluation_identity_is_stored_as_a_hash_of_the_inputs() -> None:
     with _session() as session:
         _ensure_active_profile(session)
         opportunity = _opportunity(session)
-        service = MatchingService(session)
+        service = MatchingService(session, _TEST_OWNER_SUB)
 
         assessment = service.evaluate(opportunity.id)
 
@@ -234,13 +250,13 @@ def _queue_with_target_areas(
 ) -> list[UUID]:
     """Queue as seen by an active profile declaring `areas`, whatever the database holds."""
     active_id = _ensure_active_profile(session)
-    real = ProfileService.get_active(ProfileService(session))
+    real = ProfileService.get_active(ProfileService(session, _TEST_OWNER_SUB))
     preferences = replace(real.snapshot.preferences, target_role_families=areas)
     stub = SimpleNamespace(
         id=active_id, snapshot=replace(real.snapshot, preferences=preferences)
     )
     monkeypatch.setattr(ProfileService, "get_active", lambda self: stub)
-    return MatchingService(session).pending_evaluation_ids(limit=5000)
+    return MatchingService(session, _TEST_OWNER_SUB).pending_evaluation_ids(limit=5000)
 
 
 def test_target_areas_keep_sales_out_of_the_queue_but_not_unknown(
@@ -281,7 +297,7 @@ def test_the_next_utc_day_queues_only_postings_that_crossed_a_recency_band() -> 
         _ensure_active_profile(session)
         today = datetime.now(UTC)
         tomorrow = today + timedelta(days=1)
-        service = MatchingService(session)
+        service = MatchingService(session, _TEST_OWNER_SUB)
         # Ten ages, none of them on a band edge tomorrow (age 9 becomes 10, all in 8-14).
         steady = [
             _opportunity(session, published_at=today - timedelta(days=9)) for _ in range(10)

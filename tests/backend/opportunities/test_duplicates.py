@@ -53,6 +53,7 @@ pytestmark = [
 ]
 
 NOW = datetime.now(UTC)
+_TEST_OWNER_SUB = "test-duplicates-owner"
 
 
 def _opportunity(
@@ -85,9 +86,11 @@ def _opportunity(
 
 
 def _profile_version(session: Session) -> ProfileVersionModel:
-    profile = session.scalar(select(CareerProfileModel).limit(1))
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == _TEST_OWNER_SUB)
+    )
     if profile is None:
-        profile = CareerProfileModel(version=1)
+        profile = CareerProfileModel(version=1, owner_sub=_TEST_OWNER_SUB)
         session.add(profile)
         session.flush()
     version = ProfileVersionModel(
@@ -494,10 +497,10 @@ def test_two_active_applications_raise_conflict_without_partial_mutation() -> No
         session.add_all([older, newer])
         session.commit()
         profile_version = _profile_version(session)
-        PipelineService(session).start(
+        PipelineService(session, owner_sub=_TEST_OWNER_SUB).start(
             older.id, profile_version_id=profile_version.id, stage=ApplicationStage.APPLIED
         )
-        PipelineService(session).start(
+        PipelineService(session, owner_sub=_TEST_OWNER_SUB).start(
             newer.id, profile_version_id=profile_version.id, stage=ApplicationStage.APPLIED
         )
         try:
@@ -664,7 +667,12 @@ def test_confirm_duplicate_keeps_marks_on_the_absorbed_opportunity_without_promo
         newer = _opportunity(created_at=NOW, published_at=NOW + timedelta(days=1))
         session.add_all([older, newer])
         session.commit()
-        mark = RelevanceMarkModel(opportunity_id=newer.id, relevant=True, reason="AREA")
+        mark = RelevanceMarkModel(
+            owner_sub=_TEST_OWNER_SUB,
+            opportunity_id=newer.id,
+            relevant=True,
+            reason="AREA",
+        )
         session.add(mark)
         session.commit()
         try:

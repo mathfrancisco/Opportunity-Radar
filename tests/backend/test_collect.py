@@ -226,6 +226,11 @@ def test_collect_runs_two_sources_concurrently_with_independent_sessions(monkeyp
                 [_StubCollector(type_a), _StubCollector(type_b)]
             ),
         )
+        monkeypatch.setattr(
+            collect,
+            "active_profile_target_role_families",
+            lambda session: lambda: (),
+        )
         try:
             report = asyncio.run(
                 collect._collect(

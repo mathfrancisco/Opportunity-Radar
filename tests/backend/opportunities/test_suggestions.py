@@ -90,13 +90,13 @@ _PROMPT = ClassificationPrompt(
 
 def _ensure_suggestion_profile(session: Session) -> UUID:
     """Use a stable synthetic owner for the worker's profile-scoped candidate query."""
-    _ensure_active_profile(session)
+    _ensure_active_profile(session, owner_sub=_SUGGESTION_OWNER)
     service = ProfileService(session, _SUGGESTION_OWNER)
     try:
         return service.get_active().id
     except ProfileNotFoundError:
         pass
-    snapshot = ProfileService(session).get_active().snapshot
+    snapshot = service.get_active().snapshot
     return service.create_active_version(snapshot, 0).id
 
 

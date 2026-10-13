@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from opportunity_radar.platform.database import create_database_engine
 from scripts import eval_search
 
-from .test_queries import _company, _opportunity
+from .test_queries import _company, _opportunity, list_opportunity_inbox
 
 NOW = datetime.now(UTC)
 
@@ -26,6 +26,11 @@ requires_database = pytest.mark.skipif(
     os.environ.get("RUN_DATABASE_INTEGRATION") != "1",
     reason="database integration is enabled only in the isolated CI database",
 )
+
+
+@pytest.fixture(autouse=True)
+def _owner_scoped_inbox(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(eval_search, "list_opportunity_inbox", list_opportunity_inbox)
 
 
 def test_level_cases_include_junior_remote_and_forbid_senior_or_higher() -> None:

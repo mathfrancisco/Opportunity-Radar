@@ -52,16 +52,20 @@ pytestmark = [
 
 NOW = datetime.now(UTC)
 DAYS = 7
+_TEST_OWNER_SUB = "test-assessment-retention-owner"
+_BACKFILL_OWNER_SUB = "test-assessment-retention-backfill"
 
 
 class _Fixture:
     def __init__(self, engine: Engine) -> None:
         self.engine = engine
         self.session = Session(engine)
-        profile = self.session.scalar(select(CareerProfileModel).limit(1))
+        profile = self.session.scalar(
+            select(CareerProfileModel).where(CareerProfileModel.owner_sub == _TEST_OWNER_SUB)
+        )
         self.created_profile: UUID | None = None
         if profile is None:
-            profile = CareerProfileModel(version=1)
+            profile = CareerProfileModel(version=1, owner_sub=_TEST_OWNER_SUB)
             self.session.add(profile)
             self.session.flush()
             self.created_profile = profile.id
@@ -91,7 +95,9 @@ class _Fixture:
         return self.profile_ids[0]
 
     def second_profile(self) -> UUID:
-        profile = self.session.scalar(select(CareerProfileModel).limit(1))
+        profile = self.session.scalar(
+            select(CareerProfileModel).where(CareerProfileModel.owner_sub == _TEST_OWNER_SUB)
+        )
         assert profile is not None
         number = self.session.scalar(
             select(func.max(ProfileVersionModel.number)).where(
@@ -132,6 +138,7 @@ class _Fixture:
         version: int = 1,
     ) -> UUID:
         assessment = MatchAssessmentModel(
+            owner_sub=_TEST_OWNER_SUB,
             opportunity_id=opportunity_id,
             opportunity_version=version,
             profile_version_id=profile_id or self.profile_id,
@@ -192,6 +199,7 @@ class _Fixture:
     def application(self, opportunity_id: UUID, profile_id: UUID | None = None) -> None:
         self.session.add(
             ApplicationProcessModel(
+                owner_sub=_TEST_OWNER_SUB,
                 opportunity_id=opportunity_id,
                 profile_version_id=profile_id or self.profile_id,
                 current_stage="INTERESTED",
@@ -484,15 +492,21 @@ _UPDATE_ASSESSMENT = "UPDATE matching.match_assessment SET score = 1 WHERE id = 
 _UPDATE_FACTOR = "UPDATE matching.match_factor SET explanation = 'x' WHERE assessment_id = :id"
 
 
-def _alembic(url: str, *args: str) -> None:
+def _alembic(url: str, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         ["alembic", *args],
         cwd=REPO_ROOT,
-        env={**os.environ, "DATABASE_URL": url},
+        env={
+            **os.environ,
+            "DATABASE_URL": url,
+            "OWNER_SUB_BACKFILL": _BACKFILL_OWNER_SUB,
+        },
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0, result.stderr
+    if check:
+        assert result.returncode == 0, result.stderr
+    return result
 
 
 def _refusal(connection: Connection, *statements: str, params: dict[str, object]) -> str | None:
@@ -573,9 +587,9 @@ def test_the_migration_round_trips() -> None:
                         params={"id": assessment_id},
                     )
 
-            _alembic(scratch, "downgrade", "20261005_0063")
-            assert "immutable" in (prune_one(ids[0]) or "")
-            _alembic(scratch, "upgrade", "head")
+            result = _alembic(scratch, "downgrade", "20261005_0063", check=False)
+            assert result.returncode != 0
+            assert "owner_sub tenancy downgrade is refused" in result.stderr
             assert prune_one(ids[0]) is None
         finally:
             fixture.session.close()

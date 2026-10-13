@@ -28,9 +28,10 @@ from opportunity_radar.dashboard.search_benchmark import (
 from opportunity_radar.dashboard.source_baseline import opportunity_search_payload_hash
 from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.platform.database import create_database_engine
+from scripts import search_benchmark
 from scripts.search_benchmark import evaluate
 
-from .test_queries import _company, _opportunity
+from .test_queries import _company, _opportunity, list_opportunity_inbox
 
 pytestmark = [
     pytest.mark.integration,
@@ -55,6 +56,11 @@ _QUERIES: list[dict[str, Any]] = [
     {"query": "kubernetes", "category": "specific"},
 ]
 _REVIEWERS = ["reviewer-a", "reviewer-b"]
+
+
+@pytest.fixture(autouse=True)
+def _owner_scoped_inbox(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(search_benchmark, "list_opportunity_inbox", list_opportunity_inbox)
 
 
 def _freeze(session: Session, relevant: set[tuple[str, str]]) -> dict[str, Any]:
