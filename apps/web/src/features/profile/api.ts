@@ -1,4 +1,4 @@
-import { apiUrl, requestFailure } from '../../lib/api'
+import { apiUrl, privateFetch, requestFailure } from '../../lib/api'
 
 export interface ProfileSkill {
   canonicalName: string
@@ -245,7 +245,7 @@ async function readVersion(response: Response, what: string): Promise<ProfileVer
 
 /** The active version, or null when no profile has been created yet. */
 export async function getActiveProfile(): Promise<ProfileVersion | null> {
-  const response = await fetch(apiUrl('/profile'), {
+  const response = await privateFetch(apiUrl('/profile'), {
     headers: { Accept: 'application/json' },
   })
   if (response.status === 404) return null
@@ -253,7 +253,7 @@ export async function getActiveProfile(): Promise<ProfileVersion | null> {
 }
 
 export async function listProfileVersions(): Promise<ProfileVersion[]> {
-  const response = await fetch(apiUrl('/profile/versions'), {
+  const response = await privateFetch(apiUrl('/profile/versions'), {
     headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
@@ -263,7 +263,7 @@ export async function listProfileVersions(): Promise<ProfileVersion[]> {
 }
 
 function post(path: string, payload: unknown) {
-  return fetch(apiUrl(path), {
+  return privateFetch(apiUrl(path), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),

@@ -1,5 +1,24 @@
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || '/api'
 const apiBaseUrl = configuredBaseUrl.replace(/\/$/, '')
+type AuthTokenGetter = () => Promise<string | null>
+
+let authTokenGetter: AuthTokenGetter | null = null
+
+/** Supplies Clerk's current token getter to private API requests. */
+export function setAuthTokenGetter(getToken: AuthTokenGetter | null) {
+  authTokenGetter = getToken
+}
+
+/** Adds a fresh Clerk token to one private request without retaining it. */
+export async function privateFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  if (authTokenGetter === null) throw new Error('A autenticação não está disponível.')
+  const token = await authTokenGetter()
+  if (!token) throw new Error('Entre na sua conta para acessar este recurso.')
+
+  const headers = new Headers(init.headers)
+  headers.set('Authorization', `Bearer ${token}`)
+  return fetch(input, { ...init, headers })
+}
 
 export function apiUrl(path: string) {
   return `${apiBaseUrl}${path}`

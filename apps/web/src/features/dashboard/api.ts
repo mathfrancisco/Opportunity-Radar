@@ -1,4 +1,4 @@
-import { apiUrl } from '../../lib/api'
+import { apiUrl, privateFetch } from '../../lib/api'
 
 export const inboxOrders = ['priority', 'recency', 'score'] as const
 export type InboxOrder = (typeof inboxOrders)[number]
@@ -391,7 +391,7 @@ export async function getInbox({
   if (openAtSource) params.set('open_at_source', 'true')
   if (onlyStartups) params.set('only_startups', 'true')
 
-  const response = await fetch(apiUrl(`/inbox?${params.toString()}`), {
+  const response = await privateFetch(apiUrl(`/inbox?${params.toString()}`), {
     headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
@@ -465,7 +465,7 @@ function parseSourceMetrics(value: unknown): SourceMetrics | null {
 }
 
 export async function getSourceMetrics(): Promise<SourceMetricsReport> {
-  const response = await fetch(apiUrl('/source-metrics'), {
+  const response = await privateFetch(apiUrl('/source-metrics'), {
     headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
@@ -551,7 +551,7 @@ function parseAIMetrics(value: unknown): AIMetrics {
 }
 
 export async function getAnalysisMetrics(): Promise<AnalysisMetricsReport> {
-  const response = await fetch(apiUrl('/analysis-metrics'), {
+  const response = await privateFetch(apiUrl('/analysis-metrics'), {
     headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
@@ -583,7 +583,7 @@ export async function getAnalysisMetrics(): Promise<AnalysisMetricsReport> {
 }
 
 export async function getOverview(): Promise<Overview> {
-  const response = await fetch(apiUrl('/overview'), {
+  const response = await privateFetch(apiUrl('/overview'), {
     headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)

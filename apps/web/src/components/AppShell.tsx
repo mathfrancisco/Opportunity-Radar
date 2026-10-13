@@ -6,6 +6,8 @@ import { MobileNavigationDialog } from './ui/MobileNavigationDialog'
 export interface AppShellProps {
   /** Omitted on pages that are reached from a link rather than from the nav. */
   current?: NavigationPath
+  /** Owner-only views use the extended navigation when their route is authorized. */
+  isOwner?: boolean
   /** Petrol kicker above the title (SPEC 54: "Decidir"); drawn only when given. */
   eyebrow?: string
   title: string
@@ -28,6 +30,7 @@ const drawerId = 'sidebar'
  */
 export function AppShell({
   current,
+  isOwner = false,
   eyebrow,
   title,
   description,
@@ -90,14 +93,14 @@ export function AppShell({
             </button>
           }
         >
-          <Sidebar current={current} onNavigate={() => setOpen(false)} />
+          <Sidebar current={current} isOwner={isOwner} onNavigate={() => setOpen(false)} />
         </MobileNavigationDialog>
       </div>
 
       <aside
         className="hidden w-60 shrink-0 border-r border-line-strong bg-sidebar p-3 md:sticky md:top-0 md:block md:h-screen md:overflow-y-auto"
       >
-        <Sidebar current={current} />
+        <Sidebar current={current} isOwner={isOwner} />
       </aside>
 
       <main className="min-w-0 flex-1 p-4 md:p-8">

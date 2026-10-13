@@ -50,6 +50,7 @@ export function StatusPage() {
 
   return (
     <PageShell
+      isOwner
       current="/status"
       eyebrow="Ambiente local"
       title={view.title}

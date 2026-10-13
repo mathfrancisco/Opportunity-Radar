@@ -1,4 +1,4 @@
-import { apiUrl, failureFrom } from '../../lib/api'
+import { apiUrl, failureFrom, privateFetch } from '../../lib/api'
 
 export interface CompanySource {
   id?: string
@@ -215,7 +215,7 @@ function parseProposal(value: unknown): ProposedSource | null {
 }
 
 export async function getCompany(companyId: string): Promise<CompanyDetail> {
-  const response = await fetch(apiUrl(`/companies/${companyId}`), {
+  const response = await privateFetch(apiUrl(`/companies/${companyId}`), {
     headers: { Accept: 'application/json' },
   })
   if (response.status === 404) throw new Error('Empresa não encontrada.')
@@ -252,7 +252,7 @@ function parseCompanyDetail(body: unknown): CompanyDetail {
 }
 
 async function send(path: string, method: string, payload: unknown): Promise<unknown> {
-  const response = await fetch(apiUrl(path), {
+  const response = await privateFetch(apiUrl(path), {
     method,
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -344,7 +344,7 @@ export async function reopenHomologation(sourceId: string, expectedVersion: numb
 }
 
 export async function detectCompanySource(companyId: string): Promise<SourceProposal> {
-  const response = await fetch(apiUrl(`/companies/${companyId}/detect-source`), {
+  const response = await privateFetch(apiUrl(`/companies/${companyId}/detect-source`), {
     method: 'POST',
     headers: { Accept: 'application/json' },
   })
@@ -370,7 +370,7 @@ export async function getCompanies({
 }: CompanyListParams): Promise<CompanyPage> {
   const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
   if (q?.trim()) params.set('q', q.trim())
-  const response = await fetch(apiUrl(`/companies?${params.toString()}`), {
+  const response = await privateFetch(apiUrl(`/companies?${params.toString()}`), {
     headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)

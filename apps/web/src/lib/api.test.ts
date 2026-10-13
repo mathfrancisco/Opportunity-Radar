@@ -1,5 +1,18 @@
-import { describe, expect, it } from 'vitest'
-import { ConflictError, FieldError, failureFrom, requestFailure } from './api'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  ConflictError,
+  FieldError,
+  failureFrom,
+  privateFetch,
+  requestFailure,
+  setAuthTokenGetter,
+} from './api'
+
+afterEach(() => {
+  setAuthTokenGetter(null)
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 
 describe('requestFailure', () => {
   it('marca 409 como conflito, porque repetir a escrita apagaria a outra edição', () => {
@@ -101,5 +114,48 @@ describe('failureFrom', () => {
 
     expect(error).not.toBeInstanceOf(FieldError)
     expect(error.message).toBe('external sources require confirmed evidence')
+  })
+})
+
+describe('privateFetch', () => {
+  it('gets a fresh token for every request without persisting it', async () => {
+    const order: string[] = []
+    const tokens = ['test-token-one', 'test-token-two']
+    const getToken = vi.fn(async () => {
+      order.push('token')
+      return tokens.shift() ?? null
+    })
+    const fetchMock = vi.fn<typeof fetch>(async () => {
+      order.push('request')
+      return new Response('{}', { status: 200 })
+    })
+    const serialize = vi.spyOn(JSON, 'stringify')
+    const log = vi.spyOn(console, 'log')
+    vi.stubGlobal('fetch', fetchMock)
+    setAuthTokenGetter(getToken)
+
+    await privateFetch('/private/one')
+    await privateFetch('/private/two')
+
+    expect(getToken).toHaveBeenCalledTimes(2)
+    expect(order).toEqual(['token', 'request', 'token', 'request'])
+    expect(fetchMock.mock.calls.map(([input, init]) => [input, new Headers(init?.headers).get('Authorization')])).toEqual([
+      ['/private/one', 'Bearer test-token-one'],
+      ['/private/two', 'Bearer test-token-two'],
+    ])
+    expect(localStorage.length).toBe(0)
+    expect(sessionStorage.length).toBe(0)
+    expect(serialize).not.toHaveBeenCalled()
+    expect(log).not.toHaveBeenCalled()
+  })
+
+  it.each([null, ''])('does not send a private request when Clerk returns no token (%s)', async (token) => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    setAuthTokenGetter(async () => token)
+
+    await expect(privateFetch('/private/one')).rejects.toThrow('Entre na sua conta')
+
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

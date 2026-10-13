@@ -6,6 +6,12 @@ import { App } from '../app/App'
 import { render } from '../components/testing'
 import { OverviewPage, SavedSearchesWithNews, StartupShortcut } from './OverviewPage'
 
+vi.mock('@clerk/react', () => ({
+  SignIn: () => null,
+  SignUp: () => null,
+  useAuth: () => ({ getToken: async () => 'vitest-token', isLoaded: true, isSignedIn: true }),
+}))
+
 afterEach(() => vi.unstubAllGlobals())
 
 async function flush(times = 4) {
