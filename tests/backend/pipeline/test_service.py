@@ -241,3 +241,13 @@ def test_next_action_is_editable_and_cleared_when_the_application_closes() -> No
         assert closed.next_action is None
         assert closed.next_action_at is None
         assert closed.notes == "Contato pelo LinkedIn."
+
+
+@pytest.mark.parametrize("owner_sub", [None, "", "   "])
+def test_starting_an_application_without_an_owner_is_refused(owner_sub: str | None) -> None:
+    from opportunity_radar.profile.domain import ProfileOwnerRequiredError
+
+    service = PipelineService(object(), owner_sub)  # type: ignore[arg-type]
+
+    with pytest.raises(ProfileOwnerRequiredError):
+        service.start(uuid4())

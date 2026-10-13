@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import os
 from collections.abc import Sequence
 from typing import Any
@@ -35,9 +36,22 @@ from opportunity_radar.profile.domain import ProfileNotFoundError
 from opportunity_radar.profile.service import ProfileService
 from scripts.owner_context import operational_owner
 
+logger = logging.getLogger(__name__)
+
 #: Sources collected at once, default 1 (current sequential behavior unchanged). Same-
 #: host work still serializes at 1 request/second regardless of this setting.
 DEFAULT_COLLECT_CONCURRENCY = 1
+
+
+def _owner_or_warn(settings: Settings) -> str | None:
+    """The operational owner, or one structured warning (no values) when it is missing."""
+    owner_sub = ProfileService.operational_owner(settings.worker_owner_sub)
+    if owner_sub is None:
+        logger.warning(
+            "worker job skipped: no operational owner configured",
+            extra={"job": "collect", "reason": "missing_worker_owner"},
+        )
+    return owner_sub
 
 
 NO_ACTIVE_PROFILE = "no_active_profile"
@@ -328,6 +342,7 @@ def main() -> int:
         )
         return 2
     settings = Settings()  # type: ignore[call-arg]  # values come from the environment
+    owner_sub = _owner_or_warn(settings)
     report = asyncio.run(
         _collect(
             engine,
@@ -347,7 +362,6 @@ def main() -> int:
     ]
     try:
         with Session(engine) as session:
-            owner_sub = operational_owner(settings)
             level = add_level_column(
                 session,
                 report,

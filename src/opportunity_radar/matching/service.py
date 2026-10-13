@@ -73,7 +73,11 @@ from opportunity_radar.platform.ai.telemetry import (
     start_operation,
 )
 from opportunity_radar.platform.logging import get_logger
-from opportunity_radar.profile.domain import ProfileNotFoundError, ProfileVersion
+from opportunity_radar.profile.domain import (
+    ProfileNotFoundError,
+    ProfileOwnerRequiredError,
+    ProfileVersion,
+)
 from opportunity_radar.profile.service import ProfileService
 
 RULES_VERSION = "matching-v5"
@@ -106,6 +110,12 @@ class AnalysisInProgressError(RuntimeError):
     """Another holder — the job or the manual action — owns this analysis right now."""
 
 
+def _require_owner(owner_sub: str | None) -> str:
+    if owner_sub is None or not owner_sub.strip():
+        raise ProfileOwnerRequiredError("profile owner subject is required")
+    return owner_sub
+
+
 class MatchingService:
     def __init__(self, session: Session, owner_sub: str | None = None) -> None:
         self.session = session
@@ -118,6 +128,7 @@ class MatchingService:
         *,
         profile_version_id: UUID | None = None,
     ) -> MatchAssessmentModel:
+        owner_sub = _require_owner(self.owner_sub)
         opportunity = OpportunityRepository(self.session).get(opportunity_id)
         if opportunity is None:
             raise MatchOpportunityNotFoundError(str(opportunity_id))
@@ -152,7 +163,7 @@ class MatchingService:
                 taxonomy_version,
                 input_hash,
                 assessed_at,
-                self.owner_sub or "local-system",
+                owner_sub,
             ),
             [_factor_record(factor) for factor in result.factors],
         )

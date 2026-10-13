@@ -24,6 +24,7 @@ from opportunity_radar.pipeline.domain import (
 )
 from opportunity_radar.pipeline.models import ApplicationProcessModel
 from opportunity_radar.pipeline.repository import PipelineRepository
+from opportunity_radar.profile.domain import ProfileOwnerRequiredError
 from opportunity_radar.profile.service import ProfileService
 
 
@@ -50,6 +51,9 @@ class PipelineService:
         """Start tracking a candidacy. The opportunity is untouched: it keeps its own
         lifecycle, and closing the application later will not close the posting."""
         validate_start(stage)
+        owner_sub = self.owner_sub
+        if owner_sub is None or not owner_sub.strip():
+            raise ProfileOwnerRequiredError("profile owner subject is required")
         opportunity = OpportunityRepository(self.session).get(opportunity_id)
         if opportunity is None:
             raise ApplicationOpportunityNotFoundError(str(opportunity_id))
@@ -81,7 +85,7 @@ class PipelineService:
             next_action_at=next_action_at,
             notes=normalized_notes,
             history_notes=normalized_notes,
-            owner_sub=self.owner_sub or "local-system",
+            owner_sub=owner_sub,
         )
         try:
             self.session.commit()
