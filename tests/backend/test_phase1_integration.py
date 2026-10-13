@@ -6,15 +6,13 @@ import os
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from opportunity_radar.companies.models import Company, CompanyAlias, CompanyImportBatch
-from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_development_app as create_app
 from scripts.import_notion_export import import_companies, input_hash
+from tests.backend.support.auth import authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -37,7 +35,7 @@ def test_profile_and_company_catalog_flow(tmp_path: Path) -> None:
             )
         )
 
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
     created = client.post(
         "/profile/versions",
         json={

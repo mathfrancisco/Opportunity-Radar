@@ -16,10 +16,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_development_app as create_app
 from scripts.search_reference import add_relevant, canonical_url, resolve
+from tests.backend.support.auth import authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -69,7 +68,7 @@ def test_relevance_mark_history_and_current_and_precision(tmp_path) -> None:
             )
         )
 
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
 
     relevant_job = _create_opportunity(
         client, url="https://example.com/jobs/relevance-1", title="Relevant Role"

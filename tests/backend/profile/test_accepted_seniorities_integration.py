@@ -7,14 +7,13 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_development_app as create_app
 from opportunity_radar.profile.models import CareerProfileModel
 from scripts.seed_profile_target_areas import SEED_ROLE_FAMILIES, seed
+from tests.backend.support.auth import OWNER_SUB, authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -27,7 +26,12 @@ pytestmark = [
 
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(create_app(Settings(database_url=os.environ["DATABASE_URL"])))
+    # Other suites leave profiles for foreign owners; the seed script and the optimistic
+    # lock assume a single-owner database, so start from an empty profile root.
+    with Session(create_database_engine(os.environ["DATABASE_URL"])) as session:
+        session.execute(text("TRUNCATE profile.career_profile CASCADE"))
+        session.commit()
+    return authenticated_test_client(os.environ["DATABASE_URL"])
 
 
 def _session() -> Session:
@@ -36,7 +40,12 @@ def _session() -> Session:
 
 def _lock() -> int:
     with _session() as session:
-        return session.scalar(select(CareerProfileModel.version).limit(1)) or 0
+        version = session.scalar(
+            select(CareerProfileModel.version)
+            .where(CareerProfileModel.owner_sub == OWNER_SUB)
+            .limit(1)
+        )
+        return version or 0
 
 
 def _activate(client: TestClient, preferences: dict[str, Any]) -> dict[str, Any]:

@@ -24,10 +24,10 @@ from opportunity_radar.opportunities.models import (
     SourceOccurrenceModel,
 )
 from opportunity_radar.opportunities.service import OpportunityService
-from opportunity_radar.platform.config import Settings, get_settings
+from opportunity_radar.platform.config import get_settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_development_app as create_app
 from scripts.reclassify_content import main
+from tests.backend.support.auth import authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -49,7 +49,10 @@ def engine() -> Iterator[Engine]:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with engine.begin() as connection:
         connection.execute(
-            text("TRUNCATE acquisition.source_definition, opportunities.opportunity CASCADE")
+            text(
+                "TRUNCATE acquisition.source_definition, opportunities.opportunity, "
+                "profile.career_profile CASCADE"
+            )
         )
     yield engine
     get_settings.cache_clear()
@@ -62,7 +65,7 @@ def _enable(monkeypatch: pytest.MonkeyPatch, rules: str) -> None:
 
 def _seed(engine: Engine) -> dict[str, UUID]:
     """Normalize four postings with every content rule off (the state in production today)."""
-    client = TestClient(create_app(Settings(database_url=os.environ["DATABASE_URL"])))
+    client = authenticated_test_client(os.environ["DATABASE_URL"])
     source = client.post(
         "/sources",
         json={
@@ -370,7 +373,7 @@ def _collect(client: TestClient, source_id: str, title: str, description: str) -
 
 
 def _collision_world(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> dict[str, UUID]:
-    client = TestClient(create_app(Settings(database_url=os.environ["DATABASE_URL"])))
+    client = authenticated_test_client(os.environ["DATABASE_URL"])
     source = client.post(
         "/sources",
         json={

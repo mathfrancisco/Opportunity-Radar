@@ -14,15 +14,13 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from opportunity_radar.opportunities.duplicates import find_title_location_window_candidates
 from opportunity_radar.opportunities.models import DuplicateCandidateModel, OpportunityModel
-from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_development_app as create_app
+from tests.backend.support.auth import authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -77,7 +75,7 @@ def _cleanup(session: Session, opportunity_ids: list) -> None:
 def test_duplicate_candidate_routes_and_inbox_badge() -> None:
     database_url = os.environ["DATABASE_URL"]
     engine = create_database_engine(database_url)
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
     marker = uuid4().hex[:10]
 
     with Session(engine) as session:
@@ -164,7 +162,7 @@ def test_duplicate_candidate_routes_and_inbox_badge() -> None:
 def test_reject_duplicate_candidate_via_http_clears_the_inbox_badge() -> None:
     database_url = os.environ["DATABASE_URL"]
     engine = create_database_engine(database_url)
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
     marker = uuid4().hex[:10]
 
     with Session(engine) as session:
@@ -211,7 +209,7 @@ def test_reject_duplicate_candidate_via_http_clears_the_inbox_badge() -> None:
 
 def test_confirm_unknown_candidate_returns_404() -> None:
     database_url = os.environ["DATABASE_URL"]
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
     missing = client.post(
         "/opportunities/duplicate-candidates/00000000-0000-0000-0000-000000000000/confirm",
         json={
@@ -227,7 +225,7 @@ def test_confirm_unknown_candidate_returns_404() -> None:
 def test_candidate_payload_resolves_equal_created_at_by_lower_id() -> None:
     database_url = os.environ["DATABASE_URL"]
     engine = create_database_engine(database_url)
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
     marker = uuid4().hex[:10]
     lower_id, higher_id = sorted((uuid4(), uuid4()))
 

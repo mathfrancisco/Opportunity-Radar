@@ -93,6 +93,7 @@ def client(
     app = create_app(
         Settings(
             database_url=os.environ["DATABASE_URL"],
+            frontend_origin=PARTY,
             clerk_issuer=ISSUER,
             clerk_jwks_url=f"{ISSUER}/.well-known/jwks.json",
             clerk_authorized_parties=PARTY,

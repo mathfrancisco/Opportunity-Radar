@@ -92,6 +92,7 @@ def _production_client(keypair, monkeypatch: pytest.MonkeyPatch, owner_sub: str)
         create_app(
             Settings(
                 database_url="postgresql+psycopg://test:test@localhost/test",
+                frontend_origin=PARTY,
                 clerk_issuer=ISSUER,
                 clerk_jwks_url=f"{ISSUER}/.well-known/jwks.json",
                 clerk_authorized_parties=PARTY,
@@ -295,6 +296,7 @@ def test_production_factory_leaves_only_liveness_public(keypair, monkeypatch) ->
     app = create_app(
         Settings(
             database_url="postgresql+psycopg://test:test@localhost/test",
+            frontend_origin=PARTY,
             clerk_issuer=ISSUER,
             clerk_jwks_url=f"{ISSUER}/.well-known/jwks.json",
             clerk_authorized_parties=PARTY,

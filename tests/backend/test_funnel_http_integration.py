@@ -7,8 +7,7 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-from opportunity_radar.platform.config import Settings
-from opportunity_radar.presentation.http.app import create_development_app as create_app
+from tests.backend.support.auth import authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -20,7 +19,7 @@ pytestmark = [
 
 
 def _client() -> TestClient:
-    return TestClient(create_app(Settings(database_url=os.environ["DATABASE_URL"])))
+    return authenticated_test_client(os.environ["DATABASE_URL"])
 
 
 def test_funnel_metrics_endpoint_answers_stages_north_star_and_guards() -> None:

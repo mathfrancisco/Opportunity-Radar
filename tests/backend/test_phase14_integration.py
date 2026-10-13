@@ -17,9 +17,8 @@ from opportunity_radar.acquisition.proposals import (
     proposal_for,
 )
 from opportunity_radar.companies.models import CompanySource
-from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_development_app as create_app
+from tests.backend.support.auth import authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -31,7 +30,7 @@ pytestmark = [
 
 
 def _client() -> TestClient:
-    return TestClient(create_app(Settings(database_url=os.environ["DATABASE_URL"])))
+    return authenticated_test_client(os.environ["DATABASE_URL"])
 
 
 def _unique(prefix: str) -> str:
