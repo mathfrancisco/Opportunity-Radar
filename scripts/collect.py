@@ -7,7 +7,9 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -34,6 +36,9 @@ from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.profile.domain import ProfileNotFoundError
 from opportunity_radar.profile.service import ProfileService
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from scripts.owner_context import operational_owner
 
 logger = logging.getLogger(__name__)

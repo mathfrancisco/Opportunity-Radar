@@ -20,6 +20,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from opportunity_radar.dashboard.queries import InboxQuery, list_opportunity_inbox  # noqa: E402
 from opportunity_radar.dashboard.search_benchmark import (  # noqa: E402

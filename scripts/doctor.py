@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -39,6 +40,9 @@ from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.health import database_health
 from opportunity_radar.profile.domain import ProfileNotFoundError
 from opportunity_radar.profile.service import ProfileService
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from scripts.owner_context import operational_owner
 
 OK = "ok"

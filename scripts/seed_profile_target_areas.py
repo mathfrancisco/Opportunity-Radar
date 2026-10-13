@@ -14,7 +14,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from dataclasses import replace
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -22,6 +24,9 @@ from opportunity_radar.platform.config import get_settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.profile.domain import ProfileNotFoundError, ProfileSnapshot
 from opportunity_radar.profile.service import ProfileService
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from scripts.owner_context import require_operational_owner
 
 SEED_ROLE_FAMILIES: tuple[str, ...] = (

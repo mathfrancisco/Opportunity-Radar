@@ -57,6 +57,9 @@ from opportunity_radar.opportunities.models import OpportunityModel, SourceOccur
 from opportunity_radar.opportunities.service import recompute_from_stored_description
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from scripts.owner_context import require_operational_owner
 
 MANIFEST_VERSION = "workday-backfill-manifest-v1"

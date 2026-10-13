@@ -19,7 +19,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -28,6 +30,9 @@ from opportunity_radar.opportunities.role_family import RoleFamily
 from opportunity_radar.opportunities.service import reclassify_content
 from opportunity_radar.platform.config import get_settings
 from opportunity_radar.platform.database import create_database_engine
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from scripts.owner_context import require_operational_owner
 
 
