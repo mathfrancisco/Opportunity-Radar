@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from opportunity_radar.platform.config import Settings
+from opportunity_radar.profile.domain import EmploymentPreference, ProfileSnapshot
+from opportunity_radar.profile.models import CareerProfileModel
+from opportunity_radar.profile.service import ProfileService
 from scripts import doctor
 from scripts.doctor import Check, check_ai, classify_worker_jobs
 
@@ -170,6 +178,33 @@ def _settings(**overrides: object) -> Settings:
     return Settings(database_url="postgresql+psycopg://test:test@localhost/test", **overrides)
 
 
+_requires_database = pytest.mark.skipif(
+    os.environ.get("RUN_DATABASE_INTEGRATION") != "1",
+    reason="database integration is enabled only in the isolated CI database",
+)
+
+
+def _seed_active_profile(session: Session, owner_sub: str) -> None:
+    ProfileService(session, owner_sub).create_active_version(
+        ProfileSnapshot(
+            skills=(),
+            experiences=(),
+            projects=(),
+            preferences=EmploymentPreference(target_role_families=("DATA",)),
+        ),
+        expected_profile_version=0,
+    )
+
+
+def _cleanup_profile(session: Session, owner_sub: str) -> None:
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == owner_sub)
+    )
+    if profile is not None:
+        session.delete(profile)
+        session.commit()
+
+
 def test_check_ai_never_prints_the_key() -> None:
     secret = "sk-super-secret-value"
     check = check_ai(_settings(ai_enabled=True, groq_api_key=secret))
@@ -292,6 +327,36 @@ def test_check_funnel_uses_operational_owner(monkeypatch) -> None:
 
     assert check.status == doctor.OK
     assert seen == {"owner_sub": "doctor-test-owner", "families": ("DATA",)}
+
+
+@pytest.mark.integration
+@_requires_database
+def test_check_analysis_reads_an_owned_active_profile() -> None:
+    owner_sub = f"doctor-test-owner-{os.urandom(8).hex()}"
+    settings = Settings(database_url=os.environ["DATABASE_URL"], worker_owner_sub=owner_sub)
+    with Session(doctor.create_database_engine(settings.database_url)) as session:
+        _seed_active_profile(session, owner_sub)
+        try:
+            check = doctor.check_analysis(settings)
+            assert check.status != doctor.WARN
+            assert "WORKER_OWNER_SUB" not in check.detail
+        finally:
+            _cleanup_profile(session, owner_sub)
+
+
+@pytest.mark.integration
+@_requires_database
+def test_check_funnel_reads_an_owned_active_profile() -> None:
+    owner_sub = f"doctor-test-owner-{os.urandom(8).hex()}"
+    settings = Settings(database_url=os.environ["DATABASE_URL"], worker_owner_sub=owner_sub)
+    with Session(doctor.create_database_engine(settings.database_url)) as session:
+        _seed_active_profile(session, owner_sub)
+        try:
+            check = doctor.check_funnel(settings)
+            assert check.status != doctor.WARN
+            assert "WORKER_OWNER_SUB" not in check.detail
+        finally:
+            _cleanup_profile(session, owner_sub)
 
 
 @dataclass(frozen=True)

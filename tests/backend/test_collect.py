@@ -269,22 +269,24 @@ def test_collect_runs_two_sources_concurrently_with_independent_sessions(monkeyp
     type_a = f"collect_test_ok_a_{uuid4().hex[:8]}"
     type_b = f"collect_test_ok_b_{uuid4().hex[:8]}"
     owner_sub = f"collect-test-owner-{uuid4().hex[:8]}"
+    source_ids: list[UUID] = []
     with Session(engine) as session:
-        id_a = _seed_source(session, source_type=type_a)
-        id_b = _seed_source(session, source_type=type_b)
-        _seed_active_profile(session, owner_sub)
-        source_a = session.get(SourceDefinitionModel, id_a)
-        source_b = session.get(SourceDefinitionModel, id_b)
-        assert source_a is not None and source_b is not None
-
-        monkeypatch.setattr(
-            collect,
-            "_registry",
-            lambda settings: CollectorRegistry(
-                [_StubCollector(type_a), _StubCollector(type_b)]
-            ),
-        )
         try:
+            id_a = _seed_source(session, source_type=type_a)
+            source_ids.append(id_a)
+            id_b = _seed_source(session, source_type=type_b)
+            source_ids.append(id_b)
+            _seed_active_profile(session, owner_sub)
+            source_a = session.get(SourceDefinitionModel, id_a)
+            source_b = session.get(SourceDefinitionModel, id_b)
+            assert source_a is not None and source_b is not None
+            collector_a = _StubCollector(type_a)
+            collector_b = _StubCollector(type_b)
+            monkeypatch.setattr(
+                collect,
+                "_registry",
+                lambda settings: CollectorRegistry([collector_a, collector_b]),
+            )
             report = asyncio.run(
                 collect._collect(
                     engine,
@@ -300,6 +302,8 @@ def test_collect_runs_two_sources_concurrently_with_independent_sessions(monkeyp
             statuses = {item["source_name"]: item["status"] for item in report}
             assert statuses[source_a.name] == "SUCCEEDED"
             assert statuses[source_b.name] == "SUCCEEDED"
+            assert collector_a.requests[0].target_role_families == ("DATA",)
+            assert collector_b.requests[0].target_role_families == ("DATA",)
         finally:
             _cleanup_profile(session, owner_sub)
-            _cleanup(session, [id_a, id_b])
+            _cleanup(session, source_ids)
