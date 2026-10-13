@@ -1,3 +1,7 @@
+# CI_AUTH_DIR must name an existing fixture directory generated first with
+# `docker compose -f compose.yaml -f compose.ci.yaml run --rm --no-deps -T auth-tools init
+# --directory /fixtures` (tests/e2e/auth/fixtures.py); every ${CI_AUTH_DIR:?...} below fails
+# fast otherwise. Set CI_UID/CI_GID to the caller's ids so the files stay deletable.
 services:
   # CI owns an ephemeral database whose name makes the isolation guard explicit. Keep
   # this override here rather than giving the operational Compose file a test backfill.

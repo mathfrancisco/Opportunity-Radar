@@ -42,4 +42,16 @@ if [ "${1:-}" = "--refresh" ]; then exit 0; fi
 extra=()
 if curl --version | grep -q Schannel; then extra=(--ssl-no-revoke); fi
 
+# The bearer must only ever reach the pinned loopback origin: refuse any other URL.
+for arg in "$@"; do
+  case "$arg" in
+    http://* | https://*)
+      case "$arg" in
+        https://127.0.0.1:8443 | https://127.0.0.1:8443/*) ;;
+        *) echo "auth-curl.sh: refusing to send a bearer to a URL outside https://127.0.0.1:8443" >&2; exit 2 ;;
+      esac
+      ;;
+  esac
+done
+
 exec curl "${extra[@]}" --cacert "$CI_AUTH_DIR/public/ca.pem" --header "@$header_file" "$@"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 from types import ModuleType
 
@@ -75,7 +76,8 @@ def test_jwks_is_public_only_and_key_material_stays_out_of_served_dirs(auth_dir:
     assert not {"d", "p", "q", "dp", "dq", "qi"} & set(jwks["keys"][0])
     served = [path.name for folder in ("public", "tls") for path in (auth_dir / folder).iterdir()]
     assert "private.pem" not in served
-    assert (auth_dir / "jwt" / "private.pem").stat().st_mode & 0o077 == 0
+    if os.name != "nt":  # POSIX permission bits are not meaningful on Windows
+        assert (auth_dir / "jwt" / "private.pem").stat().st_mode & 0o077 == 0
 
 
 def test_minted_tokens_verify_with_the_production_verifier(auth_dir: Path) -> None:

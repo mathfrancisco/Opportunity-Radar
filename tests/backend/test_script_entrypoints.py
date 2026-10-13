@@ -12,7 +12,14 @@ ROOT = Path(__file__).parents[2]
 
 @pytest.mark.parametrize(
     "script",
-    ("scripts/doctor.py", "scripts/seed_profile_target_areas.py"),
+    (
+        "scripts/doctor.py",
+        "scripts/seed_profile_target_areas.py",
+        "scripts/collect.py",
+        "scripts/reclassify_content.py",
+        "scripts/workday_detail_backfill.py",
+        "scripts/search_benchmark.py",
+    ),
 )
 def test_owner_context_scripts_run_directly(script: str) -> None:
     environment = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}

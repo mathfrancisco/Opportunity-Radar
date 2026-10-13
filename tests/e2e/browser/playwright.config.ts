@@ -28,6 +28,9 @@ const projects: Project[] = [
   {
     name: 'offline-no-clerk-config',
     testMatch: '00-offline-auth.spec.ts',
+    // The browser does not trust the run's ephemeral CI CA (served on loopback), and this
+    // project signs nothing in. Scoped here so a real-Clerk project never inherits it.
+    use: { ignoreHTTPSErrors: true },
   },
   {
     name: 'api-authenticated',
@@ -60,8 +63,6 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'report' }]],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? 'https://127.0.0.1:8443',
-    // The only TLS certificate in play is the run's ephemeral CI CA, served on loopback.
-    ignoreHTTPSErrors: true,
     trace: 'retain-on-failure',
     // Always on, not just on failure: the card wants the happy path's own screenshots as
     // CI evidence, not only a failing run's.

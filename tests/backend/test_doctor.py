@@ -335,8 +335,8 @@ def test_check_analysis_reads_an_owned_active_profile() -> None:
     owner_sub = f"doctor-test-owner-{os.urandom(8).hex()}"
     settings = Settings(database_url=os.environ["DATABASE_URL"], worker_owner_sub=owner_sub)
     with Session(doctor.create_database_engine(settings.database_url)) as session:
-        _seed_active_profile(session, owner_sub)
         try:
+            _seed_active_profile(session, owner_sub)
             check = doctor.check_analysis(settings)
             assert check.status != doctor.WARN
             assert "WORKER_OWNER_SUB" not in check.detail
@@ -350,8 +350,8 @@ def test_check_funnel_reads_an_owned_active_profile() -> None:
     owner_sub = f"doctor-test-owner-{os.urandom(8).hex()}"
     settings = Settings(database_url=os.environ["DATABASE_URL"], worker_owner_sub=owner_sub)
     with Session(doctor.create_database_engine(settings.database_url)) as session:
-        _seed_active_profile(session, owner_sub)
         try:
+            _seed_active_profile(session, owner_sub)
             check = doctor.check_funnel(settings)
             assert check.status != doctor.WARN
             assert "WORKER_OWNER_SUB" not in check.detail
