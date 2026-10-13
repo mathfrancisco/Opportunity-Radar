@@ -571,11 +571,69 @@ def test_the_migration_round_trips() -> None:
         scratch = with_database(url, name)
         _alembic(scratch, "upgrade", "20261006_0068")
         scratch_engine = create_database_engine(scratch)
-        fixture = _Fixture(scratch_engine)
         try:
-            posting = fixture.posting()
-            ids = [fixture.assessment(posting, age) for age in (30, 20, 10)]
-            fixture.session.close()
+            profile_id, profile_version_id, opportunity_id = uuid4(), uuid4(), uuid4()
+            ids = [uuid4() for _ in range(3)]
+            with scratch_engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO profile.career_profile (id, singleton_key, version) "
+                        "VALUES (:id, true, 1)"
+                    ),
+                    {"id": profile_id},
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO profile.profile_version (id, career_profile_id, number, status) "
+                        "VALUES (:id, :career_profile_id, 1, 'DRAFT')"
+                    ),
+                    {"id": profile_version_id, "career_profile_id": profile_id},
+                )
+                connection.execute(
+                    text("INSERT INTO profile.employment_preference (id, profile_version_id) VALUES (:id, :profile_version_id)"),
+                    {"id": uuid4(), "profile_version_id": profile_version_id},
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO opportunities.opportunity ("
+                        "id, fingerprint, fingerprint_version, canonical_title, normalized_title, "
+                        "company_name, normalized_company_name, work_mode, seniority, contract_type, "
+                        "lifecycle_status, first_seen_at, version) VALUES ("
+                        ":id, :fingerprint, 'v1', 'Prune probe', 'prune probe', 'Probe', 'probe', "
+                        "'REMOTE', 'UNKNOWN', 'FULL_TIME', 'ACTIVE', :now, 1)"
+                    ),
+                    {"id": opportunity_id, "fingerprint": uuid4().hex, "now": NOW},
+                )
+                for assessment_id, age in zip(ids, (30, 20, 10), strict=True):
+                    at = NOW - timedelta(days=age)
+                    connection.execute(
+                        text(
+                            "INSERT INTO matching.match_assessment ("
+                            "id, opportunity_id, opportunity_version, profile_version_id, input_hash, "
+                            "rules_version, taxonomy_version, opportunity_snapshot, profile_snapshot, "
+                            "eligibility, eligibility_details, verdict, score, confidence, assessed_at, created_at) "
+                            "VALUES (:id, :opportunity_id, 1, :profile_version_id, :input_hash, "
+                            "'matching-v1', :taxonomy_version, '{}'::jsonb, '{}'::jsonb, 'ELIGIBLE', "
+                            "'[]'::jsonb, 'RECOMMENDED', 50, 0.9, :at, :at)"
+                        ),
+                        {
+                            "id": assessment_id,
+                            "opportunity_id": opportunity_id,
+                            "profile_version_id": profile_version_id,
+                            "input_hash": uuid4().hex + uuid4().hex,
+                            "taxonomy_version": SKILL_TAXONOMY_VERSION,
+                            "at": at,
+                        },
+                    )
+                    connection.execute(
+                        text(
+                            "INSERT INTO matching.match_factor ("
+                            "id, assessment_id, factor_code, weight, contribution, status, confidence, "
+                            "missing_policy, explanation) VALUES (:id, :assessment_id, 'SKILLS', 0.5, "
+                            "10, 'KNOWN', 0.9, 'NEUTRAL', 'probe')"
+                        ),
+                        {"id": uuid4(), "assessment_id": assessment_id},
+                    )
 
             def prune_one(assessment_id: UUID) -> str | None:
                 with scratch_engine.connect() as connection:
@@ -592,7 +650,6 @@ def test_the_migration_round_trips() -> None:
             _alembic(scratch, "upgrade", "20261006_0068")
             assert prune_one(ids[0]) is None
         finally:
-            fixture.session.close()
             scratch_engine.dispose()
     finally:
         drop_database(url, name)
