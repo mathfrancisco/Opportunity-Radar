@@ -132,6 +132,8 @@ jobs:
         # analysis pass would spend its timeout proving something the e2e job proves.
         env:
           AI_ENABLED: "false"
+          # The soak acts for an explicit operational owner and refuses to guess one.
+          WORKER_OWNER_SUB: ci-owner-sub
         run: python scripts/soak_gate.py --json
 
   frontend:
