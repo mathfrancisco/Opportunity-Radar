@@ -45,17 +45,72 @@ services:
       start_period: 2s
     networks: [app_net]
 
+  # One-shot, no network: creates (init) and signs with (mint) the run's ephemeral JWT key
+  # and TLS CA. CI_AUTH_DIR is an absolute temp directory outside the checkout; the key
+  # lives there and is mounted only into this service, never into the API or an image.
+  # Runs as the caller (CI_UID/CI_GID) so the runner can delete what it wrote.
+  auth-tools:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+      target: test
+    entrypoint: ["python", "/auth-tools/fixtures.py"]
+    user: "${CI_UID:-0}:${CI_GID:-0}"
+    network_mode: none
+    volumes:
+      - ./tests/e2e/auth:/auth-tools:ro
+      - ${CI_AUTH_DIR:?CI_AUTH_DIR must name the ephemeral fixture directory}:/fixtures
+    restart: "no"
+    profiles: [ci-auth]
+
+  # HTTPS front (test-only). Inside app_net it is issuer.test, so the production API
+  # fetches the public JWKS over verified TLS; on the host it is the loopback-only
+  # https://127.0.0.1:8443 origin that proxies to the frontend and its /api/ proxy.
+  # It mounts the public and TLS directories only, never the JWT signing key.
+  ci-tls:
+    image: nginx:1.27.4-alpine
+    volumes:
+      - ./tests/e2e/auth/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${CI_AUTH_DIR:?CI_AUTH_DIR must name the ephemeral fixture directory}/public:/auth/public:ro
+      - ${CI_AUTH_DIR:?CI_AUTH_DIR must name the ephemeral fixture directory}/tls:/auth/tls:ro
+    ports:
+      - "127.0.0.1:8443:443"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --no-check-certificate -O /dev/null https://127.0.0.1/.well-known/jwks.json || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 2s
+    depends_on:
+      frontend:
+        condition: service_healthy
+    networks:
+      app_net:
+        aliases: [issuer.test]
+
   # The API probes and runs sources on demand, so it has to read the same local board the
   # worker does: a probe that reached the real Greenhouse would make the gate depend on it.
   api:
-    # CI exercises the explicit local-only factory; production always starts app:create_app.
-    command: ["uvicorn", "opportunity_radar.dev.local_app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+    # The production factory, with offline verification: the issuer is the synthetic
+    # https://issuer.test served by ci-tls, trusted through the ephemeral CA alone.
+    command: ["uvicorn", "opportunity_radar.presentation.http.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       DATABASE_URL: postgresql+psycopg://opportunity_radar:ci-password@postgres:5432/opportunity_radar_test
       GREENHOUSE_BASE_URL: http://jobboard:8477
       GROQ_BASE_URL: http://groq:8080/openai/v1
       GROQ_API_KEY: ci-fake
       AI_ENABLED: "true"
+      CLERK_ISSUER: https://issuer.test
+      CLERK_JWKS_URL: https://issuer.test/.well-known/jwks.json
+      CLERK_AUTHORIZED_PARTIES: https://127.0.0.1:8443
+      CLERK_OWNER_SUB: ci-owner-sub
+      # scripts/doctor.py runs through `exec api` and resolves the operational owner too.
+      WORKER_OWNER_SUB: ci-owner-sub
+      FRONTEND_ORIGIN: https://127.0.0.1:8443
+      # Python's default TLS context honours this; only the public CA is mounted.
+      SSL_CERT_FILE: /auth/public/ca.pem
+    volumes:
+      - ${CI_AUTH_DIR:?CI_AUTH_DIR must name the ephemeral fixture directory}/public/ca.pem:/auth/public/ca.pem:ro
     depends_on:
       jobboard:
         condition: service_started
@@ -65,6 +120,8 @@ services:
   worker:
     environment:
       DATABASE_URL: postgresql+psycopg://opportunity_radar:ci-password@postgres:5432/opportunity_radar_test
+      # The scheduled passes act for the same synthetic owner the API recognises.
+      WORKER_OWNER_SUB: ci-owner-sub
       GREENHOUSE_BASE_URL: http://jobboard:8477
       GROQ_BASE_URL: http://groq:8080/openai/v1
       GROQ_API_KEY: ci-fake

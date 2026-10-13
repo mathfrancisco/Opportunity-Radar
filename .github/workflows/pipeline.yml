@@ -176,115 +176,171 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4
+      - name: Prepare the ephemeral authentication directory
+        # Signing keys and the TLS CA live in a per-run temp directory outside the checkout
+        # and the Docker build context. They are never uploaded, logged or baked into images.
+        run: |
+          auth_dir="$(mktemp -d "$RUNNER_TEMP/ci-auth.XXXXXX")"
+          chmod 700 "$auth_dir"
+          {
+            echo "CI_AUTH_DIR=$auth_dir"
+            echo "CI_UID=$(id -u)"
+            echo "CI_GID=$(id -g)"
+            echo "NODE_EXTRA_CA_CERTS=$auth_dir/public/ca.pem"
+          } >> "$GITHUB_ENV"
       - name: Validate Compose configuration
         run: docker compose -f compose.yaml -f compose.ci.yaml config --quiet
+      - name: Generate the run's ephemeral JWT key, JWKS and TLS CA
+        run: |
+          docker compose -f compose.yaml -f compose.ci.yaml run --rm --no-deps -T \
+            auth-tools init --directory /fixtures
+          test -s "$CI_AUTH_DIR/public/jwks.json"
+          if grep -q '"d"' "$CI_AUTH_DIR/public/jwks.json"; then
+            echo "the public JWKS must not carry private fields" >&2
+            exit 1
+          fi
       - name: Start application
-        run: docker compose -f compose.yaml -f compose.ci.yaml up --detach --build api worker frontend
+        run: docker compose -f compose.yaml -f compose.ci.yaml up --detach --build api worker frontend ci-tls
       - name: Verify public API liveness and frontend against the fake Groq stub
         run: |
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/live
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:3000/
+          # The HTTPS front proxies the same frontend and serves the offline JWKS.
+          curl --fail --retry 30 --retry-all-errors --retry-delay 2 --silent --output /dev/null \
+            --cacert "$CI_AUTH_DIR/public/ca.pem" https://127.0.0.1:8443/api/health/live
           curl --fail http://127.0.0.1:8000/health/live | python -c "import json,sys; assert json.load(sys.stdin)['status'] == 'ok'"
           test "$(docker inspect --format '{{.State.Health.Status}}' "$(docker compose -f compose.yaml -f compose.ci.yaml ps -q worker)")" = "healthy"
+      - name: Verify the authentication boundary before seeding
+        run: |
+          authcurl() { bash "$GITHUB_WORKSPACE/tests/e2e/auth/auth-curl.sh" "$@"; }
+          api="https://127.0.0.1:8443/api"
+          check() { # check <expected> <label> <actual>
+            if [ "$3" != "$1" ]; then echo "$2: expected $1, got $3" >&2; exit 1; fi
+            echo "$2: $3"
+          }
+          anon() { curl --silent --output /dev/null --write-out '%{http_code}' --cacert "$CI_AUTH_DIR/public/ca.pem" "$1"; }
+          as() { # as <persona> <case> <path>
+            AUTH_PERSONA="$1" AUTH_CASE="$2" authcurl --silent --output /dev/null --write-out '%{http_code}' "$3"
+          }
+          # Public liveness stays anonymous; private routes refuse a missing bearer.
+          check 200 "anonymous health" "$(anon "$api/health/live")"
+          check 401 "anonymous profile" "$(anon "$api/profile")"
+          check 401 "anonymous sources" "$(anon "$api/sources")"
+          check 200 "owner sources" "$(as owner valid "$api/sources")"
+          check 403 "non-owner sources" "$(as non-owner valid "$api/sources")"
+          # A non-owner is authenticated: the profile route answers a domain result, never 401.
+          non_owner_profile="$(as non-owner valid "$api/profile")"
+          case "$non_owner_profile" in 200|404) echo "non-owner profile: $non_owner_profile" ;; *) echo "non-owner profile: unexpected $non_owner_profile" >&2; exit 1 ;; esac
+          check 401 "expired token" "$(as owner expired "$api/sources")"
+          check 401 "wrong issuer" "$(as owner wrong-issuer "$api/sources")"
+          check 401 "wrong authorized party" "$(as owner wrong-azp "$api/sources")"
+          check 401 "unknown key id" "$(as owner unknown-kid "$api/sources")"
+          # The valid owner token still works after the rejected ones (same key, same JWKS).
+          check 200 "owner sources again" "$(as owner valid "$api/sources")"
       - name: Import and expose the researched company catalog
         run: |
+          authcurl() { bash "$GITHUB_WORKSPACE/tests/e2e/auth/auth-curl.sh" "$@"; }
           docker compose -f compose.yaml -f compose.ci.yaml run --rm \
             -v "$PWD/docs/pesquisas:/imports:ro" \
             api python scripts/import_research_catalog.py \
             --input /imports/auditoria-186-empresas.md \
             --input /imports/empresas-adicionais.md
-          curl --fail http://127.0.0.1:3000/api/companies | \
+          authcurl --fail https://127.0.0.1:8443/api/companies | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 379"
-          curl --fail http://127.0.0.1:3000/api/sources | \
+          authcurl --fail https://127.0.0.1:8443/api/sources | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 16; assert {item['source_type'] for item in data['items']} == {'ashby', 'lever', 'greenhouse', 'remotive'}; assert all(not item['enabled'] for item in data['items']); greenhouse=next(item for item in data['items'] if item['source_type'] == 'greenhouse'); assert greenhouse['evidence_status'] == 'ats_identified'; assert greenhouse['configuration']['board_token'] == 'assemblyai'; remotive=next(item for item in data['items'] if item['source_type'] == 'remotive'); assert remotive['evidence_status'] == 'unverified'; assert remotive['rate_limit_policy']['minimum_run_interval_seconds'] == 21600"
       - name: Verify manual acquisition through the public API
         run: |
-          source_id="$(curl --fail --silent \
+          authcurl() { bash "$GITHUB_WORKSPACE/tests/e2e/auth/auth-curl.sh" "$@"; }
+          source_id="$(authcurl --fail --silent \
             --json '{"source_type":"manual","name":"CI manual intake","enabled":true,"evidence_status":"confirmed","collector_local_tested":true}' \
-            http://127.0.0.1:3000/api/sources | \
+            https://127.0.0.1:8443/api/sources | \
             python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
           run_payload='{"correlation_id":"compose-e2e","inputs":[{"kind":"URL","value":"https://example.com/jobs/ci-1","metadata":{"title":"Senior Python Engineer","company_name":"Example","location_text":"Remote","employment_type":"full-time","salaryRange":{"min":100000,"max":150000,"currency":"USD","interval":"year"},"skills":["Python","ReactJS"]}},{"kind":"TEXT","value":"Required: Python and ReactJS.","metadata":{"title":"Senior Python Engineer","company_name":"Example","location_text":"Remote","employment_type":"full-time","salaryRange":{"min":100000,"max":150000,"currency":"USD","interval":"year"},"skills":["Python","ReactJS"]}}]}'
-          curl --fail --silent --json "$run_payload" \
-            "http://127.0.0.1:3000/api/sources/$source_id/runs" | \
+          authcurl --fail --silent --json "$run_payload" \
+            "https://127.0.0.1:8443/api/sources/$source_id/runs" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'SUCCEEDED'; assert data['items_persisted'] == 2"
-          curl --fail --silent --json "$run_payload" \
-            "http://127.0.0.1:3000/api/sources/$source_id/runs" | \
+          authcurl --fail --silent --json "$run_payload" \
+            "https://127.0.0.1:8443/api/sources/$source_id/runs" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['items_skipped'] == 2"
-          curl --fail --silent "http://127.0.0.1:3000/api/source-runs?source_id=$source_id" | \
+          authcurl --fail --silent "https://127.0.0.1:8443/api/source-runs?source_id=$source_id" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 2"
-          curl --fail --silent --request POST \
-            "http://127.0.0.1:3000/api/opportunities/normalizations/pending?limit=10"
-          curl --fail --silent http://127.0.0.1:3000/api/opportunities | \
+          authcurl --fail --silent --request POST \
+            "https://127.0.0.1:8443/api/opportunities/normalizations/pending?limit=10"
+          authcurl --fail --silent https://127.0.0.1:8443/api/opportunities | \
             python -c "import json,sys; from decimal import Decimal; data=json.load(sys.stdin); assert data['total'] == 1; item=data['items'][0]; assert item['fingerprint_version'] == 'v1'; assert item['work_mode'] == 'REMOTE'; assert item['seniority'] == 'SENIOR'; assert item['contract_type'] == 'FULL_TIME'; assert len(item['compensations']) == 2; assert all(Decimal(value['minimum']) == Decimal('100000') and value['currency'] == 'USD' for value in item['compensations']); assert {skill['canonical_name'] for skill in item['skills']} == {'python', 'react'}; assert all(skill['taxonomy_version'] == 'skills-v5' for skill in item['skills']); assert len(item['occurrences']) == 2"
       - name: Verify deterministic matching through the public API
         run: |
+          authcurl() { bash "$GITHUB_WORKSPACE/tests/e2e/auth/auth-curl.sh" "$@"; }
           # The posting is SENIOR, so the profile accepts SENIOR: a level outside the accepted
           # ones stops at WATCHLIST (F52-04) and this gate checks a RECOMMENDED posting.
           # A fresh database has no profile yet (GET /profile answers 404), so the first
           # write is made against lock 0.
           profile_lock=0
           profile_payload="{\"expected_profile_version\":$profile_lock,\"skills\":[{\"canonical_name\":\"python\"},{\"canonical_name\":\"react\"}],\"preferences\":{\"work_modes\":[\"REMOTE\"],\"contracts\":[\"FULL_TIME\"],\"countries\":[\"BR\"],\"compensation_min\":100000,\"compensation_currency\":\"USD\",\"compensation_period\":\"YEAR\",\"accepted_seniorities\":[\"SENIOR\"]}}"
-          profile_draft="$(curl --fail --silent --json "$profile_payload" http://127.0.0.1:3000/api/profile/versions)"
+          profile_draft="$(authcurl --fail --silent --json "$profile_payload" https://127.0.0.1:8443/api/profile/versions)"
           profile_id="$(python -c "import json,sys; print(json.load(sys.stdin)['id'])" <<< "$profile_draft")"
           profile_lock="$(python -c "import json,sys; print(json.load(sys.stdin)['profile_lock_version'])" <<< "$profile_draft")"
-          profile_published="$(curl --fail --silent --json "{\"expected_profile_version\":$profile_lock}" "http://127.0.0.1:3000/api/profile/versions/$profile_id/publish")"
+          profile_published="$(authcurl --fail --silent --json "{\"expected_profile_version\":$profile_lock}" "https://127.0.0.1:8443/api/profile/versions/$profile_id/publish")"
           profile_lock="$(python -c "import json,sys; print(json.load(sys.stdin)['profile_lock_version'])" <<< "$profile_published")"
-          curl --fail --silent --json "{\"expected_profile_version\":$profile_lock}" \
-            "http://127.0.0.1:3000/api/profile/versions/$profile_id/activate"
-          opportunity_id="$(curl --fail --silent http://127.0.0.1:3000/api/opportunities | python -c "import json,sys; print(json.load(sys.stdin)['items'][0]['id'])")"
+          authcurl --fail --silent --json "{\"expected_profile_version\":$profile_lock}" \
+            "https://127.0.0.1:8443/api/profile/versions/$profile_id/activate"
+          opportunity_id="$(authcurl --fail --silent https://127.0.0.1:8443/api/opportunities | python -c "import json,sys; print(json.load(sys.stdin)['items'][0]['id'])")"
           match_payload="{\"opportunity_id\":\"$opportunity_id\"}"
-          first_match="$(curl --fail --silent --json "$match_payload" http://127.0.0.1:3000/api/matches/evaluate)"
+          first_match="$(authcurl --fail --silent --json "$match_payload" https://127.0.0.1:8443/api/matches/evaluate)"
           first_match_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['rules_version'] == 'matching-v5'; assert data['taxonomy_version'] == 'skills-v5'; assert data['eligibility'] == 'ELIGIBLE'; assert data['verdict'] == 'RECOMMENDED'; assert len(data['input_hash']) == 64; assert len(data['eligibility_details']) == 7; assert len(data['factors']) == 8; print(data['id'])" <<< "$first_match")"
-          second_match_id="$(curl --fail --silent --json "$match_payload" http://127.0.0.1:3000/api/matches/evaluate | python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
+          second_match_id="$(authcurl --fail --silent --json "$match_payload" https://127.0.0.1:8443/api/matches/evaluate | python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
           test "$first_match_id" = "$second_match_id"
-          curl --fail --silent "http://127.0.0.1:3000/api/matches?opportunity_id=$opportunity_id" | \
+          authcurl --fail --silent "https://127.0.0.1:8443/api/matches?opportunity_id=$opportunity_id" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 1; assert data['items'][0]['id'] == '$first_match_id'"
           echo "MATCH_ID=$first_match_id" >> "$GITHUB_ENV"
       - name: Verify semantic analysis without overriding the deterministic result
         run: |
+          authcurl() { bash "$GITHUB_WORKSPACE/tests/e2e/auth/auth-curl.sh" "$@"; }
           # The worker analyses the same assessments, and a live claim answers 409 rather
           # than handing back another holder's stale row. Retrying is the intended reply.
-          first_analysis="$(curl --fail --retry 10 --retry-all-errors --retry-delay 3 --silent --request POST "http://127.0.0.1:3000/api/matches/$MATCH_ID/analysis")"
+          first_analysis="$(authcurl --fail --retry 10 --retry-all-errors --retry-delay 3 --silent --request POST "https://127.0.0.1:8443/api/matches/$MATCH_ID/analysis")"
           first_analysis_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'AI_COMPLETED'; assert data['schema_version'] == 'analysis-v1'; assert data['metrics'] is not None and data['metrics']['total_ms'] > 0 and data['metrics']['output_tokens'] == 422 and data['metrics']['prompt_tokens'] == 2100, data.get('metrics'); assert data['prompt_version'] == 'opportunity_analysis/v1'; assert data['summary']; assert len(data['cache_key']) == 64; print(data['id'])" <<< "$first_analysis")"
-          curl --fail --retry 10 --retry-all-errors --retry-delay 3 --silent --request POST "http://127.0.0.1:3000/api/matches/$MATCH_ID/analysis" | \
+          authcurl --fail --retry 10 --retry-all-errors --retry-delay 3 --silent --request POST "https://127.0.0.1:8443/api/matches/$MATCH_ID/analysis" | \
             python -c "import json,sys; assert json.load(sys.stdin)['id'] == '$first_analysis_id'"
-          curl --fail --silent "http://127.0.0.1:3000/api/matches/$MATCH_ID" | \
+          authcurl --fail --silent "https://127.0.0.1:8443/api/matches/$MATCH_ID" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['verdict'] == 'RECOMMENDED'; assert data['eligibility'] == 'ELIGIBLE'; assert len(data['factors']) == 8; assert data['analysis']['id'] == '$first_analysis_id'; assert data['analysis']['status'] == 'AI_COMPLETED'"
-          unknown_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --request POST \
-            http://127.0.0.1:3000/api/matches/00000000-0000-0000-0000-000000000000/analysis)"
+          unknown_status="$(authcurl --silent --output /dev/null --write-out '%{http_code}' --request POST \
+            https://127.0.0.1:8443/api/matches/00000000-0000-0000-0000-000000000000/analysis)"
           test "$unknown_status" = "404"
-          curl --fail --silent 'http://127.0.0.1:3000/api/analysis-metrics' |             python -c "import json,sys; data=json.load(sys.stdin); assert [item['window'] for item in data['windows']] == ['24h', '7d']; assert isinstance(data['pending'], int) and data['pending'] >= 0; current=[item for item in data['windows'][0]['models'] if item['model_id'] == data['current_model']]; assert len(current) == 1, data; assert current[0]['total_ms_p50'] > 0, current; assert current[0]['completed'] >= 1; assert 0 <= current[0]['failure_rate'] <= 1"
-          analysis_window_status="$(curl --silent --output /dev/null --write-out '%{http_code}' 'http://127.0.0.1:3000/api/analysis-metrics?window=90d')"
+          authcurl --fail --silent 'https://127.0.0.1:8443/api/analysis-metrics' |             python -c "import json,sys; data=json.load(sys.stdin); assert [item['window'] for item in data['windows']] == ['24h', '7d']; assert isinstance(data['pending'], int) and data['pending'] >= 0; current=[item for item in data['windows'][0]['models'] if item['model_id'] == data['current_model']]; assert len(current) == 1, data; assert current[0]['total_ms_p50'] > 0, current; assert current[0]['completed'] >= 1; assert 0 <= current[0]['failure_rate'] <= 1"
+          analysis_window_status="$(authcurl --silent --output /dev/null --write-out '%{http_code}' 'https://127.0.0.1:8443/api/analysis-metrics?window=90d')"
           test "$analysis_window_status" = "422"
       - name: Verify the dashboard read models
         run: |
-          curl --fail --silent http://127.0.0.1:3000/api/overview | \
+          authcurl() { bash "$GITHUB_WORKSPACE/tests/e2e/auth/auth-curl.sh" "$@"; }
+          authcurl --fail --silent https://127.0.0.1:8443/api/overview | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['opportunities_total'] == 1; assert data['assessed_opportunities'] == 1; assert data['verdict_counts']['RECOMMENDED'] == 1; assert data['analyses_degraded'] == 0; assert data['sources_total'] == 17; assert data['sources_failing'] == 0; assert data['pending_normalizations'] == 0; assert data['applications_active'] == 0; assert data['applications_by_stage'] == {}; assert data['follow_ups_due'] == 0"
-          curl --fail --silent 'http://127.0.0.1:3000/api/inbox?order=score' | \
+          authcurl --fail --silent 'https://127.0.0.1:8443/api/inbox?order=score' | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 1; assert data['order'] == 'score'; item=data['items'][0]; assert item['verdict'] == 'RECOMMENDED'; assert item['analysis_status'] == 'AI_COMPLETED'; assert item['company_name'] == 'Example'; assert float(item['score']) >= 0"
-          curl --fail --silent 'http://127.0.0.1:3000/api/inbox?only_assessed=true' | \
+          authcurl --fail --silent 'https://127.0.0.1:8443/api/inbox?only_assessed=true' | \
             python -c "import json,sys; assert json.load(sys.stdin)['total'] == 1"
-          curl --fail --silent 'http://127.0.0.1:3000/api/inbox?verdict=HIGH_PRIORITY' | \
+          authcurl --fail --silent 'https://127.0.0.1:8443/api/inbox?verdict=HIGH_PRIORITY' | \
             python -c "import json,sys; assert json.load(sys.stdin)['total'] == 0"
-          curl --fail --silent 'http://127.0.0.1:3000/api/inbox?minimum_score=99' | \
+          authcurl --fail --silent 'https://127.0.0.1:8443/api/inbox?minimum_score=99' | \
             python -c "import json,sys; assert json.load(sys.stdin)['total'] == 0"
-          curl --fail --silent 'http://127.0.0.1:3000/api/inbox?search=senior%20python' | \
+          authcurl --fail --silent 'https://127.0.0.1:8443/api/inbox?search=senior%20python' | \
             python -c "import json,sys; assert json.load(sys.stdin)['total'] == 1"
-          inbox_opportunity_id="$(curl --fail --silent http://127.0.0.1:3000/api/inbox | python -c "import json,sys; print(json.load(sys.stdin)['items'][0]['opportunity_id'])")"
-          curl --fail --silent "http://127.0.0.1:3000/api/opportunities/$inbox_opportunity_id" | \
+          inbox_opportunity_id="$(authcurl --fail --silent https://127.0.0.1:8443/api/inbox | python -c "import json,sys; print(json.load(sys.stdin)['items'][0]['opportunity_id'])")"
+          authcurl --fail --silent "https://127.0.0.1:8443/api/opportunities/$inbox_opportunity_id" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['fingerprint_version'] == 'v1'; assert len(data['occurrences']) == 2; assert len(data['normalization_results']) == 2; assert len(data['compensations']) == 2; assert all(item['payload_retained'] and item['payload_expired_at'] is None for item in data['occurrences'])"
-          curl --fail --silent 'http://127.0.0.1:3000/api/source-health' | \
+          authcurl --fail --silent 'https://127.0.0.1:8443/api/source-health' | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 17; assert data['failing'] == 0; ran=[item for item in data['items'] if item['last_run_status'] is not None]; assert len(ran) == 1; assert ran[0]['last_run_status'] == 'SUCCEEDED'; assert ran[0]['last_run_items_seen'] == 2; assert ran[0]['last_run_items_skipped'] == 2; assert ran[0]['last_run_duration_seconds'] >= 0; idle=[item for item in data['items'] if item['last_run_id'] is None]; assert len(idle) == 16; assert all(item['last_run_items_seen'] is None for item in idle)"
-          curl --fail --silent 'http://127.0.0.1:3000/api/source-health?only_failing=true' | \
+          authcurl --fail --silent 'https://127.0.0.1:8443/api/source-health?only_failing=true' | \
             python -c "import json,sys; assert json.load(sys.stdin)['total'] == 0"
-          curl --fail --silent 'http://127.0.0.1:3000/api/source-metrics' | \
+          authcurl --fail --silent 'https://127.0.0.1:8443/api/source-metrics' | \
             python -c "import json,sys; data=json.load(sys.stdin); assert [item['window'] for item in data['windows']] == ['24h', '7d'], data; day=data['windows'][0]; assert len(day['sources']) == 17, day['sources']; ran=[item for item in day['sources'] if item['has_runs']]; assert len(ran) == 1, ran; assert ran[0]['runs'] == 2, ran[0]; assert ran[0]['dedupe_rate'] == 0.5, ran[0]; assert ran[0]['error_rate'] == 0.0, ran[0]; assert ran[0]['coverage_state'] == 'SUCCEEDED', ran[0]; assert ran[0]['seniority']['unknown'] == 0, ran[0]; assert ran[0]['seniority']['counts']['SENIOR'] == 2, ran[0]; assert ran[0]['seniority']['mapping_versions'] == {'seniority-v6': 2}, ran[0]; idle=[item for item in day['sources'] if not item['has_runs']]; assert all(item['error_rate'] is None and item['dedupe_rate'] is None for item in idle), idle; assert {item['coverage_state'] for item in idle} == {'NOT_ENABLED'}, {item['coverage_state'] for item in idle}"
-          metrics_status="$(curl --silent --output /dev/null --write-out '%{http_code}' 'http://127.0.0.1:3000/api/source-metrics?window=90d')"
+          metrics_status="$(authcurl --silent --output /dev/null --write-out '%{http_code}' 'https://127.0.0.1:8443/api/source-metrics?window=90d')"
           test "$metrics_status" = "422"
-          curl --fail --silent http://127.0.0.1:3000/api/profile | \
+          authcurl --fail --silent https://127.0.0.1:8443/api/profile | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'ACTIVE'; assert {skill['canonical_name'] for skill in data['skills']} == {'python', 'react'}; assert data['preferences']['countries'] == ['BR']"
-          company_id="$(curl --fail --silent 'http://127.0.0.1:3000/api/companies?page_size=1' | python -c "import json,sys; print(json.load(sys.stdin)['items'][0]['id'])")"
-          curl --fail --silent "http://127.0.0.1:3000/api/companies/$company_id" | \
+          company_id="$(authcurl --fail --silent 'https://127.0.0.1:8443/api/companies?page_size=1' | python -c "import json,sys; print(json.load(sys.stdin)['items'][0]['id'])")"
+          authcurl --fail --silent "https://127.0.0.1:8443/api/companies/$company_id" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['id'] == '$company_id'; assert isinstance(data['aliases'], list); assert isinstance(data['sources'], list)"
           curl --fail --retry 10 --retry-all-errors --retry-delay 2 --silent --output /dev/null http://127.0.0.1:3000/inbox
           curl --fail --silent --output /dev/null "http://127.0.0.1:3000/opportunities/$inbox_opportunity_id"
@@ -295,39 +351,42 @@ jobs:
           echo "OPPORTUNITY_ID=$inbox_opportunity_id" >> "$GITHUB_ENV"
       - name: Verify the application pipeline through the public API
         run: |
-          application="$(curl --fail --silent --json "{\"opportunity_id\":\"$OPPORTUNITY_ID\"}" http://127.0.0.1:3000/api/applications)"
+          authcurl() { bash "$GITHUB_WORKSPACE/tests/e2e/auth/auth-curl.sh" "$@"; }
+          application="$(authcurl --fail --silent --json "{\"opportunity_id\":\"$OPPORTUNITY_ID\"}" https://127.0.0.1:8443/api/applications)"
           application_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['current_stage'] == 'INTERESTED'; assert data['status'] == 'ACTIVE'; assert data['version'] == 1; assert len(data['history']) == 1; assert data['history'][0]['from_stage'] is None; print(data['id'])" <<< "$application")"
-          duplicate_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --json "{\"opportunity_id\":\"$OPPORTUNITY_ID\"}" http://127.0.0.1:3000/api/applications)"
+          duplicate_status="$(authcurl --silent --output /dev/null --write-out '%{http_code}' --json "{\"opportunity_id\":\"$OPPORTUNITY_ID\"}" https://127.0.0.1:8443/api/applications)"
           test "$duplicate_status" = "409"
-          illegal_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --json '{"stage":"OFFER","expected_version":1}' "http://127.0.0.1:3000/api/applications/$application_id/transitions")"
+          illegal_status="$(authcurl --silent --output /dev/null --write-out '%{http_code}' --json '{"stage":"OFFER","expected_version":1}' "https://127.0.0.1:8443/api/applications/$application_id/transitions")"
           test "$illegal_status" = "422"
-          curl --fail --silent --json '{"stage":"APPLIED","expected_version":1,"reason":"submitted"}' \
-            "http://127.0.0.1:3000/api/applications/$application_id/transitions" | \
+          authcurl --fail --silent --json '{"stage":"APPLIED","expected_version":1,"reason":"submitted"}' \
+            "https://127.0.0.1:8443/api/applications/$application_id/transitions" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['current_stage'] == 'APPLIED'; assert data['version'] == 2; assert data['applied_at'] is not None; assert len(data['history']) == 2"
-          curl --fail --silent --request PATCH --json '{"expected_version":2,"next_action":"Enviar follow-up","next_action_at":"2030-01-01T12:00:00Z"}' \
-            "http://127.0.0.1:3000/api/applications/$application_id/next-action" | \
+          authcurl --fail --silent --request PATCH --json '{"expected_version":2,"next_action":"Enviar follow-up","next_action_at":"2030-01-01T12:00:00Z"}' \
+            "https://127.0.0.1:8443/api/applications/$application_id/next-action" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['next_action'] == 'Enviar follow-up'; assert data['version'] == 3"
-          curl --fail --silent "http://127.0.0.1:3000/api/inbox?applied=true" | \
+          authcurl --fail --silent "https://127.0.0.1:8443/api/inbox?applied=true" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['total'] == 1; item=data['items'][0]; assert item['applied'] is True; assert item['application_stage'] == 'APPLIED'; assert item['application_id'] == '$application_id'"
-          curl --fail --silent "http://127.0.0.1:3000/api/inbox?applied=false" | \
+          authcurl --fail --silent "https://127.0.0.1:8443/api/inbox?applied=false" | \
             python -c "import json,sys; assert json.load(sys.stdin)['total'] == 0"
-          curl --fail --silent http://127.0.0.1:3000/api/overview | \
+          authcurl --fail --silent https://127.0.0.1:8443/api/overview | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['applications_active'] == 1; assert data['applications_by_stage'] == {'APPLIED': 1}; assert data['follow_ups_due'] == 0; assert data['follow_up_window_days'] == 7"
           curl --fail --silent --output /dev/null http://127.0.0.1:3000/applications
           echo "APPLICATION_ID=$application_id" >> "$GITHUB_ENV"
       - name: Verify structured logs and the doctor
         run: |
+          authcurl() { bash "$GITHUB_WORKSPACE/tests/e2e/auth/auth-curl.sh" "$@"; }
           docker compose -f compose.yaml -f compose.ci.yaml exec -T api \
             python scripts/doctor.py --json | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'ok', data; names={check['name'] for check in data['checks']}; assert {'environment', 'database', 'catalogue', 'prompts', 'worker jobs', 'source incidents'} <= names; catalogue=next(check for check in data['checks'] if check['name'] == 'catalogue'); assert catalogue['facts']['companies'] == 379; jobs=next(check for check in data['checks'] if check['name'] == 'worker jobs'); assert jobs['status'] == 'ok', jobs; assert set(jobs['facts']['healthy']) == {'collect_enabled_sources', 'normalize_opportunities', 'evaluate_pending', 'analyze_pending', 'expire_raw_payloads'}, jobs; incidents=next(check for check in data['checks'] if check['name'] == 'source incidents'); assert incidents['facts']['webhook_configured'] is False"
           correlation_id="ci-$(date +%s)"
-          curl --fail --silent --output /dev/null --dump-header /tmp/headers \
-            --header "X-Correlation-ID: $correlation_id" http://127.0.0.1:3000/api/overview
+          authcurl --fail --silent --output /dev/null --dump-header /tmp/headers \
+            --header "X-Correlation-ID: $correlation_id" https://127.0.0.1:8443/api/overview
           grep -iq "x-correlation-id: $correlation_id" /tmp/headers
           docker compose -f compose.yaml -f compose.ci.yaml logs --no-color --no-log-prefix api | \
             python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; matched=[line for line in lines if line.get('correlation_id') == '$correlation_id']; assert matched, 'no structured log carried the correlation id'; assert any(line.get('path') == '/overview' and line.get('status_code') == 200 for line in matched), matched"
       - name: Verify PostgreSQL persistence after restart
         run: |
+          authcurl() { bash "$GITHUB_WORKSPACE/tests/e2e/auth/auth-curl.sh" "$@"; }
           before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT version_num FROM alembic_version')"
           companies_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM company_radar.company')"
           raw_items_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM acquisition.raw_item')"
@@ -383,20 +442,34 @@ jobs:
           test "$applications_before" = "$applications_after"
           test "$history_before" = "2"
           test "$history_before" = "$history_after"
-          curl --fail --silent "http://127.0.0.1:3000/api/applications/$APPLICATION_ID" | \
+          authcurl --fail --silent "https://127.0.0.1:8443/api/applications/$APPLICATION_ID" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['current_stage'] == 'APPLIED'; assert data['next_action'] == 'Enviar follow-up'; assert len(data['history']) == 2"
+      - name: Verify authentication survives an API restart
+        run: |
+          authcurl() { bash "$GITHUB_WORKSPACE/tests/e2e/auth/auth-curl.sh" "$@"; }
+          # A new API process loads the JWKS afresh over TLS from the same ephemeral key.
+          docker compose -f compose.yaml -f compose.ci.yaml restart api
+          curl --fail --retry 30 --retry-all-errors --retry-delay 2 --silent --output /dev/null http://127.0.0.1:8000/health/live
+          authcurl --fail --retry 15 --retry-all-errors --retry-delay 2 --silent "https://127.0.0.1:8443/api/applications/$APPLICATION_ID" | \
+            python -c "import json,sys; data=json.load(sys.stdin); assert data['current_stage'] == 'APPLIED'; assert data['id'] == '$APPLICATION_ID'"
+          unauthenticated="$(curl --silent --output /dev/null --write-out '%{http_code}' --cacert "$CI_AUTH_DIR/public/ca.pem" "https://127.0.0.1:8443/api/applications/$APPLICATION_ID")"
+          test "$unauthenticated" = "401"
       - name: Verify the backup and restore gate
         run: |
           docker compose -f compose.yaml -f compose.ci.yaml exec -T api \
             python scripts/backup.py --label ci-e2e
           docker compose -f compose.yaml -f compose.ci.yaml exec -T api \
             python -c "import json,pathlib; manifest=json.loads(pathlib.Path('data/backups/ci-e2e.manifest.json').read_text()); counts=manifest['counts']; assert counts['companies'] == 379, counts; assert counts['opportunities'] == 1, counts; assert counts['applications'] == 1, counts; assert counts['stage_history'] == 2, counts; assert manifest['bytes'] > 0"
-          docker compose -f compose.yaml -f compose.ci.yaml exec -T api \
+          # The restore tool refuses anything but an explicitly isolated test database; this
+          # stack's database is opportunity_radar_test and exists only for this job.
+          docker compose -f compose.yaml -f compose.ci.yaml exec -T \
+            -e RUN_DATABASE_INTEGRATION=1 -e DATABASE_INTEGRATION_ISOLATED=1 api \
             python scripts/restore_check.py --dump data/backups/ci-e2e.dump
       - name: Verify the autonomous cycle without a terminal
         run: |
+          authcurl() { bash "$GITHUB_WORKSPACE/tests/e2e/auth/auth-curl.sh" "$@"; }
           compose="docker compose -f compose.yaml -f compose.ci.yaml"
-          api="http://127.0.0.1:3000/api"
+          api="https://127.0.0.1:8443/api"
 
           # Wait for a condition the worker reaches on its own. Nothing in this step pokes
           # the cycle: every assertion below must become true because a job ran.
@@ -416,11 +489,11 @@ jobs:
 
           # The three preconditions the compose stack deliberately does not bootstrap.
           test -n "$(count_rows 'SELECT version_num FROM alembic_version')"
-          curl --fail --silent "$api/profile" | \
+          authcurl --fail --silent "$api/profile" | \
             python -c "import json,sys; assert json.load(sys.stdin)['status'] == 'ACTIVE'"
           homologated='"enabled":true,"evidence_status":"confirmed","terms_reviewed":true,"collector_local_tested":true,"reviewed_at":"2026-09-01T00:00:00Z"'
           create_source() {
-            curl --fail --silent --json "$1" "$api/sources" | \
+            authcurl --fail --silent --json "$1" "$api/sources" | \
               python -c "import json,sys; print(json.load(sys.stdin)['id'])"
           }
           scheduled_id="$(create_source "{\"source_type\":\"greenhouse\",\"name\":\"CI scheduled board\",\"schedule\":\"* * * * *\",$homologated,\"configuration\":{\"board_token\":\"radar-ci\",\"company_name\":\"Radar CI\"}}")"
@@ -429,28 +502,28 @@ jobs:
 
           # Collection: the enabled, scheduled source runs by the clock, as SCHEDULED.
           wait_for "the scheduled source to collect" \
-            "curl --fail --silent '$api/source-runs?source_id=$scheduled_id' | python -c \"import json,sys; data=json.load(sys.stdin); assert any(item['status'] == 'SUCCEEDED' and item['execution_trigger'] == 'SCHEDULED' and item['items_persisted'] >= 1 for item in data['items'])\""
-          scheduled_run="$(curl --fail --silent "$api/source-runs?source_id=$scheduled_id" | python -c "import json,sys; data=json.load(sys.stdin); run=next(item for item in data['items'] if item['status'] == 'SUCCEEDED'); assert run['correlation_id']; print(run['correlation_id'])")"
+            "authcurl --fail --silent '$api/source-runs?source_id=$scheduled_id' | python -c \"import json,sys; data=json.load(sys.stdin); assert any(item['status'] == 'SUCCEEDED' and item['execution_trigger'] == 'SCHEDULED' and item['items_persisted'] >= 1 for item in data['items'])\""
+          scheduled_run="$(authcurl --fail --silent "$api/source-runs?source_id=$scheduled_id" | python -c "import json,sys; data=json.load(sys.stdin); run=next(item for item in data['items'] if item['status'] == 'SUCCEEDED'); assert run['correlation_id']; print(run['correlation_id'])")"
 
           # One unreachable source does not cost the others their pass.
           wait_for "the unreachable source to fail" \
-            "curl --fail --silent '$api/source-runs?source_id=$broken_id' | python -c \"import json,sys; data=json.load(sys.stdin); assert any(item['status'] == 'FAILED' for item in data['items'])\""
-          curl --fail --silent "$api/source-runs?source_id=$scheduled_id" | \
+            "authcurl --fail --silent '$api/source-runs?source_id=$broken_id' | python -c \"import json,sys; data=json.load(sys.stdin); assert any(item['status'] == 'FAILED' for item in data['items'])\""
+          authcurl --fail --silent "$api/source-runs?source_id=$scheduled_id" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert any(item['status'] == 'SUCCEEDED' for item in data['items'])"
 
           # A source without a schedule stays idle however long the worker runs.
-          curl --fail --silent "$api/source-runs?source_id=$unscheduled_id" | \
+          authcurl --fail --silent "$api/source-runs?source_id=$unscheduled_id" | \
             python -c "import json,sys; assert json.load(sys.stdin)['total'] == 0"
 
           # Normalisation, scoring and the Inbox, with no terminal command in between.
           wait_for "the collected posting to reach the Inbox with a score" \
-            "curl --fail --silent '$api/inbox?search=Senior%20Python%20Engineer' | python -c \"import json,sys; data=json.load(sys.stdin); assert any(item['company_name'] == 'Radar CI' and item['score'] is not None for item in data['items'])\""
-          autonomous="$(curl --fail --silent "$api/inbox?search=Senior%20Python%20Engineer" | python -c "import json,sys; data=json.load(sys.stdin); item=next(entry for entry in data['items'] if entry['company_name'] == 'Radar CI'); print(item['opportunity_id'])")"
+            "authcurl --fail --silent '$api/inbox?search=Senior%20Python%20Engineer' | python -c \"import json,sys; data=json.load(sys.stdin); assert any(item['company_name'] == 'Radar CI' and item['score'] is not None for item in data['items'])\""
+          autonomous="$(authcurl --fail --silent "$api/inbox?search=Senior%20Python%20Engineer" | python -c "import json,sys; data=json.load(sys.stdin); item=next(entry for entry in data['items'] if entry['company_name'] == 'Radar CI'); print(item['opportunity_id'])")"
 
           # The semantic layer is attached or the degradation is visible. Silence is not an
           # accepted outcome: a missing analysis would read as an analysis that passed.
           wait_for "the semantic layer to resolve" \
-            "curl --fail --silent '$api/matches?opportunity_id=$autonomous' | python -c \"import json,sys; data=json.load(sys.stdin); assert data['total'] >= 1; analysis=data['items'][0]['analysis']; assert analysis is not None; assert analysis['status'] in ('AI_COMPLETED', 'AI_FAILED', 'AI_SKIPPED')\""
+            "authcurl --fail --silent '$api/matches?opportunity_id=$autonomous' | python -c \"import json,sys; data=json.load(sys.stdin); assert data['total'] >= 1; analysis=data['items'][0]['analysis']; assert analysis is not None; assert analysis['status'] in ('AI_COMPLETED', 'AI_FAILED', 'AI_SKIPPED')\""
 
           # Every round is greppable: the run carries the correlation id its pass logged.
           $compose logs --no-color --no-log-prefix worker | \
@@ -485,56 +558,57 @@ jobs:
             python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; configured=[line for line in lines if line.get('message') == 'worker jobs configured']; assert configured, 'the worker never reported its job configuration'; jobs=configured[-1]['jobs']; assert jobs == {'collect_enabled_sources': False, 'normalize_opportunities': False, 'evaluate_pending': False, 'analyze_pending': False, 'expire_raw_payloads': False, 'suggest_fields_pending': True}, jobs"
       - name: Verify catalogue curation through the public API
         run: |
-          api="http://127.0.0.1:3000/api"
+          authcurl() { bash "$GITHUB_WORKSPACE/tests/e2e/auth/auth-curl.sh" "$@"; }
+          api="https://127.0.0.1:8443/api"
           # A company registered by the interface grows the catalogue by one, and the same
           # name typed again answers with the existing record instead of a second one.
-          total_before="$(curl --fail --silent "$api/companies?page_size=1" | python -c "import json,sys; print(json.load(sys.stdin)['total'])")"
-          company="$(curl --fail --silent --json '{"name":"CI Curated Company","domain":"https://www.ci-curated.example/careers","priority":"high"}' "$api/companies")"
+          total_before="$(authcurl --fail --silent "$api/companies?page_size=1" | python -c "import json,sys; print(json.load(sys.stdin)['total'])")"
+          company="$(authcurl --fail --silent --json '{"name":"CI Curated Company","domain":"https://www.ci-curated.example/careers","priority":"high"}' "$api/companies")"
           company_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['outcome'] == 'created'; assert data['company']['domain'] == 'ci-curated.example'; print(data['company']['id'])" <<< "$company")"
-          curl --fail --silent "$api/companies?page_size=1" | \
+          authcurl --fail --silent "$api/companies?page_size=1" | \
             python -c "import json,sys; assert json.load(sys.stdin)['total'] == $total_before + 1"
-          curl --fail --silent --json '{"name":"ci curated company"}' "$api/companies" | \
+          authcurl --fail --silent --json '{"name":"ci curated company"}' "$api/companies" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['outcome'] == 'matched'; assert data['company']['id'] == '$company_id'"
-          domain_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --json '{"name":"CI Stranger","domain":"ci-curated.example"}' "$api/companies")"
+          domain_status="$(authcurl --silent --output /dev/null --write-out '%{http_code}' --json '{"name":"CI Stranger","domain":"ci-curated.example"}' "$api/companies")"
           test "$domain_status" = "409"
 
           # An ATS registered by hand becomes an inert proposal, once.
-          curl --fail --silent --json '{"source_type":"greenhouse","endpoint":"https://boards.greenhouse.io/ci-curated","external_key":"ci-curated","evidence_note":"Registered by the CI curation gate."}' \
+          authcurl --fail --silent --json '{"source_type":"greenhouse","endpoint":"https://boards.greenhouse.io/ci-curated","external_key":"ci-curated","evidence_note":"Registered by the CI curation gate."}' \
             "$api/companies/$company_id/sources" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['version'] == 1; assert len(data['revisions']) == 1"
-          proposal="$(curl --fail --silent --request POST "$api/companies/$company_id/detect-source")"
+          proposal="$(authcurl --fail --silent --request POST "$api/companies/$company_id/detect-source")"
           proposal_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['result'] == 'proposed'; assert data['enabled'] is False; print(data['source_id'])" <<< "$proposal")"
-          curl --fail --silent --request POST "$api/companies/$company_id/detect-source" | \
+          authcurl --fail --silent --request POST "$api/companies/$company_id/detect-source" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['result'] == 'already_proposed'; assert data['source_id'] == '$proposal_id'"
-          proposed="$(curl --fail --silent "$api/sources/$proposal_id")"
+          proposed="$(authcurl --fail --silent "$api/sources/$proposal_id")"
           python -c "import json,sys; data=json.load(sys.stdin); assert data['enabled'] is False; assert data['evidence_status'] == 'ats_identified'" <<< "$proposed"
 
           # A stale homologation write is a conflict, not a configuration error.
           version="$(python -c "import json,sys; print(json.load(sys.stdin)['version'])" <<< "$proposed")"
           controls="{\"enabled\":false,\"terms_reviewed\":true,\"collector_local_tested\":false,\"expected_version\":$version}"
-          curl --fail --silent --request PATCH --json "$controls" "$api/sources/$proposal_id" >/dev/null
-          stale_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --request PATCH --json "$controls" "$api/sources/$proposal_id")"
+          authcurl --fail --silent --request PATCH --json "$controls" "$api/sources/$proposal_id" >/dev/null
+          stale_status="$(authcurl --silent --output /dev/null --write-out '%{http_code}' --request PATCH --json "$controls" "$api/sources/$proposal_id")"
           test "$stale_status" = "409"
 
           # A manual run is normalized item by item, as the intake screen shows it.
-          manual_id="$(curl --fail --silent --json '{"source_type":"manual","name":"CI curation intake","enabled":true}' "$api/sources" | python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
-          run_id="$(curl --fail --silent --json '{"inputs":[{"kind":"TEXT","value":"Platform Engineer at CI Curated. Remote.","metadata":{"title":"Platform Engineer","company_name":"CI Curated Company"}}]}' "$api/sources/$manual_id/runs" | python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
-          curl --fail --silent --request POST "$api/opportunities/normalizations/runs/$run_id" | \
+          manual_id="$(authcurl --fail --silent --json '{"source_type":"manual","name":"CI curation intake","enabled":true}' "$api/sources" | python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
+          run_id="$(authcurl --fail --silent --json '{"inputs":[{"kind":"TEXT","value":"Platform Engineer at CI Curated. Remote.","metadata":{"title":"Platform Engineer","company_name":"CI Curated Company"}}]}' "$api/sources/$manual_id/runs" | python -c "import json,sys; print(json.load(sys.stdin)['id'])")"
+          authcurl --fail --silent --request POST "$api/opportunities/normalizations/runs/$run_id" | \
             python -c "import json,sys; items=json.load(sys.stdin)['items']; assert len(items) == 1; assert items[0]['result']['status'] in {'SUCCEEDED', 'REVIEW_REQUIRED', 'FAILED'}"
           curl --fail --silent --output /dev/null "http://127.0.0.1:3000/companies/$company_id"
           # A source created with no terminal reaches confirmed evidence only through a live
           # probe, and then runs once the operator records the rest of the gate.
-          probe_source="$(curl --fail --silent --json '{"source_type":"greenhouse","name":"CI probed board","configuration":{"board_token":"radar-ci","company_name":"Radar CI"}}' "$api/sources")"
+          probe_source="$(authcurl --fail --silent --json '{"source_type":"greenhouse","name":"CI probed board","configuration":{"board_token":"radar-ci","company_name":"Radar CI"}}' "$api/sources")"
           probe_source_id="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['evidence_status'] == 'unverified'; print(data['id'])" <<< "$probe_source")"
           probe_version="$(python -c "import json,sys; print(json.load(sys.stdin)['version'])" <<< "$probe_source")"
-          probed="$(curl --fail --silent --json "{\"expected_version\":$probe_version}" "$api/sources/$probe_source_id/probe")"
+          probed="$(authcurl --fail --silent --json "{\"expected_version\":$probe_version}" "$api/sources/$probe_source_id/probe")"
           probed_version="$(python -c "import json,sys; data=json.load(sys.stdin); assert data['probe']['status'] == 'PASSED', data; assert data['probe']['evidence_recorded'] is True; source=data['source']; assert source['evidence_status'] == 'confirmed'; assert source['collector_local_tested'] is True; assert source['terms_reviewed'] is False; assert source['enabled'] is False; print(source['version'])" <<< "$probed")"
-          too_soon="$(curl --silent --output /dev/null --write-out '%{http_code}' --json "{\"expected_version\":$probed_version}" "$api/sources/$probe_source_id/probe")"
+          too_soon="$(authcurl --silent --output /dev/null --write-out '%{http_code}' --json "{\"expected_version\":$probed_version}" "$api/sources/$probe_source_id/probe")"
           test "$too_soon" = "429"
-          curl --fail --silent --request PATCH --json "{\"enabled\":true,\"terms_reviewed\":true,\"collector_local_tested\":true,\"reviewed_at\":\"2026-09-23T12:00:00Z\",\"expected_version\":$probed_version}" \
+          authcurl --fail --silent --request PATCH --json "{\"enabled\":true,\"terms_reviewed\":true,\"collector_local_tested\":true,\"reviewed_at\":\"2026-09-23T12:00:00Z\",\"expected_version\":$probed_version}" \
             "$api/sources/$probe_source_id" | \
             python -c "import json,sys; assert json.load(sys.stdin)['enabled'] is True"
-          curl --fail --silent --json '{"correlation_id":"ci-probed-board"}' "$api/sources/$probe_source_id/runs" | \
+          authcurl --fail --silent --json '{"correlation_id":"ci-probed-board"}' "$api/sources/$probe_source_id/runs" | \
             python -c "import json,sys; data=json.load(sys.stdin); assert data['status'] == 'SUCCEEDED', data; assert data['items_seen'] >= 1"
       - name: Restore the worker's normal schedule
         # The kill-switch step above force-recreated the worker with every job disabled.
@@ -555,19 +629,26 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
-      - name: Run the F20-47 browser journey (happy path and injected failures)
-        # Runs last, after every count-sensitive assertion above: the journey below seeds
-        # its own profile, source and opportunity, and an earlier step's fixed-count
-        # assertions (e.g. "opportunities_total == 1") would break if it ran before them.
+      - name: Run the offline browser project and the API-authenticated project
+        # NOT full browser acceptance. The frontend needs a real Clerk session, which is an
+        # external gate, and no signed-in bundle is faked. This runs only:
+        #   offline-no-clerk-config  the fail-closed rendering with no Clerk key configured;
+        #   api-authenticated        the API business assertions with a fixture bearer.
+        # The signed-in browser specs (01, 02, 03) live in the separate project
+        # requires-real-clerk-session-external-gate, which CI does not run.
+        # Runs last, after every count-sensitive assertion above: the API project seeds its
+        # own profile, source and opportunity.
         working-directory: tests/e2e/browser
         env:
-          E2E_BASE_URL: http://127.0.0.1:3000
-        run: npx playwright test
-      - name: Upload the browser journey's screenshots and traces
+          E2E_BASE_URL: https://127.0.0.1:8443
+        run: npx playwright test --project=offline-no-clerk-config --project=api-authenticated
+      - name: Upload the offline browser project's screenshots
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: f20-47-browser-e2e-evidence
+          # Only the offline project produces browser output; the API project is Node-side
+          # and its bearer never reaches a trace, report or screenshot.
+          name: offline-browser-evidence
           path: |
             tests/e2e/browser/test-results/
             tests/e2e/browser/report/
@@ -579,6 +660,10 @@ jobs:
       - name: Stop application
         if: always()
         run: docker compose -f compose.yaml -f compose.ci.yaml down --volumes --remove-orphans
+      - name: Remove the ephemeral authentication directory
+        if: always()
+        run: |
+          if [ -n "${CI_AUTH_DIR:-}" ]; then rm -rf "$CI_AUTH_DIR"; fi
 
   publish:
     name: Publish / ${{ matrix.image }}
