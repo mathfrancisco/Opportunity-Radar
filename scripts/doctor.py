@@ -397,9 +397,16 @@ def check_ai(settings: Settings) -> Check:
 
 def check_analysis(settings: Settings) -> Check:
     """Backlog and 24-hour latency of the current model, against the SPEC target."""
+    owner_sub = operational_owner(settings)
+    if owner_sub is None:
+        return Check(
+            "analysis",
+            WARN,
+            "could not compute owner-scoped analysis: WORKER_OWNER_SUB is required",
+        )
     try:
         with Session(create_database_engine(settings.database_url)) as session:
-            pending = MatchingService(session).count_pending_analysis(
+            pending = MatchingService(session, owner_sub).count_pending_analysis(
                 eligible_verdicts=settings.analysis_eligible_verdicts,
                 cooldown=timedelta(seconds=settings.analysis_retry_cooldown_seconds),
                 attempt_window=timedelta(seconds=settings.analysis_retry_attempt_window_seconds),

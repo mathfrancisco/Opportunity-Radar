@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.collectors import CollectorRegistry
@@ -32,6 +32,9 @@ from opportunity_radar.acquisition.models import (
 )
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
+from opportunity_radar.profile.domain import EmploymentPreference, ProfileSnapshot
+from opportunity_radar.profile.models import CareerProfileModel
+from opportunity_radar.profile.service import ProfileService
 from scripts import collect
 
 
@@ -119,12 +122,14 @@ class _StubCollector:
     def __init__(self, source_type: str) -> None:
         self.source_type = source_type
         self.capabilities = CollectorCapabilities(keyword_search=False)
+        self.requests: list[CollectionRequest] = []
 
     async def healthcheck(self, context: object = None) -> HealthResult:
         del context
         return HealthResult(healthy=True)
 
     async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        self.requests.append(request)
         yield CollectedItem(
             source_type=self.source_type,
             external_id=uuid4().hex,
@@ -172,6 +177,27 @@ def _cleanup(session: Session, source_ids: list[UUID]) -> None:
     session.commit()
 
 
+def _seed_active_profile(session: Session, owner_sub: str) -> None:
+    ProfileService(session, owner_sub).create_active_version(
+        ProfileSnapshot(
+            skills=(),
+            experiences=(),
+            projects=(),
+            preferences=EmploymentPreference(target_role_families=("DATA",)),
+        ),
+        expected_profile_version=0,
+    )
+
+
+def _cleanup_profile(session: Session, owner_sub: str) -> None:
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == owner_sub)
+    )
+    if profile is not None:
+        session.delete(profile)
+        session.commit()
+
+
 @pytest.mark.integration
 @_requires_database
 def test_collect_one_catches_a_bare_exception_and_reports_it_as_error(monkeypatch) -> None:
@@ -208,13 +234,45 @@ def test_collect_one_catches_a_bare_exception_and_reports_it_as_error(monkeypatc
 
 @pytest.mark.integration
 @_requires_database
+def test_collect_one_without_worker_owner_succeeds_without_profile_filter(monkeypatch) -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    source_type = f"collect_test_no_owner_{uuid4().hex[:8]}"
+    collector = _StubCollector(source_type)
+    with Session(engine) as session:
+        source_id = _seed_source(session, source_type=source_type)
+        source = session.get(SourceDefinitionModel, source_id)
+        assert source is not None
+
+        monkeypatch.setattr(collect, "_registry", lambda settings: CollectorRegistry([collector]))
+        try:
+            result = asyncio.run(
+                collect._collect_one(
+                    engine,
+                    source,
+                    mode=CollectionMode.DISCOVERY,
+                    keywords=(),
+                    max_items=None,
+                    correlation_id="test",
+                    settings=Settings(worker_owner_sub=None),  # type: ignore[call-arg]
+                )
+            )
+            assert result["status"] == "SUCCEEDED"
+            assert collector.requests[0].target_role_families == ()
+        finally:
+            _cleanup(session, [source_id])
+
+
+@pytest.mark.integration
+@_requires_database
 def test_collect_runs_two_sources_concurrently_with_independent_sessions(monkeypatch) -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     type_a = f"collect_test_ok_a_{uuid4().hex[:8]}"
     type_b = f"collect_test_ok_b_{uuid4().hex[:8]}"
+    owner_sub = f"collect-test-owner-{uuid4().hex[:8]}"
     with Session(engine) as session:
         id_a = _seed_source(session, source_type=type_a)
         id_b = _seed_source(session, source_type=type_b)
+        _seed_active_profile(session, owner_sub)
         source_a = session.get(SourceDefinitionModel, id_a)
         source_b = session.get(SourceDefinitionModel, id_b)
         assert source_a is not None and source_b is not None
@@ -226,11 +284,6 @@ def test_collect_runs_two_sources_concurrently_with_independent_sessions(monkeyp
                 [_StubCollector(type_a), _StubCollector(type_b)]
             ),
         )
-        monkeypatch.setattr(
-            collect,
-            "active_profile_target_role_families",
-            lambda session: lambda: (),
-        )
         try:
             report = asyncio.run(
                 collect._collect(
@@ -240,7 +293,7 @@ def test_collect_runs_two_sources_concurrently_with_independent_sessions(monkeyp
                     keywords=(),
                     max_items=None,
                     correlation_id="test",
-                    settings=Settings(),  # type: ignore[call-arg]
+                    settings=Settings(worker_owner_sub=owner_sub),  # type: ignore[call-arg]
                     concurrency=2,
                 )
             )
@@ -248,4 +301,5 @@ def test_collect_runs_two_sources_concurrently_with_independent_sessions(monkeyp
             assert statuses[source_a.name] == "SUCCEEDED"
             assert statuses[source_b.name] == "SUCCEEDED"
         finally:
+            _cleanup_profile(session, owner_sub)
             _cleanup(session, [id_a, id_b])

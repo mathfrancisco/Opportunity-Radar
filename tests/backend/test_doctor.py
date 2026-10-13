@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 from opportunity_radar.platform.config import Settings
 from scripts import doctor
@@ -197,6 +198,100 @@ def test_check_ai_is_ok_when_enabled_with_a_key() -> None:
     check = check_ai(_settings(ai_enabled=True, groq_api_key="sk-fake"))
 
     assert check.status == doctor.OK
+
+
+def test_check_analysis_warns_when_worker_owner_is_missing() -> None:
+    check = doctor.check_analysis(_settings(worker_owner_sub="  "))
+
+    assert check.status == doctor.WARN
+    assert "WORKER_OWNER_SUB" in check.detail
+
+
+def test_check_analysis_passes_operational_owner_to_matching_service(monkeypatch) -> None:
+    seen: dict[str, str | None] = {}
+
+    class _Matching:
+        def __init__(self, session, owner_sub=None) -> None:
+            del session
+            seen["owner_sub"] = owner_sub
+
+        def count_pending_analysis(self, **kwargs) -> int:
+            del kwargs
+            return 0
+
+    class _Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            del args
+
+    monkeypatch.setattr(doctor, "create_database_engine", lambda _: object())
+    monkeypatch.setattr(doctor, "Session", lambda _: _Session())
+    monkeypatch.setattr(doctor, "MatchingService", _Matching)
+    monkeypatch.setattr(
+        doctor,
+        "analysis_metrics",
+        lambda *args, **kwargs: SimpleNamespace(
+            windows=[SimpleNamespace(for_model=lambda _model: None)]
+        ),
+    )
+
+    check = doctor.check_analysis(_settings(worker_owner_sub="doctor-test-owner"))
+
+    assert check.status == doctor.OK
+    assert seen["owner_sub"] == "doctor-test-owner"
+
+
+def test_check_funnel_warns_when_worker_owner_is_missing() -> None:
+    check = doctor.check_funnel(_settings(worker_owner_sub="  "))
+
+    assert check.status == doctor.WARN
+    assert "WORKER_OWNER_SUB" in check.detail
+
+
+def test_check_funnel_uses_operational_owner(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    class _Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            del args
+
+    class _Profile:
+        def __init__(self, session, owner_sub) -> None:
+            del session
+            seen["owner_sub"] = owner_sub
+
+        def get_active(self):
+            return SimpleNamespace(
+                snapshot=SimpleNamespace(
+                    preferences=SimpleNamespace(target_role_families=("DATA",))
+                )
+            )
+
+    monkeypatch.setattr(doctor, "create_database_engine", lambda _: object())
+    monkeypatch.setattr(doctor, "Session", lambda _: _Session())
+    monkeypatch.setattr(doctor, "ProfileService", _Profile)
+    monkeypatch.setattr(
+        doctor,
+        "funnel_report",
+        lambda session, *, target_role_families: seen.update(
+            {"families": target_role_families}
+        ) or object(),
+    )
+    monkeypatch.setattr(
+        doctor,
+        "describe_funnel",
+        lambda report: Check("funnel", doctor.OK, "stub"),
+    )
+
+    check = doctor.check_funnel(_settings(worker_owner_sub="doctor-test-owner"))
+
+    assert check.status == doctor.OK
+    assert seen == {"owner_sub": "doctor-test-owner", "families": ("DATA",)}
 
 
 @dataclass(frozen=True)
