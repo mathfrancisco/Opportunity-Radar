@@ -1,3 +1,4 @@
+import { installTestAuth } from '../../test/auth'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createSavedSearch, getSavedSearches, openSavedSearch } from './api'
 
@@ -56,3 +57,5 @@ describe('saved searches API', () => {
     })
   })
 })
+
+installTestAuth()

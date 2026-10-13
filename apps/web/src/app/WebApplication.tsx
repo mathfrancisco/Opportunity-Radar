@@ -1,10 +1,9 @@
 import { ClerkProvider, useAuth } from '@clerk/react'
-import { type ReactNode, useLayoutEffect } from 'react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Fragment, type ReactNode, useLayoutEffect, useRef } from 'react'
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import { App } from './App'
-import { AuthenticationControls } from './AuthenticationControls'
-import { setAuthTokenGetter } from '../lib/api'
+import { setAuthSession, setAuthTokenGetter } from '../lib/api'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -12,15 +11,49 @@ const queryClient = new QueryClient({
   },
 })
 
-function ClerkTokenBridge({ children }: { children: ReactNode }) {
-  const { getToken } = useAuth()
+/**
+ * Wires Clerk into the API layer and isolates the query cache per identity.
+ *
+ * The cache is dropped synchronously during render when the identity changes, and children are
+ * remounted under an identity key, so no observer can keep showing the previous user's data.
+ */
+/**
+ * Wires Clerk into the API layer and isolates the query cache per identity.
+ *
+ * The cache is dropped synchronously during render when the identity changes, and children are
+ * remounted under an identity key, so no observer can keep showing the previous user's data.
+ */
+export function ClerkTokenBridge({ children }: { children: ReactNode }) {
+  const { getToken, isSignedIn, userId } = useAuth()
+  const queryClient = useQueryClient()
+  const identity = isSignedIn === true && userId ? userId : null
+  const previousIdentity = useRef(identity)
+
+  if (previousIdentity.current !== identity) {
+    previousIdentity.current = identity
+    void queryClient.cancelQueries()
+    queryClient.clear()
+  }
 
   useLayoutEffect(() => {
     setAuthTokenGetter(getToken)
-    return () => setAuthTokenGetter(null)
   }, [getToken])
 
-  return children
+  useLayoutEffect(() => {
+    setAuthSession(identity, identity !== null)
+  }, [identity])
+
+  useLayoutEffect(
+    () => () => {
+      setAuthTokenGetter(null)
+      setAuthSession(null, false)
+      void queryClient.cancelQueries()
+      queryClient.clear()
+    },
+    [queryClient],
+  )
+
+  return <Fragment key={identity ?? 'signed-out'}>{children}</Fragment>
 }
 
 export function WebApplication({ publishableKey }: { publishableKey: string }) {
@@ -39,15 +72,21 @@ export function WebApplication({ publishableKey }: { publishableKey: string }) {
   }
 
   return (
-    <ClerkProvider afterSignOutUrl="/" publishableKey={key}>
-      <ClerkTokenBridge>
-        <AuthenticationControls />
-        <QueryClientProvider client={queryClient}>
-          <BrowserRouter>
+    <ClerkProvider
+      afterSignOutUrl="/"
+      publishableKey={key}
+      signInFallbackRedirectUrl="/"
+      signInUrl="/sign-in"
+      signUpFallbackRedirectUrl="/"
+      signUpUrl="/sign-up"
+    >
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <ClerkTokenBridge>
             <App />
-          </BrowserRouter>
-        </QueryClientProvider>
-      </ClerkTokenBridge>
+          </ClerkTokenBridge>
+        </BrowserRouter>
+      </QueryClientProvider>
     </ClerkProvider>
   )
 }

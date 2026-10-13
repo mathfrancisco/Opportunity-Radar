@@ -1,3 +1,4 @@
+import { installTestAuth } from '../test/auth'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
 import { MemoryRouter } from 'react-router-dom'
@@ -71,3 +72,5 @@ describe('StatusPage', () => {
     expect([...container.querySelectorAll('a')].find((link) => link.textContent === 'Ver fontes')).toBeUndefined()
   })
 })
+
+installTestAuth()

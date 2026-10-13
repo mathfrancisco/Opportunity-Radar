@@ -1,3 +1,4 @@
+import { installTestAuth } from '../../test/auth'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   getApplicationForOpportunity,
@@ -157,3 +158,5 @@ describe('getApplicationForOpportunity', () => {
     expect(found?.id).toBe('application-1')
   })
 })
+
+installTestAuth()

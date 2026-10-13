@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { PageHeader } from './PageHeader'
 import { Sidebar, type NavigationPath } from './Sidebar'
 import { MobileNavigationDialog } from './ui/MobileNavigationDialog'
+import { AuthenticationControls } from '../app/AuthenticationControls'
 
 export interface AppShellProps {
   /** Omitted on pages that are reached from a link rather than from the nav. */
@@ -74,6 +75,8 @@ export function AppShell({
       >
         Pular para o conteúdo
       </a>
+
+      <AuthenticationControls />
 
       <div className="flex items-center gap-3 border-b border-line-strong bg-sidebar px-4 py-2 md:hidden">
         <MobileNavigationDialog

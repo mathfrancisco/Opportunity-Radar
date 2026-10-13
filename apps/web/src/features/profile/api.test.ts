@@ -1,3 +1,4 @@
+import { installTestAuth } from '../../test/auth'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConflictError } from '../../lib/api'
 import { emptyPreferences, getActiveProfile, saveProfileVersion } from './api'
@@ -175,3 +176,5 @@ describe('saveProfileVersion', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })
+
+installTestAuth()

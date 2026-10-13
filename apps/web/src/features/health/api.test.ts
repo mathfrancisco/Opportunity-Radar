@@ -1,3 +1,4 @@
+import { installTestAuth } from '../../test/auth'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { setAuthTokenGetter } from '../../lib/api'
 import { getReadiness } from './api'
@@ -52,3 +53,5 @@ describe('getReadiness', () => {
     await expect(getReadiness()).rejects.toThrow('503')
   })
 })
+
+installTestAuth()

@@ -1,3 +1,4 @@
+import { installTestAuth } from '../test/auth'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -554,3 +555,5 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     expect(before(deterministic, analysis)).toBe(true)
   })
 })
+
+installTestAuth()

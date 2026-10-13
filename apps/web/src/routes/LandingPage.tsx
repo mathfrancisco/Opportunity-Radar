@@ -24,12 +24,12 @@ export function LandingPage() {
           </li>
         </ul>
         <div className="mt-8 flex flex-wrap gap-3">
-          <SignInButton>
+          <SignInButton fallbackRedirectUrl="/" mode="redirect">
             <button className="min-h-11 rounded-control border border-line-strong bg-surface px-5 text-sm font-semibold text-ink" type="button">
               Entrar
             </button>
           </SignInButton>
-          <SignUpButton>
+          <SignUpButton fallbackRedirectUrl="/" mode="redirect">
             <button className="min-h-11 rounded-control bg-accent px-5 text-sm font-semibold text-surface" type="button">
               Criar conta
             </button>

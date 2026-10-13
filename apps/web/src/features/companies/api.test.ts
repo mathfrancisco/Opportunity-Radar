@@ -1,3 +1,4 @@
+import { installTestAuth } from '../../test/auth'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getCompanies } from './api'
 
@@ -58,3 +59,5 @@ describe('getCompanies', () => {
     )
   })
 })
+
+installTestAuth()

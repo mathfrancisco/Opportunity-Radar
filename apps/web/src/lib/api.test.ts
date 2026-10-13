@@ -5,11 +5,13 @@ import {
   failureFrom,
   privateFetch,
   requestFailure,
+  setAuthSession,
   setAuthTokenGetter,
 } from './api'
 
 afterEach(() => {
   setAuthTokenGetter(null)
+  setAuthSession(null, false)
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -133,6 +135,7 @@ describe('privateFetch', () => {
     const log = vi.spyOn(console, 'log')
     vi.stubGlobal('fetch', fetchMock)
     setAuthTokenGetter(getToken)
+    setAuthSession('user-a', true)
 
     await privateFetch('/private/one')
     await privateFetch('/private/two')
@@ -153,9 +156,28 @@ describe('privateFetch', () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
     setAuthTokenGetter(async () => token)
+    setAuthSession('user-a', true)
 
     await expect(privateFetch('/private/one')).rejects.toThrow('Entre na sua conta')
 
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('does not send a resolved token after auth identity changes', async () => {
+    let resolveToken: (token: string) => void = () => undefined
+    const tokenPromise = new Promise<string>((resolve) => {
+      resolveToken = resolve
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    setAuthTokenGetter(() => tokenPromise)
+    setAuthSession('user-a', true)
+
+    const request = privateFetch('/private/stale')
+    setAuthSession('user-b', true)
+    resolveToken('stale-token')
+
+    await expect(request).rejects.toThrow('Entre na sua conta')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })

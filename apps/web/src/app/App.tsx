@@ -31,7 +31,11 @@ function AuthenticationRoute({ kind }: { kind: 'sign-in' | 'sign-up' }) {
 
   if (!isLoaded) return <AuthPending />
   if (isSignedIn) return <Navigate replace to="/" />
-  return kind === 'sign-in' ? <SignIn /> : <SignUp />
+  return kind === 'sign-in' ? (
+    <SignIn fallbackRedirectUrl="/" path="/sign-in" routing="path" signUpUrl="/sign-up" />
+  ) : (
+    <SignUp fallbackRedirectUrl="/" path="/sign-up" routing="path" signInUrl="/sign-in" />
+  )
 }
 
 export function App() {

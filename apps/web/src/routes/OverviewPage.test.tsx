@@ -1,3 +1,4 @@
+import { installTestAuth } from '../test/auth'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
 import { MemoryRouter } from 'react-router-dom'
@@ -7,6 +8,8 @@ import { render } from '../components/testing'
 import { OverviewPage, SavedSearchesWithNews, StartupShortcut } from './OverviewPage'
 
 vi.mock('@clerk/react', () => ({
+  Show: ({ children }: { children?: unknown }) => children ?? null,
+  UserButton: () => null,
   SignIn: () => null,
   SignUp: () => null,
   useAuth: () => ({ getToken: async () => 'vitest-token', isLoaded: true, isSignedIn: true }),
@@ -442,3 +445,5 @@ describe('StartupShortcut', () => {
     expect(link?.getAttribute('href')).toBe('/inbox?only_startups=true')
   })
 })
+
+installTestAuth()

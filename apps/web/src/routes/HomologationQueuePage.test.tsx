@@ -1,3 +1,4 @@
+import { installTestAuth } from '../test/auth'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { render } from '../components/testing'
@@ -25,3 +26,5 @@ describe('HomologationQueuePage', () => {
     ).toBe('page')
   })
 })
+
+installTestAuth()
