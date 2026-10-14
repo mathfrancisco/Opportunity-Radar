@@ -2,10 +2,13 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { PageHeader } from './PageHeader'
 import { Sidebar, type NavigationPath } from './Sidebar'
 import { MobileNavigationDialog } from './ui/MobileNavigationDialog'
+import { AuthenticationControls } from '../app/AuthenticationControls'
 
 export interface AppShellProps {
   /** Omitted on pages that are reached from a link rather than from the nav. */
   current?: NavigationPath
+  /** Owner-only views use the extended navigation when their route is authorized. */
+  isOwner?: boolean
   /** Petrol kicker above the title (SPEC 54: "Decidir"); drawn only when given. */
   eyebrow?: string
   title: string
@@ -28,6 +31,7 @@ const drawerId = 'sidebar'
  */
 export function AppShell({
   current,
+  isOwner = false,
   eyebrow,
   title,
   description,
@@ -72,6 +76,8 @@ export function AppShell({
         Pular para o conteúdo
       </a>
 
+      <AuthenticationControls />
+
       <div className="flex items-center gap-3 border-b border-line-strong bg-sidebar px-4 py-2 md:hidden">
         <MobileNavigationDialog
           contentClassName="fixed inset-y-0 left-0 z-20 w-60 overflow-y-auto border-r border-line-strong bg-sidebar p-3 shadow-overlay md:hidden"
@@ -90,14 +96,14 @@ export function AppShell({
             </button>
           }
         >
-          <Sidebar current={current} onNavigate={() => setOpen(false)} />
+          <Sidebar current={current} isOwner={isOwner} onNavigate={() => setOpen(false)} />
         </MobileNavigationDialog>
       </div>
 
       <aside
         className="hidden w-60 shrink-0 border-r border-line-strong bg-sidebar p-3 md:sticky md:top-0 md:block md:h-screen md:overflow-y-auto"
       >
-        <Sidebar current={current} />
+        <Sidebar current={current} isOwner={isOwner} />
       </aside>
 
       <main className="min-w-0 flex-1 p-4 md:p-8">

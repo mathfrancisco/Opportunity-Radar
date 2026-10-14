@@ -184,6 +184,7 @@ export function CompaniesPage() {
 
   return (
     <PageShell
+      isOwner
       current="/companies"
       eyebrow="Catálogo local"
       title="Empresas"

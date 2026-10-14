@@ -1,3 +1,4 @@
+import { installTestAuth } from '../test/auth'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -170,3 +171,5 @@ describe('SourceControlsPanel — agenda', () => {
     expect(container.textContent).toContain('A fonte mudou depois que você a abriu')
   })
 })
+
+installTestAuth()

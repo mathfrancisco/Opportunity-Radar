@@ -1,4 +1,4 @@
-import { apiUrl, failureFrom, requestFailure } from '../../lib/api'
+import { apiUrl, failureFrom, privateFetch, requestFailure } from '../../lib/api'
 
 export interface SourceHealth {
   sourceDefinitionId: string
@@ -136,7 +136,7 @@ export async function getSourceHealth(params?: {
   status?: 'proposed'
 }): Promise<SourceHealthList> {
   const query = params?.status ? `?status=${encodeURIComponent(params.status)}` : ''
-  const response = await fetch(apiUrl(`/source-health${query}`), {
+  const response = await privateFetch(apiUrl(`/source-health${query}`), {
     headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
@@ -152,7 +152,7 @@ export async function getSourceHealth(params?: {
 }
 
 export async function getSourceCoverage(): Promise<SourceCoverageReport> {
-  const response = await fetch(apiUrl('/source-coverage'), {
+  const response = await privateFetch(apiUrl('/source-coverage'), {
     headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
@@ -174,7 +174,7 @@ export async function getSourceRuns(sourceId: string, limit = 10): Promise<Sourc
     page: '1',
     page_size: String(limit),
   })
-  const response = await fetch(apiUrl(`/source-runs?${params.toString()}`), {
+  const response = await privateFetch(apiUrl(`/source-runs?${params.toString()}`), {
     headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
@@ -190,7 +190,7 @@ export async function getSourceRuns(sourceId: string, limit = 10): Promise<Sourc
  * error belongs in the run history rather than in a toast.
  */
 export async function runSource(sourceId: string): Promise<SourceRun> {
-  const response = await fetch(apiUrl(`/sources/${sourceId}/runs`), {
+  const response = await privateFetch(apiUrl(`/sources/${sourceId}/runs`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ correlation_id: `dashboard-${Date.now()}` }),
@@ -308,7 +308,7 @@ function parseSource(value: unknown): SourceDefinition | null {
 }
 
 async function send(path: string, method: string, payload: unknown): Promise<unknown> {
-  const response = await fetch(apiUrl(path), {
+  const response = await privateFetch(apiUrl(path), {
     method,
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: payload === undefined ? undefined : JSON.stringify(payload),
@@ -318,7 +318,7 @@ async function send(path: string, method: string, payload: unknown): Promise<unk
 }
 
 export async function getSource(sourceId: string): Promise<SourceDefinition> {
-  const response = await fetch(apiUrl(`/sources/${sourceId}`), {
+  const response = await privateFetch(apiUrl(`/sources/${sourceId}`), {
     headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw await failureFrom(response)

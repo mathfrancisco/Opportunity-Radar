@@ -12,7 +12,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import (
@@ -30,10 +29,8 @@ from opportunity_radar.opportunities.models import (
     RelevanceMarkModel,
     SourceOccurrenceModel,
 )
-from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
-from opportunity_radar.presentation.http.dependencies import get_session
+from tests.backend.support.auth import OWNER_SUB, authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -305,6 +302,7 @@ def test_multisource_opportunity_counts_once(session: Session) -> None:
         )
         session.add(
             RelevanceMarkModel(
+                owner_sub=OWNER_SUB,
                 opportunity_id=opportunity.id,
                 relevant=index < 10,
                 marked_at=NOW,
@@ -340,6 +338,7 @@ def test_metrics_expose_window_denominator_support_and_null(session: Session) ->
     opportunity = _opportunity(session, company, (source,), tag="missing-publication")
     session.add(
         RelevanceMarkModel(
+            owner_sub=OWNER_SUB,
             opportunity_id=opportunity.id, relevant=True, marked_at=NOW
         )
     )
@@ -392,9 +391,11 @@ def test_absorbed_duplicate_is_not_a_new_unique_opportunity(session: Session) ->
     session.add_all(
         [
             RelevanceMarkModel(
+                owner_sub=OWNER_SUB,
                 opportunity_id=survivor.id, relevant=True, marked_at=NOW
             ),
             RelevanceMarkModel(
+                owner_sub=OWNER_SUB,
                 opportunity_id=duplicate.id, relevant=False, marked_at=NOW
             ),
         ]
@@ -428,16 +429,19 @@ def test_mark_after_now_does_not_change_historical_report(session: Session) -> N
     session.add_all(
         [
             RelevanceMarkModel(
+                owner_sub=OWNER_SUB,
                 opportunity_id=in_window.id,
                 relevant=True,
                 marked_at=NOW - timedelta(days=1),
             ),
             RelevanceMarkModel(
+                owner_sub=OWNER_SUB,
                 opportunity_id=in_window.id,
                 relevant=False,
                 marked_at=NOW + timedelta(seconds=1),
             ),
             RelevanceMarkModel(
+                owner_sub=OWNER_SUB,
                 opportunity_id=old_only.id,
                 relevant=False,
                 marked_at=since - timedelta(seconds=1),
@@ -525,6 +529,7 @@ def test_one_negative_mark_reports_zero_judgement_rate(session: Session) -> None
     opportunity = _opportunity(session, company, (source,), tag="negative-mark")
     session.add(
         RelevanceMarkModel(
+            owner_sub=OWNER_SUB,
             opportunity_id=opportunity.id, relevant=False, marked_at=NOW
         )
     )
@@ -547,6 +552,7 @@ def test_zero_requests_leave_useful_yield_null(session: Session) -> None:
     opportunity = _opportunity(session, company, (source,), tag="zero-requests")
     session.add(
         RelevanceMarkModel(
+            owner_sub=OWNER_SUB,
             opportunity_id=opportunity.id, relevant=True, marked_at=NOW
         )
     )
@@ -561,14 +567,9 @@ def test_zero_requests_leave_useful_yield_null(session: Session) -> None:
 
 def test_endpoint_reports_funnel_block(session: Session) -> None:
     _seed_funnel(session)
-    app = create_app(Settings(database_url=os.environ["DATABASE_URL"]))
-    app.dependency_overrides[get_session] = lambda: session
-    client = TestClient(app)
+    client = authenticated_test_client(os.environ["DATABASE_URL"], session=session)
 
-    try:
-        response = client.get("/search-metrics", params={"window": "7d"})
-    finally:
-        app.dependency_overrides.pop(get_session)
+    response = client.get("/search-metrics", params={"window": "7d"})
 
     assert response.status_code == 200
     body = response.json()

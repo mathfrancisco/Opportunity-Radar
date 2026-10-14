@@ -13,7 +13,10 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.orm import Session
 
-from opportunity_radar.dashboard.queries import InboxQuery, list_opportunity_inbox
+from opportunity_radar.dashboard.queries import (
+    InboxQuery,
+)
+from opportunity_radar.dashboard.queries import list_opportunity_inbox as _list_opportunity_inbox
 from opportunity_radar.platform.database import create_database_engine
 
 from .test_queries import _company, _opportunity
@@ -27,6 +30,11 @@ pytestmark = [
 ]
 
 NOW = datetime.now(UTC)
+OWNER_SUB = "user-search-fulltext"
+
+
+def list_opportunity_inbox(session: Session, query: InboxQuery):
+    return _list_opportunity_inbox(session, query, owner_sub=OWNER_SUB)
 
 
 def _session() -> Session:

@@ -15,17 +15,24 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from opportunity_radar.dashboard.queries import list_opportunity_inbox
 from opportunity_radar.platform.database import create_database_engine
 from scripts import eval_search
 
 from .test_queries import _company, _opportunity
 
 NOW = datetime.now(UTC)
+_TEST_OWNER_SUB = "test-eval-search-level-cases-owner"
 
 requires_database = pytest.mark.skipif(
     os.environ.get("RUN_DATABASE_INTEGRATION") != "1",
     reason="database integration is enabled only in the isolated CI database",
 )
+
+
+@pytest.fixture(autouse=True)
+def _owner_scoped_inbox(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(eval_search, "list_opportunity_inbox", list_opportunity_inbox)
 
 
 def test_level_cases_include_junior_remote_and_forbid_senior_or_higher() -> None:
@@ -81,7 +88,9 @@ def test_level_cases_run_against_a_corpus_and_flag_a_senior_in_the_top() -> None
             )
         session.commit()
 
-        clean = eval_search.evaluate_level_cases(session, "fulltext", eval_search.LEVEL_CASES)
+        clean = eval_search.evaluate_level_cases(
+            session, "fulltext", eval_search.LEVEL_CASES, owner_sub=_TEST_OWNER_SUB
+        )
 
         assert [case["query"] for case in clean] == [
             case.query for case in eval_search.LEVEL_CASES
@@ -100,7 +109,10 @@ def test_level_cases_run_against_a_corpus_and_flag_a_senior_in_the_top() -> None
         session.commit()
 
         flagged = eval_search.evaluate_level_cases(
-            session, "fulltext", (eval_search.LevelCase("júnior remoto"),)
+            session,
+            "fulltext",
+            (eval_search.LevelCase("júnior remoto"),),
+            owner_sub=_TEST_OWNER_SUB,
         )
 
         assert flagged[0]["passed"] is False

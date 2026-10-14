@@ -20,6 +20,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from opportunity_radar.dashboard.queries import InboxQuery, list_opportunity_inbox  # noqa: E402
 from opportunity_radar.dashboard.search_benchmark import (  # noqa: E402
@@ -39,7 +40,9 @@ from opportunity_radar.dashboard.source_baseline import (
     opportunity_search_payload_hash,  # noqa: E402
 )
 from opportunity_radar.opportunities.models import OpportunityModel  # noqa: E402
+from opportunity_radar.platform.config import get_settings  # noqa: E402
 from opportunity_radar.platform.database import create_database_engine  # noqa: E402
+from scripts.owner_context import require_operational_owner  # noqa: E402
 
 
 def _inbox_query(entry: dict[str, object]) -> InboxQuery:
@@ -59,6 +62,7 @@ def evaluate(
     session: Session,
     manifest: dict[str, object],
     *,
+    owner_sub: str,
     warm_repetitions: int = MIN_WARM_REPETITIONS,
     cold_restarts: int = 0,
     restart: Callable[[], None] | None = None,
@@ -111,7 +115,7 @@ def evaluate(
     entries = {str(entry["query"]): entry for entry in manifest["queries"]}  # type: ignore[attr-defined, index]
     for entry in manifest["queries"]:  # type: ignore[index, attr-defined]
         query = _inbox_query(entry)
-        page = list_opportunity_inbox(session, query)
+        page = list_opportunity_inbox(session, query, owner_sub=owner_sub)
         ranked = [str(item.opportunity_id) for item in page.items]
         relevant = gold_by_query.get(entry["query"], set())
         per_query.append(
@@ -135,7 +139,9 @@ def evaluate(
     }
     groups = measure_latency_groups(
         list(entries),
-        lambda text_: list_opportunity_inbox(session, _inbox_query(entries[text_])),
+        lambda text_: list_opportunity_inbox(
+            session, _inbox_query(entries[text_]), owner_sub=owner_sub
+        ),
         warm_repetitions=warm_repetitions,
         cold_restarts=cold_restarts,
         restart=restart,
@@ -253,6 +259,10 @@ def main() -> int:
     if not database_url:
         parser.error("DATABASE_URL is required")
     engine = create_database_engine(database_url)
+    try:
+        owner_sub = require_operational_owner(get_settings())
+    except ValueError as error:
+        parser.error(str(error))
     with Session(engine) as session:
         session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"))
         options: dict[str, Any] = {}
@@ -268,7 +278,9 @@ def main() -> int:
                     fresh.execute(
                         text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
                     )
-                    list_opportunity_inbox(fresh, _inbox_query(entries[query_text]))
+                    list_opportunity_inbox(
+                        fresh, _inbox_query(entries[query_text]), owner_sub=owner_sub
+                    )
 
             options = {
                 "cold_restarts": args.cold_restarts,
@@ -279,6 +291,7 @@ def main() -> int:
         report = evaluate(
             session,
             manifest,
+            owner_sub=owner_sub,
             warm_repetitions=args.warm_repetitions,
             parser_version=args.parser_version,
             **options,

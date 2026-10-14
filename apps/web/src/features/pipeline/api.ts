@@ -1,4 +1,4 @@
-import { apiUrl, requestFailure } from '../../lib/api'
+import { apiUrl, privateFetch, requestFailure } from '../../lib/api'
 
 export const applicationStages = [
   'INTERESTED',
@@ -126,7 +126,7 @@ async function send(
   method: 'POST' | 'PATCH',
   payload: unknown,
 ): Promise<Application> {
-  const response = await fetch(apiUrl(path), {
+  const response = await privateFetch(apiUrl(path), {
     method,
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload),
@@ -150,7 +150,7 @@ export async function listApplications(
   if (params.status) query.set('application_status', params.status)
   if (params.stage) query.set('stage', params.stage)
   if (params.opportunityId) query.set('opportunity_id', params.opportunityId)
-  const response = await fetch(apiUrl(`/applications?${query.toString()}`), {
+  const response = await privateFetch(apiUrl(`/applications?${query.toString()}`), {
     headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)

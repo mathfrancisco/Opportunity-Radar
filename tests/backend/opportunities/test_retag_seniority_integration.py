@@ -9,7 +9,6 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -20,10 +19,10 @@ from opportunity_radar.opportunities.models import (
     OpportunityModel,
     SourceOccurrenceModel,
 )
-from opportunity_radar.platform.config import Settings, get_settings
+from opportunity_radar.platform.config import get_settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
 from scripts.retag_seniority import main
+from tests.backend.support.auth import authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -58,7 +57,7 @@ def engine() -> Iterator[Engine]:
 
 def _seed(engine: Engine) -> dict[str, UUID]:
     """Five postings normalized today, then aged back to what `seniority-v3` had stored."""
-    client = TestClient(create_app(Settings(database_url=os.environ["DATABASE_URL"])))
+    client = authenticated_test_client(os.environ["DATABASE_URL"])
     source = client.post(
         "/sources",
         json={

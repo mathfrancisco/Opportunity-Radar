@@ -41,6 +41,8 @@ pytestmark = [
     ),
 ]
 
+_TEST_OWNER_SUB = "test-reevaluation-owner"
+
 
 def _engine():
     return create_database_engine(os.environ["DATABASE_URL"])
@@ -57,8 +59,10 @@ def _activate_new_profile(
     work_modes: tuple[str, ...] = ("REMOTE",),
 ) -> ProfileVersionModel:
     """Publish and activate a fresh version, archiving whichever one was active."""
-    service = ProfileService(session)
-    profile = session.scalar(select(CareerProfileModel).limit(1))
+    service = ProfileService(session, _TEST_OWNER_SUB)
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == _TEST_OWNER_SUB)
+    )
     expected = profile.version if profile is not None else 0
     snapshot = ProfileSnapshot(
         skills=(Skill(canonical_name="python"),),
@@ -67,7 +71,9 @@ def _activate_new_profile(
         preferences=EmploymentPreference(work_modes=work_modes, countries=countries),
     )
     version = service.create_version(snapshot, expected)
-    profile = session.scalar(select(CareerProfileModel).limit(1))
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == _TEST_OWNER_SUB)
+    )
     assert profile is not None
     service.publish(version.id, profile.version)
     session.refresh(profile)
@@ -128,7 +134,7 @@ def test_activating_a_profile_makes_previous_assessments_pending_again() -> None
     with _session() as session:
         _activate_new_profile(session)
         opportunity = _opportunity(session)
-        service = MatchingService(session)
+        service = MatchingService(session, _TEST_OWNER_SUB)
         first = service.evaluate(opportunity.id)
         first_id, first_assessed_at = first.id, first.assessed_at
         assert opportunity.id not in service.pending_evaluation_ids(limit=500)
@@ -147,7 +153,7 @@ def test_updating_the_opportunity_content_produces_an_assessment_for_the_new_ver
     with _session() as session:
         _activate_new_profile(session)
         opportunity = _opportunity(session)
-        service = MatchingService(session)
+        service = MatchingService(session, _TEST_OWNER_SUB)
         first = service.evaluate(opportunity.id)
 
         opportunity.version = 2
@@ -164,7 +170,7 @@ def test_changing_the_accepted_work_mode_changes_the_reassessment_verdict() -> N
     with _session() as session:
         _activate_new_profile(session, work_modes=("REMOTE",))
         opportunity = _opportunity(session)
-        service = MatchingService(session)
+        service = MatchingService(session, _TEST_OWNER_SUB)
         first = service.evaluate(opportunity.id)
         assert first.verdict != "INELIGIBLE"
 
@@ -182,7 +188,7 @@ def test_a_ruleset_bump_requeues_without_touching_the_previous_result(
     with _session() as session:
         _activate_new_profile(session)
         opportunity = _opportunity(session)
-        service = MatchingService(session)
+        service = MatchingService(session, _TEST_OWNER_SUB)
         first = service.evaluate(opportunity.id)
         assert opportunity.id not in service.pending_evaluation_ids(limit=500)
 
@@ -200,7 +206,7 @@ def test_a_taxonomy_bump_requeues_the_opportunity() -> None:
     with _session() as session:
         _activate_new_profile(session)
         opportunity = _opportunity(session, with_skill=True)
-        service = MatchingService(session)
+        service = MatchingService(session, _TEST_OWNER_SUB)
         first = service.evaluate(opportunity.id)
         assert first.taxonomy_version == "skills-v1"
         assert opportunity.id not in service.pending_evaluation_ids(limit=500)
@@ -231,13 +237,17 @@ def test_an_interrupted_batch_resumes_without_duplicating_results() -> None:
     # pending too, so the pass budget is the size of the queue at the start (each pass
     # retires one row) rather than a fixed count that shared-database leftovers can exceed.
     with _session() as session:
-        queue_size = len(MatchingService(session).pending_evaluation_ids(limit=100_000))
+        queue_size = len(
+            MatchingService(session, _TEST_OWNER_SUB).pending_evaluation_ids(limit=100_000)
+        )
     for _ in range(queue_size + 1):
         with _session() as session:
-            pending = set(MatchingService(session).pending_evaluation_ids(limit=100_000))
+            pending = set(
+                MatchingService(session, _TEST_OWNER_SUB).pending_evaluation_ids(limit=100_000)
+            )
         if not pending.intersection(opportunities):
             break
-        evaluate_pending(engine, batch_size=1)
+        evaluate_pending(engine, batch_size=1, owner_sub=_TEST_OWNER_SUB)
     else:  # pragma: no cover - only reached if the queue never drains
         pytest.fail("the queue never reached the opportunities under test")
 
@@ -246,7 +256,7 @@ def test_an_interrupted_batch_resumes_without_duplicating_results() -> None:
             assert _assessment_count(session, opportunity_id) == 1
 
     # A further pass after everything is current must add nothing at all.
-    evaluate_pending(engine, batch_size=50)
+    evaluate_pending(engine, batch_size=50, owner_sub=_TEST_OWNER_SUB)
     with _session() as session:
         for opportunity_id in opportunities:
             assert _assessment_count(session, opportunity_id) == 1
@@ -267,7 +277,7 @@ def test_a_pass_reports_what_it_processed() -> None:
     logger.setLevel(logging.INFO)
     try:
         for _ in range(200):
-            evaluate_pending(engine, batch_size=50)
+            evaluate_pending(engine, batch_size=50, owner_sub=_TEST_OWNER_SUB)
             with _session() as session:
                 if _assessment_count(session, opportunity_id) == 1:
                     break
@@ -291,7 +301,7 @@ def test_assessments_written_before_a_change_stay_readable() -> None:
     with _session() as session:
         _activate_new_profile(session)
         opportunity = _opportunity(session)
-        service = MatchingService(session)
+        service = MatchingService(session, _TEST_OWNER_SUB)
         first = service.evaluate(opportunity.id)
         snapshot = (first.score, first.verdict, first.input_hash, first.assessed_at)
 
@@ -311,7 +321,7 @@ def test_the_current_assessment_is_the_one_matching_the_active_inputs() -> None:
     with _session() as session:
         _activate_new_profile(session)
         opportunity = _opportunity(session)
-        service = MatchingService(session)
+        service = MatchingService(session, _TEST_OWNER_SUB)
         stale = service.evaluate(opportunity.id)
 
         _activate_new_profile(session, countries=("BR", "CL"))
@@ -332,7 +342,7 @@ def test_a_posting_that_crossed_a_recency_band_is_queued_and_scored_lower() -> N
         tomorrow = today + timedelta(days=1)
         # Three days old today (best band), four tomorrow (next band).
         opportunity = _opportunity(session, published_at=today - timedelta(days=3))
-        service = MatchingService(session)
+        service = MatchingService(session, _TEST_OWNER_SUB)
         first = service.evaluate(opportunity.id)
         assert opportunity.id not in service.pending_evaluation_ids(limit=500)
 

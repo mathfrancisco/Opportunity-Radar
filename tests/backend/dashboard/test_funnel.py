@@ -40,11 +40,13 @@ pytestmark = [
     ),
 ]
 
+TEST_OWNER_SUB = "dashboard-funnel-test-owner"
+
 
 def _profile_version(session: Session) -> ProfileVersionModel:
     profile = session.scalar(select(CareerProfileModel).limit(1))
     if profile is None:
-        profile = CareerProfileModel(version=1)
+        profile = CareerProfileModel(version=1, owner_sub=TEST_OWNER_SUB)
         session.add(profile)
         session.flush()
     number = session.scalar(
@@ -103,6 +105,7 @@ def _posting(
 def _assess(session: Session, opportunity: OpportunityModel, version_id: Any, verdict: str) -> None:
     session.add(
         MatchAssessmentModel(
+            owner_sub=TEST_OWNER_SUB,
             opportunity_id=opportunity.id,
             opportunity_version=1,
             profile_version_id=version_id,

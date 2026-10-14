@@ -248,6 +248,7 @@ export function CompanyDetailPage() {
 
   return (
     <PageShell
+      isOwner
       actions={
         company.data && !editing ? (
           <Button onClick={() => setEditing(true)} variant="secondary">

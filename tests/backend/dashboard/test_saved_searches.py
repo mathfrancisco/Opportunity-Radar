@@ -10,9 +10,11 @@ import pytest
 from sqlalchemy.orm import Session
 
 from opportunity_radar.companies.models import Company
+from opportunity_radar.dashboard import saved_searches as saved_search_service
 from opportunity_radar.dashboard.models import SavedSearchModel
 from opportunity_radar.dashboard.queries import InboxQuery, list_opportunity_inbox
 from opportunity_radar.dashboard.saved_searches import (
+    SavedSearchNotFoundError,
     create_saved_search,
     delete_saved_search,
     list_saved_searches,
@@ -30,6 +32,9 @@ pytestmark = [
         reason="database integration is enabled only in the isolated CI database",
     ),
 ]
+
+OWNER_A = "user-saved-search-a"
+OWNER_B = "user-saved-search-b"
 
 
 def _company(session: Session) -> Company:
@@ -76,34 +81,40 @@ def test_create_list_rename_delete_saved_search() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         saved = create_saved_search(
-            session, name="Busca original", term="backend", filters={"work_mode": "REMOTE"}
+            session,
+            name="Busca original",
+            term="backend",
+            filters={"work_mode": "REMOTE"},
+            owner_sub=OWNER_A,
         )
 
-        listed = list_saved_searches(session)
+        listed = list_saved_searches(session, owner_sub=OWNER_A)
 
         assert saved in listed
         assert saved.name == "Busca original"
         assert saved.term == "backend"
         assert saved.filters == {"work_mode": "REMOTE"}
 
-        renamed = rename_saved_search(session, saved.id, name="Busca renomeada")
+        renamed = rename_saved_search(session, saved.id, name="Busca renomeada", owner_sub=OWNER_A)
         assert renamed.name == "Busca renomeada"
 
-        delete_saved_search(session, saved.id)
-        assert all(item.id != saved.id for item in list_saved_searches(session))
+        delete_saved_search(session, saved.id, owner_sub=OWNER_A)
+        assert all(item.id != saved.id for item in list_saved_searches(session, owner_sub=OWNER_A))
 
 
 def test_open_saved_search_updates_last_opened_at() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     reference = datetime.now(UTC) - timedelta(days=1)
     with Session(engine) as session:
-        saved = create_saved_search(session, name="Busca", term=None, filters={})
+        saved = create_saved_search(
+            session, name="Busca", term=None, filters={}, owner_sub=OWNER_A
+        )
         model = session.get(SavedSearchModel, saved.id)
         assert model is not None
         model.last_opened_at = reference - timedelta(days=1)
         session.flush()
 
-        opened = open_saved_search(session, saved.id)
+        opened = open_saved_search(session, saved.id, owner_sub=OWNER_A)
 
         assert opened.last_opened_at is not None
         assert opened.last_opened_at > reference - timedelta(days=1)
@@ -145,13 +156,41 @@ def test_new_count_uses_same_query_as_inbox() -> None:
                 "work_mode": "REMOTE",
                 "all_areas": True,
             },
+            owner_sub=OWNER_A,
         )
 
         inbox = list_opportunity_inbox(
-            session, InboxQuery(company_id=company.id, work_mode="REMOTE")
+            session, InboxQuery(company_id=company.id, work_mode="REMOTE"), owner_sub=OWNER_A
         )
 
-        assert new_count(session, saved) == inbox.total == 1
+        assert new_count(session, saved, owner_sub=OWNER_A) == inbox.total == 1
+
+
+def test_new_count_threads_each_authenticated_owner_to_the_inbox(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    owners: list[str] = []
+
+    class _Page:
+        total = 1
+
+    def inbox_for_owner(*_: object, owner_sub: str) -> _Page:
+        owners.append(owner_sub)
+        return _Page()
+
+    monkeypatch.setattr(saved_search_service, "list_opportunity_inbox", inbox_for_owner)
+    with Session(engine) as session:
+        saved_a = create_saved_search(
+            session, name="A", term=None, filters={"all_areas": True}, owner_sub=OWNER_A
+        )
+        saved_b = create_saved_search(
+            session, name="B", term=None, filters={"all_areas": True}, owner_sub=OWNER_B
+        )
+
+        assert new_count(session, saved_a, owner_sub=OWNER_A) == 1
+        assert new_count(session, saved_b, owner_sub=OWNER_B) == 1
+        assert owners == [OWNER_A, OWNER_B]
 
 
 def test_new_count_counts_only_opportunities_created_after_last_opened() -> None:
@@ -187,14 +226,17 @@ def test_new_count_counts_only_opportunities_created_after_last_opened() -> None
             # test may have left non-empty; these fixtures carry no role_family, so that
             # silently drops all three (F20 sanity pass).
             filters={"company_id": str(company.id), "all_areas": True},
+            owner_sub=OWNER_A,
         )
         model = session.get(SavedSearchModel, saved.id)
         assert model is not None
         model.last_opened_at = reference
         session.flush()
-        saved = next(item for item in list_saved_searches(session) if item.id == saved.id)
+        saved = next(
+            item for item in list_saved_searches(session, owner_sub=OWNER_A) if item.id == saved.id
+        )
 
-        assert new_count(session, saved) == 1
+        assert new_count(session, saved, owner_sub=OWNER_A) == 1
 
 
 def test_unknown_filter_key_is_ignored_with_warning(caplog: pytest.LogCaptureFixture) -> None:
@@ -217,10 +259,46 @@ def test_unknown_filter_key_is_ignored_with_warning(caplog: pytest.LogCaptureFix
                 "renamed_filter": "legacy-value",
                 "all_areas": True,
             },
+            owner_sub=OWNER_A,
         )
 
         with caplog.at_level("WARNING"):
-            count = new_count(session, saved)
+            count = new_count(session, saved, owner_sub=OWNER_A)
 
         assert count == 1
         assert "renamed_filter" in caplog.text
+
+
+def test_saved_searches_are_private_to_the_authenticated_owner() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        saved = create_saved_search(
+            session, name="Busca A", term=None, filters={}, owner_sub=OWNER_A
+        )
+
+        assert saved.id in {item.id for item in list_saved_searches(session, owner_sub=OWNER_A)}
+        assert saved.id not in {item.id for item in list_saved_searches(session, owner_sub=OWNER_B)}
+
+
+def test_saved_search_mutations_reject_a_foreign_id_without_changing_owner_row() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        saved = create_saved_search(
+            session, name="Busca A", term=None, filters={}, owner_sub=OWNER_A
+        )
+        original = session.get(SavedSearchModel, saved.id)
+        assert original is not None
+        original_opened_at = original.last_opened_at
+
+        with pytest.raises(SavedSearchNotFoundError):
+            rename_saved_search(session, saved.id, name="Busca B", owner_sub=OWNER_B)
+        with pytest.raises(SavedSearchNotFoundError):
+            open_saved_search(session, saved.id, owner_sub=OWNER_B)
+        with pytest.raises(SavedSearchNotFoundError):
+            delete_saved_search(session, saved.id, owner_sub=OWNER_B)
+
+        preserved = session.get(SavedSearchModel, saved.id)
+        assert preserved is not None
+        assert preserved.owner_sub == OWNER_A
+        assert preserved.name == "Busca A"
+        assert preserved.last_opened_at == original_opened_at

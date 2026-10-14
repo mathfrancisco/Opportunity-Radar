@@ -59,7 +59,7 @@ def _columns(url: str) -> set[str]:
 @pytest.fixture
 def scratch_database() -> Any:
     url = os.environ["DATABASE_URL"]
-    name = f"f4816_recency_{uuid4().hex[:12]}"
+    name = f"f4816_recency_{uuid4().hex[:12]}_test"
     create_database(url, name)
     try:
         yield with_database(url, name)

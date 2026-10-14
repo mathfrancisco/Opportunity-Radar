@@ -8,7 +8,6 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -21,8 +20,8 @@ from opportunity_radar.matching.repository import (
 from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
 from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
+from tests.backend.support.auth import authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -33,6 +32,7 @@ pytestmark = [
 ]
 
 NOW = datetime.now(UTC)
+TEST_OWNER_SUB = "dashboard-analysis-test-owner"
 
 
 def _session() -> Session:
@@ -40,9 +40,11 @@ def _session() -> Session:
 
 
 def _assessment(session: Session) -> UUID:
-    profile = session.scalar(select(CareerProfileModel).limit(1))
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == TEST_OWNER_SUB)
+    )
     if profile is None:
-        profile = CareerProfileModel(version=1)
+        profile = CareerProfileModel(version=1, owner_sub=TEST_OWNER_SUB)
         session.add(profile)
         session.flush()
     number = (
@@ -69,6 +71,7 @@ def _assessment(session: Session) -> UUID:
     session.flush()
     assessment = SqlAlchemyMatchingRepository(session).add(
         AssessmentRecord(
+            owner_sub=TEST_OWNER_SUB,
             opportunity_id=opportunity.id,
             opportunity_version=1,
             profile_version_id=version.id,
@@ -201,14 +204,13 @@ def test_an_empty_window_answers_no_model_rather_than_zeros() -> None:
 
 
 def test_the_endpoint_answers_both_windows_and_rejects_an_unknown_one() -> None:
-    model = _model()
+    model = Settings(database_url=os.environ["DATABASE_URL"]).groq_reasoning_model
     with _session() as session:
         _analysis(session, model, total_ms=1500)
         session.commit()
-    client = TestClient(
-        create_app(
-            Settings(database_url=os.environ["DATABASE_URL"], groq_reasoning_model=model)
-        )
+    client = authenticated_test_client(
+        owner_sub=TEST_OWNER_SUB,
+        database_url=os.environ["DATABASE_URL"],
     )
 
     response = client.get("/analysis-metrics")
@@ -228,8 +230,9 @@ def test_the_endpoint_answers_both_windows_and_rejects_an_unknown_one() -> None:
 
 def test_the_endpoint_answers_carries_an_ai_block() -> None:
     """Card F20-20: the response gets a new `ai` block, none of the old fields move."""
-    client = TestClient(
-        create_app(Settings(database_url=os.environ["DATABASE_URL"]))
+    client = authenticated_test_client(
+        owner_sub=TEST_OWNER_SUB,
+        database_url=os.environ["DATABASE_URL"],
     )
 
     body = client.get("/analysis-metrics").json()

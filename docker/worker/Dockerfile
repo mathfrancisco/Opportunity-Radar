@@ -12,6 +12,10 @@ COPY pyproject.toml requirements.txt README.md ./
 COPY src ./src
 COPY apps ./apps
 COPY prompts ./prompts
+COPY scripts ./scripts
+# Collection can load these two audited inputs. Keeping them in the worker image
+# lets the finite cloud runner use the same application behaviour as the API image.
+COPY docs/pesquisas/auditoria-186-empresas.md docs/pesquisas/empresas-adicionais.md ./docs/pesquisas/
 COPY alembic.ini ./
 COPY migrations ./migrations
 RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir --no-deps .

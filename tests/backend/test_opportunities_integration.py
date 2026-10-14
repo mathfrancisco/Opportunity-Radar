@@ -6,14 +6,12 @@ import os
 from decimal import Decimal
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from opportunity_radar.opportunities.models import NormalizationResultModel
-from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
+from tests.backend.support.auth import authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -38,7 +36,7 @@ def test_normalizes_and_deduplicates_manual_evidence_with_provenance() -> None:
             )
         )
 
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
     source = client.post(
         "/sources",
         json={

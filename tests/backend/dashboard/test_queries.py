@@ -20,12 +20,12 @@ from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.dashboard.queries import (
     InboxOrder,
     InboxQuery,
-    list_opportunity_inbox,
     list_source_health,
     search_metrics,
     source_coverage_report,
     summarize_overview,
 )
+from opportunity_radar.dashboard.queries import list_opportunity_inbox as _list_opportunity_inbox
 from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
 from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.domain import SKILL_TAXONOMY_VERSION
@@ -52,12 +52,21 @@ pytestmark = [
 ]
 
 NOW = datetime.now(UTC)
+TEST_OWNER_SUB = "dashboard-test-owner"
 
 
-def _profile_version(session: Session) -> ProfileVersionModel:
-    profile = session.scalar(select(CareerProfileModel).limit(1))
+def list_opportunity_inbox(session: Session, query: InboxQuery):
+    return _list_opportunity_inbox(session, query, owner_sub=TEST_OWNER_SUB)
+
+
+def _profile_version(
+    session: Session, *, owner_sub: str = TEST_OWNER_SUB
+) -> ProfileVersionModel:
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == owner_sub)
+    )
     if profile is None:
-        profile = CareerProfileModel(version=1)
+        profile = CareerProfileModel(version=1, owner_sub=owner_sub)
         session.add(profile)
         session.flush()
     version = ProfileVersionModel(
@@ -136,8 +145,10 @@ def _assessment(
     verdict: str,
     score: str,
     assessed_at: datetime,
+    owner_sub: str = TEST_OWNER_SUB,
 ) -> MatchAssessmentModel:
     assessment = MatchAssessmentModel(
+        owner_sub=owner_sub,
         opportunity_id=opportunity.id,
         opportunity_version=opportunity.version,
         profile_version_id=profile_version_id,
@@ -275,6 +286,58 @@ def test_inbox_prefers_a_current_assessment_and_falls_back_to_a_stale_one() -> N
         assert items[fallback_only.id].is_stale is True
         assert items[fallback_only.id].assessment_opportunity_version == 1
         assert old_current.id != fresh.id
+
+
+def test_inbox_explicit_profile_version_keeps_a_sql_expression_for_current_profile() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    owner_sub = f"dashboard-version-{uuid4().hex}"
+    with Session(engine) as session:
+        historical = _profile_version(session, owner_sub=owner_sub)
+        active = _profile_version(session, owner_sub=owner_sub)
+        historical.status = "ARCHIVED"
+        active.status = "ACTIVE"
+        company = _company(session, "normal")
+        opportunity = _opportunity(session, company, title="Versioned role", published_at=NOW)
+        old = _assessment(
+            session,
+            opportunity,
+            historical.id,
+            verdict="WATCHLIST",
+            score="50.0000",
+            assessed_at=NOW,
+            owner_sub=owner_sub,
+        )
+        current = _assessment(
+            session,
+            opportunity,
+            active.id,
+            verdict="RECOMMENDED",
+            score="80.0000",
+            assessed_at=NOW,
+            owner_sub=owner_sub,
+        )
+        session.commit()
+
+        current_page = _list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id), owner_sub=owner_sub
+        )
+        historical_page = _list_opportunity_inbox(
+            session,
+            InboxQuery(company_id=company.id, profile_version_id=historical.id),
+            owner_sub=owner_sub,
+        )
+        without_profile_page = _list_opportunity_inbox(
+            session,
+            InboxQuery(company_id=company.id),
+            owner_sub=f"dashboard-without-profile-{uuid4().hex}",
+        )
+
+        assert current_page.items[0].assessment_id == current.id
+        assert current_page.items[0].current_profile_version_id == active.id
+        assert historical_page.items[0].assessment_id == old.id
+        assert historical_page.items[0].current_profile_version_id == historical.id
+        assert without_profile_page.items[0].assessment_id is None
+        assert without_profile_page.items[0].current_profile_version_id is None
 
 
 def test_inbox_filters_by_verdict_score_search_and_only_assessed() -> None:
@@ -632,7 +695,7 @@ def test_inbox_knows_whether_an_opportunity_was_already_applied_to() -> None:
         untouched = _opportunity(session, company, title="Open role", published_at=NOW)
         session.commit()
 
-        application = PipelineService(session).start(
+        application = PipelineService(session, owner_sub=TEST_OWNER_SUB).start(
             applied_to.id,
             profile_version_id=profile_version.id,
             stage=ApplicationStage.APPLIED,
@@ -656,7 +719,7 @@ def test_inbox_knows_whether_an_opportunity_was_already_applied_to() -> None:
         assert item.application_next_action_at is not None
         assert open_page.items[0].applied is False
 
-        summary = summarize_overview(session, now=NOW)
+        summary = summarize_overview(session, owner_sub=TEST_OWNER_SUB, now=NOW)
         assert summary.applications_active >= 1
         assert summary.applications_by_stage.get("APPLIED", 0) >= 1
         assert summary.follow_ups_due >= 1
@@ -1124,7 +1187,7 @@ def test_overview_counts_reflect_the_catalogue_and_flag_the_missing_pipeline() -
         )
         session.commit()
 
-        summary = summarize_overview(session)
+        summary = summarize_overview(session, owner_sub=TEST_OWNER_SUB)
 
         assert summary.opportunities_total >= 1
         assert summary.opportunities_active >= 1
@@ -1192,7 +1255,7 @@ def test_search_metrics_reports_coverage_numeric_fields() -> None:
         )
         session.commit()
 
-        report = search_metrics(session, window_days=7, now=NOW)
+        report = search_metrics(session, owner_sub=TEST_OWNER_SUB, window_days=7, now=NOW)
 
         by_source = {item.source_definition_id: item for item in report.coverage.by_source}
         assert by_source[source_definition.id].runs == 1

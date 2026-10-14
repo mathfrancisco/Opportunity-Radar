@@ -7,14 +7,13 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
 from opportunity_radar.profile.models import CareerProfileModel
 from scripts.seed_profile_target_areas import SEED_ROLE_FAMILIES, seed
+from tests.backend.support.auth import OWNER_SUB, authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -27,7 +26,12 @@ pytestmark = [
 
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(create_app(Settings(database_url=os.environ["DATABASE_URL"])))
+    # Other suites leave profiles for foreign owners; the seed script and the optimistic
+    # lock assume a single-owner database, so start from an empty profile root.
+    with Session(create_database_engine(os.environ["DATABASE_URL"])) as session:
+        session.execute(text("TRUNCATE profile.career_profile CASCADE"))
+        session.commit()
+    return authenticated_test_client(os.environ["DATABASE_URL"])
 
 
 def _session() -> Session:
@@ -36,7 +40,12 @@ def _session() -> Session:
 
 def _lock() -> int:
     with _session() as session:
-        return session.scalar(select(CareerProfileModel.version).limit(1)) or 0
+        version = session.scalar(
+            select(CareerProfileModel.version)
+            .where(CareerProfileModel.owner_sub == OWNER_SUB)
+            .limit(1)
+        )
+        return version or 0
 
 
 def _activate(client: TestClient, preferences: dict[str, Any]) -> dict[str, Any]:
@@ -90,11 +99,11 @@ def test_seed_dry_run_writes_nothing_and_real_run_never_overwrites(client: TestC
     lock_before = _lock()
 
     with _session() as session:
-        assert seed(session, dry_run=True)["result"] == "would write"
+        assert seed(session, dry_run=True, owner_sub=OWNER_SUB)["result"] == "would write"
     assert _lock() == lock_before
 
     with _session() as session:
-        assert seed(session, dry_run=False)["result"] == "written"
+        assert seed(session, dry_run=False, owner_sub=OWNER_SUB)["result"] == "written"
     active = client.get("/profile").json()
     assert active["preferences"]["target_role_families"] == list(SEED_ROLE_FAMILIES)
     assert active["skills"][0]["canonical_name"] == "python"
@@ -102,6 +111,6 @@ def test_seed_dry_run_writes_nothing_and_real_run_never_overwrites(client: TestC
     edited = _activate(client, {"target_role_families": ["DESIGN"]})
     lock_after_edit = _lock()
     with _session() as session:
-        assert seed(session, dry_run=False)["result"].startswith("skipped")
+        assert seed(session, dry_run=False, owner_sub=OWNER_SUB)["result"].startswith("skipped")
     assert _lock() == lock_after_edit
     assert client.get("/profile").json()["id"] == edited["id"]

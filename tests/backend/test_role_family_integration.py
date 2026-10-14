@@ -5,16 +5,14 @@ from __future__ import annotations
 import os
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.opportunities.service import reclassify_role_families
-from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
+from tests.backend.support.auth import authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -36,7 +34,7 @@ def test_new_normalization_persists_area_evidence_and_version() -> None:
     database_url = os.environ["DATABASE_URL"]
     engine = create_database_engine(database_url)
     _reset(engine)
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
     source = client.post(
         "/sources",
         json={

@@ -34,7 +34,7 @@ from opportunity_radar.acquisition.models import (
 )
 from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.worker import collect_enabled_sources
+from opportunity_radar.worker import collect_enabled_sources as _collect_enabled_sources
 
 # TODO(F10-03): re-enable. These pass on a fresh database but not on a reused one: the
 # job collects every enabled source, so sources left behind by an earlier run of this file
@@ -54,6 +54,12 @@ pytestmark = [
 _HOURLY = "0 * * * *"
 _NOON = datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC)
 _NAME_PREFIX = "collection-job-test:"
+_TEST_OWNER = "collection-job-test-owner"
+
+
+def collect_enabled_sources(*args: object, **kwargs: object) -> None:
+    """Run the pass as this fixture's explicit synthetic operational identity."""
+    _collect_enabled_sources(*args, owner_sub=_TEST_OWNER, **kwargs)  # type: ignore[arg-type]
 
 
 def _unique_type(prefix: str) -> str:

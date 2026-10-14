@@ -23,6 +23,7 @@ from opportunity_radar.matching.service import (
     MatchNotFoundError,
     MatchOpportunityNotFoundError,
 )
+from opportunity_radar.presentation.http.auth import RequestIdentity, authenticated_identity
 from opportunity_radar.presentation.http.dependencies import (
     get_analysis_adapter,
     get_session,
@@ -108,7 +109,6 @@ class MatchAnalysisResponse(BaseModel):
     metrics: AnalysisMetricsResponse | None = None
 
 
-
 class AnalyzeMatchBody(BaseModel):
     refresh: bool = False
 
@@ -147,9 +147,10 @@ class MatchAssessmentListResponse(BaseModel):
 def evaluate_match(
     body: EvaluateMatchBody,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> MatchAssessmentResponse:
     try:
-        service = MatchingService(session)
+        service = MatchingService(session, identity.sub)
         assessment = service.evaluate(
             body.opportunity_id,
             profile_version_id=body.profile_version_id,
@@ -177,8 +178,9 @@ def list_matches(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> MatchAssessmentListResponse:
-    service = MatchingService(session)
+    service = MatchingService(session, identity.sub)
     items, total = service.list(
         opportunity_id=opportunity_id,
         profile_version_id=profile_version_id,
@@ -186,10 +188,7 @@ def list_matches(
         limit=limit,
     )
     return MatchAssessmentListResponse(
-        items=[
-            _assessment_response(item, is_stale=service.is_stale(item))
-            for item in items
-        ],
+        items=[_assessment_response(item, is_stale=service.is_stale(item)) for item in items],
         total=total,
         offset=offset,
         limit=limit,
@@ -202,6 +201,7 @@ async def analyze_match(
     body: AnalyzeMatchBody | None = None,
     session: Session = Depends(get_session),
     adapter: SemanticAnalysisPort = Depends(get_analysis_adapter),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> MatchAnalysisResponse:
     """200 whenever this call owned the analysis: a degraded model is a status, not an error.
 
@@ -209,7 +209,7 @@ async def analyze_match(
     would present stale state as the answer to this request, so the conflict is explicit.
     """
     try:
-        analysis = await MatchingService(session).analyze(
+        analysis = await MatchingService(session, identity.sub).analyze(
             assessment_id,
             adapter,
             refresh=body.refresh if body is not None else False,
@@ -234,9 +234,10 @@ async def analyze_match(
 def get_match(
     assessment_id: UUID,
     session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
 ) -> MatchAssessmentResponse:
     try:
-        service = MatchingService(session)
+        service = MatchingService(session, identity.sub)
         assessment = service.get(assessment_id)
         return _assessment_response(assessment, is_stale=service.is_stale(assessment))
     except MatchNotFoundError as error:

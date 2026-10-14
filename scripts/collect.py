@@ -5,8 +5,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import os
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -34,22 +37,41 @@ from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.profile.domain import ProfileNotFoundError
 from opportunity_radar.profile.service import ProfileService
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts.owner_context import operational_owner
+
+logger = logging.getLogger(__name__)
+
 #: Sources collected at once, default 1 (current sequential behavior unchanged). Same-
 #: host work still serializes at 1 request/second regardless of this setting.
 DEFAULT_COLLECT_CONCURRENCY = 1
 
 
+def _owner_or_warn(settings: Settings) -> str | None:
+    """The operational owner, or one structured warning (no values) when it is missing."""
+    owner_sub = ProfileService.operational_owner(settings.worker_owner_sub)
+    if owner_sub is None:
+        logger.warning(
+            "worker job skipped: no operational owner configured",
+            extra={"job": "collect", "reason": "missing_worker_owner"},
+        )
+    return owner_sub
+
+
 NO_ACTIVE_PROFILE = "no_active_profile"
 
 
-def active_profile_accepted_seniorities(session: Session) -> tuple[str, ...] | None:
+def active_profile_accepted_seniorities(
+    session: Session, owner_sub: str
+) -> tuple[str, ...] | None:
     """The active profile's `accepted_seniorities` without `UNKNOWN` (F52-09).
 
     `None` when there is no active profile or it names no level: the report then says it
     cannot tell, instead of counting everything or nothing as the accepted level.
     """
     try:
-        profile = ProfileService(session).get_active()
+        profile = ProfileService(session, owner_sub).get_active()
     except ProfileNotFoundError:
         return None
     accepted = tuple(
@@ -178,10 +200,16 @@ async def _collect_one(
     reported as `ERROR`, so one bad source never sinks the batch."""
     try:
         with Session(engine) as session:
+            owner_sub = operational_owner(settings)
+            target_role_families = (
+                active_profile_target_role_families(session, owner_sub)
+                if owner_sub is not None
+                else lambda: ()
+            )
             service = AcquisitionService(
                 session,
                 registry=_registry(settings),
-                target_role_families=active_profile_target_role_families(session),
+                target_role_families=target_role_families,
                 target_area_floor=settings.collection_target_area_floor,
                 claims_enabled=settings.collection_claim_enabled,
                 inventory_contract_enabled=settings.collection_inventory_contract_enabled,
@@ -319,6 +347,7 @@ def main() -> int:
         )
         return 2
     settings = Settings()  # type: ignore[call-arg]  # values come from the environment
+    owner_sub = _owner_or_warn(settings)
     report = asyncio.run(
         _collect(
             engine,
@@ -339,7 +368,11 @@ def main() -> int:
     try:
         with Session(engine) as session:
             level = add_level_column(
-                session, report, active_profile_accepted_seniorities(session)
+                session,
+                report,
+                active_profile_accepted_seniorities(session, owner_sub)
+                if owner_sub is not None
+                else None,
             )
     except Exception as error:  # noqa: BLE001 - the level column never fails the run
         level = {"status": "unavailable", "error_summary": str(error)}

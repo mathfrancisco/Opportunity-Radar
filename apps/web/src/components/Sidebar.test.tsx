@@ -3,17 +3,17 @@ import { MemoryRouter } from 'react-router-dom'
 import { Sidebar, type NavigationPath } from './Sidebar'
 import { render } from './testing'
 
-function renderSidebar(current?: NavigationPath) {
+function renderSidebar(current?: NavigationPath, isOwner = false) {
   return render(
     <MemoryRouter>
-      <Sidebar current={current} />
+      <Sidebar current={current} isOwner={isOwner} />
     </MemoryRouter>,
   )
 }
 
 describe('Sidebar', () => {
-  it('expõe uma navegação principal com os três grupos e os oito itens', () => {
-    const container = renderSidebar('/sources')
+  it('expõe navegação padrão com Visão geral, Inbox, Pipeline e Perfil', () => {
+    const container = renderSidebar()
     const nav = container.querySelector('nav')
     const groups = [...container.querySelectorAll('nav ul[aria-labelledby]')].map((list) => [
       container.querySelector(`#${list.getAttribute('aria-labelledby')}`)?.textContent,
@@ -23,13 +23,19 @@ describe('Sidebar', () => {
     expect(nav?.getAttribute('aria-label')).toBe('Navegação principal')
     expect(groups).toEqual([
       ['Decidir', ['Visão geral', 'Inbox', 'Pipeline']],
-      ['Pesquisar', ['Empresas']],
-      ['Operar', ['Fontes', 'Homologação', 'Perfil', 'Status']],
+      ['Operar', ['Perfil']],
     ])
   })
 
+  it('expõe itens adicionais apenas para owner', () => {
+    const container = renderSidebar(undefined, true)
+    const items = [...container.querySelectorAll('nav a')].map((link) => link.textContent)
+
+    expect(items).toEqual(['Visão geral', 'Inbox', 'Pipeline', 'Empresas', 'Fontes', 'Homologação', 'Perfil', 'Status'])
+  })
+
   it('marca só o item atual, com fundo, peso, marcador e aria-current', () => {
-    const container = renderSidebar('/sources')
+    const container = renderSidebar('/sources', true)
     const active = container.querySelectorAll('nav [aria-current="page"]')
 
     expect(active).toHaveLength(1)
@@ -40,7 +46,7 @@ describe('Sidebar', () => {
   })
 
   it('marca a fila de homologação sem marcar Fontes', () => {
-    const container = renderSidebar('/sources/homologation-queue')
+    const container = renderSidebar('/sources/homologation-queue', true)
     const active = container.querySelectorAll('nav [aria-current="page"]')
 
     expect(active).toHaveLength(1)

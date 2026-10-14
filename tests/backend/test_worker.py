@@ -1,7 +1,9 @@
 import logging
 from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
@@ -19,7 +21,11 @@ _DATABASE_URL = "postgresql+psycopg://test:test@localhost/test"
 @pytest.mark.parametrize("budget", [0, 7])
 def test_scheduled_collection_uses_configured_tavily_credit_budget(budget: int) -> None:
     service = collection_service_factory(
-        Settings(database_url=_DATABASE_URL, tavily_credit_budget_per_run=budget)
+        Settings(
+            database_url=_DATABASE_URL,
+            tavily_credit_budget_per_run=budget,
+            worker_owner_sub="worker-owner-synthetic",
+        )
     )(None)  # type: ignore[arg-type]
 
     collector = service.registry.resolve("tavily_search")
@@ -36,6 +42,165 @@ def test_worker_scheduler_has_a_heartbeat_job() -> None:
     assert scheduler.get_job("evaluate-pending") is not None
     assert scheduler.get_job("analyze-pending") is not None
     assert scheduler.get_job("expire-raw-payloads") is not None
+
+
+def test_worker_jobs_receive_an_explicit_operational_owner() -> None:
+    scheduler = build_scheduler(
+        Settings(database_url=_DATABASE_URL, worker_owner_sub="worker-owner-synthetic")
+    )
+
+    assert scheduler.get_job("evaluate-pending").kwargs["owner_sub"] == "worker-owner-synthetic"
+    assert scheduler.get_job("analyze-pending").kwargs["owner_sub"] == "worker-owner-synthetic"
+    assert (
+        scheduler.get_job("collect-enabled-sources").kwargs["owner_sub"]
+        == "worker-owner-synthetic"
+    )
+
+
+def test_collection_factory_scopes_profile_reads_to_configured_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def target_roles(session: object, owner_sub: str | None = None):
+        captured["session"] = session
+        captured["owner_sub"] = owner_sub
+        return lambda: ()
+
+    monkeypatch.setattr(worker, "active_profile_target_role_families", target_roles)
+    session = object()
+    service = collection_service_factory(
+        Settings(database_url=_DATABASE_URL, worker_owner_sub="worker-owner-synthetic")
+    )(session)  # type: ignore[arg-type]
+
+    assert captured == {"session": session, "owner_sub": "worker-owner-synthetic"}
+    assert service.profile_owner_sub == "worker-owner-synthetic"
+
+
+def test_collection_factory_rejects_blank_owner_without_global_profile_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[str | None] = []
+
+    def target_roles(_session: object, owner_sub: str | None = None):
+        captured.append(owner_sub)
+        return lambda: ()
+
+    monkeypatch.setattr(worker, "active_profile_target_role_families", target_roles)
+    factory = collection_service_factory(
+        Settings(database_url=_DATABASE_URL, worker_owner_sub="  ")
+    )
+
+    with pytest.raises(ValueError, match="explicit operational owner"):
+        factory(object())  # type: ignore[arg-type]
+
+    assert captured == []
+
+
+def test_remotive_does_not_read_a_global_profile_without_owner() -> None:
+    collector = SimpleNamespace(
+        capabilities=SimpleNamespace(keyword_search=True, incremental_cursor=False)
+    )
+    service = SimpleNamespace(
+        registry=SimpleNamespace(resolve=lambda _source_type: collector),
+        profile_owner_sub=None,
+        session=object(),
+    )
+    source = SimpleNamespace(
+        source_type="remotive",
+        configuration={"keywords": ["custom term"]},
+        id=uuid4(),
+        checkpoint=None,
+    )
+
+    request, rotation, term_count = worker._scheduled_request_with_rotation(
+        service, source, "correlation"  # type: ignore[arg-type]
+    )
+
+    assert request.keywords == ("custom term",)
+    assert rotation is not None
+    assert term_count == 1
+
+
+def test_suggestion_candidate_query_fails_closed_without_owner() -> None:
+    assert worker.candidates_needing_suggestion(object(), limit=1) == []  # type: ignore[arg-type]
+
+
+def test_evaluation_skips_without_operational_owner(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        worker,
+        "Session",
+        lambda _engine: pytest.fail("an ownerless worker must not open a database session"),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="opportunity_radar.worker"):
+        worker.evaluate_pending(object())
+
+    assert any(
+        record.message == "worker job skipped: no operational owner configured"
+        and getattr(record, "reason") == "missing_worker_owner"
+        for record in caplog.records
+    )
+
+
+@pytest.mark.parametrize("owner_sub", [None, "   "])
+@pytest.mark.parametrize("job", ["collect", "evaluate", "analyze", "suggest"])
+def test_ownerless_worker_jobs_skip_before_observation_or_session(
+    owner_sub: str | None,
+    job: str,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail(*_args: object, **_kwargs: object) -> object:
+        pytest.fail("an ownerless worker job must stop before clock, observation, or session")
+
+    monkeypatch.setattr(worker, "Session", fail)
+    monkeypatch.setattr(worker, "observe_job", fail)
+    kwargs: dict[str, object] = {"owner_sub": owner_sub}
+    if job == "collect":
+        kwargs.update(monotonic_clock=fail, service_factory=fail)
+        call = partial(worker.collect_enabled_sources, object(), **kwargs)  # type: ignore[arg-type]
+    elif job == "evaluate":
+        call = partial(worker.evaluate_pending, object(), **kwargs)  # type: ignore[arg-type]
+    elif job == "analyze":
+        call = partial(worker.analyze_pending, object(), object(), **kwargs)  # type: ignore[arg-type]
+    else:
+        call = partial(
+            worker.suggest_fields_pending, object(), object(), **kwargs
+        )  # type: ignore[arg-type]
+
+    with caplog.at_level(logging.WARNING, logger="opportunity_radar.worker"):
+        call()
+
+    assert any(
+        record.message == "worker job skipped: no operational owner configured"
+        and getattr(record, "reason") == "missing_worker_owner"
+        for record in caplog.records
+    )
+
+
+def test_evaluation_uses_the_configured_operational_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owners: list[str | None] = []
+
+    class Service:
+        def __init__(self, _session: object, owner_sub: str | None) -> None:
+            owners.append(owner_sub)
+
+        def pending_evaluation_ids(self, *, limit: int) -> list[object]:
+            assert limit == 3
+            return []
+
+    monkeypatch.setattr(worker, "observe_job", lambda *_args, **_kwargs: nullcontext())
+    monkeypatch.setattr(worker, "Session", lambda _engine: nullcontext(object()))
+    monkeypatch.setattr(worker, "MatchingService", Service)
+
+    worker.evaluate_pending(object(), batch_size=3, owner_sub="worker-owner-synthetic")
+
+    assert owners == ["worker-owner-synthetic"]
 
 
 def test_worker_scheduler_has_no_embedding_job() -> None:
@@ -149,7 +314,9 @@ def test_suggest_fields_batch_summary_uses_non_reserved_log_fields(
     )
 
     with caplog.at_level(logging.INFO, logger="opportunity_radar.worker"):
-        worker.suggest_fields_pending(object(), router)
+        worker.suggest_fields_pending(
+            object(), router, owner_sub="worker-owner-synthetic"
+        )
 
     record = next(
         item
@@ -230,6 +397,7 @@ def test_worker_rechecks_due_time_after_each_source(
 
     worker.collect_enabled_sources(
         object(),
+        owner_sub="worker-owner-synthetic",
         service_factory=lambda _session: Service(),  # type: ignore[arg-type]
         utc_clock=lambda: current[0],
     )
@@ -287,6 +455,7 @@ def test_pass_deadline_skips_next_source_after_prior_cleanup_finishes(
     with caplog.at_level(logging.INFO, logger="opportunity_radar.worker"):
         worker.collect_enabled_sources(
             object(),
+            owner_sub="worker-owner-synthetic",
             service_factory=lambda _session: Service(),  # type: ignore[arg-type]
             source_deadline_seconds=0.0,
             pass_deadline_seconds=1.0,
@@ -346,6 +515,7 @@ def test_claimed_elsewhere_source_is_skipped_without_costing_the_rest_of_the_pas
     with caplog.at_level(logging.INFO, logger="opportunity_radar.worker"):
         worker.collect_enabled_sources(
             object(),
+            owner_sub="worker-owner-synthetic",
             service_factory=lambda _session: Service(),  # type: ignore[arg-type]
         )
 
@@ -360,9 +530,15 @@ def test_claimed_elsewhere_source_is_skipped_without_costing_the_rest_of_the_pas
 
 
 def test_collection_claims_follow_the_setting_and_default_on() -> None:
-    on = collection_service_factory(Settings(database_url=_DATABASE_URL))(None)  # type: ignore[arg-type]
+    on = collection_service_factory(
+        Settings(database_url=_DATABASE_URL, worker_owner_sub="worker-owner-synthetic")
+    )(None)  # type: ignore[arg-type]
     off = collection_service_factory(
-        Settings(database_url=_DATABASE_URL, collection_claim_enabled=False)
+        Settings(
+            database_url=_DATABASE_URL,
+            collection_claim_enabled=False,
+            worker_owner_sub="worker-owner-synthetic",
+        )
     )(None)  # type: ignore[arg-type]
 
     assert on._claims_enabled is True  # type: ignore[attr-defined]

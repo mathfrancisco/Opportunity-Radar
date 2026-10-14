@@ -17,7 +17,10 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
     SourceRunModel,
 )
-from opportunity_radar.dashboard.queries import InboxQuery, list_opportunity_inbox
+from opportunity_radar.dashboard.queries import (
+    InboxQuery,
+)
+from opportunity_radar.dashboard.queries import list_opportunity_inbox as _list_opportunity_inbox
 from opportunity_radar.opportunities.domain import (
     DEFAULT_RECENCY_WINDOW_DAYS,
     NEW_RECENCY_WINDOW_DAYS,
@@ -36,6 +39,11 @@ pytestmark = [
 ]
 
 NOW = datetime(2026, 10, 13, 12, 0, tzinfo=UTC)
+OWNER_SUB = "user-recency-mirror"
+
+
+def list_opportunity_inbox(session: Session, query: InboxQuery):
+    return _list_opportunity_inbox(session, query, owner_sub=OWNER_SUB)
 
 
 def _opportunity(marker: str, **changes: object) -> OpportunityModel:

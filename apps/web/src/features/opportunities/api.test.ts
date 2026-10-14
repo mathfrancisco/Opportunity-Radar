@@ -1,3 +1,4 @@
+import { installTestAuth } from '../../test/auth'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getOpportunity } from './api'
 
@@ -145,3 +146,5 @@ describe('getOpportunity', () => {
     await expect(getOpportunity('opportunity-1')).rejects.toThrow('oportunidade inválida')
   })
 })
+
+installTestAuth()

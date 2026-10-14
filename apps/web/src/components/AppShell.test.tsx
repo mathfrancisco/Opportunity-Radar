@@ -1,8 +1,13 @@
-import { act, type ReactElement } from 'react'
+import { act, type ReactElement, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { AppShell } from './AppShell'
+
+vi.mock('@clerk/react', () => ({
+  Show: ({ children }: { children: ReactNode }) => <>{children}</>,
+  UserButton: () => <button aria-label="Conta" type="button" />,
+}))
 
 const roots: ReturnType<typeof createRoot>[] = []
 
@@ -26,7 +31,9 @@ function renderShell() {
 }
 
 function menuButton(container: HTMLElement) {
-  return container.querySelector<HTMLButtonElement>('button[type="button"]')!
+  return [...container.querySelectorAll<HTMLButtonElement>('button[type="button"]')].find(
+    (button) => button.textContent === 'Menu',
+  )!
 }
 
 function drawer() {
@@ -75,6 +82,8 @@ describe('AppShell', () => {
     const tabbable = container.querySelectorAll('a[href], button')
 
     expect(tabbable[0].getAttribute('href')).toBe('#conteudo')
+    expect(tabbable[1].getAttribute('aria-label')).toBe('Conta')
+    expect(tabbable[0].compareDocumentPosition(tabbable[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(container.querySelector('#conteudo')).not.toBeNull()
   })
 

@@ -15,15 +15,13 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from opportunity_radar.opportunities.domain import recency_basis_of
 from opportunity_radar.opportunities.models import OpportunityModel
-from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
+from tests.backend.support.auth import authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -79,7 +77,7 @@ def _cleanup(session: Session, opportunity_ids: list[UUID]) -> None:
 def test_inbox_filters_by_recency_by_default_and_shows_all_when_toggled_off() -> None:
     database_url = os.environ["DATABASE_URL"]
     engine = create_database_engine(database_url)
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
     marker = uuid4().hex[:10]
 
     with Session(engine) as session:
@@ -157,7 +155,7 @@ def test_inbox_filters_by_recency_by_default_and_shows_all_when_toggled_off() ->
 def test_opportunities_list_filters_by_recency_by_default() -> None:
     database_url = os.environ["DATABASE_URL"]
     engine = create_database_engine(database_url)
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
     marker = uuid4().hex[:10]
 
     with Session(engine) as session:
@@ -193,7 +191,7 @@ def test_inbox_window_lenses_and_recency_basis() -> None:
     exposes `recency_basis` (`updated` counts as estimated)."""
     database_url = os.environ["DATABASE_URL"]
     engine = create_database_engine(database_url)
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
     marker = uuid4().hex[:10]
 
     with Session(engine) as session:

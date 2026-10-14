@@ -10,52 +10,59 @@ import {
   StatusIcon,
 } from './icons'
 
-/*
- * As oito telas agrupadas pela pergunta que respondem (SPEC 54, 5.1): decidir o que fazer
- * agora, pesquisar o mercado e operar o que alimenta o radar. Uma lista plana dava o mesmo
- * peso à tela mais usada e à menos usada, e era lida item a item, toda vez.
- */
-const navigation = [
-  {
-    id: 'decidir',
-    label: 'Decidir',
-    items: [
-      { to: '/', label: 'Visão geral', icon: <OverviewIcon /> },
-      { to: '/inbox', label: 'Inbox', icon: <InboxIcon /> },
-      { to: '/applications', label: 'Pipeline', icon: <ApplicationsIcon /> },
-    ],
-  },
-  {
-    id: 'pesquisar',
-    label: 'Pesquisar',
-    items: [{ to: '/companies', label: 'Empresas', icon: <CompaniesIcon /> }],
-  },
-  {
-    id: 'operar',
-    label: 'Operar',
-    items: [
-      { to: '/sources', label: 'Fontes', icon: <SourcesIcon /> },
-      { to: '/sources/homologation-queue', label: 'Homologação', icon: <HomologationIcon /> },
-      { to: '/profile', label: 'Perfil', icon: <ProfileIcon /> },
-      { to: '/status', label: 'Status', icon: <StatusIcon /> },
-    ],
-  },
-] as const
-
-export type NavigationPath = (typeof navigation)[number]['items'][number]['to']
+export type NavigationPath =
+  | '/'
+  | '/inbox'
+  | '/applications'
+  | '/companies'
+  | '/sources'
+  | '/sources/homologation-queue'
+  | '/profile'
+  | '/status'
 
 interface SidebarProps {
   /** Omitted on pages that are reached from a link rather than from the nav. */
   current?: NavigationPath
   /** Called when a link is followed, so the mobile drawer can close itself. */
   onNavigate?: () => void
+  /** Owner links stay hidden unless a server-verified owner capability is available. */
+  isOwner?: boolean
 }
 
 /**
  * Logo + the navigation groups. Layout (fixed column or drawer) is the shell's
  * business; this component only owns what is inside.
  */
-export function Sidebar({ current, onNavigate }: SidebarProps) {
+export function Sidebar({ current, onNavigate, isOwner = false }: SidebarProps) {
+  const navigation = [
+    {
+      id: 'decidir',
+      label: 'Decidir',
+      items: [
+        { to: '/' as const, label: 'Visão geral', icon: <OverviewIcon /> },
+        { to: '/inbox' as const, label: 'Inbox', icon: <InboxIcon /> },
+        { to: '/applications' as const, label: 'Pipeline', icon: <ApplicationsIcon /> },
+      ],
+    },
+    ...(isOwner
+      ? [{ id: 'pesquisar', label: 'Pesquisar', items: [{ to: '/companies' as const, label: 'Empresas', icon: <CompaniesIcon /> }] }]
+      : []),
+    {
+      id: 'operar',
+      label: 'Operar',
+      items: [
+        ...(isOwner
+          ? [
+              { to: '/sources' as const, label: 'Fontes', icon: <SourcesIcon /> },
+              { to: '/sources/homologation-queue' as const, label: 'Homologação', icon: <HomologationIcon /> },
+            ]
+          : []),
+        { to: '/profile' as const, label: 'Perfil', icon: <ProfileIcon /> },
+        ...(isOwner ? [{ to: '/status' as const, label: 'Status', icon: <StatusIcon /> }] : []),
+      ],
+    },
+  ]
+
   return (
     <div className="flex h-full flex-col gap-6">
       <Link

@@ -1,0 +1,85 @@
+name: opportunity-radar-cloud
+
+# This is deliberately not an override for compose.yaml. It is the cloud topology:
+# the managed PostgreSQL database and the static frontend are external services.
+x-runtime-environment: &runtime-environment
+  APP_ENV: production
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must reference the managed PostgreSQL database}
+  FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?FRONTEND_ORIGIN must be the exact HTTPS Pages origin}
+  CLERK_ISSUER: ${CLERK_ISSUER:?CLERK_ISSUER is required by the production API}
+  CLERK_JWKS_URL: ${CLERK_JWKS_URL:?CLERK_JWKS_URL is required by the production API}
+  CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES:?CLERK_AUTHORIZED_PARTIES is required by the production API}
+  CLERK_OWNER_SUB: ${CLERK_OWNER_SUB:?CLERK_OWNER_SUB is required by the production API}
+  AI_ENABLED: ${AI_ENABLED:-false}
+  GROQ_API_KEY: ${GROQ_API_KEY:-}
+  TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+
+services:
+  migrate:
+    image: ${API_IMAGE:?API_IMAGE must be an approved immutable linux/arm64 image@sha256:<64 hex> digest}
+    environment:
+      <<: *runtime-environment
+      OWNER_SUB_BACKFILL: ${OWNER_SUB_BACKFILL:?OWNER_SUB_BACKFILL is required by migration 0069}
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    networks: [runtime]
+
+  api:
+    image: ${API_IMAGE:?API_IMAGE must be an approved immutable linux/arm64 image@sha256:<64 hex> digest}
+    environment: *runtime-environment
+    command: ["uvicorn", "opportunity_radar.presentation.http.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+    expose: ["8000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks: [runtime]
+
+  worker:
+    image: ${WORKER_IMAGE:?WORKER_IMAGE must be an approved immutable linux/arm64 image@sha256:<64 hex> digest}
+    environment:
+      <<: *runtime-environment
+      WORKER_OWNER_SUB: ${WORKER_OWNER_SUB:?WORKER_OWNER_SUB is required for a finite personal pipeline}
+    command: ["python", "scripts/run_pipeline_once.py", "--deadline-seconds", "${PIPELINE_DEADLINE_SECONDS:?PIPELINE_DEADLINE_SECONDS is required}"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+    networks: [runtime]
+
+  proxy:
+    image: ${PROXY_IMAGE:?PROXY_IMAGE must be an approved immutable linux/arm64 image@sha256:<64 hex> digest}
+    environment:
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME must be the exact public API hostname}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - type: bind
+        source: ./docker/proxy/nginx.conf.template
+        target: /etc/nginx/templates/default.conf.template
+        read_only: true
+      - type: bind
+        source: ${TLS_FULLCHAIN_PATH:?TLS_FULLCHAIN_PATH must name a readable fullchain PEM file}
+        target: /run/tls/fullchain.pem
+        read_only: true
+      - type: bind
+        source: ${TLS_PRIVATE_KEY_PATH:?TLS_PRIVATE_KEY_PATH must name a readable private-key PEM file}
+        target: /run/tls/privkey.pem
+        read_only: true
+    restart: unless-stopped
+    networks: [runtime]
+
+networks:
+  runtime:
+    driver: bridge

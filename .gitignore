@@ -42,3 +42,4 @@ data/evals/
 prompts/opportunity_analysis/eval/drafts/
 # Claude Code worktrees and local settings; the worktrees hold `.env` files.
 .claude/
+.neon

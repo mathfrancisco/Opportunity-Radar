@@ -92,11 +92,16 @@ def test_receives_keywords_derived_from_profile(monkeypatch: pytest.MonkeyPatch)
     source = SimpleNamespace(
         id=uuid4(),
         source_type="remotive",
+        profile_owner_sub="test-remotive-collector-owner",
         configuration={"keywords": ["remote"]},
         checkpoint=None,
     )
     registry = CollectorRegistry((RemotiveCollector(client=client),))
-    service = SimpleNamespace(session=object(), registry=registry)
+    service = SimpleNamespace(
+        session=object(),
+        registry=registry,
+        profile_owner_sub="test-remotive-collector-owner",
+    )
     request = _scheduled_request(service, source, "test-correlation")
 
     try:

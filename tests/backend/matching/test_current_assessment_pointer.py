@@ -19,6 +19,7 @@ from opportunity_radar.matching.models import CurrentAssessmentModel
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.profile.models import ProfileVersionModel
 from tests.backend.dashboard.test_queries import (
+    TEST_OWNER_SUB,
     _assessment,
     _company,
     _opportunity,
@@ -133,6 +134,7 @@ def test_pointer_follows_a_profile_change_and_the_inbox_reads_only_the_active_ve
             for item in list_opportunity_inbox(
                 session,
                 InboxQuery(company_id=company.id, profile_version_id=new_profile.id),
+                owner_sub=TEST_OWNER_SUB,
             ).items
         }
         assert items[both.id].assessment_id == new_assessment.id
@@ -162,7 +164,9 @@ def test_a_bumped_posting_version_is_stale_at_read_time() -> None:
 
         items = {
             item.opportunity_id: item
-            for item in list_opportunity_inbox(session, InboxQuery(company_id=company.id)).items
+            for item in list_opportunity_inbox(
+                session, InboxQuery(company_id=company.id), owner_sub=TEST_OWNER_SUB
+            ).items
         }
         assert items[bumped.id].is_stale is True
         assert items[untouched.id].is_stale is False
@@ -201,7 +205,9 @@ def test_a_posting_that_crossed_a_recency_band_is_stale_at_read_time() -> None:
         items = {
             item.opportunity_id: item
             for item in list_opportunity_inbox(
-                session, InboxQuery(company_id=company.id, only_recent=False)
+                session,
+                InboxQuery(company_id=company.id, only_recent=False),
+                owner_sub=TEST_OWNER_SUB,
             ).items
         }
         assert items[crossed.id].is_stale is True

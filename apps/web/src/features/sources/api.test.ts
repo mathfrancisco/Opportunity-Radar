@@ -1,3 +1,4 @@
+import { installTestAuth } from '../../test/auth'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createSource,
@@ -299,3 +300,5 @@ describe('probeSource', () => {
     expect(probe.retryAfterSeconds).toBe(12.5)
   })
 })
+
+installTestAuth()

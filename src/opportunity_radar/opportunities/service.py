@@ -204,8 +204,7 @@ class OpportunityService:
             opportunity = occurrence.opportunity
             current_raw_item = self.session.get(RawItemModel, occurrence.raw_item_id)
             content_is_current = (
-                current_raw_item is None
-                or raw_item.fetched_at >= current_raw_item.fetched_at
+                current_raw_item is None or raw_item.fetched_at >= current_raw_item.fetched_at
             )
             previous_fingerprint = opportunity.fingerprint
             identity_changed = (
@@ -545,6 +544,7 @@ class OpportunityService:
         reason: str | None,
         note: str | None,
         profile_version_id: UUID | None,
+        owner_sub: str,
     ) -> RelevanceMarkModel:
         """Record an operator judgement. Out of scope: it never feeds score or verdict."""
         opportunity = self.repository.get(opportunity_id)
@@ -556,6 +556,7 @@ class OpportunityService:
             reason=reason,
             note=note,
             profile_version_id=profile_version_id,
+            owner_sub=owner_sub,
         )
         self.session.commit()
         return mark
@@ -1121,9 +1122,7 @@ def reclassify_content(
                     skipped["no_evidence"] += 1
                     continue
                 try:
-                    candidate = build_candidate(
-                        _normalization_input(evidence), content_rules=rules
-                    )
+                    candidate = build_candidate(_normalization_input(evidence), content_rules=rules)
                 except (NormalizationError, TypeError, ValueError):
                     skipped["unreadable_evidence"] += 1
                     continue
@@ -1199,9 +1198,7 @@ def reclassify_content(
                 opportunity.version += 1
                 if moves_fingerprint:
                     session.flush()
-                result = repository.normalization_result(
-                    occurrence.raw_item_id, NORMALIZER_VERSION
-                )
+                result = repository.normalization_result(occurrence.raw_item_id, NORMALIZER_VERSION)
                 if result is not None:
                     # A kept work mode keeps the evidence that decided it.
                     rewritten = {
@@ -1331,8 +1328,7 @@ def retag_skills(
                     )
                 rows_after.update(skill.taxonomy_version for skill in opportunity.skills)
                 if any(
-                    skill.taxonomy_version != SKILL_TAXONOMY_VERSION
-                    for skill in opportunity.skills
+                    skill.taxonomy_version != SKILL_TAXONOMY_VERSION for skill in opportunity.skills
                 ):
                     still_old += 1
                 if not opportunity.skills:
@@ -1505,9 +1501,7 @@ def retag_seniority(
                         )
                     opportunity.seniority = new
                     opportunity.version += 1
-                result = repository.normalization_result(
-                    occurrence.raw_item_id, NORMALIZER_VERSION
-                )
+                result = repository.normalization_result(occurrence.raw_item_id, NORMALIZER_VERSION)
                 if result is None:
                     continue
                 stored = [

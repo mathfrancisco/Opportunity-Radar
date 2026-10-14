@@ -205,7 +205,8 @@ def test_a_concurrent_pass_leaves_consistent_rows_for_every_host() -> None:
         session.commit()
         try:
             worker.collect_enabled_sources(
-                engine, host_concurrency=4, service_factory=service_factory
+                engine, host_concurrency=4, service_factory=service_factory,
+                owner_sub="concurrent-pass-test-owner",
             )
 
             # The two hosts were inside the transport together; the shared host never twice.
@@ -442,6 +443,7 @@ def test_a_timed_out_listing_stays_partial_while_a_complete_one_on_another_host_
                 source_deadline_seconds=1.0,
                 now=datetime.now(UTC) + timedelta(minutes=10),
                 service_factory=service_factory,
+                owner_sub="concurrent-pass-test-owner",
             )
 
             session.expire_all()

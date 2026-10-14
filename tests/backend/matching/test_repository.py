@@ -30,13 +30,17 @@ pytestmark = [
     ),
 ]
 
+_TEST_OWNER_SUB = "test-matching-repository-owner"
+
 
 def test_assessment_persistence_is_idempotent_and_keeps_factors() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
-        profile = session.scalar(select(CareerProfileModel).limit(1))
+        profile = session.scalar(
+            select(CareerProfileModel).where(CareerProfileModel.owner_sub == _TEST_OWNER_SUB)
+        )
         if profile is None:
-            profile = CareerProfileModel(version=1)
+            profile = CareerProfileModel(version=1, owner_sub=_TEST_OWNER_SUB)
             session.add(profile)
             session.flush()
         profile_version = ProfileVersionModel(
@@ -67,6 +71,7 @@ def test_assessment_persistence_is_idempotent_and_keeps_factors() -> None:
         session.flush()
 
         record = AssessmentRecord(
+            owner_sub=_TEST_OWNER_SUB,
             opportunity_id=opportunity.id,
             opportunity_version=opportunity.version,
             profile_version_id=profile_version.id,

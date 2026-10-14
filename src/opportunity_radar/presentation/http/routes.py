@@ -10,22 +10,24 @@ from opportunity_radar.presentation.http.opportunities import router as opportun
 from opportunity_radar.presentation.http.pipeline import router as pipeline_router
 from opportunity_radar.presentation.http.profile import router as profile_router
 
-router = APIRouter()
-router.include_router(acquisition_router)
-router.include_router(companies_router)
-router.include_router(dashboard_router)
-router.include_router(matching_router)
-router.include_router(opportunities_router)
-router.include_router(pipeline_router)
-router.include_router(profile_router)
+private_router = APIRouter()
+private_router.include_router(acquisition_router)
+private_router.include_router(companies_router)
+private_router.include_router(dashboard_router)
+private_router.include_router(matching_router)
+private_router.include_router(opportunities_router)
+private_router.include_router(pipeline_router)
+private_router.include_router(profile_router)
+
+public_router = APIRouter()
 
 
-@router.get("/health/live")
+@public_router.get("/health/live")
 def live() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/health/ready")
+@private_router.get("/health/ready")
 def ready(response: Response, settings: Settings = Depends(get_settings)) -> dict[str, str]:
     database = ready_health(settings)
     if database.status != "healthy":
@@ -33,7 +35,7 @@ def ready(response: Response, settings: Settings = Depends(get_settings)) -> dic
     return {"status": "ready" if database.status == "healthy" else "not_ready"}
 
 
-@router.get("/health")
+@private_router.get("/health")
 def health(response: Response, settings: Settings = Depends(get_settings)) -> dict[str, object]:
     database = ready_health(settings)
     ai = ai_health(settings)

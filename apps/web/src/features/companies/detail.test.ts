@@ -1,3 +1,4 @@
+import { installTestAuth } from '../../test/auth'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getCompany } from './api'
 
@@ -75,3 +76,5 @@ describe('getCompany', () => {
     await expect(getCompany('missing')).rejects.toThrow('não encontrada')
   })
 })
+
+installTestAuth()

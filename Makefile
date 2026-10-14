@@ -70,7 +70,9 @@ backup:
 	@docker compose run --rm -v "$(CURDIR)/data/backups:/app/data/backups" api python scripts/backup.py $(if $(LABEL),--label "$(LABEL)",)
 
 restore-check:
-	@docker compose run --rm -v "$(CURDIR)/data/backups:/app/data/backups" api python scripts/restore_check.py $(if $(DUMP),--dump "$(DUMP)",)
+	@test "$(RUN_DATABASE_INTEGRATION)" = "1" || (echo "Set RUN_DATABASE_INTEGRATION=1" && exit 1)
+	@test "$(DATABASE_INTEGRATION_ISOLATED)" = "1" || (echo "Set DATABASE_INTEGRATION_ISOLATED=1 after verifying the database is isolated" && exit 1)
+	@docker compose run --rm -e RUN_DATABASE_INTEGRATION=1 -e DATABASE_INTEGRATION_ISOLATED=1 -v "$(CURDIR)/data/backups:/app/data/backups" api python scripts/restore_check.py $(if $(DUMP),--dump "$(DUMP)",)
 
 collect:
 	@docker compose run --rm --build -v "$(CURDIR):/workspace" api python scripts/collect.py $(if $(SOURCE_ID),--source-id "$(SOURCE_ID)",) $(if $(SOURCE_TYPE),--source-type "$(SOURCE_TYPE)",) $(if $(KEYWORDS),--keywords "$(KEYWORDS)",) $(if $(MODE),--mode "$(MODE)",) $(if $(MAX_ITEMS),--max-items "$(MAX_ITEMS)",)

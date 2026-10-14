@@ -1,4 +1,4 @@
-import { apiUrl } from '../../lib/api'
+import { apiUrl, privateFetch } from '../../lib/api'
 
 export interface Compensation {
   minimum: string | null
@@ -195,7 +195,7 @@ function parseNormalization(value: unknown): NormalizationResult | null {
 }
 
 export async function getOpportunity(opportunityId: string): Promise<OpportunityDetail> {
-  const response = await fetch(apiUrl(`/opportunities/${opportunityId}`), {
+  const response = await privateFetch(apiUrl(`/opportunities/${opportunityId}`), {
     headers: { Accept: 'application/json' },
   })
   if (response.status === 404) throw new Error('Oportunidade não encontrada.')
@@ -268,7 +268,7 @@ function parseDuplicateCandidate(value: unknown): DuplicateCandidate | null {
 export async function getDuplicateCandidates(
   opportunityId: string,
 ): Promise<DuplicateCandidate[]> {
-  const response = await fetch(
+  const response = await privateFetch(
     apiUrl(`/opportunities/${opportunityId}/duplicate-candidates`),
     { headers: { Accept: 'application/json' } },
   )
@@ -288,7 +288,7 @@ async function resolveDuplicateCandidate(
   candidateId: string,
   payload: Record<string, unknown>,
 ): Promise<DuplicateCandidate> {
-  const response = await fetch(
+  const response = await privateFetch(
     apiUrl(`/opportunities/duplicate-candidates/${candidateId}/${action}`),
     {
       method: 'POST',
@@ -341,7 +341,7 @@ export async function markRelevance(
   opportunityId: string,
   input: { relevant: boolean; reason?: string | null; note?: string | null },
 ): Promise<RelevanceMark> {
-  const response = await fetch(apiUrl(`/opportunities/${opportunityId}/relevance`), {
+  const response = await privateFetch(apiUrl(`/opportunities/${opportunityId}/relevance`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({

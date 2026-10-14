@@ -294,6 +294,7 @@ export function SourcesPage() {
 
   return (
     <PageShell
+      isOwner
       actions={
         creating === null ? (
           <Button onClick={() => setCreating('greenhouse')} variant="secondary">

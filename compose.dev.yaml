@@ -9,6 +9,8 @@ x-dev-mounts: &dev-mounts
   - ./scripts:/app/scripts:ro
   - ./prompts:/app/prompts:ro
   - ./docs:/app/docs:ro
+  - ./compose.cloud.yaml:/app/compose.cloud.yaml:ro
+  - ./docker/proxy:/app/docker/proxy:ro
   - ./pyproject.toml:/app/pyproject.toml:ro
   - ./alembic.ini:/app/alembic.ini:ro
 
@@ -19,6 +21,7 @@ services:
     volumes: *dev-mounts
 
   api:
+    command: ["uvicorn", "opportunity_radar.dev.local_app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       PYTHONPATH: /app/src
       RUFF_CACHE_DIR: /tmp/ruff

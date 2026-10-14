@@ -7,6 +7,7 @@ counting query itself and is gated like the rest of the database suite.
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -36,13 +37,13 @@ class _Profiles:
 
 
 def _use_profile(monkeypatch: pytest.MonkeyPatch, accepted: tuple[str, ...] | None) -> None:
-    monkeypatch.setattr(collect, "ProfileService", lambda session: _Profiles(accepted))
+    monkeypatch.setattr(collect, "ProfileService", lambda session, owner_sub: _Profiles(accepted))
 
 
 def test_accepted_levels_drop_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
     _use_profile(monkeypatch, ("INTERN", "JUNIOR", "MID", "UNKNOWN"))
 
-    assert collect.active_profile_accepted_seniorities(object()) == (  # type: ignore[arg-type]
+    assert collect.active_profile_accepted_seniorities(object(), "owner") == (  # type: ignore[arg-type]
         "INTERN",
         "JUNIOR",
         "MID",
@@ -55,7 +56,7 @@ def test_no_active_profile_or_no_level_reads_as_unknown(
 ) -> None:
     _use_profile(monkeypatch, accepted)
 
-    assert collect.active_profile_accepted_seniorities(object()) is None  # type: ignore[arg-type]
+    assert collect.active_profile_accepted_seniorities(object(), "owner") is None  # type: ignore[arg-type]
 
 
 def test_column_says_no_active_profile_and_does_not_fail() -> None:
@@ -135,3 +136,18 @@ def test_level_counts_by_run_counts_each_posting_once_per_source_run() -> None:
         assert counts[run_a] == {"postings": 4, "accepted_level": 2}
         assert counts[run_b] == {"postings": 2, "accepted_level": 0}
         assert collect.level_counts_by_run(session, [], ("JUNIOR",)) == {}
+
+
+def test_missing_worker_owner_logs_one_structured_warning_without_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    settings = SimpleNamespace(worker_owner_sub="  ")
+
+    with caplog.at_level(logging.WARNING, logger="scripts.collect"):
+        owner = collect._owner_or_warn(settings)  # type: ignore[arg-type]
+
+    assert owner is None
+    records = [r for r in caplog.records if getattr(r, "reason", None) == "missing_worker_owner"]
+    assert len(records) == 1
+    assert records[0].levelno == logging.WARNING
+    assert getattr(records[0], "job") == "collect"

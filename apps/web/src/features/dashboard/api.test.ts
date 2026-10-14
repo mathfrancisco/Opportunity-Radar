@@ -1,3 +1,4 @@
+import { installTestAuth } from '../../test/auth'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getAnalysisMetrics, getInbox, getOverview, getSourceMetrics } from './api'
 
@@ -429,3 +430,5 @@ describe('getAnalysisMetrics', () => {
     })
   })
 })
+
+installTestAuth()

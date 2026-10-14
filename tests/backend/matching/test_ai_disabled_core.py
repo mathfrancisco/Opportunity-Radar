@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from opportunity_radar import worker
@@ -21,6 +22,7 @@ from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.platform.ai.providers.base import LLMRequest, LLMResponse
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
+from opportunity_radar.profile.models import CareerProfileModel, ProfileVersionModel
 from tests.backend.dashboard.test_queries import _company, _opportunity
 from tests.backend.matching.test_evaluation_queue import _ensure_active_profile
 
@@ -44,10 +46,14 @@ class _CountingProvider:
         raise AssertionError("no request may leave the process while AI is disabled")
 
 
-def _core(session: Session, opportunity_id: UUID, marker: str) -> tuple[object, ...]:
+def _core(
+    session: Session, opportunity_id: UUID, marker: str, *, owner_sub: str
+) -> tuple[object, ...]:
     """Score, verdict, eligibility, text-search hits and canonical content, as stored."""
-    assessment = MatchingService(session).evaluate(opportunity_id)
-    found = list_opportunity_inbox(session, InboxQuery(search=marker)).items
+    assessment = MatchingService(session, owner_sub=owner_sub).evaluate(opportunity_id)
+    found = list_opportunity_inbox(
+        session, InboxQuery(search=marker), owner_sub=owner_sub
+    ).items
     opportunity = session.get(OpportunityModel, opportunity_id)
     assert opportunity is not None
     session.refresh(opportunity)
@@ -89,7 +95,13 @@ def test_ai_disabled_preserves_deterministic_core(monkeypatch: pytest.MonkeyPatc
     engine = create_database_engine(os.environ["DATABASE_URL"])
     marker = f"zq{uuid4().hex[:10]}"
     with Session(engine) as session:
-        _ensure_active_profile(session)
+        profile_version_id = _ensure_active_profile(session)
+        owner_sub = session.scalar(
+            select(CareerProfileModel.owner_sub)
+            .join(ProfileVersionModel)
+            .where(ProfileVersionModel.id == profile_version_id)
+        )
+        assert owner_sub is not None
         # Every field is decided by rule, so the row is no candidate for any later test.
         opportunity = _opportunity(
             session,
@@ -101,7 +113,7 @@ def test_ai_disabled_preserves_deterministic_core(monkeypatch: pytest.MonkeyPatc
         )
         opportunity_id = opportunity.id
         session.commit()
-        before = _core(session, opportunity_id, marker)
+        before = _core(session, opportunity_id, marker, owner_sub=owner_sub)
         assert before[4] == [opportunity_id]
         session.commit()
 
@@ -118,7 +130,7 @@ def test_ai_disabled_preserves_deterministic_core(monkeypatch: pytest.MonkeyPatc
     assert scheduler.get_job("suggest-fields-pending") is not None
 
     with Session(engine) as session:
-        after = _core(session, opportunity_id, marker)
+        after = _core(session, opportunity_id, marker, owner_sub=owner_sub)
 
     assert after == before
     assert built == []

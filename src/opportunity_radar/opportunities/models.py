@@ -214,10 +214,13 @@ class RelevanceMarkModel(Base):
             name="ck_relevance_mark_reason",
         ),
         Index("ix_relevance_mark_opportunity_marked_at", "opportunity_id", "marked_at"),
+        Index("ix_relevance_mark_owner_sub", "owner_sub"),
         {"schema": SCHEMA},
     )
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    #: Set exclusively from the validated server-side Clerk identity.
+    owner_sub: Mapped[str] = mapped_column(String(255), nullable=False)
     opportunity_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey(f"{SCHEMA}.opportunity.id", ondelete="CASCADE"),

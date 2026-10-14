@@ -5,16 +5,23 @@
  * only needs to exist and be enabled before the test opens the browser.
  */
 
-const BASE_URL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3000'
+import { bearerHeader } from './auth'
+
+const BASE_URL = process.env.E2E_BASE_URL ?? 'https://127.0.0.1:8443'
 
 function apiUrl(path: string): URL {
   return new URL(`/api${path}`, BASE_URL)
 }
 
-async function request(path: string, init?: RequestInit): Promise<unknown> {
+export async function request(path: string, init?: RequestInit): Promise<unknown> {
   const response = await fetch(apiUrl(path), {
     ...init,
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...init?.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: bearerHeader(),
+      ...init?.headers,
+    },
   })
   if (!response.ok) {
     const body = await response.text()

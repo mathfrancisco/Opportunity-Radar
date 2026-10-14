@@ -17,6 +17,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.companies.models import Company
+from opportunity_radar.dashboard.queries import list_opportunity_inbox
 from opportunity_radar.dashboard.search_benchmark import (
     FTS_INDEX_CONFIG,
     REQUIRED_QUERY_CATEGORIES,
@@ -28,6 +29,7 @@ from opportunity_radar.dashboard.search_benchmark import (
 from opportunity_radar.dashboard.source_baseline import opportunity_search_payload_hash
 from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.platform.database import create_database_engine
+from scripts import search_benchmark
 from scripts.search_benchmark import evaluate
 
 from .test_queries import _company, _opportunity
@@ -41,6 +43,7 @@ pytestmark = [
 ]
 
 NOW = datetime.now(UTC)
+_TEST_OWNER_SUB = "test-search-benchmark-integration-owner"
 _QUERIES: list[dict[str, Any]] = [
     {"query": "engenheiro", "category": "pt"},
     {"query": "backend", "category": "en"},
@@ -55,6 +58,11 @@ _QUERIES: list[dict[str, Any]] = [
     {"query": "kubernetes", "category": "specific"},
 ]
 _REVIEWERS = ["reviewer-a", "reviewer-b"]
+
+
+@pytest.fixture(autouse=True)
+def _owner_scoped_inbox(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(search_benchmark, "list_opportunity_inbox", list_opportunity_inbox)
 
 
 def _freeze(session: Session, relevant: set[tuple[str, str]]) -> dict[str, Any]:
@@ -163,7 +171,7 @@ def test_search_benchmark_uses_frozen_manifest(
     session, target = seeded
     manifest = _freeze(session, {("backend", str(target.id))})
 
-    report = evaluate(session, manifest)
+    report = evaluate(session, manifest, owner_sub=_TEST_OWNER_SUB)
 
     for key in ("cohort", "corpus", "gold", "queries", "index_config", "reviewers"):
         assert report["hashes"][key] == manifest["hashes"][key]
@@ -171,7 +179,7 @@ def test_search_benchmark_uses_frozen_manifest(
     tampered = {**manifest, "corpus": [*manifest["corpus"]]}
     tampered["corpus"][0] = {**tampered["corpus"][0], "payload_hash": "changed"}
     with pytest.raises(ValueError, match="hashes"):
-        evaluate(session, tampered)
+        evaluate(session, tampered, owner_sub=_TEST_OWNER_SUB)
 
 
 def test_benchmark_covers_language_ambiguity_filters_and_zero(
@@ -180,7 +188,9 @@ def test_benchmark_covers_language_ambiguity_filters_and_zero(
     session, target = seeded
     assert {entry["category"] for entry in _QUERIES} == REQUIRED_QUERY_CATEGORIES
 
-    report = evaluate(session, _freeze(session, {("backend", str(target.id))}))
+    report = evaluate(
+        session, _freeze(session, {("backend", str(target.id))}), owner_sub=_TEST_OWNER_SUB
+    )
 
     assert set(report["category_counts"]) == REQUIRED_QUERY_CATEGORIES
     by_query = {row["query"]: row for row in report["per_query"]}
@@ -204,6 +214,7 @@ def test_search_benchmark_report_carries_warm_and_cold_groups(
     report = evaluate(
         session,
         _freeze(session, {("backend", str(target.id))}),
+        owner_sub=_TEST_OWNER_SUB,
         warm_repetitions=10,
         cold_restarts=5,
         restart=lambda: restarts.append(len(cold_runs)),
@@ -230,10 +241,14 @@ def test_search_benchmark_report_pairs_a_content_delta_on_a_fixed_cohort(
 ) -> None:
     session, target = seeded
     relevant = {("kubernetes", str(target.id))}  # a human label, fixed before B
-    report_a = evaluate(session, _freeze(session, relevant), parser_version="v-before")
+    report_a = evaluate(
+        session, _freeze(session, relevant), parser_version="v-before", owner_sub=_TEST_OWNER_SUB
+    )
     target.description = "Runs production Kubernetes clusters."  # the enrichment
     session.commit()
-    report_b = evaluate(session, _freeze(session, relevant), parser_version="v-after")
+    report_b = evaluate(
+        session, _freeze(session, relevant), parser_version="v-after", owner_sub=_TEST_OWNER_SUB
+    )
 
     paired = paired_report(report_a, report_b)
 

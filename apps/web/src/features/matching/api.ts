@@ -1,4 +1,4 @@
-import { apiUrl } from '../../lib/api'
+import { apiUrl, privateFetch } from '../../lib/api'
 
 export interface MatchFactor {
   factorCode: string
@@ -237,7 +237,7 @@ export async function getLatestAssessment(
   opportunityId: string,
 ): Promise<MatchAssessment | null> {
   const params = new URLSearchParams({ opportunity_id: opportunityId, limit: '1' })
-  const response = await fetch(apiUrl(`/matches?${params.toString()}`), {
+  const response = await privateFetch(apiUrl(`/matches?${params.toString()}`), {
     headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
@@ -250,7 +250,7 @@ export async function getLatestAssessment(
 }
 
 export async function evaluateOpportunity(opportunityId: string): Promise<MatchAssessment> {
-  const response = await fetch(apiUrl('/matches/evaluate'), {
+  const response = await privateFetch(apiUrl('/matches/evaluate'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ opportunity_id: opportunityId }),
@@ -265,7 +265,7 @@ export async function analyzeAssessment(
   assessmentId: string,
   options: { refresh?: boolean } = {},
 ): Promise<MatchAnalysis> {
-  const response = await fetch(apiUrl(`/matches/${assessmentId}/analysis`), {
+  const response = await privateFetch(apiUrl(`/matches/${assessmentId}/analysis`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ refresh: options.refresh === true }),

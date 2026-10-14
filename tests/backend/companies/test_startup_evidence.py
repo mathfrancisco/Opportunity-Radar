@@ -14,7 +14,6 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -30,12 +29,11 @@ from opportunity_radar.companies.startup import (
 from opportunity_radar.matching.domain import OpportunitySnapshot
 from opportunity_radar.matching.service import MatchingService
 from opportunity_radar.opportunities.models import OpportunityModel
-from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
 from opportunity_radar.profile.domain import EmploymentPreference, ProfileSnapshot, Skill
 from opportunity_radar.profile.models import CareerProfileModel
 from opportunity_radar.profile.service import ProfileService
+from tests.backend.support.auth import OWNER_SUB, authenticated_test_client
 
 NOW = datetime(2026, 9, 29, 12, tzinfo=UTC)
 PACKAGE = Path(opportunity_radar.__file__).parent
@@ -236,7 +234,7 @@ def test_invalid_evidence_is_rejected() -> None:
 @integration
 def test_inbox_only_startups_filter_and_fields() -> None:
     database_url = os.environ["DATABASE_URL"]
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
     marker = uuid4().hex[:10]
     with Session(_engine()) as session:
         strong_co = _company(session, f"a{marker}")
@@ -282,8 +280,10 @@ def test_inbox_only_startups_filter_and_fields() -> None:
 
 
 def _activate_profile(session: Session) -> None:
-    service = ProfileService(session)
-    profile = session.scalar(select(CareerProfileModel).limit(1))
+    service = ProfileService(session, OWNER_SUB)
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == OWNER_SUB)
+    )
     expected = profile.version if profile is not None else 0
     snapshot = ProfileSnapshot(
         skills=(Skill(canonical_name="python"),),
@@ -292,7 +292,9 @@ def _activate_profile(session: Session) -> None:
         preferences=EmploymentPreference(work_modes=("REMOTE",), countries=("BR",)),
     )
     version = service.create_version(snapshot, expected)
-    profile = session.scalar(select(CareerProfileModel).limit(1))
+    profile = session.scalar(
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == OWNER_SUB)
+    )
     assert profile is not None
     service.publish(version.id, profile.version)
     session.refresh(profile)
@@ -309,7 +311,7 @@ def test_startup_evidence_does_not_change_the_assessment() -> None:
         session.commit()
         # No cleanup: assessments are immutable by trigger (as in the other matching
         # integration tests, the rows stay in the isolated CI database).
-        before = MatchingService(session).evaluate(opportunity.id)
+        before = MatchingService(session, OWNER_SUB).evaluate(opportunity.id)
         snapshot = (before.verdict, before.eligibility, before.score, before.input_hash)
 
         record_startup_evidence(
@@ -317,7 +319,7 @@ def test_startup_evidence_does_not_change_the_assessment() -> None:
             source_text="Y Combinator (S24)", batch="S24",
         )
         session.commit()
-        after = MatchingService(session).evaluate(opportunity.id)
+        after = MatchingService(session, OWNER_SUB).evaluate(opportunity.id)
 
         # An unchanged input hash makes `evaluate` return the very same assessment.
         assert after.id == before.id
@@ -327,7 +329,7 @@ def test_startup_evidence_does_not_change_the_assessment() -> None:
 @integration
 def test_company_endpoint_exposes_the_evidence_with_its_origin() -> None:
     database_url = os.environ["DATABASE_URL"]
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
     with Session(_engine()) as session:
         company = _company(session, uuid4().hex[:8])
         record_startup_evidence(

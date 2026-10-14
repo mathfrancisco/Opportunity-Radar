@@ -65,12 +65,15 @@ class MatchAssessmentModel(Base):
             "profile_version_id",
             "created_at",
         ),
+        Index("ix_match_assessment_owner_sub", "owner_sub"),
         {"schema": SCHEMA},
     )
 
     id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), primary_key=True, default=uuid4
     )
+    #: Set exclusively from the validated server-side Clerk identity.
+    owner_sub: Mapped[str] = mapped_column(String(255), nullable=False)
     opportunity_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("opportunities.opportunity.id", ondelete="RESTRICT"),

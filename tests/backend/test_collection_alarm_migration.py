@@ -23,17 +23,25 @@ pytestmark = pytest.mark.skipif(
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REVISION = "20260929_0055"
 PREVIOUS = "20260929_0054"
+PRE_TENANCY_HEAD = "20261006_0068"
+_BACKFILL_OWNER_SUB = "test-collection-alarm-migration-owner"
 
 
-def _alembic(url: str, *args: str) -> None:
+def _alembic(url: str, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         ["alembic", *args],
         cwd=REPO_ROOT,
-        env={**os.environ, "DATABASE_URL": url},
+        env={
+            **os.environ,
+            "DATABASE_URL": url,
+            "OWNER_SUB_BACKFILL": _BACKFILL_OWNER_SUB,
+        },
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0, result.stderr
+    if check:
+        assert result.returncode == 0, result.stderr
+    return result
 
 
 def _shape(url: str) -> tuple[set[str], bool]:
@@ -60,7 +68,7 @@ def _shape(url: str) -> tuple[set[str], bool]:
 @pytest.fixture
 def scratch() -> Iterator[str]:
     url = os.environ["DATABASE_URL"]
-    name = f"f4807_mig_{uuid4().hex[:12]}"
+    name = f"f4807_mig_{uuid4().hex[:12]}_test"
     create_database(url, name)
     try:
         yield with_database(url, name)
@@ -69,7 +77,7 @@ def scratch() -> Iterator[str]:
 
 
 def test_migration_round_trip(scratch: str) -> None:
-    _alembic(scratch, "upgrade", "head")
+    _alembic(scratch, "upgrade", PRE_TENANCY_HEAD)
     columns, history = _shape(scratch)
     assert {"bytes_received", "newest_item_age_seconds"} <= columns
     assert history
@@ -79,7 +87,17 @@ def test_migration_round_trip(scratch: str) -> None:
     assert not {"bytes_received", "newest_item_age_seconds"} & columns
     assert not history
 
+    _alembic(scratch, "upgrade", PRE_TENANCY_HEAD)
+    columns, history = _shape(scratch)
+    assert {"bytes_received", "newest_item_age_seconds"} <= columns
+    assert history
+
+
+def test_tenancy_downgrade_is_refused(scratch: str) -> None:
     _alembic(scratch, "upgrade", "head")
+    result = _alembic(scratch, "downgrade", PRE_TENANCY_HEAD, check=False)
+    assert result.returncode != 0
+    assert "owner_sub tenancy downgrade is refused" in result.stderr
     columns, history = _shape(scratch)
     assert {"bytes_received", "newest_item_age_seconds"} <= columns
     assert history

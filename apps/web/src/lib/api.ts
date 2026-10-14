@@ -1,5 +1,40 @@
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || '/api'
 const apiBaseUrl = configuredBaseUrl.replace(/\/$/, '')
+type AuthTokenGetter = () => Promise<string | null>
+
+let authTokenGetter: AuthTokenGetter | null = null
+let authSession = { userId: null as string | null, isSignedIn: false, generation: 0 }
+
+/** Supplies Clerk's current token getter to private API requests. */
+export function setAuthTokenGetter(getToken: AuthTokenGetter | null) {
+  authTokenGetter = getToken
+}
+
+/** Marks the current Clerk identity so stale token requests cannot cross sessions. */
+export function setAuthSession(userId: string | null, isSignedIn: boolean) {
+  if (authSession.userId !== userId || authSession.isSignedIn !== isSignedIn) {
+    authSession = { userId, isSignedIn, generation: authSession.generation + 1 }
+  }
+}
+
+/** Adds a fresh Clerk token to one private request without retaining it. */
+export async function privateFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  if (authTokenGetter === null) throw new Error('A autenticação não está disponível.')
+  const sessionAtStart = authSession
+  const token = await authTokenGetter()
+  if (!token) throw new Error('Entre na sua conta para acessar este recurso.')
+  if (
+    !sessionAtStart.isSignedIn ||
+    !authSession.isSignedIn ||
+    authSession.generation !== sessionAtStart.generation
+  ) {
+    throw new Error('Entre na sua conta para acessar este recurso.')
+  }
+
+  const headers = new Headers(init.headers)
+  headers.set('Authorization', `Bearer ${token}`)
+  return fetch(input, { ...init, headers })
+}
 
 export function apiUrl(path: string) {
   return `${apiBaseUrl}${path}`

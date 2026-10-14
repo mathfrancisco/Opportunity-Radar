@@ -1,3 +1,4 @@
+import { installTestAuth } from '../test/auth'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
 import { MemoryRouter } from 'react-router-dom'
@@ -282,3 +283,5 @@ describe('SourcesPage — tabela e ação de cabeçalho', () => {
     expect(container.querySelectorAll('tbody > tr').length).toBeGreaterThanOrEqual(2)
   })
 })
+
+installTestAuth()

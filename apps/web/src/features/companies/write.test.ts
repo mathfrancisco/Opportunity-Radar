@@ -1,3 +1,4 @@
+import { installTestAuth } from '../../test/auth'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FieldError } from '../../lib/api'
 import { registerCompany, updateCompany, updateCompanySource } from './api'
@@ -169,3 +170,5 @@ describe('updateCompanySource', () => {
     expect(correction.source.proposal).toMatchObject({ externalKey: 'acmeold', outdated: true })
   })
 })
+
+installTestAuth()

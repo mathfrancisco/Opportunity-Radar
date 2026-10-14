@@ -19,7 +19,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -28,6 +30,10 @@ from opportunity_radar.opportunities.role_family import RoleFamily
 from opportunity_radar.opportunities.service import reclassify_content
 from opportunity_radar.platform.config import get_settings
 from opportunity_radar.platform.database import create_database_engine
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts.owner_context import require_operational_owner
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -68,7 +74,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             if unknown:
                 parser.error(f"unknown role family: {', '.join(unknown)}")
         else:
-            role_families = active_profile_target_role_families(session)()
+            try:
+                owner_sub = require_operational_owner(get_settings())
+            except ValueError as error:
+                parser.error(str(error))
+            role_families = active_profile_target_role_families(session, owner_sub)()
             if not role_families:
                 parser.error(
                     "the active profile has no target role families: "

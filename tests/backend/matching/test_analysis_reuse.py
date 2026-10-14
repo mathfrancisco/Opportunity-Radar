@@ -11,7 +11,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from test_analysis_persistence import _completed, _seed_assessment, _StubAdapter
+from test_analysis_persistence import _TEST_OWNER_SUB, _completed, _seed_assessment, _StubAdapter
 
 from opportunity_radar.matching.analysis import AnalysisStatus
 from opportunity_radar.matching.service import (
@@ -30,10 +30,9 @@ pytestmark = [
     ),
 ]
 
-
 def _queued(session: Session) -> set[object]:
     return set(
-        MatchingService(session).pending_analysis_ids(
+        MatchingService(session, owner_sub=_TEST_OWNER_SUB).pending_analysis_ids(
             limit=1_000_000,
             eligible_verdicts=DEFAULT_ANALYSIS_VERDICTS,
             now=datetime.now(UTC) + timedelta(seconds=1),
@@ -49,9 +48,7 @@ def test_explicit_analysis_bypasses_only_automatic_queue_filters() -> None:
             repository, record = _seed_assessment(session)
             if reason == "verdict":
                 # Assessments are immutable: a LOW_MATCH one is a new assessment.
-                record = replace(
-                    record, input_hash=uuid4().hex + uuid4().hex, verdict="LOW_MATCH"
-                )
+                record = replace(record, input_hash=uuid4().hex + uuid4().hex, verdict="LOW_MATCH")
                 repository.add(record, [])
             assessment = repository.get_existing(input_hash=record.input_hash)
             assert assessment is not None
@@ -72,7 +69,7 @@ def test_explicit_analysis_bypasses_only_automatic_queue_filters() -> None:
         for assessment_id in excluded.values():
             adapter = _StubAdapter(_completed())
             analysis = asyncio.run(
-                MatchingService(session).analyze(assessment_id, adapter)  # type: ignore[arg-type]
+                MatchingService(session, owner_sub=_TEST_OWNER_SUB).analyze(assessment_id, adapter)  # type: ignore[arg-type]
             )
             assert adapter.calls == 1
             assert analysis.status == AnalysisStatus.AI_COMPLETED.value
@@ -85,7 +82,9 @@ def test_a_new_rules_version_reuses_the_completed_analysis_without_a_provider_ca
         first = repository.get_existing(input_hash=record.input_hash)
         assert first is not None
         original = asyncio.run(
-            MatchingService(session).analyze(first.id, _StubAdapter(_completed()))
+            MatchingService(session, owner_sub=_TEST_OWNER_SUB).analyze(
+                first.id, _StubAdapter(_completed())
+            )
         )
         # Same posting, profile, verdict and content; only the rules and taxonomy moved.
         reassessed = replace(
@@ -101,7 +100,9 @@ def test_a_new_rules_version_reuses_the_completed_analysis_without_a_provider_ca
         second_id, original_id = second.id, original.id
 
         adapter = _StubAdapter(_completed())
-        reused = asyncio.run(MatchingService(session).analyze(second_id, adapter))
+        reused = asyncio.run(
+            MatchingService(session, owner_sub=_TEST_OWNER_SUB).analyze(second_id, adapter)
+        )
 
         assert adapter.calls == 0
         assert reused.assessment_id == second_id
@@ -120,29 +121,39 @@ def test_a_valid_cached_analysis_is_a_cache_hit_with_no_attempt_and_no_zero_toke
         assessment = repository.get_existing(input_hash=record.input_hash)
         assert assessment is not None
         adapter = _StubAdapter(_completed())
-        asyncio.run(MatchingService(session).analyze(assessment.id, adapter))  # type: ignore[arg-type]
+        asyncio.run(
+            MatchingService(session, owner_sub=_TEST_OWNER_SUB).analyze(assessment.id, adapter)
+        )  # type: ignore[arg-type]
         assert adapter.calls == 1
 
         def match_operations() -> set[object]:
             with engine.connect() as connection:
-                return set(connection.execute(text(
-                    "SELECT id FROM platform.ai_operation_record WHERE task = 'job_match'"
-                )).scalars())
+                return set(
+                    connection.execute(
+                        text("SELECT id FROM platform.ai_operation_record WHERE task = 'job_match'")
+                    ).scalars()
+                )
 
         known = match_operations()
-        asyncio.run(MatchingService(session).analyze(assessment.id, adapter))  # type: ignore[arg-type]
+        asyncio.run(
+            MatchingService(session, owner_sub=_TEST_OWNER_SUB).analyze(assessment.id, adapter)
+        )  # type: ignore[arg-type]
 
         assert adapter.calls == 1  # the stub stands for the transport: it was not reached
         [operation_id] = match_operations() - known
         with engine.connect() as connection:
-            operation = connection.execute(text(
-                "SELECT state, error_kind FROM platform.ai_operation_record WHERE id = :id"
-            ), {"id": operation_id}).one()
-            events = connection.execute(text(
-                "SELECT provider, cache_hit, success, transport_started, operation_ordinal, "
-                "prompt_tokens, completion_tokens FROM platform.ai_call_record "
-                "WHERE operation_id = :id"
-            ), {"id": operation_id}).all()
+            operation = connection.execute(
+                text("SELECT state, error_kind FROM platform.ai_operation_record WHERE id = :id"),
+                {"id": operation_id},
+            ).one()
+            events = connection.execute(
+                text(
+                    "SELECT provider, cache_hit, success, transport_started, operation_ordinal, "
+                    "prompt_tokens, completion_tokens FROM platform.ai_call_record "
+                    "WHERE operation_id = :id"
+                ),
+                {"id": operation_id},
+            ).all()
         assert (operation.state, operation.error_kind) == ("cache_hit", None)
         [event] = events  # the cache event is the only row: no HTTP attempt
         assert (event.provider, event.cache_hit, event.success) == ("cache", True, True)

@@ -5,14 +5,12 @@ from __future__ import annotations
 import os
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import RawItemModel, SourceRunModel
-from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
+from tests.backend.support.auth import authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -29,7 +27,7 @@ def test_manual_acquisition_is_idempotent_and_visible() -> None:
     with engine.begin() as connection:
         connection.execute(text("TRUNCATE acquisition.source_definition CASCADE"))
 
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
     created = client.post(
         "/sources",
         json={
@@ -92,7 +90,7 @@ def test_manual_acquisition_is_idempotent_and_visible() -> None:
 
 def test_confirmed_external_source_requires_explicit_activation_gates() -> None:
     database_url = os.environ["DATABASE_URL"]
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
     invalid_policy = client.post(
         "/sources",
         json={

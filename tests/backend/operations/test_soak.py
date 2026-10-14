@@ -26,7 +26,7 @@ TEST_HOURS = max(OUTAGE_STEPS) + 4
 
 def _settings() -> Settings:
     # ai_enabled defaults to False, so the soak window never reaches Groq.
-    return Settings()  # type: ignore[call-arg]  # values come from the environment
+    return Settings(worker_owner_sub="soak-test-owner")  # type: ignore[call-arg]
 
 
 def test_the_window_holds_and_reports_what_it_proved(

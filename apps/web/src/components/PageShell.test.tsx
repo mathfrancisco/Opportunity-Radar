@@ -6,7 +6,7 @@ import { render } from './testing'
 function renderShell(current?: '/sources') {
   return render(
     <MemoryRouter>
-      <PageShell current={current} eyebrow="Operação" title="Fontes">
+      <PageShell current={current} eyebrow="Operação" isOwner title="Fontes">
         <p>conteúdo</p>
       </PageShell>
     </MemoryRouter>,
@@ -69,6 +69,7 @@ describe('PageShell', () => {
           description="Subtítulo"
           eyebrow="Operação"
           footer="Rodapé"
+          isOwner
           title="Fontes"
         >
           <p>conteúdo</p>

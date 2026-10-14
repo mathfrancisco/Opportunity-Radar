@@ -52,16 +52,20 @@ pytestmark = [
 
 NOW = datetime.now(UTC)
 DAYS = 7
+_TEST_OWNER_SUB = "test-assessment-retention-owner"
+_BACKFILL_OWNER_SUB = "test-assessment-retention-backfill"
 
 
 class _Fixture:
     def __init__(self, engine: Engine) -> None:
         self.engine = engine
         self.session = Session(engine)
-        profile = self.session.scalar(select(CareerProfileModel).limit(1))
+        profile = self.session.scalar(
+            select(CareerProfileModel).where(CareerProfileModel.owner_sub == _TEST_OWNER_SUB)
+        )
         self.created_profile: UUID | None = None
         if profile is None:
-            profile = CareerProfileModel(version=1)
+            profile = CareerProfileModel(version=1, owner_sub=_TEST_OWNER_SUB)
             self.session.add(profile)
             self.session.flush()
             self.created_profile = profile.id
@@ -91,7 +95,9 @@ class _Fixture:
         return self.profile_ids[0]
 
     def second_profile(self) -> UUID:
-        profile = self.session.scalar(select(CareerProfileModel).limit(1))
+        profile = self.session.scalar(
+            select(CareerProfileModel).where(CareerProfileModel.owner_sub == _TEST_OWNER_SUB)
+        )
         assert profile is not None
         number = self.session.scalar(
             select(func.max(ProfileVersionModel.number)).where(
@@ -132,6 +138,7 @@ class _Fixture:
         version: int = 1,
     ) -> UUID:
         assessment = MatchAssessmentModel(
+            owner_sub=_TEST_OWNER_SUB,
             opportunity_id=opportunity_id,
             opportunity_version=version,
             profile_version_id=profile_id or self.profile_id,
@@ -192,6 +199,7 @@ class _Fixture:
     def application(self, opportunity_id: UUID, profile_id: UUID | None = None) -> None:
         self.session.add(
             ApplicationProcessModel(
+                owner_sub=_TEST_OWNER_SUB,
                 opportunity_id=opportunity_id,
                 profile_version_id=profile_id or self.profile_id,
                 current_stage="INTERESTED",
@@ -484,15 +492,21 @@ _UPDATE_ASSESSMENT = "UPDATE matching.match_assessment SET score = 1 WHERE id = 
 _UPDATE_FACTOR = "UPDATE matching.match_factor SET explanation = 'x' WHERE assessment_id = :id"
 
 
-def _alembic(url: str, *args: str) -> None:
+def _alembic(url: str, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         ["alembic", *args],
         cwd=REPO_ROOT,
-        env={**os.environ, "DATABASE_URL": url},
+        env={
+            **os.environ,
+            "DATABASE_URL": url,
+            "OWNER_SUB_BACKFILL": _BACKFILL_OWNER_SUB,
+        },
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0, result.stderr
+    if check:
+        assert result.returncode == 0, result.stderr
+    return result
 
 
 def _refusal(connection: Connection, *statements: str, params: dict[str, object]) -> str | None:
@@ -551,17 +565,84 @@ def test_the_setting_does_not_leak_to_the_next_transaction(
 
 def test_the_migration_round_trips() -> None:
     url = os.environ["DATABASE_URL"]
-    name = f"f5008_mig_{uuid4().hex[:12]}"
+    name = f"f5008_mig_{uuid4().hex[:12]}_test"
     create_database(url, name)
     try:
         scratch = with_database(url, name)
-        _alembic(scratch, "upgrade", "head")
+        _alembic(scratch, "upgrade", "20261006_0068")
         scratch_engine = create_database_engine(scratch)
-        fixture = _Fixture(scratch_engine)
         try:
-            posting = fixture.posting()
-            ids = [fixture.assessment(posting, age) for age in (30, 20, 10)]
-            fixture.session.close()
+            profile_id, profile_version_id, opportunity_id = uuid4(), uuid4(), uuid4()
+            ids = [uuid4() for _ in range(3)]
+            with scratch_engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO profile.career_profile (id, singleton_key, version) "
+                        "VALUES (:id, true, 1)"
+                    ),
+                    {"id": profile_id},
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO profile.profile_version "
+                        "(id, career_profile_id, number, status) "
+                        "VALUES (:id, :career_profile_id, 1, 'DRAFT')"
+                    ),
+                    {"id": profile_version_id, "career_profile_id": profile_id},
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO profile.employment_preference "
+                        "(id, profile_version_id) VALUES (:id, :profile_version_id)"
+                    ),
+                    {"id": uuid4(), "profile_version_id": profile_version_id},
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO opportunities.opportunity ("
+                        "id, fingerprint, fingerprint_version, canonical_title, normalized_title, "
+                        "company_name, normalized_company_name, work_mode, seniority, "
+                        "contract_type, "
+                        "lifecycle_status, first_seen_at, version) VALUES ("
+                        ":id, :fingerprint, 'v1', 'Prune probe', 'prune probe', 'Probe', 'probe', "
+                        "'REMOTE', 'UNKNOWN', 'FULL_TIME', 'ACTIVE', :now, 1)"
+                    ),
+                    {"id": opportunity_id, "fingerprint": uuid4().hex, "now": NOW},
+                )
+                for assessment_id, age in zip(ids, (30, 20, 10), strict=True):
+                    at = NOW - timedelta(days=age)
+                    connection.execute(
+                        text(
+                            "INSERT INTO matching.match_assessment ("
+                            "id, opportunity_id, opportunity_version, profile_version_id, "
+                            "input_hash, rules_version, taxonomy_version, "
+                            "opportunity_snapshot, profile_snapshot, eligibility, "
+                            "eligibility_details, verdict, score, confidence, assessed_at, "
+                            "created_at) "
+                            "VALUES (:id, :opportunity_id, 1, :profile_version_id, :input_hash, "
+                            "'matching-v1', :taxonomy_version, '{}'::jsonb, '{}'::jsonb, "
+                            "'ELIGIBLE', "
+                            "'[]'::jsonb, 'RECOMMENDED', 50, 0.9, :at, :at)"
+                        ),
+                        {
+                            "id": assessment_id,
+                            "opportunity_id": opportunity_id,
+                            "profile_version_id": profile_version_id,
+                            "input_hash": uuid4().hex + uuid4().hex,
+                            "taxonomy_version": SKILL_TAXONOMY_VERSION,
+                            "at": at,
+                        },
+                    )
+                    connection.execute(
+                        text(
+                            "INSERT INTO matching.match_factor ("
+                            "id, assessment_id, factor_code, weight, contribution, status, "
+                            "confidence, missing_policy, explanation) VALUES (:id, "
+                            ":assessment_id, 'SKILLS', 0.5, "
+                            "10, 'KNOWN', 0.9, 'NEUTRAL', 'probe')"
+                        ),
+                        {"id": uuid4(), "assessment_id": assessment_id},
+                    )
 
             def prune_one(assessment_id: UUID) -> str | None:
                 with scratch_engine.connect() as connection:
@@ -575,11 +656,24 @@ def test_the_migration_round_trips() -> None:
 
             _alembic(scratch, "downgrade", "20261005_0063")
             assert "immutable" in (prune_one(ids[0]) or "")
-            _alembic(scratch, "upgrade", "head")
+            _alembic(scratch, "upgrade", "20261006_0068")
             assert prune_one(ids[0]) is None
         finally:
-            fixture.session.close()
             scratch_engine.dispose()
+    finally:
+        drop_database(url, name)
+
+
+def test_tenancy_downgrade_is_refused() -> None:
+    url = os.environ["DATABASE_URL"]
+    name = f"f5008_tenancy_{uuid4().hex[:12]}_test"
+    create_database(url, name)
+    try:
+        scratch = with_database(url, name)
+        _alembic(scratch, "upgrade", "head")
+        result = _alembic(scratch, "downgrade", "20261006_0068", check=False)
+        assert result.returncode != 0
+        assert "owner_sub tenancy downgrade is refused" in result.stderr
     finally:
         drop_database(url, name)
 

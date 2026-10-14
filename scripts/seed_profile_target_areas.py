@@ -14,13 +14,20 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from dataclasses import replace
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from opportunity_radar.platform.config import get_settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.profile.domain import ProfileNotFoundError, ProfileSnapshot
 from opportunity_radar.profile.service import ProfileService
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts.owner_context import require_operational_owner
 
 SEED_ROLE_FAMILIES: tuple[str, ...] = (
     "SOFTWARE_ENGINEERING",
@@ -40,8 +47,8 @@ def seeded_snapshot(snapshot: ProfileSnapshot) -> ProfileSnapshot | None:
     )
 
 
-def seed(session: Session, *, dry_run: bool) -> dict[str, object]:
-    service = ProfileService(session)
+def seed(session: Session, *, dry_run: bool, owner_sub: str) -> dict[str, object]:
+    service = ProfileService(session, owner_sub)
     try:
         active = service.get_active()
     except ProfileNotFoundError:
@@ -70,7 +77,11 @@ def main() -> int:
     if not database_url:
         parser.error("DATABASE_URL is required.")
     with Session(create_database_engine(database_url)) as session:
-        report = seed(session, dry_run=args.dry_run)
+        try:
+            owner_sub = require_operational_owner(get_settings())
+        except ValueError as error:
+            parser.error(str(error))
+        report = seed(session, dry_run=args.dry_run, owner_sub=owner_sub)
     print(json.dumps(report, ensure_ascii=False, indent=1))
     return 0
 

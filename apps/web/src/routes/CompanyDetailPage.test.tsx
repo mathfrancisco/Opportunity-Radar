@@ -1,3 +1,4 @@
+import { installTestAuth } from '../test/auth'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -137,3 +138,5 @@ describe('CompanyDetailPage', () => {
     expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent === 'Registrar ATS')).toBe(true)
   })
 })
+
+installTestAuth()

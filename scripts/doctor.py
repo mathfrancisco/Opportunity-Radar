@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -39,6 +40,10 @@ from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.health import database_health
 from opportunity_radar.profile.domain import ProfileNotFoundError
 from opportunity_radar.profile.service import ProfileService
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts.owner_context import operational_owner
 
 OK = "ok"
 WARN = "warn"
@@ -396,9 +401,16 @@ def check_ai(settings: Settings) -> Check:
 
 def check_analysis(settings: Settings) -> Check:
     """Backlog and 24-hour latency of the current model, against the SPEC target."""
+    owner_sub = operational_owner(settings)
+    if owner_sub is None:
+        return Check(
+            "analysis",
+            WARN,
+            "could not compute owner-scoped analysis: WORKER_OWNER_SUB is required",
+        )
     try:
         with Session(create_database_engine(settings.database_url)) as session:
-            pending = MatchingService(session).count_pending_analysis(
+            pending = MatchingService(session, owner_sub).count_pending_analysis(
                 eligible_verdicts=settings.analysis_eligible_verdicts,
                 cooldown=timedelta(seconds=settings.analysis_retry_cooldown_seconds),
                 attempt_window=timedelta(seconds=settings.analysis_retry_attempt_window_seconds),
@@ -562,11 +574,18 @@ def describe_funnel(report: FunnelReport) -> Check:
 
 
 def check_funnel(settings: Settings) -> Check:
+    owner_sub = operational_owner(settings)
+    if owner_sub is None:
+        return Check(
+            "funnel",
+            WARN,
+            "could not compute owner-scoped funnel: WORKER_OWNER_SUB is required",
+        )
     try:
         engine = create_database_engine(settings.database_url)
         with Session(engine) as session:
             try:
-                active = ProfileService(session).get_active()
+                active = ProfileService(session, owner_sub).get_active()
                 families = tuple(active.snapshot.preferences.target_role_families)
             except ProfileNotFoundError:
                 families = ()

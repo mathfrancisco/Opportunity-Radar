@@ -1,4 +1,4 @@
-import { apiUrl, failureFrom } from '../../lib/api'
+import { apiUrl, failureFrom, privateFetch } from '../../lib/api'
 
 export type SavedSearchFilters = Record<string, string | string[]>
 
@@ -50,7 +50,7 @@ function parseSavedSearch(value: unknown): SavedSearch | null {
 }
 
 async function send(path: string, method: string, payload?: unknown): Promise<unknown> {
-  const response = await fetch(apiUrl(path), {
+  const response = await privateFetch(apiUrl(path), {
     method,
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: payload === undefined ? undefined : JSON.stringify(payload),
@@ -91,7 +91,7 @@ export async function renameSavedSearch(savedSearchId: string, name: string): Pr
 }
 
 export async function deleteSavedSearch(savedSearchId: string): Promise<void> {
-  const response = await fetch(apiUrl(`/saved-searches/${savedSearchId}`), {
+  const response = await privateFetch(apiUrl(`/saved-searches/${savedSearchId}`), {
     method: 'DELETE',
     headers: { Accept: 'application/json' },
   })

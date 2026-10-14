@@ -10,16 +10,14 @@ from __future__ import annotations
 import os
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.opportunities.service import OpportunityService
-from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
-from opportunity_radar.presentation.http.app import create_app
+from tests.backend.support.auth import authenticated_test_client
 
 pytestmark = [
     pytest.mark.integration,
@@ -41,7 +39,7 @@ def test_normalize_pending_resumes_a_batch_without_repeating_or_skipping() -> No
     database_url = os.environ["DATABASE_URL"]
     engine = create_database_engine(database_url)
     _reset(engine)
-    client = TestClient(create_app(Settings(database_url=database_url)))
+    client = authenticated_test_client(database_url)
     source = client.post(
         "/sources",
         json={

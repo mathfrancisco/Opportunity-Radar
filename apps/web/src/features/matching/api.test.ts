@@ -1,3 +1,4 @@
+import { installTestAuth } from '../../test/auth'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { analyzeAssessment, getLatestAssessment } from './api'
 
@@ -209,3 +210,5 @@ describe('analyzeAssessment', () => {
     await expect(analyzeAssessment('assessment-1')).rejects.toThrow('já está em andamento')
   })
 })
+
+installTestAuth()

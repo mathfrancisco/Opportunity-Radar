@@ -43,7 +43,7 @@ def _alembic(url: str, *args: str) -> None:
 @pytest.fixture
 def scratch() -> Iterator[str]:
     url = os.environ["DATABASE_URL"]
-    name = f"f4808_mig_{uuid4().hex[:12]}"
+    name = f"f4808_mig_{uuid4().hex[:12]}_test"
     create_database(url, name)
     try:
         yield with_database(url, name)

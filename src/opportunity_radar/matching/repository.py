@@ -55,6 +55,7 @@ def _company_priority_rank() -> Any:
 
 @dataclass(frozen=True, slots=True)
 class AssessmentRecord:
+    owner_sub: str
     opportunity_id: UUID
     opportunity_version: int
     profile_version_id: UUID
@@ -128,17 +129,40 @@ class SqlAlchemyMatchingRepository:
         self,
         *,
         input_hash: str,
+        owner_sub: str | None = None,
     ) -> MatchAssessmentModel | None:
-        return self.session.scalars(
-            self._assessments().where(
-                MatchAssessmentModel.input_hash == input_hash,
+        return (
+            self.session.scalars(
+                self._assessments().where(
+                    MatchAssessmentModel.input_hash == input_hash,
+                    *(
+                        [MatchAssessmentModel.owner_sub == owner_sub]
+                        if owner_sub is not None
+                        else []
+                    ),
+                )
             )
-        ).unique().one_or_none()
+            .unique()
+            .one_or_none()
+        )
 
-    def get(self, assessment_id: UUID) -> MatchAssessmentModel | None:
-        return self.session.scalars(
-            self._assessments().where(MatchAssessmentModel.id == assessment_id)
-        ).unique().one_or_none()
+    def get(
+        self, assessment_id: UUID, *, owner_sub: str | None = None
+    ) -> MatchAssessmentModel | None:
+        return (
+            self.session.scalars(
+                self._assessments().where(
+                    MatchAssessmentModel.id == assessment_id,
+                    *(
+                        [MatchAssessmentModel.owner_sub == owner_sub]
+                        if owner_sub is not None
+                        else []
+                    ),
+                )
+            )
+            .unique()
+            .one_or_none()
+        )
 
     def list(
         self,
@@ -147,8 +171,9 @@ class SqlAlchemyMatchingRepository:
         profile_version_id: UUID | None = None,
         offset: int = 0,
         limit: int = 50,
+        owner_sub: str | None = None,
     ) -> tuple[list[MatchAssessmentModel], int]:
-        filters = []
+        filters = [MatchAssessmentModel.owner_sub == owner_sub] if owner_sub is not None else []
         if opportunity_id is not None:
             filters.append(MatchAssessmentModel.opportunity_id == opportunity_id)
         if profile_version_id is not None:
@@ -162,9 +187,9 @@ class SqlAlchemyMatchingRepository:
                 .limit(limit)
             ).unique()
         )
-        total = self.session.scalar(
-            select(func.count(MatchAssessmentModel.id)).where(*filters)
-        ) or 0
+        total = (
+            self.session.scalar(select(func.count(MatchAssessmentModel.id)).where(*filters)) or 0
+        )
         return items, total
 
     def add(
@@ -178,6 +203,7 @@ class SqlAlchemyMatchingRepository:
         if existing is not None:
             return existing
         assessment = MatchAssessmentModel(
+            owner_sub=record.owner_sub,
             opportunity_id=record.opportunity_id,
             opportunity_version=record.opportunity_version,
             profile_version_id=record.profile_version_id,
@@ -322,6 +348,7 @@ class SqlAlchemyMatchingRepository:
         max_attempts: int,
         aging_sample_ratio: float = 0.0,
         role_families: Sequence[str] = (),
+        owner_sub: str | None = None,
         # `Sequence` rather than `list`: the class already binds `list` to a method above,
         # which shadows the builtin for every annotation declared after it.
     ) -> Sequence[UUID]:
@@ -343,6 +370,9 @@ class SqlAlchemyMatchingRepository:
             value=MatchAssessmentModel.verdict,
             else_=len(ANALYSIS_VERDICT_PRIORITY),
         )
+        owner_filter = (
+            (MatchAssessmentModel.owner_sub == owner_sub,) if owner_sub is not None else ()
+        )
         base_query = (
             select(MatchAssessmentModel.id)
             .join(
@@ -358,7 +388,8 @@ class SqlAlchemyMatchingRepository:
                     attempt_window=attempt_window,
                     max_attempts=max_attempts,
                     role_families=role_families,
-                )
+                ),
+                *owner_filter,
             )
         )
         # Value first (verdict, then company priority, then score), then the freshest
@@ -394,10 +425,14 @@ class SqlAlchemyMatchingRepository:
         attempt_window: timedelta,
         max_attempts: int,
         role_families: Sequence[str] = (),
+        owner_sub: str | None = None,
     ) -> int:
         """How far behind the queue is: the same selection, without the batch cap."""
         if not eligible_verdicts or max_attempts <= 0:
             return 0
+        owner_filter = (
+            (MatchAssessmentModel.owner_sub == owner_sub,) if owner_sub is not None else ()
+        )
         total = self.session.scalar(
             select(func.count())
             .select_from(MatchAssessmentModel)
@@ -409,7 +444,8 @@ class SqlAlchemyMatchingRepository:
                     attempt_window=attempt_window,
                     max_attempts=max_attempts,
                     role_families=role_families,
-                )
+                ),
+                *owner_filter,
             )
         )
         return total or 0

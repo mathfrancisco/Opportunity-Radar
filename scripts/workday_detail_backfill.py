@@ -58,6 +58,10 @@ from opportunity_radar.opportunities.service import recompute_from_stored_descri
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts.owner_context import require_operational_owner
+
 MANIFEST_VERSION = "workday-backfill-manifest-v1"
 #: A skip reason that ends the run: the budget, the cap or the cooldown will not clear by retrying.
 _STOPPING_REASONS = frozenset({"cooldown", "cap", "quota"})
@@ -452,7 +456,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                     apply=args.apply,
                 )
             else:
-                families = active_profile_target_role_families(session)()
+                try:
+                    owner_sub = require_operational_owner(Settings())
+                except ValueError as error:
+                    parser.error(str(error))
+                families = active_profile_target_role_families(session, owner_sub)()
                 if not families:
                     parser.error("the active profile has no target role family")
                 report = run_backfill(
