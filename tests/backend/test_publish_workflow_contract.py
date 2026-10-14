@@ -26,7 +26,9 @@ def test_cloud_runtime_images_are_validated_before_tags_are_published() -> None:
     assert len(qemu["uses"].partition("@")[2]) == 40
 
     build_index = next(
-        index for index, step in enumerate(steps) if step["name"] == "Build and push cloud image by digest"
+        index
+        for index, step in enumerate(steps)
+        if step["name"] == "Build and push cloud image by digest"
     )
     inspect_index = next(
         index for index, step in enumerate(steps) if step["name"] == "Inspect cloud image manifest"

@@ -58,11 +58,21 @@ def test_publish_job_runs_release_gate_before_registry_login_or_image_push() -> 
     login_index = next(
         index for index, step in enumerate(steps) if step.get("name") == "Log in to GHCR"
     )
-    publish_index = next(
-        index for index, step in enumerate(steps) if step.get("name") == "Build and publish image"
-    )
+    build_indexes = [
+        index
+        for index, step in enumerate(steps)
+        if str(step.get("uses", "")).startswith("docker/build-push-action@")
+    ]
+    imagetools_indexes = [
+        index
+        for index, step in enumerate(steps)
+        if "imagetools create" in str(step.get("run", ""))
+    ]
+    assert build_indexes
+    assert imagetools_indexes
 
     assert "${{ vars.TENANCY_OWNER_API_READY }}" in steps[gate_index]["env"][
         "TENANCY_OWNER_API_READY"
     ]
-    assert gate_index < login_index < publish_index
+    for publish_index in build_indexes + imagetools_indexes:
+        assert gate_index < login_index < publish_index
