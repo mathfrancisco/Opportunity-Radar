@@ -967,3 +967,47 @@ def test_closure_without_claims_behaves_as_before(board: _Board) -> None:
             third.id, may_close=guard.run_may_close_absences
         ) is True
         assert _absent_status(session, board) == "CLOSED"
+
+
+def test_complete_run_after_timeout_partial_closes_absences(board: _Board) -> None:
+    """Control: a subsequent complete run still closes absences normally after a partial run.
+
+    Mid-source deadline not closing absences is exercised by
+    test_worker_timeout_preserves_positive_presence_only above.
+    """
+
+    async def stalled_after_prefix(
+        request: CollectionRequest,
+    ) -> AsyncIterator[CollectedItem]:
+        del request
+        yield board.item("present")
+        await asyncio.Event().wait()
+
+    with Session(board.engine) as session:
+        opportunities = OpportunityService(session)
+        board.run_one(board.board_of("present", "absent"))
+        _normalize_source(session, board)
+
+        # One complete run missing 'absent' is not enough to close it.
+        second = board.run_one(board.board_of("present"))
+        assert second.complete is True
+        _normalize_source(session, board)
+        opportunities.reconcile_run_closures(second.id)
+        assert _absent_status(session, board) != "CLOSED"
+
+        # Partial run also misses 'absent' and must not close it.
+        partial = asyncio.run(
+            board.service(board.collector(stalled_after_prefix), session).execute(
+                board.source_id, _REQUEST, deadline_seconds=0.05
+            )
+        )
+        assert partial.status == "PARTIAL" and partial.complete is False
+        opportunities.reconcile_run_closures(partial.id)
+        assert _absent_status(session, board) != "CLOSED"
+
+        # Control: the next complete run closes the absence.
+        third = board.run_one(board.board_of("present"))
+        assert third.complete is True
+        _normalize_source(session, board)
+        opportunities.reconcile_run_closures(third.id)
+        assert _absent_status(session, board) == "CLOSED"
