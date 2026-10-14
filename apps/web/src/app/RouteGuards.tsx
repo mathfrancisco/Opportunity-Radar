@@ -1,6 +1,7 @@
 import { useAuth } from '@clerk/react'
 import { type ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
+import { useSession } from '../lib/session'
 
 export function AuthPending() {
   return <p role="status">Verificando sessão…</p>
@@ -14,15 +15,12 @@ export function RequireSignedIn({ children }: { children: ReactNode }) {
   return children
 }
 
-// This web package has no API contract that confirms owner access. A successful general
-// request or Clerk metadata cannot prove ownership, so owner UI stays disabled until an
-// authenticated owner-only endpoint can supply that proof.
-const ownerUiAvailable = false
-
 export function RequireOwnerUi({ children }: { children: ReactNode }) {
+  const { data, isError, isPending } = useSession()
+
   return (
     <RequireSignedIn>
-      {ownerUiAvailable ? children : <Navigate replace to="/" />}
+      {data?.is_owner === true && !isPending && !isError ? children : <Navigate replace to="/" />}
     </RequireSignedIn>
   )
 }
