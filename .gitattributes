@@ -1,0 +1,2 @@
+infra/systemd/* text eol=lf
+*.sh text eol=lf
