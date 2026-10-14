@@ -222,6 +222,25 @@ def test_blank_clerk_audience_is_unset(keypair, monkeypatch: pytest.MonkeyPatch)
     assert response.status_code == 200
 
 
+def test_whitespace_clerk_audience_is_unset(keypair, monkeypatch: pytest.MonkeyPatch) -> None:
+    private, _ = keypair
+    from opportunity_radar.presentation.http import routes
+
+    monkeypatch.setattr(
+        routes,
+        "ready_health",
+        lambda _: SimpleNamespace(status="healthy", as_dict=lambda: {"status": "healthy"}),
+    )
+    client = _production_client(keypair, monkeypatch, OWNER, audience="   ")
+
+    response = client.get(
+        "/health/ready",
+        headers={"Authorization": f"Bearer {_token(private)}"},
+    )
+
+    assert response.status_code == 200
+
+
 def test_unknown_kid_and_jwks_outage_are_unauthorized(keypair) -> None:
     private, _ = keypair
     verifier = _verifier(keypair)
