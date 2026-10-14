@@ -24,9 +24,16 @@ run_id="${started_utc}-${random_suffix}"
 
 export RUN_ID="$run_id"
 export DEADLINE_UTC="$deadline_utc"
+export PIPELINE_DEADLINE_SECONDS="$window_seconds"
 printf '{"event":"pipeline_window_start","run_id":"%s","deadline_utc":"%s","window_seconds":%s}\n' \
     "$run_id" "$deadline_utc" "$window_seconds"
 
-runner=${PIPELINE_RUNNER:-/usr/bin/python3}
-runner_script=${PIPELINE_RUNNER_SCRIPT:-/opt/opportunity-radar/scripts/run_pipeline_once.py}
-exec "$runner" "$runner_script" --deadline-seconds "$window_seconds"
+compose_bin=${PIPELINE_COMPOSE_BIN:-docker}
+app_dir=${PIPELINE_APP_DIR:-/opt/opportunity-radar}
+exec "$compose_bin" compose \
+    --project-name opportunity-radar \
+    -f "$app_dir/compose.cloud.yaml" \
+    run --rm \
+    -e RUN_ID \
+    -e DEADLINE_UTC \
+    worker

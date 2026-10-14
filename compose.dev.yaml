@@ -12,7 +12,6 @@ x-dev-mounts: &dev-mounts
   - ./infra:/app/infra:ro
   - ./compose.yaml:/app/compose.yaml:ro
   - ./compose.ci.yaml:/app/compose.ci.yaml:ro
-  - ./.github:/app/.github:ro
   - ./compose.cloud.yaml:/app/compose.cloud.yaml:ro
   - ./docker/proxy:/app/docker/proxy:ro
   - ./pyproject.toml:/app/pyproject.toml:ro
