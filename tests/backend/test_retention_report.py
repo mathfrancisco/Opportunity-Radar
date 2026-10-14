@@ -71,6 +71,8 @@ class _Engine:
 
 
 class _RetentionFixture:
+    # Trimmed copy of `_Fixture` in tests/backend/operations/test_assessment_retention.py;
+    # keep the two in sync (a cross-module import of a test module is fragile).
     def __init__(self, engine: Any) -> None:
         self.engine = engine
         self.session = Session(engine)
@@ -344,11 +346,13 @@ def test_report_reads_the_isolated_database() -> None:
 @pytest.fixture
 def retention_fixture() -> Iterator[_RetentionFixture]:
     engine = create_database_engine(os.environ["DATABASE_URL"])
-    fixture = _RetentionFixture(engine)
     try:
-        yield fixture
+        fixture = _RetentionFixture(engine)
+        try:
+            yield fixture
+        finally:
+            fixture.cleanup()
     finally:
-        fixture.cleanup()
         engine.dispose()
 
 
@@ -370,6 +374,9 @@ def test_report_counts_seeded_protections_without_writing(
         fx.engine, retention_days=7, now=NOW
     )
 
+    # Cutoff is NOW - 7d. A row is a candidate only if a newer row of the same posting and
+    # profile is strictly older than the cutoff; the 20-day rows are the newest, so they are
+    # never candidates. Each seeded posting below therefore adds at most one candidate.
     analysis_posting = fx.posting()
     analysis = fx.assessment(analysis_posting, 30)
     fx.assessment(analysis_posting, 20)
@@ -385,6 +392,7 @@ def test_report_counts_seeded_protections_without_writing(
     fx.assessment(application_posting, 20)
     fx.application(application_posting)
 
+    # Version 2 (30 days) is the current pointer, so it is a candidate protected as current.
     current_posting = fx.posting()
     fx.assessment(current_posting, 30, version=2)
     fx.assessment(current_posting, 20, version=1)
@@ -396,13 +404,17 @@ def test_report_counts_seeded_protections_without_writing(
     fx.claim(overlap)
     fx.application(overlap_posting)
 
+    # The only candidate nothing protects: the single deletable row.
     unprotected_posting = fx.posting()
     fx.assessment(unprotected_posting, 30)
     fx.assessment(unprotected_posting, 20)
 
+    # Alone: nothing supersedes it, however old, so it is not a candidate.
     latest_posting = fx.posting()
     fx.assessment(latest_posting, 90)
 
+    # The newer row sits exactly at the cutoff; supersession needs `created_at < cutoff`,
+    # so the 30-day row is not a candidate.
     boundary_posting = fx.posting()
     fx.assessment(boundary_posting, 30)
     fx.assessment(boundary_posting, 7)
@@ -413,13 +425,16 @@ def test_report_counts_seeded_protections_without_writing(
 
     assert report["dry_run"] is True
     assert report["retention"]["dry_run"] is True
+    # Candidates: analysis, claim, application, current, overlap, unprotected = 6.
     assert report["retention"]["candidates"] - baseline["retention"]["candidates"] == 6
     assert report["retention"]["deletable"] - baseline["retention"]["deletable"] == 1
+    # On a dry run `deleted` previews what an unbounded run would delete; nothing is removed.
     assert report["retention"]["deleted"] - baseline["retention"]["deleted"] == 1
     assert {
         key: report["protected_references"][key] - baseline["protected_references"][key]
         for key in ("analysis", "claim", "application", "current")
     } == {"analysis": 2, "claim": 2, "application": 2, "current": 1}
+    # Protections overlap (the overlap row counts in three), so 2 + 2 + 2 + 1 = 7 > 6.
     assert sum(
         report["protected_references"][key] - baseline["protected_references"][key]
         for key in ("analysis", "claim", "application", "current")

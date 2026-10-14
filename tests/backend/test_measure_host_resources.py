@@ -27,6 +27,7 @@ class _Connection:
         "closed",
         "cursor_closed",
         "rollback_called",
+        "rollback_error",
     )
 
     def __init__(self) -> None:
@@ -36,12 +37,15 @@ class _Connection:
         self.closed = False
         self.cursor_closed = False
         self.rollback_called = False
+        self.rollback_error: Exception | None = None
 
     def cursor(self) -> _Cursor:
         return _Cursor(self)
 
     def rollback(self) -> None:
         self.rollback_called = True
+        if self.rollback_error is not None:
+            raise self.rollback_error
 
     def close(self) -> None:
         self.closed = True
@@ -135,6 +139,20 @@ def test_measurement_does_not_copy_environment_or_database_url(monkeypatch: Any)
     assert "DATABASE_URL" not in serialized
 
 
+def test_connection_is_closed_even_when_rollback_raises() -> None:
+    connection = _Connection()
+    connection.rollback_error = RuntimeError("rollback failed")
+
+    with pytest.raises(RuntimeError, match="rollback failed"):
+        measure_host_resources._postgres_connections(
+            "postgresql://user:password@host/db", lambda *_a, **_k: connection
+        )
+
+    assert connection.rollback_called is True
+    assert connection.cursor_closed is True
+    assert connection.closed is True
+
+
 @pytest.mark.integration
 @pytest.mark.skipif(
     os.environ.get("RUN_DATABASE_INTEGRATION") != "1"
@@ -160,6 +178,10 @@ def test_postgres_measurement_reads_aggregates_and_closes_connection(scheme: str
 
     assert len(connections) == 1
     assert connections[0].closed is True
+    # Effective, not just assigned: the transaction the query ran in reported read-only, and
+    # a write attempted in it was refused by the server.
+    assert connections[0].transaction_read_only == "on"
+    assert connections[0].write_refused is True
     assert connections[0].read_only_value is True
     assert connections[0].autocommit_value is None
     assert connections[0].connection.autocommit is False
@@ -175,6 +197,8 @@ class _TrackedConnection:
         self.closed = False
         self.read_only_value: bool | None = None
         self.autocommit_value: bool | None = None
+        self.transaction_read_only: str | None = None
+        self.write_refused = False
 
     @property
     def read_only(self) -> bool:
@@ -195,11 +219,32 @@ class _TrackedConnection:
         self.connection.autocommit = value
 
     def cursor(self) -> Any:
-        return self.connection.cursor()
+        return _TrackedCursor(self, self.connection.cursor())
 
     def rollback(self) -> None:
+        try:
+            self.connection.execute("CREATE TEMP TABLE measurement_write_probe (id int)")
+        except psycopg.errors.ReadOnlySqlTransaction:
+            self.write_refused = True
         self.connection.rollback()
 
     def close(self) -> None:
         self.connection.close()
         self.closed = True
+
+
+class _TrackedCursor:
+    def __init__(self, owner: _TrackedConnection, cursor: Any) -> None:
+        self.owner = owner
+        self.cursor = cursor
+
+    def execute(self, statement: str) -> None:
+        self.cursor.execute(statement)
+        row = self.owner.connection.execute("SHOW transaction_read_only").fetchone()
+        self.owner.transaction_read_only = row[0] if row else None
+
+    def fetchall(self) -> Any:
+        return self.cursor.fetchall()
+
+    def close(self) -> None:
+        self.cursor.close()
