@@ -1040,6 +1040,16 @@ def test_partial_pass_between_sources_preserves_absences(
             opportunities.reconcile_run_closures(baseline_board.id)
             opportunities.reconcile_run_closures(baseline_other.id)
 
+            # One extra complete run missing 'absent' is not enough to close it.
+            extra_board = board.run_one(board.board_of("present"))
+            extra_other = other.run_one(other.board_of("present"))
+            _normalize_source(session, board)
+            _normalize_source(session, other)
+            opportunities.reconcile_run_closures(extra_board.id)
+            opportunities.reconcile_run_closures(extra_other.id)
+            assert _absent_status(session, board) != "CLOSED"
+            assert _absent_status(session, other) != "CLOSED"
+
         # Both sources are scheduled, so the second one is skipped only by the stop.
         with Session(engine) as session:
             session.execute(
@@ -1096,24 +1106,35 @@ def test_partial_pass_between_sources_preserves_absences(
             other_latest = _latest_run(session, other.source_id)
             assert board_latest is not None and other_latest is not None
 
-            ran_board = board_latest.id != baseline_board.id
-            ran_other = other_latest.id != baseline_other.id
+            ran_board = board_latest.id not in (baseline_board.id, extra_board.id)
+            ran_other = other_latest.id not in (baseline_other.id, extra_other.id)
             assert ran_board != ran_other
 
             skipped = other if ran_board else board
-            skipped_baseline = baseline_other if ran_board else baseline_board
+            skipped_extra = extra_other if ran_board else extra_board
             skipped_collector = other_collector if ran_board else board_collector
             ran_collector = board_collector if ran_board else other_collector
+            ran = board if ran_board else other
 
             assert ran_collector.calls == 1
             assert skipped_collector.calls == 0
 
-            # The skipped source keeps its baseline run as the latest one.
+            # The skipped source keeps its extra run as the latest one.
             skipped_latest = _latest_run(session, skipped.source_id)
             assert skipped_latest is not None
-            assert skipped_latest.id == skipped_baseline.id
+            assert skipped_latest.id == skipped_extra.id
 
             # Its previously seen absent posting stays open.
             assert _absent_status(session, skipped) != "CLOSED"
+
+            # The ran source had two consecutive complete misses, so closure happened
+            # inside collect_enabled_sources.
+            assert _absent_status(session, ran) == "CLOSED"
+
+            # Control: a later complete run for the skipped source closes its absence.
+            control_run = skipped.run_one(skipped_collector)
+            _normalize_source(session, skipped)
+            opportunities.reconcile_run_closures(control_run.id)
+            assert _absent_status(session, skipped) == "CLOSED"
     finally:
         other.cleanup()

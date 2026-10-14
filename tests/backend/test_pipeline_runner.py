@@ -507,6 +507,7 @@ def test_collect_sigterm_between_sources_stops_pass_without_marking_complete(
     executed: list[tuple[UUID, SimpleNamespace]] = []
     fake = _patch_collect_dependencies(monkeypatch)
 
+    # Allow the stop check to pass for source1 and return True before source2 starts.
     result = worker.collect_enabled_sources(
         object(),
         monotonic_clock=lambda: 0.0,
@@ -520,6 +521,8 @@ def test_collect_sigterm_between_sources_stops_pass_without_marking_complete(
     assert completed_run.complete is True
     assert fake.normalize_calls == [completed_run.id]
     assert fake.closure_calls == [completed_run.id]
+    assert source2.id not in [source_id for source_id, _ in executed]
+    assert len(executed) == 1  # skipped source produced no run object at all
 
 
 def test_collect_deadline_between_sources_stops_pass_without_marking_complete(
@@ -531,6 +534,8 @@ def test_collect_deadline_between_sources_stops_pass_without_marking_complete(
     executed: list[tuple[UUID, SimpleNamespace]] = []
     fake = _patch_collect_dependencies(monkeypatch)
 
+    # Four zero clock reads let source1 start and finish; the next read exceeds the pass
+    # deadline so source2 is skipped before its execute() is ever called.
     result = worker.collect_enabled_sources(
         object(),
         monotonic_clock=_DeadlineClock(4),
@@ -544,3 +549,5 @@ def test_collect_deadline_between_sources_stops_pass_without_marking_complete(
     assert completed_run.complete is True
     assert fake.normalize_calls == [completed_run.id]
     assert fake.closure_calls == [completed_run.id]
+    assert source2.id not in [source_id for source_id, _ in executed]
+    assert len(executed) == 1  # skipped source produced no run object at all
