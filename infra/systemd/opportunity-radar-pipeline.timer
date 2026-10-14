@@ -1,0 +1,13 @@
+[Unit]
+Description=Schedule Opportunity Radar finite pipeline windows
+
+[Timer]
+OnCalendar=*-*-* 06:00:00 UTC
+RandomizedDelaySec=300
+AccuracySec=60
+Unit=opportunity-radar-pipeline.service
+# Do not catch up after reboot or a missed window; AC02 and F53-18 forbid automatic catch-up.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

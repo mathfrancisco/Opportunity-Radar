@@ -1,6 +1,6 @@
 # F53-11 — jobs e timers
 
-**Prioridade:** P1. **Estado:** planejado. **Depende de:** F53-10.
+**Prioridade:** P1. **Estado:** artefatos locais existem; prova em VM pendente. **Depende de:** F53-10.
 
 ## Objetivo
 
@@ -34,7 +34,7 @@ do processo de job.
 
 Executar estes passos no shell administrativo da VM piloto, após F53-05 e
 F53-10; os arquivos abaixo ainda não existem e são contrato de implementação.
-Criar `/etc/systemd/system/opportunity-radar-pipeline.service` com usuário sem
+Os artefatos versionados em `infra/systemd/` definem este contrato. Criar `/etc/systemd/system/opportunity-radar-pipeline.service` com usuário sem
 login, diretório de trabalho da aplicação, `EnvironmentFile` de permissão 0600,
 `Type=oneshot` e `ExecStart=/usr/local/sbin/run-opportunity-radar-window`,
 `TimeoutStartSec=<SEGUNDOS>`

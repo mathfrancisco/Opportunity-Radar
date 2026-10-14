@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+
+DEFAULT_WINDOW_SECONDS=3600
+window_seconds=${PIPELINE_WINDOW_SECONDS:-$DEFAULT_WINDOW_SECONDS}
+
+case "$window_seconds" in
+    ''|*[!0-9]*)
+        printf '%s\n' 'PIPELINE_WINDOW_SECONDS must be a positive integer' >&2
+        exit 2
+        ;;
+esac
+if [ "$window_seconds" -eq 0 ]; then
+    printf '%s\n' 'PIPELINE_WINDOW_SECONDS must be a positive integer' >&2
+    exit 2
+fi
+
+started_epoch=$(date -u +%s)
+deadline_epoch=$((started_epoch + window_seconds))
+deadline_utc=$(date -u -d "@$deadline_epoch" +%Y-%m-%dT%H:%M:%SZ)
+started_utc=$(date -u -d "@$started_epoch" +%Y-%m-%dT%H:%M:%SZ)
+random_suffix=$(od -An -N4 -tx1 /dev/urandom | tr -d '[:space:]')
+run_id="${started_utc}-${random_suffix}"
+
+export RUN_ID="$run_id"
+export DEADLINE_UTC="$deadline_utc"
+export PIPELINE_DEADLINE_SECONDS="$window_seconds"
+printf '{"event":"pipeline_window_start","run_id":"%s","deadline_utc":"%s","window_seconds":%s}\n' \
+    "$run_id" "$deadline_utc" "$window_seconds"
+
+compose_bin=${PIPELINE_COMPOSE_BIN:-docker}
+app_dir=${PIPELINE_APP_DIR:-/opt/opportunity-radar}
+exec "$compose_bin" compose \
+    --project-name opportunity-radar \
+    -f "$app_dir/compose.cloud.yaml" \
+    run --rm \
+    -e RUN_ID \
+    -e DEADLINE_UTC \
+    worker
