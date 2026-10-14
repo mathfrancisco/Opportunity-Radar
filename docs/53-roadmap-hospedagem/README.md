@@ -1,7 +1,7 @@
 # Roadmap 53 — hospedagem econômica e recuperável
 
-**Estado: planejado; nenhum card está implementado ou aceito em 6 de outubro de
-2026.** Este índice decompõe o [plano de hospedagem](../53-plano-hospedagem-cloudflare-oracle-neon-clerk.md).
+**Estado: em execução; nenhum card está concluído em 14 de outubro de 2026
+(ver [Estado em 2026-10-14](#estado-em-2026-10-14)).** Este índice decompõe o [plano de hospedagem](../53-plano-hospedagem-cloudflare-oracle-neon-clerk.md).
 Uma ação descrita aqui só começa após o respectivo gate; um plano não é prova de
 deploy, custo, segurança, backup ou recuperação.
 
@@ -53,3 +53,30 @@ segredos é evidência; intenção, checklist marcado ou execução sem artefato
   a implementação. O diretório ainda não existe neste plano.
 - Consultar o runbook para decisões de produto e fontes oficiais. Cada card
   abaixo acrescenta procedimento e aceitação, não muda aquele contrato.
+
+## Estado em 2026-10-14
+
+"Código local pronto" não é "concluído": a definição acima exige prova operacional datada e rollback testado, que ainda não existem para nenhum card.
+
+| Card | Estado | Critério | Evidência |
+| --- | --- | --- | --- |
+| F53-01 | bloqueado externo (responsáveis, teto/moeda e leitura de painéis) | orçamento, inventário e baseline redigidos | [f53-01-baseline-2026-10-08](evidencias/f53-01-baseline-2026-10-08.md) |
+| F53-02 | bloqueado externo | — | — |
+| F53-03 | bloqueado externo | — | [2026-10-09-f53-03-04-terraform-root](evidencias/2026-10-09-f53-03-04-terraform-root.md); [2026-10-14-f53-03-04-terraform-static](evidencias/2026-10-14-f53-03-04-terraform-static.md) |
+| F53-04 | em andamento (validação estática local; plan/apply/SSH externos) | shape A1.Flex, ingress 80/443 e SSH só no `admin_cidr` | [2026-10-14-f53-03-04-terraform-static](evidencias/2026-10-14-f53-03-04-terraform-static.md); [2026-10-14-f53-04-08-contratos-locais](evidencias/2026-10-14-f53-04-08-contratos-locais.md) |
+| F53-05 | em andamento (publish arm64 por digest pronto; publicação bloqueada por `TENANCY_OWNER_API_READY`, decisão do dono) | imagens arm64 publicadas por digest | [2026-10-14-f53-15-publish-arm64](evidencias/2026-10-14-f53-15-publish-arm64.md) |
+| F53-06 | em andamento (timeout/pre_ping/restore_check local; Neon real externo) | conexão e restore contra Neon real | [2026-10-09-p1-worker-owner](evidencias/2026-10-09-p1-worker-owner.md) |
+| F53-07 | código local pronto, aceite operacional pendente (chaves Clerk de produção) | validação de token com chaves de produção | [2026-10-14-f53-07-nbf-aud](evidencias/2026-10-14-f53-07-nbf-aud.md); [2026-10-09-owner-route-auth](evidencias/2026-10-09-owner-route-auth.md) |
+| F53-08 | código local pronto, aceite operacional pendente (Pages/domínio/sessão real) | sessão real em Pages com domínio | [2026-10-14-f53-08-session](evidencias/2026-10-14-f53-08-session.md); [2026-10-14-f53-04-08-contratos-locais](evidencias/2026-10-14-f53-04-08-contratos-locais.md) |
+| F53-09 | em andamento | — | [2026-10-09-compose-cloud-cors](evidencias/2026-10-09-compose-cloud-cors.md); [2026-10-09-http-tenancy-isolated](evidencias/2026-10-09-http-tenancy-isolated.md) |
+| F53-10 | código local pronto, aceite operacional pendente (piloto em VM/Neon) | piloto na VM com Neon | [2026-10-09-f53-10-pipeline-local](evidencias/2026-10-09-f53-10-pipeline-local.md); [2026-10-14-f53-10-ac05-run-parcial](evidencias/2026-10-14-f53-10-ac05-run-parcial.md) |
+| F53-11 | código local pronto, aceite operacional pendente (execução na VM) | unit systemd executada na VM | [2026-10-14-f53-11-systemd](evidencias/2026-10-14-f53-11-systemd.md) |
+| F53-12 | em andamento | medição de retenção | [2026-10-14-f53-12-13-medicao-retencao](evidencias/2026-10-14-f53-12-13-medicao-retencao.md); [2026-10-14-f53-12-13-caminho-postgres](evidencias/2026-10-14-f53-12-13-caminho-postgres.md) |
+| F53-13 | em andamento | caminho Postgres | [2026-10-14-f53-12-13-caminho-postgres](evidencias/2026-10-14-f53-12-13-caminho-postgres.md); [2026-10-09-p1-dashboard](evidencias/2026-10-09-p1-dashboard.md) |
+| F53-14 | em andamento (cópia externa cifrada e restore real; `restore_check` só aceita banco `*_test`) | backup cifrado externo e restore real | [2026-10-09-f53-14-local-backup-hardening](evidencias/2026-10-09-f53-14-local-backup-hardening.md) |
+| F53-15 | código local pronto para AC01–AC04; AC05 em andamento (validação de manifest só roda no Publish com gate) | CI e testes isolados (AC01–AC05) | [2026-10-14-f53-15-publish-arm64](evidencias/2026-10-14-f53-15-publish-arm64.md) |
+| F53-16 | bloqueado externo | — | — |
+| F53-17 | bloqueado externo | — | — |
+| F53-18 | bloqueado externo | — | — |
+
+Custos: **não medidos**.
