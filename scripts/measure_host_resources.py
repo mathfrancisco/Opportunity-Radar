@@ -98,8 +98,10 @@ def _postgres_connections(database_url: str, connect: Callable[..., Any]) -> lis
         finally:
             cursor.close()
     finally:
-        connection.rollback()
-        connection.close()
+        try:
+            connection.rollback()
+        finally:
+            connection.close()
 
 
 def collect_measurement(
