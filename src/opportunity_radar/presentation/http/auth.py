@@ -44,6 +44,7 @@ class AuthConfig:
     jwks_url: str
     authorized_parties: frozenset[str]
     owner_sub: str
+    audience: str | None = None
 
     def __post_init__(self) -> None:
         issuer = urlparse(self.issuer)
@@ -166,13 +167,18 @@ class JwtVerifier:
             key = jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(jwk))
             if not isinstance(key, RSAPublicKey):
                 raise AuthenticationError("malformed_token")
-            claims = jwt.decode(
-                token,
-                key=key,
-                algorithms=["RS256"],
-                issuer=self.config.issuer,
-                options={"require": ["exp", "iss", "sub", "azp"]},
-            )
+            decode_options = {"require": ["exp", "iss", "sub", "azp", "nbf"]}
+            decode_kwargs: dict[str, Any] = {
+                "key": key,
+                "algorithms": ["RS256"],
+                "issuer": self.config.issuer,
+                "options": decode_options,
+            }
+            if self.config.audience is not None:
+                decode_options["require"].append("aud")
+                decode_kwargs["audience"] = self.config.audience
+            # PyJWT rejects an aud claim when no audience is configured; preserve that behavior.
+            claims = jwt.decode(token, **decode_kwargs)
         except AuthenticationError:
             raise
         except (

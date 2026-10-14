@@ -155,6 +155,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         jwks_url=jwks_url.strip(),
         authorized_parties=parties,
         owner_sub=owner_sub.strip(),
+        audience=settings.clerk_audience.strip() if settings.clerk_audience else None,
     )
     app = _base_app(settings, require_https_frontend_origin=True)
     app.include_router(public_router)

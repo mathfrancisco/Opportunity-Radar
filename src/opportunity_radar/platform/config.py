@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     clerk_jwks_url: str | None = None
     clerk_authorized_parties: str = ""
     clerk_owner_sub: str | None = None
+    clerk_audience: str | None = None
     collection_timezone: str = "UTC"
     worker_collect_enabled: bool = True
     worker_normalize_enabled: bool = True

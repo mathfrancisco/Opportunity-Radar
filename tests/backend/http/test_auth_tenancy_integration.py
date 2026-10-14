@@ -71,7 +71,13 @@ def identities() -> tuple[object, dict[str, object], str, str]:
 
 def _headers(private: object, sub: str) -> dict[str, str]:
     token = jwt.encode(
-        {"iss": ISSUER, "sub": sub, "azp": PARTY, "exp": int(time.time()) + 60},
+        {
+            "iss": ISSUER,
+            "sub": sub,
+            "azp": PARTY,
+            "nbf": int(time.time()) - 5,
+            "exp": int(time.time()) + 60,
+        },
         private,
         algorithm="RS256",
         headers={"kid": KID},

@@ -207,7 +207,14 @@ def build_claims(
         issuer = WRONG_ISSUER
     if case == "wrong-azp":
         azp = WRONG_ORIGIN
-    return {"iss": issuer, "sub": SUBJECTS[persona], "azp": azp, "iat": issued, "exp": expires}
+    return {
+        "iss": issuer,
+        "sub": SUBJECTS[persona],
+        "azp": azp,
+        "iat": issued,
+        "nbf": issued - 5,
+        "exp": expires,
+    }
 
 
 def mint(

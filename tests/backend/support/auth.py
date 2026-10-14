@@ -67,6 +67,7 @@ def auth_headers(
             "iss": issuer,
             "sub": sub,
             "azp": party,
+            "nbf": int(time.time()) - 5,
             "exp": int(time.time()) + exp_seconds,
         },
         private_key,

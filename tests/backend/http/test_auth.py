@@ -47,13 +47,14 @@ def keypair():
     }
 
 
-def _verifier(keypair) -> JwtVerifier:
+def _verifier(keypair, *, audience: str | None = None) -> JwtVerifier:
     _, jwks = keypair
     config = AuthConfig(
         issuer=ISSUER,
         jwks_url=f"{ISSUER}/.well-known/jwks.json",
         authorized_parties=frozenset({PARTY}),
         owner_sub=OWNER,
+        audience=audience,
     )
     return JwtVerifier(
         config, JwksClient(config.jwks_url, transport=lambda *_: json.dumps(jwks).encode())
@@ -61,7 +62,14 @@ def _verifier(keypair) -> JwtVerifier:
 
 
 def _token(private, **claims: object) -> str:
-    payload = {"iss": ISSUER, "sub": OWNER, "azp": PARTY, "exp": int(time.time()) + 60, **claims}
+    payload = {
+        "iss": ISSUER,
+        "sub": OWNER,
+        "azp": PARTY,
+        "nbf": int(time.time()) - 5,
+        "exp": int(time.time()) + 60,
+        **claims,
+    }
     return jwt.encode(payload, private, algorithm="RS256", headers={"kid": KID})
 
 
@@ -79,7 +87,9 @@ def _client(verifier: JwtVerifier) -> TestClient:
     return TestClient(app)
 
 
-def _production_client(keypair, monkeypatch: pytest.MonkeyPatch, owner_sub: str) -> TestClient:
+def _production_client(
+    keypair, monkeypatch: pytest.MonkeyPatch, owner_sub: str, *, audience: str | None = None
+) -> TestClient:
     _, jwks = keypair
     from opportunity_radar.presentation.http import app as app_module
 
@@ -97,6 +107,7 @@ def _production_client(keypair, monkeypatch: pytest.MonkeyPatch, owner_sub: str)
                 clerk_jwks_url=f"{ISSUER}/.well-known/jwks.json",
                 clerk_authorized_parties=PARTY,
                 clerk_owner_sub=owner_sub,
+                clerk_audience=audience,
             )
         )
     )
@@ -126,6 +137,89 @@ def test_invalid_claims_are_unauthorized(keypair, claims: dict[str, object], exp
     )
 
     assert response.status_code == expected
+
+
+def test_missing_or_future_nbf_is_unauthorized(keypair) -> None:
+    private, _ = keypair
+    client = _client(_verifier(keypair))
+    missing_nbf = jwt.encode(
+        {"iss": ISSUER, "sub": OWNER, "azp": PARTY, "exp": int(time.time()) + 60},
+        private,
+        algorithm="RS256",
+        headers={"kid": KID},
+    )
+
+    assert (
+        client.get(
+            "/private",
+            headers={"Authorization": f"Bearer {missing_nbf}"},
+        ).status_code
+        == 401
+    )
+    assert (
+        client.get(
+            "/private",
+            headers={"Authorization": f"Bearer {_token(private, nbf=int(time.time()) + 60)}"},
+        ).status_code
+        == 401
+    )
+
+
+@pytest.mark.parametrize(
+    ("configured_audience", "token_audience", "expected"),
+    [
+        ("https://audience.example.test", "https://audience.example.test", 200),
+        ("https://audience.example.test", "https://other-audience.example.test", 401),
+        ("https://audience.example.test", None, 401),
+        (None, None, 200),
+        (None, "https://audience.example.test", 401),
+    ],
+)
+def test_production_audience_policy(
+    keypair,
+    monkeypatch: pytest.MonkeyPatch,
+    configured_audience: str | None,
+    token_audience: str | None,
+    expected: int,
+) -> None:
+    private, _ = keypair
+    from opportunity_radar.presentation.http import routes
+
+    monkeypatch.setattr(
+        routes,
+        "ready_health",
+        lambda _: SimpleNamespace(status="healthy", as_dict=lambda: {"status": "healthy"}),
+    )
+    client = _production_client(
+        keypair, monkeypatch, OWNER, audience=configured_audience
+    )
+    claims = {} if token_audience is None else {"aud": token_audience}
+
+    response = client.get(
+        "/health/ready",
+        headers={"Authorization": f"Bearer {_token(private, **claims)}"},
+    )
+
+    assert response.status_code == expected
+
+
+def test_blank_clerk_audience_is_unset(keypair, monkeypatch: pytest.MonkeyPatch) -> None:
+    private, _ = keypair
+    from opportunity_radar.presentation.http import routes
+
+    monkeypatch.setattr(
+        routes,
+        "ready_health",
+        lambda _: SimpleNamespace(status="healthy", as_dict=lambda: {"status": "healthy"}),
+    )
+    client = _production_client(keypair, monkeypatch, OWNER, audience="")
+
+    response = client.get(
+        "/health/ready",
+        headers={"Authorization": f"Bearer {_token(private)}"},
+    )
+
+    assert response.status_code == 200
 
 
 def test_unknown_kid_and_jwks_outage_are_unauthorized(keypair) -> None:
