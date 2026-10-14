@@ -13,6 +13,8 @@ from typing import Any
 
 import psycopg
 
+from opportunity_radar.platform.backup import postgres_dsn
+
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 
 
@@ -78,12 +80,12 @@ def _host_totals(runner: Runner) -> dict[str, Any]:
 
 def _postgres_connections(database_url: str, connect: Callable[..., Any]) -> list[dict[str, Any]]:
     connection = connect(
-        database_url,
+        postgres_dsn(database_url),
         connect_timeout=3,
         options="-c statement_timeout=3000 -c default_transaction_read_only=on",
     )
     try:
-        connection.set_session(readonly=True, autocommit=False)
+        connection.read_only = True
         cursor = connection.cursor()
         try:
             cursor.execute(
@@ -96,8 +98,10 @@ def _postgres_connections(database_url: str, connect: Callable[..., Any]) -> lis
         finally:
             cursor.close()
     finally:
-        connection.rollback()
-        connection.close()
+        try:
+            connection.rollback()
+        finally:
+            connection.close()
 
 
 def collect_measurement(
