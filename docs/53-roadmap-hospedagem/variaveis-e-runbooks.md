@@ -23,7 +23,7 @@ exige controle de acesso.
 | `CLERK_JWKS_URL` | `src/opportunity_radar/platform/config.py:23`; `compose.cloud.yaml:11` | Clerk dashboard; VM EnvironmentFile `/etc/opportunity-radar/api.env` `0600` | pública | produção, VM, preview | `curl -fsS "$CLERK_JWKS_URL" >/dev/null` | Administrador Clerk aprova endpoint JWKS |
 | `CLERK_AUTHORIZED_PARTIES` | `src/opportunity_radar/platform/config.py:24`; `compose.cloud.yaml:12` | Clerk dashboard; VM EnvironmentFile `/etc/opportunity-radar/api.env` `0600` | pública | produção, VM, preview | `test -n "${CLERK_AUTHORIZED_PARTIES:+x}" && echo set` | Dono do domínio aprova origins permitidas |
 | `CLERK_OWNER_SUB` | `src/opportunity_radar/platform/config.py:25`; `compose.cloud.yaml:13` | Clerk dashboard; VM EnvironmentFile `/etc/opportunity-radar/api.env` `0600` | secreta | produção, VM, preview | `test -n "${CLERK_OWNER_SUB:+x}" && echo set` | Administrador Clerk confirma usuário dono |
-| `CLERK_AUDIENCE` | PR #80; após merge da PR #80 | Clerk dashboard; VM EnvironmentFile `/etc/opportunity-radar/api.env` `0600` | pública | produção, VM, preview | `test -n "${CLERK_AUDIENCE:+x}" && echo set` | Administrador Clerk aprova audience; após merge da PR #80 |
+| `CLERK_AUDIENCE` | `src/opportunity_radar/platform/config.py:26`; `compose.cloud.yaml:13` | Clerk dashboard; VM EnvironmentFile `/etc/opportunity-radar/api.env` `0600` | pública | produção, VM, preview | `test -n "${CLERK_AUDIENCE:+x}" && echo set` | Administrador Clerk aprova audience |
 | `WORKER_OWNER_SUB` | `src/opportunity_radar/platform/config.py:32`; `compose.cloud.yaml:49` | VM EnvironmentFile `/etc/opportunity-radar/worker.env` `0600` | secreta | produção, VM, CI | `test -n "${WORKER_OWNER_SUB:+x}" && echo set` | Dono da aplicação confirma subject operacional |
 | `OWNER_SUB_BACKFILL` | `compose.cloud.yaml:23`; `compose.yaml:123` | VM EnvironmentFile temporário `/etc/opportunity-radar/migrate.env` `0600` | secreta | produção, VM, CI | `test -n "${OWNER_SUB_BACKFILL:+x}" && echo set` | Dono da aplicação autoriza backfill único |
 | `TENANCY_OWNER_API_READY` | `scripts/check_tenancy_release_gate.py:20` | GitHub repository variable; VM EnvironmentFile `/etc/opportunity-radar/api.env` `0600` | pública | CI, produção, VM | `test -n "${TENANCY_OWNER_API_READY:+x}" && echo set` | **Somente o dono**, depois de evidência da API com escopo do dono |
@@ -155,8 +155,13 @@ exige controle de acesso.
 
 | Nome | Origem (file:line) | Onde configurar | Pública ou secreta | Ambiente | Comando seguro de validação | Autorização externa necessária |
 | --- | --- | --- | --- | --- | --- | --- |
-| `PIPELINE_DEADLINE_SECONDS` | `compose.cloud.yaml:50` | VM EnvironmentFile `/etc/opportunity-radar/worker.env` `0600` | pública | produção, VM | `test "${PIPELINE_DEADLINE_SECONDS:-0}" -gt 0` | Dono da operação aprova janela |
-| `PIPELINE_WINDOW_SECONDS` | PR #81, wrapper systemd; pendente de merge | VM EnvironmentFile `/etc/opportunity-radar/worker.env` `0600` | pública | produção, VM | `test "${PIPELINE_WINDOW_SECONDS:-0}" -gt 0` | Dono da operação aprova janela; pendente de merge da PR #81 |
+| `PIPELINE_DEADLINE_SECONDS` | `compose.cloud.yaml:50`; `infra/systemd/run-opportunity-radar-window:28` | VM EnvironmentFile `/etc/opportunity-radar/worker.env` `0600` | pública | produção, VM | `test "${PIPELINE_DEADLINE_SECONDS:-0}" -gt 0` | Dono da operação aprova janela |
+| `PIPELINE_WINDOW_SECONDS` | `infra/systemd/run-opportunity-radar-window:5` | VM EnvironmentFile `/etc/opportunity-radar/pipeline.env` `0600` | pública | produção, VM | `test "${PIPELINE_WINDOW_SECONDS:-0}" -gt 0` | Dono da operação aprova janela |
+| `DEFAULT_WINDOW_SECONDS` | `infra/systemd/run-opportunity-radar-window:4` | Constante interna do wrapper; não configurar externamente | pública | produção, VM | `test "3600" -gt 0` | Maintainer aprova janela padrão |
+| `PIPELINE_COMPOSE_BIN` | `infra/systemd/run-opportunity-radar-window:31` | VM EnvironmentFile `/etc/opportunity-radar/pipeline.env` `0600`; somente wrapper aprovado | pública | produção, VM, teste | `test -n "${PIPELINE_COMPOSE_BIN:+x}" && echo set` | Dono da operação aprova wrapper |
+| `PIPELINE_APP_DIR` | `infra/systemd/run-opportunity-radar-window:32` | VM EnvironmentFile `/etc/opportunity-radar/pipeline.env` `0600` | pública | produção, VM | `test -d "${PIPELINE_APP_DIR:-/opt/opportunity-radar}"` | Dono da operação aprova diretório |
+| `RUN_ID` | `infra/systemd/run-opportunity-radar-window:25` | Gerada pelo wrapper; não configurar externamente | pública | produção, VM | `test -n "${RUN_ID:+x}" && echo set` | Dono da operação aprova correlação |
+| `DEADLINE_UTC` | `infra/systemd/run-opportunity-radar-window:26` | Gerada pelo wrapper; não configurar externamente | pública | produção, VM | `test -n "${DEADLINE_UTC:+x}" && echo set` | Dono da operação aprova janela |
 
 ## Backup
 
@@ -286,9 +291,10 @@ existência de token, login ou endpoint público não é evidência suficiente.
      `TLS_FULLCHAIN_PATH` e `TLS_PRIVATE_KEY_PATH`. Validar com
      `test -r "$TLS_FULLCHAIN_PATH" && test -r "$TLS_PRIVATE_KEY_PATH" && echo readable`.
      Isso libera HTTPS público.
-   - [ ] Configurar wrapper systemd e `PIPELINE_WINDOW_SECONDS` somente após
-     merge da PR #81. Validar com `test "${PIPELINE_WINDOW_SECONDS:-0}" -gt 0`.
-     Isso libera janela finita do pipeline.
+    - [ ] Configurar wrapper systemd e `PIPELINE_WINDOW_SECONDS` no arquivo
+      `/etc/opportunity-radar/pipeline.env`. Validar com
+      `test "${PIPELINE_WINDOW_SECONDS:-0}" -gt 0`. Isso libera janela finita
+      do pipeline.
    - [ ] Criar passfile temporário `0600` para backup e restore. Validar com
      `test -z "${PGPASSWORD:-}" && echo unset`. Isso libera backup sem senha em
      variável de processo.
@@ -305,4 +311,5 @@ existência de token, login ou endpoint público não é evidência suficiente.
 - [F53-14 — backup e restore](cards/f53-14-backup-restore.md)
 - [Backup consistente e restauração F18-08](../40-roadmap-varredura-produtiva/fase-18/f18-08-backup-consistente-e-restauracao.md)
 - [Backup consistente e restauração F20-41](../44-roadmap-fase-20/fase-20/f20-41-backup-consistente-e-restauracao.md)
-- `infra/systemd/README.md` — pendente (PR #81)
+- `infra/systemd/README.md` — contrato versionado; instalação em VM ainda
+  externa (`infra/systemd/README.md:5`)
