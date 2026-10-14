@@ -1,7 +1,8 @@
 # F53-12/13 — caminho Postgres da medição e relatório de retenção
 
 Data: 2026-10-14 (UTC). Branch `fix/f53-12-13-db-paths`, base `origin/main` `1a42fb8`.
-Commits: `16e3014` (correção), `6ff462e` (teste de retenção).
+Commits de código: `16e3014`, `6ff462e`, `07b08a2`, `b89d488` (final; os números abaixo
+foram obtidos neste estado de código).
 
 ## Bug
 
@@ -18,13 +19,15 @@ unitários usavam um fake com `set_session`, então nunca pegaram o erro.
   registrado em log.
 - `connection.read_only = True` com `autocommit` no padrão (False): a leitura
   roda numa transação somente leitura que termina em `rollback()`; `close()`
-  continua em `finally`. `connect_timeout` e `options` mantidos.
+  continua em `finally`, com `rollback()` em `try/finally` próprio para que
+  `close()` rode mesmo se o rollback falhar (`07b08a2`; teste unitário cobre). `connect_timeout` e `options` mantidos.
 - Fake unitário restrito à superfície do psycopg 3 (`__slots__`, sem
   `set_session`).
 - Teste de integração com Postgres real, parametrizado pelas duas formas de
   URL (`postgresql+psycopg` e `postgresql`), validando saída agregada
-  (`state`/`count`), `read_only`, ausência de autocommit e conexão fechada.
-  Guardado como os demais testes de banco (`RUN_DATABASE_INTEGRATION=1`,
+  (`state`/`count`), `read_only`, ausência de autocommit e conexão fechada, além de provar que o somente-leitura é efetivo: `SHOW
+  transaction_read_only` = `on` na transação da consulta e uma escrita recusada
+  com `ReadOnlySqlTransaction` (`b89d488`). Guardado como os demais testes de banco (`RUN_DATABASE_INTEGRATION=1`,
   `DATABASE_INTEGRATION_ISOLATED=1`, banco `*_test`).
 
 ## Retenção F53-13 AC01 (`6ff462e`)
@@ -61,33 +64,33 @@ E           AttributeError: '_TrackedConnection' object has no attribute 'set_se
 (A variante com esquema `postgresql+psycopg` também falhou no original, na
 interpretação do DSN por `psycopg.conninfo`.)
 
-### Com a correção (`16e3014` + `6ff462e`)
+### Com a correção (`b89d488`)
 
 ```text
-PASSED tests/backend/test_measure_host_resources.py::test_measurement_emits_only_aggregate_metrics_and_uses_stats_only
-PASSED tests/backend/test_measure_host_resources.py::test_measurement_does_not_copy_environment_or_database_url
-PASSED tests/backend/test_measure_host_resources.py::test_postgres_measurement_reads_aggregates_and_closes_connection[postgresql+psycopg]
-PASSED tests/backend/test_measure_host_resources.py::test_postgres_measurement_reads_aggregates_and_closes_connection[postgresql]
-PASSED tests/backend/test_retention_report.py::test_report_is_read_only_aggregate_and_counts_protected_references
-PASSED tests/backend/test_retention_report.py::test_report_reads_the_isolated_database
-PASSED tests/backend/test_retention_report.py::test_report_counts_seeded_protections_without_writing
-7 passed in 1.21s
+tests/backend/test_measure_host_resources.py: 5 passed in 0.20s
+  (inclui test_connection_is_closed_even_when_rollback_raises e
+   test_postgres_measurement_reads_aggregates_and_closes_connection[postgresql+psycopg|postgresql])
+medição + test_retention_report.py + operations/test_assessment_retention.py:
+26 passed in 11.63s
 ```
 
-Junto de `tests/backend/operations/test_assessment_retention.py`: `25 passed in 12.33s`, sem skips.
+Sem testes ignorados nessa execução.
 
-### Espelho unitário completo (sem banco, `6ff462e`)
+### Espelho unitário completo (sem banco, `b89d488`)
 
 `ruff check .`: `All checks passed!`; `mypy`: `Success: no issues found in 143 source files`.
 
 ```text
-9 failed, 1724 passed, 734 skipped, 4 warnings in 33.59s
+9 failed, 1725 passed, 734 skipped, 4 warnings in 33.87s
 ```
 
-As 9 falhas são as ambientais já conhecidas (`test_pacing_table` x3,
+As 9 falhas (`test_pacing_table` x3,
 `test_auth::test_execute_source_uses_the_verified_owner_for_target_roles` x2,
 `opportunities/test_service::test_merged_normalization_bumps_version_when_skill_changes`,
-`test_tokenharbor_provider` x3), não relacionadas a esta mudança.
+`test_tokenharbor_provider` x3) ocorrem também em `origin/main` (`1a42fb8`) neste
+mesmo contêiner local: o orquestrador observou as mesmas 9 em branches baseadas
+em `1a42fb8`. O job de backend do GitHub passa. Portanto são ambientais do
+contêiner local, não regressão desta mudança.
 
 ## Não comprovado
 
