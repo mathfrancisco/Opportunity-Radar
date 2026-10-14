@@ -1,7 +1,7 @@
 import { act, type ReactElement } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createRoot, type Root } from 'react-dom/client'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RequireOwnerUi } from './RouteGuards'
 
@@ -34,11 +34,17 @@ function render(element: ReactElement) {
 function guard(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return (
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/owner']}>
         <RequireOwnerUi><p>owner content</p></RequireOwnerUi>
+        <LocationProbe />
       </MemoryRouter>
     </QueryClientProvider>
   )
+}
+
+function LocationProbe() {
+  const location = useLocation()
+  return <output data-testid="location">{location.pathname}</output>
 }
 
 function deferredResponse() {
@@ -51,7 +57,7 @@ function deferredResponse() {
 
 async function settle() {
   await act(async () => {
-    await Promise.resolve()
+    await new Promise((resolve) => setTimeout(resolve, 0))
     await new Promise((resolve) => setTimeout(resolve, 0))
   })
 }
@@ -66,15 +72,23 @@ afterEach(() => {
 })
 
 describe('RequireOwnerUi', () => {
-  it('unlocks owner UI only for a true server capability', async () => {
-    privateFetchMock.mockResolvedValue(new Response('{"is_owner":true}', { status: 200 }))
+  it('holds the owner route while pending, then unlocks it for a true server capability', async () => {
+    const request = deferredResponse()
+    privateFetchMock.mockReturnValue(request.promise)
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const { container } = render(guard(client))
 
+    expect(container.querySelector('[role="status"]')).not.toBeNull()
+    expect(container.textContent).not.toContain('owner content')
+    expect(container.querySelector('[data-testid="location"]')?.textContent).toBe('/owner')
+
+    await settle()
+    request.resolve(new Response('{"is_owner":true}', { status: 200 }))
     await settle()
 
     expect(client.getQueryData(['session', 'owner'])).toEqual({ is_owner: true })
     expect(container.textContent).toContain('owner content')
+    expect(container.querySelector('[data-testid="location"]')?.textContent).toBe('/owner')
     expect(privateFetchMock).toHaveBeenCalledWith('/api/session')
   })
 
@@ -82,20 +96,14 @@ describe('RequireOwnerUi', () => {
     ['non-owner', new Response('{"is_owner":false}', { status: 200 })],
     ['server error', new Response('{}', { status: 500 })],
     ['unauthorized', new Response('{}', { status: 401 })],
-  ])('denies owner UI for $0', async (_, response) => {
+  ])('denies owner UI and redirects for $0', async (_, response) => {
     privateFetchMock.mockResolvedValue(response)
     const { container } = render(guard())
 
     await settle()
 
     expect(container.textContent).not.toContain('owner content')
-  })
-
-  it('denies owner UI while the session capability is pending', () => {
-    privateFetchMock.mockReturnValue(new Promise(() => undefined))
-    const { container } = render(guard())
-
-    expect(container.textContent).not.toContain('owner content')
+    expect(container.querySelector('[data-testid="location"]')?.textContent).toBe('/')
   })
 
   it('denies owner UI after logout', () => {

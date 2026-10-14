@@ -16,11 +16,12 @@ export function RequireSignedIn({ children }: { children: ReactNode }) {
 }
 
 export function RequireOwnerUi({ children }: { children: ReactNode }) {
-  const { data, isError, isPending } = useSession()
+  const { data, isError, isFetching, isPending } = useSession()
+  const isCapabilityPending = isPending || (isFetching && data === undefined)
 
   return (
     <RequireSignedIn>
-      {data?.is_owner === true && !isPending && !isError ? children : <Navigate replace to="/" />}
+      {isCapabilityPending ? <AuthPending /> : data?.is_owner === true && !isError ? children : <Navigate replace to="/" />}
     </RequireSignedIn>
   )
 }

@@ -225,7 +225,7 @@ describe('App', () => {
   })
 
   it.each(['/sources', '/sources/homologation-queue', '/companies', '/companies/owner', '/status'])(
-    'mantém usuários sem capacidade verificada fora da rota owner %s',
+    'mantém usuários sem capacidade resolvida em verificação na rota owner %s',
     (path) => {
     const client = new QueryClient({ defaultOptions: { queries: { enabled: false } } })
     const container = render(
@@ -236,7 +236,7 @@ describe('App', () => {
       </QueryClientProvider>,
     )
 
-    expect(container.querySelector('h1')?.textContent).toBe('O que move sua busca esta semana?')
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Verificando sessão…')
     expect(container.querySelector('nav a[href="/sources"]')).toBeNull()
     expect(container.querySelector('nav a[href="/companies"]')).toBeNull()
     expect(container.querySelector('nav a[href="/status"]')).toBeNull()
