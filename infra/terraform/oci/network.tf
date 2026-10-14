@@ -53,10 +53,8 @@ resource "oci_core_security_list" "public" {
     description      = "HTTPS for updates and approved external APIs."
 
     tcp_options {
-      destination_port_range {
-        min = 443
-        max = 443
-      }
+      min = 443
+      max = 443
     }
   }
 
@@ -68,10 +66,8 @@ resource "oci_core_security_list" "public" {
     description      = "PostgreSQL TLS connection to the configured Neon endpoint."
 
     tcp_options {
-      destination_port_range {
-        min = 5432
-        max = 5432
-      }
+      min = 5432
+      max = 5432
     }
   }
 
@@ -83,10 +79,8 @@ resource "oci_core_security_list" "public" {
     description      = "HTTP for package mirrors that do not support HTTPS."
 
     tcp_options {
-      destination_port_range {
-        min = 80
-        max = 80
-      }
+      min = 80
+      max = 80
     }
   }
 
@@ -98,10 +92,8 @@ resource "oci_core_security_list" "public" {
     description      = "DNS to the VCN resolver."
 
     udp_options {
-      destination_port_range {
-        min = 53
-        max = 53
-      }
+      min = 53
+      max = 53
     }
   }
 
@@ -113,10 +105,8 @@ resource "oci_core_security_list" "public" {
     description      = "TCP DNS fallback to the VCN resolver."
 
     tcp_options {
-      destination_port_range {
-        min = 53
-        max = 53
-      }
+      min = 53
+      max = 53
     }
   }
 }

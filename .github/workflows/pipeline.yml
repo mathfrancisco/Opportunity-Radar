@@ -170,6 +170,25 @@ jobs:
             -v "$PWD/docker/frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
             nginx:1.27.4-alpine nginx -t
 
+  terraform-static:
+    name: Infra / Terraform static validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate the OCI Terraform root without backend access
+        run: >-
+          docker run --rm
+          -v "$PWD/infra/terraform/oci:/work:ro"
+          -w /work
+          -e TF_DATA_DIR=/tmp/tf-data
+          --entrypoint sh
+          hashicorp/terraform:1.9.8
+          -ec 'terraform fmt -check -recursive && terraform init -backend=false -input=false -lockfile=readonly && terraform validate -no-color'
+
   e2e:
     name: Compose / smoke E2E and persistence
     runs-on: ubuntu-latest
