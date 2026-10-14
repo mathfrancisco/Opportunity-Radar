@@ -743,6 +743,8 @@ jobs:
           sbom: true
       - name: Inspect cloud image manifest
         if: matrix.cloud_runtime
+        # `imagetools inspect --raw` writes the registry's raw bytes without a trailing
+        # newline; the validator fails closed if any byte differs from the image digest.
         run: >-
           docker buildx imagetools inspect --raw
           ghcr.io/${{ github.repository_owner }}/opportunity-radar-${{ matrix.image }}@${{ steps.cloud-build.outputs.digest }}
