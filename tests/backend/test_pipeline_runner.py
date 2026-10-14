@@ -373,30 +373,6 @@ def test_run_pipeline_once_sigterm_returns_non_success(
     assert all(stage["status"] != "completed" for stage in report["stages"])
 
 
-class _StopAfter:
-    """Callable that returns False for the first `allow` calls, then True."""
-
-    def __init__(self, allow: int) -> None:
-        self.calls = 0
-        self.allow = allow
-
-    def __call__(self) -> bool:
-        self.calls += 1
-        return self.calls > self.allow
-
-
-class _DeadlineClock:
-    """Callable that returns 0.0 until after `allow` calls, then 2.0."""
-
-    def __init__(self, allow: int) -> None:
-        self.calls = 0
-        self.allow = allow
-
-    def __call__(self) -> float:
-        self.calls += 1
-        return 2.0 if self.calls > self.allow else 0.0
-
-
 def _fake_source() -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid4(),
@@ -507,11 +483,11 @@ def test_collect_sigterm_between_sources_stops_pass_without_marking_complete(
     executed: list[tuple[UUID, SimpleNamespace]] = []
     fake = _patch_collect_dependencies(monkeypatch)
 
-    # Allow the stop check to pass for source1 and return True before source2 starts.
+    # The stop flips once the fake service has executed the first source.
     result = worker.collect_enabled_sources(
         object(),
         monotonic_clock=lambda: 0.0,
-        stop_requested=_StopAfter(2),
+        stop_requested=lambda: bool(executed),
         service_factory=lambda _session: _fake_service([source1, source2], executed),
     )
 
@@ -534,11 +510,11 @@ def test_collect_deadline_between_sources_stops_pass_without_marking_complete(
     executed: list[tuple[UUID, SimpleNamespace]] = []
     fake = _patch_collect_dependencies(monkeypatch)
 
-    # Four zero clock reads let source1 start and finish; the next read exceeds the pass
-    # deadline so source2 is skipped before its execute() is ever called.
+    # The clock stays at 0.0 until the first source has executed, then jumps past the
+    # pass deadline so source2 is skipped before its execute() is ever called.
     result = worker.collect_enabled_sources(
         object(),
-        monotonic_clock=_DeadlineClock(4),
+        monotonic_clock=lambda: 2.0 if executed else 0.0,
         pass_deadline_seconds=1.0,
         service_factory=lambda _session: _fake_service([source1, source2], executed),
     )

@@ -1012,6 +1012,22 @@ def test_complete_run_after_timeout_partial_closes_absences(board: _Board) -> No
             )
         )
         assert partial.status == "PARTIAL" and partial.complete is False
+        # The stall happened after the 'present' prefix was persisted in this run.
+        present_raw = session.scalar(
+            select(RawItemModel).where(
+                RawItemModel.source_definition_id == board.source_id,
+                RawItemModel.external_id == "present",
+            )
+        )
+        assert present_raw is not None
+        session.expire_all()
+        present_occurrence = session.scalar(
+            select(SourceOccurrenceModel).where(
+                SourceOccurrenceModel.raw_item_id == present_raw.id
+            )
+        )
+        assert present_occurrence is not None
+        assert present_occurrence.last_seen_run_id == partial.id
         opportunities.reconcile_run_closures(partial.id)
         assert _absent_status(session, board) != "CLOSED"
 
@@ -1074,7 +1090,9 @@ def test_partial_pass_between_sources_preserves_absences(
 
         def run_async_with_flag(coro: object) -> object:
             result = original_run_async(coro)
-            stop_after_first.stop = True
+            # Flip only once a collector has really run for the first source.
+            if board_collector.calls + other_collector.calls >= 1:
+                stop_after_first.stop = True
             return result
 
         monkeypatch.setattr(worker, "run_async", run_async_with_flag)
