@@ -10,6 +10,7 @@ x-runtime-environment: &runtime-environment
   CLERK_ISSUER: ${CLERK_ISSUER:?CLERK_ISSUER is required by the production API}
   CLERK_JWKS_URL: ${CLERK_JWKS_URL:?CLERK_JWKS_URL is required by the production API}
   CLERK_AUTHORIZED_PARTIES: ${CLERK_AUTHORIZED_PARTIES:?CLERK_AUTHORIZED_PARTIES is required by the production API}
+  CLERK_AUDIENCE: ${CLERK_AUDIENCE:-} # optional JWT audience restriction
   CLERK_OWNER_SUB: ${CLERK_OWNER_SUB:?CLERK_OWNER_SUB is required by the production API}
   AI_ENABLED: ${AI_ENABLED:-false}
   GROQ_API_KEY: ${GROQ_API_KEY:-}
