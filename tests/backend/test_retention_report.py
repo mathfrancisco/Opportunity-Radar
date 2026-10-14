@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
+
 from opportunity_radar.operations.assessment_retention import AssessmentPruneReport
+from opportunity_radar.platform.database import create_database_engine
 from scripts import retention_report
 
 
@@ -87,3 +91,22 @@ def test_report_is_read_only_aggregate_and_counts_protected_references(monkeypat
     serialized = json.dumps(report)
     assert "query" not in serialized.lower()
     assert "personal" not in serialized.lower()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("RUN_DATABASE_INTEGRATION") != "1"
+    or os.environ.get("DATABASE_INTEGRATION_ISOLATED") != "1",
+    reason="database integration is enabled only in the isolated PostgreSQL database",
+)
+@pytest.mark.skipif(
+    not os.environ.get("DATABASE_URL", "").split("?")[0].rstrip("/").endswith("_test"),
+    reason="database integration requires a database name ending in _test",
+)
+def test_report_reads_the_isolated_database() -> None:
+    report = retention_report.build_report(
+        create_database_engine(os.environ["DATABASE_URL"]), retention_days=7
+    )
+
+    assert report["dry_run"] is True
+    assert report["retention"]["dry_run"] is True
