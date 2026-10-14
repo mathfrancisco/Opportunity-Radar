@@ -37,14 +37,35 @@ def _has_linux_arm64(document: Any) -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--api-image", required=True)
-    parser.add_argument("--worker-image", required=True)
-    parser.add_argument("--proxy-image", required=True)
-    parser.add_argument("--manifest", action="append", type=_manifest_path, default=[])
+    parser.add_argument("--api-image")
+    parser.add_argument("--worker-image")
+    parser.add_argument("--proxy-image")
+    parser.add_argument("--role", choices=_ROLES)
+    parser.add_argument("--image")
+    parser.add_argument("--manifest", action="append", default=[])
     args = parser.parse_args(argv)
 
-    images = {"api": args.api_image, "worker": args.worker_image, "proxy": args.proxy_image}
-    manifests = dict(args.manifest)
+    if args.role:
+        if not args.image:
+            parser.error("--role requires --image")
+        if len(args.manifest) != 1:
+            parser.error("--role requires exactly one --manifest PATH")
+        images = {args.role: args.image}
+        manifests = {args.role: Path(args.manifest[0])}
+    else:
+        images = {
+            "api": args.api_image,
+            "worker": args.worker_image,
+            "proxy": args.proxy_image,
+        }
+        missing = [role for role, image in images.items() if not image]
+        if missing:
+            parser.error("legacy mode requires --api-image, --worker-image, and --proxy-image")
+        try:
+            manifest_pairs = [_manifest_path(value) for value in args.manifest]
+        except argparse.ArgumentTypeError as error:
+            parser.error(str(error))
+        manifests = dict(manifest_pairs)
     errors: list[str] = []
     for role, image in images.items():
         if not _DIGEST_REFERENCE.fullmatch(image):

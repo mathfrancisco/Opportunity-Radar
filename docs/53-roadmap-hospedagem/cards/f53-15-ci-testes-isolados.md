@@ -21,7 +21,7 @@ pipeline usa curl anônimo e não atende ao futuro contrato Clerk.
    redigida. Falha não usa continue-on-error.
 5. Rodar integração uma vez no final apenas com variáveis de isolamento e
    servidor/compartment separado.
-6. Inspecionar manifest publicado de api e worker: deve conter linux/arm64;
+6. Inspecionar manifest publicado de api, worker e proxy: deve conter linux/arm64;
    Buildx instalado não prova plataforma publicada.
 
 ## Aceite
@@ -32,7 +32,7 @@ pipeline usa curl anônimo e não atende ao futuro contrato Clerk.
 | AC02 | JWT/JWKS fixture do dono | E2E autorizado sem Clerk live |
 | AC03 | claims inválidos ou outro sub | 401 ou 403 determinístico |
 | AC04 | URL não isolada | guard recusa antes de tocar dados |
-| AC05 | manifest de imagens | api e worker incluem linux/arm64 |
+| AC05 | manifest de imagens | api, worker e proxy incluem linux/arm64 |
 
 Preservar JUnit, saída, workflow e prova de isolamento sem token, DSN ou env.
 
@@ -68,6 +68,14 @@ Para integração PG17 isolada, exportar somente no job
 não recebem segredo Clerk, não fazem rede live e não oferecem bypass habilitável
 em produção. Token fixture deve ser criado em arquivo temporário 0600 ou memória,
 nunca argv/log.
+
+## Integração de banco no CI
+
+O job `Backend / tests and migrations` usa exclusivamente o service container
+PostgreSQL efêmero do GitHub Actions, com banco `opportunity_radar_test` e as
+variáveis `RUN_DATABASE_INTEGRATION=1` e `DATABASE_INTEGRATION_ISOLATED=1`.
+O guard recusa qualquer URL que não termine em `_test` antes da coleta; por
+isso essa suite nunca aponta para Neon ou outro banco operacional.
 
 ## Mapa de comandos e diagnóstico
 
