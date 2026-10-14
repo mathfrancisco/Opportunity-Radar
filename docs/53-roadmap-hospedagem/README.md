@@ -28,6 +28,9 @@ deploy, custo, segurança, backup ou recuperação.
 
 ## Caminho crítico e definição de pronto
 
+Consulte também o [inventário de variáveis e runbooks](variaveis-e-runbooks.md)
+antes de configurar GitHub, Cloudflare, Clerk, Neon ou a VM OCI.
+
 O caminho crítico é F53-01 → F53-02/F53-03 → F53-04 → F53-05 → F53-09,
 F53-06 → F53-14, F53-07 → F53-15, F53-10 → F53-11 → F53-16 → F53-17 →
 F53-18. Autorização antes de expor a API, TLS antes de dados pessoais, testes
