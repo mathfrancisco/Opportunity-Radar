@@ -20,6 +20,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from opportunity_radar import worker
 from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
@@ -872,6 +873,15 @@ def _absent_status(session: Session, board: _Board) -> str:
     return occurrence.opportunity.lifecycle_status
 
 
+def _latest_run(session: Session, source_id: UUID) -> SourceRunModel | None:
+    return session.scalar(
+        select(SourceRunModel)
+        .where(SourceRunModel.source_definition_id == source_id)
+        .order_by(SourceRunModel.started_at.desc())
+        .limit(1)
+    )
+
+
 def test_stale_complete_run_does_not_close_absences_once_a_newer_run_started(
     board: _Board, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -1011,3 +1021,99 @@ def test_complete_run_after_timeout_partial_closes_absences(board: _Board) -> No
         _normalize_source(session, board)
         opportunities.reconcile_run_closures(third.id)
         assert _absent_status(session, board) == "CLOSED"
+
+
+def test_partial_pass_between_sources_preserves_absences(
+    board: _Board, engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pass stopped between two sources leaves the second source's postings open."""
+    other = _Board(engine)
+    try:
+        with Session(engine) as session:
+            opportunities = OpportunityService(session)
+
+            # Baseline: both sources see 'present' and 'absent'.
+            baseline_board = board.run_one(board.board_of("present", "absent"))
+            baseline_other = other.run_one(other.board_of("present", "absent"))
+            _normalize_source(session, board)
+            _normalize_source(session, other)
+            opportunities.reconcile_run_closures(baseline_board.id)
+            opportunities.reconcile_run_closures(baseline_other.id)
+
+        # Both sources are scheduled, so the second one is skipped only by the stop.
+        with Session(engine) as session:
+            session.execute(
+                update(SourceDefinitionModel)
+                .where(
+                    SourceDefinitionModel.id.in_([board.source_id, other.source_id])
+                )
+                .values(schedule="0 * * * *")
+            )
+            session.commit()
+
+        # Partial pass: stop after the first source completes.
+        class _StopAfterFirstRun:
+            def __init__(self) -> None:
+                self.stop = False
+
+            def __call__(self) -> bool:
+                return self.stop
+
+        stop_after_first = _StopAfterFirstRun()
+        original_run_async = worker.run_async
+
+        def run_async_with_flag(coro: object) -> object:
+            result = original_run_async(coro)
+            stop_after_first.stop = True
+            return result
+
+        monkeypatch.setattr(worker, "run_async", run_async_with_flag)
+
+        board_collector = board.board_of("present")
+        other_collector = other.board_of("present")
+
+        counts = worker.collect_enabled_sources(
+            engine,
+            owner_sub="test-owner",
+            # Both sources just ran, so the gate is only DUE far enough ahead.
+            now=datetime.now(UTC) + timedelta(days=30),
+            service_factory=lambda session: AcquisitionService(
+                session,
+                registry=CollectorRegistry((board_collector, other_collector)),
+                repository=AcquisitionRepository(session),
+                claims_enabled=True,
+                claim_renew_interval_seconds=_NO_RENEWAL,
+            ),
+            stop_requested=stop_after_first,
+            monotonic_clock=lambda: 0.0,
+        )
+
+        assert counts["completed"] == 1
+        assert counts["skipped"] >= 1
+
+        with Session(engine) as session:
+            board_latest = _latest_run(session, board.source_id)
+            other_latest = _latest_run(session, other.source_id)
+            assert board_latest is not None and other_latest is not None
+
+            ran_board = board_latest.id != baseline_board.id
+            ran_other = other_latest.id != baseline_other.id
+            assert ran_board != ran_other
+
+            skipped = other if ran_board else board
+            skipped_baseline = baseline_other if ran_board else baseline_board
+            skipped_collector = other_collector if ran_board else board_collector
+            ran_collector = board_collector if ran_board else other_collector
+
+            assert ran_collector.calls == 1
+            assert skipped_collector.calls == 0
+
+            # The skipped source keeps its baseline run as the latest one.
+            skipped_latest = _latest_run(session, skipped.source_id)
+            assert skipped_latest is not None
+            assert skipped_latest.id == skipped_baseline.id
+
+            # Its previously seen absent posting stays open.
+            assert _absent_status(session, skipped) != "CLOSED"
+    finally:
+        other.cleanup()

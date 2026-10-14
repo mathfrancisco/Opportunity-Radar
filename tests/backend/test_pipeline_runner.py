@@ -421,7 +421,9 @@ def _fake_collector_registry() -> SimpleNamespace:
     return SimpleNamespace(registry=_FakeRegistry())
 
 
-def _fake_service(sources: list[SimpleNamespace], runs: list[UUID]) -> SimpleNamespace:
+def _fake_service(
+    sources: list[SimpleNamespace], executed: list[tuple[UUID, SimpleNamespace]]
+) -> SimpleNamespace:
     base = _fake_collector_registry()
 
     class _FakeService:
@@ -435,6 +437,9 @@ def _fake_service(sources: list[SimpleNamespace], runs: list[UUID]) -> SimpleNam
         ) -> SourceSchedulingState:
             return SourceSchedulingState(schedule="0 * * * *", timezone=timezone)
 
+        def run_may_close_absences(self, _run: SimpleNamespace) -> bool:
+            return True
+
         async def execute(
             self,
             source_id: UUID,
@@ -443,8 +448,7 @@ def _fake_service(sources: list[SimpleNamespace], runs: list[UUID]) -> SimpleNam
             deadline_seconds: float | None = None,
         ) -> SimpleNamespace:
             del deadline_seconds
-            runs.append(source_id)
-            return SimpleNamespace(
+            run = SimpleNamespace(
                 id=uuid4(),
                 status="SUCCEEDED",
                 complete=True,
@@ -457,20 +461,31 @@ def _fake_service(sources: list[SimpleNamespace], runs: list[UUID]) -> SimpleNam
                 error_code=None,
                 error_summary=None,
             )
+            executed.append((source_id, run))
+            return run
 
     return _FakeService()
 
 
-def _patch_collect_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
-    class _FakeOpportunityService:
-        def normalize_run(self, _run_id: UUID) -> None:
-            pass
+class _FakeOpportunityService:
+    def __init__(self) -> None:
+        self.normalize_calls: list[UUID] = []
+        self.closure_calls: list[UUID] = []
 
-        def reconcile_run_closures(
-            self, _run_id: UUID, *, may_close: object = None
-        ) -> None:
-            pass
+    def normalize_run(self, run_id: UUID) -> None:
+        self.normalize_calls.append(run_id)
 
+    def reconcile_run_closures(
+        self, run_id: UUID, *, may_close: object = None
+    ) -> None:
+        del may_close
+        self.closure_calls.append(run_id)
+
+
+def _patch_collect_dependencies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> _FakeOpportunityService:
+    fake = _FakeOpportunityService()
     monkeypatch.setattr(worker, "_operational_owner", lambda _sub, **kwargs: "owner")
     monkeypatch.setattr(
         worker, "observe_job", lambda _engine, **kwargs: nullcontext("corr")
@@ -479,46 +494,53 @@ def _patch_collect_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         worker, "Session", lambda _engine: nullcontext(SimpleNamespace(rollback=lambda: None))
     )
-    monkeypatch.setattr(
-        worker, "OpportunityService", lambda _session: _FakeOpportunityService()
-    )
+    monkeypatch.setattr(worker, "OpportunityService", lambda _session: fake)
+    return fake
 
 
 def test_collect_sigterm_between_sources_stops_pass_without_marking_complete(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """SIGTERM between sources skips the rest of the pass; the pass is not completed."""
+    """SIGTERM between sources skips the rest of the pass; no closure for skipped sources."""
     source1 = _fake_source()
     source2 = _fake_source()
-    runs: list[UUID] = []
-    _patch_collect_dependencies(monkeypatch)
+    executed: list[tuple[UUID, SimpleNamespace]] = []
+    fake = _patch_collect_dependencies(monkeypatch)
 
     result = worker.collect_enabled_sources(
         object(),
         monotonic_clock=lambda: 0.0,
         stop_requested=_StopAfter(2),
-        service_factory=lambda _session: _fake_service([source1, source2], runs),
+        service_factory=lambda _session: _fake_service([source1, source2], executed),
     )
 
     assert result == {"input": 2, "completed": 1, "failed": 0, "skipped": 1, "stopped": 1}
-    assert runs == [source1.id]
+    assert [source_id for source_id, _ in executed] == [source1.id]
+    completed_run = executed[0][1]
+    assert completed_run.complete is True
+    assert fake.normalize_calls == [completed_run.id]
+    assert fake.closure_calls == [completed_run.id]
 
 
 def test_collect_deadline_between_sources_stops_pass_without_marking_complete(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Deadline expiry between sources skips the rest of the pass; the pass is not completed."""
+    """Deadline expiry between sources skips the rest; no closure for skipped sources."""
     source1 = _fake_source()
     source2 = _fake_source()
-    runs: list[UUID] = []
-    _patch_collect_dependencies(monkeypatch)
+    executed: list[tuple[UUID, SimpleNamespace]] = []
+    fake = _patch_collect_dependencies(monkeypatch)
 
     result = worker.collect_enabled_sources(
         object(),
         monotonic_clock=_DeadlineClock(4),
         pass_deadline_seconds=1.0,
-        service_factory=lambda _session: _fake_service([source1, source2], runs),
+        service_factory=lambda _session: _fake_service([source1, source2], executed),
     )
 
     assert result == {"input": 2, "completed": 1, "failed": 0, "skipped": 1, "stopped": 0}
-    assert runs == [source1.id]
+    assert [source_id for source_id, _ in executed] == [source1.id]
+    completed_run = executed[0][1]
+    assert completed_run.complete is True
+    assert fake.normalize_calls == [completed_run.id]
+    assert fake.closure_calls == [completed_run.id]
