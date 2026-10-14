@@ -17,12 +17,6 @@ const queryClient = new QueryClient({
  * The cache is dropped synchronously during render when the identity changes, and children are
  * remounted under an identity key, so no observer can keep showing the previous user's data.
  */
-/**
- * Wires Clerk into the API layer and isolates the query cache per identity.
- *
- * The cache is dropped synchronously during render when the identity changes, and children are
- * remounted under an identity key, so no observer can keep showing the previous user's data.
- */
 export function ClerkTokenBridge({ children }: { children: ReactNode }) {
   const { getToken, isSignedIn, userId } = useAuth()
   const queryClient = useQueryClient()

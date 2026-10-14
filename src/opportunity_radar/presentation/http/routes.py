@@ -9,6 +9,7 @@ from opportunity_radar.presentation.http.matching import router as matching_rout
 from opportunity_radar.presentation.http.opportunities import router as opportunities_router
 from opportunity_radar.presentation.http.pipeline import router as pipeline_router
 from opportunity_radar.presentation.http.profile import router as profile_router
+from opportunity_radar.presentation.http.session import router as session_router
 
 private_router = APIRouter()
 private_router.include_router(acquisition_router)
@@ -18,6 +19,7 @@ private_router.include_router(matching_router)
 private_router.include_router(opportunities_router)
 private_router.include_router(pipeline_router)
 private_router.include_router(profile_router)
+private_router.include_router(session_router)
 
 public_router = APIRouter()
 
