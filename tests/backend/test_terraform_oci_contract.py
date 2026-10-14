@@ -11,7 +11,9 @@ def _read(name: str) -> str:
 
 
 def _all_tf() -> str:
-    return "\n".join(path.read_text(encoding="utf-8") for path in sorted(TF_DIR.glob("*.tf")))
+    files = sorted(TF_DIR.glob("*.tf"))
+    assert files, f"no .tf files found in {TF_DIR}"
+    return "\n".join(path.read_text(encoding="utf-8") for path in files)
 
 
 def _variable_block(name: str) -> str:
@@ -52,9 +54,9 @@ def test_instance_shape_is_a1_flex_within_always_free_limits() -> None:
 def test_boot_volume_is_fixed_at_50_gb() -> None:
     assert _default("boot_volume_size_gbs") == "50"
     assert "var.boot_volume_size_gbs == 50" in _variable_block("boot_volume_size_gbs")
-    assert re.search(
-        r"boot_volume_size_in_gbs\s*=\s*var\.boot_volume_size_gbs\b", _read("compute.tf")
-    )
+    compute = _read("compute.tf")
+    assert re.search(r"boot_volume_size_in_gbs\s*=\s*var\.boot_volume_size_gbs\b", compute)
+    assert re.search(r"var\.boot_volume_size_gbs\s*<=\s*50\b", compute)
 
 
 def test_public_ingress_is_only_web_ports_and_admin_scoped_ssh() -> None:
@@ -103,5 +105,7 @@ def test_no_remote_backend_nat_load_balancer_or_database_resources() -> None:
         "oci_nosql_",
     )
     resources = set(re.findall(r'^\s*resource\s+"(\w+)"', text, re.M))
+    assert resources
+    assert "oci_core_instance" in resources
     for prefix in forbidden:
         assert not [name for name in resources if name.startswith(prefix)], prefix
