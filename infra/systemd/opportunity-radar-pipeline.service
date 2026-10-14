@@ -1,0 +1,15 @@
+[Unit]
+Description=Opportunity Radar finite pipeline window
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=opportunity-radar
+WorkingDirectory=/opt/opportunity-radar
+EnvironmentFile=-/etc/opportunity-radar/pipeline.env
+ExecStart=/usr/local/sbin/run-opportunity-radar-window
+TimeoutStartSec=3900
+TimeoutStopSec=30
+Restart=no
+KillSignal=SIGTERM
