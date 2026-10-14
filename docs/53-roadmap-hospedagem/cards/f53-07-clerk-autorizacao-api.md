@@ -15,8 +15,8 @@ em multiusuário. A API, não o frontend, valida o JWT e impõe o vínculo imut�
 `<CLERK_ISSUER>`, JWKS, algoritmo permitido e `<OWNER_SUB>` no cofre/configuração
 segura. Não usar segredo ou chave `sk_` no frontend.
 2. Implementar dependência de autenticação no backend e testes futuros, por
-   exemplo em `tests/backend/presentation/test_auth.py`; o arquivo ainda não
-   existe. Usar SDK Python/documentação Python, não copiar API JavaScript.
+   exemplo em `tests/backend/http/test_auth.py`; o arquivo já existe. Usar SDK
+   Python/documentação Python, não copiar API JavaScript.
 3. Buscar JWKS por URL do issuer com cache limitado e validar assinatura,
    issuer, algoritmo, `exp` e `nbf`. Rejeitar algoritmo inesperado, chave não
    encontrada, token expirado e issuer diferente.

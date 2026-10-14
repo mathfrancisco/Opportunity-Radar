@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import json
 import os
-from contextlib import nullcontext
+from collections.abc import Iterator
+from contextlib import contextmanager, nullcontext
 from datetime import timedelta
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from opportunity_radar import worker
+from opportunity_radar.acquisition.collectors import CollectorCapabilities
+from opportunity_radar.acquisition.domain import CollectionRequest
+from opportunity_radar.acquisition.scheduling import SourceSchedulingState
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.pipeline import (
     ClaimBusyError,
@@ -261,3 +266,264 @@ def test_no_analysis_or_retention_is_planned() -> None:
     stages = describe_pipeline(owner_sub="owner", deadline_seconds=30)["stages"]
     assert stages[-2]["status"] == "blocked"
     assert stages[-1]["status"] == "blocked"
+
+
+# --- F53-10 AC03/AC05 -----------------------------------------------------------------
+# Mid-source deadline not closing absences is covered by
+# tests/backend/acquisition/test_source_run_claim_fencing.py::
+# test_worker_timeout_preserves_positive_presence_only.
+# The tests below add the missing runner-level and between-sources interruption angles.
+
+
+def _run_pipeline_once_settings(**overrides: object) -> SimpleNamespace:
+    return SimpleNamespace(
+        database_url="postgresql://unused",
+        worker_owner_sub="owner",
+        collection_timezone="UTC",
+        collection_backoff_base_seconds=300.0,
+        collection_backoff_ceiling_seconds=86400.0,
+        collection_source_deadline_seconds=0.0,
+        collection_pass_deadline_seconds=None,
+        collection_host_concurrency=1,
+        worker_evaluate_batch_size=10,
+        **overrides,
+    )
+
+
+def _patch_run_pipeline_once_for_non_success(
+    monkeypatch: pytest.MonkeyPatch,
+    collect_result: dict[str, int],
+) -> None:
+    monkeypatch.setattr(
+        run_pipeline_once, "get_settings", lambda: _run_pipeline_once_settings()
+    )
+    monkeypatch.setattr(run_pipeline_once, "create_database_engine", lambda _url: object())
+    monkeypatch.setattr(run_pipeline_once, "validate_owner", lambda sub: sub)
+    monkeypatch.setattr(run_pipeline_once, "PostgresWindowClaim", lambda _engine: nullcontext())
+    monkeypatch.setattr(
+        run_pipeline_once, "collect_enabled_sources", lambda **kwargs: collect_result
+    )
+    monkeypatch.setattr(
+        run_pipeline_once,
+        "normalize_opportunities",
+        lambda **kwargs: {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 0},
+    )
+    monkeypatch.setattr(
+        run_pipeline_once,
+        "evaluate_pending",
+        lambda **kwargs: {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 0},
+    )
+
+
+def test_run_pipeline_once_deadline_reached_returns_non_success(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Runner-level deadline hit reports partial/deadline and returns non-success."""
+    _patch_run_pipeline_once_for_non_success(
+        monkeypatch,
+        {"input": 1, "completed": 0, "failed": 0, "skipped": 0, "stopped": 1},
+    )
+
+    # `run_pipeline`'s default clock is the `time.monotonic` object imported at module
+    # load, so patching the module attribute is not enough. Wrap the call to inject a
+    # fake clock that expires the deadline before the collect stage finishes.
+    real_run_pipeline = run_pipeline_once.run_pipeline
+    clock_values = [0.0, 0.0, 100.0, 100.0, 100.0, 100.0]
+
+    def _run_with_fake_clock(*args: object, **kwargs: object) -> object:
+        return real_run_pipeline(
+            *args,
+            clock=lambda: clock_values.pop(0) if clock_values else 100.0,
+            **kwargs,
+        )
+
+    monkeypatch.setattr(run_pipeline_once, "run_pipeline", _run_with_fake_clock)
+
+    exit_code = run_pipeline_once.main(["--deadline-seconds=1"])
+    report = json.loads(capsys.readouterr().out)
+
+    assert exit_code == ExitCode.DEADLINE_REACHED
+    assert report["outcome"] == "deadline_reached"
+    assert report["stop_reason"] == "deadline"
+    assert all(stage["status"] != "completed" for stage in report["stages"])
+
+
+def test_run_pipeline_once_sigterm_returns_non_success(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """SIGTERM stops the runner gracefully and no stage is marked completed."""
+    _patch_run_pipeline_once_for_non_success(
+        monkeypatch,
+        {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 1},
+    )
+
+    @contextmanager
+    def sigterm_stop(stop: StopSignal) -> Iterator[None]:
+        stop.set("interrupted")
+        yield
+
+    monkeypatch.setattr(run_pipeline_once, "signal_stop", sigterm_stop)
+
+    exit_code = run_pipeline_once.main(["--deadline-seconds=1"])
+    report = json.loads(capsys.readouterr().out)
+
+    assert exit_code == ExitCode.INTERRUPTED
+    assert report["outcome"] == "interrupted"
+    assert report["stop_reason"] == "interrupted"
+    assert all(stage["status"] != "completed" for stage in report["stages"])
+
+
+def _fake_source() -> SimpleNamespace:
+    return SimpleNamespace(
+        id=uuid4(),
+        source_type="fake",
+        name="fake",
+        configuration={},
+        rate_limit_policy={},
+        checkpoint=None,
+    )
+
+
+def _fake_collector_registry() -> SimpleNamespace:
+    class _FakeCollector:
+        capabilities = CollectorCapabilities(
+            incremental_cursor=False, keyword_search=False
+        )
+
+    class _FakeRegistry:
+        def resolve(self, _source_type: str) -> _FakeCollector:
+            return _FakeCollector()
+
+    return SimpleNamespace(registry=_FakeRegistry())
+
+
+def _fake_service(
+    sources: list[SimpleNamespace], executed: list[tuple[UUID, SimpleNamespace]]
+) -> SimpleNamespace:
+    base = _fake_collector_registry()
+
+    class _FakeService:
+        registry = base.registry
+
+        def list_collectable_sources(self) -> list[SimpleNamespace]:
+            return list(sources)
+
+        def scheduling_state(
+            self, _source: SimpleNamespace, *, timezone: str
+        ) -> SourceSchedulingState:
+            return SourceSchedulingState(schedule="0 * * * *", timezone=timezone)
+
+        def run_may_close_absences(self, _run: SimpleNamespace) -> bool:
+            return True
+
+        async def execute(
+            self,
+            source_id: UUID,
+            _request: CollectionRequest,
+            *,
+            deadline_seconds: float | None = None,
+        ) -> SimpleNamespace:
+            del deadline_seconds
+            run = SimpleNamespace(
+                id=uuid4(),
+                status="SUCCEEDED",
+                complete=True,
+                items_persisted=1,
+                items_seen=1,
+                items_skipped=0,
+                items_invalid=0,
+                http_requests=1,
+                retry_count=0,
+                error_code=None,
+                error_summary=None,
+            )
+            executed.append((source_id, run))
+            return run
+
+    return _FakeService()
+
+
+class _FakeOpportunityService:
+    def __init__(self) -> None:
+        self.normalize_calls: list[UUID] = []
+        self.closure_calls: list[UUID] = []
+
+    def normalize_run(self, run_id: UUID) -> None:
+        self.normalize_calls.append(run_id)
+
+    def reconcile_run_closures(
+        self, run_id: UUID, *, may_close: object = None
+    ) -> None:
+        del may_close
+        self.closure_calls.append(run_id)
+
+
+def _patch_collect_dependencies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> _FakeOpportunityService:
+    fake = _FakeOpportunityService()
+    monkeypatch.setattr(worker, "_operational_owner", lambda _sub, **kwargs: "owner")
+    monkeypatch.setattr(
+        worker, "observe_job", lambda _engine, **kwargs: nullcontext("corr")
+    )
+    monkeypatch.setattr(worker, "annotate_pass", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        worker, "Session", lambda _engine: nullcontext(SimpleNamespace(rollback=lambda: None))
+    )
+    monkeypatch.setattr(worker, "OpportunityService", lambda _session: fake)
+    return fake
+
+
+def test_collect_sigterm_between_sources_stops_pass_without_marking_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SIGTERM between sources skips the rest of the pass; no closure for skipped sources."""
+    source1 = _fake_source()
+    source2 = _fake_source()
+    executed: list[tuple[UUID, SimpleNamespace]] = []
+    fake = _patch_collect_dependencies(monkeypatch)
+
+    # The stop flips once the fake service has executed the first source.
+    result = worker.collect_enabled_sources(
+        object(),
+        monotonic_clock=lambda: 0.0,
+        stop_requested=lambda: bool(executed),
+        service_factory=lambda _session: _fake_service([source1, source2], executed),
+    )
+
+    assert result == {"input": 2, "completed": 1, "failed": 0, "skipped": 1, "stopped": 1}
+    assert [source_id for source_id, _ in executed] == [source1.id]
+    completed_run = executed[0][1]
+    assert completed_run.complete is True
+    assert fake.normalize_calls == [completed_run.id]
+    assert fake.closure_calls == [completed_run.id]
+    assert source2.id not in [source_id for source_id, _ in executed]
+    assert len(executed) == 1  # skipped source produced no run object at all
+
+
+def test_collect_deadline_between_sources_stops_pass_without_marking_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deadline expiry between sources skips the rest; no closure for skipped sources."""
+    source1 = _fake_source()
+    source2 = _fake_source()
+    executed: list[tuple[UUID, SimpleNamespace]] = []
+    fake = _patch_collect_dependencies(monkeypatch)
+
+    # The clock stays at 0.0 until the first source has executed, then jumps past the
+    # pass deadline so source2 is skipped before its execute() is ever called.
+    result = worker.collect_enabled_sources(
+        object(),
+        monotonic_clock=lambda: 2.0 if executed else 0.0,
+        pass_deadline_seconds=1.0,
+        service_factory=lambda _session: _fake_service([source1, source2], executed),
+    )
+
+    assert result == {"input": 2, "completed": 1, "failed": 0, "skipped": 1, "stopped": 0}
+    assert [source_id for source_id, _ in executed] == [source1.id]
+    completed_run = executed[0][1]
+    assert completed_run.complete is True
+    assert fake.normalize_calls == [completed_run.id]
+    assert fake.closure_calls == [completed_run.id]
+    assert source2.id not in [source_id for source_id, _ in executed]
+    assert len(executed) == 1  # skipped source produced no run object at all
