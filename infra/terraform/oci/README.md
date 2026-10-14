@@ -52,6 +52,19 @@ or secrets. Terraform apply is not authorized by this source or this runbook.
    plan. If capacity is unavailable or a paid resource appears, cancel the job;
    do not substitute a paid shape or region.
 
+## Validação estática
+
+O workflow `Infra / Terraform static validation` executa formatação, `init`
+sem backend com lockfile somente-leitura e `validate` no container
+`hashicorp/terraform:1.9.8`. Ele não usa credenciais OCI nem executa `plan` ou
+`apply`.
+
+Para a mesma verificação local, a partir da raiz do repositório:
+
+```sh
+docker run --rm -v "$(pwd -W)/infra/terraform/oci:/work:ro" -w /work -e TF_DATA_DIR=/tmp/tf-data --entrypoint sh hashicorp/terraform:1.9.8 -ec 'terraform fmt -check -recursive && terraform init -backend=false -input=false -lockfile=readonly && terraform validate -no-color'
+```
+
 ## State, lock and rollback
 
 Resource Manager is the intended state/lock owner. Verify a concurrent Plan or

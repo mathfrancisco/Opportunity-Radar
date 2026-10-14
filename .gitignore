@@ -25,6 +25,9 @@ data/search-reference/
 local_exports/
 local_backups/
 
+# Terraform provider cache and module data
+.terraform/
+
 # Browser automation traces from a local render check
 .playwright-mcp/
 
