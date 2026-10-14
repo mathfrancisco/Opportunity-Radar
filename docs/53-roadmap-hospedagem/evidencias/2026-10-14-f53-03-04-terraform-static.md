@@ -83,7 +83,9 @@ FAILED tests/backend/platform/ai/test_tokenharbor_provider.py::test_router_falls
 9 failed, 1724 passed, 731 skipped, 4 warnings in 32.86s
 ```
 
-As nove falhas acima são as falhas ambientais previamente aceitas; nenhuma
+As nove falhas acima também ocorrem em `origin/main` neste mesmo contêiner
+local `python:3.12-slim`; no CI do GitHub o job de backend passa. Elas não
+foram resolvidas nesta mudança e não envolvem arquivos Terraform. Nenhuma
 outra falha foi observada.
 
 ## Ainda não comprovado
