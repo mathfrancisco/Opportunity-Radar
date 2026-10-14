@@ -90,3 +90,20 @@ docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\
 Resultado esperado: três séries comparáveis, uma margem explícita e Neon sem
 query contínua no intervalo idle. Se conexões persistirem, confira timer, worker,
 `pool_pre_ping` e healthcheck; não adicione keepalive periódico como "solução".
+
+## Medição local
+
+O harness read-only registra uma linha JSON por janela, sem environment, DSN ou
+texto de query:
+
+```bash
+python scripts/measure_host_resources.py --phase before
+python scripts/measure_host_resources.py --phase peak --output /tmp/peak.jsonl
+python scripts/measure_host_resources.py --phase after
+python scripts/measure_host_resources.py --phase idle
+```
+
+Quando `DATABASE_URL` existe, o script registra somente contagens agregadas de
+conexões por estado. `free`/`df` são opcionais e ignorados no Windows. Custos e
+quotas reais, incluindo Neon CU-h, bytes de storage e OCI, ficam **não medidos**
+até um piloto com três janelas comparáveis.

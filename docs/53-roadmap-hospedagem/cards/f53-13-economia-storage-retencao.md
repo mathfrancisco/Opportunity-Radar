@@ -89,3 +89,17 @@ SQL
 
 `VACUUM` regular pode recuperar espaço para reutilização interna; não promete
 reduzir disco faturado. Só declare economia física após medição do provedor.
+
+## Relatório local
+
+O relatório sempre executa dry-run read-only. Não existe flag de deleção:
+
+```bash
+python scripts/retention_report.py
+python scripts/retention_report.py --days 7 --output /tmp/retention.json
+```
+
+Ele reutiliza a seleção de `assessment_retention`, informa candidatos,
+referências protegidas, manifesto de backup e tamanhos agregados de relações.
+Não registra linhas, conteúdo ou dados pessoais. Custos e quotas reais, incluindo
+Neon CU-h, bytes de storage e OCI, ficam **não medidos** até um piloto aprovado.

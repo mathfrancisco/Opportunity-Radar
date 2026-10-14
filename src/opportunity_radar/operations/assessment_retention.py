@@ -141,6 +141,8 @@ def prune_superseded_assessments(
     batch_size = max(1, batch_size)
     cutoff = (now or datetime.now(UTC)) - timedelta(days=retention_days)
     with Session(engine) as session:
+        if dry_run:
+            session.execute(text("SET TRANSACTION READ ONLY"))
         candidates, with_analysis, with_claim, with_application, as_current, deletable = (
             session.execute(text(_COUNT_CANDIDATES), {"cutoff": cutoff}).one()
         )
@@ -157,6 +159,8 @@ def prune_superseded_assessments(
             deleted += removed
             batches += 1
     with Session(engine) as session:
+        if dry_run:
+            session.execute(text("SET TRANSACTION READ ONLY"))
         rows_remaining, avg_after = _table_state(session)
     if not dry_run:
         logger.info(
