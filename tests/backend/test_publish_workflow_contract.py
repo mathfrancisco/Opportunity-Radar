@@ -50,3 +50,34 @@ def test_cloud_runtime_images_are_validated_before_tags_are_published() -> None:
     assert "name-canonical=true" in build["with"]["outputs"]
     assert "validate_cloud_images.py" in steps[validate_index]["run"]
     assert "imagetools create" in steps[tag_index]["run"]
+
+
+def test_backend_quality_validates_offline_cloud_manifest_contracts_without_gate() -> None:
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "pipeline.yml").read_text(encoding="utf-8")
+    )
+    backend_quality = workflow["jobs"]["backend-quality"]
+
+    needs = backend_quality.get("needs", [])
+    needs = [needs] if isinstance(needs, str) else needs
+    assert "publish" not in needs
+    assert not backend_quality.get("if")
+
+    steps = backend_quality["steps"]
+    step = next(
+        (s for s in steps if s.get("name") == "Validate offline cloud manifest contracts"),
+        None,
+    )
+    assert (
+        step is not None
+    ), "Validate offline cloud manifest contracts step not found in backend-quality job"
+
+    run_cmd = step.get("run", "")
+    assert "tests/backend/test_cloud_image_preflight_cli.py" in run_cmd
+    assert "if" not in step
+    assert "continue-on-error" not in step
+
+    step_names = [s.get("name") for s in steps]
+    install_index = step_names.index("Install backend tooling")
+    validate_index = step_names.index("Validate offline cloud manifest contracts")
+    assert install_index < validate_index

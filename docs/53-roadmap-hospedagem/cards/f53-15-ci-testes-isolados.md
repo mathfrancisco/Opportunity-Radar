@@ -36,6 +36,10 @@ pipeline usa curl anônimo e não atende ao futuro contrato Clerk.
 
 Preservar JUnit, saída, workflow e prova de isolamento sem token, DSN ou env.
 
+### Status dos critérios de aceite
+
+- **AC05 (offline verificado, critério aberto externamente):** contrato offline do validador verificado em CI não gated; manifests publicados e runtime arm64 continuam externos.
+
 ## Rollback e gate
 
 Reverter workflow e auth como unidade se a prova falhar. Revogar fixture
