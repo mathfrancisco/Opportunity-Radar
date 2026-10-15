@@ -259,6 +259,8 @@ class RequireOwner:
 # catalogue mutation available merely by omitting an endpoint-level dependency.
 _OPERATIONAL_METRIC_PATHS = frozenset(
     {
+        "/health",
+        "/health/ready",
         "/source-health",
         "/source-coverage",
         "/source-metrics",
@@ -281,8 +283,10 @@ def _requires_owner(request: Request) -> bool:
         return request.method != "GET"
     if path.startswith("/opportunities/field-suggestions/"):
         return request.method != "GET"
-    return request.method == "PATCH" and path.startswith("/opportunities/") and path.endswith(
-        "/status"
+    return (
+        request.method == "PATCH"
+        and path.startswith("/opportunities/")
+        and path.endswith("/status")
     )
 
 

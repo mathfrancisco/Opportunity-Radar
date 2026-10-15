@@ -134,9 +134,7 @@ def client(
             session.execute(
                 delete(ApplicationProcessModel).where(ApplicationProcessModel.owner_sub.in_(owners))
             )
-            session.execute(
-                delete(SavedSearchModel).where(SavedSearchModel.owner_sub.in_(owners))
-            )
+            session.execute(delete(SavedSearchModel).where(SavedSearchModel.owner_sub.in_(owners)))
             session.execute(
                 delete(CareerProfileModel).where(CareerProfileModel.owner_sub.in_(owners))
             )
@@ -190,6 +188,69 @@ def test_profile_version_id_of_another_identity_is_not_publishable_or_activatabl
             headers=_headers(private, owner_b),
         )
         assert response.status_code == 404
+
+
+def test_profile_and_preferences_stay_scoped_to_the_verified_identity(
+    client: TestClient, identities: tuple[object, dict[str, object], str, str]
+) -> None:
+    private, _, owner_a, owner_b = identities
+    a_headers = _headers(private, owner_a)
+    b_headers = _headers(private, owner_b)
+    a_created = client.post(
+        "/profile/versions",
+        json={
+            "expected_profile_version": 0,
+            "activate": True,
+            "preferences": {"countries": ["BR"], "target_role_families": ["DATA"]},
+        },
+        headers=a_headers,
+    )
+    assert a_created.status_code == 201
+    a_version_id = a_created.json()["id"]
+
+    b_created = client.post(
+        "/profile/versions",
+        json={
+            "expected_profile_version": 0,
+            "activate": True,
+            "preferences": {"countries": ["PT"], "target_role_families": ["PRODUCT"]},
+            "owner_sub": owner_a,
+        },
+        headers=b_headers,
+    )
+    assert b_created.status_code == 201
+    b_version_id = b_created.json()["id"]
+    assert b_created.json()["preferences"]["countries"] == ["PT"]
+
+    b_profile = client.get("/profile", params={"owner_sub": owner_a}, headers=b_headers)
+    assert b_profile.status_code == 200
+    assert b_profile.json()["id"] == b_version_id
+    assert b_profile.json()["preferences"]["countries"] == ["PT"]
+    b_versions = client.get("/profile/versions", params={"owner_sub": owner_a}, headers=b_headers)
+    assert b_versions.status_code == 200
+    assert [version["id"] for version in b_versions.json()] == [b_version_id]
+
+    b_updated = client.post(
+        "/profile/versions",
+        json={
+            "expected_profile_version": 1,
+            "base_version_id": b_version_id,
+            "activate": True,
+            "preferences": {"countries": ["US"]},
+            "owner_sub": owner_a,
+        },
+        headers=b_headers,
+    )
+    assert b_updated.status_code == 201
+    assert b_updated.json()["preferences"]["countries"] == ["US"]
+    assert b_updated.json()["preferences"]["target_role_families"] == ["PRODUCT"]
+
+    foreign_base = client.post(
+        "/profile/versions",
+        json={"expected_profile_version": 2, "base_version_id": a_version_id},
+        headers=b_headers,
+    )
+    assert foreign_base.status_code == 404
 
 
 def test_private_http_routes_fail_closed_without_a_valid_bearer_token(
@@ -248,9 +309,7 @@ def test_member_cannot_execute_a_shared_source(
     client: TestClient, identities: tuple[object, dict[str, object], str, str]
 ) -> None:
     private, _, _, owner_b = identities
-    response = client.post(
-        f"/sources/{uuid4()}/runs", json={}, headers=_headers(private, owner_b)
-    )
+    response = client.post(f"/sources/{uuid4()}/runs", json={}, headers=_headers(private, owner_b))
     assert response.status_code == 403
 
 
@@ -296,16 +355,22 @@ def test_application_history_and_follow_up_remain_private_in_the_overview(
         b_headers = _headers(private, owner_b)
         assert client.get("/applications", headers=b_headers).json()["items"] == []
         assert client.get(f"/applications/{application_id}", headers=b_headers).status_code == 404
-        assert client.post(
-            f"/applications/{application_id}/transitions",
-            json={"stage": "APPLIED", "expected_version": 1},
-            headers=b_headers,
-        ).status_code == 404
-        assert client.patch(
-            f"/applications/{application_id}/next-action",
-            json={"expected_version": 1, "next_action": "Attempt"},
-            headers=b_headers,
-        ).status_code == 404
+        assert (
+            client.post(
+                f"/applications/{application_id}/transitions",
+                json={"stage": "APPLIED", "expected_version": 1},
+                headers=b_headers,
+            ).status_code
+            == 404
+        )
+        assert (
+            client.patch(
+                f"/applications/{application_id}/next-action",
+                json={"expected_version": 1, "next_action": "Attempt"},
+                headers=b_headers,
+            ).status_code
+            == 404
+        )
 
         member_overview = client.get("/overview", headers=b_headers)
         owner_overview = client.get("/overview", headers=_headers(private, owner_a))

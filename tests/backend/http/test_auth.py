@@ -190,9 +190,7 @@ def test_production_audience_policy(
         "ready_health",
         lambda _: SimpleNamespace(status="healthy", as_dict=lambda: {"status": "healthy"}),
     )
-    client = _production_client(
-        keypair, monkeypatch, OWNER, audience=configured_audience
-    )
+    client = _production_client(keypair, monkeypatch, OWNER, audience=configured_audience)
     claims = {} if token_audience is None else {"aud": token_audience}
 
     response = client.get(
@@ -308,9 +306,7 @@ def test_unknown_kid_refreshes_stale_cache_at_most_once(keypair) -> None:
         requests += 1
         return json.dumps(jwks).encode()
 
-    client = JwksClient(
-        f"{ISSUER}/.well-known/jwks.json", transport=transport, ttl_seconds=0
-    )
+    client = JwksClient(f"{ISSUER}/.well-known/jwks.json", transport=transport, ttl_seconds=0)
     unknown = jwt.encode(
         {"iss": ISSUER, "sub": OWNER, "azp": PARTY, "exp": int(time.time()) + 60},
         private,
@@ -418,15 +414,36 @@ def test_production_factory_leaves_only_liveness_public(keypair, monkeypatch) ->
     )
     client = TestClient(app)
 
+    from opportunity_radar.presentation.http import routes
+
+    probes: list[str] = []
+    monkeypatch.setattr(
+        routes,
+        "ready_health",
+        lambda _: (
+            probes.append("database")
+            or SimpleNamespace(status="healthy", as_dict=lambda: {"status": "healthy"})
+        ),
+    )
+    monkeypatch.setattr(
+        routes,
+        "ai_health",
+        lambda _: (
+            probes.append("ai")
+            or SimpleNamespace(status="healthy", as_dict=lambda: {"status": "healthy"})
+        ),
+    )
+
     assert client.get("/health/live").status_code == 200
     assert client.get("/health").status_code == 401
+    assert client.get("/health/ready").status_code == 401
     assert client.get("/docs").status_code == 404
     # A valid non-owner can use private personal routes, but never shared catalogue or
     # operational routes. The guard runs before these endpoints open a database session.
-    normal_headers = {
-        "Authorization": f"Bearer {_token(private, sub='user_normal_synthetic')}"
-    }
+    normal_headers = {"Authorization": f"Bearer {_token(private, sub='user_normal_synthetic')}"}
     for method, path in (
+        ("GET", "/health"),
+        ("GET", "/health/ready"),
         ("GET", "/sources"),
         ("GET", "/source-runs"),
         ("GET", "/companies"),
@@ -435,6 +452,12 @@ def test_production_factory_leaves_only_liveness_public(keypair, monkeypatch) ->
         ("PATCH", "/opportunities/00000000-0000-0000-0000-000000000000/status"),
     ):
         assert client.request(method, path, headers=normal_headers).status_code == 403
+    assert probes == []
+    owner_headers = {"Authorization": f"Bearer {_token(private)}"}
+    assert client.get("/health", headers=owner_headers).status_code == 200
+    assert probes == ["database", "ai"]
+    assert client.get("/health/ready", headers=owner_headers).status_code == 200
+    assert probes == ["database", "ai", "database"]
     assert (
         client.get("/health/live", headers={"X-Correlation-ID": "unsafe\r\nvalue"}).headers[
             "X-Correlation-ID"
@@ -462,6 +485,8 @@ def test_production_factory_rejects_missing_clerk_configuration() -> None:
         ("/sources", "GET", True),
         ("/companies", "GET", True),
         ("/source-metrics", "GET", True),
+        ("/health", "GET", True),
+        ("/health/ready", "GET", True),
         ("/opportunities/a/status", "PATCH", True),
         ("/opportunities/a/relevance", "POST", False),
         ("/profile", "GET", False),
