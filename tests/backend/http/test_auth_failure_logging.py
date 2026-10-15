@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+import json
 import logging
 import time
 from collections.abc import Iterator
@@ -11,6 +13,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
+from opportunity_radar.platform.logging import JsonFormatter
 from tests.backend.support.auth import (
     ISSUER,
     KID,
@@ -98,6 +101,7 @@ def test_missing_bearer_logs_one_denial_with_a_reason(
     assert response.status_code == 401
     (record,) = _denials(caplog, "authentication denied")
     assert record.auth_reason == "missing_authorization"
+    assert record.correlation_id
 
 
 def test_denial_carries_the_caller_correlation_id(
@@ -124,7 +128,8 @@ def test_rejected_token_never_reaches_the_log(
     assert response.status_code == 401
     records = _denials(caplog, "authentication denied")
     assert len(records) == 1
-    assert records[0].auth_reason
+    assert records[0].auth_reason == "invalid_token"
+    assert records[0].correlation_id
     _assert_token_absent(token, caplog, caplog.records)
 
 
@@ -144,3 +149,52 @@ def test_non_owner_denial_logs_a_reason_and_no_token(
     assert record.auth_reason == "owner_required"
     assert record.correlation_id == "corr-non-owner-42"
     _assert_token_absent(token, caplog, caplog.records)
+
+
+def test_json_formatter_line_has_reason_and_correlation_id_but_no_token(
+    client: TestClient,
+) -> None:
+    token = _bad_tokens()["wrong_key"]
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(JsonFormatter())
+    logger = logging.getLogger(AUTH_LOGGER)
+    logger.addHandler(handler)
+    try:
+        response = TestClient(client.app).get(
+            "/health", headers={**_bearer(token), CORRELATION_HEADER: "corr-json-line-7"}
+        )
+    finally:
+        logger.removeHandler(handler)
+
+    assert response.status_code == 401
+    (line,) = stream.getvalue().splitlines()
+    payload = json.loads(line)
+    assert payload["message"] == "authentication denied"
+    assert payload["auth_reason"] == "invalid_token"
+    assert payload["correlation_id"] == "corr-json-line-7"
+    assert token not in line
+    assert token.split(".")[2] not in line
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        "Basic distinctive-basic-credentials",
+        "Bearer  distinctive-padded-token.distinctive-body.distinctive-sig",
+    ],
+)
+def test_malformed_authorization_header_never_reaches_the_log(
+    client: TestClient, caplog: pytest.LogCaptureFixture, header: str
+) -> None:
+    response = TestClient(client.app).get("/health", headers={"Authorization": header})
+
+    assert response.status_code == 401
+    (record,) = _denials(caplog, "authentication denied")
+    assert record.auth_reason == "malformed_authorization"
+    assert record.correlation_id
+    secret = header.split()[-1]
+    haystacks = [caplog.text, record.getMessage(), *map(str, record.__dict__.values())]
+    for haystack in haystacks:
+        assert header not in haystack
+        assert secret not in haystack
