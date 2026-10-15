@@ -109,3 +109,10 @@ def test_no_remote_backend_nat_load_balancer_or_database_resources() -> None:
     assert "oci_core_instance" in resources
     for prefix in forbidden:
         assert not [name for name in resources if name.startswith(prefix)], prefix
+
+
+def test_resource_manager_policy_uses_documented_aggregate_type() -> None:
+    policy = _read("iam.tf")
+
+    assert "to manage orm-family in compartment" in policy
+    assert "resource-manager-family" not in policy

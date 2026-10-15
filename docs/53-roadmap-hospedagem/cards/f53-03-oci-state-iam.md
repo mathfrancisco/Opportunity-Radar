@@ -71,14 +71,17 @@ negação. Se o plan exigir permissão não justificada, interrompa e revise IAM
 ## Política mínima e opções da stack
 
 Escreva políticas OCI no console só após substituir placeholders e revisar o
-compartment. O bloco é modelo de revisão, não política pronta:
+compartment. A referência oficial OCI identifica `orm-family` como o tipo
+agregado de recurso do Resource Manager ([referência de políticas Resource
+Manager](https://docs.oracle.com/en-us/iaas/Content/Identity/policyreference/resourcemanagerpolicyreference.htm)).
+O bloco é modelo de revisão, não política pronta:
 
 ```text
 Allow group <GRUPO_INFRA_PILOTO> to manage virtual-network-family in compartment <COMPARTMENT_PILOTO>
 Allow group <GRUPO_INFRA_PILOTO> to manage instance-family in compartment <COMPARTMENT_PILOTO>
 Allow group <GRUPO_INFRA_PILOTO> to manage volume-family in compartment <COMPARTMENT_PILOTO>
 Allow group <GRUPO_INFRA_PILOTO> to manage object-family in compartment <COMPARTMENT_PILOTO>
-Allow group <GRUPO_INFRA_PILOTO> to manage resource-manager-family in compartment <COMPARTMENT_PILOTO>
+Allow group <GRUPO_INFRA_PILOTO> to manage orm-family in compartment <COMPARTMENT_PILOTO>
 ```
 
 1. Confirme que cada nome é do compartment piloto, nunca tenancy root.

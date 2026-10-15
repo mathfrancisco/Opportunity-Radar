@@ -6,6 +6,6 @@ locals {
     "Allow group <GRUPO_INFRA_PILOTO> to manage instance-family in compartment <COMPARTMENT_PILOTO>",
     "Allow group <GRUPO_INFRA_PILOTO> to manage volume-family in compartment <COMPARTMENT_PILOTO>",
     "Allow group <GRUPO_INFRA_PILOTO> to manage object-family in compartment <COMPARTMENT_PILOTO>",
-    "Allow group <GRUPO_INFRA_PILOTO> to manage resource-manager-family in compartment <COMPARTMENT_PILOTO>",
+    "Allow group <GRUPO_INFRA_PILOTO> to manage orm-family in compartment <COMPARTMENT_PILOTO>",
   ]
 }
