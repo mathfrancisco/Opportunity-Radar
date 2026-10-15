@@ -19,7 +19,7 @@ Output is JSON to stdout (or --output PATH).  Exit codes:
         --active-hours-per-run 24 \\
         --runs-per-month 31 \\
         --cu 0.25
-    # total_cu_hours: 186, compute_status: "fail", exit 1
+    # total_cu_hours: 186.00, compute_status: "fail", exit 1
 
 Assumptions:
 * Each ``active_hours_per_run`` window already includes startup and suspend
@@ -36,14 +36,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Sequence
-from decimal import Decimal, Inexact, InvalidOperation, localcontext
+from decimal import Decimal, Inexact, localcontext
 from pathlib import Path
 from typing import Any
 
 _COMPUTE_LIMIT = Decimal("80")
 _STORAGE_LIMIT = 1_000_000_000  # bytes (1 decimal GB)
+
+# ASCII only: str.isdigit()/int() would accept underscores, signs, whitespace
+# and Unicode digits.  No exponent form, so output size stays bounded by input.
+_INT_RE = re.compile(r"[0-9]+")
+_DECIMAL_RE = re.compile(r"[0-9]+(?:\.[0-9]+)?")
 
 
 def project_budget(
@@ -99,6 +105,12 @@ def project_budget(
     def _check_decimal(value: Decimal, name: str, *, positive: bool = False) -> None:
         if not value.is_finite():
             raise ValueError(f"{name} must be a finite Decimal, got {value!r}")
+        if value.is_signed():
+            if value != 0:
+                raise ValueError(f"{name} must be >= 0, got {value}")
+            raise ValueError(f"{name} must not be negative zero")
+        if value.as_tuple().exponent > 0:  # type: ignore[operator]
+            raise ValueError(f"{name} must not use an exponent form, got {value!r}")
         if positive and value <= 0:
             raise ValueError(f"{name} must be > 0, got {value}")
         if not positive and value < 0:
@@ -182,16 +194,20 @@ def project_budget(
     }
 
 
-def _parse_decimal(value: str, name: str) -> Decimal:
-    try:
-        d = Decimal(value)
-    except InvalidOperation as exc:
+def _decimal_arg(value: str) -> Decimal:
+    if _DECIMAL_RE.fullmatch(value) is None:
         raise argparse.ArgumentTypeError(
-            f"{name}: cannot parse {value!r} as a Decimal"
-        ) from exc
-    if not d.is_finite():
-        raise argparse.ArgumentTypeError(f"{name}: value must be finite, got {value!r}")
-    return d
+            f"invalid decimal {value!r}: use plain ASCII digits, e.g. 0.25"
+        )
+    return Decimal(value)
+
+
+def _int_arg(value: str) -> int:
+    if _INT_RE.fullmatch(value) is None:
+        raise argparse.ArgumentTypeError(
+            f"invalid integer {value!r}: use ASCII digits only"
+        )
+    return int(value)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -200,39 +216,42 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--active-hours-per-run",
         required=True,
+        type=_decimal_arg,
         metavar="DEC",
         help="Active hours per pipeline run (Decimal).",
     )
     parser.add_argument(
         "--runs-per-month",
         required=True,
-        type=int,
+        type=_int_arg,
         metavar="INT",
         help="Number of runs per month (non-negative integer).",
     )
     parser.add_argument(
         "--cu",
         required=True,
+        type=_decimal_arg,
         metavar="DEC",
         help="Compute Unit size (e.g. 0.25).",
     )
     parser.add_argument(
         "--additional-cu-hours",
-        default="0",
+        default=Decimal("0"),
+        type=_decimal_arg,
         metavar="DEC",
         help="Extra CU-h outside scheduled windows (default 0).",
     )
     parser.add_argument(
         "--current-storage-bytes",
         default=None,
-        type=int,
+        type=_int_arg,
         metavar="INT",
         help="Current storage in bytes (must be paired with --monthly-growth-bytes).",
     )
     parser.add_argument(
         "--monthly-growth-bytes",
         default=None,
-        type=int,
+        type=_int_arg,
         metavar="INT",
         help="Expected monthly storage growth in bytes (must be paired with "
         "--current-storage-bytes).",
@@ -247,21 +266,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    # Parse Decimal arguments with descriptive errors
-    try:
-        active_hours_per_run = _parse_decimal(args.active_hours_per_run, "--active-hours-per-run")
-        cu = _parse_decimal(args.cu, "--cu")
-        additional_cu_hours = _parse_decimal(args.additional_cu_hours, "--additional-cu-hours")
-    except argparse.ArgumentTypeError as exc:
-        parser.error(str(exc))
-        return 2  # unreachable; parser.error() exits
-
     try:
         result = project_budget(
-            active_hours_per_run=active_hours_per_run,
+            active_hours_per_run=args.active_hours_per_run,
             runs_per_month=args.runs_per_month,
-            cu=cu,
-            additional_cu_hours=additional_cu_hours,
+            cu=args.cu,
+            additional_cu_hours=args.additional_cu_hours,
             current_storage_bytes=args.current_storage_bytes,
             monthly_growth_bytes=args.monthly_growth_bytes,
         )

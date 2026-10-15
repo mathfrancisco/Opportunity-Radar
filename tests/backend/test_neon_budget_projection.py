@@ -665,3 +665,106 @@ def test_cli_main_offline_and_secret_free(
     assert code == 0
     assert "supersecret" not in out
     assert Decimal(json.loads(out)["total_cu_hours"]) == Decimal("15.5")
+
+
+# ---------------------------------------------------------------------------
+# Lenient numeric forms are rejected (exit 2)
+# ---------------------------------------------------------------------------
+
+_BAD_INTS = ["1_0", "١٢", "+1", "-1", " 1", "1 ", "1\n", "1.0", "0x10", "1e3", ""]
+_BAD_DECIMALS = [
+    "1_0", "١٢", "+1", "-1", "-0", "-0.0", " 1", "1 ", "1\n", ".5", "1.", "1e3",
+    "1e999999", "1E+2", "inf", "Infinity", "nan", "NaN", "",
+]
+_VALID_BASE = {"--active-hours-per-run": "1", "--runs-per-month": "1", "--cu": "0.25"}
+
+
+def _argv(**overrides: str) -> list[str]:
+    values = dict(_VALID_BASE)
+    values.update({"--" + k.replace("_", "-"): v for k, v in overrides.items()})
+    return [item for pair in values.items() for item in pair]
+
+
+@pytest.mark.parametrize("bad", _BAD_INTS)
+@pytest.mark.parametrize(
+    "flag", ["runs_per_month", "current_storage_bytes", "monthly_growth_bytes"]
+)
+def test_cli_rejects_lenient_integer_forms(flag: str, bad: str) -> None:
+    extra = {"current_storage_bytes": "1", "monthly_growth_bytes": "1"}
+    extra[flag] = bad
+    with pytest.raises(SystemExit) as exc:
+        main(_argv(**extra))
+    assert exc.value.code == 2
+
+
+@pytest.mark.parametrize("bad", _BAD_DECIMALS)
+@pytest.mark.parametrize("flag", ["active_hours_per_run", "cu", "additional_cu_hours"])
+def test_cli_rejects_lenient_decimal_forms(flag: str, bad: str) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(_argv(**{flag: bad}))
+    assert exc.value.code == 2
+
+
+def test_cli_accepts_plain_ascii_forms(capsys: pytest.CaptureFixture[str]) -> None:
+    code = main(
+        _argv(
+            active_hours_per_run="0", runs_per_month="0", additional_cu_hours="0.5",
+            current_storage_bytes="0", monthly_growth_bytes="00",
+        )
+    )
+    assert code == 0
+    assert json.loads(capsys.readouterr().out)["total_cu_hours"] == "0.50"
+
+
+@pytest.mark.parametrize(
+    "bad", [Decimal("-0"), Decimal("1E+3"), Decimal("1E999999"), Decimal("-0.0")]
+)
+def test_project_budget_rejects_negative_zero_and_exponent_forms(bad: Decimal) -> None:
+    with pytest.raises(ValueError):
+        project_budget(active_hours_per_run=bad, runs_per_month=1, cu=Decimal("0.25"))
+    with pytest.raises(ValueError):
+        project_budget(
+            active_hours_per_run=Decimal("1"), runs_per_month=1, cu=Decimal("0.25"),
+            additional_cu_hours=bad,
+        )
+
+
+def test_project_budget_rejects_string_integers() -> None:
+    with pytest.raises(ValueError):
+        project_budget(
+            active_hours_per_run=Decimal("1"),
+            runs_per_month="1",  # type: ignore[arg-type]
+            cu=Decimal("0.25"),
+        )
+    with pytest.raises(ValueError):
+        project_budget(
+            active_hours_per_run=Decimal("1"), runs_per_month=1, cu=Decimal("0.25"),
+            current_storage_bytes="1",  # type: ignore[arg-type]
+            monthly_growth_bytes=1,
+        )
+
+
+def test_cli_subprocess_env_isolation() -> None:
+    """The real script must not echo environment secrets to stdout or stderr."""
+    secret = "synthetic-secret-f53-7c1e"
+    code, _ = _run_cli(
+        "--active-hours-per-run", "2",
+        "--runs-per-month", "31",
+        "--cu", "0.25",
+        env={"NEON_DB_SECRET": secret, "DATABASE_URL": f"postgresql://u:{secret}@h/db"},
+    )
+    assert code == 0
+    import os
+
+    for argv in (
+        ["--active-hours-per-run", "2", "--runs-per-month", "31", "--cu", "0.25"],
+        ["--active-hours-per-run", "x", "--runs-per-month", "31", "--cu", "0.25"],
+    ):
+        proc = subprocess.run(
+            [sys.executable, "-S", "scripts/project_neon_budget.py", *argv],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "NEON_DB_SECRET": secret},
+        )
+        assert secret not in proc.stdout
+        assert secret not in proc.stderr
