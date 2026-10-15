@@ -45,6 +45,12 @@ timer ou API mal configurada e bloqueiam aceitação.
 Guardar CSV ou captura redigida de métricas, parâmetros e cálculo. Nunca
 coletar env, DSN, tokens ou SQL com dados pessoais como métrica.
 
+## Nota de progresso local
+
+projeção local implementada; consumo real, evidência de storage, compatibilidade
+e comportamento ocioso continuam pendentes. Consulte
+[`evidencias/2026-10-14-f53-06-12-projecao-offline.md`](../evidencias/2026-10-14-f53-06-12-projecao-offline.md).
+
 ## Rollback e gate
 
 Voltar ao último conjunto de limites medido e parar jobs excessivos; não apagar
