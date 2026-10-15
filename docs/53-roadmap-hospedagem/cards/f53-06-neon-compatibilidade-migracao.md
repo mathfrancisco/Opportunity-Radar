@@ -86,6 +86,12 @@ ORDER BY table_schema, table_name;
 Falha de extensão, schema ou migration interrompe promoção. Preserve diagnóstico
 redigido e corrija o piloto antes de trocar URL de runtime.
 
+## Nota de progresso local
+
+projeção local implementada; consumo real, evidência de storage, compatibilidade
+e comportamento ocioso continuam pendentes. Consulte
+[`evidencias/2026-10-14-f53-06-12-projecao-offline.md`](../evidencias/2026-10-14-f53-06-12-projecao-offline.md).
+
 ## Rollback e gate
 
 Descartar branch de ensaio, não a branch de produção. F53-14 depende deste

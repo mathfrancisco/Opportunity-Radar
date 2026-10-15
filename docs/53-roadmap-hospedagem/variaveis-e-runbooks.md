@@ -313,3 +313,75 @@ existência de token, login ou endpoint público não é evidência suficiente.
 - [Backup consistente e restauração F20-41](../44-roadmap-fase-20/fase-20/f20-41-backup-consistente-e-restauracao.md)
 - `infra/systemd/README.md` — contrato versionado; instalação em VM ainda
   externa (`infra/systemd/README.md:5`)
+
+## Runbook — `project_neon_budget.py`
+
+Script offline para projetar consumo Neon CU-h e armazenamento sem acesso
+a rede, banco de dados ou ambiente externo.
+
+### Flags
+
+| Flag | Tipo | Obrigatório | Descrição |
+| --- | --- | --- | --- |
+| `--active-hours-per-run DEC` | Decimal ≥ 0 | sim | Horas ativas por execução do pipeline |
+| `--runs-per-month INT` | int ≥ 0 | sim | Execuções por mês; zero é válido |
+| `--cu DEC` | Decimal > 0 | sim | Tamanho do Compute Unit (ex.: 0.25) |
+| `--additional-cu-hours DEC` | Decimal ≥ 0 | não | CU-h adicionais fora das janelas (padrão 0) |
+| `--current-storage-bytes INT` | int ≥ 0 | par | Bytes atuais de storage; requer `--monthly-growth-bytes` |
+| `--monthly-growth-bytes INT` | int ≥ 0 | par | Crescimento mensal em bytes; requer `--current-storage-bytes` |
+| `--output PATH` | Path | não | Grava JSON em arquivo em vez de stdout |
+
+### Unidades e suposições
+
+- `active_hours_per_run` deve incluir os tails de startup e suspend — não
+  adicionar padding separadamente.
+- A janela contada (scheduled) é: `active_hours_per_run × runs_per_month × cu`.
+- `additional_cu_hours` cobre demanda incremental fora das janelas (ex.: cold
+  start extra, admin queries), padrão zero.
+- Limite de compute: `total_cu_hours <= 80` CU-h/mês (reserva abaixo da quota
+  nominal de 100 CU-h; headroom é margem operacional).
+- Limite de storage: `projected_bytes < 1 000 000 000` bytes (1 GB decimal).
+- Par de storage ausente → `storage_status: "not_projected"`,
+  `storage_projected_bytes: null`; nunca fabricado como "pass".
+
+### Códigos de saída
+
+| Código | Significado |
+| --- | --- |
+| 0 | Sem violação de orçamento |
+| 1 | Ao menos uma violação (compute ou storage) |
+| 2 | Argumentos inválidos ou falha ao escrever `--output` |
+
+### Exemplos
+
+Projeção de 2 execuções/dia durante 31 dias (baixo consumo):
+
+```bash
+python scripts/project_neon_budget.py \
+    --active-hours-per-run 2 \
+    --runs-per-month 31 \
+    --cu 0.25
+# total_cu_hours: 15.50, compute_status: "pass", exit 0
+```
+
+Horizonte de 744 h (24 h/dia × 31 dias × 0,25 CU = 186 CU-h → inaceitável):
+
+```bash
+python scripts/project_neon_budget.py \
+    --active-hours-per-run 24 \
+    --runs-per-month 31 \
+    --cu 0.25
+# total_cu_hours: 186.00, compute_status: "fail", exit 1
+```
+
+Com projeção de storage:
+
+```bash
+python scripts/project_neon_budget.py \
+    --active-hours-per-run 2 \
+    --runs-per-month 31 \
+    --cu 0.25 \
+    --current-storage-bytes 900000000 \
+    --monthly-growth-bytes 50000000
+# storage_projected_bytes: 950000000, storage_status: "pass"
+```
