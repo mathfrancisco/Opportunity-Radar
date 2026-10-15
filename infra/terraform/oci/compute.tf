@@ -22,14 +22,14 @@ resource "oci_core_instance" "api" {
 
   source_details {
     source_type             = "image"
-    source_id               = var.arm_image_id
+    source_id               = var.enable_free_trial ? var.trial_image_id : var.arm_image_id
     boot_volume_size_in_gbs = var.boot_volume_size_gbs
   }
 
   lifecycle {
     precondition {
-      condition     = var.instance_shape == "VM.Standard.A1.Flex" && var.shape_ocpus <= 2 && var.shape_memory_in_gbs <= 12
-      error_message = "Instance must remain within the A1 Always Free allocation of 2 OCPUs and 12 GB RAM."
+      condition     = var.enable_free_trial ? contains(["VM.Standard.E4.Flex", "VM.Standard.E5.Flex"], var.instance_shape) && var.shape_ocpus == 1 && var.shape_memory_in_gbs == 8 && var.trial_image_id != null : var.instance_shape == "VM.Standard.A1.Flex" && var.shape_ocpus <= 2 && var.shape_memory_in_gbs <= 12 && var.arm_image_id != null
+      error_message = "Use A1 within Always Free limits by default; temporary Free Trial mode requires E4 or E5 Flex, 1 OCPU, 8 GB and its x86 image."
     }
 
     precondition {

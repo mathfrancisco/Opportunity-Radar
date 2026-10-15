@@ -1,9 +1,10 @@
 # OCI Always Free root — F53-03/F53-04
 
 This root is source for one OCI Resource Manager stack. It creates only a VCN,
-public subnet, Internet Gateway, route table, NSG, one A1 ARM instance and a
-private Object Storage bucket. It deliberately has no backend block: Resource
-Manager owns remote state and locking after the manual bootstrap.
+public subnet, Internet Gateway, route table, NSG, one A1 ARM instance by
+default (or the explicit temporary Free Trial option below), and a private
+Object Storage bucket. It deliberately has no backend block: Resource Manager
+owns remote state and locking after the manual bootstrap.
 
 It does **not** create a NAT Gateway, Load Balancer, database, Redis,
 Kubernetes service, extra public IP, DNS record, account, principal, API key,
@@ -20,6 +21,21 @@ or secrets. Terraform apply is not authorized by this source or this runbook.
 - OCI availability and free-tier eligibility are external gates; a successful
   validate or plan does not prove either.
 
+## Temporary Free Trial recovery option
+
+The default remains A1 Always Free. Only when `enable_free_trial = true`, this
+root permits `VM.Standard.E4.Flex` or `VM.Standard.E5.Flex` at exactly 1 OCPU
+and 8 GB, using the operator-selected Ubuntu 24.04 x86 image in `trial_image_id`.
+Choose only a shape currently offered by the account. Do not upgrade the account
+to Pay As You Go. A Free Trial balance or eligibility is temporary and must be
+checked in OCI before a separately authorized Apply; this configuration does
+not guarantee credits, host capacity, or zero cost. The 50 GB boot-volume limit,
+private bucket, network, ingress rules, and SSH key input remain the same.
+
+Returning from x86 E4/E5 to A1 ARM changes the instance image and shape and is
+expected to recreate the VM. Review the Plan, preserve any required data, and
+redeploy the application; do not treat this as an in-place architecture switch.
+
 ## Manual bootstrap and Plan
 
 1. In OCI Console, create the approved pilot compartment, group/principal and
@@ -29,8 +45,10 @@ or secrets. Terraform apply is not authorized by this source or this runbook.
    Console. The `resource_manager_iam_policy_template` output repeats those
    statements for review; it does not create or apply IAM policies.
    Do not replace them with tenancy-wide or `manage all-resources` access.
-3. Confirm A1 capacity, ARM image, Resource Manager pricing/support and stack
-   locking in the selected home region.
+3. Confirm A1 capacity and ARM image for the default path. For the temporary
+   option, explicitly enable Free Trial, select an Ubuntu 24.04 x86 image, and
+   confirm trial credits, shape availability, Resource Manager pricing/support
+   and stack locking in the selected home region.
 4. Copy `terraform.tfvars.example` **outside Git**, use only public values, and
    provide it as masked Resource Manager stack variables. Keep actual public
    SSH keys private to the stack configuration if policy requires it; never
@@ -44,13 +62,14 @@ or secrets. Terraform apply is not authorized by this source or this runbook.
    terraform validate
    ```
 
-6. Create one Resource Manager **Plan** job. Review that its sole compute is
-   A1, shape `2/12`, boot `50`, its bucket is private, and SSH is not
-   `0.0.0.0/0`. Archive only its redacted job ID and summary in
-   `docs/53-roadmap-hospedagem/evidencias/`.
+6. Create one Resource Manager **Plan** job. Review that compute matches the
+   selected mode (default A1 `2/12`; temporary E4/E5 `1/8`), boot is `50`, its
+   bucket is private, and SSH is not `0.0.0.0/0`. Archive only its redacted
+   job ID and summary in `docs/53-roadmap-hospedagem/evidencias/`.
 7. Run **Apply** only after a distinct owner authorization for the reviewed
-   plan. If capacity is unavailable or a paid resource appears, cancel the job;
-   do not substitute a paid shape or region.
+   plan. If capacity is unavailable, trial credits are insufficient, or a
+   charge outside the approved Free Trial appears, cancel the job; do not
+   upgrade the account to Pay As You Go or substitute another shape or region.
 
 ## Validação estática
 

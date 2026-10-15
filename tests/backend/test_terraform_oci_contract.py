@@ -38,17 +38,24 @@ def _ingress_rules() -> dict[str, str]:
     return rules
 
 
-def test_instance_shape_is_a1_flex_within_always_free_limits() -> None:
+def test_instance_shape_defaults_to_a1_and_trial_mode_is_strictly_opt_in() -> None:
     compute = _read("compute.tf")
+    trial = _variable_block("enable_free_trial")
 
     assert re.search(r"shape\s*=\s*var\.instance_shape\b", compute)
+    assert _default("enable_free_trial") == "false"
     assert _default("instance_shape") == "VM.Standard.A1.Flex"
-    assert 'var.instance_shape == "VM.Standard.A1.Flex"' in _variable_block("instance_shape")
+    assert 'contains(["VM.Standard.A1.Flex", "VM.Standard.E4.Flex", "VM.Standard.E5.Flex"], var.instance_shape)' in _variable_block("instance_shape")
     assert float(_default("shape_ocpus")) <= 2
     assert float(_default("shape_memory_in_gbs")) <= 12
-    assert "var.shape_ocpus <= 2" in _variable_block("shape_ocpus")
-    assert "var.shape_memory_in_gbs <= 12" in _variable_block("shape_memory_in_gbs")
-    assert "var.shape_ocpus <= 2 && var.shape_memory_in_gbs <= 12" in compute
+    assert "var.shape_ocpus > 0 && var.shape_ocpus <= 2" in _variable_block("shape_ocpus")
+    assert "var.shape_memory_in_gbs > 0 && var.shape_memory_in_gbs <= 12" in _variable_block("shape_memory_in_gbs")
+    assert "var.enable_free_trial ? var.trial_image_id : var.arm_image_id" in compute
+    assert "var.enable_free_trial ? contains([\"VM.Standard.E4.Flex\", \"VM.Standard.E5.Flex\"], var.instance_shape) && var.shape_ocpus == 1 && var.shape_memory_in_gbs == 8 && var.trial_image_id != null : var.instance_shape == \"VM.Standard.A1.Flex\" && var.shape_ocpus <= 2 && var.shape_memory_in_gbs <= 12 && var.arm_image_id != null" in compute
+    assert "default     = false" in trial
+    assert "default     = null" in _variable_block("trial_image_id")
+    for name in ("arm_image_id", "instance_shape", "shape_ocpus", "shape_memory_in_gbs"):
+        assert "var.enable_free_trial" not in _variable_block(name)
 
 
 def test_boot_volume_is_fixed_at_50_gb() -> None:
