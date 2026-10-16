@@ -32,6 +32,14 @@ def _seconds(value: str) -> int:
     return int(value)
 
 
+def _environment_files() -> list[str]:
+    return [
+        line.removeprefix("EnvironmentFile=")
+        for line in SERVICE.read_text(encoding="utf-8").splitlines()
+        if line.startswith("EnvironmentFile=")
+    ]
+
+
 def test_service_has_finite_oneshot_contract() -> None:
     service = _unit(SERVICE)
 
@@ -40,9 +48,17 @@ def test_service_has_finite_oneshot_contract() -> None:
     assert service["Service"]["KillSignal"] == "SIGTERM"
     assert service["Unit"]["Requires"] == "docker.service"
     assert service["Unit"]["After"] == "docker.service network-online.target"
-    assert service["Service"]["User"] == "opportunity-radar"
+    assert service["Service"]["User"] == "root"
     assert service["Service"]["WorkingDirectory"] == "/opt/opportunity-radar"
-    assert service["Service"]["EnvironmentFile"] == "/etc/opportunity-radar/pipeline.env"
+    assert _environment_files() == [
+        "/etc/opportunity-radar/api.env",
+        "/etc/opportunity-radar/worker.env",
+        "/etc/opportunity-radar/proxy.env",
+        "/etc/opportunity-radar/images.env",
+        "/etc/opportunity-radar/pipeline.env",
+    ]
+    assert "migrate.env" not in SERVICE.read_text(encoding="utf-8")
+    assert "OWNER_SUB_BACKFILL" not in SERVICE.read_text(encoding="utf-8")
     assert service["Service"]["ExecStart"] == "/usr/local/sbin/run-opportunity-radar-window"
 
     for key, value in service["Service"].items():
@@ -187,12 +203,10 @@ def test_systemd_analyze_verify_when_available(tmp_path: Path) -> None:
         capture_output=True,
         check=False,
     )
-    # A CI container may lack Docker, the dedicated service user, or the root-only env file.
+    # A CI container may lack Docker or the root-only environment files.
     known_host_diagnostics = (
         "Unit docker.service not found",
-        "Failed to determine user credentials",
-        "Failed at step USER",
-        "EnvironmentFile=/etc/opportunity-radar/pipeline.env not found",
+        "EnvironmentFile=/etc/opportunity-radar/",
         "Failed to load environment files",
     )
     diagnostics = [line for line in result.stderr.splitlines() if line.strip()]

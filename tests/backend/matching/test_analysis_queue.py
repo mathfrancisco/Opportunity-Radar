@@ -230,13 +230,15 @@ def _failed() -> AnalysisOutcome:
     )
 
 
-def _profile_version(session: Session) -> ProfileVersionModel:
+def _profile_version(
+    session: Session, *, owner_sub: str = _TEST_OWNER_SUB
+) -> ProfileVersionModel:
     """Each test appends a version to this suite's explicit owner profile."""
     profile = session.scalar(
-        select(CareerProfileModel).where(CareerProfileModel.owner_sub == _TEST_OWNER_SUB)
+        select(CareerProfileModel).where(CareerProfileModel.owner_sub == owner_sub)
     )
     if profile is None:
-        profile = CareerProfileModel(version=1, owner_sub=_TEST_OWNER_SUB)
+        profile = CareerProfileModel(version=1, owner_sub=owner_sub)
         session.add(profile)
         session.flush()
     next_number = (
@@ -268,9 +270,10 @@ def _seed_assessment(
     opportunity: OpportunityModel | None = None,
     profile_version: ProfileVersionModel | None = None,
     company: Company | None = None,
+    owner_sub: str = _TEST_OWNER_SUB,
 ) -> UUID:
     """Persist one assessment, returning its id. Snapshots are minimal on purpose."""
-    version = profile_version or _profile_version(session)
+    version = profile_version or _profile_version(session, owner_sub=owner_sub)
     if opportunity is None:
         opportunity = OpportunityModel(
             fingerprint=uuid4().hex,
@@ -291,7 +294,7 @@ def _seed_assessment(
     repository = SqlAlchemyMatchingRepository(session)
     assessment = repository.add(
         AssessmentRecord(
-            owner_sub=_TEST_OWNER_SUB,
+            owner_sub=owner_sub,
             opportunity_id=opportunity.id,
             opportunity_version=opportunity.version,
             profile_version_id=version.id,
@@ -796,6 +799,57 @@ def test_a_superseded_assessment_is_not_analyzed() -> None:
 
         assert newer in queued
         assert older not in queued
+
+
+def test_supersession_does_not_cross_owner_boundaries() -> None:
+    with _session() as session:
+        owner_a = f"test-analysis-queue-owner-a-{uuid4().hex}"
+        owner_b = f"test-analysis-queue-owner-b-{uuid4().hex}"
+        opportunity = OpportunityModel(
+            fingerprint=uuid4().hex,
+            fingerprint_version="v1",
+            canonical_title="Backend Engineer",
+            normalized_title="backend engineer",
+            work_mode="REMOTE",
+            seniority="SENIOR",
+            contract_type="FULL_TIME",
+            lifecycle_status="ACTIVE",
+            description=_USABLE_DESCRIPTION,
+            version=1,
+        )
+        session.add(opportunity)
+        session.flush()
+        now = datetime.now(UTC)
+        older_a = _seed_assessment(
+            session,
+            owner_sub=owner_a,
+            opportunity=opportunity,
+            profile_version=_profile_version(session, owner_sub=owner_a),
+            assessed_at=now - timedelta(hours=1),
+        )
+        _seed_assessment(
+            session,
+            owner_sub=owner_b,
+            opportunity=opportunity,
+            profile_version=_profile_version(session, owner_sub=owner_b),
+            assessed_at=now,
+        )
+        service_a = MatchingService(session, owner_sub=owner_a)
+
+        assert older_a in service_a.pending_analysis_ids(limit=100)
+        assert service_a.count_pending_analysis() == 1
+
+        newer_a = _seed_assessment(
+            session,
+            owner_sub=owner_a,
+            opportunity=opportunity,
+            profile_version=_profile_version(session, owner_sub=owner_a),
+            assessed_at=now + timedelta(hours=1),
+        )
+
+        assert older_a not in service_a.pending_analysis_ids(limit=100)
+        assert newer_a in service_a.pending_analysis_ids(limit=100)
+        assert service_a.count_pending_analysis() == 1
 
 
 def test_the_pass_limit_caps_how_many_assessments_are_queued() -> None:

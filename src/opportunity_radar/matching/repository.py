@@ -479,6 +479,7 @@ class SqlAlchemyMatchingRepository:
             select(literal(1))
             .where(
                 superseding.opportunity_id == MatchAssessmentModel.opportunity_id,
+                superseding.owner_sub == MatchAssessmentModel.owner_sub,
                 tuple_(superseding.assessed_at, superseding.id)
                 > tuple_(MatchAssessmentModel.assessed_at, MatchAssessmentModel.id),
             )

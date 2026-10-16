@@ -16,6 +16,7 @@ from typing import Any
 
 _DIGEST_REFERENCE = re.compile(r"^[a-z0-9][a-z0-9./:_-]*@sha256:[0-9a-f]{64}$")
 _ROLES = ("api", "worker", "proxy")
+_PLATFORMS = ("linux/arm64", "linux/amd64")
 
 
 def _manifest_path(value: str) -> tuple[str, Path]:
@@ -25,11 +26,12 @@ def _manifest_path(value: str) -> tuple[str, Path]:
     return role, Path(path)
 
 
-def _has_linux_arm64(document: Any) -> bool:
+def _has_platform(document: Any, platform: str) -> bool:
+    os_name, architecture = platform.split("/", maxsplit=1)
     manifests = document.get("manifests", []) if isinstance(document, dict) else []
     return any(
-        entry.get("platform", {}).get("os") == "linux"
-        and entry.get("platform", {}).get("architecture") == "arm64"
+        entry.get("platform", {}).get("os") == os_name
+        and entry.get("platform", {}).get("architecture") == architecture
         for entry in manifests
         if isinstance(entry, dict)
     )
@@ -43,6 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--role", choices=_ROLES)
     parser.add_argument("--image")
     parser.add_argument("--manifest", action="append", default=[])
+    parser.add_argument("--platform", choices=_PLATFORMS, default="linux/arm64")
     args = parser.parse_args(argv)
 
     if args.role:
@@ -92,12 +95,12 @@ def main(argv: list[str] | None = None) -> int:
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             errors.append(f"{role} manifest is not valid JSON: {error}")
             continue
-        if not _has_linux_arm64(document):
-            errors.append(f"{role} manifest lacks a linux/arm64 platform")
+        if not _has_platform(document, args.platform):
+            errors.append(f"{role} manifest lacks a {args.platform} platform")
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
-    print("cloud image preflight passed: immutable digests with linux/arm64 manifests")
+    print(f"cloud image preflight passed: immutable digests with {args.platform} manifests")
     return 0
 
 

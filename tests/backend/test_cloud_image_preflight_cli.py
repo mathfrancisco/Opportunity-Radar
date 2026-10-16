@@ -75,6 +75,29 @@ def test_single_role_preflight_rejects_missing_arm64(tmp_path: Path) -> None:
     assert "lacks a linux/arm64 platform" in result.stderr
 
 
+def test_single_role_preflight_accepts_requested_amd64_platform() -> None:
+    result = _run(
+        "--platform",
+        "linux/amd64",
+        "--role",
+        "worker",
+        "--image",
+        _image_ref("worker", AMD64_FIXTURE),
+        "--manifest",
+        str(AMD64_FIXTURE),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "linux/amd64 manifests" in result.stdout
+
+
+def test_preflight_rejects_unsupported_platform() -> None:
+    result = _run("--platform", "linux/s390x")
+
+    assert result.returncode != 0
+    assert "invalid choice" in result.stderr
+
+
 def test_single_role_preflight_rejects_digest_mismatch(tmp_path: Path) -> None:
     manifest, _ = _manifest(tmp_path)
 
@@ -171,6 +194,28 @@ def test_legacy_mode_accepts_all_multiarch_fixtures() -> None:
 
     assert result.returncode == 0, result.stderr
     assert "cloud image preflight passed" in result.stdout
+
+
+def test_legacy_mode_accepts_all_amd64_fixtures_when_requested() -> None:
+    result = _run(
+        "--platform",
+        "linux/amd64",
+        "--api-image",
+        _image_ref("api", AMD64_FIXTURE),
+        "--worker-image",
+        _image_ref("worker", AMD64_FIXTURE),
+        "--proxy-image",
+        _image_ref("proxy", AMD64_FIXTURE),
+        "--manifest",
+        f"api={AMD64_FIXTURE}",
+        "--manifest",
+        f"worker={AMD64_FIXTURE}",
+        "--manifest",
+        f"proxy={AMD64_FIXTURE}",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "linux/amd64 manifests" in result.stdout
 
 
 @pytest.mark.parametrize("failing_role", ["api", "worker", "proxy"])
