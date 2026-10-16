@@ -47,6 +47,7 @@ from opportunity_radar.opportunities.models import (
 )
 from opportunity_radar.opportunities.service import OpportunityService
 from opportunity_radar.platform.database import create_database_engine
+from tests.backend.support.absence import age_occurrences
 
 pytestmark = [
     pytest.mark.integration,
@@ -450,7 +451,8 @@ def test_detail_429_keeps_completed_listing_inventory(engine: Engine) -> None:
             opportunities.reconcile_run_closures(second.id)
             assert fixture.opportunity_for("/job/Remote/Job-1_R1").lifecycle_status != "CLOSED"
 
-            # Same listing, but detail is on and answers 429.
+            # Same listing, but detail is on and answers 429. Job-1 has been gone for over 24 h.
+            age_occurrences(session, [fixture.source.id])
             board.detail = lambda path: httpx.Response(429, headers={"Retry-After": "1"})
             fixture.use_detail(True)
             third = fixture.execute()

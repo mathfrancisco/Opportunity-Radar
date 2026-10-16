@@ -1,4 +1,4 @@
-"""A job vanishing from two complete runs in a row closes it; reappearing reopens it.
+"""A job unseen for 24 h across a complete run closes it; reappearing reopens it.
 
 Only a complete run may change anything here: a partial or failed run tells us nothing
 about what the board still has, so absence from it is not evidence.
@@ -121,6 +121,13 @@ class _Fixture:
         occurrence.last_seen_at = run.started_at
         self.session.commit()
 
+    def age_occurrence(self, hours: float) -> None:
+        """Pretend the occurrence was last seen `hours` ago (absence is clock based)."""
+        occurrence = self.session.get(SourceOccurrenceModel, self.occurrence_id)
+        assert occurrence is not None
+        occurrence.last_seen_at = datetime.now(UTC) - timedelta(hours=hours)
+        self.session.commit()
+
     def opportunity(self) -> OpportunityModel:
         opportunity = self.session.get(OpportunityModel, self.opportunity_id)
         assert opportunity is not None
@@ -167,7 +174,7 @@ def test_partial_and_failed_runs_never_close_anything() -> None:
             fixture.cleanup()
 
 
-def test_missing_from_two_consecutive_complete_runs_closes_with_evidence() -> None:
+def test_unseen_25h_with_a_complete_run_since_closes_with_evidence() -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         fixture = _Fixture(session)
@@ -175,19 +182,57 @@ def test_missing_from_two_consecutive_complete_runs_closes_with_evidence() -> No
         try:
             first = fixture.run(complete=True)
             fixture.opportunity_seen_in(first)
+            fixture.age_occurrence(25)
 
             second = fixture.run(complete=True)
             service.reconcile_run_closures(second.id)
-            assert fixture.opportunity().lifecycle_status == "ACTIVE"
-
-            third = fixture.run(complete=True)
-            service.reconcile_run_closures(third.id)
 
             closed = fixture.opportunity()
             assert closed.lifecycle_status == "CLOSED"
-            assert closed.closure_evidence == {
-                "closed_by_run_ids": [str(second.id), str(third.id)]
-            }
+            assert closed.closure_evidence["closed_by_run_ids"] == [str(second.id)]
+            assert closed.closure_evidence["absence_after_hours"] == 24
+        finally:
+            fixture.cleanup()
+
+
+def test_unseen_23h_is_not_absent() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        service = OpportunityService(session)
+        try:
+            first = fixture.run(complete=True)
+            fixture.opportunity_seen_in(first)
+            fixture.age_occurrence(23)
+
+            second = fixture.run(complete=True)
+            service.reconcile_run_closures(second.id)
+
+            assert fixture.opportunity().lifecycle_status == "ACTIVE"
+        finally:
+            fixture.cleanup()
+
+
+def test_unseen_25h_without_a_complete_run_since_is_not_absent() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        service = OpportunityService(session)
+        try:
+            first = fixture.run(complete=True)
+            fixture.opportunity_seen_in(first)
+            fixture.age_occurrence(25)
+            # The only complete run started 30 h ago: the board was not re-read since the
+            # 24 h mark, so unseen time proves nothing.
+            first.started_at = datetime.now(UTC) - timedelta(hours=30)
+            session.commit()
+            service.reconcile_run_closures(first.id)
+            assert fixture.opportunity().lifecycle_status == "ACTIVE"
+
+            # A partial run after the mark does not count either.
+            partial = fixture.run(complete=False, status="PARTIAL")
+            service.reconcile_run_closures(partial.id)
+            assert fixture.opportunity().lifecycle_status == "ACTIVE"
         finally:
             fixture.cleanup()
 
@@ -200,8 +245,7 @@ def test_reappearing_reopens_a_closed_opportunity() -> None:
         try:
             first = fixture.run(complete=True)
             fixture.opportunity_seen_in(first)
-            second = fixture.run(complete=True)
-            service.reconcile_run_closures(second.id)
+            fixture.age_occurrence(25)
             third = fixture.run(complete=True)
             service.reconcile_run_closures(third.id)
             assert fixture.opportunity().lifecycle_status == "CLOSED"
@@ -303,12 +347,11 @@ def test_an_occurrence_live_in_another_source_keeps_the_opportunity_open() -> No
                 session, fixture, seen_in_latest_complete=True
             )
 
-            second = fixture.run(complete=True)
-            service.reconcile_run_closures(second.id)
+            fixture.age_occurrence(25)
             third = fixture.run(complete=True)
             service.reconcile_run_closures(third.id)
 
-            # Source A dropped it for two runs, source B still lists it.
+            # Source A dropped it for over 24 h, source B still lists it.
             assert fixture.opportunity().lifecycle_status == "ACTIVE"
         finally:
             session.rollback()
@@ -331,8 +374,7 @@ def test_closes_when_every_source_dropped_the_opportunity() -> None:
                 session, fixture, seen_in_latest_complete=False
             )
 
-            second = fixture.run(complete=True)
-            service.reconcile_run_closures(second.id)
+            fixture.age_occurrence(25)
             third = fixture.run(complete=True)
             service.reconcile_run_closures(third.id)
 

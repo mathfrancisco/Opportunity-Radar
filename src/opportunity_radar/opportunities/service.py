@@ -7,7 +7,7 @@ from binascii import Error as Base64Error
 from collections import Counter
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -476,8 +476,14 @@ class OpportunityService:
         source_run_id: UUID,
         *,
         may_close: Callable[[SourceRunModel], bool] | None = None,
+        now: datetime | None = None,
+        absence_after_hours: int | None = None,
     ) -> bool:
-        """Close jobs that vanished for two complete runs in a row, and reopen ones back.
+        """Close jobs unseen for `absence_after_hours` (default 24), and reopen ones back.
+
+        An occurrence is absent only when its `last_seen_at` is older than that window and a
+        complete run of its source started after the window's start (so the board was
+        actually re-read since). The signal is `last_seen_at`, not per-run observations.
 
         Only a complete run may change anything here: a partial or failed run tells us
         nothing about what the board still has, so absence from it is not evidence.
@@ -506,14 +512,15 @@ class OpportunityService:
             }
             opportunity.version += 1
 
-        previous_run_id = self.repository.previous_complete_run_id(
-            source_definition_id, before_run_id=source_run_id
+        hours = (
+            absence_after_hours
+            if absence_after_hours is not None
+            else get_settings().absence_after_hours
         )
-        if previous_run_id is not None:
-            for occurrence in self.repository.occurrences_missing_from_both_runs(
-                source_definition_id,
-                current_run_id=source_run_id,
-                previous_complete_run_id=previous_run_id,
+        cutoff = (now or datetime.now(UTC)) - timedelta(hours=hours)
+        if self.repository.complete_run_started_since(source_definition_id, cutoff):
+            for occurrence in self.repository.occurrences_unseen_since(
+                source_definition_id, cutoff=cutoff
             ):
                 opportunity = occurrence.opportunity
                 current_status = OpportunityStatus(opportunity.lifecycle_status)
@@ -529,7 +536,9 @@ class OpportunityService:
                     continue
                 opportunity.lifecycle_status = OpportunityStatus.CLOSED.value
                 opportunity.closure_evidence = {
-                    "closed_by_run_ids": [str(previous_run_id), str(source_run_id)],
+                    "closed_by_run_ids": [str(source_run_id)],
+                    "absence_after_hours": hours,
+                    "last_seen_at": occurrence.last_seen_at.isoformat(),
                 }
                 opportunity.version += 1
 
