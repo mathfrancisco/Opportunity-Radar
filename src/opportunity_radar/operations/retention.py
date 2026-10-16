@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, and_, exists, select
+from sqlalchemy import Select, and_, exists, func, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import (
@@ -106,6 +106,15 @@ class PayloadRetentionService:
             policy_version=self.policy_version,
             retention_days=self.retention_days,
             cutoff=cutoff,
+        )
+
+    def count_due_payloads(self, *, now: datetime | None = None) -> int:
+        """How many payloads `expire_due_payloads` could expire now, without touching them."""
+        cutoff = (now or datetime.now(UTC)) - timedelta(days=self.retention_days)
+        return int(
+            self.session.execute(
+                select(func.count()).select_from(self._eligible(cutoff).subquery())
+            ).scalar_one()
         )
 
     def _eligible(self, cutoff: datetime) -> Select[Any]:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 
+from opportunity_radar.operations.data_reduction import run_data_reduction
 from opportunity_radar.operations.opportunity_retention import (
     DRY_RUN_JOB_NAME,
     JOB_NAME,
@@ -109,6 +110,24 @@ def _stages(engine, settings) -> list[StageSpec]:
                 dry_run=not apply,
                 should_stop=context.should_stop,
             )
+            # R55-E6: payload expiry, superseded-assessment pruning and the size check share
+            # this daily slot and the same apply gate (dry run only counts). Skipped when the
+            # retention above already stopped or failed, so the day stays open for a retry.
+            if not report.stopped and not report.errors:
+                reduction = run_data_reduction(
+                    engine,
+                    apply=apply,
+                    payload_retention_days=settings.payload_retention_days,
+                    payload_batch_size=settings.payload_retention_batch_size,
+                    assessment_retention_days=settings.assessment_retention_days,
+                    assessment_batch_size=settings.assessment_retention_batch_size,
+                    size_limit_bytes=settings.database_size_limit_bytes,
+                    size_alert_ratio=settings.database_size_alert_ratio,
+                    should_stop=context.should_stop,
+                )
+                report.stopped = report.stopped or reduction.stopped
+                report.errors.update({f"reduction_{k}": v for k, v in reduction.errors.items()})
+                report.complete = report.complete and reduction.complete
         except Exception as error:
             try:
                 record_retention_attempt(

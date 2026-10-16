@@ -304,6 +304,12 @@ def _run_pipeline_once_settings(**overrides: object) -> SimpleNamespace:
         "opportunity_retention_apply": False,
         "opportunity_retention_batch_size": 500,
         "ai_call_record_retention_days": 7,
+        "payload_retention_days": 2,
+        "payload_retention_batch_size": 500,
+        "assessment_retention_days": 1,
+        "assessment_retention_batch_size": 500,
+        "database_size_limit_bytes": 1_000_000_000,
+        "database_size_alert_ratio": 0.7,
     }
     return SimpleNamespace(
         database_url="postgresql://unused",
@@ -565,6 +571,7 @@ class _RetentionHarness:
     def __init__(
         self, monkeypatch: pytest.MonkeyPatch, *, days: int = 7, apply: bool = False
     ) -> None:
+        from opportunity_radar.operations.data_reduction import DataReductionReport
         from opportunity_radar.operations.opportunity_retention import (
             OpportunityRetentionReport,
         )
@@ -575,6 +582,8 @@ class _RetentionHarness:
         self.due = True
         self.raises: Exception | None = None
         self.record_raises = False
+        self.reduction = DataReductionReport(applied=apply)
+        self.reductions: list[dict[str, object]] = []
         self.runs: list[dict[str, object]] = []
         self.records: list[dict[str, object]] = []
         self.due_checks: list[str] = []
@@ -595,6 +604,11 @@ class _RetentionHarness:
             if harness.record_raises:
                 raise RuntimeError("record failed")
 
+        def reduce(_engine: object, **kwargs: object) -> DataReductionReport:
+            harness.reductions.append(kwargs)
+            return harness.reduction
+
+        monkeypatch.setattr(run_pipeline_once, "run_data_reduction", reduce)
         monkeypatch.setattr(run_pipeline_once, "run_opportunity_retention", run)
         monkeypatch.setattr(run_pipeline_once, "retention_due", due)
         monkeypatch.setattr(run_pipeline_once, "record_retention_attempt", record)
@@ -672,6 +686,71 @@ def test_retention_stage_step_errors_are_recorded_as_failure(
     assert harness.records == [
         {"success": False, "error": "ai_call_record", "job_name": "opportunity_retention"}
     ]
+
+
+def test_data_reduction_runs_in_the_retention_slot_with_the_same_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    applied = _RetentionHarness(monkeypatch, apply=True)
+    assert applied.run() == StageCounts(input=1, completed=1)
+    assert applied.reductions[0]["apply"] is True
+    assert applied.reductions[0]["payload_retention_days"] == 2
+    assert applied.reductions[0]["assessment_retention_days"] == 1
+    assert applied.reductions[0]["size_limit_bytes"] == 1_000_000_000
+
+    counted = _RetentionHarness(monkeypatch, apply=False)
+    assert counted.run() == StageCounts(input=1, completed=1)
+    assert counted.reductions[0]["apply"] is False
+
+
+def test_data_reduction_is_skipped_when_not_due_or_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    not_due = _RetentionHarness(monkeypatch, apply=True)
+    not_due.due = False
+    not_due.run()
+    assert not_due.reductions == []
+    off = _RetentionHarness(monkeypatch, days=0, apply=True)
+    off.run()
+    assert off.reductions == []
+
+
+def test_data_reduction_is_skipped_when_retention_stopped_or_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stopped = _RetentionHarness(monkeypatch, apply=True)
+    stopped.report.stopped = True
+    stopped.report.complete = False
+    stopped.run()
+    assert stopped.reductions == []
+
+    failed = _RetentionHarness(monkeypatch, apply=True)
+    failed.report.errors = {"opportunities": "ValueError"}
+    failed.report.complete = False
+    failed.run()
+    assert failed.reductions == []
+
+
+def test_data_reduction_error_fails_the_stage_and_stop_leaves_the_day_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failing = _RetentionHarness(monkeypatch, apply=True)
+    failing.reduction.errors = {"assessments": "RuntimeError"}
+    failing.reduction.complete = False
+    assert failing.run() == StageCounts(input=1, failed=1)
+    assert failing.records == [
+        {
+            "success": False,
+            "error": "reduction_assessments",
+            "job_name": "opportunity_retention",
+        }
+    ]
+
+    stopping = _RetentionHarness(monkeypatch, apply=True)
+    stopping.reduction.stopped = True
+    stopping.reduction.complete = False
+    assert stopping.run() == StageCounts(input=1, stopped=1)
+    assert stopping.records == []
 
 
 def test_retention_stage_exception_is_recorded_and_not_masked(
