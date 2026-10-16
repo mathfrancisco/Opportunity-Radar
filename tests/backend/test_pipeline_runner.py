@@ -262,10 +262,31 @@ def test_postgres_claim_allows_only_one_window_on_isolated_database() -> None:
                 pass
 
 
-def test_no_analysis_or_retention_is_planned() -> None:
+def test_analysis_stays_blocked_and_retention_is_planned_daily() -> None:
     stages = describe_pipeline(owner_sub="owner", deadline_seconds=30)["stages"]
-    assert stages[-2]["status"] == "blocked"
-    assert stages[-1]["status"] == "blocked"
+    assert stages[-2] == {
+        "name": "analyze_pending",
+        "status": "blocked",
+        "reason": "analysis is opt-in and disabled for finite pipeline windows",
+    }
+    assert stages[-1]["name"] == "retention"
+    assert stages[-1]["status"] == "planned"
+
+
+def test_retention_stage_is_optional_and_last() -> None:
+    events: list[str] = []
+    stages = _stages(events) + [
+        StageSpec("retention", lambda _c: events.append("retention") or StageCounts(input=1))
+    ]
+    report = run_pipeline(stages, owner_sub="owner", deadline_seconds=30, claim_factory=nullcontext)
+    assert events[-1] == "retention" and report.exit_code == ExitCode.SUCCESS
+    with pytest.raises(ConfigurationError):
+        run_pipeline(
+            [stages[-1], *stages[:-1]],
+            owner_sub="owner",
+            deadline_seconds=30,
+            claim_factory=nullcontext,
+        )
 
 
 # --- F53-10 AC03/AC05 -----------------------------------------------------------------
@@ -286,6 +307,9 @@ def _run_pipeline_once_settings(**overrides: object) -> SimpleNamespace:
         collection_pass_deadline_seconds=None,
         collection_host_concurrency=1,
         worker_evaluate_batch_size=10,
+        opportunity_retention_days=0,
+        opportunity_retention_batch_size=500,
+        ai_call_record_retention_days=7,
         **overrides,
     )
 
