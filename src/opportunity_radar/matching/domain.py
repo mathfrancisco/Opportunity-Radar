@@ -6,6 +6,7 @@ are responsible for translating their models into these value objects.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -19,6 +20,7 @@ from opportunity_radar.opportunities.domain import (
     Seniority,
     WorkMode,
 )
+from opportunity_radar.opportunities.regions import ANY_COUNTRY
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
@@ -471,15 +473,24 @@ def _country_filter(
             "COUNTRY_ALLOWED", "Residence eligibility is not stated."
         )
     allowed = _normalized_set(opportunity.allowed_countries)
-    compatible = bool(allowed & _normalized_set(profile.countries))
+    # R55-D1: "Worldwide" / "Anywhere" resolve to the `ANY` sentinel, which is no country
+    # code to intersect with.
+    compatible = ANY_COUNTRY.casefold() in allowed or bool(
+        allowed & _normalized_set(profile.countries)
+    )
     return _binary_filter(
         "COUNTRY_ALLOWED",
         compatible,
         "Profile country is allowed.",
-        "Profile country is not allowed.",
+        "Profile country is not allowed: the job allows only "
+        f"{_country_codes(allowed)}, the profile is in {_country_codes(profile.countries)}.",
         opportunity,
         profile,
     )
+
+
+def _country_codes(values: Iterable[str]) -> str:
+    return ", ".join(sorted({value.strip().upper() for value in values if value.strip()}))
 
 
 def _seniority_filter(
