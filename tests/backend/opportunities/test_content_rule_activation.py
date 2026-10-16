@@ -113,27 +113,27 @@ RULE_FIXTURES: dict[str, tuple[str, str, str]] = {
 BASE_PINS: dict[str, tuple[tuple[str, str, str | None], tuple[str, str, tuple[str, ...], str]]] = {
     "years_min": (
         (_TITLE, _LOCATION, "We need 5+ years of experience building APIs."),
-        ("UNKNOWN", "UNKNOWN", (), "regions-v1"),
+        ("UNKNOWN", "UNKNOWN", (), "regions-v2"),
     ),
     "years_range": (
         (_TITLE, _LOCATION, "Looking for 3-5 years of experience."),
-        ("UNKNOWN", "UNKNOWN", (), "regions-v1"),
+        ("UNKNOWN", "UNKNOWN", (), "regions-v2"),
     ),
     "entry": (
         (_TITLE, _LOCATION, "This is an entry-level position."),
-        ("UNKNOWN", "UNKNOWN", (), "regions-v1"),
+        ("UNKNOWN", "UNKNOWN", (), "regions-v2"),
     ),
     "intern": (
         (_TITLE, _LOCATION, "Vaga de estágio em dados, cursando graduação."),
-        ("UNKNOWN", "UNKNOWN", (), "regions-v1"),
+        ("UNKNOWN", "UNKNOWN", (), "regions-v2"),
     ),
     "work_mode": (
         ("Data Engineer", _LOCATION, "Regime híbrido, 3 dias."),
-        ("UNKNOWN", "UNKNOWN", (), "regions-v1"),
+        ("UNKNOWN", "UNKNOWN", (), "regions-v2"),
     ),
     "country": (
         ("Data Engineer", "Remote", "Trabalho remoto no Brasil."),
-        ("UNKNOWN", "REMOTE", (), "regions-v1"),
+        ("UNKNOWN", "REMOTE", (), "regions-v2"),
     ),
     "all_three": (
         (
@@ -141,11 +141,11 @@ BASE_PINS: dict[str, tuple[tuple[str, str, str | None], tuple[str, str, tuple[st
             _LOCATION,
             "5+ years of experience. Regime híbrido, 3 dias. Must be located in Brazil.",
         ),
-        ("UNKNOWN", "UNKNOWN", (), "regions-v1"),
+        ("UNKNOWN", "UNKNOWN", (), "regions-v2"),
     ),
     "title_and_location": (
         ("Senior Data Engineer", "Remote — Brazil", None),
-        ("SENIOR", "REMOTE", ("BR",), "regions-v1"),
+        ("SENIOR", "REMOTE", ("BR",), "regions-v2"),
     ),
 }
 
@@ -166,7 +166,7 @@ def test_only_years_min_enabled_changes_seniority_and_nothing_else() -> None:
     description = "5+ years of experience. Regime híbrido, 3 dias. Must be located in Brazil."
     candidate = _candidate(_TITLE, _LOCATION, description, content_rules=rules)
 
-    assert _fields(candidate) == ("SENIOR", "UNKNOWN", (), "regions-v1")
+    assert _fields(candidate) == ("SENIOR", "UNKNOWN", (), "regions-v2")
     (reason,) = candidate.classification_reasons
     assert reason["code"] == "SENIORITY_CLASSIFICATION"
     assert reason["rule"] == "description_years_min"
@@ -179,7 +179,7 @@ def test_only_years_min_enabled_changes_seniority_and_nothing_else() -> None:
         "UNKNOWN",
         "UNKNOWN",
         (),
-        "regions-v1",
+        "regions-v2",
     )
 
 
@@ -193,8 +193,8 @@ def test_a_title_decided_value_keeps_the_title_mapping_version_under_partial_act
     assert candidate.seniority.value == "SENIOR"
     (reason,) = candidate.classification_reasons
     assert reason["source"] == "title"
-    assert reason["mapping_version"] == "seniority-v6"
-    assert candidate.allowed_countries_version == "regions-v1"
+    assert reason["mapping_version"] == "seniority-v7"
+    assert candidate.allowed_countries_version == "regions-v2"
 
 
 @pytest.mark.parametrize("rule", sorted(DESCRIPTION_RULES))

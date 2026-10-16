@@ -739,3 +739,82 @@ def test_eligibility_change_leaves_scores_untouched() -> None:
         "0.8333333333333333333333333333"
     )
     assert no_data.eligibility.status is EligibilityStatus.ELIGIBLE
+
+
+# R55-D1: the country filter reads the countries resolved from the structured location.
+@pytest.mark.parametrize(
+    ("location_text", "state"),
+    [
+        ("Remote, United Kingdom", KnowledgeState.FALSE),
+        ("Remote - US", KnowledgeState.FALSE),
+        ("Toronto, Canada", KnowledgeState.FALSE),
+        ("Remote - Brazil", KnowledgeState.TRUE),
+        ("São Paulo, Brazil", KnowledgeState.TRUE),
+        ("LATAM", KnowledgeState.TRUE),
+        ("Worldwide", KnowledgeState.TRUE),
+        ("Remote", KnowledgeState.UNKNOWN),
+        ("San Francisco, CA", KnowledgeState.UNKNOWN),
+    ],
+)
+def test_country_filter_from_structured_location_with_a_brazilian_profile(
+    location_text: str, state: KnowledgeState
+) -> None:
+    from opportunity_radar.opportunities.regions import resolve_allowed_countries
+
+    result = evaluate_match(
+        _opportunity(allowed_countries=resolve_allowed_countries(location_text)),
+        _profile(countries=("BR",)),
+        _rules(),
+        assessed_at=ASSESSED_AT,
+    )
+
+    country = next(
+        item for item in result.eligibility.filters if item.code == "COUNTRY_ALLOWED"
+    )
+    # An unknown country with nothing to evaluate is NOT_APPLICABLE (see evaluate_eligibility).
+    expected = KnowledgeState.NOT_APPLICABLE if state is KnowledgeState.UNKNOWN else state
+    assert country.result is expected
+    if state is KnowledgeState.FALSE:
+        assert result.eligibility.status is EligibilityStatus.INELIGIBLE
+        assert "BR" in country.reason and "job allows only" in country.reason
+
+
+def test_country_filter_names_both_sides_when_it_fails() -> None:
+    result = evaluate_match(
+        _opportunity(allowed_countries=("GB",)), _profile(), _rules(), assessed_at=ASSESSED_AT
+    )
+    country = next(
+        item for item in result.eligibility.filters if item.code == "COUNTRY_ALLOWED"
+    )
+
+    assert country.reason == (
+        "Profile country is not allowed: the job allows only GB, the profile is in BR."
+    )
+
+
+def test_country_filter_accepts_any_profile_country_for_a_worldwide_job() -> None:
+    result = evaluate_match(
+        _opportunity(allowed_countries=("ANY",)),
+        _profile(countries=("PT", "BR")),
+        _rules(),
+        assessed_at=ASSESSED_AT,
+    )
+    country = next(
+        item for item in result.eligibility.filters if item.code == "COUNTRY_ALLOWED"
+    )
+
+    assert country.result is KnowledgeState.TRUE
+
+
+def test_country_filter_one_of_several_profile_countries_is_enough() -> None:
+    result = evaluate_match(
+        _opportunity(allowed_countries=("GB", "DE")),
+        _profile(countries=("BR", "DE")),
+        _rules(),
+        assessed_at=ASSESSED_AT,
+    )
+    country = next(
+        item for item in result.eligibility.filters if item.code == "COUNTRY_ALLOWED"
+    )
+
+    assert country.result is KnowledgeState.TRUE

@@ -251,7 +251,7 @@ def test_seniority_classification_records_precedence_and_conflicts() -> None:
 def test_seniority_v2_covers_portuguese_titles_and_abbreviations() -> None:
     from opportunity_radar.opportunities.domain import SENIORITY_MAPPING_VERSION
 
-    assert SENIORITY_MAPPING_VERSION == "seniority-v6"
+    assert SENIORITY_MAPPING_VERSION == "seniority-v7"
     assert infer_seniority("Engenheiro Especialista", None, {}) is Seniority.STAFF
     assert infer_seniority("Principal Engineer", None, {}) is Seniority.STAFF
     assert infer_seniority("Desenvolvedor Pl", None, {}) is Seniority.MID
@@ -442,7 +442,7 @@ def test_seniority_v5_keeps_the_lowest_level_of_a_range_and_cites_the_range(
     assert value is expected
     assert reason["value"] == expected.value
     assert reason["range"] == levels
-    assert reason["mapping_version"] == "seniority-v6"
+    assert reason["mapping_version"] == "seniority-v7"
 
 
 def test_seniority_v5_cites_no_range_for_a_single_or_compound_level() -> None:
@@ -1151,7 +1151,7 @@ def test_content_rules_are_off_by_default_and_versioned_when_on() -> None:
     off = build_candidate(item)
     assert off.seniority is Seniority.UNKNOWN
     assert off.allowed_countries == ()
-    assert off.allowed_countries_version == "regions-v1"
+    assert off.allowed_countries_version == "regions-v2"
     assert off.classification_reasons == ()
 
     on = build_candidate(item, content_rules=True)
