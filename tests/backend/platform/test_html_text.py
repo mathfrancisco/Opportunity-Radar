@@ -146,13 +146,45 @@ def test_real_html_is_never_unescaped_twice() -> None:
     assert html_to_text("<p>Tom &amp;amp; Jerry</p>") == "Tom &amp; Jerry"
 
 
-def test_clean_text_with_a_literal_entity_is_left_alone() -> None:
+def test_clean_text_is_stable_when_its_decoded_form_has_no_entity() -> None:
+    once = html_to_text("<p>Tom &amp; Jerry</p>")
+    assert once == "Tom & Jerry"
+    assert html_to_text(once) == once
+
+
+def test_decoded_entity_text_is_decoded_once_more_by_a_second_pass() -> None:
+    # Documented limit of idempotence: `R&lt;D` is still an entity after one decode.
     once = html_to_text("<p>R&amp;lt;D</p>")
-    assert html_to_text(once) == once == "R&lt;D"
+    assert once == "R&lt;D"
+    assert html_to_text(once) == "R<D"
 
 
-def test_escaped_markup_without_a_closing_bracket_is_text() -> None:
-    assert html_to_text("Use &lt;D for the delta") == "Use &lt;D for the delta"
+def test_plain_text_with_entities_but_no_tags_is_decoded_once() -> None:
+    assert html_to_text("Tom &amp; Jerry &nbsp;x") == "Tom & Jerry  x"
+    assert html_to_text("Use &lt;D for the delta") == "Use <D for the delta"
+    assert html_to_text("&amp;lt;") == "&lt;"
+
+
+@pytest.mark.parametrize("tag", ["script", "style", "noscript", "template"])
+def test_unclosed_dropped_element_keeps_the_text_after_it(tag: str) -> None:
+    text = html_to_text(f"<p>Hi</p><{tag}>x{{}}<p>Job at Acme, R&amp;D")
+
+    assert text is not None
+    assert "Hi" in text and "Job at Acme, R&D" in text
+
+
+@pytest.mark.parametrize("tag", ["script", "style", "noscript", "template"])
+def test_closed_dropped_element_is_removed_with_its_content(tag: str) -> None:
+    text = html_to_text(f"<p>Hi</p><{tag}>secret()</{tag}><p>Job</p>")
+
+    assert text == "Hi\n\nJob"
+
+
+def test_one_closed_and_one_unclosed_element_of_the_same_tag() -> None:
+    text = html_to_text("<style>a{}</style><p>One</p><style>b{}<p>Two")
+
+    assert text is not None
+    assert "a{}" not in text and "One" in text and "Two" in text
 
 
 def test_input_is_capped_and_hostile_markup_is_fast() -> None:

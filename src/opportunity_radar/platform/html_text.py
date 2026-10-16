@@ -31,6 +31,11 @@ _SPACES = re.compile(r"[ \t ​]+")
 _BLANK_LINES = re.compile(r"\n{3,}")
 
 _DROPPED = frozenset({"script", "style", "noscript", "template"})
+# Opening and closing tags of the dropped elements. `[^<>]{0,200}` keeps the scan linear.
+_DROPPED_OPEN = {
+    tag: re.compile(rf"<\s*{tag}(?![a-z0-9])[^<>]{{0,200}}>", re.IGNORECASE) for tag in _DROPPED
+}
+_DROPPED_CLOSE = {tag: re.compile(rf"<\s*/\s*{tag}\s*>", re.IGNORECASE) for tag in _DROPPED}
 _HEADINGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
 _BLOCKS = frozenset(
     {"br", "p", "div", "ul", "ol", "dl", "dt", "dd", "tr", "table", "section", "article"}
@@ -47,6 +52,20 @@ def _has_real_tag(text: str) -> bool:
 def _has_escaped_tag(text: str) -> bool:
     opening = _ESCAPED_OPEN.search(text)
     return opening is not None and _ESCAPED_CLOSE.search(text, opening.end()) is not None
+
+
+def _without_unclosed_openers(text: str) -> str:
+    """Remove the openers of `script`/`style`/`noscript`/`template` that never close.
+
+    An element is dropped with its content only when its closing tag exists; an opener
+    left without one is no element, and the text after it stays.
+    """
+    for tag in _DROPPED:
+        openers = list(_DROPPED_OPEN[tag].finditer(text))
+        excess = len(openers) - len(_DROPPED_CLOSE[tag].findall(text))
+        for match in reversed(openers[len(openers) - excess :] if excess > 0 else []):
+            text = text[: match.start()] + text[match.end() :]
+    return text
 
 
 class _TextExtractor(HTMLParser):
@@ -98,9 +117,12 @@ def html_to_text(value: str | None, *, heading_marker: str = "", bullet: str = "
     for callers that tell headings apart. Whitespace is collapsed per line and blank lines
     to one.
 
-    `None` stays `None`. Text with no tag, real or escaped, is plain text and is returned
-    unchanged (which also makes the function idempotent). Input past `MAX_INPUT_CHARS` is
-    cut first.
+    `None` stays `None`. Text with no tag, real or escaped, is plain text: its entities are
+    decoded once and nothing else changes. `script`, `style`, `noscript` and `template` are
+    dropped only when they close; an unclosed opener is removed and the text after it kept.
+    Input past `MAX_INPUT_CHARS` is cut first. Applying the function again leaves clean text
+    as it is, except text whose decoded form still reads as an entity (`R&lt;D`), which a
+    second pass decodes once more.
     """
     if value is None:
         return None
@@ -113,9 +135,10 @@ def html_to_text(value: str | None, *, heading_marker: str = "", bullet: str = "
             if _has_real_tag(text):
                 break
         if not _has_real_tag(text):
-            return value
+            # No markup: plain text. Its entities are decoded once ("Tom &amp; Jerry").
+            return html.unescape(text)
     extractor = _TextExtractor(heading_marker, bullet)
-    extractor.feed(text)
+    extractor.feed(_without_unclosed_openers(text))
     extractor.close()
     lines = [
         _SPACES.sub(" ", line).strip()
