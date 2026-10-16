@@ -173,12 +173,14 @@ def _country_of_segment(segment: str) -> str | None:
 
 
 def _structured_countries(text: str) -> tuple[str, ...]:
-    """Countries named by the last place segment of each part of a structured location.
+    """Countries named by the trailing country segments of each part of a structured location.
 
-    "Remote, United Kingdom" -> GB; "Toronto, Canada" -> CA; "London, UK; Berlin, Germany"
-    -> GB, DE. Work-mode segments ("Remote", "(Hybrid)") are ignored. A part whose last
-    place segment is not a known country ("San Francisco, CA", "Remote") makes the whole
-    text unknown: it is never guessed from the parts that did resolve.
+    "Remote, United Kingdom" -> GB; "Toronto, Canada" -> CA; "Remote, Brazil, Argentina" ->
+    BR, AR; "London, UK; Berlin, Germany" -> GB, DE. Work-mode segments ("Remote",
+    "(Hybrid)") are ignored. Every country in the run of segments that ends a part counts;
+    a segment before that run ("Toronto", "Berlin") is a city and is dropped. A part that
+    does not end in a known country ("San Francisco, CA", "Remote") makes the whole text
+    unknown: it is never guessed from the parts that did resolve.
     """
     found: list[str] = []
     for part in _LOCATION_PARTS.split(text):
@@ -187,11 +189,15 @@ def _structured_countries(text: str) -> tuple[str, ...]:
             for segment in _LOCATION_SEGMENTS.split(_MODE_PARENTHETICAL.sub(" ", part))
             if segment and not _MODE_SEGMENT.match(segment)
         ]
-        code = _country_of_segment(segments[-1]) if segments else None
-        if code is None:
+        trailing: list[str] = []
+        for segment in reversed(segments):
+            code = _country_of_segment(segment)
+            if code is None:
+                break
+            trailing.insert(0, code)
+        if not trailing:
             return ()
-        if code not in found:
-            found.append(code)
+        found.extend(code for code in trailing if code not in found)
     return tuple(found)
 
 
@@ -224,7 +230,9 @@ def resolve_allowed_countries(location_text: str | None) -> tuple[str, ...]:
     return _structured_countries(text)
 
 
-REGIONS_VERSION_V2 = "allowed-countries-v2"
+#: v2 -> v3 (R55-D1): the location step is the `regions-v2` table, which also reads
+#: structured locations ("Remote, United Kingdom"), so the same input can yield a country.
+REGIONS_VERSION_V2 = "allowed-countries-v3"
 
 _PLACE_NAMES = sorted(
     [*_COUNTRY_NAME_TO_CODE, "latam", "americas", "emea", "worldwide", "anywhere"],
@@ -262,7 +270,7 @@ def _place_codes(place: str) -> tuple[str, ...]:
 def resolve_allowed_countries_v2(
     location_text: str | None, description: str | None
 ) -> tuple[tuple[str, ...], dict[str, str] | None]:
-    """`allowed-countries-v2`: location (v1 table) first, then description phrases.
+    """`allowed-countries-v3`: location (`regions-v2` table) first, then description phrases.
 
     Returns `(countries, evidence)`. `()` stays "unknown". Two description phrases that
     resolve to different country sets are ambiguous and yield `()`.

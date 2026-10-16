@@ -1157,7 +1157,7 @@ def test_content_rules_are_off_by_default_and_versioned_when_on() -> None:
     on = build_candidate(item, content_rules=True)
     assert on.seniority is Seniority.MID
     assert on.allowed_countries == ("BR",)
-    assert on.allowed_countries_version == REGIONS_VERSION_V2 == "allowed-countries-v2"
+    assert on.allowed_countries_version == REGIONS_VERSION_V2 == "allowed-countries-v3"
     codes = {reason["code"]: reason for reason in on.classification_reasons}
     assert codes["SENIORITY_CLASSIFICATION"]["mapping_version"] == "seniority-v4"
     assert codes["WORK_MODE_CLASSIFICATION"]["mapping_version"] == "work-mode-v7"

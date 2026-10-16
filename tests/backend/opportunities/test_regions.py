@@ -106,3 +106,18 @@ def test_latam_worldwide_and_brazil_keep_their_resolution() -> None:
     assert "BR" in resolve_allowed_countries("LATAM")
     assert resolve_allowed_countries("Worldwide") == (ANY_COUNTRY,)
     assert resolve_allowed_countries("Brazil") == ("BR",)
+
+
+@pytest.mark.parametrize(
+    ("location_text", "expected"),
+    [
+        ("Remote, Brazil, Argentina", ("BR", "AR")),
+        ("Remote, Canada, US", ("CA", "US")),
+        ("Remote - US, Canada", ("US", "CA")),
+        ("Berlin, Germany, Brazil", ("DE", "BR")),
+        ("Toronto, Canada", ("CA",)),
+        ("Remote, Brazil, Argentina; London, UK", ("BR", "AR", "GB")),
+    ],
+)
+def test_every_trailing_country_counts(location_text: str, expected: tuple[str, ...]) -> None:
+    assert resolve_allowed_countries(location_text) == expected

@@ -139,3 +139,35 @@ def test_ai_prompt_cleaner_reads_a_double_escaped_description() -> None:
 
     assert "Build GraphQL APIs" in cleaned
     assert "&lt;" not in cleaned and "<p>" not in cleaned
+
+
+def test_real_html_is_never_unescaped_twice() -> None:
+    assert html_to_text("<p>R&amp;lt;D</p>") == "R&lt;D"
+    assert html_to_text("<p>Tom &amp;amp; Jerry</p>") == "Tom &amp; Jerry"
+
+
+def test_clean_text_with_a_literal_entity_is_left_alone() -> None:
+    once = html_to_text("<p>R&amp;lt;D</p>")
+    assert html_to_text(once) == once == "R&lt;D"
+
+
+def test_escaped_markup_without_a_closing_bracket_is_text() -> None:
+    assert html_to_text("Use &lt;D for the delta") == "Use &lt;D for the delta"
+
+
+def test_input_is_capped_and_hostile_markup_is_fast() -> None:
+    import time
+
+    hostile = "<a" * 40_000
+    started = time.perf_counter()
+    html_to_text(hostile)
+    html_to_text("&lt;a" * 40_000)
+    html_to_text("<p>" + "word " * 100_000)
+    assert time.perf_counter() - started < 0.5
+
+
+def test_input_past_the_cap_is_cut() -> None:
+    from opportunity_radar.platform.html_text import MAX_INPUT_CHARS
+
+    text = html_to_text("<p>" + "x" * (MAX_INPUT_CHARS * 2) + "</p>")
+    assert text is not None and len(text) < MAX_INPUT_CHARS

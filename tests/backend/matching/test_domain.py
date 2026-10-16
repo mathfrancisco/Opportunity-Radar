@@ -818,3 +818,19 @@ def test_country_filter_one_of_several_profile_countries_is_enough() -> None:
     )
 
     assert country.result is KnowledgeState.TRUE
+
+
+def test_country_filter_passes_a_brazilian_profile_for_a_multi_country_remote_job() -> None:
+    from opportunity_radar.opportunities.regions import resolve_allowed_countries
+
+    result = evaluate_match(
+        _opportunity(allowed_countries=resolve_allowed_countries("Remote, Brazil, Argentina")),
+        _profile(countries=("BR",)),
+        _rules(),
+        assessed_at=ASSESSED_AT,
+    )
+    country = next(
+        item for item in result.eligibility.filters if item.code == "COUNTRY_ALLOWED"
+    )
+
+    assert country.result is KnowledgeState.TRUE
