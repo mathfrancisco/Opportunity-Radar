@@ -625,6 +625,11 @@ class AcquisitionRepository:
                         reference = reference.replace(tzinfo=UTC)
                     if reference < stale_before:
                         created[index] = STALE
+                        newest = latest.get(write.identity_key)
+                        if newest is not None:
+                            # Already stored: still on the board, so presence advances (and a
+                            # closed one reopens) without new evidence or an observation row.
+                            observed.append((newest, True))
                         continue
             envelope = _Envelope(
                 uuid4(),

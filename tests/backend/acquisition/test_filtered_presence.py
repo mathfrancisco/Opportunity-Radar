@@ -181,5 +181,9 @@ def test_changed_off_target_item_is_not_closed_as_absent() -> None:
             ).one()
             # Presence is the occurrence's own last_seen_run_id (R55-E3), not observations.
             assert occurrence.last_seen_run_id == third.id
+            # A complete filtered run lists the item, so closure must leave it open.
+            OpportunityService(session).reconcile_run_closures(third.id)
+            session.refresh(occurrence.opportunity)
+            assert occurrence.opportunity.lifecycle_status != "CLOSED"
         finally:
             _cleanup(session, source)

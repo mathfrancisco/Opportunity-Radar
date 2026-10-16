@@ -353,3 +353,80 @@ def test_reappearance_after_closure_keeps_an_observation() -> None:
             assert world.counts() == (1, 1, 2)
         finally:
             world.cleanup()
+
+
+def test_stale_changed_item_with_stored_evidence_still_counts_as_present() -> None:
+    from opportunity_radar.opportunities.models import OpportunityModel as _Opp
+    from tests.backend.support.absence import age_occurrences
+
+    with _session() as session:
+        world = _World(session)
+        try:
+            now = datetime.now(UTC)
+            world.collector.items = [_item(world.source_type, "a", published=now)]
+            world.run(max_age_days=7)
+            world.normalize_all()
+            age_occurrences(session, [world.source.id])  # unseen for 25 h
+            before = world.counts()
+
+            # Changed content, and the source now dates it 10 days back: STALE, not stored.
+            world.collector.items = [
+                _item(world.source_type, "a", published=now - timedelta(days=10), v=2)
+            ]
+            run = world.run(max_age_days=7)
+            session.refresh(run)
+            assert run.skipped_stale == 1 and run.complete is True
+            assert world.counts() == before  # no raw item, payload or observation
+            occurrence = world.occurrence()
+            assert occurrence.last_seen_run_id == run.id
+            assert occurrence.last_seen_at > now - timedelta(hours=1)
+
+            OpportunityService(session).reconcile_run_closures(run.id)
+            assert session.get(_Opp, occurrence.opportunity_id).lifecycle_status != "CLOSED"
+
+            # A closed opportunity reopens when its stale-changed posting is still listed.
+            session.execute(
+                update(_Opp)
+                .where(_Opp.id == occurrence.opportunity_id)
+                .values(lifecycle_status="CLOSED")
+            )
+            session.commit()
+            again = world.run(max_age_days=7)
+            OpportunityService(session).reconcile_run_closures(again.id)
+            session.expire_all()
+            assert session.get(_Opp, occurrence.opportunity_id).lifecycle_status != "CLOSED"
+        finally:
+            world.cleanup()
+
+
+def test_brand_new_stale_item_is_not_present_anywhere() -> None:
+    with _session() as session:
+        world = _World(session)
+        try:
+            world.collector.items = [
+                _item(world.source_type, "old", published=datetime.now(UTC) - timedelta(days=9))
+            ]
+            world.run(max_age_days=7)
+            assert world.counts() == (0, 0, 0)
+        finally:
+            world.cleanup()
+
+
+def test_stale_item_still_advances_the_checkpoint_cursor() -> None:
+    with _session() as session:
+        world = _World(session)
+        try:
+            now = datetime.now(UTC)
+            world.collector.items = [
+                _item(world.source_type, "a", published=now),
+                _item(world.source_type, "z-old", published=now - timedelta(days=9)),
+            ]
+            world.run(max_age_days=7)
+            cursor = session.scalar(
+                select(SourceCheckpointModel.cursor).where(
+                    SourceCheckpointModel.source_definition_id == world.source.id
+                )
+            )
+            assert cursor == "z-old"
+        finally:
+            world.cleanup()

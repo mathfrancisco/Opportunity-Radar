@@ -345,6 +345,10 @@ def test_two_identical_visits_update_presence_without_duplicate_content_or_ai() 
             session.refresh(occurrence)
             assert occurrence.last_seen_at > first_last_seen
             assert occurrence.last_seen_run_id == second_run.id
+            # The revisit confirms presence, so reconciling the run closes nothing.
+            OpportunityService(session).reconcile_run_closures(second_run.id)
+            session.refresh(occurrence.opportunity)
+            assert occurrence.opportunity.lifecycle_status != "CLOSED"
 
             observations = list(
                 session.scalars(

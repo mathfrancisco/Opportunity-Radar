@@ -1624,6 +1624,8 @@ class AcquisitionService:
                     continue
                 if outcome == STALE:
                     run.record_items(skipped=1, stale=1)
+                    if item.cursor is not None:
+                        last_cursor = item.cursor
                     continue
                 if outcome:
                     run.record_items(persisted=1)
