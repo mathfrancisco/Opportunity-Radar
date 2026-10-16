@@ -69,7 +69,7 @@ def test_normalization_fills_allowed_countries_from_remote_brazil_location() -> 
         opportunity = session.scalar(select(OpportunityModel))
         assert opportunity is not None
         assert opportunity.allowed_countries == ["BR"]
-        assert opportunity.allowed_countries_version == "regions-v1"
+        assert opportunity.allowed_countries_version == "regions-v2"
 
 
 def test_normalization_leaves_allowed_countries_unknown_for_an_unrecognizable_location() -> None:

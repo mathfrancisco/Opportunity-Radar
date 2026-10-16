@@ -193,7 +193,7 @@ def test_apply_bumps_the_version_once_per_posting_and_a_second_run_changes_nothi
     # A: three fields changed, one version bump.
     a = _state(engine, ids["A"])
     assert (a["seniority"], a["work_mode"], a["allowed_countries"]) == ("SENIOR", "HYBRID", ["BR"])
-    assert a["allowed_countries_version"] == "allowed-countries-v2"
+    assert a["allowed_countries_version"] == "allowed-countries-v3"
     assert a["version"] == before["A"]["version"] + 1
     # D: one field changed, one version bump.
     d = _state(engine, ids["D"])

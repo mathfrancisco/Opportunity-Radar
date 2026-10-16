@@ -54,7 +54,7 @@ _LEVEL_WORDS: dict[str, str] = {
         r"|new grad(?:uate)?|apprentice|aprendiz)\b"
     ),
     "JUNIOR": r"\b(?:junior|jr|early career)\b",
-    "MID": r"\b(?:mid(?:[- ]level)?|middle|pleno|pl)\b",
+    "MID": r"\b(?:mid(?:[- ]level)?|middle|pleno|pl|intermediate|intermediari[oa])\b",
     "SENIOR": r"\b(?:senior|sr)\b",
     "STAFF": r"\b(?:staff|especialista|principal)\b",
     "LEAD": r"\b(?:lead|lider)\b",

@@ -118,7 +118,7 @@ def test_rule_fields_reprocess_even_without_source_updated_at() -> None:
 
     assert changed is True
     assert opportunity.allowed_countries == ["BR"]
-    assert opportunity.allowed_countries_version == "regions-v1"
+    assert opportunity.allowed_countries_version == "regions-v2"
 
 
 def test_evidence_fields_apply_when_candidate_has_no_freshness_signal() -> None:
