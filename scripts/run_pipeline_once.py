@@ -1,11 +1,14 @@
-"""Run one finite collection/normalization/evaluation(/daily retention) window and exit."""
+"""Run one finite collection/normalization/evaluation/analysis(/daily retention) window and exit."""
 
 from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Callable
+from dataclasses import replace
 from time import monotonic
 
+from opportunity_radar.matching.adapters import build_analysis_adapter
 from opportunity_radar.operations.data_reduction import (
     DataReductionReport,
     check_database_size,
@@ -18,10 +21,12 @@ from opportunity_radar.operations.opportunity_retention import (
     retention_due,
     run_opportunity_retention,
 )
-from opportunity_radar.platform.config import get_settings
+from opportunity_radar.platform.ai.config import AIState, ai_status
+from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.logging import get_logger
 from opportunity_radar.platform.pipeline import (
+    ANALYZE_STAGE,
     ConfigurationError,
     ExitCode,
     PostgresWindowClaim,
@@ -35,6 +40,7 @@ from opportunity_radar.platform.pipeline import (
     validate_owner,
 )
 from opportunity_radar.worker import (
+    analyze_pending,
     collect_enabled_sources,
     evaluate_pending,
     normalize_opportunities,
@@ -53,6 +59,17 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def analyze_window_cap(settings: Settings) -> int:
+    """Assessments one window may analyse: the day's request ceiling spread over its windows.
+
+    The ceiling is the soft day limit minus the interactive reserve (the free Groq quota is
+    1,000 requests a day on the 120b model), so 24 hourly windows cannot spend more than
+    the worker's share between them (R55-C1). At least 1, so a tiny ceiling still moves.
+    """
+    ceiling = settings.ai_daily_requests_soft_limit - settings.ai_interactive_reserve_requests
+    return max(1, ceiling // settings.pipeline_analyze_windows_per_day)
+
+
 def _stages(engine, settings, measurements: dict[str, object] | None = None) -> list[StageSpec]:
     measurements = measurements if measurements is not None else {}
 
@@ -63,10 +80,40 @@ def _stages(engine, settings, measurements: dict[str, object] | None = None) -> 
             failed=result["failed"],
             skipped=result["skipped"],
             stopped=result["stopped"],
+            metrics={
+                key: result[key]
+                for key in ("eligible", "executed", "deadline_deferred")
+                if key in result
+            },
         )
 
+    def budgeted(context: StageContext, fraction: float):
+        """(stop callback, budget_spent) for a stage allowed `fraction` of the remaining time.
+
+        The stage stops at its own budget or the window's stop, whichever is first, but only
+        the window's stop makes it a stopped stage: spending its own share is a partial,
+        normal completion, and the stages after it still run.
+        """
+        ends_at = monotonic() + context.deadline.remaining() * fraction
+
+        def budget_spent() -> bool:
+            return monotonic() >= ends_at
+
+        return (lambda: context.should_stop() or budget_spent()), budget_spent
+
+    def finish(
+        result: dict[str, int], context: StageContext, budget_spent: Callable[[], bool]
+    ) -> StageCounts:
+        result = {**result, "stopped": int(context.should_stop())}
+        outcome = counts(result)
+        if budget_spent() and not outcome.stopped:
+            outcome = replace(outcome, metrics={**outcome.metrics, "budget_spent": 1})
+        return outcome
+
     def collect(context: StageContext) -> StageCounts:
-        return counts(
+        stop_requested, budget_spent = budgeted(context, settings.pipeline_collect_budget_fraction)
+        share = context.deadline.remaining() * settings.pipeline_collect_budget_fraction
+        return finish(
             collect_enabled_sources(
                 engine,
                 timezone=settings.collection_timezone,
@@ -74,19 +121,29 @@ def _stages(engine, settings, measurements: dict[str, object] | None = None) -> 
                 backoff_ceiling_seconds=settings.collection_backoff_ceiling_seconds,
                 source_deadline_seconds=settings.collection_source_deadline_seconds,
                 pass_deadline_seconds=min(
-                    settings.collection_pass_deadline_seconds or context.deadline.remaining(),
-                    context.deadline.remaining(),
+                    settings.collection_pass_deadline_seconds or share,
+                    share,
                 ),
                 host_concurrency=settings.collection_host_concurrency,
                 owner_sub=context.owner_sub,
-                stop_requested=context.should_stop,
-            )
+                stop_requested=stop_requested,
+                manual_min_interval_hours=settings.manual_source_min_interval_hours,
+            ),
+            context,
+            budget_spent,
         )
 
     def normalize(context: StageContext) -> StageCounts:
         if context.should_stop():
             return StageCounts(stopped=1)
-        return counts(normalize_opportunities(engine, stop_requested=context.should_stop))
+        stop_requested, budget_spent = budgeted(
+            context, settings.pipeline_normalize_budget_fraction
+        )
+        return finish(
+            normalize_opportunities(engine, stop_requested=stop_requested),
+            context,
+            budget_spent,
+        )
 
     def evaluate(context: StageContext) -> StageCounts:
         if context.should_stop():
@@ -97,6 +154,50 @@ def _stages(engine, settings, measurements: dict[str, object] | None = None) -> 
                 batch_size=settings.worker_evaluate_batch_size,
                 owner_sub=context.owner_sub,
                 stop_requested=context.should_stop,
+            )
+        )
+
+    def analyze(context: StageContext) -> StageCounts:
+        # R55-C1: gated by the kill switch and AI_ENABLED (with its key) before anything is
+        # built; a window with no quota left or no eligible verdict is a clean no-op.
+        if context.should_stop():
+            return StageCounts(stopped=1)
+        if not settings.worker_analyze_enabled or ai_status(settings) is not AIState.ENABLED:
+            return StageCounts(skipped=1, metrics={"ai_disabled": 1})
+        cap = analyze_window_cap(settings)
+        call_seconds = (
+            settings.ai_timeout_seconds * (settings.ai_max_retries + 1)
+            + settings.pipeline_analyze_margin_seconds
+        )
+        if context.deadline.remaining() < call_seconds:
+            return StageCounts(skipped=1, metrics={"deadline_deferred": 1})
+        try:
+            adapter = build_analysis_adapter(settings, engine)
+        except Exception as error:
+            # A provider that cannot even be set up is a degraded optional layer, not a
+            # failed window: the rules already ran.
+            logger.error("analysis adapter unavailable", extra={"error": type(error).__name__})
+            return StageCounts(skipped=1, metrics={"adapter_error": 1})
+        return counts(
+            analyze_pending(
+                engine,
+                adapter,
+                batch_size=cap,
+                eligible_verdicts=settings.analysis_eligible_verdicts,
+                cooldown_seconds=settings.analysis_retry_cooldown_seconds,
+                attempt_window_seconds=settings.analysis_retry_attempt_window_seconds,
+                max_attempts=settings.analysis_retry_max_attempts,
+                lease_seconds=settings.analysis_claim_lease_seconds,
+                aging_sample_ratio=settings.worker_analyze_aging_sample_ratio,
+                daily_cap_fraction=settings.worker_analyze_daily_cap_fraction,
+                worker_requests_ceiling=(
+                    settings.ai_daily_requests_soft_limit
+                    - settings.ai_interactive_reserve_requests
+                ),
+                owner_sub=context.owner_sub,
+                stop_requested=context.should_stop,
+                time_left=context.deadline.remaining,
+                min_call_seconds=call_seconds,
             )
         )
 
@@ -245,6 +346,7 @@ def _stages(engine, settings, measurements: dict[str, object] | None = None) -> 
         StageSpec("collect_enabled_sources", collect),
         StageSpec("normalize_opportunities", normalize),
         StageSpec("evaluate_pending", evaluate),
+        StageSpec(ANALYZE_STAGE, analyze),
     ]
 
 
