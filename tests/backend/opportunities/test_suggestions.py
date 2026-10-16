@@ -987,7 +987,7 @@ def test_the_suggestion_job_skips_postings_outside_the_automatic_queue(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine = create_database_engine(os.environ["DATABASE_URL"])
-    marker = uuid4().hex[:10]
+    marker = uuid4().hex[:10].translate(str.maketrans("0123456789", "ghijklmnop"))
     with Session(engine) as session:
         profile_id = _ensure_suggestion_profile(session)
         queued = _opportunity(title=f"Queued {marker}", seniority="UNKNOWN", **_KNOWN)
