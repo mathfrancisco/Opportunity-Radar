@@ -22,7 +22,7 @@ pytestmark = pytest.mark.skipif(
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REVISION = "20261016_0071"
-PREVIOUS = "20261008_0069"
+PREVIOUS = "20261016_0070"
 COLUMNS = (
     ("acquisition", "raw_item_payload", "payload"),
     ("opportunities", "opportunity", "description"),

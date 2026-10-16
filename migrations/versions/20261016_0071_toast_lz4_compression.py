@@ -1,10 +1,7 @@
 """Compress large text and jsonb columns with lz4 (R55-E6).
 
 Revision ID: 20261016_0071
-Revises: 20261008_0069
-
-REBASE NOTE: the ingestion PR (r55/e1-e3-ingest) adds 20261016_0070. When it lands on main,
-change `down_revision` below to "20261016_0070" so Alembic keeps a single head.
+Revises: 20261016_0070
 
 `ALTER COLUMN ... SET COMPRESSION lz4` (PostgreSQL 14+) only affects values written after
 it; existing rows keep their pglz-compressed form until they are rewritten, so the saving
@@ -20,7 +17,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20261016_0071"
-down_revision = "20261008_0069"
+down_revision = "20261016_0070"
 branch_labels = None
 depends_on = None
 
