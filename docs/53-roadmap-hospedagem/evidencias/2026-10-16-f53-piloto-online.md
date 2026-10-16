@@ -104,7 +104,7 @@ As extensões `plpgsql`, `unaccent` e `vector` estão presentes.
 
 Estes itens não têm prova ainda e impedem considerar F53 completa:
 
-- Upload do ciphertext ao bucket privado OCI. Depende de ação do dono no console.
+- Upload feito em 16/10: `f53-14/<label>.orbk` (174114 bytes) e `.orbk.sha256` no bucket privado, via instance principal com policy restrita a OBJECT_CREATE/OBJECT_INSPECT nesse bucket. A regra SSH foi trocada para o novo `/32` do dono direto no NSG (drift da stack: atualizar `admin_cidr`).
 - Restore a partir da cópia baixada do bucket.
 - Prova de reboot, timeout e alerta de janela perdida do timer (F53-11, AC01 a AC05).
 - Medição de consumo e limites gratuitos ao longo do tempo.
