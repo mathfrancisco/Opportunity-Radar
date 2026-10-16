@@ -103,6 +103,14 @@ class Settings(BaseSettings):
     worker_assessment_retention_enabled: bool = False
     assessment_retention_days: int = 7
     assessment_retention_batch_size: int = 500
+    # R55-E2: daily deletion of opportunities older than N days (age = published_at, else
+    # first seen) and their dependents, run by the pipeline's `retention` stage. 0 disables
+    # it (the rollback). Applications and relevant-marked opportunities are always kept.
+    opportunity_retention_days: int = Field(default=7, ge=0)
+    opportunity_retention_batch_size: int = Field(default=500, ge=1)
+    # Deleting is an owner decision: until this is true the pipeline stage only dry-runs
+    # (counts per table in the log; nothing deleted, including ai_call_record and Tavily).
+    opportunity_retention_apply: bool = False
     # How late a job may be before the doctor calls it late rather than merely busy.
     doctor_job_grace_seconds: int = 120
 
@@ -143,7 +151,7 @@ class Settings(BaseSettings):
     ai_breaker_cooldown_seconds: int = 120
     # SPEC 43 §8.5: per-call telemetry (`platform.ai_call_record`) carries no PII, so it
     # only needs enough retention to explain recent cost and failure, not an audit trail.
-    ai_call_record_retention_days: int = 30
+    ai_call_record_retention_days: int = 7
     # Optional on purpose: presence decides whether the Tavily source participates in
     # runs at all. Absent, it is a supported deployment (bloqueada por configuração),
     # the same treatment source_alert_webhook_url already gets above.

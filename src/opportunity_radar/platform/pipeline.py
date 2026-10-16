@@ -3,7 +3,9 @@
 This module deliberately knows nothing about schedules.  A caller provides the three
 allowed stages, which are run once in their fixed order while a PostgreSQL advisory
 lock is held.  It is therefore safe for a timer to invoke and let exit: no polling,
-retry loop, analysis, or retention is hidden here.
+retry loop, or analysis is hidden here.  The one optional trailing `retention` stage
+(card R55-E2) is supplied by the caller like the others and decides for itself whether it
+is due.
 """
 
 from __future__ import annotations
@@ -28,7 +30,7 @@ logger = get_logger("opportunity_radar.pipeline")
 
 STAGE_ORDER = ("collect_enabled_sources", "normalize_opportunities", "evaluate_pending")
 ANALYSIS_BLOCKED = "analysis is opt-in and disabled for finite pipeline windows"
-RETENTION_BLOCKED = "retention is blocked until F53-13 is accepted"
+RETENTION_STAGE = "retention"
 
 
 class ExitCode(IntEnum):
@@ -190,7 +192,7 @@ def describe_pipeline(*, owner_sub: str | None, deadline_seconds: float) -> dict
         "stages": [{"name": name, "status": "planned"} for name in STAGE_ORDER]
         + [
             {"name": "analyze_pending", "status": "blocked", "reason": ANALYSIS_BLOCKED},
-            {"name": "retention", "status": "blocked", "reason": RETENTION_BLOCKED},
+            {"name": RETENTION_STAGE, "status": "planned", "cadence": "once per UTC day"},
         ],
         "touches": "none",
     }
@@ -207,8 +209,11 @@ def run_pipeline(
 ) -> PipelineReport:
     """Run each allowed stage once. A returned failure never triggers a retry."""
     owner = validate_owner(owner_sub)
-    if tuple(stage.name for stage in stages) != STAGE_ORDER:
-        raise ConfigurationError("stages must be collect, normalize, then evaluate")
+    names = tuple(stage.name for stage in stages)
+    if names not in (STAGE_ORDER, STAGE_ORDER + (RETENTION_STAGE,)):
+        raise ConfigurationError(
+            "stages must be collect, normalize, evaluate, then optionally retention"
+        )
     deadline = Deadline(deadline_seconds, clock=clock)
     stop = stop or StopSignal()
     if stop.requested(deadline):

@@ -18,8 +18,10 @@ from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.pipeline import (
     ClaimBusyError,
     ConfigurationError,
+    Deadline,
     ExitCode,
     PostgresWindowClaim,
+    StageContext,
     StageCounts,
     StageSpec,
     StopSignal,
@@ -262,10 +264,31 @@ def test_postgres_claim_allows_only_one_window_on_isolated_database() -> None:
                 pass
 
 
-def test_no_analysis_or_retention_is_planned() -> None:
+def test_analysis_stays_blocked_and_retention_is_planned_daily() -> None:
     stages = describe_pipeline(owner_sub="owner", deadline_seconds=30)["stages"]
-    assert stages[-2]["status"] == "blocked"
-    assert stages[-1]["status"] == "blocked"
+    assert stages[-2] == {
+        "name": "analyze_pending",
+        "status": "blocked",
+        "reason": "analysis is opt-in and disabled for finite pipeline windows",
+    }
+    assert stages[-1]["name"] == "retention"
+    assert stages[-1]["status"] == "planned"
+
+
+def test_retention_stage_is_optional_and_last() -> None:
+    events: list[str] = []
+    stages = _stages(events) + [
+        StageSpec("retention", lambda _c: events.append("retention") or StageCounts(input=1))
+    ]
+    report = run_pipeline(stages, owner_sub="owner", deadline_seconds=30, claim_factory=nullcontext)
+    assert events[-1] == "retention" and report.exit_code == ExitCode.SUCCESS
+    with pytest.raises(ConfigurationError):
+        run_pipeline(
+            [stages[-1], *stages[:-1]],
+            owner_sub="owner",
+            deadline_seconds=30,
+            claim_factory=nullcontext,
+        )
 
 
 # --- F53-10 AC03/AC05 -----------------------------------------------------------------
@@ -276,6 +299,12 @@ def test_no_analysis_or_retention_is_planned() -> None:
 
 
 def _run_pipeline_once_settings(**overrides: object) -> SimpleNamespace:
+    defaults = {
+        "opportunity_retention_days": 0,
+        "opportunity_retention_apply": False,
+        "opportunity_retention_batch_size": 500,
+        "ai_call_record_retention_days": 7,
+    }
     return SimpleNamespace(
         database_url="postgresql://unused",
         worker_owner_sub="owner",
@@ -286,7 +315,7 @@ def _run_pipeline_once_settings(**overrides: object) -> SimpleNamespace:
         collection_pass_deadline_seconds=None,
         collection_host_concurrency=1,
         worker_evaluate_batch_size=10,
-        **overrides,
+        **{**defaults, **overrides},
     )
 
 
@@ -527,3 +556,142 @@ def test_collect_deadline_between_sources_stops_pass_without_marking_complete(
     assert fake.closure_calls == [completed_run.id]
     assert source2.id not in [source_id for source_id, _ in executed]
     assert len(executed) == 1  # skipped source produced no run object at all
+
+
+# --- R55-E2: the real `retention` stage closure ----------------------------------------
+
+
+class _RetentionHarness:
+    def __init__(
+        self, monkeypatch: pytest.MonkeyPatch, *, days: int = 7, apply: bool = False
+    ) -> None:
+        from opportunity_radar.operations.opportunity_retention import (
+            OpportunityRetentionReport,
+        )
+
+        self.report = OpportunityRetentionReport(
+            dry_run=not apply, retention_days=days, cutoff=None
+        )
+        self.due = True
+        self.raises: Exception | None = None
+        self.record_raises = False
+        self.runs: list[dict[str, object]] = []
+        self.records: list[dict[str, object]] = []
+        self.due_checks: list[str] = []
+        harness = self
+
+        def run(_engine: object, **kwargs: object):
+            harness.runs.append(kwargs)
+            if harness.raises:
+                raise harness.raises
+            return harness.report
+
+        def due(_engine: object, *, job_name: str = "opportunity_retention", **_kw: object):
+            harness.due_checks.append(job_name)
+            return harness.due
+
+        def record(_engine: object, **kwargs: object) -> None:
+            harness.records.append(kwargs)
+            if harness.record_raises:
+                raise RuntimeError("record failed")
+
+        monkeypatch.setattr(run_pipeline_once, "run_opportunity_retention", run)
+        monkeypatch.setattr(run_pipeline_once, "retention_due", due)
+        monkeypatch.setattr(run_pipeline_once, "record_retention_attempt", record)
+        settings = _run_pipeline_once_settings(
+            opportunity_retention_days=days, opportunity_retention_apply=apply
+        )
+        self.stage = run_pipeline_once._stages(object(), settings)[3]
+        assert self.stage.name == "retention"
+
+    def run(self, *, stopped: bool = False) -> StageCounts:
+        stop = StopSignal()
+        if stopped:
+            stop.set("signal")
+        return self.stage.run(StageContext("owner", Deadline(60), stop))
+
+
+def test_retention_stage_disabled_with_zero_days(monkeypatch: pytest.MonkeyPatch) -> None:
+    harness = _RetentionHarness(monkeypatch, days=0)
+    assert harness.run() == StageCounts(skipped=1)
+    assert harness.runs == [] and harness.due_checks == []
+
+
+def test_retention_stage_skips_when_not_due(monkeypatch: pytest.MonkeyPatch) -> None:
+    harness = _RetentionHarness(monkeypatch)
+    harness.due = False
+    assert harness.run() == StageCounts(skipped=1)
+    assert harness.runs == [] and harness.records == []
+
+
+def test_retention_stage_stop_before_start_runs_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    harness = _RetentionHarness(monkeypatch, apply=True)
+    assert harness.run(stopped=True) == StageCounts(stopped=1)
+    assert harness.runs == [] and harness.records == []
+
+
+def test_retention_stage_defaults_to_dry_run_tracked_apart(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _RetentionHarness(monkeypatch, apply=False)
+    assert harness.run() == StageCounts(input=1, completed=1)
+    assert harness.runs[0]["dry_run"] is True
+    assert harness.due_checks == ["opportunity_retention_dry_run"]
+    assert harness.records == [{"success": True, "job_name": "opportunity_retention_dry_run"}]
+
+
+def test_retention_stage_applies_only_when_the_flag_is_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _RetentionHarness(monkeypatch, apply=True)
+    assert harness.run() == StageCounts(input=1, completed=1)
+    assert harness.runs[0]["dry_run"] is False
+    assert harness.runs[0]["batch_size"] == 500
+    assert harness.runs[0]["ai_call_record_retention_days"] == 7
+    assert harness.due_checks == ["opportunity_retention"]
+    assert harness.records == [{"success": True, "job_name": "opportunity_retention"}]
+
+
+def test_retention_stage_stopped_run_is_not_recorded_as_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _RetentionHarness(monkeypatch, apply=True)
+    harness.report.stopped = True
+    harness.report.complete = False
+    assert harness.run() == StageCounts(input=1, stopped=1)
+    assert harness.records == []
+
+
+def test_retention_stage_step_errors_are_recorded_as_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _RetentionHarness(monkeypatch, apply=True)
+    harness.report.errors = {"ai_call_record": "ValueError"}
+    harness.report.complete = False
+    assert harness.run() == StageCounts(input=1, failed=1)
+    assert harness.records == [
+        {"success": False, "error": "ai_call_record", "job_name": "opportunity_retention"}
+    ]
+
+
+def test_retention_stage_exception_is_recorded_and_not_masked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _RetentionHarness(monkeypatch, apply=True)
+    harness.raises = ValueError("original")
+    harness.record_raises = True  # recording the failure fails too
+    with pytest.raises(ValueError, match="original"):
+        harness.run()
+    assert harness.records[0]["success"] is False
+
+
+def test_retention_apply_setting_defaults_to_false_and_reads_the_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from opportunity_radar.platform.config import Settings
+
+    url = "postgresql+psycopg://u:p@localhost:5432/x_test"
+    assert Settings(database_url=url).opportunity_retention_apply is False
+    assert Settings(database_url=url, opportunity_retention_apply=True).opportunity_retention_apply
+    monkeypatch.setenv("OPPORTUNITY_RETENTION_APPLY", "true")
+    assert Settings(database_url=url).opportunity_retention_apply is True
