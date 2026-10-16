@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 from sqlalchemy import func, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.alerts import (
@@ -110,7 +110,11 @@ COLLECTED_ITEM_V1_KEY = "collected_item_v1"
 #: trips whatever its size; the bound keeps the event loop unblocked long enough for the
 #: lease renewal (lease/3) and caps what a crash can lose to one re-read batch.
 _ITEM_BATCH_SIZE = 50
-#: Collectors that trickle items (detail fetches) must not hold them unwritten for long.
+#: A trickling collector (detail fetches) flushes once its oldest unwritten item is this old.
+#: Checked when the next item arrives, not during a stall: a collector that stalls with items
+#: buffered keeps them unwritten until it yields again, fails or times out (the failure paths
+#: flush), and they are lost only if the process dies meanwhile. A timer would have to write
+#: from the renewal task, i.e. hold the claim lock across an await, so it is deliberately absent.
 _ITEM_BATCH_MAX_SECONDS = 10.0
 
 logger = get_logger("opportunity_radar.acquisition.service")
@@ -1545,17 +1549,51 @@ class AcquisitionService:
                 return
             entries = list(pending)
             pending.clear()
-            if scope is not None:
-                scope.fence(self.session)
-            outcomes = self._persist_items(
-                source_id,
-                run.id,
-                source_type,
-                entries,
-                observed_at=run.started_at or datetime.now(UTC),
-            )
-            if scope is not None:
-                self.session.commit()
+            observed_at = run.started_at or datetime.now(UTC)
+
+            def write(batch: list[tuple[CollectedItem, bool]]) -> list[bool | Exception]:
+                # Any failure must end the transaction here: left open it would keep the
+                # claim row lock (taken by the fence) on an aborted transaction, and the
+                # renewal task would then wait on it from this same thread, forever.
+                try:
+                    if scope is not None:
+                        scope.fence(self.session)
+                    if scope is None:
+                        # No per-batch commit: roll back this batch only, not the run.
+                        with self.session.begin_nested():
+                            outcomes = self._persist_items(
+                                source_id, run.id, source_type, batch, observed_at=observed_at
+                            )
+                    else:
+                        outcomes = self._persist_items(
+                            source_id, run.id, source_type, batch, observed_at=observed_at
+                        )
+                        self.session.commit()
+                    return outcomes
+                except FencedWriteRejected:
+                    raise  # `fence` already rolled back
+                except BaseException:
+                    if scope is not None:
+                        self.session.rollback()
+                    raise
+
+            try:
+                outcomes = write(entries)
+            except FencedWriteRejected:
+                raise
+            except SQLAlchemyError:
+                # One item the database refuses (data it cannot store) must not sink its
+                # batch mates: retry item by item and count only the refused one invalid.
+                outcomes = []
+                for entry in entries:
+                    try:
+                        outcomes.extend(write([entry]))
+                    except FencedWriteRejected:
+                        raise
+                    except SQLAlchemyError as refused:
+                        outcomes.append(
+                            ValueError(f"item could not be stored ({type(refused).__name__})")
+                        )
             for (item, _), outcome in zip(entries, outcomes, strict=True):
                 if isinstance(outcome, Exception):
                     run.record_items(invalid=1)
@@ -1590,6 +1628,21 @@ class AcquisitionService:
                         hn_proposal_items.append(hn_proposal)
                 if item.cursor is not None:
                     last_cursor = item.cursor
+
+        def flush_after_failure(original: BaseException) -> None:
+            """Keep what was read before `original`, without ever replacing `original`.
+
+            A lost lease may replace a timeout or collector failure (the run is stale and
+            writes nothing), but never a cancellation, which must reach its caller as such.
+            """
+            try:
+                persist_pending()
+            except FencedWriteRejected:
+                if not isinstance(original, asyncio.CancelledError):
+                    raise
+                logger.warning("source collection lost its lease while cancelled")
+            except Exception:  # noqa: BLE001 - the original failure is what the run reports
+                logger.exception("pending source items could not be written")
 
         try:
             if throttle_error is not None:
@@ -1751,8 +1804,8 @@ class AcquisitionService:
                         persist_pending()
                     except FencedWriteRejected:
                         raise  # a stale execution writes nothing, pending items included
-                    except asyncio.CancelledError:
-                        persist_pending()
+                    except asyncio.CancelledError as cancelled:
+                        flush_after_failure(cancelled)
                         logger.warning(
                             "source collection cleanup pending",
                             extra={
@@ -1764,9 +1817,9 @@ class AcquisitionService:
                             },
                         )
                         raise
-                    except BaseException:
+                    except BaseException as failure:
                         # A timeout or collector failure still keeps what was read so far.
-                        persist_pending()
+                        flush_after_failure(failure)
                         raise
             if deadline.expired():
                 raise TimeoutError("source collection deadline exceeded")
@@ -2281,6 +2334,11 @@ class AcquisitionService:
         if item.source_type.strip().casefold() != source_type:
             raise ValueError("collected item source type does not match its source")
         payload = _json_object(item.raw_payload)
+        if _contains_nul(payload) or _contains_nul(dict(item.metadata)) or _contains_nul(
+            [item.external_id, item.url]
+        ):
+            # PostgreSQL cannot store NUL in text or JSONB; one such item must not fail a batch.
+            raise ValueError("collected item contains a NUL character")
         payload_hash = canonical_payload_hash(payload)
         identity_key = _identity_key(
             item,
@@ -2363,6 +2421,16 @@ def collected_item_v1(
         "parser_version": _string_or_none(source_metadata.get("parser_version")),
         "metadata": source_metadata,
     }
+
+
+def _contains_nul(value: object) -> bool:
+    if isinstance(value, str):
+        return "\x00" in value
+    if isinstance(value, Mapping):
+        return any(_contains_nul(key) or _contains_nul(item) for key, item in value.items())
+    if isinstance(value, (list, tuple)):
+        return any(_contains_nul(item) for item in value)
+    return False
 
 
 def _json_object(value: Mapping[str, Any]) -> dict[str, Any]:

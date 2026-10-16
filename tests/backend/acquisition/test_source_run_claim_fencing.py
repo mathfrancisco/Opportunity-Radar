@@ -1319,3 +1319,160 @@ def test_an_invalid_item_is_counted_without_dropping_its_batch_mates(board: _Boa
     assert run.status == "PARTIAL" and run.error_code == "INVALID_ITEM"
     assert (run.items_seen, run.items_persisted, run.items_invalid) == (3, 2, 1)
     assert board.external_ids() == {"good-1", "good-2"}
+
+
+# --- F53-14 review fixes ---------------------------------------------------------------
+
+
+def _claim_row_is_unlocked(engine: Engine, source_id: UUID) -> bool:
+    """Whether another session can lock the claim row right now (it must not be held)."""
+    from sqlalchemy.exc import OperationalError
+
+    with Session(engine) as session:
+        try:
+            session.execute(
+                select(SourceExecutionClaimModel.fencing_token)
+                .where(SourceExecutionClaimModel.source_definition_id == source_id)
+                .with_for_update(nowait=True)
+            ).all()
+        except OperationalError:
+            return False
+        finally:
+            session.rollback()
+    return True
+
+
+def test_a_failed_batch_releases_the_claim_lock_before_anything_awaits(
+    board: _Board, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A batch write failing after the fence must not leave the claim row locked: the
+    renewal task runs on this thread and would otherwise block on it forever."""
+    from opportunity_radar.acquisition.service import _ClaimScope
+
+    def explode(*args: object, **kwargs: object) -> list[bool]:
+        raise RuntimeError("batch write failed")
+
+    monkeypatch.setattr(AcquisitionRepository, "record_evidence_batch", explode)
+    unlocked: list[bool] = []
+    original_stop = _ClaimScope.stop_renewal
+
+    async def observing_stop(self: _ClaimScope) -> None:
+        unlocked.append(_claim_row_is_unlocked(board.engine, board.source_id))
+        await original_stop(self)
+
+    monkeypatch.setattr(_ClaimScope, "stop_renewal", observing_stop)
+
+    run = board.run_one(board.board_of("a", "b"), renew_interval=0.05)
+
+    assert unlocked and all(unlocked)
+    assert run.status == "FAILED" and run.error_code == "UNKNOWN_EXTERNAL_ERROR"
+
+
+def test_one_item_the_database_refuses_does_not_sink_its_batch_mates(
+    board: _Board, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sqlalchemy.exc import DataError
+
+    original = AcquisitionRepository.record_evidence_batch
+
+    def refuse_bad(self: AcquisitionRepository, **kwargs: object) -> list[bool]:
+        writes = kwargs["writes"]
+        if any(write.identity_key == "external:bad" for write in writes):  # type: ignore[attr-defined]
+            raise DataError("INSERT", {}, Exception("refused"))
+        return original(self, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(AcquisitionRepository, "record_evidence_batch", refuse_bad)
+
+    run = board.run_one(board.board_of("good-1", "bad", "good-2"))
+
+    assert run.status == "PARTIAL" and run.error_code == "INVALID_ITEM"
+    assert (run.items_seen, run.items_persisted, run.items_skipped, run.items_invalid) == (
+        3,
+        2,
+        0,
+        1,
+    )
+    assert board.external_ids() == {"good-1", "good-2"}
+
+
+def test_an_item_with_a_nul_character_is_invalid_and_counters_add_up(board: _Board) -> None:
+    async def script(request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        del request
+        yield board.item("ok-1")
+        yield replace(board.item("nul"), raw_payload={"title": "bad\x00text"})
+        yield board.item("ok-2")
+
+    run = board.run_one(board.collector(script))
+
+    assert run.items_seen == run.items_persisted + run.items_skipped + run.items_invalid == 3
+    assert run.items_invalid == 1
+    assert board.external_ids() == {"ok-1", "ok-2"}
+
+
+def test_a_failing_flush_does_not_replace_a_collector_timeout(
+    board: _Board, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def explode(*args: object, **kwargs: object) -> list[bool]:
+        raise RuntimeError("batch write failed")
+
+    monkeypatch.setattr(AcquisitionRepository, "record_evidence_batch", explode)
+
+    async def script(request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        del request
+        yield board.item("read-before-timeout")
+        raise TimeoutError("collector timed out")
+
+    run = board.run_one(board.collector(script))
+
+    assert run.status == "PARTIAL" and run.error_code == "SOURCE_TIMEOUT"
+
+
+def test_a_failing_flush_does_not_replace_a_cancellation(
+    board: _Board, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def explode(*args: object, **kwargs: object) -> list[bool]:
+        raise RuntimeError("batch write failed")
+
+    monkeypatch.setattr(AcquisitionRepository, "record_evidence_batch", explode)
+
+    async def scenario() -> None:
+        blocked = asyncio.Event()
+
+        async def script(request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+            del request
+            yield board.item("read-before-cancel")
+            blocked.set()
+            await asyncio.Event().wait()
+            yield board.item("never")
+
+        with Session(board.engine) as session:
+            task = asyncio.create_task(
+                board.service(board.collector(script), session).execute(board.source_id, _REQUEST)
+            )
+            await blocked.wait()
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+    asyncio.run(scenario())
+
+
+def test_a_lost_insert_race_still_observes_the_winning_row(
+    board: _Board, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = board.run_one(board.board_of("raced"))
+    assert first.items_persisted == 1
+    real = AcquisitionRepository._stored_envelopes
+    calls = 0
+
+    def stale_first_read(self: AcquisitionRepository, *args: object, **kwargs: object) -> list:  # type: ignore[type-arg]
+        nonlocal calls
+        calls += 1
+        return [] if calls == 1 else real(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(AcquisitionRepository, "_stored_envelopes", stale_first_read)
+
+    second = board.run_one(board.board_of("raced"))
+
+    assert (second.items_persisted, second.items_skipped) == (0, 1)
+    assert board.observed_external_ids(second.id) == {"raced"}

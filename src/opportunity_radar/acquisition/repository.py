@@ -605,10 +605,31 @@ class AcquisitionRepository:
         stored_ids = {envelope.id for _, envelope in stored}
         if planned:
             inserted = self._insert_raw_items(source_id, run_id, planned)
-            for index, envelope, _ in planned:
-                if envelope.id not in inserted:
-                    created[index] = False  # lost a race to identical evidence: nothing to add
+            lost = [
+                (index, envelope) for index, envelope, _ in planned if envelope.id not in inserted
+            ]
+            for index, _ in lost:
+                created[index] = False  # lost a race to identical evidence: nothing to add
             stored_ids |= inserted
+            if lost:
+                # The winner's row is the evidence these items observe: point them at it.
+                keys = {write.identity_key for _, _, write in planned}
+                winners = dict(self._stored_envelopes(source_id, keys))
+                remap: dict[UUID, _Envelope] = {}
+                for index, envelope in lost:
+                    write = writes[index]
+                    winner = winners.get(
+                        (
+                            write.identity_key,
+                            write.payload_hash,
+                            write.semantic_hash,
+                            write.semantic_hash_version,
+                        )
+                    )
+                    if winner is not None:
+                        remap[envelope.id] = winner
+                        stored_ids.add(winner.id)
+                observed = [(remap.get(envelope.id, envelope), m) for envelope, m in observed]
         self._insert_observations(
             source_id,
             run_id,
