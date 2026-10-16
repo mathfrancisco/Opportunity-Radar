@@ -23,6 +23,7 @@ from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.logging import get_logger
 from opportunity_radar.platform.pipeline import (
     ConfigurationError,
+    ExitCode,
     PostgresWindowClaim,
     StageContext,
     StageCounts,
@@ -100,6 +101,19 @@ def _stages(engine, settings, measurements: dict[str, object] | None = None) -> 
         )
 
     def retention(context: StageContext) -> StageCounts:
+        # Nothing in the retention slot may block collection: any exception, from the due
+        # check to the bookkeeping, becomes a failed count, and either kind of failure is
+        # surfaced as `retention_failed` plus a nonzero exit once every stage has run.
+        try:
+            counts = retention_body(context)
+        except Exception as error:
+            logger.error("retention stage failed", extra={"error": type(error).__name__})
+            counts = StageCounts(input=1, failed=1)
+        if counts.failed:
+            measurements["retention_failed"] = True
+        return counts
+
+    def retention_body(context: StageContext) -> StageCounts:
         # R55-E2/E6: at most one run per UTC day, and FIRST in the window so that the short
         # hourly window always reaches it; it has its own budget (RETENTION_STAGE_BUDGET_
         # SECONDS) so collection still runs, and a failure here never blocks collection.
@@ -157,9 +171,12 @@ def _stages(engine, settings, measurements: dict[str, object] | None = None) -> 
                 )
             except Exception:  # never mask the original error
                 pass
+            ensure_size()
             # Logged and counted, not raised: a raising first stage would skip collection.
             logger.error("retention stage failed", extra={"error": type(error).__name__})
             return StageCounts(input=1, failed=1)
+        # The 70% warning must fire during a backlog too, so measure whatever happened above.
+        ensure_size()
         if not apply:
             # Per-table counts only, for the owner to read before enabling the apply flag.
             logger.info(
@@ -182,6 +199,20 @@ def _stages(engine, settings, measurements: dict[str, object] | None = None) -> 
             return StageCounts(input=1, failed=1)
         record_retention_attempt(engine, success=report.complete, job_name=job_name)
         return StageCounts(input=1, completed=int(report.complete))
+
+    def ensure_size() -> None:
+        if "database_size_bytes" in measurements:
+            return
+        try:
+            _note_size(
+                check_database_size(
+                    engine,
+                    size_limit_bytes=settings.database_size_limit_bytes,
+                    size_alert_ratio=settings.database_size_alert_ratio,
+                )
+            )
+        except Exception as error:  # a watch failure never fails the stage
+            logger.warning("size check failed", extra={"error": type(error).__name__})
 
     def size_only(context: StageContext) -> StageCounts:
         # Retention is off, but the size watch runs once per UTC day on its own job name.
@@ -243,6 +274,9 @@ def main(argv: list[str] | None = None) -> int:
             )
         # database_size_* appear only in the window that measured them (once per UTC day).
         print(json.dumps({**report.to_dict(), **measurements}, sort_keys=True))
+        if measurements.get("retention_failed") and report.exit_code == ExitCode.SUCCESS:
+            # Collection ran, but the journal and the unit must show that retention did not.
+            return int(ExitCode.STAGE_FAILED)
         return int(report.exit_code)
     except ConfigurationError as error:
         print(

@@ -846,6 +846,90 @@ def test_size_watch_runs_when_retention_is_switched_off(
     assert harness.run() == StageCounts(skipped=1)
 
 
+def test_failures_anywhere_in_the_retention_slot_never_raise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _RetentionHarness(monkeypatch, apply=True)
+
+    def broken(*_a: object, **_k: object) -> bool:
+        raise RuntimeError("database unreachable")
+
+    monkeypatch.setattr(run_pipeline_once, "retention_due", broken)
+    assert harness.run() == StageCounts(input=1, failed=1)
+    assert harness.measurements["retention_failed"] is True
+
+    errored = _RetentionHarness(monkeypatch, apply=True)
+    errored.record_raises = True
+    errored.report.errors = {"opportunities": "ValueError"}
+    errored.report.complete = False
+    assert errored.run() == StageCounts(input=1, failed=1)  # record_retention_attempt raised
+
+
+def test_a_healthy_retention_does_not_flag_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    harness = _RetentionHarness(monkeypatch, apply=True)
+    harness.run()
+    assert "retention_failed" not in harness.measurements
+
+
+def test_size_is_measured_even_when_retention_errors_or_stops(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from opportunity_radar.operations.data_reduction import DataReductionReport
+
+    def check(_engine: object, **_k: object) -> DataReductionReport:
+        return DataReductionReport(applied=False, database_size_bytes=900, size_alert=True)
+
+    monkeypatch.setattr(run_pipeline_once, "check_database_size", check)
+    failing = _RetentionHarness(monkeypatch, apply=True)
+    failing.report.errors = {"opportunities": "ValueError"}
+    failing.report.complete = False
+    failing.run()
+    assert failing.reductions == []  # nothing deleted past the failure
+    assert failing.measurements["database_size_alert"] is True
+
+    raising = _RetentionHarness(monkeypatch, apply=True)
+    raising.raises = ValueError("x")
+    raising.run()
+    assert raising.measurements["database_size_bytes"] == 900
+
+    stopping = _RetentionHarness(monkeypatch, apply=True)
+    stopping.report.stopped = True
+    stopping.report.complete = False
+    stopping.run()
+    assert stopping.measurements["database_size_bytes"] == 900
+
+
+@pytest.mark.parametrize(("failed", "expected"), [(True, 12), (False, 0)])
+def test_main_exits_nonzero_after_collection_when_retention_failed(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], failed: bool, expected: int
+) -> None:
+    from opportunity_radar.platform.pipeline import PipelineReport
+
+    monkeypatch.setattr(
+        run_pipeline_once,
+        "get_settings",
+        lambda: SimpleNamespace(worker_owner_sub="owner", database_url="postgresql://unused"),
+    )
+    monkeypatch.setattr(run_pipeline_once, "create_database_engine", lambda _url: object())
+
+    def fake_stages(_engine: object, _settings: object, measurements: dict[str, object]) -> list:
+        if failed:
+            measurements["retention_failed"] = True
+        return []
+
+    monkeypatch.setattr(run_pipeline_once, "_stages", fake_stages)
+    monkeypatch.setattr(
+        run_pipeline_once,
+        "run_pipeline",
+        lambda *_a, **_k: PipelineReport(ExitCode.SUCCESS, "success"),
+    )
+
+    assert run_pipeline_once.main(["--deadline-seconds=30"]) == expected
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["outcome"] == "success"  # the collection stages still ran and reported
+    assert payload.get("retention_failed", False) is failed
+
+
 def test_retention_apply_setting_defaults_to_false_and_reads_the_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
