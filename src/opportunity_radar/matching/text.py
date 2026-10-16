@@ -15,14 +15,15 @@ max_input_tokens` is the ceiling here `num_ctx` used to be, now set by the task
 
 from __future__ import annotations
 
-import html
 import math
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+from opportunity_radar.platform.html_text import html_to_text
+
 #: Version of the cleaning rules below. Any change to the patterns bumps it.
-CLEANER_VERSION = "cleaner-v2"
+CLEANER_VERSION = "cleaner-v3"
 
 #: Tokens per character before any analysis of the model has been measured. Deliberately
 #: high: overestimating only cuts a description sooner, underestimating overflows.
@@ -95,11 +96,6 @@ _JOB_HEADING = _whole_line(_JOB_HEADINGS)
 # A marked heading — from `<hN>` or Markdown — or a short line ending in a colon ends a
 # boilerplate section. Anything else, bullets included, still belongs to it.
 _MARKED_HEADING = re.compile(r"^\s*(?:#+\s*\S.*|[^\s\-•*][^.!?]{0,60}:)\s*$")
-_HEADING_OPEN = re.compile(r"<\s*h[1-6]\b[^>]*>", re.IGNORECASE)
-_BLOCK_TAGS = re.compile(
-    r"<\s*/?\s*(?:br|p|div|li|ul|ol|h[1-6])\b[^>]*>", re.IGNORECASE
-)
-_TAGS = re.compile(r"<[^>]+>")
 _SPACES = re.compile(r"[ \t ]+")
 _BLANK_LINES = re.compile(r"\n{3,}")
 _SENTENCE_END = re.compile(r"[.!?](?=\s)|\n\n")
@@ -117,16 +113,14 @@ class CleanedText:
 def clean_description_report(text: str | None) -> CleanedText:
     """Plain text with markup, entities and listed boilerplate sections removed.
 
-    Greenhouse sends HTML that is itself escaped, so entities are decoded before tags are
-    stripped and once more after, which leaves a literal `&amp;` in plain text intact.
+    Greenhouse sends HTML that is itself escaped; `platform.html_text.html_to_text` decodes
+    it, strips the tags and keeps paragraph and list line breaks (card R55-B3).
     Inside a dropped section, a line that states pay, visa, contract, country or time zone
     is kept: those are the facts a "Benefits" heading most often hides.
     """
     if not text:
         return CleanedText(text="")
-    decoded = html.unescape(text)
-    blocked = _BLOCK_TAGS.sub("\n", _HEADING_OPEN.sub("\n# ", decoded))
-    plain = html.unescape(_TAGS.sub(" ", blocked))
+    plain = html_to_text(text, heading_marker="# ", bullet="") or ""
     lines = [_SPACES.sub(" ", line).strip() for line in plain.replace("\r", "").split("\n")]
     kept: list[str] = []
     removed: list[str] = []
