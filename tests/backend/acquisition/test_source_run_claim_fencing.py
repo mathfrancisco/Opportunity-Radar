@@ -13,6 +13,7 @@ import os
 import threading
 import time
 from collections.abc import AsyncIterator, Callable, Iterator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -22,6 +23,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from opportunity_radar import worker
+from opportunity_radar.acquisition import service as service_module
 from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
@@ -382,10 +384,11 @@ def test_worker_and_cli_race_only_one_claims_and_the_other_makes_zero_http(
 
 
 def test_fenced_item_write_is_rejected_after_the_lease_is_recovered(
-    board: _Board, caplog: pytest.LogCaptureFixture
+    board: _Board, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """AC02: A (token 1) blocks before its second item; B recovers (token 2) and writes."""
     caplog.set_level(logging.INFO)
+    monkeypatch.setattr(service_module, "_ITEM_BATCH_SIZE", 1)  # write each item as it arrives
 
     async def scenario() -> tuple[SourceRunModel, SourceRunModel]:
         blocked, release = asyncio.Event(), asyncio.Event()
@@ -427,11 +430,12 @@ def test_fenced_item_write_is_rejected_after_the_lease_is_recovered(
 
 
 def test_stale_owner_leaves_no_occurrence_or_observation_rows_after_recovery(
-    board: _Board, caplog: pytest.LogCaptureFixture
+    board: _Board, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """AC02 (occurrence/presence): once B recovered the lease, A's late items leave no
     observation of A's run and no new occurrence; the rejection is logged as FENCE_REJECTED."""
     caplog.set_level(logging.INFO)
+    monkeypatch.setattr(service_module, "_ITEM_BATCH_SIZE", 1)  # write each item as it arrives
     board.run_one(board.board_of("seen-by-a", "seen-by-b"))
     with Session(board.engine) as session:
         _normalize_source(session, board)  # occurrences exist, so presence updates have a target
@@ -1188,3 +1192,130 @@ def test_lease_is_renewed_while_a_synchronous_item_loop_outlasts_it(
     assert run.items_persisted == total
     assert "lease_renewed" in _events(caplog)
     assert "fence_rejected" not in _events(caplog)
+
+
+def _board_with_urls(board: _Board, prefix: str, total: int) -> _Scripted:
+    """A board like a real ATS one: every posting has an id and a canonical URL."""
+
+    async def script(request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        del request
+        for index in range(total):
+            external_id = f"{prefix}-{index}"
+            yield replace(board.item(external_id), url=f"https://jobs.example.test/{external_id}")
+
+    return board.collector(script)
+
+
+def _statements_per_item(board: _Board, *, small: int, large: int, rerun: bool) -> float:
+    """SQL statements one extra item costs, from the difference of two runs' totals."""
+    from sqlalchemy import event
+
+    counts: list[int] = []
+
+    def count_run(total: int, prefix: str) -> int:
+        collector = _board_with_urls(board, prefix, total)
+        statements = 0
+
+        def tick(*args: object, **kwargs: object) -> None:
+            nonlocal statements
+            statements += 1
+
+        event.listen(board.engine, "before_cursor_execute", tick)
+        try:
+            board.run_one(collector)
+        finally:
+            event.remove(board.engine, "before_cursor_execute", tick)
+        return statements
+
+    for total in (small, large):
+        prefix = f"stmt{total}"  # distinct ids per size: the first pass sees only new items
+        if rerun:
+            board.run_one(_board_with_urls(board, prefix, total))
+        counts.append(count_run(total, prefix))
+    return (counts[1] - counts[0]) / (large - small)
+
+
+def test_statements_per_new_item_stay_within_budget(board: _Board) -> None:
+    per_item = _statements_per_item(board, small=4, large=104, rerun=False)
+    print(f"STATEMENTS_PER_NEW_ITEM={per_item}")
+    assert per_item <= _NEW_ITEM_STATEMENT_BUDGET
+
+
+def test_statements_per_unchanged_item_stay_within_budget(board: _Board) -> None:
+    per_item = _statements_per_item(board, small=4, large=104, rerun=True)
+    print(f"STATEMENTS_PER_UNCHANGED_ITEM={per_item}")
+    assert per_item <= _UNCHANGED_ITEM_STATEMENT_BUDGET
+
+
+# Round trips cost ~160 ms each from a São Paulo VM to Neon in us-east-2.
+_NEW_ITEM_STATEMENT_BUDGET = 0.5  # was 14.0 with one fence, commit and lookups per item
+_UNCHANGED_ITEM_STATEMENT_BUDGET = 0.5  # was 10.0
+
+
+def test_a_batch_unwritten_when_the_lease_is_lost_is_dropped_whole(
+    board: _Board, caplog: pytest.LogCaptureFixture
+) -> None:
+    """F53-14: items are written per batch, so a stale owner's unwritten batch is rejected
+    as a unit at its fence: the item it read before the loss is not written either."""
+    caplog.set_level(logging.INFO)
+
+    async def scenario() -> UUID:
+        blocked, release = asyncio.Event(), asyncio.Event()
+
+        async def a_script(request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+            del request
+            yield board.item("a-before-loss")
+            blocked.set()
+            await release.wait()
+            yield board.item("a-after-loss")
+
+        with Session(board.engine) as a_session, Session(board.engine) as b_session:
+            a = board.service(board.collector(a_script), a_session)
+            b = board.service(board.board_of("b-only"), b_session)
+            a_task = asyncio.create_task(a.execute(board.source_id, _REQUEST))
+            await blocked.wait()
+            claim = board.claim_row()
+            assert claim is not None and claim.run_id is not None
+            board.expire_lease()
+            await b.execute(board.source_id, _REQUEST)
+            release.set()
+            with pytest.raises(FencedWriteRejected):
+                await a_task
+            return claim.run_id
+
+    a_run_id = asyncio.run(scenario())
+
+    assert board.external_ids() == {"b-only"}
+    assert board.observed_external_ids(a_run_id) == set()
+    assert board.run(a_run_id).error_code == "FENCE_REJECTED"
+
+
+def test_items_are_written_in_several_batches_and_duplicates_count_once(
+    board: _Board, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(service_module, "_ITEM_BATCH_SIZE", 3)
+    ids = ["dup", "one", "dup", "two", "three", "four", "one", "five"]
+
+    run = board.run_one(board.board_of(*ids))
+
+    assert run.status == "SUCCEEDED"
+    assert (run.items_seen, run.items_persisted, run.items_skipped) == (8, 6, 2)
+    assert board.external_ids() == {"dup", "one", "two", "three", "four", "five"}
+    assert board.observed_external_ids(run.id) == board.external_ids()
+    rerun = board.run_one(board.board_of(*ids))
+    assert (rerun.items_persisted, rerun.items_skipped) == (0, 8)
+    assert board.observed_external_ids(rerun.id) == board.external_ids()
+
+
+def test_an_invalid_item_is_counted_without_dropping_its_batch_mates(board: _Board) -> None:
+    async def script(request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        del request
+        yield board.item("good-1")
+        yield replace(board.item("wrong-type"), source_type="another_source")
+        yield board.item("good-2")
+
+    run = board.run_one(board.collector(script))
+
+    assert run.status == "PARTIAL" and run.error_code == "INVALID_ITEM"
+    assert (run.items_seen, run.items_persisted, run.items_invalid) == (3, 2, 1)
+    assert board.external_ids() == {"good-1", "good-2"}
