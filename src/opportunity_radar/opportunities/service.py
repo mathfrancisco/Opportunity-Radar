@@ -196,9 +196,12 @@ class OpportunityService:
         )
         if company_key:
             identity_locks.add(f"review:{company_key}:{candidate.normalized_title}")
+        # R55-E4: the same job in two sources is keyed by company id on one side and by
+        # company name on the other, so the lock above would not serialize them. Take both
+        # keys: any two postings the matcher can pair share at least one.
+        if candidate.company_id:
+            identity_locks.add(f"xsource:{candidate.company_id}:{candidate.normalized_title}")
         if candidate.normalized_company_name:
-            # R55-E4: the same job in two sources is keyed by company id on one side and
-            # by company name on the other, so the lock above would not serialize them.
             identity_locks.add(
                 f"xsource:{candidate.normalized_company_name}:{candidate.normalized_title}"
             )
@@ -218,7 +221,12 @@ class OpportunityService:
                 current_raw_item is None or raw_item.fetched_at >= current_raw_item.fetched_at
             )
             previous_fingerprint = opportunity.fingerprint
-            identity_changed = (
+            # R55-E4: the primary (first-attached) occurrence is the only one that may
+            # rewrite the opportunity; a secondary source updates just its own row and
+            # presence, so two sources with different wording cannot flip fields back and
+            # forth (and bump `version`) on every collection.
+            is_primary = self.repository.is_primary_occurrence(occurrence)
+            identity_changed = is_primary and (
                 previous_fingerprint != candidate.fingerprint
                 or opportunity.fingerprint_version != candidate.fingerprint_version
             )
@@ -248,8 +256,12 @@ class OpportunityService:
             else:
                 decision = "REFRESHED"
                 result_status = "SUCCEEDED"
-                reasons = [{"code": "SAME_SOURCE_EXTERNAL_IDENTITY"}]
-                if content_is_current:
+                reasons = [
+                    {"code": "SAME_SOURCE_EXTERNAL_IDENTITY"}
+                    if is_primary
+                    else {"code": "SECONDARY_SOURCE_OCCURRENCE"}
+                ]
+                if content_is_current and is_primary:
                     refresh_changed = _refresh_opportunity(opportunity, candidate)
                     if opportunity.fingerprint != previous_fingerprint:
                         reasons = [{"code": "IDENTITY_REFRESHED_SAME_EXTERNAL_ID"}]

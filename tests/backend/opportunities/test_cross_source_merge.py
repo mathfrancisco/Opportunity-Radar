@@ -130,9 +130,14 @@ class _World:
         location: str | None = "Sao Paulo",
         published: datetime | None = None,
         url: str | None = None,
+        external_id: str | None = None,
+        company_text: str | None = None,
+        description: str | None = None,
+        updated: datetime | None = None,
+        fetched_at: datetime | None = None,
     ):
         definition = self.sources[key]
-        external_id = f"job-{uuid4().hex[:10]}"
+        external_id = external_id or f"job-{uuid4().hex[:10]}"
         url = url or f"https://example.invalid/{definition.source_type}/{external_id}"
         published = published or NOW - timedelta(days=1)
         run = self.latest_run(key)
@@ -144,7 +149,7 @@ class _World:
             canonical_url=url,
             identity_key=f"external:{external_id}",
             payload_hash=uuid4().hex + uuid4().hex,
-            fetched_at=NOW,
+            fetched_at=fetched_at or NOW,
             item_metadata={
                 COLLECTED_ITEM_V1_KEY: {
                     "version": 1,
@@ -152,9 +157,11 @@ class _World:
                     "external_id": external_id,
                     "url": url,
                     "title": title,
-                    "company_name": self.company_name(company),
+                    "company_name": company_text or self.company_name(company),
                     "location_text": location,
                     "published_at": published.isoformat(),
+                    "updated_at": updated.isoformat() if updated else None,
+                    "description": description,
                     "metadata": {},
                 }
             },
@@ -473,6 +480,144 @@ def test_measurement_counts_merged_and_residual_duplicates(world: _World) -> Non
     world.session.execute(
         text(
             "DELETE FROM opportunities.opportunity WHERE canonical_company_id = :c "
+            "AND id NOT IN (SELECT opportunity_id FROM opportunities.source_occurrence)"
+        ),
+        {"c": twin.canonical_company_id},
+    )
+    world.session.commit()
+
+
+def test_two_different_non_ascii_company_names_never_match(world: _World) -> None:
+    """Every non-ASCII name folds to an empty key; an empty key is a missing name."""
+    greenhouse, remotive = _greenhouse_and_remotive(world)
+    first = world.post(greenhouse, company="a", company_text="株式会社甲")
+    second = world.post(remotive, company="a", company_text="株式会社乙")
+
+    assert first.opportunity is not None and first.opportunity.normalized_company_name == ""
+    assert second.identity_decision != "MERGED"
+    assert len(world.opportunities()) == 2
+
+
+def test_conflicting_known_seniority_is_not_a_strong_match(world: _World) -> None:
+    from dataclasses import replace
+
+    from opportunity_radar.opportunities.domain import (
+        NormalizationInput,
+        Seniority,
+        build_candidate,
+    )
+    from opportunity_radar.opportunities.duplicates import find_cross_source_strong_match
+
+    greenhouse, remotive = _greenhouse_and_remotive(world)
+    first = world.post(greenhouse, company="a")
+    opportunity = world.session.get(OpportunityModel, first.opportunity_id)
+    assert opportunity is not None
+    candidate = build_candidate(
+        NormalizationInput(
+            raw_item_id=uuid4(),
+            source_definition_id=world.sources[remotive].id,
+            source_type="remotive",
+            external_id="seniority-probe",
+            title=opportunity.canonical_title,
+            company_name=opportunity.company_name,
+            location_text=opportunity.location_text,
+            published_at=opportunity.published_at,
+        )
+    )
+    source_id = world.sources[remotive].id
+
+    opportunity.seniority = "SENIOR"
+    world.session.commit()
+    conflicting = replace(candidate, seniority=Seniority.JUNIOR)
+    assert (
+        find_cross_source_strong_match(world.session, conflicting, source_definition_id=source_id)
+        is None
+    )
+    same = replace(candidate, seniority=Seniority.SENIOR)
+    assert (
+        find_cross_source_strong_match(world.session, same, source_definition_id=source_id)
+        is not None
+    )
+    unknown = replace(candidate, seniority=Seniority.UNKNOWN)
+    assert (
+        find_cross_source_strong_match(world.session, unknown, source_definition_id=source_id)
+        is not None
+    )
+
+
+def test_secondary_source_never_rewrites_the_opportunity(world: _World) -> None:
+    greenhouse, remotive = _greenhouse_and_remotive(world)
+    first = world.post(
+        greenhouse, company="a", description="Greenhouse text", updated=NOW - timedelta(days=2),
+        external_id="gh-1",
+    )
+    assert first.opportunity_id is not None
+    world.post(
+        remotive, company="a", description="Remotive text", updated=NOW - timedelta(hours=1),
+        external_id="rem-1", location="SAO PAULO",
+        fetched_at=NOW + timedelta(seconds=1),
+    )
+
+    def snapshot() -> tuple:
+        world.session.expire_all()
+        o = world.session.get(OpportunityModel, first.opportunity_id)
+        assert o is not None
+        return (o.version, o.description, o.location_text, o.source_updated_at, o.canonical_title)
+
+    baseline = snapshot()
+    assert baseline[1] == "Greenhouse text"
+    for step in range(1, 4):
+        later = NOW + timedelta(minutes=step)
+        second = world.post(
+            remotive, company="a", description=f"Remotive text v{step}", location="SAO PAULO",
+            updated=NOW + timedelta(hours=step), external_id="rem-1", fetched_at=later,
+        )
+        assert second.reasons[0]["code"] == "SECONDARY_SOURCE_OCCURRENCE"
+        assert snapshot() == baseline
+        primary = world.post(
+            greenhouse, company="a", description="Greenhouse text",
+            updated=NOW - timedelta(days=2), external_id="gh-1", fetched_at=later,
+        )
+        assert primary.reasons[0]["code"] == "SAME_SOURCE_EXTERNAL_IDENTITY"
+        assert snapshot() == baseline
+    occurrences = world.session.scalars(
+        select(SourceOccurrenceModel).where(
+            SourceOccurrenceModel.opportunity_id == first.opportunity_id
+        )
+    ).all()
+    assert len(occurrences) == 2
+
+
+def test_measurement_ignores_closed_and_same_source_pairs(world: _World) -> None:
+    greenhouse, _ = _greenhouse_and_remotive(world)
+    before = measure_cross_source_duplicates(world.session)
+    world.post(greenhouse, company="a", published=NOW - timedelta(days=1))
+    # Same source, another publication day: two real requisitions, not a missed merge.
+    world.post(greenhouse, company="a", published=NOW - timedelta(days=3))
+    same_source = measure_cross_source_duplicates(world.session)
+    assert same_source.residual_duplicate_rows == before.residual_duplicate_rows
+
+    twin = world.opportunities()[0]
+    world.session.add(
+        OpportunityModel(
+            fingerprint=uuid4().hex + uuid4().hex,
+            fingerprint_version="v1",
+            canonical_title=twin.canonical_title,
+            normalized_title=twin.normalized_title,
+            canonical_company_id=twin.canonical_company_id,
+            normalized_company_name=twin.normalized_company_name,
+            normalized_location=twin.normalized_location,
+            published_at=twin.published_at,
+            lifecycle_status="CLOSED",
+        )
+    )
+    world.session.commit()
+    closed = measure_cross_source_duplicates(world.session)
+    assert closed.residual_duplicate_rows == before.residual_duplicate_rows
+    world.session.execute(
+        text(
+            "DELETE FROM opportunities.opportunity WHERE canonical_company_id = :c "
+            "AND lifecycle_status = 'CLOSED' "
             "AND id NOT IN (SELECT opportunity_id FROM opportunities.source_occurrence)"
         ),
         {"c": twin.canonical_company_id},

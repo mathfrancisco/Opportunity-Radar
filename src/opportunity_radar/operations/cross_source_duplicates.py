@@ -16,8 +16,6 @@ from sqlalchemy.orm import Session
 
 from opportunity_radar.opportunities.duplicates import CROSS_SOURCE_WINDOW_DAYS
 
-_COMPANY_KEY = "coalesce(o.canonical_company_id::text, o.normalized_company_name)"
-
 _TOTALS = """
 SELECT
   count(*) AS root_opportunities,
@@ -29,20 +27,37 @@ FROM opportunities.opportunity o
 WHERE o.duplicate_of IS NULL
 """
 
-# A row is redundant when an older-keyed root opportunity strongly matches it. Counting the
-# redundant rows (not the pairs) is the number of opportunities a perfect merge would remove.
+# A row is redundant when another open root opportunity strongly matches it under the same
+# guards as `find_cross_source_strong_match` (open status, same company by id or non-empty
+# name, same title and non-empty location, no conflicting known work mode or seniority, no
+# source in common), so it counts what the merge missed and not pairs it correctly keeps
+# apart. Counting rows, not pairs, is how many opportunities a perfect merge would remove.
+# Cost: a self semi-join hashed on (title, location), then filtered; fine for the 7-day
+# working set (thousands of rows), not meant for an unbounded history.
+_OPEN = "('DISCOVERED', 'ACTIVE', 'STALE')"
 _RESIDUAL = f"""
 SELECT count(*) AS residual_duplicate_rows FROM opportunities.opportunity b
-WHERE b.duplicate_of IS NULL
+WHERE b.duplicate_of IS NULL AND b.lifecycle_status IN {_OPEN}
   AND b.normalized_location IS NOT NULL AND b.published_at IS NOT NULL
   AND EXISTS (
     SELECT 1 FROM opportunities.opportunity o
-    WHERE o.duplicate_of IS NULL AND o.id < b.id
-      AND {_COMPANY_KEY} = coalesce(b.canonical_company_id::text, b.normalized_company_name)
+    WHERE o.duplicate_of IS NULL AND o.lifecycle_status IN {_OPEN} AND o.id < b.id
       AND o.normalized_title = b.normalized_title
       AND o.normalized_location = b.normalized_location
+      AND (
+        (o.canonical_company_id IS NOT NULL
+          AND o.canonical_company_id = b.canonical_company_id)
+        OR (coalesce(o.normalized_company_name, '') <> ''
+          AND o.normalized_company_name = b.normalized_company_name))
+      AND (o.work_mode = b.work_mode OR 'UNKNOWN' IN (o.work_mode, b.work_mode))
+      AND (o.seniority = b.seniority OR 'UNKNOWN' IN (o.seniority, b.seniority))
       AND o.published_at IS NOT NULL
-      AND abs(extract(epoch FROM (o.published_at - b.published_at))) <= :window_seconds)
+      AND abs(extract(epoch FROM (o.published_at - b.published_at))) <= :window_seconds
+      AND NOT EXISTS (
+        SELECT 1 FROM opportunities.source_occurrence so
+        JOIN opportunities.source_occurrence sb
+          ON sb.source_definition_id = so.source_definition_id
+        WHERE so.opportunity_id = o.id AND sb.opportunity_id = b.id))
 """
 
 _CANDIDATES = """

@@ -251,6 +251,16 @@ class OpportunityRepository:
             .first()
         )
 
+    def is_primary_occurrence(self, occurrence: SourceOccurrenceModel) -> bool:
+        """Whether this is the opportunity's first-attached occurrence (oldest, then id)."""
+        primary = self.session.scalar(
+            select(SourceOccurrenceModel.id)
+            .where(SourceOccurrenceModel.opportunity_id == occurrence.opportunity_id)
+            .order_by(SourceOccurrenceModel.first_seen_at, SourceOccurrenceModel.id)
+            .limit(1)
+        )
+        return primary is None or primary == occurrence.id
+
     def opportunity_by_fingerprint(
         self, *, fingerprint: str, fingerprint_version: str
     ) -> OpportunityModel | None:

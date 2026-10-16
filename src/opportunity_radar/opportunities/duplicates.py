@@ -87,7 +87,7 @@ def find_cross_source_strong_match(
     """The single open opportunity this posting strongly matches in *another* source.
 
     Strong means: same company (canonical id, else normalized name), same normalized
-    title, same non-empty normalized location, no conflicting known work mode, and
+    title, same non-empty normalized location, no conflicting known work mode or seniority, and
     `published_at` within `CROSS_SOURCE_WINDOW_DAYS` of each other. Anything weaker (no
     location, no publication date, a different location, a longer gap) returns `None`
     and stays with the `duplicate_candidate` review path.
@@ -101,13 +101,14 @@ def find_cross_source_strong_match(
     if (
         candidate.published_at is None
         or candidate.normalized_location is None
-        or (candidate.company_id is None and candidate.normalized_company_name is None)
+        or (candidate.company_id is None and not candidate.normalized_company_name)
     ):
         return None
     company_clauses = []
     if candidate.company_id is not None:
         company_clauses.append(OpportunityModel.canonical_company_id == candidate.company_id)
-    if candidate.normalized_company_name is not None:
+    # An empty key (every non-ASCII name folds to "") is a missing name, never a match.
+    if candidate.normalized_company_name:
         company_clauses.append(
             OpportunityModel.normalized_company_name == candidate.normalized_company_name
         )
@@ -130,6 +131,8 @@ def find_cross_source_strong_match(
     ]
     if candidate.work_mode.value != "UNKNOWN":
         filters.append(OpportunityModel.work_mode.in_((candidate.work_mode.value, "UNKNOWN")))
+    if candidate.seniority.value != "UNKNOWN":
+        filters.append(OpportunityModel.seniority.in_((candidate.seniority.value, "UNKNOWN")))
     matches = session.scalars(
         select(OpportunityModel)
         .where(*filters)
