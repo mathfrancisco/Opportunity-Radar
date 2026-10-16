@@ -19,12 +19,19 @@ approved duration preserves this inequality.
 
 ## Future VM Installation
 
-An operator must create the `opportunity-radar` non-login user, install Docker,
-deploy the application at `/opt/opportunity-radar`, install the wrapper at
-`/usr/local/sbin/run-opportunity-radar-window`, and copy the unit files to
-`/etc/systemd/system/`. Create the mandatory
-`/etc/opportunity-radar/pipeline.env` with mode `0600`. Keep secrets in that
-file, never in a unit or log. The service fails closed when this file is absent.
+Install Docker, deploy the application at `/opt/opportunity-radar`, install the
+wrapper at `/usr/local/sbin/run-opportunity-radar-window`, and copy the unit
+files to `/etc/systemd/system/`. The service runs as `root` because the verified
+Docker socket is owned by `root:docker` with mode `0660`; it does not create or
+grant login access to a service account. Keep `/opt/opportunity-radar` owned by
+`root:root` with mode `0755`.
+
+Create `/etc/opportunity-radar/api.env`, `worker.env`, `proxy.env`, `images.env`,
+and `pipeline.env`, each owned by `root:root` with mode `0600`. systemd reads
+these files before launching the wrapper, so Compose receives its interpolation
+inputs without relaxing their permissions. Keep secrets in those files, never in
+a unit or log. Keep `/etc/opportunity-radar` owned by `root:root` with mode
+`0700`. The service fails closed when any required file is absent.
 
 ```sh
 sudo install -o root -g root -m 0644 opportunity-radar-pipeline.service /etc/systemd/system/
@@ -35,6 +42,32 @@ sudo systemctl enable --now opportunity-radar-pipeline.timer
 systemctl list-timers opportunity-radar-pipeline.timer
 systemctl status opportunity-radar-pipeline.timer
 ```
+
+Before the first migration that reaches revision `0069`, create a temporary
+root-owned `/etc/opportunity-radar/migrate.env` with mode `0600` containing the
+approved `OWNER_SUB_BACKFILL`. Run the migration once as root with the normal
+environment files plus that temporary file, then remove `migrate.env` only after
+the command succeeds:
+
+```sh
+sudo docker compose \
+  --env-file /etc/opportunity-radar/api.env \
+  --env-file /etc/opportunity-radar/worker.env \
+  --env-file /etc/opportunity-radar/proxy.env \
+  --env-file /etc/opportunity-radar/images.env \
+  --env-file /etc/opportunity-radar/pipeline.env \
+  --env-file /etc/opportunity-radar/migrate.env \
+  -f /opt/opportunity-radar/compose.cloud.yaml \
+  run --rm migrate \
+  && sudo rm /etc/opportunity-radar/migrate.env
+```
+
+After revision `0069` is at head, the finite worker may still start the migration
+service, but that revision no longer executes and its backfill value is absent.
+If a database still needs `0069`, its migration fails closed without the
+temporary value. This is a development-pilot installation contract for the
+selected workers.dev and Clerk development configuration; it does not release a
+production deployment.
 
 The wrapper creates a UTC timestamp plus random suffix `RUN_ID`, calculates
 `DEADLINE_UTC` at activation time, logs one redacted structured start line, and

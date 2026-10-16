@@ -105,6 +105,144 @@ def test_run_pg_dump_omits_the_snapshot_flag_when_absent(monkeypatch: pytest.Mon
     assert not any(part.startswith("--snapshot=") for part in captured["command"])
 
 
+@pytest.mark.parametrize(
+    "artifact",
+    ("same.dump", "same.manifest.json", "same.dump.tmp", "same.manifest.json.tmp"),
+)
+def test_backup_refuses_existing_generation_before_reading_database_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, artifact: str
+) -> None:
+    (tmp_path / artifact).write_bytes(b"previous generation")
+    monkeypatch.setattr(
+        backup,
+        "database_url",
+        lambda: pytest.fail("database URL must not be read for a collision"),
+    )
+
+    with pytest.raises(SystemExit, match="refusing to overwrite"):
+        backup.main(["--output-dir", str(tmp_path), "--label", "same"])
+    assert (tmp_path / artifact).read_bytes() == b"previous generation"
+
+
+@pytest.mark.parametrize(
+    "artifact",
+    ("same.dump", "same.manifest.json", "same.dump.tmp", "same.manifest.json.tmp"),
+)
+def test_backup_refuses_dangling_generation_symlinks_before_reading_database_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, artifact: str
+) -> None:
+    link = tmp_path / artifact
+    link.symlink_to("missing-generation-artifact")
+    monkeypatch.setattr(
+        backup,
+        "database_url",
+        lambda: pytest.fail("database URL must not be read for a symlink collision"),
+    )
+
+    with pytest.raises(SystemExit, match="refusing to overwrite"):
+        backup.main(["--output-dir", str(tmp_path), "--label", "same"])
+
+    assert link.is_symlink()
+    assert link.readlink() == Path("missing-generation-artifact")
+
+
+def test_backup_refuses_a_generation_reserved_by_another_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "same.dump.lock").write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        backup,
+        "database_url",
+        lambda: pytest.fail("database URL must not be read for a reservation"),
+    )
+
+    with pytest.raises(SystemExit, match="already reserved"):
+        backup.main(["--output-dir", str(tmp_path), "--label", "same"])
+    assert (tmp_path / "same.dump.lock").read_text(encoding="utf-8") == ""
+
+
+def test_backup_reservation_blocks_a_cooperative_same_name_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def hold_reservation(_url: str, _target: Path) -> dict[str, Any]:
+        with pytest.raises(SystemExit, match="already reserved"):
+            backup.main(["--output-dir", str(tmp_path), "--label", "same"])
+        raise RuntimeError("simulated backup failure")
+
+    monkeypatch.setattr(backup, "database_url", lambda: "postgresql://unused")
+    monkeypatch.setattr(backup, "take_backup", hold_reservation)
+
+    with pytest.raises(RuntimeError, match="simulated backup failure"):
+        backup.main(["--output-dir", str(tmp_path), "--label", "same"])
+    assert not (tmp_path / "same.dump.lock").exists()
+
+
+def test_backup_releases_its_reservation_after_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_backup(_url: str, target: Path) -> dict[str, Any]:
+        target.write_bytes(b"dump")
+        return _manifest()
+
+    monkeypatch.setattr(backup, "database_url", lambda: "postgresql://unused")
+    monkeypatch.setattr(backup, "take_backup", fake_backup)
+
+    assert backup.main(["--output-dir", str(tmp_path), "--label", "same"]) == 0
+    assert not (tmp_path / "same.dump.lock").exists()
+
+
+def test_backup_releases_only_its_own_reservation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock = tmp_path / "same.dump.lock"
+
+    def replace_reservation(_url: str, target: Path) -> dict[str, Any]:
+        lock.unlink()
+        lock.write_text("replacement reservation", encoding="utf-8")
+        target.write_bytes(b"dump")
+        return _manifest()
+
+    monkeypatch.setattr(backup, "database_url", lambda: "postgresql://unused")
+    monkeypatch.setattr(backup, "take_backup", replace_reservation)
+
+    assert backup.main(["--output-dir", str(tmp_path), "--label", "same"]) == 0
+    assert lock.read_text(encoding="utf-8") == "replacement reservation"
+
+
+@pytest.mark.parametrize("label", ("../outside", "nested/name", "nested\\name", ".", ""))
+def test_backup_rejects_labels_that_are_not_simple_filenames(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, label: str
+) -> None:
+    monkeypatch.setattr(
+        backup,
+        "database_url",
+        lambda: pytest.fail("database URL must not be read for an invalid label"),
+    )
+
+    with pytest.raises(SystemExit, match="label must be a simple filename"):
+        backup.main(["--output-dir", str(tmp_path), "--label", label])
+
+
+def test_backup_collision_preserves_the_previous_dump_and_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dump = tmp_path / "same.dump"
+    manifest = tmp_path / "same.manifest.json"
+    dump.write_bytes(b"previous dump")
+    manifest.write_bytes(b"previous manifest")
+    monkeypatch.setattr(
+        backup,
+        "database_url",
+        lambda: pytest.fail("database URL must not be read for a collision"),
+    )
+
+    with pytest.raises(SystemExit, match="refusing to overwrite"):
+        backup.main(["--output-dir", str(tmp_path), "--label", "same"])
+
+    assert dump.read_bytes() == b"previous dump"
+    assert manifest.read_bytes() == b"previous manifest"
+
+
 def test_load_manifest_missing_file_fails_strict(tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="no manifest at"):
         restore_check.load_manifest(tmp_path / "missing.manifest.json", allow_missing=False)
@@ -268,9 +406,7 @@ def test_manifest_includes_the_ai_quota_and_call_record_tables() -> None:
     """F20-41 evidence: these two tables landed after this card's first pass and were
     missing from the manifest until now. Pin them here (no DB needed) so a future
     revert of the entry cannot slip through unnoticed."""
-    tables = {
-        query.split("FROM", 1)[1].strip() for query in MANIFEST_QUERIES.values()
-    }
+    tables = {query.split("FROM", 1)[1].strip() for query in MANIFEST_QUERIES.values()}
 
     assert "platform.ai_quota_usage" in tables
     assert "platform.ai_call_record" in tables

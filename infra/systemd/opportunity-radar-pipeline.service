@@ -6,11 +6,16 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=opportunity-radar
+User=root
 WorkingDirectory=/opt/opportunity-radar
+EnvironmentFile=/etc/opportunity-radar/api.env
+EnvironmentFile=/etc/opportunity-radar/worker.env
+EnvironmentFile=/etc/opportunity-radar/proxy.env
+EnvironmentFile=/etc/opportunity-radar/images.env
 EnvironmentFile=/etc/opportunity-radar/pipeline.env
 ExecStart=/usr/local/sbin/run-opportunity-radar-window
 TimeoutStartSec=3900
 TimeoutStopSec=120
 Restart=no
 KillSignal=SIGTERM
+NoNewPrivileges=yes

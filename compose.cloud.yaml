@@ -18,16 +18,18 @@ x-runtime-environment: &runtime-environment
 
 services:
   migrate:
-    image: ${API_IMAGE:?API_IMAGE must be an approved immutable linux/arm64 image@sha256:<64 hex> digest}
+    image: ${API_IMAGE:?API_IMAGE must be an approved immutable image@sha256:<64 hex> digest}
     environment:
       <<: *runtime-environment
-      OWNER_SUB_BACKFILL: ${OWNER_SUB_BACKFILL:?OWNER_SUB_BACKFILL is required by migration 0069}
+      # Only the one-time 0069 migration reads this value. Do not retain it in the
+      # systemd runtime environment after that migration succeeds.
+      OWNER_SUB_BACKFILL: ${OWNER_SUB_BACKFILL:-}
     command: ["alembic", "upgrade", "head"]
     restart: "no"
     networks: [runtime]
 
   api:
-    image: ${API_IMAGE:?API_IMAGE must be an approved immutable linux/arm64 image@sha256:<64 hex> digest}
+    image: ${API_IMAGE:?API_IMAGE must be an approved immutable image@sha256:<64 hex> digest}
     environment: *runtime-environment
     command: ["uvicorn", "opportunity_radar.presentation.http.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
     expose: ["8000"]
@@ -44,7 +46,7 @@ services:
     networks: [runtime]
 
   worker:
-    image: ${WORKER_IMAGE:?WORKER_IMAGE must be an approved immutable linux/arm64 image@sha256:<64 hex> digest}
+    image: ${WORKER_IMAGE:?WORKER_IMAGE must be an approved immutable image@sha256:<64 hex> digest}
     environment:
       <<: *runtime-environment
       WORKER_OWNER_SUB: ${WORKER_OWNER_SUB:?WORKER_OWNER_SUB is required for a finite personal pipeline}
@@ -56,7 +58,7 @@ services:
     networks: [runtime]
 
   proxy:
-    image: ${PROXY_IMAGE:?PROXY_IMAGE must be an approved immutable linux/arm64 image@sha256:<64 hex> digest}
+    image: ${PROXY_IMAGE:?PROXY_IMAGE must be an approved immutable image@sha256:<64 hex> digest}
     environment:
       PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:?PUBLIC_HOSTNAME must be the exact public API hostname}
     depends_on:

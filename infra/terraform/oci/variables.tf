@@ -31,10 +31,28 @@ variable "availability_domain" {
 variable "arm_image_id" {
   description = "Approved ARM64 platform image OCID; select it in OCI, never infer it from a secret."
   type        = string
+  default     = null
 
   validation {
-    condition     = can(regex("^ocid1\\.image\\.", var.arm_image_id))
-    error_message = "arm_image_id must be an OCI image OCID."
+    condition     = var.arm_image_id == null || can(regex("^ocid1\\.image\\.", var.arm_image_id))
+    error_message = "arm_image_id must be null or an OCI image OCID."
+  }
+}
+
+variable "enable_free_trial" {
+  description = "Opt into the temporary x86 E4/E5 Flex Free Trial configuration; this is not an Always Free shape."
+  type        = bool
+  default     = false
+}
+
+variable "trial_image_id" {
+  description = "Approved x86 Ubuntu 24.04 image OCID required only for temporary Free Trial mode."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.trial_image_id == null || can(regex("^ocid1\\.image\\.", var.trial_image_id))
+    error_message = "trial_image_id must be an OCI image OCID when provided."
   }
 }
 
@@ -82,18 +100,18 @@ variable "admin_cidr" {
 }
 
 variable "instance_shape" {
-  description = "Always Free ARM shape only."
+  description = "A1 Always Free by default; E4 or E5 Flex is allowed only in explicit temporary Free Trial mode."
   type        = string
   default     = "VM.Standard.A1.Flex"
 
   validation {
-    condition     = var.instance_shape == "VM.Standard.A1.Flex"
-    error_message = "Only VM.Standard.A1.Flex is allowed by this Always Free root."
+    condition     = contains(["VM.Standard.A1.Flex", "VM.Standard.E4.Flex", "VM.Standard.E5.Flex"], var.instance_shape)
+    error_message = "instance_shape must be VM.Standard.A1.Flex, VM.Standard.E4.Flex, or VM.Standard.E5.Flex."
   }
 }
 
 variable "shape_ocpus" {
-  description = "A1 OCPUs; the tenancy-wide Always Free maximum is two."
+  description = "A1 OCPUs (up to two) or exactly one OCPU in Free Trial mode."
   type        = number
   default     = 2
 
@@ -104,7 +122,7 @@ variable "shape_ocpus" {
 }
 
 variable "shape_memory_in_gbs" {
-  description = "A1 memory; the tenancy-wide Always Free maximum is 12 GB."
+  description = "A1 memory (up to 12 GB) or exactly 8 GB in Free Trial mode."
   type        = number
   default     = 12
 

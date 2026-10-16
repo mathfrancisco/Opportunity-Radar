@@ -4,6 +4,9 @@ region                  = "<oci-home-region>"
 compartment_id          = "<ocid-do-compartment-piloto>"
 availability_domain     = "<AD-da-regiao-com-capacidade-A1>"
 arm_image_id            = "<ocid-da-imagem-ARM64-aprovada>"
+# Temporary Free Trial only: enable explicitly, then set the approved x86 image.
+enable_free_trial       = false
+trial_image_id          = null
 ssh_public_key          = "ssh-ed25519 <chave-publica-administrativa> opportunity-radar"
 admin_cidr              = "203.0.113.0/24"
 backup_bucket_name      = "opportunity-radar-backups-<identificador-unico>"
@@ -17,3 +20,9 @@ boot_volume_size_gbs         = 50
 backup_storage_limit_gbs     = 20
 backup_monthly_request_limit = 50000
 resource_prefix              = "opportunity-radar"
+
+# Temporary Free Trial: replace the existing assignments above; do not append
+# duplicate keys. Set enable_free_trial=true, trial_image_id to the selected
+# Ubuntu 24.04 x86 image, choose an available E4 or E5 Flex shape,
+# shape_ocpus=1, and shape_memory_in_gbs=8. Do not upgrade the account to Pay
+# As You Go.

@@ -73,6 +73,7 @@ pytestmark = [
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "pre_f20_dump.sql"
 PRE_PHASE_20_REVISION = "20260925_0029"
+UPGRADE_FIXTURE_OWNER_SUB = "f20-upgrade-fixture-owner"
 
 #: The literal `normalizer_version` this fixture's 20 `normalization_result` rows were
 #: dumped with. A `pg_dump` fixture cannot reference the `NORMALIZER_VERSION` constant
@@ -135,9 +136,7 @@ def _restore_fixture(url: str) -> None:
     `_fixture_sql_for_current_normalizer_version`.
     """
     sql = _fixture_sql_for_current_normalizer_version()
-    with tempfile.NamedTemporaryFile(
-        "w", suffix=".sql", delete=False, encoding="utf-8"
-    ) as handle:
+    with tempfile.NamedTemporaryFile("w", suffix=".sql", delete=False, encoding="utf-8") as handle:
         handle.write(sql)
         rewritten_path = handle.name
     try:
@@ -162,15 +161,21 @@ def _alembic_upgrade_head(url: str) -> None:
 
     `migrations/env.py` reads `DATABASE_URL` from the environment, and — like the
     CI job's own "Verify migration round trip" step — this is the exact command CI
-    and an operator run, not a reimplementation of it. A subprocess also keeps
-    Alembic's `fileConfig(...)` call (`migrations/env.py`) from reconfiguring this
-    test process's own logging handlers, which would otherwise break `caplog` in
-    tests that run afterwards in the same pytest session.
+    and an operator run, not a reimplementation of it. Migration 0069 additionally
+    requires an owner subject; this test supplies its synthetic fixture value rather
+    than inheriting an operator's environment. A subprocess also keeps Alembic's
+    `fileConfig(...)` call (`migrations/env.py`) from reconfiguring this test
+    process's own logging handlers, which would otherwise break `caplog` in tests
+    that run afterwards in the same pytest session.
     """
     result = subprocess.run(
         ["alembic", "upgrade", "head"],
         cwd=REPO_ROOT,
-        env={**os.environ, "DATABASE_URL": url},
+        env={
+            **os.environ,
+            "DATABASE_URL": url,
+            "OWNER_SUB_BACKFILL": UPGRADE_FIXTURE_OWNER_SUB,
+        },
         capture_output=True,
         text=True,
     )
@@ -233,12 +238,18 @@ def test_pre_phase_20_database_upgrades_to_head_without_losing_history(
     engine = create_database_engine(scratch_database)
     try:
         with engine.connect() as connection:
-            assert connection.execute(
-                text("SELECT count(*) FROM platform.ai_quota_usage")
-            ).scalar_one() == 0
-            assert connection.execute(
-                text("SELECT count(*) FROM platform.ai_call_record")
-            ).scalar_one() == 0
+            assert (
+                connection.execute(
+                    text("SELECT count(*) FROM platform.ai_quota_usage")
+                ).scalar_one()
+                == 0
+            )
+            assert (
+                connection.execute(
+                    text("SELECT count(*) FROM platform.ai_call_record")
+                ).scalar_one()
+                == 0
+            )
     finally:
         engine.dispose()
 

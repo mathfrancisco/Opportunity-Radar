@@ -24,11 +24,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import secrets
 import subprocess
 import sys
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from opportunity_radar.platform.backup import (
     ALEMBIC_REVISION_QUERY,
@@ -45,6 +48,35 @@ from opportunity_radar.platform.backup import (
 from opportunity_radar.platform.database import create_database_engine
 
 DEFAULT_OUTPUT_DIR = Path("data/backups")
+
+
+@contextmanager
+def _reserve_generation(target: Path) -> Iterator[None]:
+    """Reserve a backup name and refuse to reuse artifacts from that generation."""
+    manifest = target.with_suffix(".manifest.json")
+    target_tmp = target.with_name(target.name + ".tmp")
+    manifest_tmp = manifest.with_name(manifest.name + ".tmp")
+    lock = target.with_name(target.name + ".lock")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    reservation = secrets.token_hex(32)
+    try:
+        with lock.open("x", encoding="utf-8") as handle:
+            handle.write(reservation)
+    except FileExistsError as error:
+        raise SystemExit(f"backup generation already reserved: {target}") from error
+    try:
+        for path in (target, manifest, target_tmp, manifest_tmp):
+            if path.exists() or path.is_symlink():
+                raise SystemExit(f"refusing to overwrite: already exists: {path}")
+        yield
+    finally:
+        try:
+            current = lock.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            pass
+        else:
+            if current == reservation:
+                lock.unlink()
 
 
 def take_backup(url: str, target: Path) -> dict[str, Any]:
@@ -107,9 +139,7 @@ def run_pg_dump(url: str, target: Path, *, snapshot: str | None = None) -> None:
         try:
             subprocess.run(command, check=True, capture_output=True, text=True, env=env)
         except FileNotFoundError as error:
-            raise SystemExit(
-                "pg_dump is not available; run this through `make backup`"
-            ) from error
+            raise SystemExit("pg_dump is not available; run this through `make backup`") from error
         except subprocess.CalledProcessError as error:
             raise SystemExit("pg_dump failed; command output was redacted") from error
 
@@ -141,37 +171,39 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    url = database_url()
+    if args.label is not None and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", args.label):
+        raise SystemExit("label must be a simple filename")
     stamp = args.label or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     target = args.output_dir / f"{stamp}.dump"
     manifest_path = target.with_suffix(".manifest.json")
     target_tmp = target.with_name(target.name + ".tmp")
     manifest_tmp = manifest_path.with_name(manifest_path.name + ".tmp")
 
-    manifest = take_backup(url, target_tmp)
-    manifest["file"] = target.name
-    manifest["bytes"] = target_tmp.stat().st_size
-    manifest["sha256"] = sha256_file(target_tmp)
-    manifest["database"] = database_name(url)
-    manifest_tmp.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    # The dump is complete and hashed, and the manifest fully written, before either one
-    # takes its real name: a reader never sees a dump with no manifest, or a half file.
-    os.replace(target_tmp, target)
-    os.replace(manifest_tmp, manifest_path)
-
-    print(f"wrote {target} ({manifest['bytes']} bytes, sha256 {manifest['sha256'][:12]}...)")
-    print(f"wrote {manifest_path}")
-    if args.prune_days > 0:
-        candidates = prune(args.output_dir, args.prune_days)
-        print(
-            "retention was not applied; review candidates only after a validated "
-            "isolated restore",
-            file=sys.stderr,
+    with _reserve_generation(target):
+        url = database_url()
+        manifest = take_backup(url, target_tmp)
+        manifest["file"] = target.name
+        manifest["bytes"] = target_tmp.stat().st_size
+        manifest["sha256"] = sha256_file(target_tmp)
+        manifest["database"] = database_name(url)
+        manifest_tmp.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
-        for dump in candidates:
-            print(f"retention candidate {dump}", file=sys.stderr)
+        # Both files are complete before taking their final names.
+        os.replace(target_tmp, target)
+        os.replace(manifest_tmp, manifest_path)
+
+        print(f"wrote {target} ({manifest['bytes']} bytes, sha256 {manifest['sha256'][:12]}...)")
+        print(f"wrote {manifest_path}")
+        if args.prune_days > 0:
+            candidates = prune(args.output_dir, args.prune_days)
+            print(
+                "retention was not applied; review candidates only after a validated "
+                "isolated restore",
+                file=sys.stderr,
+            )
+            for dump in candidates:
+                print(f"retention candidate {dump}", file=sys.stderr)
     return 0
 
 

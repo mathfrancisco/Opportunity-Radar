@@ -1,7 +1,6 @@
 # Roadmap 53 — hospedagem econômica e recuperável
 
-**Estado: em execução; nenhum card está concluído em 14 de outubro de 2026
-(ver [Estado em 2026-10-14](#estado-em-2026-10-14)).** Este índice decompõe o [plano de hospedagem](../53-plano-hospedagem-cloudflare-oracle-neon-clerk.md).
+**Estado: piloto online desde 16 de outubro de 2026; ver [Estado em 2026-10-16](#estado-em-2026-10-16) (a tabela de 14/10 fica como histórico).** Este índice decompõe o [plano de hospedagem](../53-plano-hospedagem-cloudflare-oracle-neon-clerk.md).
 Uma ação descrita aqui só começa após o respectivo gate; um plano não é prova de
 deploy, custo, segurança, backup ou recuperação.
 
@@ -80,3 +79,32 @@ segredos é evidência; intenção, checklist marcado ou execução sem artefato
 | F53-18 | bloqueado externo | cutover depende de decisão do dono | — |
 
 Custos: **não medidos**.
+
+## Estado em 2026-10-16
+
+Piloto online: Worker `opportunity-radar.math-francisco2.workers.dev`, API na VM
+OCI E5 Free Trial (sa-saopaulo-1), Neon movido para `aws-sa-east-1`, Clerk de
+desenvolvimento. Evidências:
+[2026-10-16-f53-piloto-online](evidencias/2026-10-16-f53-piloto-online.md) e
+[2026-10-16-f53-fechamento-piloto](evidencias/2026-10-16-f53-fechamento-piloto.md).
+
+| Card | Estado em 16/10 | Prova ou lacuna |
+| --- | --- | --- |
+| F53-04 | provado no piloto, com desvio | Plan da stack com `No changes`; o shape é E5 Free Trial, não A1 Always Free |
+| F53-05 | provado | imagens multiarch publicadas por digest e implantadas |
+| F53-06 | provado | dump/restore entre regiões Neon com contagens idênticas; compute ocioso suspenso |
+| F53-07 | provado em Clerk dev | `/session` `is_owner=true`; `CLERK_AUDIENCE` vazio (token dev sem `aud`) |
+| F53-08 | provado em workers.dev | login real e menu de dono; domínio próprio não usado |
+| F53-09 | provado | TLS Let's Encrypt, preflight CORS 200 só para a origem do Worker |
+| F53-10 | provado | coleta de 225 itens e janela finita sem falha após a correção de lease |
+| F53-11 | AC01–AC04 provados; AC05 sem prova | não há alerta de janela perdida |
+| F53-12 | medido | projeção de 18,4 CU-h/mês de 80; VM com 762 MiB usados |
+| F53-13 | parcial | storage medido (34,7 MB); retenção real não exercitada |
+| F53-14 | provado | cópia cifrada no bucket, baixada e restaurada em banco isolado |
+| F53-15 | provado | CI verde e Publish por digest no run 38920561681 |
+| F53-16 | parcial | E2E do dono provado; segundo usuário sem prova |
+| F53-17 | sem prova | alarme de teste desabilitado e e-mail removido a pedido do dono |
+| F53-18 | rollback provado; cutover sem prova | troca de digest e volta em 13 s; dados pessoais reais ainda não migrados |
+
+Custos: Neon, OCI e Cloudflare no plano gratuito ou nos créditos do trial, sem
+cobrança. O consumo do Cloudflare não foi medido.

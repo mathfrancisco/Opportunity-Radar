@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import re
+import time
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
 from contextlib import aclosing, contextmanager
 from dataclasses import dataclass, replace
@@ -16,7 +17,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 from sqlalchemy import func, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DataError, DBAPIError, IntegrityError, StatementError
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.alerts import (
@@ -73,6 +74,7 @@ from opportunity_radar.acquisition.repository import (
     SOURCE_CLAIM_LEASE,
     AcquisitionRepository,
     FencedWriteRejected,
+    RawEvidenceWrite,
     SourceClaimUnavailable,
     SourceExecutionClaim,
 )
@@ -104,6 +106,16 @@ from opportunity_radar.profile.domain import ProfileNotFoundError
 from opportunity_radar.profile.service import ProfileService
 
 COLLECTED_ITEM_V1_KEY = "collected_item_v1"
+#: Items written per fence and transaction (F53-14). A batch costs a fixed handful of round
+#: trips whatever its size; the bound keeps the event loop unblocked long enough for the
+#: lease renewal (lease/3) and caps what a crash can lose to one re-read batch.
+_ITEM_BATCH_SIZE = 50
+#: A trickling collector (detail fetches) flushes once its oldest unwritten item is this old.
+#: Checked when the next item arrives, not during a stall: a collector that stalls with items
+#: buffered keeps them unwritten until it yields again, fails or times out (the failure paths
+#: flush), and they are lost only if the process dies meanwhile. A timer would have to write
+#: from the renewal task, i.e. hold the claim lock across an await, so it is deliberately absent.
+_ITEM_BATCH_MAX_SECONDS = 10.0
 
 logger = get_logger("opportunity_radar.acquisition.service")
 
@@ -310,6 +322,11 @@ class _ClaimScope:
             self._log("claim_recovered", claim=claim, recovered_run_id=claim.recovered_run_id)
         self._heartbeat = asyncio.create_task(self._renew_loop(claim))
         return claim
+
+    @property
+    def lost(self) -> bool:
+        """The renewal found the lease gone; the next fenced write is certain to be rejected."""
+        return self._lost
 
     def attach(self) -> bool:
         """Bind the committed RUNNING row to the claim; False when the lease is already lost."""
@@ -1508,6 +1525,139 @@ class AcquisitionService:
             if self._tavily_extraction is not None
             else None
         )
+        # Read once: a batch commit expires every ORM attribute, and reading `source.*` in the
+        # item loop afterwards would cost two refresh queries per batch.
+        source_id = source.id
+        source_type = source.source_type
+        # (item, persist_new) pairs read from the collector and not written yet.
+        pending: list[tuple[CollectedItem, bool]] = []
+        pending_since = 0.0
+
+        def persist_pending() -> None:
+            """Write the pending items as one mutation unit: one fence, one transaction.
+
+            The unit used to be one item (claim row lock held from its fence to its commit,
+            ~16 round trips each at 160 ms); it is now up to `_ITEM_BATCH_SIZE` items. The
+            fence runs first and the commit last with no await in between, so the claim row
+            lock is held only across this synchronous call and the renewal task, which runs on
+            this same thread, can never wait on it. If the lease was lost the fence rejects and
+            rolls back the whole unit, so a stale execution still writes nothing. Items read
+            but not yet written are lost only if the process dies: the next run re-reads them.
+            """
+            nonlocal error, last_cursor
+            if not pending:
+                return
+            entries = list(pending)
+            pending.clear()
+            observed_at = run.started_at or datetime.now(UTC)
+
+            def write(batch: list[tuple[CollectedItem, bool]]) -> list[bool | Exception]:
+                # Any failure must end the transaction here: left open it would keep the
+                # claim row lock (taken by the fence) on an aborted transaction, and the
+                # renewal task would then wait on it from this same thread, forever.
+                try:
+                    if scope is None:
+                        # No per-batch commit: roll back this batch only, not the run.
+                        with self.session.begin_nested():
+                            return self._persist_items(
+                                source_id, run.id, source_type, batch, observed_at=observed_at
+                            )
+                    outcomes = self._persist_items(
+                        source_id, run.id, source_type, batch, observed_at=observed_at
+                    )
+                    self.session.commit()
+                    return outcomes
+                except BaseException:
+                    if scope is not None:
+                        self.session.rollback()
+                    raise
+
+            def attempt(batch: list[tuple[CollectedItem, bool]]) -> list[bool | Exception] | None:
+                """Fence, then write; `None` only when the database refused the data itself.
+
+                The fence sits outside the refusal handling: a lost lease or a database
+                failure there is never an invalid item. Any other database error (connection,
+                operational) propagates and fails the run as retryable.
+                """
+                if scope is not None:
+                    try:
+                        scope.fence(self.session)
+                    except FencedWriteRejected:
+                        raise  # `fence` already rolled back
+                    except BaseException:
+                        self.session.rollback()
+                        raise
+                try:
+                    return write(batch)
+                except StatementError as refused:
+                    if isinstance(refused, DBAPIError) and not isinstance(
+                        refused, (DataError, IntegrityError)
+                    ):
+                        raise
+                    return None
+
+            batch_outcomes = attempt(entries)
+            if batch_outcomes is None:
+                # One item the database refuses must not sink its batch mates: retry item by
+                # item and count only the refused one invalid.
+                outcomes: list[bool | Exception] = []
+                for entry in entries:
+                    single = attempt([entry])
+                    outcomes.append(
+                        ValueError("item could not be stored") if single is None else single[0]
+                    )
+            else:
+                outcomes = batch_outcomes
+            for (item, _), outcome in zip(entries, outcomes, strict=True):
+                if isinstance(outcome, Exception):
+                    run.record_items(invalid=1)
+                    error = AcquisitionError(
+                        AcquisitionErrorCode.INVALID_ITEM,
+                        str(outcome),
+                        retryable=False,
+                    )
+                    continue
+                if outcome:
+                    run.record_items(persisted=1)
+                else:
+                    run.record_items(skipped=1)
+                logger.info(
+                    "source collection item processed",
+                    extra={
+                        "job": "collect",
+                        "source_id": str(source_id),
+                        "run_id": str(run.id),
+                        "state": "progress",
+                        "items_seen": run.items_seen,
+                        "items_persisted": run.items_persisted,
+                        "http_requests": run_telemetry.http_requests,
+                        "last_activity_at": datetime.now(UTC).isoformat(),
+                    },
+                )
+                if source_type == "tavily_search":
+                    tavily_proposal_items.append(item)
+                elif source_type == "hacker_news":
+                    hn_proposal = _hn_proposal_item(item)
+                    if hn_proposal is not None:
+                        hn_proposal_items.append(hn_proposal)
+                if item.cursor is not None:
+                    last_cursor = item.cursor
+
+        def flush_after_failure(original: BaseException) -> None:
+            """Keep what was read before `original`, without ever replacing `original`.
+
+            A lost lease may replace a timeout or collector failure (the run is stale and
+            writes nothing), but never a cancellation, which must reach its caller as such.
+            """
+            try:
+                persist_pending()
+            except FencedWriteRejected:
+                if not isinstance(original, asyncio.CancelledError):
+                    raise
+                logger.warning("source collection lost its lease while cancelled")
+            except Exception:  # noqa: BLE001 - the original failure is what the run reports
+                logger.exception("pending source items could not be written")
+
         try:
             if throttle_error is not None:
                 raise throttle_error
@@ -1631,7 +1781,7 @@ class AcquisitionService:
                                 telemetry=tavily_telemetry,
                                 network_policy=network_policy,
                                 run=run,
-                                source_type=source.source_type,
+                                source_type=source_type,
                             )
                             if deadline.expired():
                                 raise TimeoutError("source collection deadline exceeded")
@@ -1650,66 +1800,40 @@ class AcquisitionService:
                                         target=0 if off_target else 1,
                                         off_target=1 if off_target else 0,
                                     )
-                            if scope is not None:
-                                scope.fence(self.session)
-                            try:
-                                created = self._persist_item(
-                                    source.id,
-                                    run.id,
-                                    source.source_type,
-                                    item,
-                                    observed_at=run.started_at or datetime.now(UTC),
-                                    persist_new=not (filter_active and off_target),
-                                )
-                            except (TypeError, ValueError) as item_error:
-                                run.record_items(invalid=1)
-                                error = AcquisitionError(
-                                    AcquisitionErrorCode.INVALID_ITEM,
-                                    str(item_error),
-                                    retryable=False,
-                                )
-                                continue
-                            finally:
-                                # One mutation unit per item: evidence, occurrence and
-                                # presence commit together and release the claim row lock.
-                                if scope is not None:
-                                    self.session.commit()
-                            if created:
-                                run.record_items(persisted=1)
-                            else:
-                                run.record_items(skipped=1)
-                            logger.info(
-                                "source collection item processed",
-                                extra={
-                                    "job": "collect",
-                                    "source_id": str(source.id),
-                                    "run_id": str(run.id),
-                                    "state": "progress",
-                                    "items_seen": run.items_seen,
-                                    "items_persisted": run.items_persisted,
-                                    "http_requests": run_telemetry.http_requests,
-                                    "last_activity_at": datetime.now(UTC).isoformat(),
-                                },
-                            )
-                            if source.source_type == "tavily_search":
-                                tavily_proposal_items.append(item)
-                            elif source.source_type == "hacker_news":
-                                hn_proposal = _hn_proposal_item(item)
-                                if hn_proposal is not None:
-                                    hn_proposal_items.append(hn_proposal)
-                            if item.cursor is not None:
-                                last_cursor = item.cursor
-                    except asyncio.CancelledError:
+                            if scope is not None and scope.lost:
+                                scope.fence(self.session)  # raises: the lease is gone
+                            if not pending:
+                                pending_since = time.monotonic()
+                            pending.append((item, not (filter_active and off_target)))
+                            if (
+                                len(pending) >= _ITEM_BATCH_SIZE
+                                or time.monotonic() - pending_since >= _ITEM_BATCH_MAX_SECONDS
+                            ):
+                                persist_pending()
+                            # Items already in memory never suspend this coroutine, so without
+                            # this yield the lease renewal task starved until the claim
+                            # expired (F53-14). No claim row lock is held here: the batch fence
+                            # and commit both happen inside `persist_pending`.
+                            await asyncio.sleep(0)
+                        persist_pending()
+                    except FencedWriteRejected:
+                        raise  # a stale execution writes nothing, pending items included
+                    except asyncio.CancelledError as cancelled:
+                        flush_after_failure(cancelled)
                         logger.warning(
                             "source collection cleanup pending",
                             extra={
                                 "job": "collect",
-                                "source_id": str(source.id),
+                                "source_id": str(source_id),
                                 "run_id": str(run.id),
                                 "state": "cleanup_pending",
                                 "last_activity_at": datetime.now(UTC).isoformat(),
                             },
                         )
+                        raise
+                    except BaseException as failure:
+                        # A timeout or collector failure still keeps what was read so far.
+                        flush_after_failure(failure)
                         raise
             if deadline.expired():
                 raise TimeoutError("source collection deadline exceeded")
@@ -2076,6 +2200,54 @@ class AcquisitionService:
             return item
         return apply_extracted_description(item, results[0])
 
+    def _persist_items(
+        self,
+        source_id: UUID,
+        run_id: UUID,
+        source_type: str,
+        entries: list[tuple[CollectedItem, bool]],
+        *,
+        observed_at: datetime,
+    ) -> list[bool | Exception]:
+        """Persist `(item, persist_new)` pairs in order; per item, whether it created evidence.
+
+        An item that can never be stored yields its `ValueError`/`TypeError` instead. The
+        real repository writes the whole batch in a fixed number of statements; any other
+        repository (in-memory adapters) is driven one item at a time as before.
+        """
+        results: list[bool | Exception] = [False] * len(entries)
+        if not isinstance(self.repository, AcquisitionRepository):
+            for index, (item, persist_new) in enumerate(entries):
+                try:
+                    results[index] = self._persist_item(
+                        source_id,
+                        run_id,
+                        source_type,
+                        item,
+                        observed_at=observed_at,
+                        persist_new=persist_new,
+                    )
+                except (TypeError, ValueError) as invalid:
+                    results[index] = invalid
+            return results
+        prepared: list[tuple[int, RawEvidenceWrite]] = []
+        for index, (item, persist_new) in enumerate(entries):
+            try:
+                prepared.append(
+                    (index, self._prepare_write(source_type, item, persist_new=persist_new))
+                )
+            except (TypeError, ValueError) as invalid:
+                results[index] = invalid
+        created = self.repository.record_evidence_batch(
+            source_id=source_id,
+            run_id=run_id,
+            writes=[write for _, write in prepared],
+            observed_at=observed_at,
+        )
+        for (index, _), was_created in zip(prepared, created, strict=True):
+            results[index] = was_created
+        return results
+
     def _persist_item(
         self,
         source_id: UUID,
@@ -2086,32 +2258,21 @@ class AcquisitionService:
         observed_at: datetime,
         persist_new: bool = True,
     ) -> bool:
-        if item.source_type.strip().casefold() != source_type:
-            raise ValueError("collected item source type does not match its source")
-        payload = _json_object(item.raw_payload)
-        payload_hash = canonical_payload_hash(payload)
-        identity_key = _identity_key(
-            item,
-            payload_hash,
-            allow_payload_identity=source_type == "manual",
-        )
-        metadata = _json_object(item.metadata)
-        semantic_payload = collected_item_v1(item, metadata)
-        hashes = content_hashes(semantic_payload, raw_hash=payload_hash)
+        write = self._prepare_write(source_type, item, persist_new=persist_new)
         envelope_lookup = getattr(self.repository, "raw_item_by_envelope", None)
         existing = (
             envelope_lookup(
                 source_id=source_id,
-                identity_key=identity_key,
-                payload_hash=payload_hash,
-                semantic_hash=hashes.semantic_hash,
-                semantic_hash_version=hashes.semantic_hash_version,
+                identity_key=write.identity_key,
+                payload_hash=write.payload_hash,
+                semantic_hash=write.semantic_hash,
+                semantic_hash_version=write.semantic_hash_version,
             )
             if envelope_lookup is not None
             else self.repository.identical_raw_item_exists(
                 source_id=source_id,
-                identity_key=identity_key,
-                payload_hash=payload_hash,
+                identity_key=write.identity_key,
+                payload_hash=write.payload_hash,
             )
         )
         if existing:
@@ -2131,7 +2292,7 @@ class AcquisitionService:
             # complete run would stop seeing it and close it as absent.
             latest_lookup = getattr(self.repository, "latest_raw_item_by_identity", None)
             latest = (
-                latest_lookup(source_id=source_id, identity_key=identity_key)
+                latest_lookup(source_id=source_id, identity_key=write.identity_key)
                 if latest_lookup is not None
                 else None
             )
@@ -2143,25 +2304,24 @@ class AcquisitionService:
                     content_hash_matched=False,
                 )
             return False
-        metadata[COLLECTED_ITEM_V1_KEY] = collected_item_v1(item, metadata)
         try:
             with self.session.begin_nested():
                 raw_item = RawItemModel(
                     source_run_id=run_id,
                     source_definition_id=source_id,
-                    external_id=item.external_id,
-                    canonical_url=item.url,
-                    identity_key=identity_key,
-                    payload_hash=payload_hash,
-                    semantic_hash=hashes.semantic_hash,
-                    semantic_hash_version=hashes.semantic_hash_version,
-                    content_type=_string_or_none(metadata.get("content_type")),
-                    parser_version=_string_or_none(metadata.get("parser_version")),
-                    item_metadata=metadata,
+                    external_id=write.external_id,
+                    canonical_url=write.canonical_url,
+                    identity_key=write.identity_key,
+                    payload_hash=write.payload_hash,
+                    semantic_hash=write.semantic_hash,
+                    semantic_hash_version=write.semantic_hash_version,
+                    content_type=write.content_type,
+                    parser_version=write.parser_version,
+                    item_metadata=dict(write.metadata),
                 )
                 # Envelope and body are written together: an envelope whose content never
                 # arrived would be indistinguishable from one retention has expired.
-                raw_item.payload_record = RawItemPayloadModel(payload=payload)
+                raw_item.payload_record = RawItemPayloadModel(payload=dict(write.payload))
                 self.session.add(raw_item)
                 self.session.flush()
                 record_observation = getattr(self.repository, "record_presence_observation", None)
@@ -2175,6 +2335,49 @@ class AcquisitionService:
         except IntegrityError:
             return False
         return True
+
+    @staticmethod
+    def _prepare_write(
+        source_type: str, item: CollectedItem, *, persist_new: bool
+    ) -> RawEvidenceWrite:
+        """Validate one item and reduce it to the rows it would become; touches no database.
+
+        Raises `ValueError`/`TypeError` for an item that can never be stored (the caller
+        counts it invalid).
+        """
+        if item.source_type.strip().casefold() != source_type:
+            raise ValueError("collected item source type does not match its source")
+        payload = _json_object(item.raw_payload)
+        metadata = _json_object(item.metadata)
+        semantic_payload = collected_item_v1(item, metadata)
+        if (
+            _contains_nul(payload)
+            or _contains_nul(metadata)
+            or _contains_nul(semantic_payload)
+            or _contains_nul([item.external_id, item.url])
+        ):
+            # PostgreSQL cannot store NUL in text or JSONB; one such item must not fail a batch.
+            raise ValueError("collected item contains a NUL character")
+        payload_hash = canonical_payload_hash(payload)
+        identity_key = _identity_key(
+            item,
+            payload_hash,
+            allow_payload_identity=source_type == "manual",
+        )
+        hashes = content_hashes(semantic_payload, raw_hash=payload_hash)
+        return RawEvidenceWrite(
+            identity_key=identity_key,
+            payload_hash=payload_hash,
+            semantic_hash=hashes.semantic_hash,
+            semantic_hash_version=hashes.semantic_hash_version,
+            external_id=item.external_id,
+            canonical_url=item.url,
+            content_type=_string_or_none(metadata.get("content_type")),
+            parser_version=_string_or_none(metadata.get("parser_version")),
+            metadata={**metadata, COLLECTED_ITEM_V1_KEY: semantic_payload},
+            payload=payload,
+            persist_new=persist_new,
+        )
 
     @staticmethod
     def _copy_run(run: SourceRun, model: SourceRunModel) -> None:
@@ -2235,6 +2438,16 @@ def collected_item_v1(
         "parser_version": _string_or_none(source_metadata.get("parser_version")),
         "metadata": source_metadata,
     }
+
+
+def _contains_nul(value: object) -> bool:
+    if isinstance(value, str):
+        return "\x00" in value
+    if isinstance(value, Mapping):
+        return any(_contains_nul(key) or _contains_nul(item) for key, item in value.items())
+    if isinstance(value, (list, tuple)):
+        return any(_contains_nul(item) for item in value)
+    return False
 
 
 def _json_object(value: Mapping[str, Any]) -> dict[str, Any]:

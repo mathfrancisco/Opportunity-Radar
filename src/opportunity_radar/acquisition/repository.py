@@ -1,15 +1,16 @@
 """Persistence queries for Acquisition."""
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import case, func, select, update
+from sqlalchemy import Table, and_, case, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, lazyload, selectinload
 
 from opportunity_radar.acquisition.models import (
     HostBudgetStateModel,
@@ -40,6 +41,39 @@ class SourceClaimUnavailable(RuntimeError):
 
 class FencedWriteRejected(RuntimeError):
     """This execution's fencing generation is no longer current."""
+
+
+@dataclass(frozen=True, slots=True)
+class RawEvidenceWrite:
+    """One collected item, reduced to what the evidence tables store (F53-14)."""
+
+    identity_key: str
+    payload_hash: str
+    semantic_hash: str | None
+    semantic_hash_version: str | None
+    external_id: str | None
+    canonical_url: str | None
+    content_type: str | None
+    parser_version: str | None
+    metadata: Mapping[str, Any]
+    payload: Mapping[str, Any]
+    #: False for an off-target posting: it may only confirm presence of stored evidence.
+    persist_new: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class _Envelope:
+    """The part of a stored (or about to be stored) raw item presence tracking needs."""
+
+    id: UUID
+    identity_key: str
+    external_id: str | None
+    canonical_url: str | None
+    #: Orders versions of one identity; a row planned by this batch is newer than any stored.
+    recency: tuple[datetime, UUID]
+
+
+_PLANNED_RECENCY = datetime.max.replace(tzinfo=UTC)
 
 
 @dataclass(frozen=True, slots=True)
@@ -419,13 +453,16 @@ class AcquisitionRepository:
     ) -> RawItemModel | None:
         """Return only evidence with the same immutable parser interpretation."""
         return self.session.scalar(
-            select(RawItemModel).where(
+            select(RawItemModel)
+            .where(
                 RawItemModel.source_definition_id == source_id,
                 RawItemModel.identity_key == identity_key,
                 RawItemModel.payload_hash == payload_hash,
                 RawItemModel.semantic_hash == semantic_hash,
                 RawItemModel.semantic_hash_version == semantic_hash_version,
             )
+            # Presence needs the envelope only; never pull the stored body back per item.
+            .options(lazyload(RawItemModel.payload_record))
         )
 
     def latest_raw_item_by_identity(
@@ -503,6 +540,253 @@ class AcquisitionRepository:
                 self.session.flush()
         except IntegrityError:
             pass
+
+    def record_evidence_batch(
+        self,
+        *,
+        source_id: UUID,
+        run_id: UUID,
+        writes: Sequence[RawEvidenceWrite],
+        observed_at: datetime,
+    ) -> list[bool]:
+        """Store a run's items and their presence observations in a fixed number of statements.
+
+        Same decisions, item by item and in order, as one lookup-then-insert per item: an
+        identical stored envelope only gains an observation; an off-target item only confirms
+        its newest stored evidence; anything else becomes new immutable evidence. The
+        existing evidence and occurrences of the whole batch are read in two queries, and the
+        rows are written with `INSERT ... ON CONFLICT DO NOTHING` (a concurrent writer of the
+        same evidence or observation wins, exactly as the savepoint-and-ignore it replaces).
+        Returns, per write, whether it created new evidence. The caller owns the transaction.
+        """
+        if not writes:
+            return []
+        stored = self._stored_envelopes(source_id, {write.identity_key for write in writes})
+        exact: dict[tuple[str, str, str | None, str | None], _Envelope] = {}
+        latest: dict[str, _Envelope] = {}
+        for key, envelope in stored:
+            exact[key] = envelope
+            current = latest.get(envelope.identity_key)
+            if current is None or envelope.recency > current.recency:
+                latest[envelope.identity_key] = envelope
+
+        created = [False] * len(writes)
+        observed: list[tuple[_Envelope, bool]] = []
+        planned: list[tuple[int, _Envelope, RawEvidenceWrite]] = []
+        for index, write in enumerate(writes):
+            key = (
+                write.identity_key,
+                write.payload_hash,
+                write.semantic_hash,
+                write.semantic_hash_version,
+            )
+            known = exact.get(key)
+            if known is not None:
+                observed.append((known, True))
+                continue
+            if not write.persist_new:
+                newest = latest.get(write.identity_key)
+                if newest is not None:
+                    observed.append((newest, False))
+                continue
+            envelope = _Envelope(
+                uuid4(),
+                write.identity_key,
+                write.external_id,
+                write.canonical_url,
+                (_PLANNED_RECENCY, uuid4()),
+            )
+            exact[key] = envelope
+            latest[write.identity_key] = envelope
+            planned.append((index, envelope, write))
+            observed.append((envelope, False))
+            created[index] = True
+
+        stored_ids = {envelope.id for _, envelope in stored}
+        if planned:
+            inserted = self._insert_raw_items(source_id, run_id, planned)
+            lost = [
+                (index, envelope) for index, envelope, _ in planned if envelope.id not in inserted
+            ]
+            for index, _ in lost:
+                created[index] = False  # lost a race to identical evidence: nothing to add
+            stored_ids |= inserted
+            if lost:
+                # The winner's row is the evidence these items observe: point them at it.
+                keys = {write.identity_key for _, _, write in planned}
+                winners = dict(self._stored_envelopes(source_id, keys))
+                remap: dict[UUID, _Envelope] = {}
+                for index, envelope in lost:
+                    write = writes[index]
+                    winner = winners.get(
+                        (
+                            write.identity_key,
+                            write.payload_hash,
+                            write.semantic_hash,
+                            write.semantic_hash_version,
+                        )
+                    )
+                    if winner is not None:
+                        remap[envelope.id] = winner
+                        stored_ids.add(winner.id)
+                observed = [(remap.get(envelope.id, envelope), m) for envelope, m in observed]
+        self._insert_observations(
+            source_id,
+            run_id,
+            [(envelope, matched) for envelope, matched in observed if envelope.id in stored_ids],
+            observed_at,
+        )
+        return created
+
+    def _stored_envelopes(
+        self, source_id: UUID, identity_keys: set[str]
+    ) -> list[tuple[tuple[str, str, str | None, str | None], _Envelope]]:
+        rows = self.session.execute(
+            select(
+                RawItemModel.id,
+                RawItemModel.identity_key,
+                RawItemModel.payload_hash,
+                RawItemModel.semantic_hash,
+                RawItemModel.semantic_hash_version,
+                RawItemModel.external_id,
+                RawItemModel.canonical_url,
+                RawItemModel.fetched_at,
+            ).where(
+                RawItemModel.source_definition_id == source_id,
+                RawItemModel.identity_key.in_(identity_keys),
+            )
+        )
+        return [
+            (
+                (identity_key, payload_hash, semantic_hash, semantic_version),
+                _Envelope(raw_id, identity_key, external_id, canonical_url, (fetched_at, raw_id)),
+            )
+            for (
+                raw_id,
+                identity_key,
+                payload_hash,
+                semantic_hash,
+                semantic_version,
+                external_id,
+                canonical_url,
+                fetched_at,
+            ) in rows
+        ]
+
+    def _insert_raw_items(
+        self,
+        source_id: UUID,
+        run_id: UUID,
+        planned: Sequence[tuple[int, _Envelope, RawEvidenceWrite]],
+    ) -> set[UUID]:
+        """Envelope and body are written together: an envelope whose content never arrived
+        would be indistinguishable from one retention has expired."""
+        raw_table = cast(Table, RawItemModel.__table__)
+        payload_table = cast(Table, RawItemPayloadModel.__table__)
+        inserted = set(
+            self.session.scalars(
+                pg_insert(raw_table)
+                .values(
+                    [
+                        {
+                            "id": envelope.id,
+                            "source_run_id": run_id,
+                            "source_definition_id": source_id,
+                            "external_id": write.external_id,
+                            "canonical_url": write.canonical_url,
+                            "identity_key": write.identity_key,
+                            "payload_hash": write.payload_hash,
+                            "semantic_hash": write.semantic_hash,
+                            "semantic_hash_version": write.semantic_hash_version,
+                            "content_type": write.content_type,
+                            "parser_version": write.parser_version,
+                            "metadata": dict(write.metadata),
+                            # Not the transaction's `now()`: one transaction spans a batch.
+                            "fetched_at": func.clock_timestamp(),
+                        }
+                        for _, envelope, write in planned
+                    ]
+                )
+                .on_conflict_do_nothing()
+                .returning(raw_table.c.id)
+            )
+        )
+        bodies = [
+            {
+                "raw_item_id": envelope.id,
+                "payload": dict(write.payload),
+                "stored_at": func.clock_timestamp(),
+            }
+            for _, envelope, write in planned
+            if envelope.id in inserted
+        ]
+        if bodies:
+            self.session.execute(pg_insert(payload_table).values(bodies))
+        return inserted
+
+    def _insert_observations(
+        self,
+        source_id: UUID,
+        run_id: UUID,
+        observations: Sequence[tuple[_Envelope, bool]],
+        observed_at: datetime,
+    ) -> None:
+        if not observations:
+            return
+        envelopes = [envelope for envelope, _ in observations]
+        external_ids = {e.external_id for e in envelopes if e.external_id}
+        urls = {e.canonical_url for e in envelopes if e.canonical_url}
+        matches = [SourceOccurrenceModel.raw_item_id.in_({e.id for e in envelopes})]
+        if external_ids:
+            matches.append(
+                and_(
+                    SourceOccurrenceModel.source_definition_id == source_id,
+                    SourceOccurrenceModel.external_id.in_(external_ids),
+                )
+            )
+        if urls:
+            matches.append(
+                and_(
+                    SourceOccurrenceModel.source_definition_id == source_id,
+                    SourceOccurrenceModel.source_url.in_(urls),
+                )
+            )
+        by_raw: dict[UUID, SourceOccurrenceModel] = {}
+        by_external: dict[str, SourceOccurrenceModel] = {}
+        by_url: dict[str, SourceOccurrenceModel] = {}
+        for occurrence in self.session.scalars(select(SourceOccurrenceModel).where(or_(*matches))):
+            by_raw.setdefault(occurrence.raw_item_id, occurrence)
+            if occurrence.source_definition_id == source_id:
+                if occurrence.external_id:
+                    by_external.setdefault(occurrence.external_id, occurrence)
+                if occurrence.source_url:
+                    by_url.setdefault(occurrence.source_url, occurrence)
+
+        rows: list[dict[str, Any]] = []
+        for envelope, matched in observations:
+            occurrence = by_raw.get(envelope.id)
+            if occurrence is None and envelope.external_id:
+                occurrence = by_external.get(envelope.external_id)
+            if occurrence is None and envelope.canonical_url:
+                occurrence = by_url.get(envelope.canonical_url)
+            if occurrence is not None and observed_at > occurrence.last_seen_at:
+                occurrence.last_seen_at = observed_at
+                occurrence.last_seen_run_id = run_id
+            rows.append(
+                {
+                    "id": uuid4(),
+                    "source_occurrence_id": occurrence.id if occurrence is not None else None,
+                    "source_run_id": run_id,
+                    "raw_item_id": envelope.id,
+                    "observed_at": observed_at,
+                    "content_hash_matched": matched,
+                }
+            )
+        self.session.execute(
+            pg_insert(cast(Table, SourceOccurrenceObservationModel.__table__))
+            .values(rows)
+            .on_conflict_do_nothing()
+        )
 
     def resumable_run(self, run_id: UUID, *, source_id: UUID) -> SourceRunModel | None:
         """A named run of this source whose persisted prefix a caller may resume.
