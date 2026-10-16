@@ -11,7 +11,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError, InterfaceError, OperationalError
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import RawItemModel, SourceRunModel
@@ -55,7 +56,7 @@ from opportunity_radar.platform.logging import get_logger
 
 logger = get_logger("opportunity_radar.opportunities")
 
-NORMALIZER_VERSION = "v6"
+NORMALIZER_VERSION = "v7"
 
 
 class PayloadExpiredError(NormalizationError):
@@ -261,6 +262,12 @@ class OpportunityService:
                 occurrence.source_updated_at = candidate.source_updated_at
                 occurrence.source_valid_through = candidate.valid_through
         else:
+            stale = self._stale_without_occurrence(raw_item, candidate.published_at)
+            if stale is not None:
+                self.session.add(stale)
+                self.session.commit()
+                self.session.refresh(stale)
+                return stale
             url_match = self.repository.opportunity_by_normalized_url(candidate.normalized_url)
             if url_match is not None:
                 opportunity = url_match
@@ -371,6 +378,71 @@ class OpportunityService:
         self.session.refresh(result)
         return result
 
+    def _record_unexpected_failure(
+        self, raw_item_id: UUID, error: Exception
+    ) -> NormalizationResultModel:
+        result = NormalizationResultModel(
+            raw_item_id=raw_item_id,
+            status="FAILED",
+            normalizer_version=NORMALIZER_VERSION,
+            identity_decision=None,
+            reasons=[{"code": "NORMALIZATION_ERROR", "error": type(error).__name__}],
+            error_summary=f"unexpected {type(error).__name__} while normalizing",
+        )
+        try:
+            self.session.add(result)
+            self.session.commit()
+            self.session.refresh(result)
+        except Exception:
+            self.session.rollback()
+            raise
+        return result
+
+    def _stale_without_occurrence(
+        self, raw_item: RawItemModel, published_at: datetime | None
+    ) -> NormalizationResultModel | None:
+        """R55-E1 cutoff for a REPROCESSED item that has no occurrence.
+
+        Only an item that already has a result from an earlier normalizer version qualifies:
+        first-time normalization is never skipped (a fresh item may wait in the backlog for
+        days). Such an item is not turned into an opportunity when its posting is older than
+        `INGEST_MAX_AGE_DAYS`, judged like the collector does: by the published date, else by
+        when its identity was first stored (the oldest raw item of that source and identity).
+        0 disables it."""
+        max_age_days = get_settings().ingest_max_age_days
+        if max_age_days <= 0:
+            return None
+        reprocessed = self.session.scalar(
+            select(NormalizationResultModel.id)
+            .where(
+                NormalizationResultModel.raw_item_id == raw_item.id,
+                NormalizationResultModel.normalizer_version != NORMALIZER_VERSION,
+            )
+            .limit(1)
+        )
+        if reprocessed is None:
+            return None
+        reference = published_at or self.session.scalar(
+            select(func.min(RawItemModel.fetched_at)).where(
+                RawItemModel.source_definition_id == raw_item.source_definition_id,
+                RawItemModel.identity_key == raw_item.identity_key,
+            )
+        )
+        if reference is None:
+            return None
+        if reference.tzinfo is None:
+            reference = reference.replace(tzinfo=UTC)
+        if reference >= datetime.now(UTC) - timedelta(days=max_age_days):
+            return None
+        return NormalizationResultModel(
+            raw_item_id=raw_item.id,
+            status="FAILED",
+            normalizer_version=NORMALIZER_VERSION,
+            identity_decision=None,
+            reasons=[{"code": "STALE_POSTING_SKIPPED"}],
+            error_summary="posting older than the ingestion window; no opportunity created",
+        )
+
     def _short_circuit_cosmetic_change(
         self, raw_item: RawItemModel
     ) -> NormalizationResultModel | None:
@@ -457,13 +529,43 @@ class OpportunityService:
             for raw_item in self.repository.run_raw_items(source_run_id)
         ]
 
-    def normalize_pending(self, limit: int = 100) -> NormalizationBatch:
+    def normalize_pending(
+        self, limit: int = 100, *, should_stop: Callable[[], bool] | None = None
+    ) -> NormalizationBatch:
+        """Normalize up to `limit` pending items; `should_stop` is read before each one.
+
+        A batch cut short by `should_stop` has fewer results than `limit`, which the
+        looping caller reads as "stop", so it checks `should_stop` itself as well.
+        """
         if limit < 1 or limit > 500:
             raise ValueError("normalization batch limit must be between 1 and 500")
-        results = [
-            self.normalize(raw_item_id)
-            for raw_item_id in self.repository.pending_raw_item_ids(limit, NORMALIZER_VERSION)
-        ]
+        results: list[NormalizationResultModel] = []
+        for raw_item_id in self.repository.pending_raw_item_ids(limit, NORMALIZER_VERSION):
+            if should_stop is not None and should_stop():
+                break
+            try:
+                results.append(self.normalize(raw_item_id))
+            except IntegrityError:
+                # A concurrent normalization of the same item (or identity) won the race.
+                # That is not the item's fault: use the result that exists, else leave it
+                # pending for the next pass. Never recorded as a permanent failure.
+                self.session.rollback()
+                existing = self.repository.normalization_result(raw_item_id, NORMALIZER_VERSION)
+                if existing is not None:
+                    results.append(existing)
+            except (OperationalError, InterfaceError):
+                raise  # the database is unreachable: nothing to record, and not the item's fault
+            except RawItemNotFoundError:
+                raise
+            except Exception as error:
+                # A poison item must not stall the queue: it would stay pending and fail
+                # every pass. Record it as FAILED for this version and go on.
+                self.session.rollback()
+                logger.exception(
+                    "raw item normalization failed",
+                    extra={"job": "normalize", "raw_item_id": str(raw_item_id)},
+                )
+                results.append(self._record_unexpected_failure(raw_item_id, error))
         return NormalizationBatch(
             processed=len(results),
             succeeded=sum(item.status == "SUCCEEDED" for item in results),
