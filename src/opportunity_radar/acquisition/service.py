@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 from sqlalchemy import func, select, update
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import DataError, DBAPIError, IntegrityError, StatementError
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.alerts import (
@@ -1556,44 +1556,58 @@ class AcquisitionService:
                 # claim row lock (taken by the fence) on an aborted transaction, and the
                 # renewal task would then wait on it from this same thread, forever.
                 try:
-                    if scope is not None:
-                        scope.fence(self.session)
                     if scope is None:
                         # No per-batch commit: roll back this batch only, not the run.
                         with self.session.begin_nested():
-                            outcomes = self._persist_items(
+                            return self._persist_items(
                                 source_id, run.id, source_type, batch, observed_at=observed_at
                             )
-                    else:
-                        outcomes = self._persist_items(
-                            source_id, run.id, source_type, batch, observed_at=observed_at
-                        )
-                        self.session.commit()
+                    outcomes = self._persist_items(
+                        source_id, run.id, source_type, batch, observed_at=observed_at
+                    )
+                    self.session.commit()
                     return outcomes
-                except FencedWriteRejected:
-                    raise  # `fence` already rolled back
                 except BaseException:
                     if scope is not None:
                         self.session.rollback()
                     raise
 
-            try:
-                outcomes = write(entries)
-            except FencedWriteRejected:
-                raise
-            except SQLAlchemyError:
-                # One item the database refuses (data it cannot store) must not sink its
-                # batch mates: retry item by item and count only the refused one invalid.
-                outcomes = []
-                for entry in entries:
+            def attempt(batch: list[tuple[CollectedItem, bool]]) -> list[bool | Exception] | None:
+                """Fence, then write; `None` only when the database refused the data itself.
+
+                The fence sits outside the refusal handling: a lost lease or a database
+                failure there is never an invalid item. Any other database error (connection,
+                operational) propagates and fails the run as retryable.
+                """
+                if scope is not None:
                     try:
-                        outcomes.extend(write([entry]))
+                        scope.fence(self.session)
                     except FencedWriteRejected:
+                        raise  # `fence` already rolled back
+                    except BaseException:
+                        self.session.rollback()
                         raise
-                    except SQLAlchemyError as refused:
-                        outcomes.append(
-                            ValueError(f"item could not be stored ({type(refused).__name__})")
-                        )
+                try:
+                    return write(batch)
+                except StatementError as refused:
+                    if isinstance(refused, DBAPIError) and not isinstance(
+                        refused, (DataError, IntegrityError)
+                    ):
+                        raise
+                    return None
+
+            batch_outcomes = attempt(entries)
+            if batch_outcomes is None:
+                # One item the database refuses must not sink its batch mates: retry item by
+                # item and count only the refused one invalid.
+                outcomes: list[bool | Exception] = []
+                for entry in entries:
+                    single = attempt([entry])
+                    outcomes.append(
+                        ValueError("item could not be stored") if single is None else single[0]
+                    )
+            else:
+                outcomes = batch_outcomes
             for (item, _), outcome in zip(entries, outcomes, strict=True):
                 if isinstance(outcome, Exception):
                     run.record_items(invalid=1)
@@ -2334,8 +2348,13 @@ class AcquisitionService:
         if item.source_type.strip().casefold() != source_type:
             raise ValueError("collected item source type does not match its source")
         payload = _json_object(item.raw_payload)
-        if _contains_nul(payload) or _contains_nul(dict(item.metadata)) or _contains_nul(
-            [item.external_id, item.url]
+        metadata = _json_object(item.metadata)
+        semantic_payload = collected_item_v1(item, metadata)
+        if (
+            _contains_nul(payload)
+            or _contains_nul(metadata)
+            or _contains_nul(semantic_payload)
+            or _contains_nul([item.external_id, item.url])
         ):
             # PostgreSQL cannot store NUL in text or JSONB; one such item must not fail a batch.
             raise ValueError("collected item contains a NUL character")
@@ -2345,8 +2364,6 @@ class AcquisitionService:
             payload_hash,
             allow_payload_identity=source_type == "manual",
         )
-        metadata = _json_object(item.metadata)
-        semantic_payload = collected_item_v1(item, metadata)
         hashes = content_hashes(semantic_payload, raw_hash=payload_hash)
         return RawEvidenceWrite(
             identity_key=identity_key,

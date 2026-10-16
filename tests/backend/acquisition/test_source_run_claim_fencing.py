@@ -1476,3 +1476,35 @@ def test_a_lost_insert_race_still_observes_the_winning_row(
 
     assert (second.items_persisted, second.items_skipped) == (0, 1)
     assert board.observed_external_ids(second.id) == {"raced"}
+
+
+def test_an_operational_error_fails_the_run_instead_of_marking_items_invalid(
+    board: _Board, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sqlalchemy.exc import OperationalError
+
+    def connection_lost(*args: object, **kwargs: object) -> list[bool]:
+        raise OperationalError("INSERT", {}, Exception("connection lost"))
+
+    monkeypatch.setattr(AcquisitionRepository, "record_evidence_batch", connection_lost)
+
+    run = board.run_one(board.board_of("a", "b"))
+
+    assert run.status == "FAILED" and run.error_code == "UNKNOWN_EXTERNAL_ERROR"
+    assert run.items_invalid == 0
+
+
+def test_a_nul_character_in_the_title_or_description_is_an_invalid_item(
+    board: _Board,
+) -> None:
+    async def script(request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        del request
+        yield board.item("ok")
+        yield replace(board.item("nul-title"), title="bad\x00title")
+        yield replace(board.item("nul-description"), description="bad\x00text")
+        yield replace(board.item("nul-location"), location_text="bad\x00place")
+
+    run = board.run_one(board.collector(script))
+
+    assert (run.items_seen, run.items_persisted, run.items_invalid) == (4, 1, 3)
+    assert board.external_ids() == {"ok"}
