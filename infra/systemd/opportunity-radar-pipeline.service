@@ -18,3 +18,4 @@ TimeoutStartSec=3900
 TimeoutStopSec=120
 Restart=no
 KillSignal=SIGTERM
+NoNewPrivileges=yes

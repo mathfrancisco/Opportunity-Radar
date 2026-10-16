@@ -46,6 +46,7 @@ def test_service_has_finite_oneshot_contract() -> None:
     assert service["Service"]["Type"] == "oneshot"
     assert service["Service"]["Restart"] == "no"
     assert service["Service"]["KillSignal"] == "SIGTERM"
+    assert service["Service"]["NoNewPrivileges"] == "yes"
     assert service["Unit"]["Requires"] == "docker.service"
     assert service["Unit"]["After"] == "docker.service network-online.target"
     assert service["Service"]["User"] == "root"
