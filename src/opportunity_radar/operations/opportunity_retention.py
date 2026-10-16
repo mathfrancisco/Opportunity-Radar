@@ -45,19 +45,44 @@ from opportunity_radar.platform.logging import get_logger
 DEFAULT_OPPORTUNITY_RETENTION_DAYS = 7
 DEFAULT_AI_CALL_RECORD_RETENTION_DAYS = 7
 JOB_NAME = "opportunity_retention"
+#: Tracks the once-a-day *dry run* the pipeline does while applying is not enabled, apart
+#: from the applied runs so that one never counts as the other.
+DRY_RUN_JOB_NAME = "opportunity_retention_dry_run"
 
 logger = get_logger("opportunity_radar.operations.opportunity_retention")
 
-_AGE = "coalesce(o.published_at, o.first_seen_at)"
-_HAS_APPLICATION = (
-    "EXISTS (SELECT 1 FROM crm.application_process p WHERE p.opportunity_id = o.id)"
-)
-_HAS_RELEVANT_MARK = (
-    "EXISTS (SELECT 1 FROM opportunities.relevance_mark m "
-    "WHERE m.opportunity_id = o.id AND m.relevant)"
+
+
+def _age(a: str) -> str:
+    return f"coalesce({a}.published_at, {a}.first_seen_at)"
+
+
+def _has_application(a: str) -> str:
+    return f"EXISTS (SELECT 1 FROM crm.application_process p WHERE p.opportunity_id = {a}.id)"
+
+
+def _has_relevant_mark(a: str) -> str:
+    return (
+        "EXISTS (SELECT 1 FROM opportunities.relevance_mark m "
+        f"WHERE m.opportunity_id = {a}.id AND m.relevant)"
+    )
+
+
+def _protected(a: str) -> str:
+    return f"{_has_application(a)} OR {_has_relevant_mark(a)}"
+
+
+_AGE = _age("o")
+_HAS_APPLICATION = _has_application("o")
+_HAS_RELEVANT_MARK = _has_relevant_mark("o")
+# `duplicate_of` is SET NULL: deleting a survivor would silently orphan a duplicate that
+# stays. A survivor is kept while any opportunity pointing at it is itself kept.
+_HAS_KEPT_DUPLICATE = (
+    "EXISTS (SELECT 1 FROM opportunities.opportunity k WHERE k.duplicate_of = o.id AND ("
+    f"{_age('k')} >= :cutoff OR {_protected('k')}))"
 )
 _ELIGIBLE = (
-    f"{_AGE} < :cutoff AND NOT {_HAS_APPLICATION} AND NOT {_HAS_RELEVANT_MARK}"
+    f"{_AGE} < :cutoff AND NOT ({_protected('o')}) AND NOT {_HAS_KEPT_DUPLICATE}"
 )
 
 _LOCK_BATCH = f"""
@@ -66,6 +91,13 @@ WHERE {_ELIGIBLE}
 ORDER BY {_AGE}, o.id
 LIMIT :batch_size
 FOR UPDATE OF o SKIP LOCKED
+"""
+
+# Second statement of a batch: a fresh snapshot of the rows the lock statement returned, so
+# an application or mark committed between the two is honoured.
+_RECHECK = f"""
+SELECT o.id FROM opportunities.opportunity o
+WHERE o.id = ANY(:ids) AND NOT ({_protected("o")}) AND NOT {_HAS_KEPT_DUPLICATE}
 """
 
 # Tables that reference the opportunity directly and go away with it (cascade or explicit).
@@ -106,6 +138,8 @@ class OpportunityRetentionReport:
     #: "done today" for the pipeline stage.
     complete: bool = True
     stopped: bool = False
+    #: Step name -> exception class name, for steps that raised (no messages, no content).
+    errors: dict[str, str] = field(default_factory=dict)
 
     @property
     def opportunities(self) -> int:
@@ -143,11 +177,16 @@ def run_opportunity_retention(
         dry_run=dry_run, retention_days=retention_days, cutoff=cutoff
     )
     if cutoff is not None:
-        if dry_run:
-            _count_all(engine, cutoff, report)
-        else:
-            _delete_all(engine, cutoff, batch_size, max_batches, stop, report)
-    if not report.stopped and report.complete or dry_run:
+        try:
+            if dry_run:
+                _count_all(engine, cutoff, report)
+            else:
+                _delete_all(engine, cutoff, batch_size, max_batches, stop, report)
+        except Exception as error:
+            _fail(report, "opportunities", error)
+    # The two purges do not depend on how the opportunity delete went, only on nobody
+    # having asked to stop; each captures its own error.
+    if not report.stopped:
         _housekeeping(
             engine,
             report,
@@ -171,6 +210,15 @@ def run_opportunity_retention(
     return report
 
 
+def _fail(report: OpportunityRetentionReport, step: str, error: Exception) -> None:
+    report.errors[step] = type(error).__name__
+    report.complete = False
+    logger.warning(
+        "opportunity retention step failed",
+        extra={"job": JOB_NAME, "step": step, "error": type(error).__name__},
+    )
+
+
 def _delete_all(
     engine: Engine,
     cutoff: datetime,
@@ -187,15 +235,17 @@ def _delete_all(
             report.complete = False
             report.stopped = True
             return
-        counts = _delete_batch(engine, cutoff, batch_size)
-        if not counts:
+        locked, counts = _delete_batch(engine, cutoff, batch_size)
+        if not locked:
             return
         report.batches += 1
         for table, number in counts.items():
             report.rows[table] = report.rows.get(table, 0) + number
 
 
-def _delete_batch(engine: Engine, cutoff: datetime, batch_size: int) -> dict[str, int]:
+def _delete_batch(
+    engine: Engine, cutoff: datetime, batch_size: int
+) -> tuple[int, dict[str, int]]:
     """One transaction: lock a batch of old opportunities and delete them with dependents."""
     with Session(engine) as session, session.begin():
         ids = [
@@ -205,7 +255,14 @@ def _delete_batch(engine: Engine, cutoff: datetime, batch_size: int) -> dict[str
             )
         ]
         if not ids:
-            return {}
+            return 0, {}
+        locked = len(ids)
+        ids = [
+            row[0]
+            for row in session.execute(text(_RECHECK), {"ids": ids, "cutoff": cutoff})
+        ]
+        if not ids:
+            return locked, {}
         params = {"ids": ids}
         counts: dict[str, int] = {}
 
@@ -292,7 +349,7 @@ def _delete_batch(engine: Engine, cutoff: datetime, batch_size: int) -> dict[str
         )
         for table, number in _delete_unreferenced_raw_items(session, raw_ids).items():
             counts[table] = counts.get(table, 0) + number
-        return {table: number for table, number in counts.items() if number}
+        return locked, {table: number for table, number in counts.items() if number}
 
 
 def _delete_unreferenced_raw_items(session: Session, raw_ids: list[Any]) -> dict[str, int]:
@@ -308,6 +365,18 @@ def _delete_unreferenced_raw_items(session: Session, raw_ids: list[Any]) -> dict
             {"raw_ids": raw_ids},
         )
     ]
+    if free:
+        # Fresh snapshot after the lock: a row that gained a reference meanwhile stays.
+        free = [
+            row[0]
+            for row in session.execute(
+                text(
+                    "SELECT r.id FROM acquisition.raw_item r WHERE r.id = ANY(:free) "
+                    f"AND NOT ({_STILL_REFERENCED})"
+                ),
+                {"free": free},
+            )
+        ]
     if not free:
         return {}
     params = {"free": free}
@@ -415,51 +484,78 @@ def _housekeeping(
     now: datetime,
 ) -> None:
     if ai_days is not None and ai_days > 0:
-        cutoff = now - timedelta(days=ai_days)
-        if report.dry_run:
-            with Session(engine) as session:
-                session.execute(text("SET TRANSACTION READ ONLY"))
-                number = session.execute(
-                    text("SELECT count(*) FROM platform.ai_call_record WHERE created_at < :c"),
-                    {"c": cutoff},
-                ).scalar_one()
-        else:
-            number = _delete_in_batches(
-                engine,
-                "DELETE FROM platform.ai_call_record WHERE id IN (SELECT id FROM "
-                "platform.ai_call_record WHERE created_at < :c ORDER BY created_at "
-                "LIMIT :n FOR UPDATE SKIP LOCKED)",
-                {"c": cutoff},
-                batch_size,
-                stop,
-                report,
-            )
-        if number:
-            report.rows["ai_call_record"] = number
+        try:
+            _purge_ai_call_records(engine, report, ai_days, batch_size, stop, now)
+        except Exception as error:
+            _fail(report, "ai_call_record", error)
     if tavily:
-        if report.dry_run:
-            with Session(engine) as session:
-                session.execute(text("SET TRANSACTION READ ONLY"))
-                number = session.execute(
-                    text(
-                        "SELECT count(*) FROM acquisition.tavily_extract_cache "
-                        "WHERE expires_at <= :now"
-                    ),
-                    {"now": now},
-                ).scalar_one()
-        else:
-            number = _delete_in_batches(
-                engine,
-                "DELETE FROM acquisition.tavily_extract_cache WHERE url_hash IN (SELECT "
-                "url_hash FROM acquisition.tavily_extract_cache WHERE expires_at <= :now "
-                "ORDER BY expires_at LIMIT :n FOR UPDATE SKIP LOCKED)",
+        try:
+            _purge_tavily_cache(engine, report, batch_size, stop, now)
+        except Exception as error:
+            _fail(report, "tavily_extract_cache", error)
+
+
+def _purge_ai_call_records(
+    engine: Engine,
+    report: OpportunityRetentionReport,
+    days: int,
+    batch_size: int,
+    stop: Callable[[], bool],
+    now: datetime,
+) -> None:
+    cutoff = now - timedelta(days=days)
+    if report.dry_run:
+        with Session(engine) as session:
+            session.execute(text("SET TRANSACTION READ ONLY"))
+            number = session.execute(
+                text("SELECT count(*) FROM platform.ai_call_record WHERE created_at < :c"),
+                {"c": cutoff},
+            ).scalar_one()
+    else:
+        number = _delete_in_batches(
+            engine,
+            "DELETE FROM platform.ai_call_record WHERE id IN (SELECT id FROM "
+            "platform.ai_call_record WHERE created_at < :c ORDER BY created_at "
+            "LIMIT :n FOR UPDATE SKIP LOCKED)",
+            {"c": cutoff},
+            batch_size,
+            stop,
+            report,
+        )
+    if number:
+        report.rows["ai_call_record"] = number
+
+
+def _purge_tavily_cache(
+    engine: Engine,
+    report: OpportunityRetentionReport,
+    batch_size: int,
+    stop: Callable[[], bool],
+    now: datetime,
+) -> None:
+    if report.dry_run:
+        with Session(engine) as session:
+            session.execute(text("SET TRANSACTION READ ONLY"))
+            number = session.execute(
+                text(
+                    "SELECT count(*) FROM acquisition.tavily_extract_cache "
+                    "WHERE expires_at <= :now"
+                ),
                 {"now": now},
-                batch_size,
-                stop,
-                report,
-            )
-        if number:
-            report.rows["tavily_extract_cache"] = number
+            ).scalar_one()
+    else:
+        number = _delete_in_batches(
+            engine,
+            "DELETE FROM acquisition.tavily_extract_cache WHERE url_hash IN (SELECT "
+            "url_hash FROM acquisition.tavily_extract_cache WHERE expires_at <= :now "
+            "ORDER BY expires_at LIMIT :n FOR UPDATE SKIP LOCKED)",
+            {"now": now},
+            batch_size,
+            stop,
+            report,
+        )
+    if number:
+        report.rows["tavily_extract_cache"] = number
 
 
 def _delete_in_batches(
@@ -489,19 +585,26 @@ def _delete_in_batches(
 # --- Once per UTC day ---------------------------------------------------------------------
 
 
-def retention_due(engine: Engine, *, now: datetime | None = None) -> bool:
+def retention_due(
+    engine: Engine, *, now: datetime | None = None, job_name: str = JOB_NAME
+) -> bool:
     """True unless a complete retention run already finished on today's UTC date."""
     moment = (now or datetime.now(UTC)).astimezone(UTC)
     with Session(engine) as session:
         last = session.execute(
             text("SELECT last_success_at FROM platform.worker_job_state WHERE job_name = :j"),
-            {"j": JOB_NAME},
+            {"j": job_name},
         ).scalar_one_or_none()
     return last is None or last.astimezone(UTC).date() < moment.date()
 
 
 def record_retention_attempt(
-    engine: Engine, *, success: bool, error: str | None = None, now: datetime | None = None
+    engine: Engine,
+    *,
+    success: bool,
+    error: str | None = None,
+    now: datetime | None = None,
+    job_name: str = JOB_NAME,
 ) -> None:
     """Remember the attempt in `platform.worker_job_state`; only a complete run is a success."""
     moment = now or datetime.now(UTC)
@@ -517,7 +620,7 @@ def record_retention_attempt(
                 "next_run_at = :t, last_correlation_id = :cid, last_error = :err"
             ),
             {
-                "j": JOB_NAME,
+                "j": job_name,
                 "t": moment,
                 "ok": moment if success else None,
                 "bad": None if success else moment,
@@ -530,6 +633,7 @@ def record_retention_attempt(
 __all__ = [
     "DEFAULT_AI_CALL_RECORD_RETENTION_DAYS",
     "DEFAULT_OPPORTUNITY_RETENTION_DAYS",
+    "DRY_RUN_JOB_NAME",
     "JOB_NAME",
     "OpportunityRetentionReport",
     "record_retention_attempt",

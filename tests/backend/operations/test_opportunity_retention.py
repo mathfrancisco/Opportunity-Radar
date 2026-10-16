@@ -502,20 +502,117 @@ def test_dry_run_deletes_nothing_and_reports_counts(fx: _Fixture) -> None:
 
 
 def test_batches_are_oldest_first_and_bounded(fx: _Fixture) -> None:
-    oldest = fx.opportunity(40)
-    middle = fx.opportunity(30)
-    newest_old = fx.opportunity(20)
-    run_opportunity_retention(
-        fx.engine, retention_days=7, batch_size=1, max_batches=1, dry_run=False
+    oldest = fx.opportunity(4000)
+    middle = fx.opportunity(3999)
+    newest_old = fx.opportunity(3998)
+    older_elsewhere = fx.session.scalar(
+        text(
+            "SELECT count(*) FROM opportunities.opportunity "
+            "WHERE coalesce(published_at, first_seen_at) < :t AND id <> ALL(:mine)"
+        ),
+        {"t": NOW - timedelta(days=3999), "mine": fx.opportunity_ids},
     )
-    # The shared test database may hold older rows of other suites; the bound is 1 batch,
-    # so at most one of ours is gone and, if any, it is the oldest.
-    gone = {oldest, middle, newest_old} - fx.present()
-    assert gone <= {oldest}
+    assert older_elsewhere == 0, "the shared test database holds older rows than the probe"
+
     report = run_opportunity_retention(
         fx.engine, retention_days=7, batch_size=1, max_batches=1, dry_run=False
     )
+
     assert report.batches == 1 and report.complete is False
+    assert fx.present() == {middle, newest_old}
+    assert oldest not in fx.present()
+
+
+def test_retention_days_zero_skips_the_opportunity_part(fx: _Fixture) -> None:
+    old = fx.opportunity(30, full=True)
+    report = run_opportunity_retention(fx.engine, retention_days=0, dry_run=False)
+    assert report.cutoff is None and report.batches == 0 and report.opportunities == 0
+    assert old in fx.present()
+
+
+def test_a_survivor_is_kept_while_a_kept_duplicate_points_at_it(fx: _Fixture) -> None:
+    survivor = fx.opportunity(30)
+    kept_duplicate = fx.opportunity(1)
+    fx.session.get(OpportunityModel, kept_duplicate).duplicate_of = survivor  # type: ignore[union-attr]
+    fx.session.commit()
+    run_opportunity_retention(fx.engine, retention_days=7, dry_run=False)
+    assert fx.present() == {survivor, kept_duplicate}
+    fx.session.expire_all()
+    assert fx.session.get(OpportunityModel, kept_duplicate).duplicate_of == survivor  # type: ignore[union-attr]
+
+
+def test_a_survivor_and_its_old_duplicate_go_together(fx: _Fixture) -> None:
+    survivor = fx.opportunity(30)
+    duplicate = fx.opportunity(31)
+    fx.session.get(OpportunityModel, duplicate).duplicate_of = survivor  # type: ignore[union-attr]
+    fx.session.commit()
+    run_opportunity_retention(fx.engine, retention_days=7, dry_run=False)
+    assert fx.present() == set()
+
+
+def test_batch_rechecks_protection_after_the_lock(
+    fx: _Fixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opportunity_radar.operations import opportunity_retention as module
+
+    protected = fx.opportunity(30, full=True)
+    fx.application(protected)
+    # A lock statement that (as after a concurrent commit) still returns the protected row.
+    monkeypatch.setattr(
+        module,
+        "_LOCK_BATCH",
+        "SELECT o.id FROM opportunities.opportunity o WHERE o.id = ANY(:mine) "
+        "AND :cutoff IS NOT NULL AND :batch_size > 0 FOR UPDATE OF o SKIP LOCKED",
+    )
+    original = module.text
+    monkeypatch.setattr(
+        module,
+        "text",
+        lambda sql: (
+            original(sql).bindparams(mine=[protected])
+            if sql is module._LOCK_BATCH
+            else original(sql)
+        ),
+    )
+    report = run_opportunity_retention(fx.engine, retention_days=7, dry_run=False, max_batches=1)
+    assert protected in fx.present()
+    assert report.opportunities == 0
+
+
+def test_purges_run_even_when_the_opportunity_delete_fails(
+    fx: _Fixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opportunity_radar.operations import opportunity_retention as module
+
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("secret detail that must not reach the report")
+
+    monkeypatch.setattr(module, "_delete_all", boom)
+    called: list[str] = []
+    monkeypatch.setattr(module, "_purge_ai_call_records", lambda *a, **k: called.append("ai"))
+    monkeypatch.setattr(module, "_purge_tavily_cache", lambda *a, **k: called.append("tavily"))
+    report = run_opportunity_retention(
+        fx.engine, retention_days=7, ai_call_record_retention_days=7, dry_run=False
+    )
+    assert called == ["ai", "tavily"]
+    assert report.errors == {"opportunities": "RuntimeError"} and report.complete is False
+
+
+def test_a_failing_purge_does_not_stop_the_other(
+    fx: _Fixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from opportunity_radar.operations import opportunity_retention as module
+
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise ValueError("x")
+
+    monkeypatch.setattr(module, "_purge_ai_call_records", boom)
+    called: list[str] = []
+    monkeypatch.setattr(module, "_purge_tavily_cache", lambda *a, **k: called.append("tavily"))
+    report = run_opportunity_retention(
+        fx.engine, retention_days=7, ai_call_record_retention_days=7, dry_run=False
+    )
+    assert called == ["tavily"] and report.errors == {"ai_call_record": "ValueError"}
 
 
 def test_stop_callback_ends_the_run_before_the_next_batch(fx: _Fixture) -> None:
