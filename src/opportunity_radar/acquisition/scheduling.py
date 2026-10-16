@@ -35,6 +35,16 @@ DEFAULT_HOST_BUDGET_WINDOW = timedelta(hours=1)
 DEFAULT_HOST_REQUESTS_CEILING = 1000
 
 
+#: A source whose schedule is empty or this word is "manual": no cron to follow. It runs on
+#: demand and, only when a pass is given a minimum interval (R55-B2), whenever its last
+#: successful run is older than that interval.
+MANUAL_SCHEDULE = "manual"
+
+
+def is_manual_schedule(schedule: str | None) -> bool:
+    return schedule is None or not schedule.strip() or schedule.strip().lower() == MANUAL_SCHEDULE
+
+
 class CollectionGate(StrEnum):
     """The verdict for one source at one moment."""
 
@@ -61,6 +71,8 @@ class SourceRunHistory:
     last_started_at: datetime | None = None
     consecutive_failures: int = 0
     last_failure_at: datetime | None = None
+    #: Start of the most recent run that ended well (`SUCCEEDED` or `PARTIAL`).
+    last_success_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,17 +281,24 @@ def evaluate_gate(
     now: datetime,
     backoff_base: timedelta = DEFAULT_BACKOFF_BASE,
     backoff_ceiling: timedelta = DEFAULT_BACKOFF_CEILING,
+    manual_min_interval: timedelta | None = None,
 ) -> CollectionGate:
     """Decide whether this source may run now.
+
+    `manual_min_interval` (R55-B2) makes a manual/unscheduled source due once its last
+    successful run is older than the interval; without it such a source is never scheduled.
 
     Order matters for the summary: the clock is asked first, so a source that simply is
     not due reads as skipped rather than blocked, and only a source that *would* have run
     is reported as held back by a limit.
     """
-    if not state.schedule:
-        return CollectionGate.NOT_SCHEDULED
-    if not is_due(
-        state.schedule,
+    if is_manual_schedule(state.schedule):
+        if manual_min_interval is None:
+            return CollectionGate.NOT_SCHEDULED
+        if not manual_is_due(state.history, now=now, min_interval=manual_min_interval):
+            return CollectionGate.NOT_DUE
+    elif not is_due(
+        state.schedule or "",
         timezone=state.timezone,
         previous_run_at=state.history.last_started_at,
         now=now,
@@ -310,6 +329,7 @@ def next_due_at(
     now: datetime,
     backoff_base: timedelta = DEFAULT_BACKOFF_BASE,
     backoff_ceiling: timedelta = DEFAULT_BACKOFF_CEILING,
+    manual_min_interval: timedelta | None = None,
 ) -> tuple[datetime | None, str]:
     """When this source becomes eligible again, and why it is not eligible now.
 
@@ -318,15 +338,19 @@ def next_due_at(
     only explains it (for the API/dashboard, per SPEC 39 §7). Returns `(now, "due")` when
     the source is already eligible.
     """
-    if not state.schedule:
-        return None, "not_scheduled"
-    if not is_due(
-        state.schedule,
+    if is_manual_schedule(state.schedule):
+        if manual_min_interval is None:
+            return None, "not_scheduled"
+        if not manual_is_due(state.history, now=now, min_interval=manual_min_interval):
+            assert state.history.last_success_at is not None
+            return state.history.last_success_at + manual_min_interval, "freshness"
+    elif not is_due(
+        state.schedule or "",
         timezone=state.timezone,
         previous_run_at=state.history.last_started_at,
         now=now,
     ):
-        trigger = CronTrigger.from_crontab(state.schedule, timezone=state.timezone)
+        trigger = CronTrigger.from_crontab(state.schedule or "", timezone=state.timezone)
         due_at = trigger.get_next_fire_time(state.history.last_started_at, now)
         return due_at, "freshness"
     if state.history.consecutive_failures > 0 and state.history.last_failure_at is not None:
@@ -348,6 +372,13 @@ def next_due_at(
         window_end = current.window_start + DEFAULT_HOST_BUDGET_WINDOW
         return window_end, "budget"
     return now, "due"
+
+
+def manual_is_due(history: SourceRunHistory, *, now: datetime, min_interval: timedelta) -> bool:
+    """A manual source is due when it never succeeded or its last success is stale."""
+    if history.last_success_at is None:
+        return True
+    return now - history.last_success_at >= min_interval
 
 
 def is_due(

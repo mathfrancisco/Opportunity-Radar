@@ -32,6 +32,7 @@ from opportunity_radar.opportunities.models import (
 )
 
 _UNFINISHED_RUN_STATUSES = ("PENDING", "RUNNING")
+_SUCCESS_RUN_STATUSES = ("SUCCEEDED", "PARTIAL")
 SOURCE_CLAIM_LEASE = timedelta(minutes=3)
 
 
@@ -308,13 +309,16 @@ class AcquisitionRepository:
     def list_collectable_sources(self) -> list[SourceDefinitionModel]:
         """Every source the scheduled pass may run: enabled and not `manual`, no limit.
 
-        Never-collected sources come first, so a freshly imported batch is not stuck
-        behind slow ones; then the company's priority (high first, and a source with no
-        company counts as normal), then name.
+        Ordered by the company's priority (high first, and a source with no company counts as
+        normal), then the oldest last successful run, never-succeeded sources first so a
+        freshly imported batch is not stuck behind slow ones (R55-B2), then name.
         """
         last_started_at = (
             select(func.max(SourceRunModel.started_at))
-            .where(SourceRunModel.source_definition_id == SourceDefinitionModel.id)
+            .where(
+                SourceRunModel.source_definition_id == SourceDefinitionModel.id,
+                SourceRunModel.status.in_(_SUCCESS_RUN_STATUSES),
+            )
             .correlate(SourceDefinitionModel)
             .scalar_subquery()
         )
@@ -333,8 +337,8 @@ class AcquisitionRepository:
                 SourceDefinitionModel.source_type != "manual",
             )
             .order_by(
-                last_started_at.asc().nulls_first(),
                 priority_rank,
+                last_started_at.asc().nulls_first(),
                 SourceDefinitionModel.name,
             )
         )
@@ -411,6 +415,9 @@ class AcquisitionRepository:
             last_started_at=attempts[0].started_at if attempts else None,
             consecutive_failures=consecutive_failures,
             last_failure_at=last_failure_at,
+            last_success_at=next(
+                (row.started_at for row in rows if row.status in _SUCCESS_RUN_STATUSES), None
+            ),
         )
 
     def target_area_share(self, source_id: UUID, *, runs: int = 3) -> float | None:

@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.collectors import CollectorRegistry
@@ -32,6 +32,7 @@ from opportunity_radar.acquisition.models import (
 )
 from opportunity_radar.acquisition.repository import AcquisitionRepository
 from opportunity_radar.acquisition.service import AcquisitionService
+from opportunity_radar.companies.models import Company, CompanySource
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.worker import collect_enabled_sources as _collect_enabled_sources
 
@@ -91,12 +92,24 @@ class _StubCollector:
         yield  # pragma: no cover - keeps this an async generator
 
 
-def _seed(session: Session, source_type: str, name: str, *, enabled: bool = True) -> UUID:
+_CRON = "0 * * * *"
+
+
+def _seed(
+    session: Session,
+    source_type: str,
+    name: str,
+    *,
+    enabled: bool = True,
+    schedule: str | None = _CRON,
+    company_source_id: UUID | None = None,
+) -> UUID:
     source = SourceDefinitionModel(
         source_type=source_type,
         name=f"{_PREFIX}{name}",
         enabled=enabled,
-        schedule="0 * * * *",
+        schedule=schedule,
+        company_source_id=company_source_id,
         evidence_status="confirmed",
         reviewed_at=datetime.now(UTC),
         terms_reviewed=True,
@@ -170,3 +183,148 @@ def test_collectable_sources_are_unbounded_and_never_collected_come_first() -> N
     # Never collected first even though it sorts last by name; then the rest by name.
     assert ours == [never, early, late]
     assert all(source.enabled and source.source_type != "manual" for source in sources)
+
+
+class _OurSourcesService(AcquisitionService):
+    """Only this module's seeded sources, so a shared test database's leftovers do not count."""
+
+    def list_collectable_sources(self) -> list[SourceDefinitionModel]:
+        return [s for s in super().list_collectable_sources() if s.name.startswith(_PREFIX)]
+
+
+def _succeeded_run(session: Session, source_id: UUID, started_at: datetime) -> None:
+    session.add(
+        SourceRunModel(
+            source_definition_id=source_id,
+            execution_trigger=ExecutionTrigger.SCHEDULED.value,
+            status="SUCCEEDED",
+            started_at=started_at,
+            finished_at=started_at + timedelta(seconds=5),
+        )
+    )
+    session.commit()
+
+
+def test_collectable_sources_are_ordered_by_priority_then_oldest_success() -> None:
+    source_type = f"example_{uuid4().hex[:8]}"
+    engine = _engine()
+    suffix = uuid4().hex[:8]
+    company_ids: list[UUID] = []
+    with Session(engine) as session:
+        try:
+            linked: dict[str, UUID] = {}
+            for priority in ("low", "high"):
+                company = Company(
+                    canonical_name=f"{_PREFIX}{priority}-{suffix}",
+                    normalized_name=f"{_PREFIX}{priority}-{suffix}",
+                    priority=priority,
+                )
+                company.sources.append(
+                    CompanySource(source_type=source_type, endpoint=f"https://{priority}.test/{suffix}")
+                )
+                session.add(company)
+                session.commit()
+                company_ids.append(company.id)
+                linked[priority] = company.sources[0].id
+            low = _seed(session, source_type, "a-low", company_source_id=linked["low"])
+            high = linked["high"]
+            high_recent = _seed(session, source_type, "b-high-recent", company_source_id=high)
+            high_stale = _seed(session, source_type, "c-high-stale", company_source_id=high)
+            normal_never = _seed(session, source_type, "d-normal-never")
+            for source_id, hours_ago in ((low, 9), (high_recent, 1), (high_stale, 5)):
+                _succeeded_run(session, source_id, _NOON - timedelta(hours=hours_ago))
+            # A newer failure must not move the source: the order reads the last success.
+            session.add(
+                SourceRunModel(
+                    source_definition_id=high_stale,
+                    execution_trigger=ExecutionTrigger.SCHEDULED.value,
+                    status="FAILED",
+                    started_at=_NOON,
+                    finished_at=_NOON,
+                )
+            )
+            session.commit()
+
+            sources = AcquisitionRepository(session).list_collectable_sources()
+            ours = [source.id for source in sources if source.name.startswith(_PREFIX)]
+
+            # high first (oldest success first), then normal, then low.
+            assert ours == [high_stale, high_recent, normal_never, low]
+        finally:
+            session.rollback()
+            session.execute(
+                update(SourceDefinitionModel)
+                .where(SourceDefinitionModel.name.startswith(_PREFIX))
+                .values(company_source_id=None)
+            )
+            session.execute(delete(Company).where(Company.id.in_(company_ids)))
+            session.commit()
+
+
+def test_the_window_runs_due_manual_sources_and_reports_executed_over_eligible() -> None:
+    source_type = f"example_{uuid4().hex[:8]}"
+    engine = _engine()
+    with Session(engine) as session:
+        never = _seed(session, source_type, "a-null-never", schedule=None)
+        stale = _seed(session, source_type, "b-manual-stale", schedule="manual")
+        fresh = _seed(session, source_type, "c-manual-fresh", schedule="Manual")
+        cron = _seed(session, source_type, "d-cron-due")
+        _succeeded_run(session, stale, _NOON - timedelta(hours=2))
+        _succeeded_run(session, fresh, _NOON - timedelta(minutes=10))
+        _succeeded_run(session, cron, _NOON - timedelta(hours=3))
+
+    def build(session: Session) -> AcquisitionService:
+        return _OurSourcesService(
+            session, registry=CollectorRegistry([_StubCollector(source_type)])
+        )
+
+    counts = _collect_enabled_sources(
+        engine,
+        now=_NOON,
+        service_factory=build,
+        owner_sub=_TEST_OWNER,
+        manual_min_interval_hours=1,
+    )
+
+    assert counts["eligible"] == 3  # never, stale and the cron source; fresh is not due
+    assert counts["executed"] == 3
+    assert counts["completed"] == 3
+    with Session(engine) as session:
+        runs_per_source = {
+            source_id: len(
+                session.scalars(
+                    select(SourceRunModel.id).where(
+                        SourceRunModel.source_definition_id == source_id
+                    )
+                ).all()
+            )
+            for source_id in (never, stale, fresh, cron)
+        }
+    assert runs_per_source == {never: 1, stale: 2, fresh: 1, cron: 2}
+
+
+def test_without_the_interval_manual_sources_stay_skipped() -> None:
+    source_type = f"example_{uuid4().hex[:8]}"
+    engine = _engine()
+    with Session(engine) as session:
+        never = _seed(session, source_type, "a-null-never", schedule=None)
+        stale = _seed(session, source_type, "b-manual-stale", schedule="manual")
+        _succeeded_run(session, stale, _NOON - timedelta(hours=2))
+
+    def build(session: Session) -> AcquisitionService:
+        return _OurSourcesService(
+            session, registry=CollectorRegistry([_StubCollector(source_type)])
+        )
+
+    counts = _collect_enabled_sources(
+        engine, now=_NOON, service_factory=build, owner_sub=_TEST_OWNER
+    )
+
+    assert counts["eligible"] == 0
+    assert counts["executed"] == 0
+    with Session(engine) as session:
+        assert not session.scalars(
+            select(SourceRunModel.id).where(
+                SourceRunModel.source_definition_id == never,
+            )
+        ).all()
