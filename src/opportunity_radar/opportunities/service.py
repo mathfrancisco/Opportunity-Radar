@@ -11,8 +11,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, update
-from sqlalchemy.exc import InterfaceError, OperationalError
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError, InterfaceError, OperationalError
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import RawItemModel, SourceRunModel
@@ -389,22 +389,45 @@ class OpportunityService:
             reasons=[{"code": "NORMALIZATION_ERROR", "error": type(error).__name__}],
             error_summary=f"unexpected {type(error).__name__} while normalizing",
         )
-        self.session.add(result)
-        self.session.commit()
-        self.session.refresh(result)
+        try:
+            self.session.add(result)
+            self.session.commit()
+            self.session.refresh(result)
+        except Exception:
+            self.session.rollback()
+            raise
         return result
 
     def _stale_without_occurrence(
         self, raw_item: RawItemModel, published_at: datetime | None
     ) -> NormalizationResultModel | None:
-        """R55-E1 cutoff at normalization: an item with no occurrence yet is not made one
-        when its posting is older than `INGEST_MAX_AGE_DAYS` (so renormalizing an old FAILED
-        item after a version bump cannot resurrect a stale posting). Judged by the published
-        date, else by when the item was first stored. 0 disables it."""
+        """R55-E1 cutoff for a REPROCESSED item that has no occurrence.
+
+        Only an item that already has a result from an earlier normalizer version qualifies:
+        first-time normalization is never skipped (a fresh item may wait in the backlog for
+        days). Such an item is not turned into an opportunity when its posting is older than
+        `INGEST_MAX_AGE_DAYS`, judged like the collector does: by the published date, else by
+        when its identity was first stored (the oldest raw item of that source and identity).
+        0 disables it."""
         max_age_days = get_settings().ingest_max_age_days
         if max_age_days <= 0:
             return None
-        reference = published_at or raw_item.fetched_at
+        reprocessed = self.session.scalar(
+            select(NormalizationResultModel.id)
+            .where(
+                NormalizationResultModel.raw_item_id == raw_item.id,
+                NormalizationResultModel.normalizer_version != NORMALIZER_VERSION,
+            )
+            .limit(1)
+        )
+        if reprocessed is None:
+            return None
+        reference = published_at or self.session.scalar(
+            select(func.min(RawItemModel.fetched_at)).where(
+                RawItemModel.source_definition_id == raw_item.source_definition_id,
+                RawItemModel.identity_key == raw_item.identity_key,
+            )
+        )
         if reference is None:
             return None
         if reference.tzinfo is None:
@@ -522,6 +545,14 @@ class OpportunityService:
                 break
             try:
                 results.append(self.normalize(raw_item_id))
+            except IntegrityError:
+                # A concurrent normalization of the same item (or identity) won the race.
+                # That is not the item's fault: use the result that exists, else leave it
+                # pending for the next pass. Never recorded as a permanent failure.
+                self.session.rollback()
+                existing = self.repository.normalization_result(raw_item_id, NORMALIZER_VERSION)
+                if existing is not None:
+                    results.append(existing)
             except (OperationalError, InterfaceError):
                 raise  # the database is unreachable: nothing to record, and not the item's fault
             except RawItemNotFoundError:
