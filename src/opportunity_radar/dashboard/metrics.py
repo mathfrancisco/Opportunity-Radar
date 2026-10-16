@@ -33,7 +33,6 @@ from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
     OpportunityModel,
     SourceOccurrenceModel,
-    SourceOccurrenceObservationModel,
 )
 
 #: The two windows the Overview and the API both answer for.
@@ -283,27 +282,27 @@ def _run_aggregates(session: Session, since: datetime) -> dict[UUID, Any]:
 
 
 def _presence_confirmed_without_reprocessing(session: Session, since: datetime) -> dict[UUID, int]:
-    """F20-39: revisits whose raw evidence matched, counted by the run that observed them.
+    """F20-39 / R55-E3: revisits that confirmed presence without new content, per source.
 
-    `content_hash_matched=True` is the operational signal — a revisit that confirmed
-    presence without a byte of new content and therefore without normalization or AI.
+    An unchanged revisit writes no observation row any more, so the signal comes from the run
+    counters: items skipped (already held, no new evidence) minus those the freshness filter
+    dropped (`skipped_stale`, never held). Items a collector reports as non-opportunities
+    are counted in `items_skipped` too, so this is an upper bound for such sources.
     """
     rows = session.execute(
         select(
             SourceRunModel.source_definition_id,
-            func.count().label("confirmed"),
-        )
-        .join(
-            SourceOccurrenceObservationModel,
-            SourceOccurrenceObservationModel.source_run_id == SourceRunModel.id,
+            func.sum(
+                func.greatest(SourceRunModel.items_skipped - SourceRunModel.skipped_stale, 0)
+            ).label("confirmed"),
         )
         .where(
             SourceRunModel.started_at >= since,
-            SourceOccurrenceObservationModel.content_hash_matched.is_(True),
+            SourceRunModel.status.not_in(_UNFINISHED),
         )
         .group_by(SourceRunModel.source_definition_id)
     ).all()
-    return {source_id: int(confirmed) for source_id, confirmed in rows}
+    return {source_id: int(confirmed or 0) for source_id, confirmed in rows}
 
 
 def _errors_by_code(session: Session, since: datetime) -> dict[UUID, dict[str, int]]:

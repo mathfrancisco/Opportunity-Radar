@@ -47,6 +47,7 @@ from opportunity_radar.opportunities.models import (
 )
 from opportunity_radar.opportunities.service import OpportunityService
 from opportunity_radar.platform.database import create_database_engine
+from tests.backend.support.absence import age_occurrences
 
 pytestmark = [
     pytest.mark.integration,
@@ -437,6 +438,7 @@ def test_a_timed_out_listing_stays_partial_while_a_complete_one_on_another_host_
                 )
             )
 
+            age_occurrences(session, source_ids)  # unseen over 24 h: absent once re-listed
             worker.collect_enabled_sources(
                 engine,
                 host_concurrency=2,

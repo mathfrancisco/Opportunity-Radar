@@ -95,6 +95,13 @@ class Settings(BaseSettings):
     source_alert_webhook_url: str = ""
     source_alert_failure_threshold: int = 3
     source_alert_timeout_seconds: float = 5.0
+    # R55-E1: an item published more than this many days before collection is dropped
+    # before any row is written; an undated one is judged by its first observation.
+    # 0 disables the filter.
+    ingest_max_age_days: int = 7
+    # R55-E3/D5: an occurrence is absent only after this many hours unseen, across a
+    # complete run of its source that started after that mark.
+    absence_after_hours: int = 24
     payload_retention_days: int = 365
     payload_retention_batch_size: int = 500
     payload_retention_interval_seconds: int = 21600
@@ -217,9 +224,7 @@ class Settings(BaseSettings):
     @property
     def analysis_eligible_verdicts(self) -> tuple[str, ...]:
         return tuple(
-            item.strip().upper()
-            for item in self.worker_analyze_verdicts.split(",")
-            if item.strip()
+            item.strip().upper() for item in self.worker_analyze_verdicts.split(",") if item.strip()
         )
 
     @model_validator(mode="after")
@@ -274,6 +279,14 @@ class Settings(BaseSettings):
         for name, value in positive_limits.items():
             if value <= 0:
                 raise ValueError(f"{name} must be positive, got {value!r}")
+        if self.ingest_max_age_days < 0:
+            raise ValueError(
+                f"INGEST_MAX_AGE_DAYS cannot be negative, got {self.ingest_max_age_days!r}"
+            )
+        if self.absence_after_hours <= 0:
+            raise ValueError(
+                f"ABSENCE_AFTER_HOURS must be positive, got {self.absence_after_hours!r}"
+            )
         if self.ai_max_retries < 0:
             raise ValueError(f"AI_MAX_RETRIES cannot be negative, got {self.ai_max_retries!r}")
         if not 0 <= self.ai_interactive_reserve_requests < self.ai_daily_requests_soft_limit:
