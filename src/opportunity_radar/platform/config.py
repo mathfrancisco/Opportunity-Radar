@@ -132,6 +132,14 @@ class Settings(BaseSettings):
     # finite window once its last successful run is older than this many hours. 0 turns it
     # off (such sources are then skipped, as before). Host budgets still apply.
     manual_source_min_interval_hours: float = Field(default=1.0, ge=0)
+    # R55-B1: share of the window's remaining time each of these stages may use, so that
+    # evaluation and analysis always get theirs. A stage that spends its share is a normal
+    # (partial) completion: later stages still run and the exit stays SUCCESS.
+    pipeline_collect_budget_fraction: float = Field(default=0.4, gt=0, le=1)
+    pipeline_normalize_budget_fraction: float = Field(default=0.3, gt=0, le=1)
+    # R55-C1: seconds kept beyond the worst case of one AI call before the analysis stage
+    # declines to start another (AI_TIMEOUT_SECONDS * (AI_MAX_RETRIES + 1) + this).
+    pipeline_analyze_margin_seconds: float = Field(default=5.0, ge=0)
     # R55-C1: the finite window analyses at most (daily request ceiling / this) assessments,
     # so a day of hourly windows stays under the free quota. Quota guard reads still apply.
     pipeline_analyze_windows_per_day: int = Field(default=24, ge=1)

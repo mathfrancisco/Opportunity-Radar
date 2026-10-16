@@ -205,7 +205,7 @@ def _succeeded_run(session: Session, source_id: UUID, started_at: datetime) -> N
     session.commit()
 
 
-def test_collectable_sources_are_ordered_by_priority_then_oldest_success() -> None:
+def test_collectable_sources_are_ordered_by_staleness_weighted_by_priority() -> None:
     source_type = f"example_{uuid4().hex[:8]}"
     engine = _engine()
     suffix = uuid4().hex[:8]
@@ -231,16 +231,17 @@ def test_collectable_sources_are_ordered_by_priority_then_oldest_success() -> No
             high_recent = _seed(session, source_type, "b-high-recent", company_source_id=high)
             high_stale = _seed(session, source_type, "c-high-stale", company_source_id=high)
             normal_never = _seed(session, source_type, "d-normal-never")
-            for source_id, hours_ago in ((low, 9), (high_recent, 1), (high_stale, 5)):
-                _succeeded_run(session, source_id, _NOON - timedelta(hours=hours_ago))
+            now = datetime.now(UTC)
+            for source_id, hours_ago in ((low, 40), (high_recent, 1), (high_stale, 20)):
+                _succeeded_run(session, source_id, now - timedelta(hours=hours_ago))
             # A newer failure must not move the source: the order reads the last success.
             session.add(
                 SourceRunModel(
                     source_definition_id=high_stale,
                     execution_trigger=ExecutionTrigger.SCHEDULED.value,
                     status="FAILED",
-                    started_at=_NOON,
-                    finished_at=_NOON,
+                    started_at=now,
+                    finished_at=now,
                 )
             )
             session.commit()
@@ -248,8 +249,10 @@ def test_collectable_sources_are_ordered_by_priority_then_oldest_success() -> No
             sources = AcquisitionRepository(session).list_collectable_sources()
             ours = [source.id for source in sources if source.name.startswith(_PREFIX)]
 
-            # high first (oldest success first), then normal, then low.
-            assert ours == [high_stale, high_recent, normal_never, low]
+            # Never succeeded first; then age x weight: high 20 h x 3 = 60, low 40 h x 1 = 40,
+            # high 1 h x 3 = 3. A stale low-priority source runs before a fresh high one.
+            assert ours == [normal_never, high_stale, low, high_recent]
+            assert ours.index(low) < ours.index(high_recent)
         finally:
             session.rollback()
             session.execute(

@@ -195,7 +195,7 @@ def test_the_window_deadline_stops_between_assessments(monkeypatch: pytest.Monke
 
 
 def _context(owner: str = "owner") -> StageContext:
-    return StageContext(owner, Deadline(60), StopSignal())
+    return StageContext(owner, Deadline(600), StopSignal())
 
 
 def _stage(settings: Settings, name: str = "analyze_pending"):
@@ -278,7 +278,7 @@ def test_a_stopped_window_does_not_start_the_analysis(monkeypatch: pytest.Monkey
     monkeypatch.setattr(run_pipeline_once, "build_analysis_adapter", fail)
     stop = StopSignal()
     stop.set("interrupted")
-    context = StageContext("owner", Deadline(60), stop)
+    context = StageContext("owner", Deadline(600), stop)
     settings = Settings(database_url=_URL, ai_enabled=True, groq_api_key="synthetic")
 
     assert _stage(settings).run(context).stopped == 1

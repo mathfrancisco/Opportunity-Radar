@@ -86,6 +86,10 @@ from opportunity_radar.profile.keywords import (
 )
 from opportunity_radar.profile.service import ProfileService
 
+#: Batches one scheduler pass of the normalization job may run (R55-B1): the backlog is drained
+#: over several 60 s passes, so the job's heartbeat never goes stale behind a long backlog.
+NORMALIZE_JOB_MAX_BATCHES = 20
+
 WORKER_READY_FILE = Path("/tmp/opportunity-radar-worker-ready")
 
 # Every functional job the worker can schedule, mapped to its scheduler id. The startup log
@@ -113,12 +117,15 @@ def normalize_opportunities(
     *,
     stop_requested: Callable[[], bool] | None = None,
     batch_size: int = 50,
+    max_batches: int | None = None,
 ) -> dict[str, int]:
     """Normalize pending raw items in batches until none is left or a stop is requested.
 
     R55-B1: there is no fixed cap per pass. `stop_requested` (the finite window's deadline
     or a signal) is read between batches and, inside a batch, before each item, so a stop
-    never waits for more than the item in flight. Each pass gets its own correlation id.
+    never waits for more than the item in flight. `max_batches` bounds one pass (the
+    long-running scheduler uses it so its heartbeat stays fresh). Each pass gets its own
+    correlation id.
     """
     if stop_requested is not None and stop_requested():
         return {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 1}
@@ -140,6 +147,8 @@ def normalize_opportunities(
                     totals["review_required"] += batch.review_required
                     totals["failed"] += batch.failed
                     if batch.processed < batch_size:
+                        break
+                    if max_batches is not None and batches >= max_batches:
                         break
             except Exception:
                 logger.exception("normalization batch failed", extra={"job": "normalize"})
@@ -249,6 +258,8 @@ def analyze_pending(
     daily_cap_fraction: float | None = None,
     owner_sub: str | None = None,
     stop_requested: Callable[[], bool] | None = None,
+    time_left: Callable[[], float] | None = None,
+    min_call_seconds: float = 0.0,
 ) -> dict[str, int]:
     """Attach the semantic layer to current assessments, one claim at a time.
 
@@ -278,8 +289,16 @@ def analyze_pending(
     item. The returned counts use the pipeline's stage vocabulary: `input` assessments
     read, `completed` analysed (a reused one included), `failed` internal errors, `skipped`
     degraded results and every one left pending by a budget or cap, `stopped` 1 on a stop.
+
+    `time_left` and `min_call_seconds` (the worst case of one provider call, retries
+    included) keep a window from starting a call it could not finish: with less time left the
+    rest stays pending, counted in `skipped` and `deadline_deferred`, and is no failure.
     """
     empty = {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 0}
+
+    def out_of_time() -> bool:
+        return time_left is not None and time_left() < min_call_seconds
+
     owner = _operational_owner(owner_sub, job="analyze")
     if owner is None:
         return empty
@@ -321,6 +340,9 @@ def analyze_pending(
                 max_attempts=max_attempts,
                 aging_sample_ratio=aging_sample_ratio,
             )
+            if pending and out_of_time():
+                return {**empty, "input": len(pending), "skipped": len(pending),
+                        "deadline_deferred": len(pending)}
             if pending:
                 # After an idle stretch the provider connection may need re-warming
                 # (a no-op for the cloud adapter); this keeps that cost out of the
@@ -333,10 +355,14 @@ def analyze_pending(
                     )
             completed = reused = degraded = claimed_elsewhere = failed = skipped_budget = 0
             skipped_daily_cap = 0
+            deadline_deferred = 0
             stopped = 0
             for position, assessment_id in enumerate(pending):
                 if stop_requested is not None and stop_requested():
                     stopped = 1
+                    break
+                if out_of_time():
+                    deadline_deferred = len(pending) - position
                     break
                 if not under_daily_cap():
                     skipped_daily_cap = len(pending) - position
@@ -400,13 +426,20 @@ def analyze_pending(
                         "failed": failed,
                     },
                 )
-            return {
+            counts = {
                 "input": len(pending),
                 "completed": completed,
                 "failed": failed,
-                "skipped": degraded + claimed_elsewhere + skipped_budget + skipped_daily_cap,
+                "skipped": degraded
+                + claimed_elsewhere
+                + skipped_budget
+                + skipped_daily_cap
+                + deadline_deferred,
                 "stopped": stopped,
             }
+            if deadline_deferred:
+                counts["deadline_deferred"] = deadline_deferred
+            return counts
 
 
 def build_classification_router(settings: Settings, engine: Engine) -> AIRouter | None:
@@ -702,6 +735,7 @@ def _count_unreached_if_eligible(
             manual_min_interval=ctx.manual_min_interval,
         )
     except Exception:
+        service.session.rollback()
         return
     if gate not in _NOT_ELIGIBLE_GATES:
         ctx.summary.add_eligible()
@@ -1239,6 +1273,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
             "interval",
             seconds=60,
             args=(engine,),
+            kwargs={"max_batches": NORMALIZE_JOB_MAX_BATCHES},
             id="normalize-opportunities",
             replace_existing=True,
             coalesce=True,

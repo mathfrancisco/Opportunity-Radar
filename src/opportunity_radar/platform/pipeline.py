@@ -268,7 +268,9 @@ def run_pipeline(
                         stop.reason,
                         duration_ms=_duration_ms(clock, started_at),
                     )
-                if context.should_stop() or counts.stopped:
+                # Only a stage that says it stopped is stopped: one that finished its work
+                # as the deadline passed is complete, and the loop head skips what follows.
+                if counts.stopped:
                     reports.append(
                         StageReport(
                             stage.name,

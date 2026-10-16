@@ -318,6 +318,8 @@ def _run_pipeline_once_settings(**overrides: object) -> SimpleNamespace:
         "database_size_alert_ratio": 0.7,
         "retention_stage_budget_seconds": 300.0,
         "manual_source_min_interval_hours": 1.0,
+        "pipeline_collect_budget_fraction": 0.4,
+        "pipeline_normalize_budget_fraction": 0.3,
     }
     return SimpleNamespace(
         database_url="postgresql://unused",

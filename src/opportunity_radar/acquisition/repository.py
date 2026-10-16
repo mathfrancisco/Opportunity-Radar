@@ -33,6 +33,7 @@ from opportunity_radar.opportunities.models import (
 
 _UNFINISHED_RUN_STATUSES = ("PENDING", "RUNNING")
 _SUCCESS_RUN_STATUSES = ("SUCCEEDED", "PARTIAL")
+_NEVER_SUCCEEDED_AGE_HOURS = 1_000_000.0
 SOURCE_CLAIM_LEASE = timedelta(minutes=3)
 
 
@@ -309,9 +310,9 @@ class AcquisitionRepository:
     def list_collectable_sources(self) -> list[SourceDefinitionModel]:
         """Every source the scheduled pass may run: enabled and not `manual`, no limit.
 
-        Ordered by the company's priority (high first, and a source with no company counts as
-        normal), then the oldest last successful run, never-succeeded sources first so a
-        freshly imported batch is not stuck behind slow ones (R55-B2), then name.
+        Ordered by staleness weighted by priority (R55-B2): the hours since the last successful
+        run (a never-succeeded source counts as very old, so a freshly imported batch is not
+        stuck behind slow ones) times a tier weight (high 3, normal 2, low 1), then name.
         """
         last_started_at = (
             select(func.max(SourceRunModel.started_at))
@@ -322,11 +323,18 @@ class AcquisitionRepository:
             .correlate(SourceDefinitionModel)
             .scalar_subquery()
         )
-        priority_rank = case(
-            (Company.priority == "high", 0),
-            (Company.priority == "low", 2),
-            (Company.priority == "blocked", 3),
-            else_=1,
+        # Staleness is what orders the pass, with priority only a weight on it, so a stale
+        # low-priority source is not starved behind fresh high-priority ones. A source that
+        # never succeeded has a very large age (and goes first among equal weights).
+        age_hours = func.coalesce(
+            func.extract("epoch", func.now() - last_started_at) / 3600.0,
+            _NEVER_SUCCEEDED_AGE_HOURS,
+        )
+        tier_weight = case(
+            (Company.priority == "high", 3.0),
+            (Company.priority == "low", 1.0),
+            (Company.priority == "blocked", 0.5),
+            else_=2.0,
         )
         statement = (
             select(SourceDefinitionModel)
@@ -336,11 +344,7 @@ class AcquisitionRepository:
                 SourceDefinitionModel.enabled.is_(True),
                 SourceDefinitionModel.source_type != "manual",
             )
-            .order_by(
-                priority_rank,
-                last_started_at.asc().nulls_first(),
-                SourceDefinitionModel.name,
-            )
+            .order_by((age_hours * tier_weight).desc(), SourceDefinitionModel.name)
         )
         return list(self.session.scalars(statement))
 

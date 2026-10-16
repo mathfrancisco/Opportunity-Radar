@@ -152,3 +152,30 @@ def test_225_collected_items_are_all_normalized_in_one_stage_call() -> None:
             assert done == 225
         finally:
             fixture.cleanup()
+
+
+def test_the_scheduler_job_is_bounded_per_pass(monkeypatch: pytest.MonkeyPatch) -> None:
+    batches: list[int] = []
+
+    class Service:
+        def normalize_pending(self, limit: int, *, should_stop=None) -> SimpleNamespace:
+            batches.append(limit)
+            return SimpleNamespace(processed=limit, succeeded=limit, review_required=0, failed=0)
+
+    _patch_unit(monkeypatch, Service())
+
+    result = worker.normalize_opportunities(object(), batch_size=5, max_batches=20)
+
+    assert len(batches) == 20 and result["input"] == 100
+
+
+def test_the_scheduler_registers_the_normalize_job_with_a_batch_bound() -> None:
+    from opportunity_radar.platform.config import Settings
+
+    scheduler = worker.build_scheduler(
+        Settings(database_url="postgresql+psycopg://test:test@localhost/test")
+    )
+    job = scheduler.get_job("normalize-opportunities")
+    assert job is not None
+    assert job.kwargs == {"max_batches": worker.NORMALIZE_JOB_MAX_BATCHES}
+    assert worker.NORMALIZE_JOB_MAX_BATCHES == 20
