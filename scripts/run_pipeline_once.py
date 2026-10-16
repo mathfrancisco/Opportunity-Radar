@@ -6,12 +6,15 @@ import argparse
 import json
 
 from opportunity_radar.operations.opportunity_retention import (
+    DRY_RUN_JOB_NAME,
+    JOB_NAME,
     record_retention_attempt,
     retention_due,
     run_opportunity_retention,
 )
 from opportunity_radar.platform.config import get_settings
 from opportunity_radar.platform.database import create_database_engine
+from opportunity_radar.platform.logging import get_logger
 from opportunity_radar.platform.pipeline import (
     ConfigurationError,
     PostgresWindowClaim,
@@ -29,6 +32,8 @@ from opportunity_radar.worker import (
     evaluate_pending,
     normalize_opportunities,
 )
+
+logger = get_logger("opportunity_radar.scripts.run_pipeline_once")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -84,8 +89,14 @@ def _stages(engine, settings) -> list[StageSpec]:
         )
 
     def retention(context: StageContext) -> StageCounts:
-        # R55-E2: at most one complete run per UTC day; 0 days is the off switch.
-        if settings.opportunity_retention_days <= 0 or not retention_due(engine):
+        # R55-E2: at most one run per UTC day; 0 days is the off switch. Deleting needs the
+        # owner's explicit OPPORTUNITY_RETENTION_APPLY=true; until then the stage only
+        # counts, and that dry run is tracked apart from applied runs.
+        if settings.opportunity_retention_days <= 0:
+            return StageCounts(skipped=1)
+        apply = bool(settings.opportunity_retention_apply)
+        job_name = JOB_NAME if apply else DRY_RUN_JOB_NAME
+        if not retention_due(engine, job_name=job_name):
             return StageCounts(skipped=1)
         if context.should_stop():
             return StageCounts(stopped=1)
@@ -95,16 +106,36 @@ def _stages(engine, settings) -> list[StageSpec]:
                 retention_days=settings.opportunity_retention_days,
                 batch_size=settings.opportunity_retention_batch_size,
                 ai_call_record_retention_days=settings.ai_call_record_retention_days,
-                dry_run=False,
+                dry_run=not apply,
                 should_stop=context.should_stop,
             )
         except Exception as error:
-            record_retention_attempt(engine, success=False, error=type(error).__name__)
+            try:
+                record_retention_attempt(
+                    engine, success=False, error=type(error).__name__, job_name=job_name
+                )
+            except Exception:  # never mask the original error
+                pass
             raise
-        record_retention_attempt(engine, success=report.complete)
-        return StageCounts(
-            input=1, completed=int(report.complete), stopped=int(report.stopped)
-        )
+        if not apply:
+            # Per-table counts only, for the owner to read before enabling the apply flag.
+            logger.info(
+                "opportunity retention dry run",
+                extra={"job": JOB_NAME, "rows": dict(sorted(report.rows.items()))},
+            )
+        if report.stopped:
+            # A deadline or signal is not a failure; the day stays open for the next window.
+            return StageCounts(input=1, stopped=1)
+        if report.errors:
+            record_retention_attempt(
+                engine,
+                success=False,
+                error=",".join(sorted(report.errors)),
+                job_name=job_name,
+            )
+            return StageCounts(input=1, failed=1)
+        record_retention_attempt(engine, success=report.complete, job_name=job_name)
+        return StageCounts(input=1, completed=int(report.complete))
 
     return [
         StageSpec("collect_enabled_sources", collect),

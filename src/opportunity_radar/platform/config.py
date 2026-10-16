@@ -108,6 +108,9 @@ class Settings(BaseSettings):
     # it (the rollback). Applications and relevant-marked opportunities are always kept.
     opportunity_retention_days: int = Field(default=7, ge=0)
     opportunity_retention_batch_size: int = Field(default=500, ge=1)
+    # Deleting is an owner decision: until this is true the pipeline stage only dry-runs
+    # (counts per table in the log; nothing deleted, including ai_call_record and Tavily).
+    opportunity_retention_apply: bool = False
     # How late a job may be before the doctor calls it late rather than merely busy.
     doctor_job_grace_seconds: int = 120
 
