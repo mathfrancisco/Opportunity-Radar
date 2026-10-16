@@ -6,14 +6,18 @@ or enabled by this repository.
 
 ## Timing Contract
 
+R55-E5: the timer fires hourly (`OnCalendar=hourly UTC`, 24 windows per day) with a short
+15-minute window. Windows never overlap: a oneshot unit cannot start while active, and the
+pipeline `PostgresWindowClaim` advisory lock makes a second runner exit with `CLAIM_BUSY`.
+
 | Value | Setting | Meaning |
 | --- | --- | --- |
-| 3,600 seconds | `DEFAULT_WINDOW_SECONDS` | Runner deadline passed as `--deadline-seconds` |
-| 3,900 seconds | `TimeoutStartSec` | Maximum service start time |
-| 300 seconds | `RandomizedDelaySec` | Schedule jitter |
-| 86,100 seconds | Daily schedule interval - 300 seconds | Minimum interval between daily activation windows |
+| 900 seconds | `DEFAULT_WINDOW_SECONDS` | Runner deadline passed as `--deadline-seconds` |
+| 960 seconds | `TimeoutStartSec` | Maximum service start time |
+| 120 seconds | `RandomizedDelaySec` | Schedule jitter |
+| 3,480 seconds | Hourly schedule interval - 120 seconds | Minimum interval between hourly activation windows |
 
-The enforced rule is `3,600 < 3,900 < 86,100`. Set
+The enforced rule is `900 < 960 < 3,480`. Set
 `PIPELINE_WINDOW_SECONDS` in the root-only environment file only when an
 approved duration preserves this inequality.
 

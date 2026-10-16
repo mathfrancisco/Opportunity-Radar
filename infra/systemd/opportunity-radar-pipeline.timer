@@ -2,11 +2,14 @@
 Description=Schedule Opportunity Radar finite pipeline windows
 
 [Timer]
-OnCalendar=*-*-* 06:00:00 UTC
-RandomizedDelaySec=300
+# R55-E5: hourly collection; each window is short (deadline ~15 min), so Neon suspends between.
+OnCalendar=hourly UTC
+RandomizedDelaySec=120
 AccuracySec=60
 Unit=opportunity-radar-pipeline.service
 # Do not catch up after reboot or a missed window; AC02 and F53-18 forbid automatic catch-up.
+# A window that overruns its hour is never overlapped: the oneshot service cannot start while
+# active, and the pipeline's PostgresWindowClaim lock makes a second runner exit CLAIM_BUSY.
 Persistent=false
 
 [Install]
