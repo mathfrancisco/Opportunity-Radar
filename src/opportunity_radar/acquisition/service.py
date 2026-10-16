@@ -1678,6 +1678,12 @@ class AcquisitionService:
                                 run.record_items(persisted=1)
                             else:
                                 run.record_items(skipped=1)
+                            # Items already in memory and synchronous database calls never
+                            # suspend this coroutine, so without this yield the lease
+                            # renewal task would starve until the claim expired (F53-14).
+                            # The item's claim row lock was released by the commit above, so
+                            # the renewal cannot wait on a lock this thread holds.
+                            await asyncio.sleep(0)
                             logger.info(
                                 "source collection item processed",
                                 extra={

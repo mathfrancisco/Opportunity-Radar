@@ -11,6 +11,7 @@ import asyncio
 import logging
 import os
 import threading
+import time
 from collections.abc import AsyncIterator, Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
@@ -1156,3 +1157,34 @@ def test_partial_pass_between_sources_preserves_absences(
             assert _absent_status(session, skipped) == "CLOSED"
     finally:
         other.cleanup()
+
+
+# --- F53-14: long synchronous item loops ----------------------------------------------
+
+
+def test_lease_is_renewed_while_a_synchronous_item_loop_outlasts_it(
+    board: _Board, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Production: 221 in-memory jobs x ~2.6 s of blocking DB calls ran past a 3 min lease.
+
+    The collector never awaits, so only the run's own yield after each item lets the
+    renewal task run; the lease here is shorter than the whole run but longer than a few items.
+    """
+    from opportunity_radar.acquisition import repository as repository_module
+
+    caplog.set_level(logging.INFO)
+    monkeypatch.setattr(repository_module, "SOURCE_CLAIM_LEASE", timedelta(seconds=1.5))
+    total = 14
+
+    async def blocking(request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        del request
+        for index in range(total):
+            time.sleep(0.2)  # synchronous work the event loop cannot interleave with
+            yield board.item(f"sync-{index}")
+
+    run = board.run_one(board.collector(blocking), renew_interval=0.3)
+
+    assert run.status == "SUCCEEDED"
+    assert run.items_persisted == total
+    assert "lease_renewed" in _events(caplog)
+    assert "fence_rejected" not in _events(caplog)
