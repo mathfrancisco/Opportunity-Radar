@@ -55,7 +55,7 @@ from opportunity_radar.platform.logging import get_logger
 
 logger = get_logger("opportunity_radar.opportunities")
 
-NORMALIZER_VERSION = "v6"
+NORMALIZER_VERSION = "v7"
 
 
 class PayloadExpiredError(NormalizationError):
@@ -457,13 +457,21 @@ class OpportunityService:
             for raw_item in self.repository.run_raw_items(source_run_id)
         ]
 
-    def normalize_pending(self, limit: int = 100) -> NormalizationBatch:
+    def normalize_pending(
+        self, limit: int = 100, *, should_stop: Callable[[], bool] | None = None
+    ) -> NormalizationBatch:
+        """Normalize up to `limit` pending items; `should_stop` is read before each one.
+
+        A batch cut short by `should_stop` has fewer results than `limit`, which the
+        looping caller reads as "stop", so it checks `should_stop` itself as well.
+        """
         if limit < 1 or limit > 500:
             raise ValueError("normalization batch limit must be between 1 and 500")
-        results = [
-            self.normalize(raw_item_id)
-            for raw_item_id in self.repository.pending_raw_item_ids(limit, NORMALIZER_VERSION)
-        ]
+        results = []
+        for raw_item_id in self.repository.pending_raw_item_ids(limit, NORMALIZER_VERSION):
+            if should_stop is not None and should_stop():
+                break
+            results.append(self.normalize(raw_item_id))
         return NormalizationBatch(
             processed=len(results),
             succeeded=sum(item.status == "SUCCEEDED" for item in results),
