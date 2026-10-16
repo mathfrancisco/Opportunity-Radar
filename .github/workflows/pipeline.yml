@@ -426,6 +426,7 @@ jobs:
           applications_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM crm.application_process')"
           history_before="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM crm.stage_history')"
           docker compose -f compose.yaml -f compose.ci.yaml restart postgres
+          for attempt in $(seq 1 30); do docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres pg_isready -U opportunity_radar -d opportunity_radar_test && break; sleep 2; done
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/live
           after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT version_num FROM alembic_version')"
           companies_after="$(docker compose -f compose.yaml -f compose.ci.yaml exec -T postgres psql -U opportunity_radar -d opportunity_radar_test -tAc 'SELECT count(*) FROM company_radar.company')"
