@@ -33,7 +33,6 @@ from opportunity_radar.opportunities.models import (
     SourceOccurrenceModel,
     SourceOccurrenceObservationModel,
 )
-from opportunity_radar.opportunities.repository import OpportunityRepository
 from opportunity_radar.opportunities.service import OpportunityService
 from opportunity_radar.platform.database import create_database_engine
 
@@ -175,9 +174,12 @@ def test_changed_off_target_item_is_not_closed_as_absent() -> None:
                 )
                 == 1
             )
-            missing = OpportunityRepository(session).occurrences_missing_from_both_runs(
-                source.id, current_run_id=third.id, previous_complete_run_id=second.id
-            )
-            assert missing == []
+            occurrence = session.scalars(
+                select(SourceOccurrenceModel).where(
+                    SourceOccurrenceModel.source_definition_id == source.id
+                )
+            ).one()
+            # Presence is the occurrence's own last_seen_run_id (R55-E3), not observations.
+            assert occurrence.last_seen_run_id == third.id
         finally:
             _cleanup(session, source)

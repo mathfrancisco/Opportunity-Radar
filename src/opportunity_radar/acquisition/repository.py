@@ -10,7 +10,7 @@ from sqlalchemy import Table, and_, case, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, lazyload, selectinload
+from sqlalchemy.orm import Session, joinedload, lazyload, selectinload
 
 from opportunity_radar.acquisition.models import (
     HostBudgetStateModel,
@@ -59,6 +59,12 @@ class RawEvidenceWrite:
     payload: Mapping[str, Any]
     #: False for an off-target posting: it may only confirm presence of stored evidence.
     persist_new: bool = True
+    #: When the source says the posting went up; `None` when it does not (R55-E1).
+    published_at: datetime | None = None
+
+
+#: `record_evidence_batch` outcome for an item dropped by the freshness filter (R55-E1).
+STALE = "stale"
 
 
 @dataclass(frozen=True, slots=True)
@@ -526,6 +532,13 @@ class AcquisitionRepository:
         if occurrence is not None and observed_at > occurrence.last_seen_at:
             occurrence.last_seen_at = observed_at
             occurrence.last_seen_run_id = source_run_id
+        if (
+            content_hash_matched
+            and occurrence is not None
+            and occurrence.opportunity.lifecycle_status != "CLOSED"
+        ):
+            # R55-E3: nothing changed and the posting never left: presence alone moved.
+            return
         try:
             with self.session.begin_nested():
                 self.session.add(
@@ -548,7 +561,8 @@ class AcquisitionRepository:
         run_id: UUID,
         writes: Sequence[RawEvidenceWrite],
         observed_at: datetime,
-    ) -> list[bool]:
+        stale_before: datetime | None = None,
+    ) -> list[bool | str]:
         """Store a run's items and their presence observations in a fixed number of statements.
 
         Same decisions, item by item and in order, as one lookup-then-insert per item: an
@@ -557,7 +571,13 @@ class AcquisitionRepository:
         existing evidence and occurrences of the whole batch are read in two queries, and the
         rows are written with `INSERT ... ON CONFLICT DO NOTHING` (a concurrent writer of the
         same evidence or observation wins, exactly as the savepoint-and-ignore it replaces).
-        Returns, per write, whether it created new evidence. The caller owns the transaction.
+        Returns, per write, whether it created new evidence, or `STALE` for an item dropped
+        by the freshness filter. The caller owns the transaction.
+
+        R55-E1: with `stale_before`, an item that would create evidence is dropped when its
+        `published_at` is older than that instant, or, undated, when its identity was first
+        stored before it. A brand-new undated item is kept. R55-E3: an unchanged item whose
+        occurrence is live adds no observation row, only advances `last_seen_*`.
         """
         if not writes:
             return []
@@ -570,7 +590,16 @@ class AcquisitionRepository:
             if current is None or envelope.recency > current.recency:
                 latest[envelope.identity_key] = envelope
 
-        created = [False] * len(writes)
+        first_stored: dict[str, datetime] = {}
+        for _, envelope in stored:
+            seen_at = envelope.recency[0]
+            if (
+                envelope.identity_key not in first_stored
+                or seen_at < first_stored[envelope.identity_key]
+            ):
+                first_stored[envelope.identity_key] = seen_at
+
+        created: list[bool | str] = [False] * len(writes)
         observed: list[tuple[_Envelope, bool]] = []
         planned: list[tuple[int, _Envelope, RawEvidenceWrite]] = []
         for index, write in enumerate(writes):
@@ -589,6 +618,14 @@ class AcquisitionRepository:
                 if newest is not None:
                     observed.append((newest, False))
                 continue
+            if stale_before is not None:
+                reference = write.published_at or first_stored.get(write.identity_key)
+                if reference is not None:
+                    if reference.tzinfo is None:
+                        reference = reference.replace(tzinfo=UTC)
+                    if reference < stale_before:
+                        created[index] = STALE
+                        continue
             envelope = _Envelope(
                 uuid4(),
                 write.identity_key,
@@ -754,7 +791,11 @@ class AcquisitionRepository:
         by_raw: dict[UUID, SourceOccurrenceModel] = {}
         by_external: dict[str, SourceOccurrenceModel] = {}
         by_url: dict[str, SourceOccurrenceModel] = {}
-        for occurrence in self.session.scalars(select(SourceOccurrenceModel).where(or_(*matches))):
+        for occurrence in self.session.scalars(
+            select(SourceOccurrenceModel)
+            .where(or_(*matches))
+            .options(joinedload(SourceOccurrenceModel.opportunity))
+        ):
             by_raw.setdefault(occurrence.raw_item_id, occurrence)
             if occurrence.source_definition_id == source_id:
                 if occurrence.external_id:
@@ -772,6 +813,12 @@ class AcquisitionRepository:
             if occurrence is not None and observed_at > occurrence.last_seen_at:
                 occurrence.last_seen_at = observed_at
                 occurrence.last_seen_run_id = run_id
+            if (
+                matched
+                and occurrence is not None
+                and occurrence.opportunity.lifecycle_status != "CLOSED"
+            ):
+                continue  # R55-E3: unchanged and still live: presence advanced, no row
             rows.append(
                 {
                     "id": uuid4(),
@@ -782,6 +829,8 @@ class AcquisitionRepository:
                     "content_hash_matched": matched,
                 }
             )
+        if not rows:
+            return
         self.session.execute(
             pg_insert(cast(Table, SourceOccurrenceObservationModel.__table__))
             .values(rows)
@@ -880,27 +929,32 @@ class AcquisitionRepository:
             return "quota"
         model = HostBudgetStateModel
         rollover = model.window_start <= now - DEFAULT_HOST_BUDGET_WINDOW
-        statement = pg_insert(model).values(
-            host=host,
-            window_start=now,
-            requests_used=1,
-            requests_ceiling=default_ceiling,
-            exploration_reserve_ratio=0.10,
-        ).on_conflict_do_update(
-            index_elements=[model.host],
-            set_={
-                "window_start": case((rollover, now), else_=model.window_start),
-                "requests_used": case((rollover, 1), else_=model.requests_used + 1),
-                "updated_at": now,
-            },
-            where=(
-                (model.cooldown_until.is_(None) | (model.cooldown_until <= now))
-                & case(
-                    (rollover, model.requests_ceiling > 0),
-                    else_=(model.requests_used < model.requests_ceiling),
-                )
-            ),
-        ).returning(model.host)
+        statement = (
+            pg_insert(model)
+            .values(
+                host=host,
+                window_start=now,
+                requests_used=1,
+                requests_ceiling=default_ceiling,
+                exploration_reserve_ratio=0.10,
+            )
+            .on_conflict_do_update(
+                index_elements=[model.host],
+                set_={
+                    "window_start": case((rollover, now), else_=model.window_start),
+                    "requests_used": case((rollover, 1), else_=model.requests_used + 1),
+                    "updated_at": now,
+                },
+                where=(
+                    (model.cooldown_until.is_(None) | (model.cooldown_until <= now))
+                    & case(
+                        (rollover, model.requests_ceiling > 0),
+                        else_=(model.requests_used < model.requests_ceiling),
+                    )
+                ),
+            )
+            .returning(model.host)
+        )
         accepted = self.session.execute(statement).scalar_one_or_none()
         if accepted is None:
             current = self.session.get(model, host)

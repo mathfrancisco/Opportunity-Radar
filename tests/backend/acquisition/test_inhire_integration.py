@@ -30,6 +30,7 @@ from opportunity_radar.opportunities.models import (
     SourceOccurrenceModel,
     SourceOccurrenceObservationModel,
 )
+from opportunity_radar.platform.config import get_settings
 from opportunity_radar.platform.database import create_database_engine
 
 pytestmark = [
@@ -43,6 +44,12 @@ pytestmark = [
 _FIXTURES = Path(__file__).parents[2] / "fixtures"
 _LIST = json.loads((_FIXTURES / "inhire_jobs.json").read_text(encoding="utf-8"))
 _DETAIL = json.loads((_FIXTURES / "inhire_job_detail.json").read_text(encoding="utf-8"))
+
+
+@pytest.fixture(autouse=True)
+def _old_fixture_dates_are_not_stale(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These fixtures use fixed past dates; the R55-E1 freshness filter is not under test."""
+    monkeypatch.setattr(get_settings(), "ingest_max_age_days", 0)
 
 
 def _cleanup(session: Session, source: SourceDefinitionModel) -> None:
