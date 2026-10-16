@@ -1,12 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { PageShell } from './PageShell'
 import { render } from './testing'
 
+vi.mock('../lib/session', () => ({
+  useSession: () => ({ data: { is_owner: true }, isError: false, isPending: false }),
+}))
+
 function renderShell(current?: '/sources') {
   return render(
     <MemoryRouter>
-      <PageShell current={current} eyebrow="Operação" isOwner title="Fontes">
+      <PageShell current={current} eyebrow="Operação" title="Fontes">
         <p>conteúdo</p>
       </PageShell>
     </MemoryRouter>,
@@ -69,7 +73,6 @@ describe('PageShell', () => {
           description="Subtítulo"
           eyebrow="Operação"
           footer="Rodapé"
-          isOwner
           title="Fontes"
         >
           <p>conteúdo</p>

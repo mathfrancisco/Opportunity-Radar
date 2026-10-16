@@ -4,6 +4,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { render } from '../components/testing'
 import { HomologationQueuePage } from './HomologationQueuePage'
 
+vi.mock('../lib/session', () => ({
+  useSession: () => ({ data: { is_owner: true }, isError: false, isPending: false }),
+}))
+
 vi.mock('../components/HomologationQueue', () => ({
   HomologationQueue: () => <div>Fila carregada</div>,
 }))

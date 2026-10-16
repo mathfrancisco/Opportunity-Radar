@@ -15,7 +15,6 @@ export function HomologationQueuePage() {
 
   return (
     <PageShell
-      isOwner
       current="/sources/homologation-queue"
       eyebrow="Aquisição"
       title="Fila de homologação"

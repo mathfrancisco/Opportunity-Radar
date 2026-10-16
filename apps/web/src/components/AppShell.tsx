@@ -3,12 +3,11 @@ import { PageHeader } from './PageHeader'
 import { Sidebar, type NavigationPath } from './Sidebar'
 import { MobileNavigationDialog } from './ui/MobileNavigationDialog'
 import { AuthenticationControls } from '../app/AuthenticationControls'
+import { useSession } from '../lib/session'
 
 export interface AppShellProps {
   /** Omitted on pages that are reached from a link rather than from the nav. */
   current?: NavigationPath
-  /** Owner-only views use the extended navigation when their route is authorized. */
-  isOwner?: boolean
   /** Petrol kicker above the title (SPEC 54: "Decidir"); drawn only when given. */
   eyebrow?: string
   title: string
@@ -31,7 +30,6 @@ const drawerId = 'sidebar'
  */
 export function AppShell({
   current,
-  isOwner = false,
   eyebrow,
   title,
   description,
@@ -43,6 +41,9 @@ export function AppShell({
 }: AppShellProps) {
   const [open, setOpen] = useState(false)
   const menuButton = useRef<HTMLButtonElement>(null)
+  const session = useSession()
+  // Fail closed: owner links only for a successful capability that says so.
+  const isOwner = !session.isError && session.data?.is_owner === true
 
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') {
