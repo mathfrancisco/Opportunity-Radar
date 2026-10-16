@@ -16,6 +16,7 @@ from opportunity_radar.operations.assessment_retention import (
     DEFAULT_ASSESSMENT_RETENTION_DAYS,
     prune_superseded_assessments,
 )
+from opportunity_radar.operations.data_reduction import measure_database_size
 from opportunity_radar.platform.backup import FORMAT_VERSION, MANIFEST_QUERIES
 from opportunity_radar.platform.database import create_database_engine
 
@@ -68,9 +69,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--days", type=int, default=DEFAULT_ASSESSMENT_RETENTION_DAYS)
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args(argv)
-    report = build_report(
-        create_database_engine(os.environ["DATABASE_URL"]), retention_days=args.days
-    )
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    report = build_report(engine, retention_days=args.days)
+    # R55-E6: the same number the daily window logs, with the 70% alert flag (read-only).
+    size, alert = measure_database_size(engine)
+    report["database_size_bytes"] = size
+    report["database_size_alert"] = alert
     output = json.dumps(report, ensure_ascii=True, indent=2) + "\n"
     if args.output is None:
         print(output, end="")

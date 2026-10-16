@@ -3,7 +3,7 @@
 This module deliberately knows nothing about schedules.  A caller provides the three
 allowed stages, which are run once in their fixed order while a PostgreSQL advisory
 lock is held.  It is therefore safe for a timer to invoke and let exit: no polling,
-retry loop, or analysis is hidden here.  The one optional trailing `retention` stage
+retry loop, or analysis is hidden here.  The one optional leading `retention` stage
 (card R55-E2) is supplied by the caller like the others and decides for itself whether it
 is due.
 """
@@ -189,11 +189,11 @@ def describe_pipeline(*, owner_sub: str | None, deadline_seconds: float) -> dict
         "dry_run": True,
         "owner_configured": bool(owner),
         "deadline_seconds": deadline_seconds,
-        "stages": [{"name": name, "status": "planned"} for name in STAGE_ORDER]
-        + [
-            {"name": "analyze_pending", "status": "blocked", "reason": ANALYSIS_BLOCKED},
-            {"name": RETENTION_STAGE, "status": "planned", "cadence": "once per UTC day"},
-        ],
+        "stages": [
+            {"name": RETENTION_STAGE, "status": "planned", "cadence": "once per UTC day, first"}
+        ]
+        + [{"name": name, "status": "planned"} for name in STAGE_ORDER]
+        + [{"name": "analyze_pending", "status": "blocked", "reason": ANALYSIS_BLOCKED}],
         "touches": "none",
     }
 
@@ -210,9 +210,9 @@ def run_pipeline(
     """Run each allowed stage once. A returned failure never triggers a retry."""
     owner = validate_owner(owner_sub)
     names = tuple(stage.name for stage in stages)
-    if names not in (STAGE_ORDER, STAGE_ORDER + (RETENTION_STAGE,)):
+    if names not in (STAGE_ORDER, (RETENTION_STAGE,) + STAGE_ORDER):
         raise ConfigurationError(
-            "stages must be collect, normalize, evaluate, then optionally retention"
+            "stages must be collect, normalize, evaluate, optionally preceded by retention"
         )
     deadline = Deadline(deadline_seconds, clock=clock)
     stop = stop or StopSignal()

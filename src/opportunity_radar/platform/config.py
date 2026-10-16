@@ -102,13 +102,16 @@ class Settings(BaseSettings):
     # R55-E3/D5: an occurrence is absent only after this many hours unseen, across a
     # complete run of its source that started after that mark.
     absence_after_hours: int = 24
-    payload_retention_days: int = 365
+    # R55-E6: a normalized raw item keeps its body only briefly; the hash, the envelope and
+    # the occurrence stay. Only already-normalized items are ever expired.
+    payload_retention_days: int = 2
     payload_retention_batch_size: int = 500
     payload_retention_interval_seconds: int = 21600
     # Off by default (card F50-08): it deletes data. Turn on only after
     # `scripts/prune_assessments.py` (dry run) reports what it would delete.
     worker_assessment_retention_enabled: bool = False
-    assessment_retention_days: int = 7
+    # R55-E6: superseded assessments older than this are pruned (current is always kept).
+    assessment_retention_days: int = 1
     assessment_retention_batch_size: int = 500
     # R55-E2: daily deletion of opportunities older than N days (age = published_at, else
     # first seen) and their dependents, run by the pipeline's `retention` stage. 0 disables
@@ -118,6 +121,13 @@ class Settings(BaseSettings):
     # Deleting is an owner decision: until this is true the pipeline stage only dry-runs
     # (counts per table in the log; nothing deleted, including ai_call_record and Tavily).
     opportunity_retention_apply: bool = False
+    # R55-E6: the daily window logs pg_database_size and warns above this share of the limit
+    # (Neon free tier: 1 GB decimal). Warning only; nothing is deleted because of it.
+    # The daily retention + reduction stage runs first in the window; this caps how long it
+    # may take so the hourly collection still gets its share of the short deadline.
+    retention_stage_budget_seconds: float = Field(default=300.0, gt=0)
+    database_size_limit_bytes: int = Field(default=1_000_000_000, ge=1)
+    database_size_alert_ratio: float = Field(default=0.7, gt=0, le=1)
     # How late a job may be before the doctor calls it late rather than merely busy.
     doctor_job_grace_seconds: int = 120
 

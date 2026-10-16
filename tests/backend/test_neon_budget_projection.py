@@ -768,3 +768,36 @@ def test_cli_subprocess_env_isolation() -> None:
         )
         assert secret not in proc.stdout
         assert secret not in proc.stderr
+
+
+# ---------------------------------------------------------------------------
+# R55-E5 — hourly windows: 24 windows/day x 31 days = 744 runs/month
+# ---------------------------------------------------------------------------
+
+_HOURLY_RUNS = 24 * 31
+
+
+def test_hourly_windows_typical_activity_stays_under_the_compute_limit() -> None:
+    # About 5 min of work plus the 5 min Neon suspend tail = 10 min active per window.
+    result = project_budget(
+        active_hours_per_run=Decimal("0.1667"), runs_per_month=_HOURLY_RUNS, cu=Decimal("0.25")
+    )
+    assert result["total_cu_hours"] == "31.006200"
+    assert result["compute_status"] == "pass"
+
+
+def test_hourly_windows_worst_case_full_deadline_still_passes() -> None:
+    # 15 min deadline fully used plus the 5 min suspend tail = 20 min active per window.
+    result = project_budget(
+        active_hours_per_run=Decimal("0.3334"), runs_per_month=_HOURLY_RUNS, cu=Decimal("0.25")
+    )
+    assert result["total_cu_hours"] == "62.012400"
+    assert result["compute_status"] == "pass"
+
+
+def test_hourly_windows_that_never_let_neon_suspend_breach_the_limit() -> None:
+    # The negative case: always-on compute (60 min per window) is 186 CU-h and must fail.
+    result = project_budget(
+        active_hours_per_run=Decimal("1"), runs_per_month=_HOURLY_RUNS, cu=Decimal("0.25")
+    )
+    assert result["compute_status"] == "fail"

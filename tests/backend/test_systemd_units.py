@@ -40,6 +40,17 @@ def _environment_files() -> list[str]:
     ]
 
 
+def _calendar_interval_seconds(calendar: str) -> int:
+    """Interval between two activations for the supported OnCalendar forms."""
+    if calendar == "hourly UTC":
+        return 3600
+    match = re.fullmatch(r"\*-\*-\* (\d{2}):(\d{2}):(\d{2}) UTC", calendar)
+    assert match, f"unsupported OnCalendar form: {calendar!r}"
+    scheduled_time = time(*(int(value) for value in match.groups()))
+    first = datetime.combine(datetime(2026, 1, 1), scheduled_time, tzinfo=timezone.utc)
+    return int(((first + timedelta(days=1)) - first).total_seconds())
+
+
 def test_service_has_finite_oneshot_contract() -> None:
     service = _unit(SERVICE)
 
@@ -93,13 +104,8 @@ def test_timing_contract_is_runner_less_than_service_less_than_schedule_window()
     runner_deadline = default_window
     service_timeout = _seconds(service["TimeoutStartSec"])
     randomized_delay = _seconds(timer["RandomizedDelaySec"])
-    calendar = timer["OnCalendar"]
-    match = re.fullmatch(r"\*-\*-\* (\d{2}):(\d{2}):(\d{2}) UTC", calendar)
-    assert match, f"unsupported OnCalendar form: {calendar!r}"
-    scheduled_time = time(*(int(value) for value in match.groups()))
-    first = datetime.combine(datetime(2026, 1, 1), scheduled_time, tzinfo=timezone.utc)
-    second = first + timedelta(days=1)
-    schedule_window = int((second - first).total_seconds()) - randomized_delay
+    interval = _calendar_interval_seconds(timer["OnCalendar"])
+    schedule_window = interval - randomized_delay
 
     assert runner_deadline < service_timeout < schedule_window
 
@@ -218,3 +224,28 @@ def test_systemd_analyze_verify_when_available(tmp_path: Path) -> None:
     ]
     assert not unexpected, "\n".join(unexpected)
     assert "run-opportunity-radar-window is not executable" not in result.stderr
+
+
+def test_r55_e5_hourly_short_window_without_overlap() -> None:
+    timer = _unit(TIMER)["Timer"]
+    service = _unit(SERVICE)["Service"]
+    wrapper = WRAPPER.read_text(encoding="utf-8")
+
+    assert timer["OnCalendar"] == "hourly UTC"
+    assert _seconds(timer["RandomizedDelaySec"]) <= 120
+    assert timer["Persistent"].lower() == "false"
+    assert "DEFAULT_WINDOW_SECONDS=900" in wrapper.splitlines()
+    assert _seconds(service["TimeoutStartSec"]) == 960
+    # A oneshot service is never started again while it is active, and the pipeline lock
+    # (PostgresWindowClaim) rejects a second runner; neither may be turned into a restart.
+    assert service["Type"] == "oneshot"
+    assert service["Restart"] == "no"
+
+
+@pytest.mark.parametrize(
+    ("calendar", "message"),
+    [("daily UTC", "unsupported"), ("*-*-* 06:00:00", "unsupported")],
+)
+def test_calendar_interval_rejects_unsupported_forms(calendar: str, message: str) -> None:
+    with pytest.raises(AssertionError, match=message):
+        _calendar_interval_seconds(calendar)

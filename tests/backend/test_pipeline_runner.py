@@ -76,7 +76,8 @@ def test_dry_run_has_no_claim_or_clock() -> None:
     plan = describe_pipeline(owner_sub="owner", deadline_seconds=30)
     assert plan["dry_run"] is True
     assert plan["touches"] == "none"
-    assert [stage["name"] for stage in plan["stages"][:3]] == [spec.name for spec in _stages([])]
+    assert [stage["name"] for stage in plan["stages"][1:4]] == [spec.name for spec in _stages([])]
+    assert plan["stages"][0]["name"] == "retention"
 
 
 @pytest.mark.parametrize("deadline", [float("nan"), float("inf"), float("-inf")])
@@ -266,29 +267,34 @@ def test_postgres_claim_allows_only_one_window_on_isolated_database() -> None:
 
 def test_analysis_stays_blocked_and_retention_is_planned_daily() -> None:
     stages = describe_pipeline(owner_sub="owner", deadline_seconds=30)["stages"]
-    assert stages[-2] == {
+    assert stages[-1] == {
         "name": "analyze_pending",
         "status": "blocked",
         "reason": "analysis is opt-in and disabled for finite pipeline windows",
     }
-    assert stages[-1]["name"] == "retention"
-    assert stages[-1]["status"] == "planned"
+    assert stages[0]["name"] == "retention"
+    assert stages[0]["status"] == "planned"
 
 
-def test_retention_stage_is_optional_and_last() -> None:
+def test_retention_stage_is_optional_and_first() -> None:
     events: list[str] = []
-    stages = _stages(events) + [
+    stages = [
         StageSpec("retention", lambda _c: events.append("retention") or StageCounts(input=1))
-    ]
+    ] + _stages(events)
     report = run_pipeline(stages, owner_sub="owner", deadline_seconds=30, claim_factory=nullcontext)
-    assert events[-1] == "retention" and report.exit_code == ExitCode.SUCCESS
-    with pytest.raises(ConfigurationError):
-        run_pipeline(
-            [stages[-1], *stages[:-1]],
-            owner_sub="owner",
-            deadline_seconds=30,
-            claim_factory=nullcontext,
-        )
+    assert events[0] == "retention" and report.exit_code == ExitCode.SUCCESS
+    assert events[1:] == ["collect_enabled_sources", "normalize_opportunities", "evaluate_pending"]
+    for wrong in (stages[1:] + stages[:1], [stages[1], stages[0], *stages[2:]]):
+        with pytest.raises(ConfigurationError):
+            run_pipeline(wrong, owner_sub="owner", deadline_seconds=30, claim_factory=nullcontext)
+
+
+def test_a_retention_stage_that_only_reports_failed_counts_does_not_block_collection() -> None:
+    events: list[str] = []
+    stages = [StageSpec("retention", lambda _c: StageCounts(input=1, failed=1))] + _stages(events)
+    report = run_pipeline(stages, owner_sub="owner", deadline_seconds=30, claim_factory=nullcontext)
+    assert events == ["collect_enabled_sources", "normalize_opportunities", "evaluate_pending"]
+    assert report.exit_code == ExitCode.SUCCESS
 
 
 # --- F53-10 AC03/AC05 -----------------------------------------------------------------
@@ -304,6 +310,13 @@ def _run_pipeline_once_settings(**overrides: object) -> SimpleNamespace:
         "opportunity_retention_apply": False,
         "opportunity_retention_batch_size": 500,
         "ai_call_record_retention_days": 7,
+        "payload_retention_days": 2,
+        "payload_retention_batch_size": 500,
+        "assessment_retention_days": 1,
+        "assessment_retention_batch_size": 500,
+        "database_size_limit_bytes": 1_000_000_000,
+        "database_size_alert_ratio": 0.7,
+        "retention_stage_budget_seconds": 300.0,
     }
     return SimpleNamespace(
         database_url="postgresql://unused",
@@ -563,8 +576,14 @@ def test_collect_deadline_between_sources_stops_pass_without_marking_complete(
 
 class _RetentionHarness:
     def __init__(
-        self, monkeypatch: pytest.MonkeyPatch, *, days: int = 7, apply: bool = False
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        days: int = 7,
+        apply: bool = False,
+        budget: float = 300.0,
     ) -> None:
+        from opportunity_radar.operations.data_reduction import DataReductionReport
         from opportunity_radar.operations.opportunity_retention import (
             OpportunityRetentionReport,
         )
@@ -575,6 +594,11 @@ class _RetentionHarness:
         self.due = True
         self.raises: Exception | None = None
         self.record_raises = False
+        self.reduction = DataReductionReport(applied=apply)
+        self.reductions: list[dict[str, object]] = []
+        self.measurements: dict[str, object] = {}
+        self.stop_when_run = False
+        self.stop = StopSignal()
         self.runs: list[dict[str, object]] = []
         self.records: list[dict[str, object]] = []
         self.due_checks: list[str] = []
@@ -582,6 +606,8 @@ class _RetentionHarness:
 
         def run(_engine: object, **kwargs: object):
             harness.runs.append(kwargs)
+            if harness.stop_when_run:
+                harness.stop.set("deadline")
             if harness.raises:
                 raise harness.raises
             return harness.report
@@ -595,26 +621,29 @@ class _RetentionHarness:
             if harness.record_raises:
                 raise RuntimeError("record failed")
 
+        def reduce(_engine: object, **kwargs: object) -> DataReductionReport:
+            harness.reductions.append(kwargs)
+            if harness.stop_when_run:
+                harness.stop.set("deadline")
+            return harness.reduction
+
+        monkeypatch.setattr(run_pipeline_once, "run_data_reduction", reduce)
         monkeypatch.setattr(run_pipeline_once, "run_opportunity_retention", run)
         monkeypatch.setattr(run_pipeline_once, "retention_due", due)
         monkeypatch.setattr(run_pipeline_once, "record_retention_attempt", record)
         settings = _run_pipeline_once_settings(
-            opportunity_retention_days=days, opportunity_retention_apply=apply
+            opportunity_retention_days=days,
+            opportunity_retention_apply=apply,
+            retention_stage_budget_seconds=budget,
         )
-        self.stage = run_pipeline_once._stages(object(), settings)[3]
+        self.stage = run_pipeline_once._stages(object(), settings, self.measurements)[0]
         assert self.stage.name == "retention"
 
     def run(self, *, stopped: bool = False) -> StageCounts:
-        stop = StopSignal()
+        self.stop = StopSignal()
         if stopped:
-            stop.set("signal")
-        return self.stage.run(StageContext("owner", Deadline(60), stop))
-
-
-def test_retention_stage_disabled_with_zero_days(monkeypatch: pytest.MonkeyPatch) -> None:
-    harness = _RetentionHarness(monkeypatch, days=0)
-    assert harness.run() == StageCounts(skipped=1)
-    assert harness.runs == [] and harness.due_checks == []
+            self.stop.set("signal")
+        return self.stage.run(StageContext("owner", Deadline(60), self.stop))
 
 
 def test_retention_stage_skips_when_not_due(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -658,6 +687,7 @@ def test_retention_stage_stopped_run_is_not_recorded_as_failure(
     harness = _RetentionHarness(monkeypatch, apply=True)
     harness.report.stopped = True
     harness.report.complete = False
+    harness.stop_when_run = True  # the pipeline deadline or a signal, not the stage budget
     assert harness.run() == StageCounts(input=1, stopped=1)
     assert harness.records == []
 
@@ -674,15 +704,230 @@ def test_retention_stage_step_errors_are_recorded_as_failure(
     ]
 
 
-def test_retention_stage_exception_is_recorded_and_not_masked(
+def test_data_reduction_runs_in_the_retention_slot_with_the_same_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    applied = _RetentionHarness(monkeypatch, apply=True)
+    assert applied.run() == StageCounts(input=1, completed=1)
+    assert applied.reductions[0]["apply"] is True
+    assert applied.reductions[0]["payload_retention_days"] == 2
+    assert applied.reductions[0]["assessment_retention_days"] == 1
+    assert applied.reductions[0]["size_limit_bytes"] == 1_000_000_000
+
+    counted = _RetentionHarness(monkeypatch, apply=False)
+    assert counted.run() == StageCounts(input=1, completed=1)
+    assert counted.reductions[0]["apply"] is False
+
+
+def test_data_reduction_is_skipped_when_not_due_or_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    not_due = _RetentionHarness(monkeypatch, apply=True)
+    not_due.due = False
+    not_due.run()
+    assert not_due.reductions == []
+    from opportunity_radar.operations.data_reduction import DataReductionReport
+
+    monkeypatch.setattr(
+        run_pipeline_once,
+        "check_database_size",
+        lambda *_a, **_k: DataReductionReport(applied=False),
+    )
+    off = _RetentionHarness(monkeypatch, days=0, apply=True)
+    off.run()
+    assert off.reductions == []
+
+
+def test_data_reduction_is_skipped_when_retention_stopped_or_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stopped = _RetentionHarness(monkeypatch, apply=True)
+    stopped.report.stopped = True
+    stopped.report.complete = False
+    stopped.run()
+    assert stopped.reductions == []
+
+    failed = _RetentionHarness(monkeypatch, apply=True)
+    failed.report.errors = {"opportunities": "ValueError"}
+    failed.report.complete = False
+    failed.run()
+    assert failed.reductions == []
+
+
+def test_data_reduction_error_fails_the_stage_and_stop_leaves_the_day_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failing = _RetentionHarness(monkeypatch, apply=True)
+    failing.reduction.errors = {"assessments": "RuntimeError"}
+    failing.reduction.complete = False
+    assert failing.run() == StageCounts(input=1, failed=1)
+    assert failing.records == [
+        {
+            "success": False,
+            "error": "reduction_assessments",
+            "job_name": "opportunity_retention",
+        }
+    ]
+
+    stopping = _RetentionHarness(monkeypatch, apply=True)
+    stopping.reduction.stopped = True
+    stopping.reduction.complete = False
+    stopping.stop_when_run = True
+    assert stopping.run() == StageCounts(input=1, stopped=1)
+    assert stopping.records == []
+
+
+def test_retention_stage_exception_is_recorded_and_does_not_block_collection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     harness = _RetentionHarness(monkeypatch, apply=True)
     harness.raises = ValueError("original")
     harness.record_raises = True  # recording the failure fails too
-    with pytest.raises(ValueError, match="original"):
-        harness.run()
+    assert harness.run() == StageCounts(input=1, failed=1)
     assert harness.records[0]["success"] is False
+
+
+def test_the_stage_budget_running_out_is_not_a_pipeline_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _RetentionHarness(monkeypatch, apply=True)
+    harness.report.stopped = True
+    harness.report.complete = False
+    # The pipeline deadline is far away, so this stop was the stage's own budget.
+    assert harness.run() == StageCounts(input=1, skipped=1)
+    assert harness.records == []  # the day stays open for the next hourly window
+    stop_fn = harness.runs[0]["should_stop"]
+    assert callable(stop_fn) and stop_fn() is False
+
+
+def test_the_stage_budget_is_enforced_by_the_stop_callback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _RetentionHarness(monkeypatch, apply=True, budget=0.0001)
+    import time as _time
+
+    harness.run()
+    _time.sleep(0.01)
+    assert harness.runs[0]["should_stop"]() is True  # type: ignore[operator]
+
+
+def test_size_is_reported_in_the_summary_and_an_alert_is_visible(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _RetentionHarness(monkeypatch, apply=False)
+    harness.reduction.database_size_bytes = 800_000_000
+    harness.reduction.size_alert = True
+    harness.run()
+    assert harness.measurements == {
+        "database_size_bytes": 800_000_000,
+        "database_size_alert": True,
+    }
+
+
+def test_size_watch_runs_when_retention_is_switched_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from opportunity_radar.operations.data_reduction import DataReductionReport
+
+    harness = _RetentionHarness(monkeypatch, days=0)
+    seen: list[dict[str, object]] = []
+
+    def check(_engine: object, **kwargs: object) -> DataReductionReport:
+        seen.append(kwargs)
+        return DataReductionReport(applied=False, database_size_bytes=5, size_alert=False)
+
+    monkeypatch.setattr(run_pipeline_once, "check_database_size", check)
+    assert harness.run() == StageCounts(input=1, completed=1)
+    assert seen and harness.runs == [] and harness.reductions == []  # nothing is deleted
+    assert harness.due_checks == ["database_size_check"]
+    assert harness.records == [{"success": True, "error": None, "job_name": "database_size_check"}]
+    assert harness.measurements["database_size_alert"] is False
+    harness.due = False
+    assert harness.run() == StageCounts(skipped=1)
+
+
+def test_failures_anywhere_in_the_retention_slot_never_raise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _RetentionHarness(monkeypatch, apply=True)
+
+    def broken(*_a: object, **_k: object) -> bool:
+        raise RuntimeError("database unreachable")
+
+    monkeypatch.setattr(run_pipeline_once, "retention_due", broken)
+    assert harness.run() == StageCounts(input=1, failed=1)
+    assert harness.measurements["retention_failed"] is True
+
+    errored = _RetentionHarness(monkeypatch, apply=True)
+    errored.record_raises = True
+    errored.report.errors = {"opportunities": "ValueError"}
+    errored.report.complete = False
+    assert errored.run() == StageCounts(input=1, failed=1)  # record_retention_attempt raised
+
+
+def test_a_healthy_retention_does_not_flag_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    harness = _RetentionHarness(monkeypatch, apply=True)
+    harness.run()
+    assert "retention_failed" not in harness.measurements
+
+
+def test_size_is_measured_even_when_retention_errors_or_stops(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from opportunity_radar.operations.data_reduction import DataReductionReport
+
+    def check(_engine: object, **_k: object) -> DataReductionReport:
+        return DataReductionReport(applied=False, database_size_bytes=900, size_alert=True)
+
+    monkeypatch.setattr(run_pipeline_once, "check_database_size", check)
+    failing = _RetentionHarness(monkeypatch, apply=True)
+    failing.report.errors = {"opportunities": "ValueError"}
+    failing.report.complete = False
+    failing.run()
+    assert failing.reductions == []  # nothing deleted past the failure
+    assert failing.measurements["database_size_alert"] is True
+
+    raising = _RetentionHarness(monkeypatch, apply=True)
+    raising.raises = ValueError("x")
+    raising.run()
+    assert raising.measurements["database_size_bytes"] == 900
+
+    stopping = _RetentionHarness(monkeypatch, apply=True)
+    stopping.report.stopped = True
+    stopping.report.complete = False
+    stopping.run()
+    assert stopping.measurements["database_size_bytes"] == 900
+
+
+@pytest.mark.parametrize(("failed", "expected"), [(True, 12), (False, 0)])
+def test_main_exits_nonzero_after_collection_when_retention_failed(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], failed: bool, expected: int
+) -> None:
+    from opportunity_radar.platform.pipeline import PipelineReport
+
+    monkeypatch.setattr(
+        run_pipeline_once,
+        "get_settings",
+        lambda: SimpleNamespace(worker_owner_sub="owner", database_url="postgresql://unused"),
+    )
+    monkeypatch.setattr(run_pipeline_once, "create_database_engine", lambda _url: object())
+
+    def fake_stages(_engine: object, _settings: object, measurements: dict[str, object]) -> list:
+        if failed:
+            measurements["retention_failed"] = True
+        return []
+
+    monkeypatch.setattr(run_pipeline_once, "_stages", fake_stages)
+    monkeypatch.setattr(
+        run_pipeline_once,
+        "run_pipeline",
+        lambda *_a, **_k: PipelineReport(ExitCode.SUCCESS, "success"),
+    )
+
+    assert run_pipeline_once.main(["--deadline-seconds=30"]) == expected
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["outcome"] == "success"  # the collection stages still ran and reported
+    assert payload.get("retention_failed", False) is failed
 
 
 def test_retention_apply_setting_defaults_to_false_and_reads_the_env(
