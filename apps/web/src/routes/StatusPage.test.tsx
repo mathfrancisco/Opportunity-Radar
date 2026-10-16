@@ -6,6 +6,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render } from '../components/testing'
 import { StatusPage } from './StatusPage'
 
+vi.mock('../lib/session', () => ({
+  useSession: () => ({ data: { is_owner: true }, isError: false, isPending: false }),
+}))
+
 afterEach(() => vi.unstubAllGlobals())
 
 async function flush(times = 4) {

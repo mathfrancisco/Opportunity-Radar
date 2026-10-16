@@ -4,6 +4,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { AppShell } from './AppShell'
 
+const sessionMock = vi.hoisted(() => ({
+  result: { data: undefined, isError: false, isPending: true } as {
+    data: { is_owner: boolean } | undefined
+    isError: boolean
+    isPending: boolean
+  },
+}))
+
+vi.mock('../lib/session', () => ({ useSession: () => sessionMock.result }))
 vi.mock('@clerk/react', () => ({
   Show: ({ children }: { children: ReactNode }) => <>{children}</>,
   UserButton: () => <button aria-label="Conta" type="button" />,
@@ -69,6 +78,7 @@ function stubMatchMedia() {
 const originalMatchMedia = window.matchMedia
 
 afterEach(() => {
+  sessionMock.result = { data: undefined, isError: false, isPending: true }
   act(() => {
     roots.splice(0).forEach((root) => root.unmount())
   })
@@ -212,5 +222,40 @@ describe('AppShell', () => {
 
     expect(button.getAttribute('aria-expanded')).toBe('false')
     expect(document.querySelector('[role="dialog"][id="sidebar"]')).toBeNull()
+  })
+})
+
+describe('AppShell owner navigation', () => {
+  const ownerHrefs = ['/sources', '/companies', '/status']
+
+  function renderOverview() {
+    return render(
+      <MemoryRouter>
+        <AppShell current="/" title="Visão geral">
+          <p>conteúdo</p>
+        </AppShell>
+      </MemoryRouter>,
+    )
+  }
+
+  function ownerLinks(container: HTMLElement) {
+    return ownerHrefs.map((href) => container.querySelector(`nav a[href="${href}"]`))
+  }
+
+  it('mostra os links de dono numa página comum quando a sessão diz is_owner', () => {
+    sessionMock.result = { data: { is_owner: true }, isError: false, isPending: false }
+
+    expect(ownerLinks(renderOverview()).every((link) => link !== null)).toBe(true)
+  })
+
+  it.each([
+    ['não é dono', { data: { is_owner: false }, isError: false, isPending: false }],
+    ['a sessão está pendente', { data: undefined, isError: false, isPending: true }],
+    ['a sessão falhou', { data: undefined, isError: true, isPending: false }],
+    ['há erro mesmo com dados antigos de dono', { data: { is_owner: true }, isError: true, isPending: false }],
+  ])('esconde os links de dono quando %s', (_, result) => {
+    sessionMock.result = result
+
+    expect(ownerLinks(renderOverview()).every((link) => link === null)).toBe(true)
   })
 })
