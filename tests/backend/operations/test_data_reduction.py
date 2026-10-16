@@ -207,3 +207,39 @@ def test_a_stop_request_before_the_start_runs_nothing(monkeypatch: pytest.Monkey
 
     assert report.stopped is True and report.complete is False
     assert prune.calls == [] and report.database_size_bytes is None
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.environ.get("RUN_DATABASE_INTEGRATION") != "1",
+    reason="database integration is enabled only in the isolated CI database",
+)
+def test_long_running_worker_expiry_is_gated_by_the_apply_flag() -> None:
+    from opportunity_radar import worker
+
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        try:
+            old = fixture.raw_item(age_days=5)
+
+            worker.expire_raw_payloads(engine, retention_days=2, apply=False)
+            assert fixture.payload_is_present(old)  # flag off: nothing destroyed
+
+            worker.expire_raw_payloads(engine, retention_days=2, apply=True)
+            assert not fixture.payload_is_present(old)
+        finally:
+            fixture.cleanup()
+
+
+def test_scheduler_passes_the_apply_flag_to_the_payload_job() -> None:
+    from opportunity_radar.platform.config import Settings
+    from opportunity_radar.worker import build_scheduler
+
+    url = "postgresql+psycopg://u:p@localhost:5432/x_test"
+    off = build_scheduler(Settings(database_url=url)).get_job("expire-raw-payloads")
+    on = build_scheduler(
+        Settings(database_url=url, opportunity_retention_apply=True)
+    ).get_job("expire-raw-payloads")
+    assert off is not None and off.kwargs["apply"] is False
+    assert on is not None and on.kwargs["apply"] is True

@@ -123,6 +123,9 @@ class Settings(BaseSettings):
     opportunity_retention_apply: bool = False
     # R55-E6: the daily window logs pg_database_size and warns above this share of the limit
     # (Neon free tier: 1 GB decimal). Warning only; nothing is deleted because of it.
+    # The daily retention + reduction stage runs first in the window; this caps how long it
+    # may take so the hourly collection still gets its share of the short deadline.
+    retention_stage_budget_seconds: float = Field(default=300.0, gt=0)
     database_size_limit_bytes: int = Field(default=1_000_000_000, ge=1)
     database_size_alert_ratio: float = Field(default=0.7, gt=0, le=1)
     # How late a job may be before the doctor calls it late rather than merely busy.

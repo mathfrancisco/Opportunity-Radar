@@ -527,9 +527,14 @@ def expire_raw_payloads(
     batch_size: int = 500,
     interval_seconds: int = 21600,
     ai_call_record_retention_days: int | None = None,
+    apply: bool = True,
     now: datetime | None = None,
 ) -> None:
     """Drop raw bodies the policy has released, and account for every one of them.
+
+    `apply=False` (the scheduler passes `OPPORTUNITY_RETENTION_APPLY`) deletes nothing: the
+    job still reports its heartbeat, but payload expiry and the telemetry purge are skipped
+    until the owner enables the destructive-retention flag (R55-E6).
 
     `ai_call_record_retention_days` piggybacks on this same daily pass (card F20-19):
     the telemetry table carries no PII, so it only needs its own short retention, not a
@@ -540,6 +545,12 @@ def expire_raw_payloads(
         job_name="expire_raw_payloads",
         interval=timedelta(seconds=interval_seconds),
     ):
+        if not apply:
+            logger.info(
+                "raw payload expiry skipped: OPPORTUNITY_RETENTION_APPLY is false",
+                extra={"job": "retention", "retention_days": retention_days},
+            )
+            return
         with Session(engine) as session:
             outcome = PayloadRetentionService(
                 session, retention_days=retention_days, batch_size=batch_size
@@ -1242,6 +1253,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
                 "batch_size": settings.payload_retention_batch_size,
                 "interval_seconds": settings.payload_retention_interval_seconds,
                 "ai_call_record_retention_days": settings.ai_call_record_retention_days,
+                "apply": bool(settings.opportunity_retention_apply),
             },
             id="expire-raw-payloads",
             replace_existing=True,

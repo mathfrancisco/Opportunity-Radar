@@ -114,24 +114,7 @@ def run_data_reduction(
             _fail(report, "assessments", error)
 
     # Cheap and read-only: measured even after a stop request so the day's number is logged.
-    try:
-        size, alert = measure_database_size(
-            engine, limit_bytes=size_limit_bytes, alert_ratio=size_alert_ratio
-        )
-        report.database_size_bytes = size
-        report.size_alert = alert
-        extra = {
-            "job": "data_reduction",
-            "database_size_bytes": size,
-            "limit_bytes": size_limit_bytes,
-            "alert_ratio": size_alert_ratio,
-        }
-        if alert:
-            logger.warning("database size above alert threshold", extra=extra)
-        else:
-            logger.info("database size measured", extra=extra)
-    except Exception as error:
-        _fail(report, "database_size", error)
+    _measure(engine, report, size_limit_bytes, size_alert_ratio)
 
     if stop() and not report.errors:
         report.stopped, report.complete = True, False
@@ -140,6 +123,46 @@ def run_data_reduction(
         extra={"job": "data_reduction", **{k: v for k, v in report.as_dict().items()}},
     )
     return report
+
+
+def check_database_size(
+    engine: Engine,
+    *,
+    size_limit_bytes: int = DEFAULT_SIZE_LIMIT_BYTES,
+    size_alert_ratio: float = DEFAULT_SIZE_ALERT_RATIO,
+) -> DataReductionReport:
+    """Only the size measurement: no payload is expired and no assessment pruned.
+
+    Used when the opportunity retention is switched off (`OPPORTUNITY_RETENTION_DAYS=0`):
+    the off switch stops deletions, never the 1 GB watch.
+    """
+    report = DataReductionReport(applied=False, size_limit_bytes=size_limit_bytes)
+    _measure(engine, report, size_limit_bytes, size_alert_ratio)
+    return report
+
+
+def _measure(
+    engine: Engine, report: DataReductionReport, limit_bytes: int, alert_ratio: float
+) -> None:
+    try:
+        size, alert = measure_database_size(
+            engine, limit_bytes=limit_bytes, alert_ratio=alert_ratio
+        )
+    except Exception as error:
+        _fail(report, "database_size", error)
+        return
+    report.database_size_bytes = size
+    report.size_alert = alert
+    extra = {
+        "job": "data_reduction",
+        "database_size_bytes": size,
+        "limit_bytes": limit_bytes,
+        "alert_ratio": alert_ratio,
+    }
+    if alert:
+        logger.warning("database size above alert threshold", extra=extra)
+    else:
+        logger.info("database size measured", extra=extra)
 
 
 def _payloads(
@@ -181,6 +204,7 @@ __all__ = [
     "DEFAULT_SIZE_ALERT_RATIO",
     "DEFAULT_SIZE_LIMIT_BYTES",
     "DataReductionReport",
+    "check_database_size",
     "measure_database_size",
     "run_data_reduction",
 ]
