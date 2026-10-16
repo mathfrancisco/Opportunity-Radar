@@ -94,22 +94,24 @@ def test_cli_dry_run_refuses_non_finite_deadline(monkeypatch, deadline: str) -> 
     assert run_pipeline_once.main([f"--deadline-seconds={deadline}", "--dry-run"]) == 2
 
 
-def test_normalize_stops_before_starting_the_next_item(monkeypatch) -> None:
+def test_normalize_stops_between_batches(monkeypatch) -> None:
     calls: list[int] = []
 
     class Service:
-        def normalize_pending(self, limit: int) -> SimpleNamespace:
+        def normalize_pending(self, limit: int, *, should_stop=None) -> SimpleNamespace:
             calls.append(limit)
-            return SimpleNamespace(processed=1, succeeded=1, review_required=0, failed=0)
+            return SimpleNamespace(processed=limit, succeeded=limit, review_required=0, failed=0)
 
     monkeypatch.setattr(worker, "Session", lambda _engine: nullcontext(object()))
     monkeypatch.setattr(worker, "OpportunityService", lambda _session: Service())
     monkeypatch.setattr(worker, "observe_job", lambda *_args, **_kwargs: nullcontext())
 
-    result = worker.normalize_opportunities(object(), stop_requested=lambda: bool(calls))
+    result = worker.normalize_opportunities(
+        object(), stop_requested=lambda: bool(calls), batch_size=7
+    )
 
-    assert calls == [1]
-    assert result == {"input": 1, "completed": 1, "failed": 0, "skipped": 0, "stopped": 1}
+    assert calls == [7]
+    assert result == {"input": 7, "completed": 7, "failed": 0, "skipped": 0, "stopped": 1}
 
 
 def test_parallel_collection_accounts_for_unstarted_host_group() -> None:
@@ -265,13 +267,11 @@ def test_postgres_claim_allows_only_one_window_on_isolated_database() -> None:
                 pass
 
 
-def test_analysis_stays_blocked_and_retention_is_planned_daily() -> None:
+def test_analysis_is_planned_last_and_retention_is_planned_daily() -> None:
     stages = describe_pipeline(owner_sub="owner", deadline_seconds=30)["stages"]
-    assert stages[-1] == {
-        "name": "analyze_pending",
-        "status": "blocked",
-        "reason": "analysis is opt-in and disabled for finite pipeline windows",
-    }
+    assert stages[-1]["name"] == "analyze_pending"
+    assert stages[-1]["status"] == "planned"
+    assert "AI_ENABLED" in stages[-1]["gate"]
     assert stages[0]["name"] == "retention"
     assert stages[0]["status"] == "planned"
 
@@ -317,6 +317,7 @@ def _run_pipeline_once_settings(**overrides: object) -> SimpleNamespace:
         "database_size_limit_bytes": 1_000_000_000,
         "database_size_alert_ratio": 0.7,
         "retention_stage_budget_seconds": 300.0,
+        "manual_source_min_interval_hours": 1.0,
     }
     return SimpleNamespace(
         database_url="postgresql://unused",
@@ -533,7 +534,15 @@ def test_collect_sigterm_between_sources_stops_pass_without_marking_complete(
         service_factory=lambda _session: _fake_service([source1, source2], executed),
     )
 
-    assert result == {"input": 2, "completed": 1, "failed": 0, "skipped": 1, "stopped": 1}
+    assert result == {
+        "input": 2,
+        "completed": 1,
+        "failed": 0,
+        "skipped": 1,
+        "stopped": 1,
+        "eligible": 2,
+        "executed": 1,
+    }
     assert [source_id for source_id, _ in executed] == [source1.id]
     completed_run = executed[0][1]
     assert completed_run.complete is True
@@ -561,7 +570,15 @@ def test_collect_deadline_between_sources_stops_pass_without_marking_complete(
         service_factory=lambda _session: _fake_service([source1, source2], executed),
     )
 
-    assert result == {"input": 2, "completed": 1, "failed": 0, "skipped": 1, "stopped": 0}
+    assert result == {
+        "input": 2,
+        "completed": 1,
+        "failed": 0,
+        "skipped": 1,
+        "stopped": 0,
+        "eligible": 2,
+        "executed": 1,
+    }
     assert [source_id for source_id, _ in executed] == [source1.id]
     completed_run = executed[0][1]
     assert completed_run.complete is True

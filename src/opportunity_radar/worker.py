@@ -109,9 +109,17 @@ def heartbeat() -> None:
 
 
 def normalize_opportunities(
-    engine: Engine, *, stop_requested: Callable[[], bool] | None = None
+    engine: Engine,
+    *,
+    stop_requested: Callable[[], bool] | None = None,
+    batch_size: int = 50,
 ) -> dict[str, int]:
-    """Each pass gets its own correlation id, so one batch is greppable end to end."""
+    """Normalize pending raw items in batches until none is left or a stop is requested.
+
+    R55-B1: there is no fixed cap per pass. `stop_requested` (the finite window's deadline
+    or a signal) is read between batches and, inside a batch, before each item, so a stop
+    never waits for more than the item in flight. Each pass gets its own correlation id.
+    """
     if stop_requested is not None and stop_requested():
         return {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 1}
     with observe_job(
@@ -121,17 +129,17 @@ def normalize_opportunities(
             try:
                 service = OpportunityService(session)
                 totals = {"processed": 0, "succeeded": 0, "review_required": 0, "failed": 0}
-                remaining = 100
-                while remaining and (stop_requested is None or not stop_requested()):
+                batches = 0
+                while stop_requested is None or not stop_requested():
                     batch = service.normalize_pending(
-                        limit=1 if stop_requested is not None else remaining
+                        limit=batch_size, should_stop=stop_requested
                     )
+                    batches += 1
                     totals["processed"] += batch.processed
                     totals["succeeded"] += batch.succeeded
                     totals["review_required"] += batch.review_required
                     totals["failed"] += batch.failed
-                    remaining -= batch.processed
-                    if not batch.processed:
+                    if batch.processed < batch_size:
                         break
             except Exception:
                 logger.exception("normalization batch failed", extra={"job": "normalize"})
@@ -141,6 +149,7 @@ def normalize_opportunities(
                 "normalization batch finished",
                 extra={
                     "job": "normalize",
+                    "batches": batches,
                     **totals,
                 },
             )
@@ -239,7 +248,8 @@ def analyze_pending(
     worker_requests_ceiling: int | None = None,
     daily_cap_fraction: float | None = None,
     owner_sub: str | None = None,
-) -> None:
+    stop_requested: Callable[[], bool] | None = None,
+) -> dict[str, int]:
     """Attach the semantic layer to current assessments, one claim at a time.
 
     The adapter classifies its own failures instead of raising, so a provider that is
@@ -263,10 +273,18 @@ def analyze_pending(
     a read (`QuotaGuard.has_day_balance`), checked before the queue is read and before each
     item; reaching it writes nothing, so assessments stay pending in queue order for the
     next day window. An explicit analysis never goes through this job, so it is not capped.
+
+    `stop_requested` (the finite window's deadline or a signal, R55-C1) is read before each
+    item. The returned counts use the pipeline's stage vocabulary: `input` assessments
+    read, `completed` analysed (a reused one included), `failed` internal errors, `skipped`
+    degraded results and every one left pending by a budget or cap, `stopped` 1 on a stop.
     """
+    empty = {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 0}
     owner = _operational_owner(owner_sub, job="analyze")
     if owner is None:
-        return
+        return empty
+    if stop_requested is not None and stop_requested():
+        return {**empty, "stopped": 1}
     with observe_job(
         engine, job_name="analyze_pending", interval=timedelta(seconds=120)
     ) as correlation_id:
@@ -292,7 +310,7 @@ def analyze_pending(
                 "analysis daily cap reached; assessments stay pending",
                 extra={"job": "analyze", "reason": "daily_cap", "cap_fraction": daily_cap_fraction},
             )
-            return
+            return empty
         with Session(engine) as session:
             service = MatchingService(session, owner)
             pending = service.pending_analysis_ids(
@@ -315,7 +333,11 @@ def analyze_pending(
                     )
             completed = reused = degraded = claimed_elsewhere = failed = skipped_budget = 0
             skipped_daily_cap = 0
+            stopped = 0
             for position, assessment_id in enumerate(pending):
+                if stop_requested is not None and stop_requested():
+                    stopped = 1
+                    break
                 if not under_daily_cap():
                     skipped_daily_cap = len(pending) - position
                     logger.info(
@@ -378,6 +400,13 @@ def analyze_pending(
                         "failed": failed,
                     },
                 )
+            return {
+                "input": len(pending),
+                "completed": completed,
+                "failed": failed,
+                "skipped": degraded + claimed_elsewhere + skipped_budget + skipped_daily_cap,
+                "stopped": stopped,
+            }
 
 
 def build_classification_router(settings: Settings, engine: Engine) -> AIRouter | None:
@@ -609,7 +638,21 @@ class _PassSummary:
     counts: dict[str, int] = field(
         default_factory=lambda: {"completed": 0, "failed": 0, "skipped": 0, "blocked": 0}
     )
+    #: Sources the clock and backoff said may run in this pass (R55-B2), whether or not the
+    #: window reached them or a host budget held them back: the denominator of the coverage
+    #: metric whose numerator is the sources that were actually executed.
+    eligible: int = 0
+    #: Eligible sources whose run was actually started (numerator of the same metric).
+    executed: int = 0
     _lock: Lock = field(default_factory=Lock, repr=False)
+
+    def add_eligible(self, count: int = 1) -> None:
+        with self._lock:
+            self.eligible += count
+
+    def add_executed(self, count: int = 1) -> None:
+        with self._lock:
+            self.executed += count
 
     def add(self, outcome: str, count: int = 1) -> None:
         with self._lock:
@@ -632,6 +675,36 @@ class _PassContext:
     monotonic_clock: Callable[[], float]
     summary: _PassSummary
     stop_requested: Callable[[], bool] | None = None
+    manual_min_interval: timedelta | None = None
+
+
+#: Gates that say the source is not due by the clock, i.e. not in the window's denominator.
+_NOT_ELIGIBLE_GATES = frozenset({CollectionGate.NOT_SCHEDULED, CollectionGate.NOT_DUE})
+
+
+def _count_unreached_if_eligible(
+    service: AcquisitionService,
+    source: SourceDefinitionModel,
+    ctx: _PassContext,
+    moment: datetime,
+) -> None:
+    """A source the window never reached still counts as eligible if it was due (R55-B2).
+
+    Best effort: the coverage metric must not turn a stop into a failure, so any error here
+    leaves the source uncounted.
+    """
+    try:
+        gate = evaluate_gate(
+            service.scheduling_state(source, timezone=ctx.timezone),
+            now=moment,
+            backoff_base=ctx.backoff_base,
+            backoff_ceiling=ctx.backoff_ceiling,
+            manual_min_interval=ctx.manual_min_interval,
+        )
+    except Exception:
+        return
+    if gate not in _NOT_ELIGIBLE_GATES:
+        ctx.summary.add_eligible()
 
 
 def _collect_one_source(
@@ -652,12 +725,13 @@ def _collect_one_source(
     pass_started = ctx.pass_started
     monotonic_clock = ctx.monotonic_clock
     correlation_id = ctx.correlation_id
-    if ctx.stop_requested is not None and ctx.stop_requested():
-        summary.add("skipped")
-        return
     moment = now or (
         utc_clock() if utc_clock is not None else datetime.now(ZoneInfo(timezone))
     )
+    if ctx.stop_requested is not None and ctx.stop_requested():
+        summary.add("skipped")
+        _count_unreached_if_eligible(service, source, ctx, moment)
+        return
     pass_remaining = (
         pass_deadline_seconds - (monotonic_clock() - pass_started)
         if pass_deadline_seconds > 0
@@ -665,6 +739,7 @@ def _collect_one_source(
     )
     if pass_remaining is not None and pass_remaining <= 0:
         summary.add("skipped")
+        _count_unreached_if_eligible(service, source, ctx, moment)
         logger.info(
             "scheduled collection skipped",
             extra={
@@ -687,6 +762,7 @@ def _collect_one_source(
             now=moment,
             backoff_base=backoff_base,
             backoff_ceiling=backoff_ceiling,
+            manual_min_interval=ctx.manual_min_interval,
         )
     except Exception:
         session.rollback()
@@ -696,6 +772,8 @@ def _collect_one_source(
             extra={"job": "collect", "source_id": str(source.id)},
         )
         return
+    if gate not in _NOT_ELIGIBLE_GATES:
+        summary.add_eligible()
     if gate is not CollectionGate.DUE:
         summary.add(gate.outcome)
         _, reason = next_due_at(
@@ -703,6 +781,7 @@ def _collect_one_source(
             now=moment,
             backoff_base=backoff_base,
             backoff_ceiling=backoff_ceiling,
+            manual_min_interval=ctx.manual_min_interval,
         )
         logger.info(
             "scheduled collection did not run",
@@ -758,6 +837,7 @@ def _collect_one_source(
                 "deadline_seconds": source_timeout,
             },
         )
+        summary.add_executed()
         run = run_async(
             service.execute(
                 source.id, request, deadline_seconds=source_timeout
@@ -771,6 +851,7 @@ def _collect_one_source(
         # Another execution (CLI/API/previous pass) owns this source right now.
         # It made no request, so it is a skip, not a failure.
         session.rollback()
+        summary.add_executed(-1)  # counted just before execute, but it never ran
         summary.add("skipped")
         logger.info(
             "scheduled collection skipped",
@@ -889,8 +970,14 @@ def collect_enabled_sources(
     service_factory: Callable[[Session], AcquisitionService] = AcquisitionService,
     owner_sub: str | None = None,
     stop_requested: Callable[[], bool] | None = None,
+    manual_min_interval_hours: float | None = None,
 ) -> dict[str, int]:
     """Run every eligible source whose schedule is due, and account for the ones that are not.
+
+    `manual_min_interval_hours` (R55-B2) also makes sources with no cron (null or "manual"
+    schedule) due once their last successful run is older than that; `None` or 0 keeps them
+    skipped. The result carries `eligible` (due by the clock) and `executed` (reached
+    execution), the window's coverage. Host budgets still hold sources back.
 
     Each eligible source ends the pass in exactly one bucket. Silence about a source that
     did not run is what makes partial coverage look like full coverage, so a skip and a
@@ -921,6 +1008,11 @@ def collect_enabled_sources(
             monotonic_clock=monotonic_clock,
             summary=summary,
             stop_requested=stop_requested,
+            manual_min_interval=(
+                timedelta(hours=manual_min_interval_hours)
+                if manual_min_interval_hours
+                else None
+            ),
         )
         groups: dict[str, list[UUID]] = {}
         with Session(engine) as session:
@@ -954,6 +1046,8 @@ def collect_enabled_sources(
             "failed": counts["failed"],
             "skipped": counts["skipped"] + counts["blocked"],
             "stopped": int(stop_requested is not None and stop_requested()),
+            "eligible": summary.eligible,
+            "executed": summary.executed,
         }
 
 

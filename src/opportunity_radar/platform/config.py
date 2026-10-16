@@ -128,6 +128,13 @@ class Settings(BaseSettings):
     retention_stage_budget_seconds: float = Field(default=300.0, gt=0)
     database_size_limit_bytes: int = Field(default=1_000_000_000, ge=1)
     database_size_alert_ratio: float = Field(default=0.7, gt=0, le=1)
+    # R55-B2: an enabled source with no cron ("manual" or empty schedule) is collected by the
+    # finite window once its last successful run is older than this many hours. 0 turns it
+    # off (such sources are then skipped, as before). Host budgets still apply.
+    manual_source_min_interval_hours: float = Field(default=1.0, ge=0)
+    # R55-C1: the finite window analyses at most (daily request ceiling / this) assessments,
+    # so a day of hourly windows stays under the free quota. Quota guard reads still apply.
+    pipeline_analyze_windows_per_day: int = Field(default=24, ge=1)
     # How late a job may be before the doctor calls it late rather than merely busy.
     doctor_job_grace_seconds: int = 120
 

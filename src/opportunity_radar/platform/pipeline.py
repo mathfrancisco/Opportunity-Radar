@@ -4,8 +4,9 @@ This module deliberately knows nothing about schedules.  A caller provides the t
 allowed stages, which are run once in their fixed order while a PostgreSQL advisory
 lock is held.  It is therefore safe for a timer to invoke and let exit: no polling,
 retry loop, or analysis is hidden here.  The one optional leading `retention` stage
-(card R55-E2) is supplied by the caller like the others and decides for itself whether it
-is due.
+(card R55-E2) and the one optional trailing `analyze_pending` stage (card R55-C1) are
+supplied by the caller like the others; each decides for itself whether it has work (the
+retention stage whether it is due, the analysis stage whether AI is enabled and has quota).
 """
 
 from __future__ import annotations
@@ -29,8 +30,15 @@ from opportunity_radar.platform.logging import get_logger
 logger = get_logger("opportunity_radar.pipeline")
 
 STAGE_ORDER = ("collect_enabled_sources", "normalize_opportunities", "evaluate_pending")
-ANALYSIS_BLOCKED = "analysis is opt-in and disabled for finite pipeline windows"
 RETENTION_STAGE = "retention"
+ANALYZE_STAGE = "analyze_pending"
+#: Every stage list `run_pipeline` accepts: the three core stages, optionally preceded by
+#: `retention` and optionally followed by `analyze_pending`.
+ALLOWED_STAGE_ORDERS = tuple(
+    prefix + STAGE_ORDER + suffix
+    for prefix in ((), (RETENTION_STAGE,))
+    for suffix in ((), (ANALYZE_STAGE,))
+)
 
 
 class ExitCode(IntEnum):
@@ -57,6 +65,8 @@ class StageCounts:
     failed: int = 0
     skipped: int = 0
     stopped: int = 0
+    #: Stage-specific numbers (for example `eligible`/`executed` sources, R55-B2).
+    metrics: dict[str, int] = field(default_factory=dict)
 
 
 class Deadline:
@@ -193,7 +203,13 @@ def describe_pipeline(*, owner_sub: str | None, deadline_seconds: float) -> dict
             {"name": RETENTION_STAGE, "status": "planned", "cadence": "once per UTC day, first"}
         ]
         + [{"name": name, "status": "planned"} for name in STAGE_ORDER]
-        + [{"name": "analyze_pending", "status": "blocked", "reason": ANALYSIS_BLOCKED}],
+        + [
+            {
+                "name": ANALYZE_STAGE,
+                "status": "planned",
+                "gate": "AI_ENABLED and quota; bounded per window",
+            }
+        ],
         "touches": "none",
     }
 
@@ -210,9 +226,10 @@ def run_pipeline(
     """Run each allowed stage once. A returned failure never triggers a retry."""
     owner = validate_owner(owner_sub)
     names = tuple(stage.name for stage in stages)
-    if names not in (STAGE_ORDER, (RETENTION_STAGE,) + STAGE_ORDER):
+    if names not in ALLOWED_STAGE_ORDERS:
         raise ConfigurationError(
-            "stages must be collect, normalize, evaluate, optionally preceded by retention"
+            "stages must be collect, normalize, evaluate, optionally preceded by retention "
+            "and followed by analyze_pending"
         )
     deadline = Deadline(deadline_seconds, clock=clock)
     stop = stop or StopSignal()

@@ -1,4 +1,4 @@
-"""Run one finite collection/normalization/evaluation(/daily retention) window and exit."""
+"""Run one finite collection/normalization/evaluation/analysis(/daily retention) window and exit."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import argparse
 import json
 from time import monotonic
 
+from opportunity_radar.matching.adapters import build_analysis_adapter
 from opportunity_radar.operations.data_reduction import (
     DataReductionReport,
     check_database_size,
@@ -18,10 +19,12 @@ from opportunity_radar.operations.opportunity_retention import (
     retention_due,
     run_opportunity_retention,
 )
-from opportunity_radar.platform.config import get_settings
+from opportunity_radar.platform.ai.config import AIState, ai_status
+from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.logging import get_logger
 from opportunity_radar.platform.pipeline import (
+    ANALYZE_STAGE,
     ConfigurationError,
     ExitCode,
     PostgresWindowClaim,
@@ -35,6 +38,7 @@ from opportunity_radar.platform.pipeline import (
     validate_owner,
 )
 from opportunity_radar.worker import (
+    analyze_pending,
     collect_enabled_sources,
     evaluate_pending,
     normalize_opportunities,
@@ -53,6 +57,17 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def analyze_window_cap(settings: Settings) -> int:
+    """Assessments one window may analyse: the day's request ceiling spread over its windows.
+
+    The ceiling is the soft day limit minus the interactive reserve (the free Groq quota is
+    1,000 requests a day on the 120b model), so 24 hourly windows cannot spend more than
+    the worker's share between them (R55-C1). At least 1, so a tiny ceiling still moves.
+    """
+    ceiling = settings.ai_daily_requests_soft_limit - settings.ai_interactive_reserve_requests
+    return max(1, ceiling // settings.pipeline_analyze_windows_per_day)
+
+
 def _stages(engine, settings, measurements: dict[str, object] | None = None) -> list[StageSpec]:
     measurements = measurements if measurements is not None else {}
 
@@ -63,6 +78,9 @@ def _stages(engine, settings, measurements: dict[str, object] | None = None) -> 
             failed=result["failed"],
             skipped=result["skipped"],
             stopped=result["stopped"],
+            metrics={
+                key: result[key] for key in ("eligible", "executed") if key in result
+            },
         )
 
     def collect(context: StageContext) -> StageCounts:
@@ -80,6 +98,7 @@ def _stages(engine, settings, measurements: dict[str, object] | None = None) -> 
                 host_concurrency=settings.collection_host_concurrency,
                 owner_sub=context.owner_sub,
                 stop_requested=context.should_stop,
+                manual_min_interval_hours=settings.manual_source_min_interval_hours,
             )
         )
 
@@ -95,6 +114,35 @@ def _stages(engine, settings, measurements: dict[str, object] | None = None) -> 
             evaluate_pending(
                 engine,
                 batch_size=settings.worker_evaluate_batch_size,
+                owner_sub=context.owner_sub,
+                stop_requested=context.should_stop,
+            )
+        )
+
+    def analyze(context: StageContext) -> StageCounts:
+        # R55-C1: gated by the kill switch and AI_ENABLED (with its key) before anything is
+        # built; a window with no quota left or no eligible verdict is a clean no-op.
+        if context.should_stop():
+            return StageCounts(stopped=1)
+        if not settings.worker_analyze_enabled or ai_status(settings) is not AIState.ENABLED:
+            return StageCounts(skipped=1, metrics={"ai_disabled": 1})
+        cap = analyze_window_cap(settings)
+        return counts(
+            analyze_pending(
+                engine,
+                build_analysis_adapter(settings, engine),
+                batch_size=cap,
+                eligible_verdicts=settings.analysis_eligible_verdicts,
+                cooldown_seconds=settings.analysis_retry_cooldown_seconds,
+                attempt_window_seconds=settings.analysis_retry_attempt_window_seconds,
+                max_attempts=settings.analysis_retry_max_attempts,
+                lease_seconds=settings.analysis_claim_lease_seconds,
+                aging_sample_ratio=settings.worker_analyze_aging_sample_ratio,
+                daily_cap_fraction=settings.worker_analyze_daily_cap_fraction,
+                worker_requests_ceiling=(
+                    settings.ai_daily_requests_soft_limit
+                    - settings.ai_interactive_reserve_requests
+                ),
                 owner_sub=context.owner_sub,
                 stop_requested=context.should_stop,
             )
@@ -245,6 +293,7 @@ def _stages(engine, settings, measurements: dict[str, object] | None = None) -> 
         StageSpec("collect_enabled_sources", collect),
         StageSpec("normalize_opportunities", normalize),
         StageSpec("evaluate_pending", evaluate),
+        StageSpec(ANALYZE_STAGE, analyze),
     ]
 
 
