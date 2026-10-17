@@ -121,7 +121,7 @@ def test_a_poison_item_is_recorded_as_failed_and_the_next_one_is_processed(
             fixture.cleanup()
 
 
-def test_an_integrity_race_leaves_the_item_pending_and_the_batch_continues(
+def test_a_deterministic_integrity_error_is_recorded_as_a_counted_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine = _engine()
@@ -145,15 +145,72 @@ def test_an_integrity_race_leaves_the_item_pending_and_the_batch_continues(
 
             monkeypatch.setattr(OpportunityService, "normalize", normalize)
 
-            OpportunityService(session).normalize_pending(limit=50)
+            batch = OpportunityService(session).normalize_pending(limit=50)
 
-            assert _results(session, racer.id) == []  # no permanent FAILED
+            [failed] = _results(session, racer.id)  # R55-B1 follow-up: recorded, not retried
+            assert failed.status == "FAILED"
+            assert failed.reasons[0] == {"code": "NORMALIZATION_ERROR", "error": "IntegrityError"}
+            assert batch.failed >= 1  # counted
             for raw in raws[1:]:
                 assert [r.status for r in _results(session, raw.id)] == ["SUCCEEDED"]
             pending = OpportunityService(session).repository.pending_raw_item_ids(
                 500, NORMALIZER_VERSION
             )
-            assert racer.id in pending  # tried again on the next pass
+            assert racer.id not in pending  # the batch no longer shrinks on it
+        finally:
+            monkeypatch.undo()
+            fixture.cleanup()
+
+
+def test_an_integrity_error_while_recording_does_not_abort_the_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _engine()
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        try:
+            raws = _collect(
+                fixture,
+                [
+                    _item(fixture.source_type, external_id=f"r-{index}", title=f"Recorder {index}")
+                    for index in range(3)
+                ],
+            )
+            racer = raws[0]
+            original = OpportunityService.normalize
+            recorder = OpportunityService._record_unexpected_failure
+
+            def normalize(self: OpportunityService, raw_item_id):
+                if raw_item_id == racer.id:
+                    raise _integrity_error()
+                return original(self, raw_item_id)
+
+            def record(self: OpportunityService, raw_item_id, error):
+                if raw_item_id == racer.id:
+                    # a concurrent worker stores its result first: our insert then conflicts
+                    session.add(
+                        NormalizationResultModel(
+                            raw_item_id=racer.id,
+                            status="FAILED",
+                            normalizer_version=NORMALIZER_VERSION,
+                            reasons=[{"code": "NORMALIZATION_ERROR"}],
+                            error_summary="winner",
+                        )
+                    )
+                    session.commit()
+                    monkeypatch.setattr(
+                        self.repository, "normalization_result", lambda *_args: None
+                    )
+                return recorder(self, raw_item_id, error)
+
+            monkeypatch.setattr(OpportunityService, "normalize", normalize)
+            monkeypatch.setattr(OpportunityService, "_record_unexpected_failure", record)
+
+            batch = OpportunityService(session).normalize_pending(limit=50)  # must not raise
+
+            assert batch.processed >= 2
+            for raw in raws[1:]:
+                assert [r.status for r in _results(session, raw.id)] == ["SUCCEEDED"]
         finally:
             monkeypatch.undo()
             fixture.cleanup()
