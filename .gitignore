@@ -46,3 +46,6 @@ prompts/opportunity_analysis/eval/drafts/
 # Claude Code worktrees and local settings; the worktrees hold `.env` files.
 .claude/
 .neon
+
+# R55 catalogue export (private)
+.tmp/
