@@ -115,16 +115,25 @@ const suggestionCause: Record<ProfileSuggestion['kind'], string> = {
   LOWER_COMPANY_PRIORITY: 'da empresa',
 }
 
+/** Preference codes compare ignoring case, so "pt" and "PT" are the same country. */
+function sameCode(left: string, right: string): boolean {
+  return left.toLowerCase() === right.toLowerCase()
+}
+
+function hasCode(list: string[], value: string): boolean {
+  return list.some((item) => sameCode(item, value))
+}
+
 /** Whether the draft already carries the change a suggestion asks for. */
 function isApplied(suggestion: ProfileSuggestion, preferences: ProfilePreferences): boolean {
   if (suggestion.kind === 'REMOVE_ROLE_FAMILY') {
-    return !preferences.targetRoleFamilies.includes(suggestion.value)
+    return !hasCode(preferences.targetRoleFamilies, suggestion.value)
   }
   if (suggestion.kind === 'REMOVE_SENIORITY') {
-    return !preferences.acceptedSeniorities.includes(suggestion.value)
+    return !hasCode(preferences.acceptedSeniorities, suggestion.value)
   }
   if (suggestion.kind === 'REMOVE_COUNTRY') {
-    return !preferences.countries.includes(suggestion.value)
+    return !hasCode(preferences.countries, suggestion.value)
   }
   return false
 }
@@ -135,18 +144,18 @@ function applySuggestion(
 ): Partial<ProfilePreferences> {
   if (suggestion.kind === 'REMOVE_ROLE_FAMILY') {
     return {
-      targetRoleFamilies: preferences.targetRoleFamilies.filter((item) => item !== suggestion.value),
+      targetRoleFamilies: preferences.targetRoleFamilies.filter((item) => !sameCode(item, suggestion.value)),
     }
   }
   if (suggestion.kind === 'REMOVE_SENIORITY') {
     return {
       acceptedSeniorities: preferences.acceptedSeniorities.filter(
-        (item) => item !== suggestion.value,
+        (item) => !sameCode(item, suggestion.value),
       ),
     }
   }
   if (suggestion.kind === 'REMOVE_COUNTRY') {
-    return { countries: preferences.countries.filter((item) => item !== suggestion.value) }
+    return { countries: preferences.countries.filter((item) => !sameCode(item, suggestion.value)) }
   }
   return {}
 }

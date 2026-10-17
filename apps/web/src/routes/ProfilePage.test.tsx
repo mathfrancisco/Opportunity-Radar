@@ -16,6 +16,7 @@ function version(
     skills?: object[]
     targetRoleFamilies?: string[]
     acceptedSeniorities?: string[]
+    countries?: string[]
   } = {},
 ) {
   return {
@@ -29,7 +30,7 @@ function version(
     preferences: {
       work_modes: [],
       contracts: [],
-      countries: [],
+      countries: extra.countries ?? [],
       timezone_start_hour: null,
       timezone_end_hour: null,
       compensation_min: null,
@@ -365,6 +366,65 @@ describe('ProfilePage — ajustes sugeridos pelo feedback', () => {
     expect(apply.textContent).toBe('Aplicado ao rascunho')
     expect(apply.disabled).toBe(true)
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0)
+  })
+
+  it('aplicar compara sem diferenciar maiúsculas e minúsculas', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input)
+      if (init?.method === 'POST') return new Response(JSON.stringify(version('version-2', 4, [])))
+      if (url.endsWith('/profile/suggestions')) {
+        return new Response(
+          JSON.stringify({
+            min_marks: 2,
+            suggestions: [{ kind: 'REMOVE_COUNTRY', value: 'PT', marks: 2 }],
+          }),
+        )
+      }
+      if (url.endsWith('/profile/versions')) return new Response('[]')
+      return new Response(
+        JSON.stringify(version('version-1', 3, [], { countries: ['br', 'pt'] })),
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const container = renderPage(<ProfilePage />)
+    await flush(8)
+
+    const countries = () =>
+      (container.querySelector('input[placeholder="BR, PT"]') as HTMLInputElement).value
+    const apply = container.querySelectorAll<HTMLButtonElement>('#ajustes-sugeridos button')[0]
+    expect(countries()).toBe('br, pt')
+    expect(apply.disabled).toBe(false)
+    await act(async () => {
+      apply.click()
+    })
+
+    expect(countries()).toBe('br')
+    expect(apply.disabled).toBe(true)
+  })
+
+  it('aplicar não mexe em países que não casam com a sugestão', async () => {
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const url = String(input)
+      if (url.endsWith('/profile/suggestions')) {
+        return new Response(
+          JSON.stringify({
+            min_marks: 2,
+            suggestions: [{ kind: 'REMOVE_COUNTRY', value: 'PT', marks: 2 }],
+          }),
+        )
+      }
+      if (url.endsWith('/profile/versions')) return new Response('[]')
+      return new Response(JSON.stringify(version('version-1', 3, [], { countries: ['br'] })))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const container = renderPage(<ProfilePage />)
+    await flush(8)
+
+    const apply = container.querySelectorAll<HTMLButtonElement>('#ajustes-sugeridos button')[0]
+    expect(apply.textContent).toBe('Aplicado ao rascunho')
+    expect(apply.disabled).toBe(true)
   })
 
   it('salvar depois de aplicar envia a preferência ajustada como nova versão', async () => {
