@@ -215,3 +215,87 @@ def test_ai_selective_metrics_include_denominators_and_gaps() -> None:
 
     assert (supplied.baseline.useful_results, supplied.pilot.useful_results) == (4, 5)
     assert supplied.gaps == ("baseline.tokens",)
+
+
+def test_cost_per_job_and_fallback_rate_are_grouped_by_task() -> None:
+    """Card R55-C4: a job is one operation; fallback is counted per job, not per call."""
+    from uuid import uuid4
+
+    engine = _engine()
+    _reset(engine)
+    from opportunity_radar.platform.ai.telemetry import start_operation
+
+    primary, fallback, classification_id, cache_id = uuid4(), uuid4(), uuid4(), uuid4()
+    fast = "openai/gpt-oss-20b"
+    for operation, task in (
+        (primary, "job_match"), (fallback, "job_match"),
+        (classification_id, "job_classification"), (cache_id, "job_match"),
+    ):
+        start_operation(engine, operation_id=operation, task=task, prompt_version="v2")
+    record_calls(
+        engine,
+        [
+            _record(operation_id=primary, prompt_tokens=800, completion_tokens=200),
+            _record(operation_id=fallback, success=False, error_kind="quota",
+                    prompt_tokens=None, completion_tokens=None),
+            _record(operation_id=fallback, model="qwen/qwen3.8-27b", fallback_used=True,
+                    prompt_tokens=600, completion_tokens=100),
+            _record(task="job_classification", model=fast, operation_id=classification_id,
+                    prompt_tokens=300, completion_tokens=50),
+            _record(cache_hit=True, provider="cache", prompt_tokens=None,
+                    completion_tokens=None, operation_id=cache_id),
+        ],
+        now=NOW - timedelta(minutes=5),
+    )
+
+    report = ai_metrics(engine, state="enabled", guard=None, breaker=None, now=NOW)
+
+    tasks = {item.task: item for item in report.by_task}
+    match = tasks["job_match"]
+    assert (match.jobs, match.requests, match.cache_hits) == (2, 3, 1)
+    assert match.tokens == 1000 + 700
+    assert match.avg_tokens_per_job == pytest.approx(850.0)
+    assert match.fallback_jobs == 1 and match.fallback_rate == pytest.approx(0.5)
+    classification = tasks["job_classification"]
+    assert classification.jobs == 1 and classification.fallback_rate == 0.0
+    assert classification.avg_tokens_per_job == pytest.approx(350.0)
+
+
+def test_budget_shows_used_and_remaining_per_model_for_the_day() -> None:
+    """Card R55-C6: counters come from the guard table; unused models show zero."""
+    from opportunity_radar.platform.ai.metrics import ai_budget
+
+    engine = _engine()
+    _reset(engine)
+    guard = QuotaGuard(
+        engine,
+        QuotaLimits(
+            minute_requests=100, minute_tokens=100_000, day_requests=850, day_tokens=170_000
+        ),
+        now=lambda: NOW,
+    )
+    for _ in range(3):
+        guard.reserve(_MODEL, estimated_tokens=600)
+
+    report = ai_budget(
+        engine,
+        state="enabled",
+        models=[_MODEL, "openai/gpt-oss-20b", "tokenharbor/x"],
+        requests_soft_limit=850,
+        tokens_limit=170_000,
+        interactive_reserve_requests=100,
+        provider_requests_limit=1000,
+        provider_limit_models=[_MODEL, "openai/gpt-oss-20b"],
+        now=NOW,
+    )
+
+    by_model = {item.model: item for item in report.models}
+    big = by_model[_MODEL]
+    assert (big.requests_used, big.provider_requests_limit) == (3, 1000)
+    assert big.requests_remaining == 997 and big.requests_remaining_operational == 847
+    assert big.tokens_used == 1800 and big.tokens_remaining == 170_000 - 1800
+    idle = by_model["openai/gpt-oss-20b"]
+    assert (idle.requests_used, idle.requests_remaining) == (0, 1000)
+    assert by_model["tokenharbor/x"].requests_remaining is None
+    assert report.resets_at - report.day == timedelta(days=1)
+    assert report.interactive_reserve_requests == 100

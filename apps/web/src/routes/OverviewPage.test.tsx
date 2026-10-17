@@ -363,7 +363,7 @@ describe('OverviewPage — composição', () => {
     )
   })
 
-  it('faz exatamente as mesmas requisições de antes, sem chamadas extras', async () => {
+  it('faz as mesmas requisições de antes, mais o orçamento diário de IA (R55-C6), sem outras', async () => {
     stubOverviewFetch(overviewBody(), ['greenhouse'])
 
     renderWithProviders(<OverviewPage />)
@@ -371,12 +371,13 @@ describe('OverviewPage — composição', () => {
 
     const calls = (fetch as ReturnType<typeof vi.fn>).mock.calls.map(([input]) => String(input))
     expect([...new Set(calls)].sort()).toEqual([
+      '/api/ai-budget',
       '/api/analysis-metrics',
       '/api/overview',
       '/api/saved-searches',
       '/api/source-metrics',
     ])
-    expect(calls).toHaveLength(4)
+    expect(calls).toHaveLength(5)
   })
 
   it('abrir uma busca salva com novidade continua marcando a busca como aberta', async () => {

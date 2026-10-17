@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # own separate table.
     worker_suggest_enabled: bool = False
     worker_suggest_batch_size: int = 20
+    # Off by default (card R55-C5): also asks the model for the `country` and the
+    # `work_authorization` the rules did not find. Suggestions only, origin `ai`.
+    worker_suggest_extended_fields: bool = False
     # Off by default (card F48-15): `seniority-v4`, `work-mode-v7` and `allowed-countries-v2`
     # read the description. Turn on only after `scripts/measure_content_classification.py
     # --check-gate` reports >= 90% precision per rule on the human-labelled gold set.
@@ -172,6 +175,9 @@ class Settings(BaseSettings):
     ai_reasoning_effort_job_extraction: str | None = None
     ai_analysis_prompt: str = "v1"
     ai_daily_requests_soft_limit: int = 850
+    # What the Groq free tier grants one model per UTC day (card R55-C6); shown next to
+    # the operational soft limit above so the panel states both.
+    ai_provider_daily_requests_limit: int = 1000
     ai_daily_tokens_soft_limit: int = 170_000
     # Part of the day's Groq request quota the worker's own batch never spends, so
     # analysis requested from the UI always has room even on a day the backlog is deep

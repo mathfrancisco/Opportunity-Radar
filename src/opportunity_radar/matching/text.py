@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from opportunity_radar.platform.html_text import html_to_text
 
 #: Version of the cleaning rules below. Any change to the patterns bumps it.
-CLEANER_VERSION = "cleaner-v3"
+CLEANER_VERSION = "cleaner-v4"
 
 #: Tokens per character before any analysis of the model has been measured. Deliberately
 #: high: overestimating only cuts a description sooner, underestimating overflows.
@@ -49,6 +49,15 @@ _BOILERPLATE_HEADINGS = (
     r"benef[íi]cios",
     r"what we offer",
     r"o que oferecemos",
+    # Repeated institutional blocks (card R55-C2): the same mission, values and "why join"
+    # text is pasted into every posting of a company and says nothing about this job.
+    r"our (?:mission|values|culture|story|vision)",
+    r"company (?:overview|culture|values)",
+    r"why (?:join|work (?:with|at|for)) (?:us|.{1,40})",
+    r"life at .{1,40}",
+    r"nossa (?:miss[ãa]o|cultura|hist[óo]ria|vis[ãa]o)",
+    r"nossos valores",
+    r"por que (?:trabalhar|fazer parte) .{1,40}",
 )
 
 #: Headings that open the part of a posting about the job, in plain-text sources.
@@ -68,6 +77,23 @@ _JOB_HEADINGS = (
     r"requisitos",
     r"qualifica[çc][õo]es",
     r"diferenciais",
+)
+
+
+#: Headings of the sections a candidate screens a posting by. Under a token ceiling these
+#: go into the prompt first (card R55-C2); everything else follows in its original order.
+_PRIORITY_HEADINGS = (
+    r"responsibilities",
+    r"(?:key )?responsibilities and requirements",
+    r"what you(?:'ll| will) do",
+    r"requirements",
+    r"(?:minimum |preferred |basic )?qualifications",
+    r"what you(?:'ll| will)? bring",
+    r"who you are",
+    r"responsabilidades",
+    r"o que voc[êe] (?:vai|ir[áa]) fazer",
+    r"requisitos",
+    r"qualifica[çc][õo]es",
 )
 
 
@@ -91,11 +117,36 @@ _DECISIVE_FACT = re.compile(
     re.IGNORECASE,
 )
 
+#: Plain-text headings that only end a dropped institutional block (R55-C review); kept out
+#: of `split_sections` so a bare "Skills" inside "Requirements" does not split it.
+_SKIP_EXIT_HEADINGS = (
+    r"what we(?:'re| are) looking for",
+    r"your profile",
+    r"(?:technical |key |core )?skills(?: and experience)?",
+    r"must[- ]haves?",
+    r"(?:required )?experience",
+    r"job description",
+    r"(?:the )?position",
+    r"perfil(?: da vaga| desejado)?",
+    r"compet[êe]ncias",
+    r"habilidades",
+    r"experi[êe]ncia",
+    r"descri[çc][ãa]o da vaga",
+    r"o que buscamos",
+)
+
 _BOILERPLATE = _whole_line(_BOILERPLATE_HEADINGS)
+_PRIORITY_HEADING = _whole_line(_PRIORITY_HEADINGS)
 _JOB_HEADING = _whole_line(_JOB_HEADINGS)
+_SKIP_EXIT_HEADING = _whole_line(_SKIP_EXIT_HEADINGS)
 # A marked heading — from `<hN>` or Markdown — or a short line ending in a colon ends a
 # boilerplate section. Anything else, bullets included, still belongs to it.
 _MARKED_HEADING = re.compile(r"^\s*(?:#+\s*\S.*|[^\s\-•*][^.!?]{0,60}:)\s*$")
+# A short unpunctuated line that opens a bullet list or a paragraph is a heading even when
+# no listed heading matches it and it carries no colon (conservative: ending the skip early
+# keeps text, it never loses a requirement).
+_HEADING_LIKE = re.compile(r"^[^\s\-•*][^.!?,;:]{0,50}$")
+_BULLET_OR_SENTENCE = re.compile(r"^(?:[\-•*]\s*\S|.*[.!?]$|(?:\S+\s+){8,}\S+)")
 _SPACES = re.compile(r"[ \t ]+")
 _BLANK_LINES = re.compile(r"\n{3,}")
 _SENTENCE_END = re.compile(r"[.!?](?=\s)|\n\n")
@@ -108,6 +159,14 @@ class CleanedText:
     text: str
     removed_sections: tuple[str, ...] = ()
     kept_facts: int = 0
+
+
+def _opens_block(line: str, following: Sequence[str]) -> bool:
+    """A short heading-like line whose next non-blank line is a bullet or a paragraph."""
+    if not line or not _HEADING_LIKE.match(line) or len(line.split()) > 6:
+        return False
+    next_line = next((candidate for candidate in following if candidate), "")
+    return bool(next_line) and bool(_BULLET_OR_SENTENCE.match(next_line))
 
 
 def clean_description_report(text: str | None) -> CleanedText:
@@ -126,12 +185,17 @@ def clean_description_report(text: str | None) -> CleanedText:
     removed: list[str] = []
     kept_facts = 0
     skipping = False
-    for line in lines:
+    for index, line in enumerate(lines):
         if _BOILERPLATE.match(line):
             skipping = True
             removed.append(line.lstrip("# ").rstrip(":.! ").strip())
             continue
-        if skipping and (_JOB_HEADING.match(line) or _MARKED_HEADING.match(line)):
+        if skipping and (
+            _JOB_HEADING.match(line)
+            or _SKIP_EXIT_HEADING.match(line)
+            or _MARKED_HEADING.match(line)
+            or _opens_block(line, lines[index + 1 :])
+        ):
             skipping = False
         if not skipping:
             kept.append(line)
@@ -176,8 +240,10 @@ def prompt_budget(max_input_tokens: int, max_output_tokens: int, margin: int | N
     The margin starts at 10% of `max_input_tokens`; a calibration whose observed prompts
     cost more than the ratio in use predicts widens it (`TokenCalibration.margin`).
     """
-    return max_input_tokens - max_output_tokens - (
-        max_input_tokens // 10 if margin is None else margin
+    return (
+        max_input_tokens
+        - max_output_tokens
+        - (max_input_tokens // 10 if margin is None else margin)
     )
 
 
@@ -259,6 +325,24 @@ def calibrate(measured: Sequence[tuple[int, int, int | None]]) -> TokenCalibrati
     )
 
 
+def split_sections(text: str) -> list[tuple[bool, str]]:
+    """`(is_priority, block)` pairs of a cleaned description, in the original order.
+
+    A block starts at a heading line (job heading or marked heading) and runs to the next
+    one; text before the first heading is its own block. `is_priority` is true for the
+    requirements and responsibilities blocks (card R55-C2).
+    """
+    blocks: list[tuple[bool, list[str]]] = []
+    for line in text.split(chr(10)):
+        if _JOB_HEADING.match(line) or _PRIORITY_HEADING.match(line) or _MARKED_HEADING.match(line):
+            blocks.append((bool(_PRIORITY_HEADING.match(line)), [line]))
+        elif blocks:
+            blocks[-1][1].append(line)
+        else:
+            blocks.append((False, [line]))
+    return [(priority, chr(10).join(lines).strip()) for priority, lines in blocks if any(lines)]
+
+
 @dataclass(frozen=True, slots=True)
 class FittedText:
     text: str
@@ -274,6 +358,44 @@ def fit_description(
     return FittedText(text=text, truncated=truncated)
 
 
+def fit_description_by_section(
+    description: str, *, available_tokens: int, tokens_per_char: float
+) -> FittedText:
+    """Like `fit_description`, but a cut keeps requirements and responsibilities first.
+
+    A description that fits is returned untouched. Otherwise its sections go in whole, the
+    requirements and responsibilities ones first and the rest in their original order,
+    until the budget is spent; the section that crosses it is cut at a sentence boundary.
+    Without any section heading the result is the plain cut of `fit_description`.
+    """
+    max_chars = max(0, math.floor(available_tokens / tokens_per_char))
+    if len(description) <= max_chars:
+        return FittedText(text=description, truncated=False)
+    sections = split_sections(description)
+    if not any(priority for priority, _ in sections):
+        return fit_description(
+            description, available_tokens=available_tokens, tokens_per_char=tokens_per_char
+        )
+    ordered = [block for priority, block in sections if priority] + [
+        block for priority, block in sections if not priority
+    ]
+    kept: list[str] = []
+    used = 0
+    for block in ordered:
+        cost = len(block) + (2 if kept else 0)
+        if used + cost <= max_chars:
+            kept.append(block)
+            used += cost
+            continue
+        room = max_chars - used - (2 if kept else 0)
+        if room > 0:
+            cut, _ = truncate_at_sentence(block, room)
+            if cut:
+                kept.append(cut)
+                used += len(cut) + (2 if len(kept) > 1 else 0)
+    return FittedText(text=(chr(10) * 2).join(kept), truncated=True)
+
+
 __all__ = [
     "CLEANER_VERSION",
     "DEFAULT_TOKENS_PER_CHAR",
@@ -286,6 +408,8 @@ __all__ = [
     "clean_description_report",
     "estimate_tokens",
     "fit_description",
+    "fit_description_by_section",
+    "split_sections",
     "prompt_budget",
     "truncate_at_sentence",
 ]

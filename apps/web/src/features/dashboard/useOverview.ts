@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { getAnalysisMetrics, getOverview, getSourceMetrics } from './api'
+import { getAIBudget, getAnalysisMetrics, getOverview, getSourceMetrics } from './api'
 
 export function useOverview() {
   return useQuery({ queryKey: ['overview'], queryFn: getOverview })
@@ -11,4 +11,8 @@ export function useSourceMetrics() {
 
 export function useAnalysisMetrics() {
   return useQuery({ queryKey: ['analysis-metrics'], queryFn: getAnalysisMetrics })
+}
+
+export function useAIBudget() {
+  return useQuery({ queryKey: ['ai-budget'], queryFn: getAIBudget })
 }

@@ -267,6 +267,7 @@ _OPERATIONAL_METRIC_PATHS = frozenset(
         "/funnel-metrics",
         "/analysis-metrics",
         "/search-metrics",
+        "/ai-budget",
     }
 )
 

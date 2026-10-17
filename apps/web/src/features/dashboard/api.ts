@@ -237,11 +237,46 @@ export interface ModelAIMetrics {
   dayTokensLimit: number | null
 }
 
+/** Card R55-C4: cost per job (one operation, retries and fallback included) of one task. */
+export interface TaskAIMetrics {
+  task: string
+  jobs: number
+  cacheHits: number
+  requests: number
+  tokens: number
+  avgTokensPerJob: number | null
+  avgRequestsPerJob: number | null
+  fallbackJobs: number
+  fallbackRate: number | null
+}
+
 export interface AIMetrics {
   state: string
   windowHours: number
   byModel: ModelAIMetrics[]
   cacheHitRate: number | null
+  byTask: TaskAIMetrics[]
+}
+
+/** Card R55-C6: one model's day balance. `null` limit means no provider limit is known. */
+export interface ModelBudget {
+  model: string
+  providerRequestsLimit: number | null
+  requestsSoftLimit: number
+  requestsUsed: number
+  requestsRemaining: number | null
+  requestsRemainingOperational: number
+  tokensLimit: number
+  tokensUsed: number
+  tokensRemaining: number
+}
+
+export interface AIBudget {
+  state: string
+  day: string
+  resetsAt: string
+  interactiveReserveRequests: number
+  models: ModelBudget[]
 }
 
 export interface AnalysisMetricsReport {
@@ -534,9 +569,24 @@ function parseModelAIMetrics(value: unknown): ModelAIMetrics | null {
   }
 }
 
+function parseTaskAIMetrics(value: unknown): TaskAIMetrics | null {
+  if (!isRecord(value) || typeof value.task !== 'string') return null
+  return {
+    task: value.task,
+    jobs: count(value.jobs),
+    cacheHits: count(value.cache_hits),
+    requests: count(value.requests),
+    tokens: count(value.tokens),
+    avgTokensPerJob: optionalNumber(value.avg_tokens_per_job),
+    avgRequestsPerJob: optionalNumber(value.avg_requests_per_job),
+    fallbackJobs: count(value.fallback_jobs),
+    fallbackRate: optionalNumber(value.fallback_rate),
+  }
+}
+
 function parseAIMetrics(value: unknown): AIMetrics {
   if (!isRecord(value)) {
-    return { state: 'disabled', windowHours: 24, byModel: [], cacheHitRate: null }
+    return { state: 'disabled', windowHours: 24, byModel: [], cacheHitRate: null, byTask: [] }
   }
   return {
     state: text(value.state) ?? 'disabled',
@@ -547,6 +597,47 @@ function parseAIMetrics(value: unknown): AIMetrics {
           .filter((item): item is ModelAIMetrics => item !== null)
       : [],
     cacheHitRate: optionalNumber(value.cache_hit_rate),
+    byTask: Array.isArray(value.by_task)
+      ? value.by_task
+          .map(parseTaskAIMetrics)
+          .filter((item): item is TaskAIMetrics => item !== null)
+      : [],
+  }
+}
+
+function parseModelBudget(value: unknown): ModelBudget | null {
+  if (!isRecord(value) || typeof value.model !== 'string') return null
+  return {
+    model: value.model,
+    providerRequestsLimit: optionalNumber(value.provider_requests_limit),
+    requestsSoftLimit: count(value.requests_soft_limit),
+    requestsUsed: count(value.requests_used),
+    requestsRemaining: optionalNumber(value.requests_remaining),
+    requestsRemainingOperational: count(value.requests_remaining_operational),
+    tokensLimit: count(value.tokens_limit),
+    tokensUsed: count(value.tokens_used),
+    tokensRemaining: count(value.tokens_remaining),
+  }
+}
+
+/** `GET /ai-budget`: today's (UTC) requests and tokens used and remaining, per model. */
+export async function getAIBudget(): Promise<AIBudget> {
+  const response = await privateFetch(apiUrl('/ai-budget'), {
+    headers: { Accept: 'application/json' },
+  })
+  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  const body: unknown = await response.json()
+  if (!isRecord(body) || !Array.isArray(body.models)) {
+    throw new Error('A API retornou um orçamento de IA inválido.')
+  }
+  return {
+    state: text(body.state) ?? 'disabled',
+    day: text(body.day) ?? '',
+    resetsAt: text(body.resets_at) ?? '',
+    interactiveReserveRequests: count(body.interactive_reserve_requests),
+    models: body.models
+      .map(parseModelBudget)
+      .filter((item): item is ModelBudget => item !== null),
   }
 }
 
