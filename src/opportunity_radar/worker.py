@@ -484,6 +484,7 @@ def suggest_fields_pending(
     batch_size: int = 20,
     worker_requests_ceiling: int | None = None,
     owner_sub: str | None = None,
+    extended: bool = False,
 ) -> None:
     """Suggest `role_family`/`seniority`/`work_mode` for opportunities the deterministic
     rules left `UNKNOWN` (card F20-23). Off by default (`worker_suggest_enabled`): the
@@ -501,7 +502,7 @@ def suggest_fields_pending(
         engine, job_name="suggest_fields_pending", interval=timedelta(seconds=300)
     ):
         with Session(engine) as session:
-            prompt = load_classification_prompt()
+            prompt = load_classification_prompt("v2" if extended else "v1")
             route = router.route(AITask.JOB_CLASSIFICATION)
             route_hash = hashlib.sha256("\0".join(route.chain).encode()).hexdigest()
             # One read of the day windows decides the pass: with no balance on any model of
@@ -530,6 +531,7 @@ def suggest_fields_pending(
                 route_hash=route_hash,
                 prompt=prompt,
                 route=route,
+                extended=extended,
             )
             created = discarded = skipped_budget = failed = attempted = 0
             failure_classes = Counter[str]()
@@ -544,6 +546,7 @@ def suggest_fields_pending(
                             opportunity,
                             prompt=prompt,
                             quota_ceiling_requests=worker_requests_ceiling,
+                            extended=extended,
                         )
                     )
                 except Exception:
@@ -1356,6 +1359,7 @@ def build_scheduler(settings: Settings) -> BackgroundScheduler:
                 settings.ai_daily_requests_soft_limit
                 - settings.ai_interactive_reserve_requests
             ),
+            "extended": settings.worker_suggest_extended_fields,
         }
         if settings.worker_owner_sub:
             suggest_kwargs["owner_sub"] = settings.worker_owner_sub

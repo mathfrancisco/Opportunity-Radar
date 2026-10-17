@@ -63,7 +63,16 @@ from opportunity_radar.opportunities.domain import (
     WorkMode,
 )
 from opportunity_radar.platform.ai.config import ai_status
-from opportunity_radar.platform.ai.metrics import ModelAIMetrics, ai_metrics
+from opportunity_radar.platform.ai.metrics import (
+    AIBudgetReport,
+    ModelAIMetrics,
+    ModelBudget,
+    TaskAIMetrics,
+    ai_budget,
+    ai_metrics,
+)
+from opportunity_radar.platform.ai.providers.tokenharbor import MODEL_PREFIX
+from opportunity_radar.platform.ai.tasks import default_routes
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.presentation.http.auth import RequestIdentity, authenticated_identity
 from opportunity_radar.presentation.http.dependencies import get_analysis_adapter, get_session
@@ -344,11 +353,44 @@ class ModelAIMetricsResponse(BaseModel):
     day_tokens_limit: int | None
 
 
+class TaskAIMetricsResponse(BaseModel):
+    task: str
+    jobs: int
+    cache_hits: int
+    requests: int
+    tokens: int
+    avg_tokens_per_job: float | None
+    avg_requests_per_job: float | None
+    fallback_jobs: int
+    fallback_rate: float | None
+
+
 class AIMetricsResponse(BaseModel):
     state: str
     window_hours: int
     by_model: list[ModelAIMetricsResponse]
     cache_hit_rate: float | None
+    by_task: list[TaskAIMetricsResponse] = []
+
+
+class ModelBudgetResponse(BaseModel):
+    model: str
+    provider_requests_limit: int | None
+    requests_soft_limit: int
+    requests_used: int
+    requests_remaining: int | None
+    requests_remaining_operational: int
+    tokens_limit: int
+    tokens_used: int
+    tokens_remaining: int
+
+
+class AIBudgetResponse(BaseModel):
+    state: str
+    day: datetime
+    resets_at: datetime
+    interactive_reserve_requests: int
+    models: list[ModelBudgetResponse]
 
 
 class AnalysisMetricsReportResponse(BaseModel):
@@ -794,6 +836,68 @@ def _ai_metrics_response(
         window_hours=report.window_hours,
         cache_hit_rate=report.cache_hit_rate,
         by_model=[_model_ai_metrics_response(item) for item in report.by_model],
+        by_task=[_task_ai_metrics_response(item) for item in report.by_task],
+    )
+
+
+def _task_ai_metrics_response(item: TaskAIMetrics) -> TaskAIMetricsResponse:
+    return TaskAIMetricsResponse(
+        task=item.task,
+        jobs=item.jobs,
+        cache_hits=item.cache_hits,
+        requests=item.requests,
+        tokens=item.tokens,
+        avg_tokens_per_job=item.avg_tokens_per_job,
+        avg_requests_per_job=item.avg_requests_per_job,
+        fallback_jobs=item.fallback_jobs,
+        fallback_rate=item.fallback_rate,
+    )
+
+
+@router.get("/ai-budget", response_model=AIBudgetResponse)
+def get_ai_budget(
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    identity: RequestIdentity = Depends(authenticated_identity),
+) -> AIBudgetResponse:
+    """Card R55-C6: today's requests and tokens used and remaining, per route model."""
+    del identity
+    routes = default_routes(settings)
+    models = list(dict.fromkeys(name for route in routes.values() for name in route.chain))
+    report = ai_budget(
+        cast(Engine, session.get_bind()),
+        state=ai_status(settings).value,
+        models=models,
+        requests_soft_limit=settings.ai_daily_requests_soft_limit,
+        tokens_limit=settings.ai_daily_tokens_soft_limit,
+        interactive_reserve_requests=settings.ai_interactive_reserve_requests,
+        provider_requests_limit=settings.ai_provider_daily_requests_limit,
+        provider_limit_models=[name for name in models if not name.startswith(MODEL_PREFIX)],
+    )
+    return _ai_budget_response(report)
+
+
+def _ai_budget_response(report: AIBudgetReport) -> AIBudgetResponse:
+    return AIBudgetResponse(
+        state=report.state,
+        day=report.day,
+        resets_at=report.resets_at,
+        interactive_reserve_requests=report.interactive_reserve_requests,
+        models=[_model_budget_response(item) for item in report.models],
+    )
+
+
+def _model_budget_response(item: ModelBudget) -> ModelBudgetResponse:
+    return ModelBudgetResponse(
+        model=item.model,
+        provider_requests_limit=item.provider_requests_limit,
+        requests_soft_limit=item.requests_soft_limit,
+        requests_used=item.requests_used,
+        requests_remaining=item.requests_remaining,
+        requests_remaining_operational=item.requests_remaining_operational,
+        tokens_limit=item.tokens_limit,
+        tokens_used=item.tokens_used,
+        tokens_remaining=item.tokens_remaining,
     )
 
 

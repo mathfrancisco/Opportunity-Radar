@@ -9,6 +9,7 @@ connection and never sees a prompt or a response body.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -17,7 +18,12 @@ import sqlalchemy as sa
 from sqlalchemy.engine import Engine
 
 from opportunity_radar.platform.ai.breaker import BreakerState, CircuitBreaker
-from opportunity_radar.platform.ai.quota import QuotaGuard, day_window
+from opportunity_radar.platform.ai.quota import (
+    QuotaGuard,
+    ai_quota_usage,
+    day_window,
+    effective_ceiling,
+)
 from opportunity_radar.platform.ai.telemetry import ai_call_record
 
 DEFAULT_WINDOW_HOURS = 24
@@ -56,11 +62,32 @@ class ModelAIMetrics:
 
 
 @dataclass(frozen=True, slots=True)
+class TaskAIMetrics:
+    """Cost per job and fallback rate of one task (card R55-C4).
+
+    A "job" is one operation: the router's whole attempt chain for one posting, retries and
+    fallbacks included. Cost is tokens, because the free tiers carry no price; cache reuse
+    is counted apart and never spends tokens.
+    """
+
+    task: str
+    jobs: int
+    cache_hits: int
+    requests: int
+    tokens: int
+    avg_tokens_per_job: float | None
+    avg_requests_per_job: float | None
+    fallback_jobs: int
+    fallback_rate: float | None
+
+
+@dataclass(frozen=True, slots=True)
 class AIMetricsReport:
     state: str
     window_hours: int
     by_model: tuple[ModelAIMetrics, ...]
     cache_hit_rate: float | None
+    by_task: tuple[TaskAIMetrics, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +236,145 @@ def ai_metrics(
         window_hours=window_hours,
         by_model=by_model,
         cache_hit_rate=_rate(total_cache_hits, total_requests),
+        by_task=_task_metrics(engine, since, reference),
+    )
+
+
+def _task_metrics(engine: Engine, since: datetime, until: datetime) -> tuple[TaskAIMetrics, ...]:
+    """One row per task: jobs (distinct operations), tokens per job and the fallback share."""
+    record = ai_call_record
+    fresh = record.c.cache_hit.is_(False)
+    statement = (
+        sa.select(
+            record.c.task.label("task"),
+            sa.func.count(sa.distinct(record.c.operation_id)).filter(fresh).label("jobs"),
+            sa.func.count().filter(record.c.cache_hit.is_(True)).label("cache_hits"),
+            sa.func.count().filter(fresh).label("requests"),
+            sa.func.coalesce(
+                sa.func.sum(
+                    sa.func.coalesce(record.c.prompt_tokens, 0)
+                    + sa.func.coalesce(record.c.completion_tokens, 0)
+                ).filter(fresh),
+                0,
+            ).label("tokens"),
+            sa.func.count(sa.distinct(record.c.operation_id))
+            .filter(fresh, record.c.fallback_used.is_(True))
+            .label("fallback_jobs"),
+        )
+        .where(record.c.created_at >= since, record.c.created_at <= until)
+        .group_by(record.c.task)
+        .order_by(record.c.task)
+    )
+    with engine.connect() as connection:
+        rows = connection.execute(statement).all()
+    return tuple(
+        TaskAIMetrics(
+            task=row.task,
+            jobs=int(row.jobs),
+            cache_hits=int(row.cache_hits),
+            requests=int(row.requests),
+            tokens=int(row.tokens),
+            avg_tokens_per_job=(row.tokens / row.jobs) if row.jobs else None,
+            avg_requests_per_job=(row.requests / row.jobs) if row.jobs else None,
+            fallback_jobs=int(row.fallback_jobs),
+            fallback_rate=_rate(int(row.fallback_jobs), int(row.jobs)),
+        )
+        for row in rows
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class ModelBudget:
+    """One model's day balance (card R55-C6). `None` means no such limit is known."""
+
+    model: str
+    provider_requests_limit: int | None
+    requests_soft_limit: int
+    requests_used: int
+    requests_remaining: int | None
+    requests_remaining_operational: int
+    tokens_limit: int
+    tokens_used: int
+    tokens_remaining: int
+
+
+@dataclass(frozen=True, slots=True)
+class AIBudgetReport:
+    state: str
+    day: datetime
+    resets_at: datetime
+    interactive_reserve_requests: int
+    models: tuple[ModelBudget, ...]
+
+
+def ai_budget(
+    engine: Engine,
+    *,
+    state: str,
+    models: Sequence[str],
+    requests_soft_limit: int,
+    tokens_limit: int,
+    interactive_reserve_requests: int,
+    provider_requests_limit: int | None,
+    provider_limit_models: Sequence[str] = (),
+    now: datetime | None = None,
+) -> AIBudgetReport:
+    """Today's (UTC) requests and tokens used and remaining, for every model of the routes.
+
+    Read from `platform.ai_quota_usage`, the counters `QuotaGuard` reserves against, so the
+    number is the one the router enforces. A model that was never called today shows zero
+    used. The effective cap honours the absolute ceiling a provider reported in its
+    headers, when that is lower than the configured soft limit.
+    """
+    reference = now or datetime.now(UTC)
+    today = day_window(reference)
+    with engine.connect() as connection:
+        rows = {
+            row.model: row
+            for row in connection.execute(
+                sa.select(
+                    ai_quota_usage.c.model,
+                    ai_quota_usage.c.requests,
+                    ai_quota_usage.c.tokens,
+                    ai_quota_usage.c.requests_ceiling,
+                    ai_quota_usage.c.tokens_ceiling,
+                ).where(
+                    ai_quota_usage.c.window_kind == "day",
+                    ai_quota_usage.c.window_start == today,
+                )
+            )
+        }
+    names = list(dict.fromkeys([*models, *rows]))
+    capped = set(provider_limit_models)
+    budgets = []
+    for name in names:
+        row = rows.get(name)
+        used_requests = int(row.requests) if row else 0
+        used_tokens = int(row.tokens) if row else 0
+        soft = effective_ceiling(requests_soft_limit, row.requests_ceiling if row else None)
+        token_cap = effective_ceiling(tokens_limit, row.tokens_ceiling if row else None)
+        provider = provider_requests_limit if name in capped else None
+        budgets.append(
+            ModelBudget(
+                model=name,
+                provider_requests_limit=provider,
+                requests_soft_limit=soft,
+                requests_used=used_requests,
+                requests_remaining=(
+                    None if provider is None else max(0, provider - used_requests)
+                ),
+                requests_remaining_operational=max(0, soft - used_requests),
+                tokens_limit=token_cap,
+                tokens_used=used_tokens,
+                tokens_remaining=max(0, token_cap - used_tokens),
+            )
+        )
+    return AIBudgetReport(
+        state=state,
+        day=today,
+        resets_at=today + timedelta(days=1),
+        interactive_reserve_requests=interactive_reserve_requests,
+        models=tuple(budgets),
     )
 
 
@@ -276,10 +442,14 @@ def _optional(value: Any) -> float | None:
 
 __all__ = [
     "DEFAULT_WINDOW_HOURS",
+    "AIBudgetReport",
     "AIMetricsReport",
     "AIPeriodComparison",
     "ModelAIMetrics",
+    "ModelBudget",
     "PeriodTotals",
+    "TaskAIMetrics",
+    "ai_budget",
     "ai_metrics",
     "ai_period_comparison",
 ]

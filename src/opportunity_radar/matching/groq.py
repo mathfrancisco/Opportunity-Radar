@@ -43,7 +43,7 @@ from opportunity_radar.matching.text import (
     CLEANER_VERSION,
     DEFAULT_TOKENS_PER_CHAR,
     clean_description_report,
-    fit_description,
+    fit_description_by_section,
     prompt_budget,
     truncate_at_sentence,
 )
@@ -188,7 +188,7 @@ class GroqAnalysisAdapter:
             else:
                 while True:
                     available = budget_ceiling - estimate(render("", False, decisions))
-                    fitted = fit_description(
+                    fitted = fit_description_by_section(
                         cleaned.text, available_tokens=available, tokens_per_char=ratio
                     )
                     if fitted.truncated and decisions:

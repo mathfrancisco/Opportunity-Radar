@@ -267,6 +267,7 @@ class FieldSuggestionResponse(BaseModel):
     evidence: str
     model: str
     prompt_version: str
+    origin: str = "ai"
     status: str
     decided_by: str | None
     decided_at: datetime | None
@@ -657,6 +658,7 @@ def _field_suggestion_response(
         evidence=suggestion.evidence,
         model=suggestion.model,
         prompt_version=suggestion.prompt_version,
+        origin=suggestion.origin,
         status=suggestion.status,
         decided_by=suggestion.decided_by,
         decided_at=suggestion.decided_at,

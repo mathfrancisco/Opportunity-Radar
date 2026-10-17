@@ -1,6 +1,7 @@
 import { useQueries } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { AIBudgetCard } from '../components/AIBudgetCard'
 import { ButtonLink } from '../components/Button'
 import { Card } from '../components/Card'
 import { Chip } from '../components/Chip'
@@ -796,6 +797,9 @@ function Summary({ overview }: { overview: Overview }) {
         </div>
         <div className="mt-6">
           <AIUsageCard />
+        </div>
+        <div className="mt-6">
+          <AIBudgetCard />
         </div>
         <SourceMetricsSection />
       </Block>
