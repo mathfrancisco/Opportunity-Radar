@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render } from '../components/testing'
 import { type OpportunityDetail } from '../features/opportunities/api'
 import {
+  AbsenceRule,
   DuplicateCandidates,
   OpportunityDescription,
   OpportunityDetailPage,
@@ -314,6 +315,22 @@ describe('DuplicateCandidates', () => {
   })
 })
 
+describe('AbsenceRule (R55-D5)', () => {
+  it('numa vaga encerrada, abre com o motivo do encerramento', () => {
+    const container = render(<AbsenceRule status="CLOSED" />)
+
+    expect(container.textContent).toContain('Por que está encerrada')
+    expect(container.textContent).toContain('mais de 24 h')
+  })
+
+  it('numa vaga ativa, abre com a regra geral', () => {
+    const container = render(<AbsenceRule status="ACTIVE" />)
+
+    expect(container.textContent).toContain('Quando a vaga é encerrada')
+    expect(container.textContent).not.toContain('Por que está encerrada')
+  })
+})
+
 describe('SiblingLocations (F48-10)', () => {
   it('lists the other cities with links to each opportunity', () => {
     const container = renderWithProviders(
@@ -532,6 +549,20 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     expect(panel.textContent).toContain('Relevante')
     expect(panel.querySelector('#candidatura')).not.toBeNull()
     expect(panel.textContent).toContain('Registrar interesse')
+  })
+
+  it('explica na tela da vaga quando ela é encerrada por ausência (R55-D5)', async () => {
+    const container = await renderDetail()
+
+    const facts = container.querySelector('#resumo') as HTMLElement
+    const rule = facts.querySelector('[data-testid="absence-rule"]') as HTMLElement
+    expect(rule).not.toBeNull()
+    expect(rule.textContent).toContain('Quando a vaga é encerrada')
+    expect(rule.textContent).toContain('mais de 24 h')
+    expect(rule.textContent).toContain('absence_after_hours')
+    expect(rule.textContent).toContain('execução completa')
+    expect(rule.textContent).toContain('Execuções parciais ou com falha não encerram nada')
+    expect(rule.textContent).toContain('reaparecer')
   })
 
   it('separa o matching determinístico da análise de IA em regiões rotuladas', async () => {

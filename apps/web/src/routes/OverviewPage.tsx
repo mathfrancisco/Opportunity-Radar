@@ -471,6 +471,17 @@ function AIUsageCard() {
       </Card>
     )
   }
+  // R55-D6: until the metrics arrive nothing is known, so the card must not claim "Desligada".
+  if (metrics.isPending) {
+    return (
+      <Card>
+        <p className="text-sm text-muted">IA (Groq)</p>
+        <p className="mt-2 text-sm text-subtle" role="status">
+          Carregando métricas de IA…
+        </p>
+      </Card>
+    )
+  }
   if (!ai || ai.state !== 'enabled') {
     return (
       <Card>

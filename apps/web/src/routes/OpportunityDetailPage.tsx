@@ -218,7 +218,30 @@ function TitleFacts({ opportunity }: { opportunity: OpportunityDetail }) {
           </li>
         ))}
       </ul>
+      <AbsenceRule status={opportunity.lifecycleStatus} />
     </div>
+  )
+}
+
+/**
+ * R55-D5: when a posting closes by itself, in words. The rule lives in
+ * `OpportunityService.reconcile_run_closures` (setting `absence_after_hours`, default 24).
+ */
+export function AbsenceRule({ status }: { status: string }) {
+  return (
+    <p
+      className="mt-3 max-w-[72ch] text-body-sm text-subtle"
+      data-testid="absence-rule"
+      id="regra-ausencia"
+    >
+      <span className="font-medium text-ink">
+        {status === 'CLOSED' ? 'Por que está encerrada: ' : 'Quando a vaga é encerrada: '}
+      </span>
+      ela some do quadro da fonte por mais de 24 h (configuração <code>absence_after_hours</code>
+      ) e a execução completa mais recente da fonte leu o quadro inteiro. Execuções parciais ou
+      com falha não encerram nada. Se a vaga reaparecer em uma execução completa, volta a ficar
+      ativa.
+    </p>
   )
 }
 
