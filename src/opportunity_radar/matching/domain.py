@@ -6,6 +6,7 @@ are responsible for translating their models into these value objects.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -26,6 +27,10 @@ ZERO = Decimal("0")
 ONE = Decimal("1")
 HALF = Decimal("0.5")
 HUNDRED = Decimal("100")
+#: R55-D2: a factor nobody could measure is not "known and middling". The old `HALF` for both
+#: tied every posting that lacked the same fields (27 of 40 labeled cases at 55.0). Unknown
+#: now scores below the neutral midpoint, so a posting with evidence outranks one without it.
+UNKNOWN_FACTOR_SCORE = Decimal("0.45")
 
 
 class MatchingError(ValueError):
@@ -233,8 +238,9 @@ class MatchingRuleSet:
         (CompanyPriority.LOW, Decimal("0.4")),
         (CompanyPriority.BLOCKED, ZERO),
     )
-    # matching-v2 calibration (card F48-12). A posting whose factors are all unknown scores
-    # about 55 (every neutral factor is 0.5), so:
+    # matching-v2 calibration (card F48-12). A posting whose factors are all unknown scored
+    # about 55 while an unknown factor was 0.5; since matching-v6 (R55-D2) it scores about
+    # 51 (unknown 0.45), still at the WATCHLIST floor, below a posting with known evidence:
     # - WATCHLIST (45 -> 50) needs at least neutral evidence: a posting dragged to the low 40s
     #   by a known mismatch (e.g. seniority above the preference) is LOW_MATCH;
     # - RECOMMENDED (65) needs one strong known signal on top of the neutral baseline
@@ -243,8 +249,16 @@ class MatchingRuleSet:
     high_priority_threshold: Decimal = Decimal("80")
     recommended_threshold: Decimal = Decimal("65")
     watchlist_threshold: Decimal = Decimal("50")
+    #: Raw score of a factor with no data under `NEUTRAL`/`REQUIRE_REVIEW` (R55-D2). Never
+    #: above `HALF`, the score of a known, middling fit.
+    unknown_score: Decimal = UNKNOWN_FACTOR_SCORE
+    #: R55-D3: a junior/mid level adjacent to the accepted ones is a soft penalty. Off for
+    #: the versions before `matching-v6`, so replaying their assessments gives their numbers.
+    seniority_bands: bool = True
 
     def __post_init__(self) -> None:
+        if not ZERO <= self.unknown_score <= HALF:
+            raise MatchingError("unknown score must be between zero and one half")
         if not self.version.strip():
             raise MatchingError("matching rules require a version")
         _require_unique("factor codes", tuple(factor.code for factor in self.factors))
@@ -321,15 +335,34 @@ RULES_VERSION_V4 = "matching-v4"
 #: F52-05: an unknown level, with no other sign of the level, never ranks above WATCHLIST
 #: either, for a profile that states the levels it accepts.
 RULES_VERSION_V5 = "matching-v5"
+#: R55-D2 (unknown scores below neutral) and R55-D3 (seniority bands: a level adjacent to the
+#: accepted ones is a soft penalty, not an elimination).
+RULES_VERSION_V6 = "matching-v6"
+RULES_VERSION_CURRENT_NUMBER = 6
 
 
-def default_rule_set(version: str = RULES_VERSION_V5) -> MatchingRuleSet:
+def default_rule_set(version: str = RULES_VERSION_V6) -> MatchingRuleSet:
     """Return the current explicit, fully weighted deterministic rule set.
 
     `matching-v1` assessments stay in the history under their own `rules_version`; a new
     evaluation is a new row, never an in-place edit.
     """
+    if _version_number(version) < 6:
+        # matching-v1..v5 replay with their own numbers: unknown is neutral (0.5) and the
+        # junior/mid band does not exist.
+        return MatchingRuleSet(
+            version=version,
+            factors=DEFAULT_FACTORS,
+            unknown_score=HALF,
+            seniority_bands=False,
+        )
     return MatchingRuleSet(version=version, factors=DEFAULT_FACTORS)
+
+
+def _version_number(version: str) -> int:
+    """The N of `matching-vN`; a version that does not follow the pattern is current."""
+    match = re.fullmatch(r"matching-v(\d+)", version.strip())
+    return int(match.group(1)) if match else RULES_VERSION_CURRENT_NUMBER
 
 
 def evaluate_match(
@@ -340,7 +373,9 @@ def evaluate_match(
     assessed_at: datetime | None = None,
 ) -> MatchResult:
     """Evaluate stable inputs without source calls, inference, or wall-clock dependence."""
-    eligibility = evaluate_eligibility(opportunity, profile)
+    eligibility = evaluate_eligibility(
+        opportunity, profile, seniority_bands=rules.seniority_bands
+    )
     factors = tuple(
         _evaluate_factor(rule, opportunity, profile, rules, assessed_at)
         for rule in rules.factors
@@ -365,7 +400,9 @@ def evaluate_match(
             eligibility,
             review_required,
             rules,
-            level_outside_preference=_level_outside_preference(opportunity, profile)
+            level_outside_preference=_level_outside_preference(
+                opportunity, profile, seniority_bands=rules.seniority_bands
+            )
             or _level_unknown_without_signal(opportunity, profile),
         ),
         review_required=review_required,
@@ -373,7 +410,10 @@ def evaluate_match(
 
 
 def evaluate_eligibility(
-    opportunity: OpportunitySnapshot, profile: ProfileSnapshot
+    opportunity: OpportunitySnapshot,
+    profile: ProfileSnapshot,
+    *,
+    seniority_bands: bool = True,
 ) -> EligibilityResult:
     """Apply only conclusive hard filters supported by normalized snapshots.
 
@@ -399,7 +439,7 @@ def evaluate_eligibility(
             has_source=opportunity.timezone_overlap_hours is not None
             or opportunity.required_timezone_overlap_hours is not None,
         ),
-        _seniority_filter(opportunity, profile),
+        _seniority_filter(opportunity, profile, seniority_bands=seniority_bands),
         _contract_filter(opportunity, profile),
     )
     if any(item.result is KnowledgeState.FALSE for item in filters):
@@ -494,13 +534,30 @@ def _country_codes(values: Iterable[str]) -> str:
 
 
 def _seniority_filter(
-    opportunity: OpportunitySnapshot, profile: ProfileSnapshot
+    opportunity: OpportunitySnapshot,
+    profile: ProfileSnapshot,
+    *,
+    seniority_bands: bool = True,
 ) -> HardFilterResult:
     if opportunity.seniority is Seniority.UNKNOWN or not profile.accepted_seniorities:
         return _unknown_filter(
             "SENIORITY_COMPATIBLE", "Seniority compatibility is not stated."
         )
     compatible = opportunity.seniority in profile.accepted_seniorities
+    if (
+        seniority_bands
+        and not compatible
+        and _is_adjacent_level(opportunity.seniority, profile)
+    ):
+        # R55-D3: Júnior and Pleno are one band; a profile that accepts one reads the other
+        # as a near fit, not as an elimination.
+        return HardFilterResult(
+            code="SENIORITY_COMPATIBLE",
+            result=KnowledgeState.TRUE,
+            reason="Seniority is adjacent to the profile preference (junior/mid band); "
+            "ranked lower, not excluded.",
+            evidence_refs=opportunity.evidence_refs + profile.evidence_refs,
+        )
     if not compatible and _is_senior_tier(opportunity.seniority):
         # F48-13: SENIOR and above outside the preference rank lower, they are not excluded.
         return HardFilterResult(
@@ -530,16 +587,44 @@ _SENIOR_TIER = frozenset(
 )
 #: Raw score of the seniority factor for a level above the preference: low, not zero.
 SENIORITY_ABOVE_PREFERENCE_SCORE = Decimal("0.25")
+#: R55-D3: the entry-to-mid band. Accepting either level makes the other adjacent.
+_ENTRY_BAND = frozenset({Seniority.JUNIOR, Seniority.MID})
+#: Raw score of the seniority factor for the adjacent level of the band: below an accepted
+#: level (1.0), above a level over the preference (0.25).
+SENIORITY_ADJACENT_SCORE = Decimal("0.6")
 
 
 def _is_senior_tier(seniority: Seniority) -> bool:
     return seniority in _SENIOR_TIER
 
 
+def _is_adjacent_level(seniority: Seniority, profile: ProfileSnapshot) -> bool:
+    """A junior/mid level the profile did not list while it lists the other one."""
+    return (
+        seniority in _ENTRY_BAND
+        and seniority not in profile.accepted_seniorities
+        and any(level in _ENTRY_BAND for level in profile.accepted_seniorities)
+    )
+
+
 def _seniority_measurement(
-    opportunity: OpportunitySnapshot, profile: ProfileSnapshot
+    opportunity: OpportunitySnapshot,
+    profile: ProfileSnapshot,
+    *,
+    seniority_bands: bool = True,
 ) -> tuple[KnowledgeState, Decimal | None, str, tuple[str, ...]]:
-    result = _seniority_filter(opportunity, profile)
+    result = _seniority_filter(opportunity, profile, seniority_bands=seniority_bands)
+    if (
+        seniority_bands
+        and result.result is KnowledgeState.TRUE
+        and _is_adjacent_level(opportunity.seniority, profile)
+    ):
+        return (
+            KnowledgeState.TRUE,
+            SENIORITY_ADJACENT_SCORE,
+            result.reason,
+            result.evidence_refs,
+        )
     if (
         result.result is KnowledgeState.TRUE
         and _is_senior_tier(opportunity.seniority)
@@ -666,7 +751,7 @@ def _evaluate_factor(
         raw = None
         status = FactorStatus.NOT_APPLICABLE
     else:
-        raw = _missing_score(rule.missing_policy)
+        raw = _missing_score(rule.missing_policy, rules)
         status = FactorStatus.UNKNOWN
     contribution = ZERO if raw is None else HUNDRED * rule.weight * raw
     confidence = ONE if status is FactorStatus.KNOWN else ZERO
@@ -714,10 +799,11 @@ def _factor_measurement(
                 "Work mode, country and contract are not stated; neutral.",
                 (),
             )
-        # An unknown dimension is neutral (0.5), never a reason to require review.
+        # An unknown dimension scores `unknown_score` (R55-D2), never a reason to require
+        # review.
         raw = sum(
             (
-                ONE if item.result is KnowledgeState.TRUE else HALF
+                ONE if item.result is KnowledgeState.TRUE else rules.unknown_score
                 for item in dimensions
             ),
             ZERO,
@@ -743,7 +829,9 @@ def _factor_measurement(
             opportunity.evidence_refs,
         )
     if code == "SENIORITY_SCOPE":
-        return _seniority_measurement(opportunity, profile)
+        return _seniority_measurement(
+            opportunity, profile, seniority_bands=rules.seniority_bands
+        )
     if code == "CONTRACT_COMPENSATION":
         return _contract_compensation_measurement(opportunity, profile)
     if code == "RECENCY":
@@ -948,9 +1036,9 @@ def _filter_measurement(
     return result.result, raw_score, result.reason, result.evidence_refs
 
 
-def _missing_score(policy: MissingPolicy) -> Decimal | None:
+def _missing_score(policy: MissingPolicy, rules: MatchingRuleSet) -> Decimal | None:
     if policy is MissingPolicy.NEUTRAL or policy is MissingPolicy.REQUIRE_REVIEW:
-        return HALF
+        return rules.unknown_score
     if policy is MissingPolicy.PENALIZE:
         return ZERO
     return None
@@ -1008,12 +1096,18 @@ def _verdict(
     return Verdict.LOW_MATCH
 
 
-def _level_outside_preference(opportunity: OpportunitySnapshot, profile: ProfileSnapshot) -> bool:
+def _level_outside_preference(
+    opportunity: OpportunitySnapshot,
+    profile: ProfileSnapshot,
+    *,
+    seniority_bands: bool = True,
+) -> bool:
     """A stated level the profile does not accept. Unknown on either side is not that."""
     return (
         opportunity.seniority is not Seniority.UNKNOWN
         and bool(profile.accepted_seniorities)
         and opportunity.seniority not in profile.accepted_seniorities
+        and not (seniority_bands and _is_adjacent_level(opportunity.seniority, profile))
     )
 
 

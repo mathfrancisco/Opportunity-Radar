@@ -321,14 +321,11 @@ class GreenhouseCollector:
             company_name=company_name,
             location_text=GreenhouseCollector._string((location or {}).get("name")),
             description=GreenhouseCollector._string(job.get("content")),
-            # Card F20-61 checked this collector for a real `published_at` source:
-            # the public Job Board API's job object carries only `updated_at` (this
-            # collector's own `updated_at` above) and no `first_published`/
-            # `posted_at`/`date_posted` field at all — `updated_at` is a
-            # last-modified time, not a publication date, so it is deliberately not
-            # reused as `published_at` here (that would misrepresent a re-touched
-            # posting as freshly published). `published_at` stays `None`; the
-            # recency filter falls back to `first_seen_at`, marked estimated.
+            # R55-A5: the Job Board API documents `first_published` on the job object
+            # (https://developers.greenhouse.io/job-board.html). It is the publication
+            # date the 7-day ingestion window needs; `updated_at` is only a last-modified
+            # time and is not reused here. Absent or malformed, it stays `None`.
+            published_at=GreenhouseCollector._first_published(job.get("first_published")),
             updated_at=GreenhouseCollector._updated_at(job.get("updated_at")),
             raw_payload=job,
             metadata={
@@ -365,6 +362,17 @@ class GreenhouseCollector:
     @staticmethod
     def _string(value: Any) -> str | None:
         return value if isinstance(value, str) else None
+
+    @staticmethod
+    def _first_published(value: Any) -> datetime | None:
+        """The documented `first_published` timestamp; tolerant, since the field is optional."""
+        if not isinstance(value, str) or not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
     @staticmethod
     def _updated_at(value: Any) -> datetime | None:

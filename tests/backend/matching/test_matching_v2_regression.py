@@ -137,11 +137,14 @@ def test_v2_leaves_the_review_wall_and_reaches_the_positive_verdicts() -> None:
 
 
 def test_v2_distribution_is_pinned() -> None:
-    """Before: 40 REVIEW_REQUIRED and 10 INELIGIBLE (recorded in the cases, matching-v1)."""
+    """Before: 40 REVIEW_REQUIRED and 10 INELIGIBLE (recorded in the cases, matching-v1).
+
+    matching-v6 (R55-D2) moved one case from WATCHLIST to LOW_MATCH: unknown scores 0.45.
+    """
     before = Counter(case["payload"]["verdict"] for case in load())
 
     assert before == {"REVIEW_REQUIRED": 40, "INELIGIBLE": 10}
-    assert distribution(load()) == {"WATCHLIST": 34, "LOW_MATCH": 6, "INELIGIBLE": 10}
+    assert distribution(load()) == {"WATCHLIST": 33, "LOW_MATCH": 7, "INELIGIBLE": 10}
 
 
 def test_eligibility_after_f50_06_holds_open_only_for_criteria_with_a_data_source() -> None:

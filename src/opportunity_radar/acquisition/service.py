@@ -25,7 +25,7 @@ from opportunity_radar.acquisition.alerts import (
     SourceAlertService,
 )
 from opportunity_radar.acquisition.ashby import AshbyCollector
-from opportunity_radar.acquisition.collectors import CollectorRegistry, ManualCollector
+from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.concurrency import source_host_key
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
@@ -69,7 +69,7 @@ from opportunity_radar.acquisition.proposals import (
     IDENTIFIER_KEYS,
     follow_inert_correction,
 )
-from opportunity_radar.acquisition.remotive import RemotiveCollector
+from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.repository import (
     SOURCE_CLAIM_LEASE,
     STALE,
@@ -448,15 +448,9 @@ class AcquisitionService:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
         self.alerts = alerts or SourceAlertService(session, notifier=alert_notifier)
-        self.registry = registry or CollectorRegistry(
-            (
-                ManualCollector(),
-                AshbyCollector(),
-                LeverCollector(),
-                GreenhouseCollector(),
-                RemotiveCollector(),
-            )
-        )
+        # R55-A5: the default is the deployment registry, not a hand-kept subset, so a
+        # collector added to `build_collector_registry` can never be missing here.
+        self.registry = registry or build_collector_registry()
         self._sleeper = sleeper
         # F20-45: fills in a missing description via Tavily `/extract` after discovery,
         # for any collector's items, not only tavily_search's own. `None` (the default)
@@ -2393,6 +2387,7 @@ class AcquisitionService:
             payload=payload,
             persist_new=persist_new,
             published_at=item.published_at,
+            source_updated_at=item.updated_at,
         )
 
     @staticmethod

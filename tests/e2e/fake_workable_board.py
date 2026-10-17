@@ -16,7 +16,12 @@ Accounts served:
 """
 
 import json
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+#: Inside the 7-day ingest window (R55-E1).
+RECENT_1 = (datetime.now(UTC) - timedelta(days=2)).date().isoformat()
+RECENT_2 = (datetime.now(UTC) - timedelta(days=1)).date().isoformat()
 
 HEALTHY_ACCOUNT = "radar-ci"
 RATE_LIMITED_ACCOUNT = "rate-limited"
@@ -29,7 +34,7 @@ JOBS = [
         "url": "https://apply.workable.com/radar-ci/j/RADAR-1/",
         "location": {"location_str": "Remote", "telecommuting": True},
         "full_description": "<p>Build the radar.</p>",
-        "published_on": "2026-09-01",
+        "published_on": RECENT_1,
     },
     {
         "id": "RADAR-2",
@@ -37,7 +42,7 @@ JOBS = [
         "url": "https://apply.workable.com/radar-ci/j/RADAR-2/",
         "location": {"location_str": "Remote", "telecommuting": True},
         "full_description": "<p>Keep the radar up.</p>",
-        "published_on": "2026-09-02",
+        "published_on": RECENT_2,
     },
 ]
 

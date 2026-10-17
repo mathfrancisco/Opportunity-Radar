@@ -437,6 +437,56 @@ describe('OverviewPage — composição', () => {
   })
 })
 
+// R55-D6: the AI card said "Desligada" while the metrics were still loading.
+describe('OverviewPage — cartão de IA', () => {
+  function stubAnalysisMetrics(respond: () => Promise<Response>) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.endsWith('/analysis-metrics')) return respond()
+        if (url.endsWith('/saved-searches')) return new Response('[]', { status: 200 })
+        if (url.endsWith('/overview')) {
+          return new Response(JSON.stringify(overviewBody()), { status: 200 })
+        }
+        return new Response(JSON.stringify({ generated_at: '', windows: [] }), { status: 200 })
+      }),
+    )
+  }
+
+  it('mostra "carregando" e não "Desligada" enquanto as métricas não chegam', async () => {
+    stubAnalysisMetrics(() => new Promise<Response>(() => {}))
+
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    expect(container.textContent).toContain('Carregando métricas de IA')
+    expect(container.textContent).not.toContain('Desligada')
+  })
+
+  it('mostra "Desligada" só depois que a API informa IA desligada', async () => {
+    stubAnalysisMetrics(
+      async () => new Response(JSON.stringify(disabledAnalysisMetrics), { status: 200 }),
+    )
+
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    expect(container.textContent).not.toContain('Carregando métricas de IA')
+    expect(container.textContent).toContain('Desligada (AI_ENABLED=false).')
+  })
+
+  it('mostra o erro, e não "Desligada", quando as métricas falham', async () => {
+    stubAnalysisMetrics(async () => new Response('{}', { status: 500 }))
+
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    expect(container.textContent).toContain('Não foi possível carregar as métricas de IA.')
+    expect(container.textContent).not.toContain('Desligada')
+  })
+})
+
 // Card F20-54: the Overview links to the Inbox filtered to startups.
 describe('StartupShortcut', () => {
   it('leva para a Inbox filtrada por only_startups', () => {

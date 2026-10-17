@@ -52,6 +52,7 @@ from opportunity_radar.opportunities.suggestions import (
     accept_suggestion,
     reject_suggestion,
 )
+from opportunity_radar.platform.config import get_settings
 from opportunity_radar.presentation.http.auth import RequestIdentity, authenticated_identity
 from opportunity_radar.presentation.http.dependencies import get_session
 from opportunity_radar.profile.domain import ProfileNotFoundError
@@ -183,6 +184,9 @@ class OpportunityResponse(BaseModel):
     skills: list[OpportunitySkillResponse]
     occurrences: list[SourceOccurrenceResponse]
     relevance_mark: RelevanceMarkResponse | None = None
+    #: R55-D5: hours a posting may be missing from its source board before it is closed
+    #: (setting `absence_after_hours`), so the screen states the real window.
+    absence_after_hours: int | None = None
 
 
 class SiblingLocationResponse(BaseModel):
@@ -730,6 +734,7 @@ def _opportunity_response(
         contract_type=opportunity.contract_type,
         description=opportunity.description,
         lifecycle_status=opportunity.lifecycle_status,
+        absence_after_hours=get_settings().absence_after_hours,
         role_family=opportunity.role_family,
         role_family_evidence=opportunity.role_family_evidence,
         role_family_version=opportunity.role_family_version,

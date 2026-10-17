@@ -70,6 +70,7 @@ function sourceDetail(id: string, overrides: Record<string, unknown> = {}) {
 function stubFetch(options: {
   items: ReturnType<typeof healthItem>[]
   probeResponses?: Record<string, unknown>[]
+  detail?: Record<string, unknown>
 }) {
   const calls: { method: string; url: string }[] = []
   let probeCallIndex = 0
@@ -104,7 +105,9 @@ function stubFetch(options: {
       }
       const sourceIdMatch = /\/sources\/([^/?]+)/.exec(url)
       if (sourceIdMatch) {
-        return new Response(JSON.stringify(sourceDetail(sourceIdMatch[1])), { status: 200 })
+        return new Response(JSON.stringify(sourceDetail(sourceIdMatch[1], options.detail)), {
+          status: 200,
+        })
       }
       return new Response('{}', { status: 200 })
     }),
@@ -157,6 +160,35 @@ describe('HomologationQueue', () => {
 
     expect(container.textContent).toContain('2 de 2')
     expect(container.textContent).toContain('Fonte source-2')
+  })
+
+  it('mostra a evidência de homologação aninhada, nunca [object Object] (R55-D6)', async () => {
+    stubFetch({
+      items: [healthItem({ source_definition_id: 'source-1', name: 'Primeira' })],
+      detail: {
+        configuration: {
+          board_token: 'acme',
+          homologation_audit: {
+            terms_review: 'operator-confirmed via --accept-terms',
+            collector_local_test: { status: 'passed', items_seen: 3, http_requests: 1 },
+          },
+        },
+      },
+    })
+
+    const container = renderWithClient(<HomologationQueue />)
+    await flush()
+    act(() => container.querySelector<HTMLButtonElement>('tbody tr button')?.click())
+    await flush()
+
+    const text = container.textContent ?? ''
+    expect(text).not.toContain('[object Object]')
+    expect(text).toContain('homologation_audit')
+    expect(text).toContain('terms_review')
+    expect(text).toContain('operator-confirmed via --accept-terms')
+    expect(text).toContain('collector_local_test')
+    expect(text).toContain('items_seen')
+    expect(text).toContain('passed')
   })
 
   it('modo sequencial avança sem voltar à lista', async () => {

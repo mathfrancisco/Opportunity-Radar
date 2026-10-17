@@ -348,6 +348,7 @@ def _patch_run_pipeline_once_for_non_success(
     monkeypatch.setattr(
         run_pipeline_once, "collect_enabled_sources", lambda **kwargs: collect_result
     )
+    monkeypatch.setattr(run_pipeline_once, "collection_service_factory", lambda _s: object())
     monkeypatch.setattr(
         run_pipeline_once,
         "normalize_opportunities",
