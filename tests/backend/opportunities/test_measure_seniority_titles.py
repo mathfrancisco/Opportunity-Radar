@@ -96,6 +96,13 @@ def test_baseline_counts_levels_patterns_and_the_title_only_ceiling() -> None:
     assert report["coverage_ceiling_title_only"] == 0.75
 
 
+def test_baseline_counts_intermediate_title_as_mid() -> None:
+    report = baseline(_rows("Intermediate Software Engineer"))
+
+    assert report["mapping_version"] == "seniority-v7"
+    assert report["levels"] == {"MID": 1}
+
+
 def test_baseline_of_no_titles_reports_zero_instead_of_dividing() -> None:
     report = baseline([])
 

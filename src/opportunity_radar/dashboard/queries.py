@@ -947,6 +947,23 @@ def list_opportunity_inbox(
     )
 
 
+def count_opportunity_inbox(
+    session: Session,
+    query: InboxQuery,
+    *,
+    owner_sub: str,
+) -> int:
+    """Return the Inbox total without materializing a page of Inbox items.
+
+    The total remains the window count from `_inbox_statement`, so this preserves the
+    Inbox filters, profile scope, cutoff and posting-group deduplication used by the
+    list endpoint. `totals_only` selects a single representative row to carry it.
+    """
+    statement, _ = _inbox_statement(query, owner_sub=owner_sub, totals_only=True)
+    row = session.execute(statement.limit(1)).first()
+    return int(row[-2]) if row is not None else 0
+
+
 def _inbox_item(row: Any) -> InboxItem:
     return InboxItem(
         opportunity_id=row[0],

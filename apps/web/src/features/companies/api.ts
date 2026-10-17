@@ -214,12 +214,13 @@ function parseProposal(value: unknown): ProposedSource | null {
   }
 }
 
-export async function getCompany(companyId: string): Promise<CompanyDetail> {
+export async function getCompany(companyId: string, signal?: AbortSignal): Promise<CompanyDetail> {
   const response = await privateFetch(apiUrl(`/companies/${companyId}`), {
     headers: { Accept: 'application/json' },
+    signal,
   })
   if (response.status === 404) throw new Error('Empresa não encontrada.')
-  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  if (!response.ok) throw await failureFrom(response)
   return parseCompanyDetail(await response.json())
 }
 
@@ -367,13 +368,14 @@ export async function getCompanies({
   page,
   pageSize,
   q,
-}: CompanyListParams): Promise<CompanyPage> {
+}: CompanyListParams, signal?: AbortSignal): Promise<CompanyPage> {
   const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
   if (q?.trim()) params.set('q', q.trim())
   const response = await privateFetch(apiUrl(`/companies?${params.toString()}`), {
     headers: { Accept: 'application/json' },
+    signal,
   })
-  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  if (!response.ok) throw await failureFrom(response)
   const body: unknown = await response.json()
   if (!isRecord(body) || !Array.isArray(body.items)) {
     throw new Error('A API retornou uma lista de empresas inválida.')

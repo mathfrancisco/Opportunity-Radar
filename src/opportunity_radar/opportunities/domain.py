@@ -955,7 +955,7 @@ _SENIORITY_WORDS: tuple[tuple[Seniority | None, str], ...] = (
     (Seniority.STAFF, r"\bstaff\b|\bespecialista\b|\bprincipal\b"),
     (Seniority.MID, r"\bsemi[- ]?senior\b|\bssr\b"),
     (Seniority.SENIOR, r"\bsenior\b|\bsr\b"),
-    (Seniority.MID, r"\bmid(?:[- ]?level)?\b|\bmiddle\b|\bplen[oa]\b|\bpl\b"),
+    (Seniority.MID, r"\bmid(?:[- ]?level)?\b|\bmiddle\b|\bintermediate\b|\bplen[oa]\b|\bpl\b"),
     # seniority-v6: "associate" is the job name here, not a level. Deliberately narrow:
     # only this short list of role phrases, so "Associate Software Engineer" stays JUNIOR.
     (None, r"\blabell?ing associate\b"),
@@ -1082,7 +1082,11 @@ def infer_seniority(
 #: role, not the MANAGER level, and "labeling associate" is not the JUNIOR level; both
 #: titles fall back to the other words of the title, or UNKNOWN. Changes titles that were
 #: already classified.
-SENIORITY_MAPPING_VERSION = "seniority-v6"
+#:
+#: v6 -> v7: explicit "Intermediate" in a title or homologated structured field maps to
+#: MID. Description text remains limited to its phrase/years rules, so "intermediate
+#: English" does not name a seniority level.
+SENIORITY_MAPPING_VERSION = "seniority-v7"
 
 # Collector payloads are intentionally listed even when they have no approved level
 # field. Adding a field here is part of that collector's homologation, not a heuristic.

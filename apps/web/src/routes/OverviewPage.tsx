@@ -1,4 +1,3 @@
-import { useQueries } from '@tanstack/react-query'
 import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ButtonLink } from '../components/Button'
@@ -23,15 +22,16 @@ import {
   useSourceMetrics,
 } from '../features/dashboard/useOverview'
 import { verdictCountLabels, verdictOrder } from '../features/matching/verdicts'
-import { type SavedSearchFilters, getSavedSearchNewCount } from '../features/saved-searches/api'
-import { useOpenSavedSearch, useSavedSearches } from '../features/saved-searches/useSavedSearches'
+import { opportunityLabel, seniorityLabels } from '../features/opportunities/labels'
+import { type SavedSearchFilters } from '../features/saved-searches/api'
+import { useOpenSavedSearch, useSavedSearchSummary } from '../features/saved-searches/useSavedSearches'
 import { coverageLabels, coverageTones } from '../features/sources/states'
 
 function savedSearchInboxLink(filters: SavedSearchFilters): string {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(filters)) {
     if (Array.isArray(value)) value.forEach((item) => params.append(key, item))
-    else params.set(key, value)
+    else params.set(key, String(value))
   }
   const query = params.toString()
   return query ? `/inbox?${query}` : '/inbox'
@@ -81,7 +81,7 @@ function MetricBlock({
     <div className="rounded-panel border border-line bg-panel p-4">
       <p className="text-metric tabular-nums text-ink">{value}</p>
       <p className="mt-1 text-sm">
-        <Link className="underline decoration-accent decoration-2 underline-offset-4" to={to}>
+        <Link className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11" to={to}>
           {label}
         </Link>
       </p>
@@ -194,7 +194,7 @@ function SourceMetricsRow({ source }: { source: SourceMetrics }) {
         ) : (
           <>
             <p>
-              UNKNOWN {seniority.unknown} (
+              Não informada {seniority.unknown} (
               {(seniority.percentages.UNKNOWN ?? 0).toFixed(1)}%) · conhecidas{' '}
               {seniority.known}
             </p>
@@ -203,7 +203,7 @@ function SourceMetricsRow({ source }: { source: SourceMetrics }) {
                 {knownLevels
                   .map(
                     ([level, total]) =>
-                      `${level} ${total} (${(seniority.percentages[level] ?? 0).toFixed(1)}%)`,
+                      `${opportunityLabel(level, seniorityLabels)} ${total} (${(seniority.percentages[level] ?? 0).toFixed(1)}%)`,
                   )
                   .join(' · ')}
               </p>
@@ -471,6 +471,14 @@ function AIUsageCard() {
       </Card>
     )
   }
+  if (metrics.isPending) {
+    return (
+      <Card>
+        <p className="text-sm text-muted">IA (Groq)</p>
+        <p className="mt-2 text-sm text-subtle" role="status">Verificando disponibilidade da IA…</p>
+      </Card>
+    )
+  }
   if (!ai || ai.state !== 'enabled') {
     return (
       <Card>
@@ -569,46 +577,61 @@ function Block({
  */
 /** Card F20-34: só as buscas salvas com vaga nova desde a última abertura aparecem aqui. */
 export function SavedSearchesWithNews() {
-  const searches = useSavedSearches()
+  const summary = useSavedSearchSummary()
   const open = useOpenSavedSearch()
-  const counts = useQueries({
-    queries: (searches.data ?? []).map((savedSearch) => ({
-      queryKey: ['saved-search-new-count', savedSearch.id],
-      queryFn: () => getSavedSearchNewCount(savedSearch.id),
-      enabled: searches.data !== undefined,
-    })),
-  })
+  const withNews = (summary.data ?? [])
+    .filter((savedSearch) => savedSearch.newCount !== null && savedSearch.newCount > 0)
+  const unavailable = (summary.data ?? []).filter((savedSearch) => savedSearch.countError !== null)
 
-  const withNews = (searches.data ?? []).flatMap((savedSearch, index) => {
-    const count = counts[index]?.data
-    return count ? [{ savedSearch, count }] : []
-  })
-
-  if (withNews.length === 0) return null
+  if (summary.isPending) {
+    return <p className="mt-4 text-sm text-muted" role="status">Consultando buscas salvas…</p>
+  }
+  if (summary.isError) {
+    return (
+      <div className="mt-4">
+        <p className="text-sm text-danger-ink">Não foi possível consultar as novidades das buscas salvas.</p>
+        <button className="mt-2 min-h-11 text-sm font-medium underline" onClick={() => void summary.refetch()} type="button">
+          Atualizar buscas salvas
+        </button>
+      </div>
+    )
+  }
+  if (withNews.length === 0 && unavailable.length === 0) return null
 
   return (
     <div className="mt-4">
       <h3 className="text-body-sm font-medium">Buscas salvas com novidade</h3>
-      <DataTable
+      {unavailable.length > 0 && (
+        <ul className="mb-3 text-sm text-muted" aria-label="Buscas salvas indisponíveis">
+          {unavailable.map((savedSearch) => (
+            <li key={savedSearch.id}>
+              {savedSearch.name}: {savedSearch.countError === 'invalid_filters'
+                ? 'contagem indisponível por filtros inválidos.'
+                : 'contagem indisponível por resposta inválida.'}
+            </li>
+          ))}
+        </ul>
+      )}
+      {withNews.length > 0 && <DataTable
         caption="Buscas salvas com vagas novas"
         className="mt-2"
         columns={['Busca', 'Vagas novas']}
       >
-        {withNews.map(({ savedSearch, count }) => (
+        {withNews.map((savedSearch) => (
           <tr key={savedSearch.id}>
             <td>
               <Link
-                className="font-medium underline decoration-accent decoration-2 underline-offset-4"
+                className="inline-flex items-center font-medium underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11"
                 onClick={() => open.mutate(savedSearch.id)}
                 to={savedSearchInboxLink(savedSearch.filters)}
               >
                 {savedSearch.name}
               </Link>
             </td>
-            <td className="font-semibold">{count}</td>
+            <td className="font-semibold">{savedSearch.newCount}</td>
           </tr>
         ))}
-      </DataTable>
+      </DataTable>}
     </div>
   )
 }
@@ -665,7 +688,7 @@ function PendingDecisions({ overview }: { overview: Overview }) {
             <tr key={verdict}>
               <td>
                 <Link
-                  className="underline decoration-accent decoration-2 underline-offset-4"
+                  className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11"
                   to={`/inbox?verdict=${verdict}`}
                 >
                   {verdictCountLabels[verdict] ?? verdict}
@@ -690,7 +713,7 @@ export function StartupShortcut() {
   return (
     <p className="mt-3 text-sm">
       <Link
-        className="underline decoration-accent decoration-2 underline-offset-4"
+        className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11"
         to="/inbox?only_startups=true"
       >
         Ver só startups

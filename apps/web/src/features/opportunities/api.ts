@@ -1,4 +1,4 @@
-import { apiUrl, privateFetch } from '../../lib/api'
+import { apiUrl, failureFrom, privateFetch } from '../../lib/api'
 
 export interface Compensation {
   minimum: string | null
@@ -194,12 +194,13 @@ function parseNormalization(value: unknown): NormalizationResult | null {
   }
 }
 
-export async function getOpportunity(opportunityId: string): Promise<OpportunityDetail> {
+export async function getOpportunity(opportunityId: string, signal?: AbortSignal): Promise<OpportunityDetail> {
   const response = await privateFetch(apiUrl(`/opportunities/${opportunityId}`), {
     headers: { Accept: 'application/json' },
+    signal,
   })
   if (response.status === 404) throw new Error('Oportunidade não encontrada.')
-  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  if (!response.ok) throw await failureFrom(response)
   const body: unknown = await response.json()
   if (!isRecord(body) || typeof body.id !== 'string') {
     throw new Error('A API retornou uma oportunidade inválida.')
@@ -267,13 +268,14 @@ function parseDuplicateCandidate(value: unknown): DuplicateCandidate | null {
  * included — callers filter to `PENDING` for the "still owed a decision" view. */
 export async function getDuplicateCandidates(
   opportunityId: string,
+  signal?: AbortSignal,
 ): Promise<DuplicateCandidate[]> {
   const response = await privateFetch(
     apiUrl(`/opportunities/${opportunityId}/duplicate-candidates`),
-    { headers: { Accept: 'application/json' } },
+    { headers: { Accept: 'application/json' }, signal },
   )
   if (response.status === 404) throw new Error('Oportunidade não encontrada.')
-  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  if (!response.ok) throw await failureFrom(response)
   const body: unknown = await response.json()
   if (!isRecord(body) || !Array.isArray(body.items)) {
     throw new Error('A API retornou candidatos a duplicata inválidos.')

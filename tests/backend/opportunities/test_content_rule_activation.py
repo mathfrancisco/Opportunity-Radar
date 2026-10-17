@@ -161,6 +161,49 @@ def test_flag_off_and_empty_list_keep_the_base_output(name: str) -> None:
         assert candidate.classification_reasons == ()
 
 
+def test_flag_off_keeps_regions_v1_remote_alias_unknown() -> None:
+    candidate = _candidate("Data Engineer", "Remote, UnitedKingdom", None)
+
+    assert _fields(candidate) == ("UNKNOWN", "REMOTE", (), "regions-v1")
+    assert candidate.classification_reasons == ()
+
+
+def test_country_rule_uses_v2_structured_location_when_enabled() -> None:
+    candidate = _candidate(
+        "Data Engineer",
+        "Remote, UnitedKingdom",
+        None,
+        content_rules=frozenset({"allowed_countries:description"}),
+    )
+
+    assert _fields(candidate) == ("UNKNOWN", "REMOTE", ("GB",), "allowed-countries-v2")
+    reason = next(
+        reason
+        for reason in candidate.classification_reasons
+        if reason["code"] == "ALLOWED_COUNTRIES_CLASSIFICATION"
+    )
+    assert reason["source"] == "location"
+    assert reason["value"] == "GB"
+
+
+def test_country_rule_keeps_description_conflict_unknown_in_v2() -> None:
+    candidate = _candidate(
+        "Data Engineer",
+        "Remote, UnitedKingdom",
+        "Remote within Brazil; applicants must be located in Portugal.",
+        content_rules=frozenset({"allowed_countries:description"}),
+    )
+
+    assert _fields(candidate) == ("UNKNOWN", "REMOTE", (), "allowed-countries-v2")
+    reason = next(
+        reason
+        for reason in candidate.classification_reasons
+        if reason["code"] == "ALLOWED_COUNTRIES_CLASSIFICATION"
+    )
+    assert reason["source"] == "conflict"
+    assert reason["value"] is None
+
+
 def test_only_years_min_enabled_changes_seniority_and_nothing_else() -> None:
     rules = frozenset({"seniority:description_years_min"})
     description = "5+ years of experience. Regime híbrido, 3 dias. Must be located in Brazil."
@@ -193,7 +236,7 @@ def test_a_title_decided_value_keeps_the_title_mapping_version_under_partial_act
     assert candidate.seniority.value == "SENIOR"
     (reason,) = candidate.classification_reasons
     assert reason["source"] == "title"
-    assert reason["mapping_version"] == "seniority-v6"
+    assert reason["mapping_version"] == "seniority-v7"
     assert candidate.allowed_countries_version == "regions-v1"
 
 

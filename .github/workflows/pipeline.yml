@@ -161,7 +161,18 @@ jobs:
       - name: Audit runtime dependencies
         run: npm audit --omit=dev --audit-level=high
       - name: Validate frontend
+        env:
+          REQUEST_METRICS_MODE: final
+          REQUEST_METRICS_OUTPUT: ${{ github.workspace }}/apps/web/request-metrics.json
         run: npm run check
+      - name: Upload synthetic request-metrics evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: frontend-request-metrics
+          path: apps/web/request-metrics.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Validate nginx config syntax
         # Cheap syntax gate for the DNS-resolver fix (F20 §5): a variable-based
         # proxy_pass has to keep parsing cleanly, since a typo there only shows up

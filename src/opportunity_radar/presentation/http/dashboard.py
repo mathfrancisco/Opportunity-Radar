@@ -48,6 +48,7 @@ from opportunity_radar.dashboard.saved_searches import (
     SavedSearchNotFoundError,
     create_saved_search,
     delete_saved_search,
+    list_saved_search_summaries,
     list_saved_searches,
     new_count,
     open_saved_search,
@@ -152,6 +153,11 @@ class SavedSearchResponse(BaseModel):
 
 class SavedSearchNewCountResponse(BaseModel):
     new_count: int
+
+
+class SavedSearchSummaryResponse(SavedSearchResponse):
+    new_count: int | None = Field(default=None, ge=0)
+    count_error: Literal["invalid_filters"] | None = None
 
 
 class SourceHealthResponse(BaseModel):
@@ -506,6 +512,21 @@ def get_saved_searches(
     return [
         _saved_search_response(item)
         for item in list_saved_searches(session, owner_sub=identity.sub)
+    ]
+
+
+@router.get("/saved-searches/summary", response_model=list[SavedSearchSummaryResponse])
+def get_saved_searches_summary(
+    session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
+) -> list[SavedSearchSummaryResponse]:
+    return [
+        SavedSearchSummaryResponse(
+            **_saved_search_response(item.saved_search).model_dump(),
+            new_count=item.new_count,
+            count_error=item.count_error,
+        )
+        for item in list_saved_search_summaries(session, owner_sub=identity.sub)
     ]
 
 

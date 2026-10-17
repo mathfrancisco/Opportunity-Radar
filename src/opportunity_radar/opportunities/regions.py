@@ -98,7 +98,7 @@ _REGION_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("WORLDWIDE", re.compile(r"\bworldwide\b|\bglobal\b", re.IGNORECASE)),
 )
 
-#: "Remote — Brazil", "Remote - Brazil", "Remote: Brazil", "Remoto (Brasil)".
+#: `regions-v1` syntax: "Remote — Brazil", "Remote: Brazil", "Remoto (Brasil)".
 _REMOTE_COUNTRY_PATTERN = re.compile(
     r"remote\s*[—\-–:]\s*([a-zà-ÿ .]+?)\s*$"
     r"|remoto\s*\(([a-zà-ÿ .]+?)\)",
@@ -137,8 +137,18 @@ def resolve_allowed_countries(location_text: str | None) -> tuple[str, ...]:
 
 REGIONS_VERSION_V2 = "allowed-countries-v2"
 
+#: v2 extends only the structured-location syntax used after its explicit-description
+#: pass. Keep these additions out of `regions-v1`: feature-off callers retain its
+#: original mapping table and delimiter rules.
+_COUNTRY_NAME_TO_CODE_V2 = {**_COUNTRY_NAME_TO_CODE, "unitedkingdom": "GB"}
+_REMOTE_COUNTRY_PATTERN_V2 = re.compile(
+    r"remote\s*[—\-–:,]\s*([a-zà-ÿ .]+?)\s*$"
+    r"|remoto\s*\(([a-zà-ÿ .]+?)\)",
+    re.IGNORECASE,
+)
+
 _PLACE_NAMES = sorted(
-    [*_COUNTRY_NAME_TO_CODE, "latam", "americas", "emea", "worldwide", "anywhere"],
+    [*_COUNTRY_NAME_TO_CODE_V2, "latam", "americas", "emea", "worldwide", "anywhere"],
     key=len,
     reverse=True,
 )
@@ -166,32 +176,52 @@ def _place_codes(place: str) -> tuple[str, ...]:
     region = place.upper()
     if region in REGIONS:
         return REGIONS[region]
-    code = _COUNTRY_NAME_TO_CODE.get(place)
+    code = _COUNTRY_NAME_TO_CODE_V2.get(place)
     return (code,) if code else ()
+
+
+def _resolve_allowed_countries_v2_location(location_text: str | None) -> tuple[str, ...]:
+    """Resolve v2-only structured-location syntax without changing `regions-v1`."""
+    text = (location_text or "").strip()
+    if not text:
+        return ()
+
+    remote_match = _REMOTE_COUNTRY_PATTERN_V2.search(text)
+    if remote_match:
+        country_name = (remote_match.group(1) or remote_match.group(2) or "").strip()
+        code = _COUNTRY_NAME_TO_CODE_V2.get(country_name.casefold().rstrip("."))
+        if code:
+            return (code,)
+
+    return resolve_allowed_countries(text)
 
 
 def resolve_allowed_countries_v2(
     location_text: str | None, description: str | None
 ) -> tuple[tuple[str, ...], dict[str, str] | None]:
-    """`allowed-countries-v2`: location (v1 table) first, then description phrases.
+    """`allowed-countries-v2`: explicit description phrases, then structured location.
 
-    Returns `(countries, evidence)`. `()` stays "unknown". Two description phrases that
-    resolve to different country sets are ambiguous and yield `()`.
+    Returns `(countries, evidence)`. An explicit eligibility phrase is more specific than
+    an office/structured location. `()` stays "unknown". Two description phrases that
+    resolve to different country sets are ambiguous and return conflict evidence, so a
+    caller cannot silently fall back to the structured location.
     """
-    from_location = resolve_allowed_countries(location_text)
+    text = re.sub(r"\s+", " ", (description or "").casefold()).strip()
+    found: dict[tuple[str, ...], str] = {}
+    if text:
+        for pattern in _DESCRIPTION_COUNTRY_PATTERNS:
+            for match in pattern.finditer(text):
+                codes = _place_codes(match.group(1))
+                if codes:
+                    start, end = max(0, match.start() - 40), min(len(text), match.end() + 40)
+                    found.setdefault(codes, text[start:end].strip())
+    if len(found) > 1:
+        snippets = " | ".join(found.values())
+        return (), {"source": "conflict", "evidence": snippets}
+    if found:
+        codes, snippet = next(iter(found.items()))
+        return codes, {"source": "description", "evidence": snippet}
+    from_location = _resolve_allowed_countries_v2_location(location_text)
     if from_location:
         return from_location, {"source": "location", "evidence": (location_text or "").strip()}
-    text = re.sub(r"\s+", " ", (description or "").casefold()).strip()
-    if not text:
-        return (), None
-    found: dict[tuple[str, ...], str] = {}
-    for pattern in _DESCRIPTION_COUNTRY_PATTERNS:
-        for match in pattern.finditer(text):
-            codes = _place_codes(match.group(1))
-            if codes:
-                start, end = max(0, match.start() - 40), min(len(text), match.end() + 40)
-                found.setdefault(codes, text[start:end].strip())
-    if len(found) != 1:
-        return (), None
-    codes, snippet = next(iter(found.items()))
-    return codes, {"source": "description", "evidence": snippet}
+    return (), None

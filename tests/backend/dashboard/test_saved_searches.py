@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime, timedelta
+from time import perf_counter
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from opportunity_radar.companies.models import Company
@@ -17,6 +19,7 @@ from opportunity_radar.dashboard.saved_searches import (
     SavedSearchNotFoundError,
     create_saved_search,
     delete_saved_search,
+    list_saved_search_summaries,
     list_saved_searches,
     new_count,
     open_saved_search,
@@ -24,6 +27,8 @@ from opportunity_radar.dashboard.saved_searches import (
 )
 from opportunity_radar.opportunities.models import OpportunityModel
 from opportunity_radar.platform.database import create_database_engine
+from opportunity_radar.profile.domain import EmploymentPreference, ProfileSnapshot
+from opportunity_radar.profile.service import ProfileService
 
 pytestmark = [
     pytest.mark.integration,
@@ -172,14 +177,11 @@ def test_new_count_threads_each_authenticated_owner_to_the_inbox(
     engine = create_database_engine(os.environ["DATABASE_URL"])
     owners: list[str] = []
 
-    class _Page:
-        total = 1
-
-    def inbox_for_owner(*_: object, owner_sub: str) -> _Page:
+    def count_for_owner(*_: object, owner_sub: str) -> int:
         owners.append(owner_sub)
-        return _Page()
+        return 1
 
-    monkeypatch.setattr(saved_search_service, "list_opportunity_inbox", inbox_for_owner)
+    monkeypatch.setattr(saved_search_service, "count_opportunity_inbox", count_for_owner)
     with Session(engine) as session:
         saved_a = create_saved_search(
             session, name="A", term=None, filters={"all_areas": True}, owner_sub=OWNER_A
@@ -302,3 +304,277 @@ def test_saved_search_mutations_reject_a_foreign_id_without_changing_owner_row()
         assert preserved.owner_sub == OWNER_A
         assert preserved.name == "Busca A"
         assert preserved.last_opened_at == original_opened_at
+
+
+@pytest.mark.parametrize("saved_search_count", [0, 1, 20])
+def test_saved_search_summary_matches_an_independent_legacy_inbox_total(
+    saved_search_count: int,
+) -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    owner_sub = f"{OWNER_A}-summary-{uuid4().hex}"
+    reference = datetime.now(UTC)
+    with Session(engine) as session:
+        company = _company(session)
+        _opportunity(
+            session,
+            company,
+            title="Summary before cutoff",
+            created_at=reference - timedelta(seconds=1),
+        )
+        _opportunity(
+            session,
+            company,
+            title="Summary after cutoff",
+            created_at=reference + timedelta(seconds=1),
+        )
+        session.flush()
+        filters = {
+            "company_id": str(company.id),
+            "work_mode": "REMOTE",
+            "seniority": "SENIOR",
+            "all_areas": True,
+            "order": "priority",
+        }
+        saved = tuple(
+            create_saved_search(
+                session,
+                name=f"Summary {index}",
+                term=None,
+                filters=filters,
+                owner_sub=owner_sub,
+            )
+            for index in range(saved_search_count)
+        )
+        for item in saved:
+            model = session.get(SavedSearchModel, item.id)
+            assert model is not None
+            model.last_opened_at = reference
+        session.flush()
+
+        # This is the legacy public Inbox read, deliberately independent of `new_count`.
+        # Its total covers the same filters, explicit profile, cutoff and posting-group
+        # deduplication that a saved-search summary must preserve.
+        legacy_total = list_opportunity_inbox(
+            session,
+            InboxQuery(
+                company_id=company.id,
+                work_mode="REMOTE",
+                seniorities=("SENIOR",),
+                created_after=reference,
+            ),
+            owner_sub=owner_sub,
+        ).total
+
+        assert legacy_total == 1
+        summaries = list_saved_search_summaries(session, owner_sub=owner_sub)
+
+        assert {item.saved_search.id for item in summaries} == {item.id for item in saved}
+        assert [item.new_count for item in summaries] == [legacy_total] * saved_search_count
+
+
+def test_saved_search_summary_preserves_created_at_descending_id_ascending_order() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    reference = datetime.now(UTC)
+    owner_sub = f"{OWNER_A}-summary-order-{uuid4().hex}"
+    with Session(engine) as session:
+        older = create_saved_search(
+            session, name="Older", term=None, filters={"all_areas": True}, owner_sub=owner_sub
+        )
+        first_tie = create_saved_search(
+            session,
+            name="First tie",
+            term=None,
+            filters={"all_areas": True},
+            owner_sub=owner_sub,
+        )
+        second_tie = create_saved_search(
+            session,
+            name="Second tie",
+            term=None,
+            filters={"all_areas": True},
+            owner_sub=owner_sub,
+        )
+        for search_id, created_at in (
+            (older.id, reference - timedelta(seconds=1)),
+            (first_tie.id, reference),
+            (second_tie.id, reference),
+        ):
+            model = session.get(SavedSearchModel, search_id)
+            assert model is not None
+            model.created_at = created_at
+        session.commit()
+
+        summaries = list_saved_search_summaries(session, owner_sub=owner_sub)
+
+        expected_ties = sorted((first_tie.id, second_tie.id))
+        assert [item.saved_search.id for item in summaries] == [*expected_ties, older.id]
+
+
+def test_saved_search_summary_is_empty_and_does_not_leak_another_owner() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    owner_a = f"{OWNER_A}-summary-empty-{uuid4().hex}"
+    owner_b = f"{OWNER_B}-summary-private-{uuid4().hex}"
+    with Session(engine) as session:
+        create_saved_search(
+            session, name="Private", term=None, filters={"all_areas": True}, owner_sub=owner_b
+        )
+
+        assert list_saved_search_summaries(session, owner_sub=owner_a) == ()
+        assert [
+            item.saved_search.name
+            for item in list_saved_search_summaries(session, owner_sub=owner_b)
+        ] == ["Private"]
+
+
+def test_saved_search_summary_isolates_invalid_legacy_filters_per_owner() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    owner_sub = f"{OWNER_A}-invalid-summary-{uuid4().hex}"
+    with Session(engine) as session:
+        company = _company(session)
+        _opportunity(
+            session,
+            company,
+            title="Valid summary alongside invalid legacy filters",
+            created_at=datetime.now(UTC),
+        )
+        valid = create_saved_search(
+            session,
+            name="Valid",
+            term=None,
+            filters={"company_id": str(company.id), "all_areas": True},
+            owner_sub=owner_sub,
+        )
+        invalid_filters = (
+            ("Invalid legacy order", {"order": "not-an-inbox-order", "all_areas": True}),
+            ("Object search", {"search": {"query": "backend"}, "all_areas": True}),
+            ("List search", {"search": ["backend"], "all_areas": True}),
+            ("Non-string verdict", {"verdict": ["RECOMMENDED", 1], "all_areas": True}),
+            ("Non-string seniority", {"seniority": ["SENIOR", None], "all_areas": True}),
+            ("List published after", {"published_after": ["2026-01-01"], "all_areas": True}),
+            (
+                "Object published after",
+                {"published_after": {"date": "2026-01-01"}, "all_areas": True},
+            ),
+            ("Object applied", {"applied": {"value": True}, "all_areas": True}),
+            ("List applied", {"applied": [True], "all_areas": True}),
+            ("Object only assessed", {"only_assessed": {"value": True}, "all_areas": True}),
+            ("Object work mode", {"work_mode": {"value": "remote"}, "all_areas": True}),
+            ("Object all areas", {"all_areas": {"value": True}}),
+            ("Empty list score", {"minimum_score": [], "all_areas": True}),
+            ("Object salary", {"salary_min": {}, "all_areas": True}),
+            ("NaN score", {"minimum_score": "NaN", "all_areas": True}),
+            ("Infinite salary", {"salary_max": "Infinity", "all_areas": True}),
+        )
+        invalid = [
+            create_saved_search(
+                session,
+                name=name,
+                term=None,
+                filters=filters,
+                owner_sub=owner_sub,
+            )
+            for name, filters in invalid_filters
+        ]
+
+        summaries = {
+            item.saved_search.id: item
+            for item in list_saved_search_summaries(session, owner_sub=owner_sub)
+        }
+
+        assert summaries[valid.id].new_count == 1
+        assert summaries[valid.id].count_error is None
+        for saved_search in invalid:
+            assert summaries[saved_search.id].new_count is None
+            assert summaries[saved_search.id].count_error == "invalid_filters"
+
+
+@pytest.mark.skipif(
+    os.environ.get("DATABASE_INTEGRATION_ISOLATED") != "1"
+    or not os.environ.get("DATABASE_URL", "").split("?", 1)[0].endswith("_test"),
+    reason="summary SQL query counting requires the isolated _test database",
+)
+@pytest.mark.parametrize("saved_search_count", [0, 1, 20])
+def test_saved_search_summary_records_one_list_query_and_one_count_per_saved_search(
+    saved_search_count: int,
+) -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    owner_sub = f"{OWNER_A}-summary-query-count-{uuid4().hex}"
+    with Session(engine) as session:
+        for index in range(saved_search_count):
+            create_saved_search(
+                session,
+                name=f"Query count {index}",
+                term=None,
+                filters={"all_areas": True},
+                owner_sub=owner_sub,
+            )
+        statements: list[str] = []
+
+        def record(
+            _connection: object,
+            _cursor: object,
+            statement: str,
+            _parameters: object,
+            _context: object,
+            _executemany: object,
+        ) -> None:
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", record)
+        try:
+            started_at = perf_counter()
+            summaries = list_saved_search_summaries(session, owner_sub=owner_sub)
+            elapsed_seconds = perf_counter() - started_at
+        finally:
+            event.remove(engine, "before_cursor_execute", record)
+
+        assert len(summaries) == saved_search_count
+        assert elapsed_seconds >= 0
+        assert len(statements) == 1 + len(summaries)
+        print(
+            "summary_sql_measure "
+            f"saved_searches={saved_search_count} statements={len(statements)} "
+            f"elapsed_seconds={elapsed_seconds:.6f}"
+        )
+
+
+@pytest.mark.skipif(
+    os.environ.get("DATABASE_INTEGRATION_ISOLATED") != "1"
+    or not os.environ.get("DATABASE_URL", "").split("?", 1)[0].endswith("_test"),
+    reason="summary SQL query counting requires the isolated _test database",
+)
+def test_saved_search_summary_measures_active_profile_fallback_query() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    owner_sub = f"{OWNER_A}-summary-profile-fallback-{uuid4().hex}"
+    with Session(engine) as session:
+        ProfileService(session, owner_sub).create_active_version(
+            ProfileSnapshot(
+                skills=(),
+                experiences=(),
+                projects=(),
+                preferences=EmploymentPreference(target_role_families=("DATA",)),
+            ),
+            expected_profile_version=0,
+        )
+        create_saved_search(session, name="Fallback", term=None, filters={}, owner_sub=owner_sub)
+        statements: list[str] = []
+
+        def record(
+            _connection: object,
+            _cursor: object,
+            statement: str,
+            _parameters: object,
+            _context: object,
+            _executemany: object,
+        ) -> None:
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", record)
+        try:
+            summaries = list_saved_search_summaries(session, owner_sub=owner_sub)
+        finally:
+            event.remove(engine, "before_cursor_execute", record)
+
+        assert len(summaries) == 1
+        assert len(statements) > 2
+        print(f"summary_profile_fallback_sql statements={len(statements)}")

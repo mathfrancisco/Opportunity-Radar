@@ -320,6 +320,29 @@ def test_a_known_and_accepted_level_is_not_capped(seniority: Seniority) -> None:
     assert _verdict_for(Seniority.SENIOR, ()) in _TOP
 
 
+def test_mid_is_accepted_while_senior_is_penalized_without_ai_input() -> None:
+    mid = evaluate_match(
+        _opportunity(seniority=Seniority.MID),
+        _profile(accepted_seniorities=(Seniority.JUNIOR, Seniority.MID)),
+        default_rule_set(RULES_VERSION),
+        assessed_at=ASSESSED_AT,
+    )
+    senior = evaluate_match(
+        _opportunity(seniority=Seniority.SENIOR),
+        _profile(accepted_seniorities=(Seniority.JUNIOR, Seniority.MID)),
+        default_rule_set(RULES_VERSION),
+        assessed_at=ASSESSED_AT,
+    )
+
+    mid_factor = next(item for item in mid.factors if item.factor_code == "SENIORITY_SCOPE")
+    senior_factor = next(item for item in senior.factors if item.factor_code == "SENIORITY_SCOPE")
+    assert mid.eligibility.status is EligibilityStatus.ELIGIBLE
+    assert senior.eligibility.status is EligibilityStatus.ELIGIBLE
+    assert mid_factor.raw_score is not None
+    assert senior_factor.raw_score is not None
+    assert senior_factor.raw_score < mid_factor.raw_score
+
+
 def test_an_unknown_level_stops_at_watchlist_and_stays_eligible() -> None:
     # F52-05: the profile lists UNKNOWN, so the posting is kept; it just leaves the top.
     assert _verdict_for(Seniority.UNKNOWN, _OWNER_ACCEPTED) is Verdict.WATCHLIST

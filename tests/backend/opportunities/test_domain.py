@@ -230,6 +230,12 @@ def test_work_mode_from_description_avoids_known_false_positive_shapes() -> None
 def test_seniority_classification_records_precedence_and_conflicts() -> None:
     title_value, title_reason = seniority_classification("Junior Engineer", {})
     structured_value, structured_reason = seniority_classification("Engineer", {"seniority": "Mid"})
+    intermediate_title, intermediate_title_reason = seniority_classification(
+        "Intermediate Software Engineer", {}
+    )
+    intermediate_structured, intermediate_structured_reason = seniority_classification(
+        "Engineer", {"seniority": "Intermediate"}
+    )
     conflict_value, conflict_reason = seniority_classification(
         "Senior Engineer", {"seniority": "Junior"}
     )
@@ -242,6 +248,10 @@ def test_seniority_classification_records_precedence_and_conflicts() -> None:
     assert structured_value is Seniority.MID
     assert structured_reason["source"] == "structured"
     assert structured_reason["external_value"] == "Mid"
+    assert intermediate_title is Seniority.MID
+    assert intermediate_title_reason["source"] == "title"
+    assert intermediate_structured is Seniority.MID
+    assert intermediate_structured_reason["source"] == "structured"
     assert conflict_value is Seniority.UNKNOWN
     assert conflict_reason["source"] == "conflict"
     assert unmapped_value is Seniority.UNKNOWN
@@ -251,11 +261,13 @@ def test_seniority_classification_records_precedence_and_conflicts() -> None:
 def test_seniority_v2_covers_portuguese_titles_and_abbreviations() -> None:
     from opportunity_radar.opportunities.domain import SENIORITY_MAPPING_VERSION
 
-    assert SENIORITY_MAPPING_VERSION == "seniority-v6"
+    assert SENIORITY_MAPPING_VERSION == "seniority-v7"
     assert infer_seniority("Engenheiro Especialista", None, {}) is Seniority.STAFF
     assert infer_seniority("Principal Engineer", None, {}) is Seniority.STAFF
     assert infer_seniority("Desenvolvedor Pl", None, {}) is Seniority.MID
     assert infer_seniority("Desenvolvedor Pl.", None, {}) is Seniority.MID
+    assert infer_seniority("Intermediate Backend Engineer", None, {}) is Seniority.MID
+    assert infer_seniority("IntermediateEnglish Engineer", None, {}) is Seniority.UNKNOWN
     assert infer_seniority("Dev Jr", None, {}) is Seniority.JUNIOR
     assert infer_seniority("Dev Sr", None, {}) is Seniority.SENIOR
     assert infer_seniority("Tech Lider", None, {}) is Seniority.LEAD
@@ -442,7 +454,7 @@ def test_seniority_v5_keeps_the_lowest_level_of_a_range_and_cites_the_range(
     assert value is expected
     assert reason["value"] == expected.value
     assert reason["range"] == levels
-    assert reason["mapping_version"] == "seniority-v6"
+    assert reason["mapping_version"] == "seniority-v7"
 
 
 def test_seniority_v5_cites_no_range_for_a_single_or_compound_level() -> None:
@@ -1030,6 +1042,15 @@ def test_seniority_v4_stays_unknown_without_conclusive_evidence(description: str
     assert reason["evidence"] is None
 
 
+def test_seniority_v4_does_not_infer_intermediate_language_from_description() -> None:
+    value, reason = content.classify_seniority_v4(
+        "Software Engineer", "Intermediate English is required.", {}
+    )
+
+    assert value is Seniority.UNKNOWN
+    assert reason["source"] == "none"
+
+
 def test_seniority_v4_boundary_five_is_senior_only_as_a_lower_bound() -> None:
     assert content.classify_seniority_v4("E", "3-5 years of experience", {})[0] is Seniority.MID
     assert content.classify_seniority_v4("E", "5-7 years of experience", {})[0] is Seniority.SENIOR
@@ -1109,7 +1130,7 @@ def test_work_mode_v7_title_wins_and_conflict_is_unknown() -> None:
 @pytest.mark.parametrize(
     ("location", "description", "expected", "source"),
     [
-        ("Remote — Brazil", "We are open to candidates in Portugal.", ("BR",), "location"),
+        ("Remote — Brazil", "We are open to candidates in Portugal.", ("PT",), "description"),
         (None, "This role is remote within Brazil.", ("BR",), "description"),
         ("Remote", "You must be located in the United States.", ("US",), "description"),
         ("Remote", "Vaga remota. Residentes no Brasil.", ("BR",), "description"),
@@ -1118,7 +1139,7 @@ def test_work_mode_v7_title_wins_and_conflict_is_unknown() -> None:
         ("Remote", "Authorized to work in Canada is required.", ("CA",), "description"),
     ],
 )
-def test_allowed_countries_v2_uses_location_first_then_description_phrases(
+def test_allowed_countries_v2_uses_explicit_description_before_location(
     location: str | None,
     description: str,
     expected: tuple[str, ...],
@@ -1130,16 +1151,20 @@ def test_allowed_countries_v2_uses_location_first_then_description_phrases(
 
 
 @pytest.mark.parametrize(
-    ("location", "description"),
+    ("location", "description", "expected_evidence_source"),
     [
-        ("Remote", "We have customers in Brazil and offices in Portugal."),  # bare names
-        ("Remote", "Remote within Brazil, or you must be located in Portugal."),  # conflict
-        (None, None),
-        ("Remote", ""),
+        ("Remote", "We have customers in Brazil and offices in Portugal.", None),  # bare names
+        ("Remote", "Remote within Brazil, or you must be located in Portugal.", "conflict"),
+        (None, None, None),
+        ("Remote", "", None),
     ],
 )
-def test_allowed_countries_v2_stays_unknown(location: str | None, description: str | None) -> None:
-    assert resolve_allowed_countries_v2(location, description) == ((), None)
+def test_allowed_countries_v2_stays_unknown(
+    location: str | None, description: str | None, expected_evidence_source: str | None
+) -> None:
+    countries, evidence = resolve_allowed_countries_v2(location, description)
+    assert countries == ()
+    assert (evidence or {}).get("source") == expected_evidence_source
 
 
 def test_content_rules_are_off_by_default_and_versioned_when_on() -> None:

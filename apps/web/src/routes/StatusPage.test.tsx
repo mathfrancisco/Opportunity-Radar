@@ -10,7 +10,10 @@ vi.mock('../lib/session', () => ({
   useSession: () => ({ data: { is_owner: true }, isError: false, isPending: false }),
 }))
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
+})
 
 async function flush(times = 4) {
   for (let i = 0; i < times; i += 1) {
@@ -45,7 +48,7 @@ describe('StatusPage', () => {
     await flush()
 
     expect(container.textContent).toContain('Radar pronto para começar')
-    expect(container.textContent).toContain('Ambiente local')
+    expect(container.textContent).toContain('Ambiente não informado')
     expect(container.textContent).toContain('Próxima ação')
     expect(container.textContent).toContain('A prontidão confirma que a API e a conexão com o banco de dados estão disponíveis.')
     expect(container.textContent).not.toContain('IA está indisponível')
@@ -74,6 +77,25 @@ describe('StatusPage', () => {
     expect(container.textContent).toContain('Confira a configuração e a saúde dos serviços')
     expect(container.textContent).toContain('IA está indisponível')
     expect([...container.querySelectorAll('a')].find((link) => link.textContent === 'Ver fontes')).toBeUndefined()
+  })
+
+  it('não infere o ambiente de execução pelo modo de build production', async () => {
+    vi.stubEnv('MODE', 'production')
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'ready' }), { status: 200 }))
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ status: 'ok', ai: { status: 'healthy' } }), { status: 200 }),
+        ),
+    )
+
+    const container = renderPage(<StatusPage />)
+    await flush()
+
+    expect(container.textContent).toContain('Ambiente não informado')
+    expect(container.textContent).not.toContain('Ambiente: produção')
   })
 })
 

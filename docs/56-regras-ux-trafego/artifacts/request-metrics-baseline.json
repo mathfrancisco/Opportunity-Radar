@@ -1,0 +1,2804 @@
+{
+  "version": 1,
+  "synthetic": true,
+  "harness": {
+    "sourceFiles": [
+      "eslint.config.js",
+      "package-lock.json",
+      "src\\app\\App.test.tsx",
+      "src\\app\\App.tsx",
+      "src\\app\\AuthenticationControls.tsx",
+      "src\\app\\RouteGuards.test.tsx",
+      "src\\app\\RouteGuards.tsx",
+      "src\\app\\WebApplication.test.tsx",
+      "src\\app\\WebApplication.tsx",
+      "src\\components\\AppShell.test.tsx",
+      "src\\components\\AppShell.tsx",
+      "src\\components\\ApplicationPanel.tsx",
+      "src\\components\\Button.test.tsx",
+      "src\\components\\Button.tsx",
+      "src\\components\\Card.test.tsx",
+      "src\\components\\Card.tsx",
+      "src\\components\\Chip.test.tsx",
+      "src\\components\\Chip.tsx",
+      "src\\components\\CompanyForm.tsx",
+      "src\\components\\CompanySourceForm.tsx",
+      "src\\components\\DataTable.test.tsx",
+      "src\\components\\DataTable.tsx",
+      "src\\components\\Field.test.tsx",
+      "src\\components\\Field.tsx",
+      "src\\components\\FilterBar.tsx",
+      "src\\components\\FilterPill.test.tsx",
+      "src\\components\\FilterPill.tsx",
+      "src\\components\\HomologationQueue.test.tsx",
+      "src\\components\\HomologationQueue.tsx",
+      "src\\components\\ManualIntakePanel.tsx",
+      "src\\components\\PageHeader.test.tsx",
+      "src\\components\\PageHeader.tsx",
+      "src\\components\\PageShell.test.tsx",
+      "src\\components\\PageShell.tsx",
+      "src\\components\\PageSizeSelect.tsx",
+      "src\\components\\Pagination.test.tsx",
+      "src\\components\\Pagination.tsx",
+      "src\\components\\SearchInput.tsx",
+      "src\\components\\Sidebar.test.tsx",
+      "src\\components\\Sidebar.tsx",
+      "src\\components\\SourceControlsPanel.test.tsx",
+      "src\\components\\SourceControlsPanel.tsx",
+      "src\\components\\SourceCreateForm.tsx",
+      "src\\components\\StatusBadge.test.tsx",
+      "src\\components\\StatusBadge.tsx",
+      "src\\components\\Toolbar.test.tsx",
+      "src\\components\\Toolbar.tsx",
+      "src\\components\\Unavailable.test.tsx",
+      "src\\components\\Unavailable.tsx",
+      "src\\components\\cells.test.tsx",
+      "src\\components\\cells.tsx",
+      "src\\components\\icons.tsx",
+      "src\\components\\skeletons.test.tsx",
+      "src\\components\\skeletons.tsx",
+      "src\\components\\states.test.tsx",
+      "src\\components\\states.tsx",
+      "src\\components\\testing.tsx",
+      "src\\components\\ui\\MobileNavigationDialog.tsx",
+      "src\\features\\companies\\api.test.ts",
+      "src\\features\\companies\\api.ts",
+      "src\\features\\companies\\detail.test.ts",
+      "src\\features\\companies\\useCompanies.ts",
+      "src\\features\\companies\\write.test.ts",
+      "src\\features\\dashboard\\api.test.ts",
+      "src\\features\\dashboard\\api.ts",
+      "src\\features\\dashboard\\roleFamilies.ts",
+      "src\\features\\dashboard\\useInbox.ts",
+      "src\\features\\dashboard\\useOverview.ts",
+      "src\\features\\health\\api.test.ts",
+      "src\\features\\health\\api.ts",
+      "src\\features\\health\\useReadiness.ts",
+      "src\\features\\matching\\AnalysisPanel.tsx",
+      "src\\features\\matching\\api.test.ts",
+      "src\\features\\matching\\api.ts",
+      "src\\features\\matching\\useAssessment.ts",
+      "src\\features\\matching\\verdicts.ts",
+      "src\\features\\opportunities\\api.test.ts",
+      "src\\features\\opportunities\\api.ts",
+      "src\\features\\opportunities\\useOpportunity.ts",
+      "src\\features\\pipeline\\api.test.ts",
+      "src\\features\\pipeline\\api.ts",
+      "src\\features\\pipeline\\usePipeline.ts",
+      "src\\features\\profile\\api.test.ts",
+      "src\\features\\profile\\api.ts",
+      "src\\features\\profile\\useProfile.ts",
+      "src\\features\\saved-searches\\api.test.ts",
+      "src\\features\\saved-searches\\api.ts",
+      "src\\features\\saved-searches\\useSavedSearches.ts",
+      "src\\features\\sources\\api.test.ts",
+      "src\\features\\sources\\api.ts",
+      "src\\features\\sources\\gate.test.ts",
+      "src\\features\\sources\\gate.ts",
+      "src\\features\\sources\\states.ts",
+      "src\\features\\sources\\useSources.ts",
+      "src\\lib\\api.test.ts",
+      "src\\lib\\api.ts",
+      "src\\lib\\queryClient.ts",
+      "src\\lib\\session.ts",
+      "src\\lib\\useMediaQuery.ts",
+      "src\\main.tsx",
+      "src\\routes\\CompaniesPage.test.tsx",
+      "src\\routes\\CompaniesPage.tsx",
+      "src\\routes\\CompanyDetailPage.test.tsx",
+      "src\\routes\\CompanyDetailPage.tsx",
+      "src\\routes\\HomologationQueuePage.test.tsx",
+      "src\\routes\\HomologationQueuePage.tsx",
+      "src\\routes\\InboxPage.test.tsx",
+      "src\\routes\\InboxPage.tsx",
+      "src\\routes\\LandingPage.tsx",
+      "src\\routes\\OpportunityDetailPage.test.tsx",
+      "src\\routes\\OpportunityDetailPage.tsx",
+      "src\\routes\\OverviewPage.test.tsx",
+      "src\\routes\\OverviewPage.tsx",
+      "src\\routes\\PipelinePage.test.tsx",
+      "src\\routes\\PipelinePage.tsx",
+      "src\\routes\\ProfilePage.test.tsx",
+      "src\\routes\\ProfilePage.tsx",
+      "src\\routes\\SourcesPage.test.tsx",
+      "src\\routes\\SourcesPage.tsx",
+      "src\\routes\\StatusPage.test.tsx",
+      "src\\routes\\StatusPage.tsx",
+      "src\\styles.css",
+      "src\\styles.test.ts",
+      "src\\testSetup.ts",
+      "src\\test\\auth.ts",
+      "src\\test\\requestBudgets.test.tsx",
+      "src\\test\\requestMetrics.ts",
+      "src\\vite-env.d.ts",
+      "tsconfig.app.json",
+      "vite.config.ts"
+    ],
+    "sha256": "5cb434b96736b0ed0e64dac7f258dd880a6dd2ca71281f5447cf3d42ab189389"
+  },
+  "reports": [
+    {
+      "scenario": "saved-searches-0",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 2,
+            "durationMs": 9.84480000000076
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 2
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 9.84480000000076,
+              "p95": 9.84480000000076
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "saved-searches-5",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 586,
+            "durationMs": 0.8497999999999593
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 2,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.4674999999997453
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 3,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.0471999999999753
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 4,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 1.6415999999999258
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 5,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 1.276600000000144
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 6,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 0.9927000000006956
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 586
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.8497999999999593,
+              "p95": 0.8497999999999593
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "trafficKind": "product",
+            "calls": 5,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 5,
+            "bytesKnown": {
+              "responses": 5,
+              "total": 75
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 1.6415999999999258,
+              "p95": 2.4674999999997453
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "saved-searches-20",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 2363,
+            "durationMs": 0.5249000000003434
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 2,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 3.7786000000005515
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 3,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 3.4367999999994936
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 4,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 3.1301000000003114
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 5,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.960900000000038
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 6,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.8471000000008644
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 7,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.725000000000364
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 8,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.6184000000002925
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 9,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.520599999999831
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 10,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.410299999999552
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 11,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.313299999999799
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 12,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.2206999999998516
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 13,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.1293000000005122
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 14,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.0383999999994558
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 15,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 1.9471000000003187
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 16,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 1.8522000000002663
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 17,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 1.757699999999204
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 18,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 1.6642000000001644
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 19,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 1.573699999999917
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 20,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 1.4836999999997715
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 21,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 1.3941999999997279
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 2363
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.5249000000003434,
+              "p95": 0.5249000000003434
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "trafficKind": "product",
+            "calls": 20,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 20,
+            "bytesKnown": {
+              "responses": 20,
+              "total": 300
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 2.2206999999998516,
+              "p95": 3.4367999999994936
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "pipeline-active",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/applications",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 438,
+            "durationMs": 1.003099999999904
+          },
+          {
+            "method": "GET",
+            "endpoint": "/applications",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 2,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 438,
+            "durationMs": 0.49720000000070286
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/applications",
+            "trafficKind": "product",
+            "calls": 2,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 2,
+            "bytesKnown": {
+              "responses": 2,
+              "total": 876
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.49720000000070286,
+              "p95": 1.003099999999904
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "cold-overview-0",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/overview",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 472,
+            "durationMs": 0.784099999999853
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 2,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 2,
+            "durationMs": 0.9367000000002008
+          },
+          {
+            "method": "GET",
+            "endpoint": "/analysis-metrics",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 3,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 163,
+            "durationMs": 0.6052999999992608
+          },
+          {
+            "method": "GET",
+            "endpoint": "/source-metrics",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 4,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 52,
+            "durationMs": 0.43040000000019063
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/overview",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 472
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.784099999999853,
+              "p95": 0.784099999999853
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 2
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.9367000000002008,
+              "p95": 0.9367000000002008
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/analysis-metrics",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 163
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.6052999999992608,
+              "p95": 0.6052999999992608
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/source-metrics",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 52
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.43040000000019063,
+              "p95": 0.43040000000019063
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "cold-overview-5",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/overview",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 472,
+            "durationMs": 0.4039999999995416
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 2,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 586,
+            "durationMs": 1.1962000000003172
+          },
+          {
+            "method": "GET",
+            "endpoint": "/analysis-metrics",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 3,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 163,
+            "durationMs": 0.88799999999992
+          },
+          {
+            "method": "GET",
+            "endpoint": "/source-metrics",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 4,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 52,
+            "durationMs": 0.6191999999991822
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 5,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 0.9580999999998312
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 6,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 0.7656000000006316
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 7,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 0.642399999999725
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 8,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 0.5166999999992186
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 9,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 0.4084999999995489
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/overview",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 472
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.4039999999995416,
+              "p95": 0.4039999999995416
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 586
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 1.1962000000003172,
+              "p95": 1.1962000000003172
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/analysis-metrics",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 163
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.88799999999992,
+              "p95": 0.88799999999992
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/source-metrics",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 52
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.6191999999991822,
+              "p95": 0.6191999999991822
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "trafficKind": "product",
+            "calls": 5,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 5,
+            "bytesKnown": {
+              "responses": 5,
+              "total": 75
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.642399999999725,
+              "p95": 0.9580999999998312
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "cold-overview-20",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/overview",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 472,
+            "durationMs": 0.43509999999969295
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 2,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 2363,
+            "durationMs": 0.7373999999999796
+          },
+          {
+            "method": "GET",
+            "endpoint": "/analysis-metrics",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 3,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 163,
+            "durationMs": 0.4562999999998283
+          },
+          {
+            "method": "GET",
+            "endpoint": "/source-metrics",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 4,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 52,
+            "durationMs": 0.32480000000032305
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 5,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 6.2973000000001775
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 6,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 6.0208999999995285
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 7,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 5.783699999999953
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 8,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 5.581599999999526
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 9,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 5.407000000000153
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 10,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 5.207999999999629
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 11,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 5.048500000000786
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 12,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 4.8431000000000495
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 13,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 4.61239999999998
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 14,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 4.377999999999702
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 15,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 4.19839999999931
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 16,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 4.015800000000127
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 17,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 3.8148000000001048
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 18,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 3.6065000000007785
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 19,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 3.4085000000004584
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 20,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 3.2039999999997235
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 21,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.9898000000002867
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 22,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.783100000000559
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 23,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.559400000000096
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 24,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 15,
+            "durationMs": 2.3420999999998457
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/overview",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 472
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.43509999999969295,
+              "p95": 0.43509999999969295
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 2363
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.7373999999999796,
+              "p95": 0.7373999999999796
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/analysis-metrics",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 163
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.4562999999998283,
+              "p95": 0.4562999999998283
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/source-metrics",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 52
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.32480000000032305,
+              "p95": 0.32480000000032305
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/saved-searches/:id/new-count",
+            "trafficKind": "product",
+            "calls": 20,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 20,
+            "bytesKnown": {
+              "responses": 20,
+              "total": 300
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 4.19839999999931,
+              "p95": 6.0208999999995285
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "cold-inbox",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0.4614999999994325
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 995
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.4614999999994325,
+              "p95": 0.4614999999994325
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "cold-detail",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/opportunities/:id",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 456,
+            "durationMs": 0.6032999999997628
+          },
+          {
+            "method": "GET",
+            "endpoint": "/matches",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 2,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 12,
+            "durationMs": 0.3139999999993961
+          },
+          {
+            "method": "GET",
+            "endpoint": "/applications",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 3,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 44,
+            "durationMs": 0.5172999999995227
+          },
+          {
+            "method": "GET",
+            "endpoint": "/opportunities/:id/duplicate-candidates",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 4,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 12,
+            "durationMs": 0.30749999999989086
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/opportunities/:id",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 456
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.6032999999997628,
+              "p95": 0.6032999999997628
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/matches",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 12
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.3139999999993961,
+              "p95": 0.3139999999993961
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/applications",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 44
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.5172999999995227,
+              "p95": 0.5172999999995227
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/opportunities/:id/duplicate-candidates",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 12
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.30749999999989086,
+              "p95": 0.30749999999989086
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "cold-inbox-assessment-application-and-filter",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 1.0126000000000204
+          },
+          {
+            "method": "GET",
+            "endpoint": "/matches",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 2,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 12,
+            "durationMs": 0.6664000000000669
+          },
+          {
+            "method": "GET",
+            "endpoint": "/applications",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 3,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 439,
+            "durationMs": 0.41899999999986903
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 4,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0.3253999999997177
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "trafficKind": "product",
+            "calls": 2,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 2,
+            "bytesKnown": {
+              "responses": 2,
+              "total": 1990
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.3253999999997177,
+              "p95": 1.0126000000000204
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/matches",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 12
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.6664000000000669,
+              "p95": 0.6664000000000669
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/applications",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 439
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.41899999999986903,
+              "p95": 0.41899999999986903
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "warm-inbox-remount",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0.4679999999998472
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 2,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0.39580000000023574
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "trafficKind": "product",
+            "calls": 2,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 2,
+            "bytesKnown": {
+              "responses": 2,
+              "total": 1990
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.39580000000023574,
+              "p95": 0.4679999999998472
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "pipeline-closed-tab",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/applications",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 44,
+            "durationMs": 0.8121999999993932
+          },
+          {
+            "method": "GET",
+            "endpoint": "/applications",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 2,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 44,
+            "durationMs": 0.3317000000006374
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/applications",
+            "trafficKind": "product",
+            "calls": 2,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 2,
+            "bytesKnown": {
+              "responses": 2,
+              "total": 88
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.3317000000006374,
+              "p95": 0.8121999999993932
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "five-minute-idle-inbox",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 2,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 3,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 4,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 5,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 6,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 7,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 8,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 9,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 10,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 11,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 12,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 13,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 14,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 15,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 16,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 17,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 18,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 19,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 20,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          },
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 21,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 995,
+            "durationMs": 0
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "trafficKind": "product",
+            "calls": 21,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 21,
+            "bytesKnown": {
+              "responses": 21,
+              "total": 20895
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0,
+              "p95": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "relevance-write-and-detail-invalidation",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/opportunities/:id",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 456,
+            "durationMs": 0.6022000000002663
+          },
+          {
+            "method": "POST",
+            "endpoint": "/opportunities/:id/relevance",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 2,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 97,
+            "durationMs": 0.7618000000002212
+          },
+          {
+            "method": "GET",
+            "endpoint": "/opportunities/:id",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 3,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 456,
+            "durationMs": 0.5147000000006301
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/opportunities/:id",
+            "trafficKind": "product",
+            "calls": 2,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 2,
+            "bytesKnown": {
+              "responses": 2,
+              "total": 912
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.5147000000006301,
+              "p95": 0.6022000000002663
+            }
+          },
+          {
+            "method": "POST",
+            "endpoint": "/opportunities/:id/relevance",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 97
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.7618000000002212,
+              "p95": 0.7618000000002212
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "private-fetch-http-outcomes",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/overview",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 11,
+            "durationMs": 0.6222999999999956
+          },
+          {
+            "method": "GET",
+            "endpoint": "/blocked",
+            "status": 403,
+            "outcome": "error",
+            "trafficKind": "product",
+            "requestOrdinal": 2,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 2,
+            "durationMs": 0.3346000000001368
+          },
+          {
+            "method": "GET",
+            "endpoint": "/signed-out",
+            "status": 401,
+            "outcome": "error",
+            "trafficKind": "product",
+            "requestOrdinal": 3,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 2,
+            "durationMs": 0.24330000000009022
+          },
+          {
+            "method": "GET",
+            "endpoint": "/invalid",
+            "status": 422,
+            "outcome": "error",
+            "trafficKind": "product",
+            "requestOrdinal": 4,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 2,
+            "durationMs": 0.2294000000001688
+          },
+          {
+            "method": "GET",
+            "endpoint": "/limited",
+            "status": 429,
+            "outcome": "error",
+            "trafficKind": "product",
+            "requestOrdinal": 5,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 2,
+            "durationMs": 0.2290000000002692
+          },
+          {
+            "method": "GET",
+            "endpoint": "/server-error",
+            "status": 500,
+            "outcome": "error",
+            "trafficKind": "product",
+            "requestOrdinal": 6,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 2,
+            "durationMs": 0.23260000000027503
+          },
+          {
+            "method": "GET",
+            "endpoint": "/not-registered",
+            "status": null,
+            "outcome": "error",
+            "trafficKind": "product",
+            "requestOrdinal": 7,
+            "retry": null,
+            "synthetic": true,
+            "bytes": null,
+            "durationMs": 0.25720000000001164
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/overview",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 11
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.6222999999999956,
+              "p95": 0.6222999999999956
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/blocked",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 1,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 2
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.3346000000001368,
+              "p95": 0.3346000000001368
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/signed-out",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 1,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 2
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.24330000000009022,
+              "p95": 0.24330000000009022
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/invalid",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 1,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 2
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.2294000000001688,
+              "p95": 0.2294000000001688
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/limited",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 1,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 2
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.2290000000002692,
+              "p95": 0.2290000000002692
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/server-error",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 1,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 2
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.23260000000027503,
+              "p95": 0.23260000000027503
+            }
+          },
+          {
+            "method": "GET",
+            "endpoint": "/not-registered",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 1,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 0,
+              "total": 0
+            },
+            "bytesUnknown": 1,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.25720000000001164,
+              "p95": 0.25720000000001164
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "aborted-request",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "status": null,
+            "outcome": "cancelled",
+            "trafficKind": "product",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": null,
+            "durationMs": 0.6859999999996944
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/inbox",
+            "trafficKind": "product",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 1,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 0,
+              "total": 0
+            },
+            "bytesUnknown": 1,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.6859999999996944,
+              "p95": 0.6859999999996944
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "session-and-preflight-separation",
+      "report": {
+        "version": 1,
+        "synthetic": true,
+        "mode": "baseline",
+        "savedSearchFixture": "legacy",
+        "provenance": {
+          "baselineSha": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+          "finalRevision": null,
+          "finalDirty": null
+        },
+        "requests": [
+          {
+            "method": "GET",
+            "endpoint": "/session",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "auth-session",
+            "requestOrdinal": 1,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 2,
+            "durationMs": 0.5551999999997861
+          },
+          {
+            "method": "OPTIONS",
+            "endpoint": "/inbox",
+            "status": 200,
+            "outcome": "success",
+            "trafficKind": "preflight",
+            "requestOrdinal": 2,
+            "retry": null,
+            "synthetic": true,
+            "bytes": 2,
+            "durationMs": 0.3106999999999971
+          }
+        ],
+        "routes": [
+          {
+            "method": "GET",
+            "endpoint": "/session",
+            "trafficKind": "auth-session",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 2
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.5551999999997861,
+              "p95": 0.5551999999997861
+            }
+          },
+          {
+            "method": "OPTIONS",
+            "endpoint": "/inbox",
+            "trafficKind": "preflight",
+            "calls": 1,
+            "errors": 0,
+            "cancelled": 0,
+            "retryKnown": {
+              "attempts": 0,
+              "retries": 0
+            },
+            "retryUnknown": 1,
+            "bytesKnown": {
+              "responses": 1,
+              "total": 2
+            },
+            "bytesUnknown": 0,
+            "durationMs": {
+              "percentileMethod": "nearest-rank",
+              "p50": 0.3106999999999971,
+              "p95": 0.3106999999999971
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

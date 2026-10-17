@@ -1,23 +1,38 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { queryStaleTimes } from '../../lib/queryClient'
 import {
   type NewSavedSearch,
   createSavedSearch,
   deleteSavedSearch,
   getSavedSearchNewCount,
+  getSavedSearchSummary,
   getSavedSearches,
   openSavedSearch,
   renameSavedSearch,
 } from './api'
 
 export function useSavedSearches() {
-  return useQuery({ queryKey: ['saved-searches'], queryFn: getSavedSearches })
+  return useQuery({
+    queryKey: ['saved-searches'],
+    queryFn: ({ signal }) => getSavedSearches(signal),
+    staleTime: queryStaleTimes.standard,
+  })
+}
+
+export function useSavedSearchSummary() {
+  return useQuery({
+    queryKey: ['saved-searches', 'summary'],
+    queryFn: ({ signal }) => getSavedSearchSummary(signal),
+    staleTime: queryStaleTimes.standard,
+  })
 }
 
 export function useSavedSearchNewCount(savedSearchId: string | null) {
   return useQuery({
     queryKey: ['saved-search-new-count', savedSearchId],
-    queryFn: () => getSavedSearchNewCount(savedSearchId ?? ''),
+    queryFn: ({ signal }) => getSavedSearchNewCount(savedSearchId ?? '', signal),
     enabled: savedSearchId !== null,
+    staleTime: queryStaleTimes.standard,
   })
 }
 

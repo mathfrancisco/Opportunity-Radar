@@ -1,0 +1,156 @@
+{
+  "generatedAt": "2026-10-17T03:44:26.926Z",
+  "workspace": {
+    "head": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+    "dirty": true,
+    "status": "M .github/workflows/pipeline.yml\n M apps/web/src/app/WebApplication.tsx\n M apps/web/src/components/FilterPill.tsx\n M apps/web/src/components/SearchInput.tsx\n M apps/web/src/features/companies/api.ts\n M apps/web/src/features/companies/useCompanies.ts\n M apps/web/src/features/dashboard/api.ts\n M apps/web/src/features/dashboard/useInbox.ts\n M apps/web/src/features/dashboard/useOverview.ts\n M apps/web/src/features/health/api.ts\n M apps/web/src/features/health/useReadiness.ts\n M apps/web/src/features/matching/api.ts\n M apps/web/src/features/matching/useAssessment.ts\n M apps/web/src/features/opportunities/api.ts\n M apps/web/src/features/opportunities/useOpportunity.ts\n M apps/web/src/features/pipeline/api.ts\n M apps/web/src/features/pipeline/usePipeline.ts\n M apps/web/src/features/profile/api.ts\n M apps/web/src/features/profile/useProfile.ts\n M apps/web/src/features/saved-searches/api.test.ts\n M apps/web/src/features/saved-searches/api.ts\n M apps/web/src/features/saved-searches/useSavedSearches.ts\n M apps/web/src/features/sources/api.ts\n M apps/web/src/features/sources/useSources.ts\n M apps/web/src/lib/api.test.ts\n M apps/web/src/lib/api.ts\n M apps/web/src/lib/session.ts\n M apps/web/src/routes/CompanyDetailPage.test.tsx\n M apps/web/src/routes/CompanyDetailPage.tsx\n M apps/web/src/routes/InboxPage.test.tsx\n M apps/web/src/routes/InboxPage.tsx\n M apps/web/src/routes/OpportunityDetailPage.test.tsx\n M apps/web/src/routes/OpportunityDetailPage.tsx\n M apps/web/src/routes/OverviewPage.test.tsx\n M apps/web/src/routes/OverviewPage.tsx\n M apps/web/src/routes/PipelinePage.tsx\n M apps/web/src/routes/StatusPage.test.tsx\n M apps/web/src/routes/StatusPage.tsx\n M src/opportunity_radar/dashboard/queries.py\n M src/opportunity_radar/dashboard/saved_searches.py\n M src/opportunity_radar/opportunities/content_classification.py\n M src/opportunity_radar/opportunities/domain.py\n M src/opportunity_radar/opportunities/regions.py\n M src/opportunity_radar/presentation/http/dashboard.py\n M tests/backend/dashboard/test_saved_searches.py\n M tests/backend/http/test_auth_tenancy_integration.py\n M tests/backend/matching/test_domain.py\n M tests/backend/opportunities/test_content_rule_activation.py\n M tests/backend/opportunities/test_domain.py\n M tests/backend/opportunities/test_measure_seniority_titles.py\n M tests/backend/opportunities/test_regions.py\n?? .worktrees/\n?? apps/web/.tmp/\n?? apps/web/src/features/opportunities/labels.ts\n?? apps/web/src/lib/queryClient.test.ts\n?? apps/web/src/lib/queryClient.ts\n?? apps/web/src/test/requestBudgets.test.tsx\n?? apps/web/src/test/requestMetrics.ts\n?? docs/56-regras-ux-trafego/\n?? docs/superpowers/plans/2026-10-16-regras-ux-requisicoes-progress.md\n?? docs/superpowers/plans/2026-10-16-regras-ux-requisicoes.md",
+    "workingTreeSha256": "69e8e2075c6ecc6222d32ed38f2a4bd9efe87af01d31c62adde912f5f171f244",
+    "hashExcludes": [
+      "docs/56-regras-ux-trafego/ux-captures/",
+      "docs/56-regras-ux-trafego/artifacts/",
+      "docs/56-regras-ux-trafego/.tmp/",
+      "apps/web/.tmp/",
+      ".validation/",
+      ".worktrees/"
+    ]
+  },
+  "screenshots": [
+    "docs\\56-regras-ux-trafego\\ux-captures\\inbox-1440.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\inbox-768.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\inbox-360.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\detail-1440.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\detail-768.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\detail-360.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\pipeline-1440.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\pipeline-768.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\pipeline-360.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\overview-1440.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\overview-768.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\overview-360.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\inbox-state-error.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\detail-state-stale.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\pipeline-state-empty.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\overview-state-loading.png"
+  ],
+  "focusChecks": [
+    {
+      "route": "inbox",
+      "viewport": 1440,
+      "stops": [
+        {
+          "label": "Pular para o conteúdo",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        },
+        {
+          "label": "◉\nOpportunity Radar",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        },
+        {
+          "label": "Visão geral",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        },
+        {
+          "label": "Inbox",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        },
+        {
+          "label": "Pipeline",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        },
+        {
+          "label": "Empresas",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        },
+        {
+          "label": "Fontes",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        },
+        {
+          "label": "Homologação",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        }
+      ]
+    }
+  ],
+  "targetChecks": [
+    {
+      "route": "inbox",
+      "viewport": 360,
+      "tooSmall": []
+    },
+    {
+      "route": "detail",
+      "viewport": 360,
+      "tooSmall": []
+    },
+    {
+      "route": "pipeline",
+      "viewport": 360,
+      "tooSmall": []
+    },
+    {
+      "route": "overview",
+      "viewport": 360,
+      "tooSmall": []
+    }
+  ],
+  "contrastEvidence": [
+    {
+      "pair": "ink/canvas (page title/body)",
+      "foreground": "ink",
+      "background": "canvas",
+      "ratio": 15.32,
+      "minimum": 4.5
+    },
+    {
+      "pair": "subtle/canvas (secondary text)",
+      "foreground": "subtle",
+      "background": "canvas",
+      "ratio": 7.77,
+      "minimum": 4.5
+    },
+    {
+      "pair": "muted/surface (metadata)",
+      "foreground": "muted",
+      "background": "surface",
+      "ratio": 6.34,
+      "minimum": 4.5
+    },
+    {
+      "pair": "danger-ink/danger-surface",
+      "foreground": "danger-ink",
+      "background": "danger-surface",
+      "ratio": 7.19,
+      "minimum": 4.5
+    },
+    {
+      "pair": "warning-ink/warning-surface",
+      "foreground": "warning-ink",
+      "background": "warning-surface",
+      "ratio": 7.88,
+      "minimum": 4.5
+    },
+    {
+      "pair": "surface/accent (primary button)",
+      "foreground": "surface",
+      "background": "accent",
+      "ratio": 7.58,
+      "minimum": 4.5
+    }
+  ],
+  "blockedRequests": [],
+  "failures": [],
+  "limits": [
+    "Components are mounted directly with a test-only Clerk identity shim; this is not an authentication test.",
+    "All API responses are deterministic local fixtures and do not prove backend data or runtime freshness.",
+    "Screenshots are visual review evidence only; they do not establish WCAG conformance or production readiness."
+  ]
+}

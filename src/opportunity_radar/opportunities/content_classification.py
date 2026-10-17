@@ -509,7 +509,7 @@ def classify_enabled_rules(
     evidence: dict[str, str] | None = None
     if "allowed_countries:description" in enabled_rules:
         countries, evidence = resolve_allowed_countries_v2(location_text, description)
-    if evidence is not None and evidence["source"] == "description":
+    if evidence is not None:
         countries_version = REGIONS_VERSION_V2
         reasons.append(allowed_countries_reason(countries, evidence))
     else:

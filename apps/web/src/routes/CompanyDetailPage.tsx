@@ -61,9 +61,33 @@ function label(value: string, labels: Record<string, string>) {
   return labels[value] ?? value
 }
 
+const sensitiveConfigKey = /secret|token|password|credential|authorization|api.?key|email/i
+
+function configSummary(value: unknown): string {
+  if (value === null || value === undefined) return '—'
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  if (Array.isArray(value)) {
+    const simple = value.filter((item) => ['string', 'number', 'boolean'].includes(typeof item))
+    return simple.length === value.length
+      ? simple.slice(0, 3).map(String).join(', ') + (value.length > 3 ? ` e mais ${value.length - 3}` : '')
+      : `Lista com ${value.length} itens`
+  }
+  if (typeof value === 'object') {
+    const visible = Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !sensitiveConfigKey.test(key))
+      .slice(0, 3)
+      .map(([key, item]) => `${key}: ${typeof item === 'object' ? 'valor estruturado' : String(item)}`)
+    return visible.length ? visible.join('; ') : 'Detalhes indisponíveis'
+  }
+  return 'Detalhes indisponíveis'
+}
+
 function describeChange(change: { from: unknown; to: unknown }) {
-  const shown = (value: unknown) => (value === null || value === undefined ? '—' : String(value))
-  return change.from === null ? shown(change.to) : `${shown(change.from)} → ${shown(change.to)}`
+  return change.from === null
+    ? configSummary(change.to)
+    : `${configSummary(change.from)} → ${configSummary(change.to)}`
 }
 
 /** Every registration and correction of one ATS record, oldest first, with its reason. */
@@ -273,7 +297,7 @@ export function CompanyDetailPage() {
           <LoadingState className="mt-8">Carregando empresa…</LoadingState>
         )}
         {company.isError && (
-          <ErrorState className="mt-8" onRetry={() => void company.refetch()}>{company.error.message}</ErrorState>
+          <ErrorState className="mt-8" onRetry={() => void company.refetch()}>Não foi possível carregar a empresa. Tente novamente.</ErrorState>
         )}
       </div>
 

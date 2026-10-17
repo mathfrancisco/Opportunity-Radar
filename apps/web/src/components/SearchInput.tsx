@@ -49,7 +49,7 @@ export function SearchInput({
         {label}
       </label>
       <button
-        className="absolute left-1 flex h-6 w-8 items-center justify-center text-muted hover:text-ink max-md:h-9"
+        className="absolute left-1 flex h-6 w-8 items-center justify-center text-muted hover:text-ink max-md:h-11 max-md:w-11"
         type="submit"
       >
         <SearchIcon />

@@ -134,12 +134,13 @@ function parseRun(value: unknown): SourceRun | null {
 
 export async function getSourceHealth(params?: {
   status?: 'proposed'
-}): Promise<SourceHealthList> {
+}, signal?: AbortSignal): Promise<SourceHealthList> {
   const query = params?.status ? `?status=${encodeURIComponent(params.status)}` : ''
   const response = await privateFetch(apiUrl(`/source-health${query}`), {
     headers: { Accept: 'application/json' },
+    signal,
   })
-  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  if (!response.ok) throw await failureFrom(response)
   const body: unknown = await response.json()
   if (!isRecord(body) || !Array.isArray(body.items)) {
     throw new Error('A API retornou uma lista de fontes inválida.')
@@ -151,11 +152,12 @@ export async function getSourceHealth(params?: {
   }
 }
 
-export async function getSourceCoverage(): Promise<SourceCoverageReport> {
+export async function getSourceCoverage(signal?: AbortSignal): Promise<SourceCoverageReport> {
   const response = await privateFetch(apiUrl('/source-coverage'), {
     headers: { Accept: 'application/json' },
+    signal,
   })
-  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  if (!response.ok) throw await failureFrom(response)
   const body: unknown = await response.json()
   if (!isRecord(body)) throw new Error('A API retornou uma cobertura inválida.')
   return {
@@ -168,7 +170,7 @@ export async function getSourceCoverage(): Promise<SourceCoverageReport> {
   }
 }
 
-export async function getSourceRuns(sourceId: string, limit = 10): Promise<SourceRun[]> {
+export async function getSourceRuns(sourceId: string, limit = 10, signal?: AbortSignal): Promise<SourceRun[]> {
   const params = new URLSearchParams({
     source_id: sourceId,
     page: '1',
@@ -176,8 +178,9 @@ export async function getSourceRuns(sourceId: string, limit = 10): Promise<Sourc
   })
   const response = await privateFetch(apiUrl(`/source-runs?${params.toString()}`), {
     headers: { Accept: 'application/json' },
+    signal,
   })
-  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  if (!response.ok) throw await failureFrom(response)
   const body: unknown = await response.json()
   if (!isRecord(body) || !Array.isArray(body.items)) {
     throw new Error('A API retornou um histórico de execuções inválido.')
@@ -317,9 +320,10 @@ async function send(path: string, method: string, payload: unknown): Promise<unk
   return response.json()
 }
 
-export async function getSource(sourceId: string): Promise<SourceDefinition> {
+export async function getSource(sourceId: string, signal?: AbortSignal): Promise<SourceDefinition> {
   const response = await privateFetch(apiUrl(`/sources/${sourceId}`), {
     headers: { Accept: 'application/json' },
+    signal,
   })
   if (!response.ok) throw await failureFrom(response)
   const source = parseSource(await response.json())

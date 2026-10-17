@@ -8,7 +8,7 @@ import { useReadiness } from '../features/health/useReadiness'
 const content = {
   loading: {
     title: 'Verificando o radar',
-    description: 'Conectando à API local para confirmar que o ambiente está pronto.',
+    description: 'Consultando a API para confirmar se o ambiente está pronto.',
     tone: 'border-line-strong bg-info-surface text-info-ink',
     label: 'Consultando /api/health/ready',
     nextAction: 'Aguarde a confirmação dos serviços antes de iniciar uma coleta.',
@@ -16,10 +16,10 @@ const content = {
   error: {
     title: 'A API não está disponível',
     description:
-      'Inicie os serviços locais e tente novamente. O dashboard volta a consultar a API quando você recarregar a página.',
+      'A API não respondeu. Tente novamente quando o serviço estiver disponível.',
     tone: 'border-danger-line bg-danger-surface-strong text-danger-ink',
     label: 'Conexão pendente',
-    nextAction: 'Inicie o ambiente local e tente a verificação novamente.',
+    nextAction: 'Tente a verificação novamente quando a API estiver disponível.',
   },
   degraded: {
     title: 'Radar disponível com recursos limitados',
@@ -32,7 +32,7 @@ const content = {
   ready: {
     title: 'Radar pronto para começar',
     description:
-      'A base local está conectada. O catálogo de empresas já pode ser importado e consultado no dashboard.',
+      'A API e a conexão com o banco responderam. O catálogo de empresas já pode ser consultado.',
     tone: 'border-success-line bg-success-surface-strong text-success-ink-strong',
     label: 'API pronta',
     nextAction: 'Revise as fontes ativas e inicie uma busca quando o catálogo estiver preparado.',
@@ -41,6 +41,7 @@ const content = {
 
 export function StatusPage() {
   const readiness = useReadiness()
+  const environmentLabel = 'Ambiente não informado'
   const state = readiness.isPending
     ? 'loading'
     : readiness.isError
@@ -51,7 +52,7 @@ export function StatusPage() {
   return (
     <PageShell
       current="/status"
-      eyebrow="Ambiente local"
+      eyebrow={environmentLabel}
       title={view.title}
       description={readiness.data?.detail ?? view.description}
       footer="Descubra oportunidades, preserve evidências e decida com contexto."
@@ -91,7 +92,7 @@ export function StatusPage() {
           <p className="text-sm text-subtle">
             A prontidão confirma que a API e a conexão com o banco de dados estão disponíveis.
             {state === 'ready'
-              ? ' O ambiente está pronto para consultar o catálogo local.'
+                ? ' O ambiente está pronto para consultar o catálogo.'
               : state === 'loading'
                 ? ' A confirmação ainda está em andamento.'
                 : state === 'degraded'

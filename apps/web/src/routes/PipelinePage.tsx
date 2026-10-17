@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Button } from '../components/Button'
 import { Chip } from '../components/Chip'
 import { PageShell } from '../components/PageShell'
 import { Pagination } from '../components/Pagination'
@@ -42,7 +43,7 @@ function ApplicationCard({ application }: { application: Application }) {
   return (
     <li className="break-words rounded-panel border border-l-4 border-line border-l-accent bg-surface p-3 text-sm">
       <Link
-        className="font-medium underline decoration-accent decoration-2 underline-offset-4"
+        className="inline-flex items-center font-medium underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11"
         to={`/opportunities/${application.opportunityId}`}
       >
         {application.opportunityTitle}
@@ -179,17 +180,17 @@ const closedStages = applicationStages.filter((stage) => !activeStages.includes(
 export function PipelinePage() {
   const [activePage, setActivePage] = useState(1)
   const [closedPage, setClosedPage] = useState(1)
+  const [view, setView] = useState<'active' | 'closed'>('active')
   const active = useApplications({
     status: 'ACTIVE',
     limit: pageSize,
     offset: (activePage - 1) * pageSize,
-  })
+  }, view === 'active')
   const closed = useApplications({
     status: 'CLOSED',
     limit: pageSize,
     offset: (closedPage - 1) * pageSize,
-  })
-  const [view, setView] = useState<'active' | 'closed'>('active')
+  }, view === 'closed')
   const selected = view === 'active' ? active : closed
   const selectedPage = view === 'active' ? activePage : closedPage
   const setSelectedPage = view === 'active' ? setActivePage : setClosedPage
@@ -236,6 +237,14 @@ export function PipelinePage() {
       <section aria-live="polite" className="mt-5" id="pipeline-view">
         <h2 className="text-section">{view === 'active' ? 'Em andamento' : 'Encerradas'}</h2>
         <p className="mt-1 text-sm text-muted">{selectedDescription}</p>
+        {view === 'closed' && (
+          <p className="mt-2 text-sm text-subtle">
+            Encerramento é uma etapa manual da candidatura. O ciclo de vida da oportunidade é independente e não encerra candidaturas automaticamente.
+          </p>
+        )}
+        <Button className="mt-3" onClick={() => void selected.refetch()} variant="secondary">
+          Atualizar candidaturas
+        </Button>
         <div className="mt-5">
           {selected.isPending && <BoardSkeleton />}
           {selected.isError && (

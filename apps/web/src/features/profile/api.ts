@@ -1,4 +1,4 @@
-import { apiUrl, privateFetch, requestFailure } from '../../lib/api'
+import { apiUrl, failureFrom, privateFetch, requestFailure } from '../../lib/api'
 
 export interface ProfileSkill {
   canonicalName: string
@@ -244,19 +244,21 @@ async function readVersion(response: Response, what: string): Promise<ProfileVer
 }
 
 /** The active version, or null when no profile has been created yet. */
-export async function getActiveProfile(): Promise<ProfileVersion | null> {
+export async function getActiveProfile(signal?: AbortSignal): Promise<ProfileVersion | null> {
   const response = await privateFetch(apiUrl('/profile'), {
     headers: { Accept: 'application/json' },
+    signal,
   })
   if (response.status === 404) return null
   return readVersion(response, 'carregar o perfil')
 }
 
-export async function listProfileVersions(): Promise<ProfileVersion[]> {
+export async function listProfileVersions(signal?: AbortSignal): Promise<ProfileVersion[]> {
   const response = await privateFetch(apiUrl('/profile/versions'), {
     headers: { Accept: 'application/json' },
+    signal,
   })
-  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  if (!response.ok) throw await failureFrom(response)
   const body: unknown = await response.json()
   if (!Array.isArray(body)) throw new Error('A API retornou versões inválidas.')
   return body.map(parseVersion).filter((item): item is ProfileVersion => item !== null)

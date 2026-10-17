@@ -48,12 +48,19 @@ function savedSearch(overrides: Record<string, unknown> = {}) {
   }
 }
 
-/** Routes /saved-searches (list) and /saved-searches/{id}/new-count by URL. */
-function stubFetch(searches: ReturnType<typeof savedSearch>[], counts: Record<string, number>) {
+/** The Overview consumes one aggregate saved-search summary request. */
+function stubFetch(searches: ReturnType<typeof savedSearch>[], counts: Record<string, number>, failSummary = false) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input)
+      if (url.endsWith('/saved-searches/summary')) {
+        if (failSummary) return new Response('{}', { status: 503 })
+        return new Response(JSON.stringify(searches.map((item) => ({
+          ...item,
+          new_count: counts[item.id] ?? 0,
+        }))), { status: 200 })
+      }
       if (url.endsWith('/saved-searches') && (!init || init.method === undefined || init.method === 'GET')) {
         return new Response(JSON.stringify(searches), { status: 200 })
       }
@@ -135,6 +142,14 @@ describe('SavedSearchesWithNews', () => {
       '/api/saved-searches/saved-1',
       expect.objectContaining({ method: 'PATCH' }),
     )
+  })
+
+  it('expõe estado de erro recuperável para o resumo agregado', async () => {
+    stubFetch([], {}, true)
+    const container = renderWithProviders(<SavedSearchesWithNews />)
+    await flush()
+    expect(container.textContent).toContain('Não foi possível consultar as novidades')
+    expect(container.textContent).toContain('Atualizar buscas salvas')
   })
 })
 
@@ -363,7 +378,7 @@ describe('OverviewPage — composição', () => {
     )
   })
 
-  it('faz exatamente as mesmas requisições de antes, sem chamadas extras', async () => {
+  it('consulta uma vez o resumo agregado de buscas, sem chamadas por busca', async () => {
     stubOverviewFetch(overviewBody(), ['greenhouse'])
 
     renderWithProviders(<OverviewPage />)
@@ -373,24 +388,39 @@ describe('OverviewPage — composição', () => {
     expect([...new Set(calls)].sort()).toEqual([
       '/api/analysis-metrics',
       '/api/overview',
-      '/api/saved-searches',
+      '/api/saved-searches/summary',
       '/api/source-metrics',
     ])
     expect(calls).toHaveLength(4)
+  })
+
+  it('mantém contagens válidas quando outra busca salva tem filtros inválidos', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
+      const url = String(input)
+      if (url.endsWith('/saved-searches/summary')) return new Response(JSON.stringify([
+        { id: 'bad', name: 'Legada', filters: { order: 42 }, new_count: null, count_error: 'invalid_filters' },
+        { id: 'good', name: 'Válida', filters: {}, new_count: 2, count_error: null },
+      ]), { status: 200 })
+      if (url.endsWith('/overview')) return new Response(JSON.stringify(overviewBody()), { status: 200 })
+      if (url.endsWith('/analysis-metrics')) return new Response(JSON.stringify(disabledAnalysisMetrics), { status: 200 })
+      return new Response(JSON.stringify({ generated_at: '', windows: [] }), { status: 200 })
+    }))
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(8)
+    expect(container.textContent).toContain('Legada: contagem indisponível por filtros inválidos.')
+    expect(container.textContent).toContain('Válida')
+    expect(container.textContent).toContain('2')
   })
 
   it('abrir uma busca salva com novidade continua marcando a busca como aberta', async () => {
     const search = savedSearch({ id: 'saved-1', name: 'Backend remoto' })
     const base = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input)
-      if (url.endsWith('/saved-searches/saved-1/new-count')) {
-        return new Response(JSON.stringify({ new_count: 2 }), { status: 200 })
+      if (url.endsWith('/saved-searches/summary')) {
+        return new Response(JSON.stringify([{ ...search, new_count: 2 }]), { status: 200 })
       }
       if (url.endsWith('/saved-searches/saved-1') && init?.method === 'PATCH') {
         return new Response(JSON.stringify(search), { status: 200 })
-      }
-      if (url.endsWith('/saved-searches')) {
-        return new Response(JSON.stringify([search]), { status: 200 })
       }
       if (url.endsWith('/overview')) {
         return new Response(JSON.stringify(overviewBody({ new_opportunities: 1 })), { status: 200 })
