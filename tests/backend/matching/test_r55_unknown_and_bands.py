@@ -285,3 +285,45 @@ def test_intermediate_and_mid_titles_fit_a_junior_profile_end_to_end(title: str)
     assert level is M
     assert result.eligibility.status is EligibilityStatus.ELIGIBLE
     assert _factor(result, "SENIORITY_SCOPE").raw_score == _ADJACENT
+
+
+# --- replay gate: the new numbers belong to matching-v6 only -------------------------------
+
+
+@pytest.mark.parametrize("version", ["matching-v1", "matching-v4", "matching-v5"])
+def test_replaying_an_older_version_gives_its_own_numbers(version: str) -> None:
+    rules = default_rule_set(version)
+    unknown = evaluate_match(
+        _opportunity(required_skills=()), _profile(), rules, assessed_at=ASSESSED_AT
+    )
+    adjacent = evaluate_match(
+        _opportunity(seniority=M),
+        _profile(accepted_seniorities=(J,)),
+        rules,
+        assessed_at=ASSESSED_AT,
+    )
+
+    assert rules.unknown_score == Decimal("0.5")
+    assert rules.seniority_bands is False
+    assert _factor(unknown, "TECHNOLOGY_FIT").raw_score == Decimal("0.5")
+    assert adjacent.eligibility.status is EligibilityStatus.INELIGIBLE
+    assert _factor(adjacent, "SENIORITY_SCOPE").raw_score == Decimal("0")
+
+
+def test_only_matching_v6_applies_the_unknown_score_and_the_band() -> None:
+    rules = default_rule_set("matching-v6")
+    unknown = evaluate_match(
+        _opportunity(required_skills=()), _profile(), rules, assessed_at=ASSESSED_AT
+    )
+    adjacent = evaluate_match(
+        _opportunity(seniority=M),
+        _profile(accepted_seniorities=(J,)),
+        rules,
+        assessed_at=ASSESSED_AT,
+    )
+
+    assert rules.unknown_score == UNKNOWN_FACTOR_SCORE
+    assert rules.seniority_bands is True
+    assert _factor(unknown, "TECHNOLOGY_FIT").raw_score == UNKNOWN_FACTOR_SCORE
+    assert adjacent.eligibility.status is not EligibilityStatus.INELIGIBLE
+    assert _factor(adjacent, "SENIORITY_SCOPE").raw_score == SENIORITY_ADJACENT_SCORE
