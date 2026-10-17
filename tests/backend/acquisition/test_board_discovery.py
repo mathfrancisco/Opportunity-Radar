@@ -755,3 +755,83 @@ def test_default_cli_is_a_dry_run_that_builds_no_tavily_client(
 
     assert seen["apply"] is False
     assert seen["tavily"] is None and seen["budget"] is None
+
+
+# --- a paid hit that does not become a proposal is not paid for again ----------------------
+
+
+def _tavily_zeta_net() -> Net:
+    return Net(
+        boards={"/v0/postings/r55b6zeta-labs": [{"id": "a"}]},
+        tavily=lambda _body: _tavily_results("https://jobs.lever.co/r55b6zeta-labs/abc"),
+    )
+
+
+def _discover_with(
+    session: Session, net: Net, company: Company, service: AcquisitionService
+) -> BoardDiscoveryReport:
+    async def scenario() -> BoardDiscoveryReport:
+        async with net.http() as http:
+            return await discover_boards(
+                session,
+                service=service,
+                client=http,
+                resolve_ips=_resolve,
+                apply=True,
+                companies=[company],
+                tavily=net.tavily_client(),
+                budget=TavilyCreditBudget(limit=10),
+                min_interval_seconds=0,
+                sleeper=_no_sleep,
+            )
+
+    return _run(scenario())
+
+
+@_requires_database
+def test_tavily_hit_on_an_already_known_board_is_stamped_and_not_searched_again(
+    session: Session,
+) -> None:
+    owner = _company(session, "Owner Co")
+    company = _company(session, "Zeta Labs")
+    service = _service(session)
+    service.create_source(
+        source_type="lever",
+        name="Proposed owner lever",
+        configuration={"company_name": owner.canonical_name, "site_identifier": "r55b6zeta-labs"},
+        evidence_status="ats_identified",
+    )
+    net = _tavily_zeta_net()
+
+    first = _discover_with(session, net, company, service)
+    second = _discover_with(session, net, company, service)
+
+    assert [o.outcome for o in first.outcomes] == ["board_already_known"]
+    assert net.tavily_calls == 1
+    assert second.skipped_recent_attempt == 1 and second.tavily_queries == 0
+    session.refresh(company)
+    assert company.board_discovery_used_tavily is True
+
+
+@_requires_database
+def test_tavily_hit_rejected_on_apply_is_stamped_and_not_searched_again(
+    session: Session,
+) -> None:
+    company = _company(session, "Zeta Labs")
+    service = _service(session)
+
+    def reject(**_kwargs: Any) -> Any:
+        raise AcquisitionError(AcquisitionErrorCode.INVALID_CONFIGURATION, "boom")
+
+    service.create_source = reject  # type: ignore[method-assign]
+    net = _tavily_zeta_net()
+
+    first = _discover_with(session, net, company, service)
+    second = _discover_with(session, net, company, service)
+
+    assert first.outcomes[0].outcome.startswith("rejected")
+    assert net.tavily_calls == 1
+    assert second.skipped_recent_attempt == 1
+    assert _proposals(session) == []
+    session.refresh(company)
+    assert company.board_discovery_used_tavily is True

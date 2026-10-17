@@ -458,6 +458,8 @@ async def find_boards(
             report.outcomes.append(
                 CompanyOutcome(name, "board_already_known", hit.source_type, hit.board_key, hit.via)
             )
+            if hit.via == DISCOVERY_VIA_TAVILY:
+                report.attempts.append((company, True))  # the credit is spent: do not repeat
             continue
         found.append((company, hit))
     return found, report
@@ -483,6 +485,8 @@ def propose_boards(
             report.outcomes.append(
                 CompanyOutcome(name, "board_already_known", hit.source_type, hit.board_key, hit.via)
             )
+            if apply and hit.via == DISCOVERY_VIA_TAVILY:
+                report.attempts.append((company, True))
             continue
         if not apply:
             claimed.add(board)
@@ -509,6 +513,8 @@ def propose_boards(
                     name, f"rejected: {error.summary}", hit.source_type, hit.board_key, hit.via
                 )
             )
+            if hit.via == DISCOVERY_VIA_TAVILY:
+                report.attempts.append((company, True))
             continue
         outcome = proposal_report.outcomes[0]
         if outcome.outcome in {"created", "already_proposed"}:
