@@ -244,10 +244,17 @@ def _task_metrics(engine: Engine, since: datetime, until: datetime) -> tuple[Tas
     """One row per task: jobs (distinct operations), tokens per job and the fallback share."""
     record = ai_call_record
     fresh = record.c.cache_hit.is_(False)
+    # A call recorded without an operation id (rows written before operations existed, or by
+    # a caller that never opened one) is its own job: COUNT(DISTINCT ...) would drop it, and
+    # grouping on the id would merge every such call into one.
+    orphan = record.c.operation_id.is_(None)
     statement = (
         sa.select(
             record.c.task.label("task"),
-            sa.func.count(sa.distinct(record.c.operation_id)).filter(fresh).label("jobs"),
+            (
+                sa.func.count(sa.distinct(record.c.operation_id)).filter(fresh)
+                + sa.func.count().filter(fresh, orphan)
+            ).label("jobs"),
             sa.func.count().filter(record.c.cache_hit.is_(True)).label("cache_hits"),
             sa.func.count().filter(fresh).label("requests"),
             sa.func.coalesce(
@@ -257,9 +264,12 @@ def _task_metrics(engine: Engine, since: datetime, until: datetime) -> tuple[Tas
                 ).filter(fresh),
                 0,
             ).label("tokens"),
-            sa.func.count(sa.distinct(record.c.operation_id))
-            .filter(fresh, record.c.fallback_used.is_(True))
-            .label("fallback_jobs"),
+            (
+                sa.func.count(sa.distinct(record.c.operation_id)).filter(
+                    fresh, record.c.fallback_used.is_(True)
+                )
+                + sa.func.count().filter(fresh, orphan, record.c.fallback_used.is_(True))
+            ).label("fallback_jobs"),
         )
         .where(record.c.created_at >= since, record.c.created_at <= until)
         .group_by(record.c.task)
