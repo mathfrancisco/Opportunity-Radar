@@ -59,6 +59,7 @@ function opportunity(overrides: Partial<OpportunityDetail> = {}): OpportunityDet
     normalizationResults: [],
     siblingLocations: [],
     relevanceMark: null,
+    absenceAfterHours: 24,
     ...overrides,
   }
 }
@@ -316,18 +317,33 @@ describe('DuplicateCandidates', () => {
 })
 
 describe('AbsenceRule (R55-D5)', () => {
-  it('numa vaga encerrada, abre com o motivo do encerramento', () => {
-    const container = render(<AbsenceRule status="CLOSED" />)
+  it('usa o prazo que a API informa, não um número fixo', () => {
+    const container = render(<AbsenceRule hours={72} status="ACTIVE" />)
 
-    expect(container.textContent).toContain('Por que está encerrada')
+    expect(container.textContent).toContain('mais de 72 h')
+    expect(container.textContent).not.toContain('24 h')
+  })
+
+  it('sem o prazo da API, não inventa um número', () => {
+    const container = render(<AbsenceRule hours={null} status="ACTIVE" />)
+
+    expect(container.textContent).not.toMatch(/\d+ h/)
+    expect(container.textContent).toContain('prazo configurado')
+  })
+
+  it('numa vaga encerrada, só enuncia a regra e não afirma um motivo', () => {
+    const container = render(<AbsenceRule hours={24} status="CLOSED" />)
+
+    expect(container.textContent).toContain('Regra de encerramento')
     expect(container.textContent).toContain('mais de 24 h')
+    expect(container.textContent).not.toContain('Por que está encerrada')
   })
 
   it('numa vaga ativa, abre com a regra geral', () => {
-    const container = render(<AbsenceRule status="ACTIVE" />)
+    const container = render(<AbsenceRule hours={24} status="ACTIVE" />)
 
     expect(container.textContent).toContain('Quando a vaga é encerrada')
-    expect(container.textContent).not.toContain('Por que está encerrada')
+    expect(container.textContent).not.toContain('Regra de encerramento')
   })
 })
 
@@ -403,6 +419,7 @@ describe('OpportunityDetailPage', () => {
             contract_type: detail.contractType,
             description: detail.description,
             lifecycle_status: detail.lifecycleStatus,
+          absence_after_hours: detail.absenceAfterHours,
             published_at: detail.publishedAt,
             recency_effective_date: detail.recencyEffectiveDate,
             recency_basis: detail.recencyBasis,
@@ -491,6 +508,7 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
               contract_type: detail.contractType,
               description: detail.description,
               lifecycle_status: detail.lifecycleStatus,
+          absence_after_hours: detail.absenceAfterHours,
               published_at: detail.publishedAt,
               recency_effective_date: detail.recencyEffectiveDate,
               recency_basis: detail.recencyBasis,
