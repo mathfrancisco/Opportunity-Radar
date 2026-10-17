@@ -5,6 +5,7 @@ from uuid import UUID
 import pytest
 
 from opportunity_radar.matching.domain import (
+    UNKNOWN_FACTOR_SCORE,
     CompanyPriority,
     CompensationSnapshot,
     EligibilityStatus,
@@ -172,7 +173,7 @@ def test_golden_case_absence_remains_unknown_and_explicit_missing_policy_applies
         assessed_at=ASSESSED_AT,
     )
 
-    assert result.factors[0].raw_score == Decimal("0.5")
+    assert result.factors[0].raw_score == UNKNOWN_FACTOR_SCORE
     assert result.factors[0].status.value == "UNKNOWN"
     assert result.review_required is True
     assert result.verdict is Verdict.REVIEW_REQUIRED
@@ -191,7 +192,7 @@ def test_golden_case_missing_salary_stays_unknown_instead_of_disqualifying() -> 
     )
     assert result.eligibility.status is EligibilityStatus.ELIGIBLE
     assert factor.status.value == "UNKNOWN"
-    assert factor.raw_score == Decimal("0.5")
+    assert factor.raw_score == UNKNOWN_FACTOR_SCORE
 
 
 def test_conflicting_compensation_requires_review_without_choosing_a_source() -> None:
@@ -465,7 +466,7 @@ def _factor(result, code: str):
 def test_v2_is_the_current_rules_version_with_complete_weights() -> None:
     rules = default_rule_set()
 
-    assert rules.version == "matching-v5" == RULES_VERSION
+    assert rules.version == "matching-v6" == RULES_VERSION
     assert sum(item.weight for item in rules.factors) == Decimal("1")
     policies = {item.code: item.missing_policy for item in rules.factors}
     assert policies["TIMEZONE"] is MissingPolicy.EXCLUDE_AND_RENORMALIZE
@@ -499,12 +500,12 @@ def test_geography_knowledge_matrix_never_forces_review(
     assert result.verdict is not Verdict.REVIEW_REQUIRED
     if known == 0:
         assert factor.status.value == "UNKNOWN"
-        assert factor.raw_score == Decimal("0.5")
+        assert factor.raw_score == UNKNOWN_FACTOR_SCORE
         assert factor.confidence == Decimal("0")
     else:
         assert factor.status.value == "KNOWN"
         assert factor.confidence == Decimal(known) / Decimal(3)
-        assert factor.raw_score == (Decimal(known) + Decimal("0.5") * (3 - known)) / 3
+        assert factor.raw_score == (Decimal(known) + UNKNOWN_FACTOR_SCORE * (3 - known)) / 3
 
 
 def test_unknown_geography_lowers_confidence_but_keeps_the_score_neutral() -> None:
@@ -571,9 +572,9 @@ def test_timezone_and_compensation_without_data_leave_the_denominator() -> None:
     [
         ("DATA", ("DATA", "SOFTWARE_ENGINEERING"), "KNOWN", Decimal("1")),
         ("SALES", ("DATA", "SOFTWARE_ENGINEERING"), "KNOWN", Decimal("0.25")),
-        ("UNKNOWN", ("DATA",), "UNKNOWN", Decimal("0.5")),
-        (None, ("DATA",), "UNKNOWN", Decimal("0.5")),
-        ("DATA", (), "UNKNOWN", Decimal("0.5")),
+        ("UNKNOWN", ("DATA",), "UNKNOWN", UNKNOWN_FACTOR_SCORE),
+        (None, ("DATA",), "UNKNOWN", UNKNOWN_FACTOR_SCORE),
+        ("DATA", (), "UNKNOWN", UNKNOWN_FACTOR_SCORE),
     ],
 )
 def test_domain_experience_is_the_role_family_intersection(
@@ -721,7 +722,7 @@ def test_criteria_without_data_are_not_applicable_in_the_eligibility_details() -
 
 
 def test_eligibility_change_leaves_scores_untouched() -> None:
-    """Literals computed from the code before F50-06 (eligibility was UNKNOWN in the last two)."""
+    """Literals of the current rules; eligibility alone never moves them (R55-D2: unknown 0.45)."""
     full = _v2(_opportunity(), _profile())
     no_data = _v2(_opportunity(**_NO_DATA), _profile(work_authorization=_UNDECLARED))
     no_country = _v2(
@@ -729,14 +730,14 @@ def test_eligibility_change_leaves_scores_untouched() -> None:
         _profile(work_authorization=_UNDECLARED),
     )
 
-    assert full.score == Decimal("90.000")
-    assert no_data.score == Decimal("89.47368421052631578947368421")
-    assert no_country.score == Decimal("86.84210526315789473684210526")
+    assert full.score == Decimal("89.0000")
+    assert no_data.score == Decimal("88.42105263157894736842105263")
+    assert no_country.score == Decimal("85.52631578947368421052631579")
     codes = ("TECHNOLOGY_FIT", "DOMAIN_EXPERIENCE", "TIMEZONE")
     raw = [_factor(no_data, code).raw_score for code in codes]
-    assert [str(item) for item in raw] == ["1.0", "0.5", "None"]
+    assert [str(item) for item in raw] == ["1.0", "0.45", "None"]
     assert str(_factor(no_country, "GEOGRAPHY_CONTRACT_FIT").raw_score) == (
-        "0.8333333333333333333333333333"
+        "0.8166666666666666666666666667"
     )
     assert no_data.eligibility.status is EligibilityStatus.ELIGIBLE
 
