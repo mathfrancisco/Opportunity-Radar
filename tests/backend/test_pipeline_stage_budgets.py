@@ -82,6 +82,7 @@ def test_collect_spending_its_own_budget_is_a_partial_completion_not_a_stop(
         }
 
     monkeypatch.setattr(run_pipeline_once, "collect_enabled_sources", fake_collect)
+    monkeypatch.setattr(run_pipeline_once, "collection_service_factory", lambda _s: object())
     stage = _stage(monkeypatch, "collect_enabled_sources", lambda: now[0])
     context = StageContext("owner", Deadline(900, clock=lambda: now[0]), StopSignal())
 

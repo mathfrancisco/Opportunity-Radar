@@ -9,7 +9,10 @@ import pytest
 from opportunity_radar import worker
 from opportunity_radar.acquisition.probing import PROBE_TYPES
 from opportunity_radar.acquisition.registry import build_collector_registry
+from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.platform.config import Settings
+from opportunity_radar.platform.pipeline import Deadline, StageContext, StopSignal
+from scripts import run_pipeline_once
 
 
 @pytest.mark.parametrize("source_type", PROBE_TYPES)
@@ -36,3 +39,41 @@ def test_service_the_window_builds_resolves_every_probeable_source_type(
     )
     service = worker.collection_service_factory(settings)(MagicMock())
     assert service.registry.resolve(source_type).source_type == source_type
+
+
+_WINDOW_TYPES = ("workable", "teamtailor", "workday", "inhire")
+
+
+def test_default_acquisition_service_registry_cannot_drift_from_the_deployment_one() -> None:
+    service = AcquisitionService(MagicMock())
+    for source_type in PROBE_TYPES:
+        assert service.registry.resolve(source_type).source_type == source_type
+
+
+def test_finite_window_collect_stage_resolves_every_window_source_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: the stage once ran with the default service and its 5-collector registry."""
+    monkeypatch.setattr(worker, "active_profile_target_role_families", lambda *_: ())
+    settings = Settings(
+        database_url="postgresql+psycopg://u:p@localhost/db_test",
+        worker_owner_sub="worker-owner-synthetic",
+    )
+    captured: dict[str, object] = {}
+
+    def fake_collect(*args: object, **kwargs: object) -> dict[str, int]:
+        captured.update(kwargs)
+        return {"input": 0, "completed": 0, "failed": 0, "skipped": 0, "stopped": 0}
+
+    monkeypatch.setattr(run_pipeline_once, "collect_enabled_sources", fake_collect)
+    stages = {
+        stage.name: stage for stage in run_pipeline_once._stages(object(), settings, {})
+    }
+    stages["collect_enabled_sources"].run(
+        StageContext("worker-owner-synthetic", Deadline(60.0), StopSignal())
+    )
+
+    factory = captured["service_factory"]
+    service = factory(MagicMock())  # type: ignore[operator]
+    for source_type in _WINDOW_TYPES:
+        assert service.registry.resolve(source_type).source_type == source_type

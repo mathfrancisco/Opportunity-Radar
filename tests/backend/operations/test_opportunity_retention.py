@@ -813,3 +813,31 @@ def test_stale_report_counts_per_source_and_applies_with_protections(fx: _Fixtur
     assert plain not in fx.present()
     assert {with_application, marked, fresh} <= fx.present()
     assert mine()["eligible"] == 0
+
+
+def test_stale_report_counts_an_opportunity_without_occurrence_as_no_source(
+    fx: _Fixture,
+) -> None:
+    orphan = fx.opportunity(0, updated_days=20)
+    fx.session.execute(
+        text("DELETE FROM opportunities.normalization_result WHERE opportunity_id = :o"),
+        {"o": orphan},
+    )
+    fx.session.execute(
+        text(
+            "DELETE FROM opportunities.source_occurrence_observation WHERE source_occurrence_id "
+            "IN (SELECT id FROM opportunities.source_occurrence WHERE opportunity_id = :o)"
+        ),
+        {"o": orphan},
+    )
+    fx.session.execute(
+        text("DELETE FROM opportunities.source_occurrence WHERE opportunity_id = :o"),
+        {"o": orphan},
+    )
+    fx.session.commit()
+
+    rows = {r.source_name: r for r in stale_by_source(fx.engine)}
+    assert rows["no_source"].eligible_opportunities >= 1
+
+    run_opportunity_retention(fx.engine, retention_days=7, dry_run=False)
+    assert orphan not in fx.present()

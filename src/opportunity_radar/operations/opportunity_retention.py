@@ -408,6 +408,10 @@ def _rowcount(session: Session, sql: str, params: dict[str, Any]) -> int:
     return cast(CursorResult[Any], session.execute(text(sql), params)).rowcount or 0
 
 
+#: Bucket for stale opportunities that have no occurrence, hence no source.
+NO_SOURCE = "no_source"
+
+
 @dataclass(slots=True)
 class StaleSourceRow:
     """Counts only: one source's stale opportunities and what a cleanup would remove."""
@@ -436,20 +440,26 @@ def stale_by_source(
     the opportunities `run_opportunity_retention(dry_run=False)` would remove.
     """
     cutoff = (now or datetime.now(UTC)) - timedelta(days=retention_days)
+    # LEFT JOINs: a stale opportunity without any occurrence still counts (bucket
+    # `no_source`), because the deletion does not need an occurrence either.
     sql = f"""
-    SELECT sd.source_type, sd.name,
-      count(DISTINCT o.id),
-      count(DISTINCT o.id) FILTER (WHERE {_HAS_APPLICATION}),
-      count(DISTINCT o.id) FILTER (WHERE {_HAS_RELEVANT_MARK}),
-      count(DISTINCT o.id) FILTER (WHERE NOT ({_protected('o')}) AND NOT {_HAS_KEPT_DUPLICATE}),
+    SELECT coalesce(sd.source_type, '{NO_SOURCE}') AS source_type,
+      coalesce(sd.name, '{NO_SOURCE}') AS source_name,
+      count(DISTINCT o.id) AS stale_opportunities,
+      count(DISTINCT o.id) FILTER (WHERE {_HAS_APPLICATION}) AS kept_with_application,
+      count(DISTINCT o.id) FILTER (WHERE {_HAS_RELEVANT_MARK}) AS kept_with_relevant_mark,
+      count(DISTINCT o.id) FILTER (
+        WHERE NOT ({_protected('o')}) AND NOT {_HAS_KEPT_DUPLICATE}
+      ) AS eligible_opportunities,
       count(DISTINCT s.raw_item_id) FILTER (
-        WHERE NOT ({_protected('o')}) AND NOT {_HAS_KEPT_DUPLICATE})
+        WHERE NOT ({_protected('o')}) AND NOT {_HAS_KEPT_DUPLICATE}
+      ) AS linked_raw_items
     FROM opportunities.opportunity o
-    JOIN opportunities.source_occurrence s ON s.opportunity_id = o.id
-    JOIN acquisition.source_definition sd ON sd.id = s.source_definition_id
+    LEFT JOIN opportunities.source_occurrence s ON s.opportunity_id = o.id
+    LEFT JOIN acquisition.source_definition sd ON sd.id = s.source_definition_id
     WHERE {_AGE} < :cutoff
     GROUP BY sd.id, sd.source_type, sd.name
-    ORDER BY 6 DESC, sd.source_type, sd.name
+    ORDER BY eligible_opportunities DESC, source_type, source_name
     """
     with Session(engine) as session:
         session.execute(text("SET TRANSACTION READ ONLY"))
