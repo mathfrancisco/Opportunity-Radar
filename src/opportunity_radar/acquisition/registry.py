@@ -5,7 +5,7 @@ from __future__ import annotations
 from opportunity_radar.acquisition.ashby import AshbyCollector
 from opportunity_radar.acquisition.collectors import CollectorRegistry, ManualCollector
 from opportunity_radar.acquisition.factorial import FactorialCollector
-from opportunity_radar.acquisition.greenhouse import GreenhouseCollector
+from opportunity_radar.acquisition.greenhouse import DEFAULT_BASE_URL, GreenhouseCollector
 from opportunity_radar.acquisition.hacker_news import HackerNewsCollector
 from opportunity_radar.acquisition.inhire import InhireCollector
 from opportunity_radar.acquisition.jobposting import JobPostingCollector
@@ -19,7 +19,7 @@ from opportunity_radar.acquisition.workday import WorkdayCollector
 
 def build_collector_registry(
     *,
-    greenhouse_base_url: str,
+    greenhouse_base_url: str = DEFAULT_BASE_URL,
     tavily_api_key: str | None = None,
     tavily_base_url: str = "https://api.tavily.com",
     tavily_search_depth: str = "basic",

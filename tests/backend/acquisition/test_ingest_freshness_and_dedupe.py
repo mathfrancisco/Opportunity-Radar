@@ -64,8 +64,16 @@ class _Collector:
             yield item
 
 
-def _item(source_type: str, ext: str, *, published: datetime | None, v: int = 1) -> CollectedItem:
+def _item(
+    source_type: str,
+    ext: str,
+    *,
+    published: datetime | None,
+    v: int = 1,
+    updated: datetime | None = None,
+) -> CollectedItem:
     return CollectedItem(
+        updated_at=updated,
         source_type=source_type,
         external_id=ext,
         title=f"Backend Engineer {ext}",
@@ -190,7 +198,9 @@ def _session() -> Session:
     return Session(create_database_engine(os.environ["DATABASE_URL"]))
 
 
-def _write(key: str, *, published: datetime | None) -> RawEvidenceWrite:
+def _write(
+    key: str, *, published: datetime | None, updated: datetime | None = None
+) -> RawEvidenceWrite:
     return RawEvidenceWrite(
         identity_key=f"external:{key}",
         payload_hash=uuid4().hex + uuid4().hex,
@@ -203,6 +213,7 @@ def _write(key: str, *, published: datetime | None) -> RawEvidenceWrite:
         metadata={},
         payload={"id": key},
         published_at=published,
+        source_updated_at=updated,
     )
 
 
@@ -233,6 +244,75 @@ def test_age_boundary_six_seven_kept_eight_days_skipped() -> None:
                 )
             )
             assert kept == {"d6", "d7"}
+        finally:
+            world.cleanup()
+
+
+def test_undated_item_is_judged_by_its_source_updated_at() -> None:
+    with _session() as session:
+        world = _World(session)
+        try:
+            run = world.run()
+            now = datetime.now(UTC)
+            result = AcquisitionRepository(session).record_evidence_batch(
+                source_id=world.source.id,
+                run_id=run.id,
+                writes=[
+                    _write("upd-old", published=None, updated=now - timedelta(days=30)),
+                    _write("upd-fresh", published=None, updated=now - timedelta(days=2)),
+                    _write(
+                        "upd-naive-old",
+                        published=None,
+                        updated=(now - timedelta(days=30)).replace(tzinfo=None),
+                    ),
+                    _write("new-undated", published=None),
+                    # published wins: a fresh publication date is not overridden by an old update.
+                    _write(
+                        "pub-fresh",
+                        published=now - timedelta(days=1),
+                        updated=now - timedelta(days=30),
+                    ),
+                ],
+                observed_at=now,
+                stale_before=now - timedelta(days=7),
+            )
+            session.commit()
+            assert result == [STALE, True, STALE, True, True]
+            kept = set(
+                session.scalars(
+                    select(RawItemModel.external_id).where(
+                        RawItemModel.source_definition_id == world.source.id
+                    )
+                )
+            )
+            assert kept == {"upd-fresh", "new-undated", "pub-fresh"}
+        finally:
+            world.cleanup()
+
+
+def test_service_drops_undated_item_with_old_updated_at_and_keeps_new_undated() -> None:
+    with _session() as session:
+        world = _World(session)
+        try:
+            now = datetime.now(UTC)
+            old = _item(
+                world.source_type, "old-upd", published=None, updated=now - timedelta(days=20)
+            )
+            fresh = _item(
+                world.source_type, "fresh-upd", published=None, updated=now - timedelta(days=1)
+            )
+            world.collector.items = [old, fresh, _item(world.source_type, "bare", published=None)]
+            run = world.run(max_age_days=7)
+            session.refresh(run)
+            assert (run.items_persisted, run.skipped_stale) == (2, 1)
+            stored = set(
+                session.scalars(
+                    select(RawItemModel.external_id).where(
+                        RawItemModel.source_definition_id == world.source.id
+                    )
+                )
+            )
+            assert stored == {"fresh-upd", "bare"}
         finally:
             world.cleanup()
 

@@ -42,6 +42,7 @@ from opportunity_radar.platform.pipeline import (
 from opportunity_radar.worker import (
     analyze_pending,
     collect_enabled_sources,
+    collection_service_factory,
     evaluate_pending,
     normalize_opportunities,
 )
@@ -126,6 +127,7 @@ def _stages(engine, settings, measurements: dict[str, object] | None = None) -> 
                 ),
                 host_concurrency=settings.collection_host_concurrency,
                 owner_sub=context.owner_sub,
+                service_factory=collection_service_factory(settings),
                 stop_requested=stop_requested,
                 manual_min_interval_hours=settings.manual_source_min_interval_hours,
             ),
