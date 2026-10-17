@@ -416,6 +416,53 @@ def test_recent_opportunity_is_kept(fx: _Fixture) -> None:
     assert len(fx.raw_present()) == 1
 
 
+def test_old_multi_occurrence_opportunity_goes_with_every_occurrence_and_raw_item(
+    fx: _Fixture,
+) -> None:
+    """R55-E4: a job attached to two sources is one opportunity, deleted once, whole."""
+    old = fx.opportunity(8, full=True)
+    fx.raw_item(old)
+    fx.session.commit()
+    assert fx.count(SourceOccurrenceModel, SourceOccurrenceModel.opportunity_id, [old]) == 2
+
+    report = run_opportunity_retention(fx.engine, retention_days=7, dry_run=False)
+
+    assert old not in fx.present()
+    assert fx.count(SourceOccurrenceModel, SourceOccurrenceModel.opportunity_id, [old]) == 0
+    assert fx.raw_present() == set()
+    assert report.rows.get("source_occurrence", 0) >= 2
+    assert report.rows.get("raw_item", 0) >= 2
+
+
+def test_recent_multi_occurrence_opportunity_is_kept_with_both_occurrences(
+    fx: _Fixture,
+) -> None:
+    recent = fx.opportunity(2, full=True)
+    fx.raw_item(recent)
+    fx.session.commit()
+
+    run_opportunity_retention(fx.engine, retention_days=7, dry_run=False)
+
+    assert recent in fx.present()
+    assert fx.count(SourceOccurrenceModel, SourceOccurrenceModel.opportunity_id, [recent]) == 2
+    assert len(fx.raw_present()) == 2
+
+
+def test_old_multi_occurrence_opportunity_with_application_keeps_every_occurrence(
+    fx: _Fixture,
+) -> None:
+    kept = fx.opportunity(30, full=True)
+    fx.raw_item(kept)
+    fx.session.commit()
+    fx.application(kept)
+
+    run_opportunity_retention(fx.engine, retention_days=7, dry_run=False)
+
+    assert kept in fx.present()
+    assert fx.count(SourceOccurrenceModel, SourceOccurrenceModel.opportunity_id, [kept]) == 2
+    assert len(fx.raw_present()) == 2
+
+
 def test_published_at_wins_over_first_seen(fx: _Fixture) -> None:
     posted_long_ago = fx.opportunity(0.5, published_days=9)
     posted_recently = fx.opportunity(30, published_days=2)

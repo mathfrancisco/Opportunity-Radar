@@ -31,7 +31,12 @@ from opportunity_radar.opportunities.domain import (
     recency_basis_of,
     seniority_classification,
 )
-from opportunity_radar.opportunities.duplicates import find_title_location_window_candidates
+from opportunity_radar.opportunities.duplicates import (
+    CROSS_SOURCE_RULE,
+    CROSS_SOURCE_WINDOW_DAYS,
+    find_cross_source_strong_match,
+    find_title_location_window_candidates,
+)
 from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
     OpportunityCompensationModel,
@@ -192,6 +197,15 @@ class OpportunityService:
         )
         if company_key:
             identity_locks.add(f"review:{company_key}:{candidate.normalized_title}")
+        # R55-E4: the same job in two sources is keyed by company id on one side and by
+        # company name on the other, so the lock above would not serialize them. Take both
+        # keys: any two postings the matcher can pair share at least one.
+        if candidate.company_id:
+            identity_locks.add(f"xsource:{candidate.company_id}:{candidate.normalized_title}")
+        if candidate.normalized_company_name:
+            identity_locks.add(
+                f"xsource:{candidate.normalized_company_name}:{candidate.normalized_title}"
+            )
         self.repository.lock_candidate_identities(identity_locks)
         refresh_changed = False
         occurrence = self.repository.occurrence_by_external_identity(
@@ -208,7 +222,12 @@ class OpportunityService:
                 current_raw_item is None or raw_item.fetched_at >= current_raw_item.fetched_at
             )
             previous_fingerprint = opportunity.fingerprint
-            identity_changed = (
+            # R55-E4: the primary (first-attached) occurrence is the only one that may
+            # rewrite the opportunity; a secondary source updates just its own row and
+            # presence, so two sources with different wording cannot flip fields back and
+            # forth (and bump `version`) on every collection.
+            is_primary = self.repository.is_primary_occurrence(occurrence)
+            identity_changed = is_primary and (
                 previous_fingerprint != candidate.fingerprint
                 or opportunity.fingerprint_version != candidate.fingerprint_version
             )
@@ -238,8 +257,12 @@ class OpportunityService:
             else:
                 decision = "REFRESHED"
                 result_status = "SUCCEEDED"
-                reasons = [{"code": "SAME_SOURCE_EXTERNAL_IDENTITY"}]
-                if content_is_current:
+                reasons = [
+                    {"code": "SAME_SOURCE_EXTERNAL_IDENTITY"}
+                    if is_primary
+                    else {"code": "SECONDARY_SOURCE_OCCURRENCE"}
+                ]
+                if content_is_current and is_primary:
                     refresh_changed = _refresh_opportunity(opportunity, candidate)
                     if opportunity.fingerprint != previous_fingerprint:
                         reasons = [{"code": "IDENTITY_REFRESHED_SAME_EXTERNAL_ID"}]
@@ -285,25 +308,46 @@ class OpportunityService:
                     result_status = "SUCCEEDED"
                     reasons = [{"code": "EXACT_VERSIONED_FINGERPRINT"}]
                 else:
-                    review_candidates = self.repository.identity_review_candidates(candidate)
-                    opportunity = _new_opportunity(candidate, first_seen_at=raw_item.fetched_at)
-                    self.session.add(opportunity)
-                    created_opportunity = True
-                    if review_candidates:
-                        decision = "REVIEW"
-                        result_status = "REVIEW_REQUIRED"
+                    cross_source_match = find_cross_source_strong_match(
+                        self.session,
+                        candidate,
+                        source_definition_id=raw_item.source_definition_id,
+                    )
+                    if cross_source_match is not None:
+                        opportunity = cross_source_match
+                        decision = "MERGED"
+                        result_status = "SUCCEEDED"
                         reasons = [
                             {
-                                "code": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
-                                "candidate_opportunity_ids": [
-                                    str(item.id) for item in review_candidates
-                                ],
+                                "code": "CROSS_SOURCE_STRONG_MATCH",
+                                "rule": CROSS_SOURCE_RULE,
+                                "window_days": CROSS_SOURCE_WINDOW_DAYS,
                             }
                         ]
                     else:
-                        decision = "NEW"
-                        result_status = "SUCCEEDED"
-                        reasons = [{"code": "NO_IDENTITY_MATCH"}]
+                        review_candidates = self.repository.identity_review_candidates(
+                            candidate
+                        )
+                        opportunity = _new_opportunity(
+                            candidate, first_seen_at=raw_item.fetched_at
+                        )
+                        self.session.add(opportunity)
+                        created_opportunity = True
+                        if review_candidates:
+                            decision = "REVIEW"
+                            result_status = "REVIEW_REQUIRED"
+                            reasons = [
+                                {
+                                    "code": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+                                    "candidate_opportunity_ids": [
+                                        str(item.id) for item in review_candidates
+                                    ],
+                                }
+                            ]
+                        else:
+                            decision = "NEW"
+                            result_status = "SUCCEEDED"
+                            reasons = [{"code": "NO_IDENTITY_MATCH"}]
             occurrence = SourceOccurrenceModel(
                 opportunity=opportunity,
                 raw_item_id=raw_item.id,
