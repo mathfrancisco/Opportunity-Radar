@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import subprocess
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -110,7 +111,8 @@ def _seed_source_database(url: str) -> dict[str, Any]:
                 "INSERT INTO acquisition.source_definition "
                 f"(id, company_source_id, source_type, name, configuration, {homologated}) "
                 "VALUES (:id, :cs, 'greenhouse', 'acme-board', "
-                "CAST('{\"board\": \"acme\"}' AS jsonb), true, 'confirmed', now(), true, true)"
+                "CAST('{\"board_token\": \"acme\"}' AS jsonb), "
+                "true, 'confirmed', now(), true, true)"
             ),
             {"id": ids["ready"], "cs": ids["cs"]},
         )
@@ -118,7 +120,7 @@ def _seed_source_database(url: str) -> dict[str, Any]:
             text(
                 "INSERT INTO acquisition.source_definition "
                 f"(id, source_type, name, configuration, {homologated}) "
-                "VALUES (:id, 'lever', 'half-done', CAST('{\"site\": \"x\"}' AS jsonb), "
+                "VALUES (:id, 'lever', 'half-done', CAST('{\"site_identifier\": \"x\"}' AS jsonb), "
                 "true, 'unverified', NULL, false, false)"
             ),
             {"id": ids["unready"]},
@@ -182,6 +184,34 @@ def _import(target: str, export: Path, **kwargs: Any) -> dict[str, Any]:
     )
 
 
+def test_json_scalars_are_serialized_for_json_columns() -> None:
+    assert migrate_catalog._bind(5, "jsonb") == "5"
+    assert migrate_catalog._bind("x", "jsonb") == '"x"'
+    assert migrate_catalog._bind({"a": 1}, "jsonb") == '{"a": 1}'
+    assert migrate_catalog._bind(5, "integer") == 5
+
+
+def test_rows_with_different_keys_are_refused() -> None:
+    writer = migrate_catalog._Writer(None, OWNER)  # type: ignore[arg-type]
+    with pytest.raises(SystemExit, match="one set of columns"):
+        writer.insert("company_radar.company", [{"id": 1}, {"id": 2, "name": "x"}])
+
+
+def test_source_identity_uses_the_endpoint_not_the_name() -> None:
+    one = migrate_catalog.source_identity("greenhouse", "A", {"board_token": " Acme "})
+    two = migrate_catalog.source_identity("greenhouse", "B", {"board_token": "acme", "x": 1})
+    assert one == two
+    assert one != migrate_catalog.source_identity("greenhouse", "A", {"board_token": "other"})
+    assert migrate_catalog.source_identity("manual", "A", {}) != migrate_catalog.source_identity(
+        "manual", "B", {}
+    )
+    assert migrate_catalog.source_identity("workday", "A", {"tenant_identifier": "t"}) != (
+        migrate_catalog.source_identity(
+            "workday", "A", {"tenant_identifier": "t", "api_region": "wd5"}
+        )
+    )
+
+
 @integration
 def test_eight_day_old_job_is_excluded_from_the_export(
     databases: tuple[str, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -192,6 +222,21 @@ def test_eight_day_old_job_is_excluded_from_the_export(
     _, tables = migrate_catalog.read_export(export)
     assert [row["identity_key"] for row in tables["acquisition.raw_item"]] == ["job-fresh"]
     assert len(tables["acquisition.raw_item_payload"]) == 1
+    assert stat.S_IMODE(export.stat().st_mode) == 0o600
+    assert not export.with_suffix(export.suffix + ".part").exists()
+
+
+@integration
+def test_failed_export_leaves_no_partial_file(databases: tuple[str, str], tmp_path: Path) -> None:
+    source, _ = databases
+    out = tmp_path / "export.jsonl"
+    engine = create_database_engine(source)
+    with engine.begin() as c:
+        c.execute(text("DROP TABLE company_radar.company_startup_evidence"))
+    engine.dispose()
+    with pytest.raises(Exception):
+        migrate_catalog.run_export(out=out, container=None, source_url=source, job_days=7)
+    assert list(tmp_path.iterdir()) == []
 
 
 @integration
@@ -203,11 +248,11 @@ def test_dry_run_writes_nothing_and_apply_twice_adds_no_duplicates(
     export = _export(source, tmp_path, monkeypatch)
     empty = _counts(target)
 
-    dry = _import(target, export, apply=False)
+    dry = _import(target, export, apply=False, enable_limit=1)
     assert dry["tables"]["acquisition.source_definition"]["inserted"] == 2
     assert _counts(target) == empty
 
-    first = _import(target, export, apply=True)
+    first = _import(target, export, apply=True, enable_limit=1)
     populated = _counts(target)
     assert populated["acquisition.source_definition"] == 2
     assert populated["company_radar.company"] == 1
@@ -215,20 +260,23 @@ def test_dry_run_writes_nothing_and_apply_twice_adds_no_duplicates(
     assert populated["acquisition.raw_item_payload"] == 1
     assert populated["acquisition.source_run"] == 1
     assert first["tables"]["acquisition.raw_item"]["inserted"] == 1
+    assert first["notes"]["sources_new_enabled"] == 1
+    assert first["notes"]["sources_new_disabled"] == 1
 
-    second = _import(target, export, apply=True)
+    second = _import(target, export, apply=True, enable_limit=1)
     assert _counts(target) == populated
     assert all(v["inserted"] == 0 for v in second["tables"].values())
+    assert second["notes"]["sources_preexisting"] == 2
 
 
 @integration
-def test_sources_arrive_disabled_unless_homologated_and_enabled(
+def test_new_sources_are_disabled_by_default(
     databases: tuple[str, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source, target = databases
     _seed_source_database(source)
     export = _export(source, tmp_path, monkeypatch)
-    _import(target, export, apply=True)
+    default = _import(target, export, apply=True)
     engine = create_database_engine(target)
     with engine.connect() as c:
         states = dict(
@@ -240,29 +288,65 @@ def test_sources_arrive_disabled_unless_homologated_and_enabled(
                 "WHERE name = 'acme-board'"
             )
         ).scalar_one()
+    assert states == {"acme-board": False, "half-done": False}
+    assert evidence == "confirmed"  # homologation state is preserved while disabled
+    # Jobs of sources imported disabled are not migrated.
+    assert default["tables"]["acquisition.raw_item"]["inserted"] == 0
+    assert default["tables"]["acquisition.source_run"]["inserted"] == 0
+    assert default["notes"]["sources_enable_candidates_not_enabled"] == 1
+
+    # Existing rows are never touched, so a later larger limit enables nothing already there.
+    again = _import(target, export, apply=True, enable_limit=5)
+    assert again["notes"]["sources_preexisting"] == 2
+    with engine.connect() as c:
+        assert (
+            c.execute(
+                text("SELECT count(*) FROM acquisition.source_definition WHERE enabled")
+            ).scalar_one()
+            == 0
+        )
     engine.dispose()
-    assert states == {"acme-board": True, "half-done": False}
-    assert evidence == "confirmed"
 
 
 @integration
-def test_all_disabled_flag_disables_everything(
+def test_enable_limit_only_enables_homologated_sources(
     databases: tuple[str, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source, target = databases
     _seed_source_database(source)
     export = _export(source, tmp_path, monkeypatch)
-    _import(target, export, apply=True, all_disabled=True)
+    _import(target, export, apply=True, enable_limit=5)
     engine = create_database_engine(target)
     with engine.connect() as c:
-        assert c.execute(
-            text("SELECT count(*) FROM acquisition.source_definition WHERE enabled")
-        ).scalar_one() == 0
+        states = dict(
+            c.execute(text("SELECT name, enabled FROM acquisition.source_definition")).all()
+        )
     engine.dispose()
+    assert states == {"acme-board": True, "half-done": False}
 
 
 @integration
-def test_same_board_under_another_name_is_not_duplicated(
+def test_synthetic_run_is_backdated_and_counts_inserted_rows(
+    databases: tuple[str, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, target = databases
+    _seed_source_database(source)
+    export = _export(source, tmp_path, monkeypatch)
+    _import(target, export, apply=True, enable_limit=1)
+    engine = create_database_engine(target)
+    with engine.connect() as c:
+        row = c.execute(
+            text(
+                "SELECT items_seen, items_persisted, status, "
+                "started_at < now() - interval '2 days' AS old FROM acquisition.source_run"
+            )
+        ).one()
+    engine.dispose()
+    assert tuple(row) == (1, 1, "SUCCEEDED", True)
+
+
+@integration
+def test_same_board_under_another_name_is_matched_not_adopted(
     databases: tuple[str, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source, target = databases
@@ -273,17 +357,104 @@ def test_same_board_under_another_name_is_not_duplicated(
             text(
                 "INSERT INTO acquisition.source_definition (id, source_type, name, configuration) "
                 "VALUES (:id, 'greenhouse', 'renamed-board', "
-                "CAST('{\"board\":\"acme\"}' AS jsonb))"
+                "CAST('{\"board_token\":\"ACME\"}' AS jsonb))"
             ),
             {"id": uuid4()},
         )
     engine.dispose()
     export = _export(source, tmp_path, monkeypatch)
-    report = _import(target, export, apply=True)
+    report = _import(target, export, apply=True, enable_limit=5)
     assert report["tables"]["acquisition.source_definition"]["after"] == 2
-    assert report["notes"]["sources_matched_by_config"] == 1
-    # Its raw item is adopted by the already-present source rather than lost.
-    assert report["tables"]["acquisition.raw_item"]["inserted"] == 1
+    assert report["notes"]["sources_matched_other_name"] == 1
+    # The pre-existing source is not adopted: no run, no raw items, no probes for it.
+    assert report["tables"]["acquisition.raw_item"]["inserted"] == 0
+    assert report["tables"]["acquisition.source_run"]["inserted"] == 0
+
+
+@integration
+def test_same_name_with_different_endpoint_is_a_conflict_and_is_skipped(
+    databases: tuple[str, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, target = databases
+    _seed_source_database(source)
+    engine = create_database_engine(target)
+    with engine.begin() as c:
+        c.execute(
+            text(
+                "INSERT INTO acquisition.source_definition (id, source_type, name, configuration) "
+                "VALUES (:id, 'greenhouse', 'acme-board', "
+                "CAST('{\"board_token\":\"another-company\"}' AS jsonb))"
+            ),
+            {"id": uuid4()},
+        )
+    export = _export(source, tmp_path, monkeypatch)
+    report = _import(target, export, apply=True, enable_limit=5)
+    with engine.connect() as c:
+        config = c.execute(
+            text(
+                "SELECT configuration->>'board_token' FROM acquisition.source_definition "
+                "WHERE name = 'acme-board'"
+            )
+        ).scalar_one()
+    engine.dispose()
+    assert config == "another-company"  # never adopted or modified
+    assert report["notes"]["source_conflicts"] == 1
+    assert report["tables"]["acquisition.raw_item"]["inserted"] == 0
+    assert report["tables"]["acquisition.source_probe"]["inserted"] == 0
+
+
+@integration
+def test_preexisting_company_source_gets_no_revisions(
+    databases: tuple[str, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, target = databases
+    _seed_source_database(source)
+    engine = create_database_engine(source)
+    with engine.begin() as c:
+        c.execute(
+            text(
+                "INSERT INTO company_radar.company_source_revision "
+                "(id, company_source_id, version, changes, evidence_note) "
+                "SELECT :id, id, 1, '{}'::jsonb, 'note' FROM company_radar.company_source"
+            ),
+            {"id": uuid4()},
+        )
+    engine.dispose()
+    export = _export(source, tmp_path, monkeypatch)
+    first = _import(target, export, apply=True)
+    assert first["tables"]["company_radar.company_source_revision"]["inserted"] == 1
+    engine = create_database_engine(target)
+    with engine.begin() as c:
+        c.execute(text("DELETE FROM company_radar.company_source_revision"))
+    engine.dispose()
+    second = _import(target, export, apply=True)
+    assert second["tables"]["company_radar.company_source_revision"]["inserted"] == 0
+    assert second["notes"]["revisions_skipped_preexisting"] == 1
+
+
+@integration
+def test_company_domain_conflict_is_reported(
+    databases: tuple[str, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, target = databases
+    _seed_source_database(source)
+    src_engine = create_database_engine(source)
+    with src_engine.begin() as c:
+        c.execute(text("UPDATE company_radar.company SET domain = 'acme.example'"))
+    src_engine.dispose()
+    dst_engine = create_database_engine(target)
+    with dst_engine.begin() as c:
+        c.execute(
+            text(
+                "INSERT INTO company_radar.company (id, canonical_name, normalized_name, domain) "
+                "VALUES (:id, 'Acme Inc', 'acme-inc', 'acme.example')"
+            ),
+            {"id": uuid4()},
+        )
+    dst_engine.dispose()
+    export = _export(source, tmp_path, monkeypatch)
+    report = _import(target, export, apply=False)
+    assert report["notes"]["company_domain_conflicts"] == 1
 
 
 @integration
@@ -307,6 +478,39 @@ def test_owner_sub_is_written_to_migrated_tables_that_carry_it(
     assert report["notes"]["owner_sub_tables"] == ["company_radar.company"]
     assert owners == [(OWNER,)]
     assert OWNER not in json.dumps(report)
+
+
+@integration
+def test_owner_sub_never_appears_in_output_on_a_database_error(
+    databases: tuple[str, str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source, target = databases
+    _seed_source_database(source)
+    export = _export(source, tmp_path, monkeypatch)
+    engine = create_database_engine(target)
+    with engine.begin() as c:
+        # Postgres quotes the failing row (owner included) in its error DETAIL.
+        c.execute(
+            text(
+                "ALTER TABLE company_radar.company ADD COLUMN owner_sub VARCHAR(255) "
+                "CHECK (owner_sub = 'nobody')"
+            )
+        )
+    engine.dispose()
+    owner_file = tmp_path / "owner.txt"
+    owner_file.write_text(OWNER, encoding="utf-8")
+    monkeypatch.setenv("DATABASE_URL", target)
+    code = migrate_catalog.main(
+        ["import", "--export", str(export), "--owner-sub-file", str(owner_file), "--apply"]
+    )
+    captured = capsys.readouterr()
+    assert code == 1
+    assert OWNER not in captured.out + captured.err
+    assert "IntegrityError" in captured.err
+    assert _counts(target)["company_radar.company"] == 0
 
 
 @integration
