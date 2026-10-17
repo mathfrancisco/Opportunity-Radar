@@ -1,7 +1,10 @@
 """Daily retention of old opportunities and everything that hangs off them (card R55-E2).
 
-An opportunity is old when `coalesce(published_at, first_seen_at)` is earlier than the
-cutoff (`now - retention_days`). Old opportunities are deleted together with their
+An opportunity is old when `coalesce(published_at, source_updated_at, first_seen_at)` is
+earlier than the cutoff (`now - retention_days`). A posting cannot predate its last change at
+the source, so an undated one whose source `updated_at` is old is old too (R55-A5).
+
+Old opportunities are deleted together with their
 dependents, oldest first, in batches; each batch is its own short transaction and locks its
 opportunities with `FOR UPDATE SKIP LOCKED`, so a concurrent writer is skipped instead of
 raced and a stopped run loses at most the batch in flight.
@@ -54,7 +57,7 @@ logger = get_logger("opportunity_radar.operations.opportunity_retention")
 
 
 def _age(a: str) -> str:
-    return f"coalesce({a}.published_at, {a}.first_seen_at)"
+    return f"coalesce({a}.published_at, {a}.source_updated_at, {a}.first_seen_at)"
 
 
 def _has_application(a: str) -> str:
@@ -403,6 +406,66 @@ def _delete_unreferenced_raw_items(session: Session, raw_ids: list[Any]) -> dict
 
 def _rowcount(session: Session, sql: str, params: dict[str, Any]) -> int:
     return cast(CursorResult[Any], session.execute(text(sql), params)).rowcount or 0
+
+
+#: Bucket for stale opportunities that have no occurrence, hence no source.
+NO_SOURCE = "no_source"
+
+
+@dataclass(slots=True)
+class StaleSourceRow:
+    """Counts only: one source's stale opportunities and what a cleanup would remove."""
+
+    source_type: str
+    source_name: str
+    stale_opportunities: int
+    kept_with_application: int
+    kept_with_relevant_mark: int
+    #: What `--apply` would delete (stale, not protected, no kept duplicate pointing at it).
+    eligible_opportunities: int
+    #: Distinct raw items of this source linked to the eligible opportunities (an upper bound
+    #: on the raw items removed: one still referenced elsewhere stays).
+    linked_raw_items: int
+
+
+def stale_by_source(
+    engine: Engine,
+    *,
+    retention_days: int = DEFAULT_OPPORTUNITY_RETENTION_DAYS,
+    now: datetime | None = None,
+) -> list[StaleSourceRow]:
+    """Read-only, per source: stored opportunities older than the window (R55-A5).
+
+    Uses the same age and the same protections as the deletion, so the numbers are exactly
+    the opportunities `run_opportunity_retention(dry_run=False)` would remove.
+    """
+    cutoff = (now or datetime.now(UTC)) - timedelta(days=retention_days)
+    # LEFT JOINs: a stale opportunity without any occurrence still counts (bucket
+    # `no_source`), because the deletion does not need an occurrence either.
+    sql = f"""
+    SELECT coalesce(sd.source_type, '{NO_SOURCE}') AS source_type,
+      coalesce(sd.name, '{NO_SOURCE}') AS source_name,
+      count(DISTINCT o.id) AS stale_opportunities,
+      count(DISTINCT o.id) FILTER (WHERE {_HAS_APPLICATION}) AS kept_with_application,
+      count(DISTINCT o.id) FILTER (WHERE {_HAS_RELEVANT_MARK}) AS kept_with_relevant_mark,
+      count(DISTINCT o.id) FILTER (
+        WHERE NOT ({_protected('o')}) AND NOT {_HAS_KEPT_DUPLICATE}
+      ) AS eligible_opportunities,
+      count(DISTINCT s.raw_item_id) FILTER (
+        WHERE NOT ({_protected('o')}) AND NOT {_HAS_KEPT_DUPLICATE}
+      ) AS linked_raw_items
+    FROM opportunities.opportunity o
+    LEFT JOIN opportunities.source_occurrence s ON s.opportunity_id = o.id
+    LEFT JOIN acquisition.source_definition sd ON sd.id = s.source_definition_id
+    WHERE {_AGE} < :cutoff
+    GROUP BY sd.id, sd.source_type, sd.name
+    ORDER BY eligible_opportunities DESC, source_type, source_name
+    """
+    with Session(engine) as session:
+        session.execute(text("SET TRANSACTION READ ONLY"))
+        return [
+            StaleSourceRow(*row) for row in session.execute(text(sql), {"cutoff": cutoff})
+        ]
 
 
 def _count_all(engine: Engine, cutoff: datetime, report: OpportunityRetentionReport) -> None:
