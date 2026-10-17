@@ -30,10 +30,10 @@ O script rodou dentro do container da API (`docker exec -i opportunity-radar-api
 | Momento | `pg_database_size` | Observação |
 | --- | --- | --- |
 | Baseline 16/10 | 26,0 MB | antes do R55 |
-| Pico 17/10 | 103,4 MB | lote 1 do A5 (Greenhouse sem filtro de 7 dias) |
+| 17/10 manhã | 103,4 MB | depois do lote 1 do A5 (Greenhouse sem filtro de 7 dias), antes do deploy #3 |
 | 17/10 14:42 UTC | 107 511 808 bytes (107,5 MB) | depois da limpeza; autovacuum rodou às 14:38 UTC |
 
-O autovacuum marca o espaço como livre para reuso, mas não devolve os arquivos ao sistema. Novas linhas reaproveitam esse espaço, então o tamanho deve ficar estável até o espaço livre acabar. Só `VACUUM FULL` reduz o número, e ele trava as tabelas; não foi rodado.
+A alta de 103,4 para 107,5 MB vem das gravações entre as duas medições: 500 reavaliações `matching-v6` com seus fatores, a migração `0072` e as coletas horárias. O DELETE não reduz o arquivo. O autovacuum marca o espaço como livre para reuso, mas não devolve os arquivos ao sistema. Novas linhas reaproveitam esse espaço, então o tamanho deve ficar estável até o espaço livre acabar. Só `VACUUM FULL` reduz o número, e ele trava as tabelas; não foi rodado.
 
 Maiores tabelas por linhas vivas depois da limpeza: `match_factor` 3 720, `opportunity_skill` 1 509, `company_source` 802, `normalization_result` 740.
 
