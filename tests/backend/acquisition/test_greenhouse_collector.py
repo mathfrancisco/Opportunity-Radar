@@ -288,3 +288,48 @@ def test_rejects_invalid_configuration_and_skips_invalid_job() -> None:
         asyncio.run(client.aclose())
     assert [item.external_id for item in items] == ["2"]
     assert request.telemetry.invalid_items == 1
+
+
+def _collect_one(job: dict[str, object]):
+    payload = {"jobs": [job], "meta": {"total": 1}}
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload))
+    )
+    try:
+        (item,) = asyncio.run(
+            _collect(
+                GreenhouseCollector(client=client),
+                CollectionRequest(company_reference="acme"),
+            )
+        )
+    finally:
+        asyncio.run(client.aclose())
+    return item
+
+
+_JOB = {
+    "id": 1,
+    "title": "Backend Engineer",
+    "absolute_url": "https://boards.greenhouse.io/acme/jobs/1",
+    "updated_at": "2026-10-10T12:00:00-04:00",
+}
+
+
+def test_first_published_becomes_published_at() -> None:
+    item = _collect_one({**_JOB, "first_published": "2026-10-01T20:00:00Z"})
+    assert item.published_at is not None
+    assert item.published_at.isoformat() == "2026-10-01T20:00:00+00:00"
+    assert item.updated_at is not None
+    assert item.published_at != item.updated_at
+
+
+@pytest.mark.parametrize("value", [None, "", "not-a-date", 12345])
+def test_missing_or_malformed_first_published_stays_undated(value: object) -> None:
+    job = dict(_JOB) if value is None else {**_JOB, "first_published": value}
+    assert _collect_one(job).published_at is None
+
+
+def test_naive_first_published_is_read_as_utc() -> None:
+    item = _collect_one({**_JOB, "first_published": "2026-10-01T20:00:00"})
+    assert item.published_at is not None
+    assert item.published_at.utcoffset() is not None

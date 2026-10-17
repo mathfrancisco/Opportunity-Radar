@@ -63,6 +63,8 @@ class RawEvidenceWrite:
     persist_new: bool = True
     #: When the source says the posting went up; `None` when it does not (R55-E1).
     published_at: datetime | None = None
+    #: When the source last modified the posting; a posting cannot predate it (R55-A5).
+    source_updated_at: datetime | None = None
 
 
 #: `record_evidence_batch` outcome for an item dropped by the freshness filter (R55-E1).
@@ -586,7 +588,8 @@ class AcquisitionRepository:
         by the freshness filter. The caller owns the transaction.
 
         R55-E1: with `stale_before`, an item that would create evidence is dropped when its
-        `published_at` is older than that instant, or, undated, when its identity was first
+        `published_at` is older than that instant, or, undated, when the source's own `updated_at`
+        is (a posting cannot predate its last change), or when its identity was first
         stored before it. A brand-new undated item is kept. R55-E3: an unchanged item whose
         occurrence is live adds no observation row, only advances `last_seen_*`.
         """
@@ -630,7 +633,17 @@ class AcquisitionRepository:
                     observed.append((newest, False))
                 continue
             if stale_before is not None:
-                reference = write.published_at or first_stored.get(write.identity_key)
+                reference = write.published_at
+                if reference is None and write.source_updated_at is not None:
+                    # R55-A5: published <= updated, so an undated item whose source says it
+                    # was last modified before the cutoff is stale whatever else is known.
+                    updated = write.source_updated_at
+                    if updated.tzinfo is None:
+                        updated = updated.replace(tzinfo=UTC)
+                    if updated < stale_before:
+                        reference = updated
+                if reference is None:
+                    reference = first_stored.get(write.identity_key)
                 if reference is not None:
                     if reference.tzinfo is None:
                         reference = reference.replace(tzinfo=UTC)

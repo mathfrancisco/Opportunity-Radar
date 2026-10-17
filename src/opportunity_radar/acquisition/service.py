@@ -2393,6 +2393,7 @@ class AcquisitionService:
             payload=payload,
             persist_new=persist_new,
             published_at=item.published_at,
+            source_updated_at=item.updated_at,
         )
 
     @staticmethod
