@@ -1,7 +1,7 @@
 """Remember which fields the model already answered null for (R55-C5 follow-up).
 
-Revision ID: 20261017_0073
-Revises: 20261017_0072
+Revision ID: 20261017_0074
+Revises: 20261017_0073
 
 A null answer created no suggestion row, so the same opportunity was asked again on every
 pass. `platform.ai_suggestion_unanswered` keeps one marker per
@@ -18,8 +18,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "20261017_0073"
-down_revision = "20261017_0072"
+revision = "20261017_0074"
+down_revision = "20261017_0073"
 branch_labels = None
 depends_on = None
 
