@@ -5,6 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -55,6 +56,12 @@ class Company(Base):
     verification_state: Mapped[str] = mapped_column(
         String(30), nullable=False, default="unverified"
     )
+    # R55-B6: last `discover_boards --apply` attempt that found no board, and whether it
+    # included the paid Tavily search. Only that script reads or writes them.
+    board_discovery_attempted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    board_discovery_used_tavily: Mapped[bool | None] = mapped_column(Boolean)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

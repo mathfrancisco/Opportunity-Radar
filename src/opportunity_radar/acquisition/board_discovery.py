@@ -22,6 +22,7 @@ import asyncio
 import re
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -68,6 +69,19 @@ _INHIRE_PAGES_URL = "https://api.inhire.app/job-posts/public/pages"
 _INHIRE_TENANT = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 _VALID_BOARD_KEY = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}", re.IGNORECASE)
 
+#: Labels that sit at the end of a domain and name a registry, not a company: a probe for
+#: `empresa.com.br` must never try the slug `com`.
+PUBLIC_SUFFIX_LABELS = frozenset(
+    {
+        "com", "co", "org", "net", "gov", "edu", "mil", "int", "info", "biz", "app", "dev",
+        "io", "ai", "br", "pt", "uk", "us", "eu", "de", "fr", "es", "mx", "ar", "cl", "ac",
+        "www", "me", "tv", "xyz", "tech", "online", "site",
+    }
+)  # fmt: skip
+MIN_SLUG_LENGTH = 3
+#: After this many Tavily failures in a row the run stops searching.
+MAX_CONSECUTIVE_TAVILY_ERRORS = 3
+
 ResolveIps = Callable[[str], Awaitable[tuple[str, ...]]]
 
 
@@ -98,6 +112,11 @@ class BoardDiscoveryReport:
     tavily_queries: int = 0
     tavily_credits_spent: int = 0
     tavily_budget_stopped: bool = False
+    tavily_disabled_after_errors: bool = False
+    tavily_consecutive_errors: int = 0
+    skipped_recent_attempt: int = 0
+    #: Companies no board was found for, with whether the paid search was part of it.
+    attempts: list[tuple[Company, bool]] = field(default_factory=list)
 
 
 def covered_company_ids(session: Session) -> set[UUID]:
@@ -123,6 +142,23 @@ def covered_company_ids(session: Session) -> set[UUID]:
     if names:
         covered.update(session.scalars(select(Company.id).where(Company.canonical_name.in_(names))))
     return covered
+
+
+def recently_attempted(
+    company: Company, *, retry_days: int, tavily_enabled: bool, now: datetime
+) -> bool:
+    """True when an earlier run already came up empty for `company` inside the window.
+
+    A probe-only attempt does not shield the company from a run that uses Tavily.
+    """
+    attempted = company.board_discovery_attempted_at
+    if retry_days <= 0 or attempted is None:
+        return False
+    if attempted.tzinfo is None:
+        attempted = attempted.replace(tzinfo=UTC)
+    if now - attempted >= timedelta(days=retry_days):
+        return False
+    return bool(company.board_discovery_used_tavily) or not tavily_enabled
 
 
 def eligible_companies(session: Session) -> tuple[list[Company], int]:
@@ -204,6 +240,21 @@ def _hit_from_endpoint(endpoint: Any, via: str) -> BoardHit | None:
     )
 
 
+def probe_slugs(company: Company) -> tuple[str, ...]:
+    """Slugs worth a request: they must name the company (same `company_key` rule as the
+    Tavily route), be at least `MIN_SLUG_LENGTH` long and never a public-suffix label."""
+    wanted = company_key(company.canonical_name)
+    seed_url = f"https://{company.domain}" if company.domain else ""
+    return tuple(
+        slug
+        for slug in direct_slug_candidates(company.canonical_name, seed_url)
+        if len(slug) >= MIN_SLUG_LENGTH
+        and slug not in PUBLIC_SUFFIX_LABELS
+        and wanted
+        and company_key(slug) == wanted
+    )
+
+
 async def probe_known_ats(
     company: Company,
     *,
@@ -213,9 +264,10 @@ async def probe_known_ats(
     sleeper: Callable[[float], Awaitable[None]],
 ) -> BoardHit | None:
     seed_url = f"https://{company.domain}" if company.domain else ""
-    slugs = direct_slug_candidates(company.canonical_name, seed_url)
+    slugs = probe_slugs(company)
     if not slugs:
         return None
+    wanted = company_key(company.canonical_name)
     endpoint, _requests = await probe_direct_ats(
         company.id,
         company.canonical_name,
@@ -229,7 +281,7 @@ async def probe_known_ats(
     )
     if endpoint is not None:
         hit = _hit_from_endpoint(endpoint, DISCOVERY_VIA_PROBE)
-        if hit is not None:
+        if hit is not None and company_key(hit.board_key) == wanted:
             return hit
     return await probe_inhire(slugs, client=client, resolve_ips=resolve_ips)
 
@@ -285,13 +337,22 @@ async def search_tavily(
     """
     budget.ensure_can_call()
     telemetry = CollectionTelemetry()
-    response = await tavily.search(
-        query=f'"{company.canonical_name}" careers jobs',
-        max_results=10,
-        time_range=None,
-        include_domains=sorted(ALLOWED_ATS_DOMAINS),
-        telemetry=telemetry,
-    )
+    try:
+        # `basic` depth costs one credit, which `ensure_can_call` just proved is left.
+        response = await tavily.search(
+            query=f'"{company.canonical_name}" careers jobs',
+            max_results=10,
+            search_depth="basic",
+            time_range=None,
+            include_domains=sorted(ALLOWED_ATS_DOMAINS),
+            telemetry=telemetry,
+        )
+    except Exception:
+        # The call may have been billed before it failed: count the minimum, never zero.
+        budget.charge(1)
+        report.tavily_queries += 1
+        report.tavily_credits_spent += 1
+        raise
     spent = response.credits_used or telemetry.credits_used or 1
     budget.charge(spent)
     report.tavily_queries += 1
@@ -337,7 +398,7 @@ async def find_boards(
     """Resolve each company to a board: known-ATS probes first, Tavily only as the fallback."""
     report = report if report is not None else BoardDiscoveryReport()
     found: list[tuple[Company, BoardHit]] = []
-    claimed = set(known)
+    claimed = set(known)  # boards that already have a source
     for company in companies:
         report.companies_considered += 1
         name = company.canonical_name
@@ -352,9 +413,15 @@ async def find_boards(
         except Exception:  # noqa: BLE001 - one company's failure never sinks the batch
             report.outcomes.append(CompanyOutcome(name, "probe_error"))
             continue
+        used_tavily = False
         if hit is None and tavily is not None and budget is not None:
+            if report.tavily_disabled_after_errors:
+                report.outcomes.append(CompanyOutcome(name, "no_match_tavily_disabled"))
+                report.attempts.append((company, False))
+                continue
             if report.tavily_budget_stopped:
                 report.outcomes.append(CompanyOutcome(name, "no_match_tavily_budget_exhausted"))
+                report.attempts.append((company, False))
                 continue
             try:
                 hit = await search_tavily(
@@ -367,25 +434,31 @@ async def find_boards(
                     min_interval_seconds=min_interval_seconds,
                     sleeper=sleeper,
                 )
-            except AcquisitionError as error:
-                if error.code is not AcquisitionErrorCode.CREDIT_BUDGET_EXCEEDED:
+                report.tavily_consecutive_errors = 0
+                used_tavily = True
+            except Exception as error:  # noqa: BLE001 - a failed search never sinks the batch
+                if (
+                    isinstance(error, AcquisitionError)
+                    and error.code is AcquisitionErrorCode.CREDIT_BUDGET_EXCEEDED
+                ):
+                    report.tavily_budget_stopped = True
+                    report.outcomes.append(CompanyOutcome(name, "no_match_tavily_budget_exhausted"))
+                else:
+                    report.tavily_consecutive_errors += 1
+                    if report.tavily_consecutive_errors >= MAX_CONSECUTIVE_TAVILY_ERRORS:
+                        report.tavily_disabled_after_errors = True
                     report.outcomes.append(CompanyOutcome(name, "tavily_error"))
-                    continue
-                report.tavily_budget_stopped = True
-                report.outcomes.append(CompanyOutcome(name, "no_match_tavily_budget_exhausted"))
-                continue
-            except Exception:  # noqa: BLE001 - a failed search never sinks the batch
-                report.outcomes.append(CompanyOutcome(name, "tavily_error"))
+                report.attempts.append((company, False))
                 continue
         if hit is None:
             report.outcomes.append(CompanyOutcome(name, "no_match"))
+            report.attempts.append((company, used_tavily))
             continue
         if (hit.source_type, hit.board_key) in claimed:
             report.outcomes.append(
                 CompanyOutcome(name, "board_already_known", hit.source_type, hit.board_key, hit.via)
             )
             continue
-        claimed.add((hit.source_type, hit.board_key))
         found.append((company, hit))
     return found, report
 
@@ -402,9 +475,17 @@ def propose_boards(
 
     Without `apply` nothing is written and the outcome is `would_propose`.
     """
+    claimed: set[tuple[str, str]] = set()
     for company, hit in found:
         name = company.canonical_name
+        board = (hit.source_type, hit.board_key)
+        if board in claimed:
+            report.outcomes.append(
+                CompanyOutcome(name, "board_already_known", hit.source_type, hit.board_key, hit.via)
+            )
+            continue
         if not apply:
+            claimed.add(board)
             report.outcomes.append(
                 CompanyOutcome(name, "would_propose", hit.source_type, hit.board_key, hit.via)
             )
@@ -430,6 +511,8 @@ def propose_boards(
             )
             continue
         outcome = proposal_report.outcomes[0]
+        if outcome.outcome in {"created", "already_proposed"}:
+            claimed.add(board)
         report.outcomes.append(
             CompanyOutcome(
                 name,
@@ -457,16 +540,35 @@ async def discover_boards(
     budget: TavilyCreditBudget | None = None,
     min_interval_seconds: float = 1.0,
     sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    retry_days: int = 14,
+    now: datetime | None = None,
 ) -> BoardDiscoveryReport:
-    """`companies` narrows the run to those given (still only if eligible)."""
+    """`companies` narrows the run to those given (still only if eligible).
+
+    A company an earlier `apply` run found nothing for within `retry_days` is skipped
+    (`retry_days=0` disables the window).
+    """
     eligible, skipped = eligible_companies(session)
     if companies is not None:
         wanted = {company.id for company in companies}
         eligible = [company for company in eligible if company.id in wanted]
-    companies = eligible
+    moment = now or datetime.now(UTC)
+    fresh = [
+        company
+        for company in eligible
+        if not recently_attempted(
+            company,
+            retry_days=retry_days,
+            tavily_enabled=tavily is not None and budget is not None,
+            now=moment,
+        )
+    ]
+    companies = fresh
     if limit is not None:
         companies = companies[: max(0, limit)]
-    report = BoardDiscoveryReport(skipped_with_source=skipped)
+    report = BoardDiscoveryReport(
+        skipped_with_source=skipped, skipped_recent_attempt=len(eligible) - len(fresh)
+    )
     found, report = await find_boards(
         companies,
         client=client,
@@ -479,4 +581,9 @@ async def discover_boards(
         report=report,
     )
     propose_boards(session, found, service=service, report=report, apply=apply)
+    if apply:
+        for company, used_tavily in report.attempts:
+            company.board_discovery_attempted_at = moment
+            company.board_discovery_used_tavily = used_tavily
+        session.commit()
     return report

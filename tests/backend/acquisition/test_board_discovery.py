@@ -21,16 +21,22 @@ from opportunity_radar.acquisition.board_discovery import (
     DISCOVERY_VIA_PROBE,
     DISCOVERY_VIA_TAVILY,
     BoardDiscoveryReport,
+    BoardHit,
     discover_boards,
     eligible_companies,
     probe_inhire,
+    probe_known_ats,
+    probe_slugs,
+    propose_boards,
 )
+from opportunity_radar.acquisition.domain import AcquisitionError, AcquisitionErrorCode
 from opportunity_radar.acquisition.models import SourceDefinitionModel
 from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.acquisition.tavily import TavilyClient, TavilyCreditBudget
 from opportunity_radar.companies.models import Company
 from opportunity_radar.platform.database import create_database_engine
+from scripts import discover_boards as cli
 
 PUBLIC_IP = "93.184.216.34"
 _PREFIX = "R55b6 "
@@ -143,9 +149,11 @@ def _discover(
     apply: bool,
     tavily: bool = False,
     budget: TavilyCreditBudget | None = None,
+    tavily_client: Any = None,
+    retry_days: int = 14,
 ) -> BoardDiscoveryReport:
     async def scenario() -> BoardDiscoveryReport:
-        tclient = net.tavily_client() if tavily else None
+        tclient = tavily_client or (net.tavily_client() if tavily else None)
         async with net.http() as http:
             return await discover_boards(
                 session,
@@ -158,6 +166,7 @@ def _discover(
                 budget=budget,
                 min_interval_seconds=0,
                 sleeper=_no_sleep,
+                retry_days=retry_days,
             )
 
     return _run(scenario())
@@ -416,3 +425,333 @@ def test_board_already_owned_by_another_source_is_not_proposed_twice(session: Se
 
     assert [o.outcome for o in report.outcomes] == ["board_already_known"]
     assert len(_proposals(session)) == 1
+
+
+# --- identity: slug luck is not a match ---------------------------------------------------
+
+
+def test_probe_slugs_drop_public_suffix_short_and_unrelated_labels() -> None:
+    br = Company(canonical_name="R55b6 Empresa", normalized_name="x", domain="empresa.com.br")
+    other = Company(canonical_name="R55b6 Delta Labs", normalized_name="y", domain="gamma.io")
+    short = Company(canonical_name="Ab", normalized_name="z", domain="ab.com")
+
+    assert "com" not in probe_slugs(br)
+    assert probe_slugs(br) == ("r55b6empresa", "r55b6-empresa")
+    assert "gamma" not in probe_slugs(other)
+    assert probe_slugs(short) == ()
+
+
+def test_com_br_domain_never_probes_the_com_slug() -> None:
+    company = Company(canonical_name="R55b6 Empresa", normalized_name="x", domain="empresa.com.br")
+    net = Net()
+
+    async def scenario() -> Any:
+        async with net.http() as http:
+            return await probe_known_ats(
+                company,
+                client=http,
+                resolve_ips=_resolve,
+                min_interval_seconds=0,
+                sleeper=_no_sleep,
+            )
+
+    assert _run(scenario()) is None
+    urls = [str(r.url) for r in net.requests]
+    assert urls
+    assert not any(
+        marker in url
+        for url in urls
+        for marker in ("/boards/com/", "/postings/com", "/job-board/com", "/accounts/com", "//com.")
+    )
+    assert not any(r.headers.get("X-Tenant") == "com" for r in net.requests)
+
+
+@_requires_database
+def test_slug_collision_with_another_companys_board_is_not_a_match(session: Session) -> None:
+    company = Company(
+        canonical_name=f"{_PREFIX}Delta Labs", normalized_name="r55b6-delta-labs", domain="gamma.io"
+    )
+    session.add(company)
+    session.commit()
+    # The domain label `gamma` is somebody else's live board.
+    net = Net(boards={"/v1/boards/gamma/jobs": {"jobs": [{"id": 1}]}})
+
+    report = _discover(session, net, [company], apply=True)
+
+    assert [o.outcome for o in report.outcomes] == ["no_match"]
+    assert _proposals(session) == []
+    assert not any("/boards/gamma/" in str(r.url) for r in net.requests)
+
+
+# --- hit shape ----------------------------------------------------------------------------
+
+
+@_requires_database
+def test_teamtailor_hit_uses_the_career_site_host_as_key_and_url(session: Session) -> None:
+    company = _company(session, "Tt Co")
+    net = Net(
+        boards={"r55b6-tt-co.teamtailor.com/jobs.json": {"items": [{"id": 1}]}},
+    )
+
+    async def probe() -> Any:
+        async with net.http() as http:
+            return await probe_known_ats(
+                company,
+                client=http,
+                resolve_ips=_resolve,
+                min_interval_seconds=0,
+                sleeper=_no_sleep,
+            )
+
+    hit = _run(probe())
+    report = _discover(session, net, [company], apply=True)
+
+    assert (hit.source_type, hit.board_key, hit.board_url) == (
+        "teamtailor",
+        "r55b6-tt-co.teamtailor.com",
+        "https://r55b6-tt-co.teamtailor.com",
+    )
+    assert [o.outcome for o in report.outcomes] == ["created"]
+    (proposal,) = _proposals(session)
+    assert proposal.source_type == "teamtailor"
+    assert proposal.configuration["company_identifier"] == "r55b6-tt-co.teamtailor.com"
+    assert proposal.enabled is False
+
+
+# --- apply: rejected proposals roll back and do not claim the board ------------------------
+
+
+def _failing_once(service: AcquisitionService) -> Callable[..., Any]:
+    real = service.create_source
+    calls = {"n": 0}
+
+    def create_source(**kwargs: Any) -> Any:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise AcquisitionError(AcquisitionErrorCode.INVALID_CONFIGURATION, "boom")
+        return real(**kwargs)
+
+    return create_source
+
+
+@_requires_database
+def test_rejected_proposal_rolls_back_and_the_board_is_not_claimed(session: Session) -> None:
+    first = _company(session, "Rej One")
+    second = _company(session, "Rej Two")
+    service = _service(session)
+    service.create_source = _failing_once(service)  # type: ignore[method-assign]
+    shared = BoardHit(
+        "greenhouse",
+        "r55b6-shared",
+        "https://boards.greenhouse.io/r55b6-shared",
+        DISCOVERY_VIA_PROBE,
+        "direct probe",
+    )
+    report = BoardDiscoveryReport()
+
+    propose_boards(
+        session, [(first, shared), (second, shared)], service=service, report=report, apply=True
+    )
+
+    assert report.outcomes[0].outcome.startswith("rejected")
+    assert report.outcomes[1].outcome == "created"
+    assert [p.configuration["company_name"] for p in _proposals(session)] == [second.canonical_name]
+
+
+@_requires_database
+def test_apply_with_a_rejected_proposal_leaves_nothing_and_no_attempt_stamp(
+    session: Session,
+) -> None:
+    company = _company(session, "Acme Co")
+    net = Net(boards={"/v1/boards/r55b6-acme-co/jobs": {"jobs": [{"id": 1}]}})
+    service = _service(session)
+    service.create_source = _failing_once(service)  # type: ignore[method-assign]
+
+    async def scenario() -> BoardDiscoveryReport:
+        async with net.http() as http:
+            return await discover_boards(
+                session,
+                service=service,
+                client=http,
+                resolve_ips=_resolve,
+                apply=True,
+                companies=[company],
+                min_interval_seconds=0,
+                sleeper=_no_sleep,
+            )
+
+    report = _run(scenario())
+
+    assert report.outcomes[0].outcome.startswith("rejected")
+    assert _proposals(session) == []
+    session.refresh(company)
+    assert company.board_discovery_attempted_at is None
+    assert session.scalar(select(func.count()).select_from(Company)) >= 1  # session usable
+
+
+# --- reruns do not re-probe or re-spend ----------------------------------------------------
+
+
+@_requires_database
+def test_rerun_skips_a_recently_attempted_company_and_spends_no_more_credits(
+    session: Session,
+) -> None:
+    company = _company(session, "Ghost Inc")
+    net = Net(tavily=lambda _b: _tavily_results())
+
+    first = _discover(
+        session, net, [company], apply=True, tavily=True, budget=TavilyCreditBudget(limit=10)
+    )
+    requests_after_first = len(net.requests)
+    second = _discover(
+        session, net, [company], apply=True, tavily=True, budget=TavilyCreditBudget(limit=10)
+    )
+
+    assert net.tavily_calls == 1
+    assert first.tavily_queries == 1 and second.tavily_queries == 0
+    assert second.skipped_recent_attempt == 1 and second.companies_considered == 0
+    assert len(net.requests) == requests_after_first
+    session.refresh(company)
+    assert company.board_discovery_attempted_at is not None
+    assert company.board_discovery_used_tavily is True
+
+
+@_requires_database
+def test_probe_only_attempt_does_not_block_a_later_tavily_run_and_window_expires(
+    session: Session,
+) -> None:
+    company = _company(session, "Ghost Inc")
+    net = Net(tavily=lambda _b: _tavily_results())
+
+    _discover(session, net, [company], apply=True)  # probes only
+    assert net.tavily_calls == 0
+    _discover(session, net, [company], apply=True, tavily=True, budget=TavilyCreditBudget(limit=10))
+    assert net.tavily_calls == 1
+    # Window disabled: tried again even though the paid search already ran.
+    _discover(
+        session,
+        net,
+        [company],
+        apply=True,
+        tavily=True,
+        budget=TavilyCreditBudget(limit=10),
+        retry_days=0,
+    )
+    assert net.tavily_calls == 2
+
+
+@_requires_database
+def test_dry_run_stamps_nothing(session: Session) -> None:
+    company = _company(session, "Ghost Inc")
+
+    _discover(session, Net(), [company], apply=False)
+
+    session.refresh(company)
+    assert company.board_discovery_attempted_at is None
+
+
+# --- Tavily budget and failures ------------------------------------------------------------
+
+
+class _Boom:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def search(self, **_kwargs: Any) -> Any:
+        self.calls += 1
+        raise RuntimeError("provider down")
+
+    async def aclose(self) -> None:
+        return None
+
+
+@_requires_database
+def test_failing_tavily_is_charged_and_stops_after_three_consecutive_errors(
+    session: Session,
+) -> None:
+    companies = [_company(session, f"Miss {n}") for n in range(5)]
+    boom = _Boom()
+    budget = TavilyCreditBudget(limit=10)
+
+    report = _discover(session, Net(), companies, apply=True, tavily_client=boom, budget=budget)
+
+    assert boom.calls == 3
+    assert budget.spent == 3 and report.tavily_credits_spent == 3
+    assert report.tavily_disabled_after_errors is True
+    assert [o.outcome for o in report.outcomes] == [
+        "tavily_error",
+        "tavily_error",
+        "tavily_error",
+        "no_match_tavily_disabled",
+        "no_match_tavily_disabled",
+    ]
+
+
+@_requires_database
+def test_failing_calls_cannot_exceed_the_budget(session: Session) -> None:
+    companies = [_company(session, f"Miss {n}") for n in range(3)]
+    boom = _Boom()
+    budget = TavilyCreditBudget(limit=2)
+
+    report = _discover(session, Net(), companies, apply=True, tavily_client=boom, budget=budget)
+
+    assert boom.calls == 2 and budget.spent == 2
+    assert report.tavily_budget_stopped is True
+
+
+@_requires_database
+def test_max_credits_zero_makes_no_tavily_call(session: Session) -> None:
+    company = _company(session, "Ghost Inc")
+    net = Net(tavily=lambda _b: _tavily_results())
+
+    report = _discover(
+        session, net, [company], apply=True, tavily=True, budget=TavilyCreditBudget(limit=0)
+    )
+
+    assert net.tavily_calls == 0
+    assert report.tavily_budget_stopped is True
+
+
+# --- CLI ----------------------------------------------------------------------------------
+
+
+def test_cli_use_tavily_requires_apply() -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        cli.parse_args(["--use-tavily"])
+    assert exit_info.value.code == 2
+    with pytest.raises(SystemExit):
+        cli.parse_args(["--apply", "--use-tavily", "--max-credits", "-1"])
+    assert cli.parse_args(["--apply", "--use-tavily"]).use_tavily is True
+
+
+def test_default_cli_is_a_dry_run_that_builds_no_tavily_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = cli.parse_args([])
+    assert (args.apply, args.use_tavily) == (False, False)
+    seen: dict[str, Any] = {}
+
+    def forbidden(*_a: Any, **_k: Any) -> Any:
+        raise AssertionError("no Tavily client may be built without --use-tavily")
+
+    async def fake_discover(_session: Any, **kwargs: Any) -> BoardDiscoveryReport:
+        seen.update(kwargs)
+        return BoardDiscoveryReport()
+
+    monkeypatch.setattr(cli, "TavilyClient", forbidden)
+    monkeypatch.setattr(cli, "discover_boards", fake_discover)
+    monkeypatch.setattr(cli, "AcquisitionService", lambda *_a, **_k: object())
+
+    _run(
+        cli.run(
+            None,  # type: ignore[arg-type]
+            apply=args.apply,
+            limit=args.limit,
+            use_tavily=args.use_tavily,
+            max_credits=args.max_credits,
+            retry_days=args.retry_days,
+        )
+    )
+
+    assert seen["apply"] is False
+    assert seen["tavily"] is None and seen["budget"] is None

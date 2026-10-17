@@ -5,7 +5,7 @@ writing nothing. `--apply` writes inert proposals (`enabled=false`, no terms rev
 local test) into the existing homologation queue; this script never enables a source.
 
 Tavily is the fallback for a company no known ATS answers for, and is off unless
-`--use-tavily` is given (a dry-run with `--use-tavily` still spends credits). Its spend is
+`--use-tavily` is given, which requires `--apply` (a dry-run never spends credits). Its spend is
 capped by `--max-credits`, default `TAVILY_CREDIT_BUDGET_PER_RUN` (Settings default 100).
 Re-running is safe: a company with any source, proposed or not, is skipped.
 """
@@ -41,6 +41,8 @@ def _report_json(report: BoardDiscoveryReport) -> dict[str, object]:
     return {
         "companies_considered": report.companies_considered,
         "skipped_with_source": report.skipped_with_source,
+        "skipped_recent_attempt": report.skipped_recent_attempt,
+        "tavily_disabled_after_errors": report.tavily_disabled_after_errors,
         "tavily_queries": report.tavily_queries,
         "tavily_credits_spent": report.tavily_credits_spent,
         "tavily_budget_stopped": report.tavily_budget_stopped,
@@ -58,6 +60,7 @@ async def run(
     limit: int | None,
     use_tavily: bool,
     max_credits: int,
+    retry_days: int = 14,
     min_interval_seconds: float = 1.0,
 ) -> BoardDiscoveryReport:
     tavily: TavilyClient | None = None
@@ -91,17 +94,24 @@ async def run(
                 tavily=tavily,
                 budget=budget,
                 min_interval_seconds=min_interval_seconds,
+                retry_days=retry_days,
             )
     finally:
         if tavily is not None:
             await tavily.aclose()
 
 
-def main() -> int:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     default_budget = int(
         os.environ.get(
             "TAVILY_CREDIT_BUDGET_PER_RUN",
             Settings.model_fields["tavily_credit_budget_per_run"].default,
+        )
+    )
+    default_retry = int(
+        os.environ.get(
+            "BOARD_DISCOVERY_RETRY_DAYS",
+            Settings.model_fields["board_discovery_retry_days"].default,
         )
     )
     parser = argparse.ArgumentParser(description=__doc__)
@@ -112,7 +122,8 @@ def main() -> int:
     parser.add_argument(
         "--use-tavily",
         action="store_true",
-        help="search Tavily for companies no known ATS answers for (spends credits)",
+        help="search Tavily for companies no known ATS answers for (spends credits; "
+        "requires --apply)",
     )
     parser.add_argument(
         "--max-credits",
@@ -120,10 +131,26 @@ def main() -> int:
         default=default_budget,
         help=f"Tavily credit ceiling for this run (default: {default_budget})",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--retry-days",
+        type=int,
+        default=default_retry,
+        help="skip companies a previous --apply run found nothing for within this many "
+        f"days (default: {default_retry}; 0 disables)",
+    )
+    args = parser.parse_args(argv)
+    if args.use_tavily and not args.apply:
+        parser.error("--use-tavily requires --apply (a dry-run never spends Tavily credits).")
+    if args.max_credits < 0:
+        parser.error("--max-credits cannot be negative.")
+    return args
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
-        parser.error("DATABASE_URL is required.")
+        raise SystemExit("DATABASE_URL is required.")
     with Session(create_database_engine(database_url)) as session:
         report = asyncio.run(
             run(
@@ -132,6 +159,7 @@ def main() -> int:
                 limit=args.limit,
                 use_tavily=args.use_tavily,
                 max_credits=args.max_credits,
+                retry_days=args.retry_days,
             )
         )
     print(json.dumps(_report_json(report), ensure_ascii=False, indent=2))
