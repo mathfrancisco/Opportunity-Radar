@@ -119,3 +119,20 @@ def test_an_empty_area_list_means_all_areas_and_has_nothing_to_remove() -> None:
     open_profile = EmploymentPreference(target_role_families=())
 
     assert build_suggestions(open_profile, [_posting("AREA", role_family="DATA")] * 3) == []
+
+
+def test_a_posting_listing_several_profile_countries_counts_for_none() -> None:
+    both = [_posting("LOCATION", allowed_countries=("BR", "PT", "ES"))] * MIN_MARKS
+
+    assert build_suggestions(_PREFERENCES, both) == []
+
+
+def test_a_posting_matching_exactly_one_profile_country_still_counts() -> None:
+    one = [_posting("LOCATION", allowed_countries=("BR", "US", "DE"))] * MIN_MARKS
+
+    [suggestion] = build_suggestions(_PREFERENCES, one)
+    assert (suggestion.kind, suggestion.value, suggestion.marks) == (
+        SuggestionKind.REMOVE_COUNTRY,
+        "BR",
+        2,
+    )

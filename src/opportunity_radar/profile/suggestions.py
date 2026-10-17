@@ -75,9 +75,13 @@ def build_suggestions(
             if level in levels and level != "UNKNOWN":
                 counts[(SuggestionKind.REMOVE_SENIORITY, level)] += 1
         elif posting.reason == "LOCATION":
-            for country in {item.upper() for item in posting.allowed_countries}:
-                if country in countries and country != ANY_COUNTRY.upper():
-                    counts[(SuggestionKind.REMOVE_COUNTRY, country)] += 1
+            # A multi-country posting says nothing about one country: it counts only when
+            # exactly one of the profile's countries is among those it allows.
+            matched = {
+                item.upper() for item in posting.allowed_countries
+            } & (countries - {ANY_COUNTRY.upper()})
+            if len(matched) == 1:
+                counts[(SuggestionKind.REMOVE_COUNTRY, next(iter(matched)))] += 1
         elif posting.reason == "COMPANY":
             name = (posting.company_name or "").strip()
             if name:
