@@ -327,3 +327,18 @@ def test_only_matching_v6_applies_the_unknown_score_and_the_band() -> None:
     assert _factor(unknown, "TECHNOLOGY_FIT").raw_score == UNKNOWN_FACTOR_SCORE
     assert adjacent.eligibility.status is not EligibilityStatus.INELIGIBLE
     assert _factor(adjacent, "SENIORITY_SCOPE").raw_score == SENIORITY_ADJACENT_SCORE
+
+
+@pytest.mark.parametrize("version", ["matching-v1", "matching-v6", "matching-v10"])
+def test_a_version_in_the_matching_vn_pattern_builds_a_rule_set(version: str) -> None:
+    assert default_rule_set(version).version == version
+
+
+@pytest.mark.parametrize(
+    "version",
+    ["", "v6", "matching-6", "matching-v", "matching-vsix", "matching-v6.1", "Matching-v6",
+     " matching-v6", "matching-v6 ", "matching-v-1"],
+)
+def test_a_version_outside_the_matching_vn_pattern_is_rejected(version: str) -> None:
+    with pytest.raises(ValueError, match="matching-vN"):
+        default_rule_set(version)
