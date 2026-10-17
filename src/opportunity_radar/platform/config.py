@@ -219,6 +219,9 @@ class Settings(BaseSettings):
     # monthly ceiling is a concern, until real usage is measured (docs/41-spec-tavily.md,
     # section 9).
     tavily_credit_budget_per_run: int = 100
+    # R55-B6: `discover_boards --apply` does not retry a company it found no board for
+    # within this many days.
+    board_discovery_retry_days: int = 14
     # F48-08: source types whose items never go through Tavily `/extract` (comma
     # separated). Workday pages are JS-rendered: every call failed and burned credits.
     extraction_skip_source_types: str = "workday,inhire"
