@@ -295,3 +295,61 @@ export async function saveProfileVersion(
     'salvar a versão',
   )
 }
+
+export type ProfileSuggestionKind =
+  | 'REMOVE_ROLE_FAMILY'
+  | 'REMOVE_SENIORITY'
+  | 'REMOVE_COUNTRY'
+  | 'LOWER_COMPANY_PRIORITY'
+
+/** R55-D4: an adjustment the "não é para mim" feedback points at. Read-only: never applied. */
+export interface ProfileSuggestion {
+  kind: ProfileSuggestionKind
+  value: string
+  /** Distinct postings the owner marked "não é para mim" for this cause. */
+  marks: number
+}
+
+export interface ProfileSuggestions {
+  /** Marks with the same cause before a suggestion appears. */
+  minMarks: number
+  suggestions: ProfileSuggestion[]
+}
+
+const suggestionKinds: readonly string[] = [
+  'REMOVE_ROLE_FAMILY',
+  'REMOVE_SENIORITY',
+  'REMOVE_COUNTRY',
+  'LOWER_COMPANY_PRIORITY',
+]
+
+function parseSuggestion(value: unknown): ProfileSuggestion | null {
+  if (
+    !isRecord(value) ||
+    typeof value.kind !== 'string' ||
+    !suggestionKinds.includes(value.kind) ||
+    typeof value.value !== 'string'
+  ) {
+    return null
+  }
+  return {
+    kind: value.kind as ProfileSuggestionKind,
+    value: value.value,
+    marks: numberOrNull(value.marks) ?? 0,
+  }
+}
+
+export async function getProfileSuggestions(): Promise<ProfileSuggestions> {
+  const response = await privateFetch(apiUrl('/profile/suggestions'), {
+    headers: { Accept: 'application/json' },
+  })
+  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  const body: unknown = await response.json()
+  if (!isRecord(body) || !Array.isArray(body.suggestions)) {
+    throw new Error('A API retornou sugestões de perfil inválidas.')
+  }
+  return {
+    minMarks: numberOrNull(body.min_marks) ?? 2,
+    suggestions: parseList(body.suggestions, parseSuggestion),
+  }
+}
