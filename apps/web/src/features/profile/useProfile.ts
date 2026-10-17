@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getActiveProfile,
+  getProfileSuggestions,
   listProfileVersions,
   saveProfileVersion,
   type ProfileDraft,
@@ -29,4 +30,8 @@ export function useSaveProfile() {
       void client.invalidateQueries({ queryKey: ['overview'] })
     },
   })
+}
+
+export function useProfileSuggestions() {
+  return useQuery({ queryKey: ['profile', 'suggestions'], queryFn: getProfileSuggestions })
 }

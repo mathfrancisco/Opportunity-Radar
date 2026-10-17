@@ -85,6 +85,8 @@ export interface OpportunityDetail {
   normalizationResults: NormalizationResult[]
   siblingLocations: SiblingLocation[]
   relevanceMark: RelevanceMark | null
+  /** R55-D5: hours absent from the source board before the posting is closed. */
+  absenceAfterHours: number | null
 }
 
 export interface DuplicateCandidate {
@@ -243,6 +245,10 @@ export async function getOpportunity(opportunityId: string): Promise<Opportunity
       .map(parseSiblingLocation)
       .filter((item): item is SiblingLocation => item !== null),
     relevanceMark: parseRelevanceMark(body.relevance_mark),
+    absenceAfterHours:
+      typeof body.absence_after_hours === 'number' && body.absence_after_hours > 0
+        ? body.absence_after_hours
+        : null,
   }
 }
 

@@ -29,6 +29,11 @@ from opportunity_radar.profile.domain import (
     Skill,
 )
 from opportunity_radar.profile.service import ProfileService
+from opportunity_radar.profile.suggestions import (
+    MIN_MARKS,
+    build_suggestions,
+    current_negative_marks,
+)
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 
@@ -132,6 +137,40 @@ def get_profile(
     identity: RequestIdentity = Depends(authenticated_identity),
 ) -> ProfileVersionResponse:
     return _execute(lambda: ProfileService(session, identity.sub).get_active())
+
+
+class ProfileSuggestionResponse(BaseModel):
+    kind: str
+    value: str
+    marks: int
+
+
+class ProfileSuggestionsResponse(BaseModel):
+    #: Distinct "not for me" marks with the same cause before a suggestion appears.
+    min_marks: int
+    suggestions: list[ProfileSuggestionResponse]
+
+
+@router.get("/suggestions", response_model=ProfileSuggestionsResponse)
+def get_profile_suggestions(
+    session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
+) -> ProfileSuggestionsResponse:
+    """R55-D4: read-only. The owner applies a suggestion by saving a new profile version."""
+    try:
+        active = ProfileService(session, identity.sub).get_active()
+    except ProfileNotFoundError:
+        return ProfileSuggestionsResponse(min_marks=MIN_MARKS, suggestions=[])
+    found = build_suggestions(
+        active.snapshot.preferences, current_negative_marks(session, identity.sub)
+    )
+    return ProfileSuggestionsResponse(
+        min_marks=MIN_MARKS,
+        suggestions=[
+            ProfileSuggestionResponse(kind=item.kind.value, value=item.value, marks=item.marks)
+            for item in found
+        ],
+    )
 
 
 @router.get("/versions", response_model=list[ProfileVersionResponse])

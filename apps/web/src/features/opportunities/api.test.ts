@@ -96,6 +96,14 @@ describe('getOpportunity', () => {
     expect(detail.occurrences[0].payloadExpiredAt).toBeNull()
   })
 
+  it('lê o prazo de ausência da API e não inventa um quando falta', async () => {
+    respond({ id: 'opportunity-1', absence_after_hours: 48 })
+    expect((await getOpportunity('opportunity-1')).absenceAfterHours).toBe(48)
+
+    respond({ id: 'opportunity-1' })
+    expect((await getOpportunity('opportunity-1')).absenceAfterHours).toBeNull()
+  })
+
   it('mostra a ocorrência cujo conteúdo bruto a retenção já expirou', async () => {
     respond({
       id: 'opportunity-1',

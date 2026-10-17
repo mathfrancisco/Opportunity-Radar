@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render } from '../components/testing'
 import { type OpportunityDetail } from '../features/opportunities/api'
 import {
+  AbsenceRule,
   DuplicateCandidates,
   OpportunityDescription,
   OpportunityDetailPage,
@@ -58,6 +59,7 @@ function opportunity(overrides: Partial<OpportunityDetail> = {}): OpportunityDet
     normalizationResults: [],
     siblingLocations: [],
     relevanceMark: null,
+    absenceAfterHours: 24,
     ...overrides,
   }
 }
@@ -314,6 +316,37 @@ describe('DuplicateCandidates', () => {
   })
 })
 
+describe('AbsenceRule (R55-D5)', () => {
+  it('usa o prazo que a API informa, não um número fixo', () => {
+    const container = render(<AbsenceRule hours={72} status="ACTIVE" />)
+
+    expect(container.textContent).toContain('mais de 72 h')
+    expect(container.textContent).not.toContain('24 h')
+  })
+
+  it('sem o prazo da API, não inventa um número', () => {
+    const container = render(<AbsenceRule hours={null} status="ACTIVE" />)
+
+    expect(container.textContent).not.toMatch(/\d+ h/)
+    expect(container.textContent).toContain('prazo configurado')
+  })
+
+  it('numa vaga encerrada, só enuncia a regra e não afirma um motivo', () => {
+    const container = render(<AbsenceRule hours={24} status="CLOSED" />)
+
+    expect(container.textContent).toContain('Regra de encerramento')
+    expect(container.textContent).toContain('mais de 24 h')
+    expect(container.textContent).not.toContain('Por que está encerrada')
+  })
+
+  it('numa vaga ativa, abre com a regra geral', () => {
+    const container = render(<AbsenceRule hours={24} status="ACTIVE" />)
+
+    expect(container.textContent).toContain('Quando a vaga é encerrada')
+    expect(container.textContent).not.toContain('Regra de encerramento')
+  })
+})
+
 describe('SiblingLocations (F48-10)', () => {
   it('lists the other cities with links to each opportunity', () => {
     const container = renderWithProviders(
@@ -386,6 +419,7 @@ describe('OpportunityDetailPage', () => {
             contract_type: detail.contractType,
             description: detail.description,
             lifecycle_status: detail.lifecycleStatus,
+          absence_after_hours: detail.absenceAfterHours,
             published_at: detail.publishedAt,
             recency_effective_date: detail.recencyEffectiveDate,
             recency_basis: detail.recencyBasis,
@@ -474,6 +508,7 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
               contract_type: detail.contractType,
               description: detail.description,
               lifecycle_status: detail.lifecycleStatus,
+          absence_after_hours: detail.absenceAfterHours,
               published_at: detail.publishedAt,
               recency_effective_date: detail.recencyEffectiveDate,
               recency_basis: detail.recencyBasis,
@@ -532,6 +567,20 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     expect(panel.textContent).toContain('Relevante')
     expect(panel.querySelector('#candidatura')).not.toBeNull()
     expect(panel.textContent).toContain('Registrar interesse')
+  })
+
+  it('explica na tela da vaga quando ela é encerrada por ausência (R55-D5)', async () => {
+    const container = await renderDetail()
+
+    const facts = container.querySelector('#resumo') as HTMLElement
+    const rule = facts.querySelector('[data-testid="absence-rule"]') as HTMLElement
+    expect(rule).not.toBeNull()
+    expect(rule.textContent).toContain('Quando a vaga é encerrada')
+    expect(rule.textContent).toContain('mais de 24 h')
+    expect(rule.textContent).toContain('absence_after_hours')
+    expect(rule.textContent).toContain('execução completa')
+    expect(rule.textContent).toContain('Execuções parciais ou com falha não encerram nada')
+    expect(rule.textContent).toContain('reaparecer')
   })
 
   it('separa o matching determinístico da análise de IA em regiões rotuladas', async () => {

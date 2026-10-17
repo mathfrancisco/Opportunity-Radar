@@ -11,6 +11,7 @@ import {
 import { ConflictError } from '../lib/api'
 import { Button } from './Button'
 import { Card } from './Card'
+import { ConfigValue } from './ConfigValue'
 import { PrimaryText, SecondaryText } from './cells'
 import { DataTable, RowSelect } from './DataTable'
 import { controlClassName } from './Field'
@@ -102,7 +103,9 @@ function SequentialCard({
           {Object.entries(record.configuration).map(([key, value]) => (
             <div className="flex gap-2" key={key}>
               <dt className="text-muted">{key}</dt>
-              <dd className="font-medium">{String(value)}</dd>
+              <dd className="font-medium">
+                <ConfigValue value={value} />
+              </dd>
             </div>
           ))}
         </dl>

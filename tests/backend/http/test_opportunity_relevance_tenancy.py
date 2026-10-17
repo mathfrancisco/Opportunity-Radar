@@ -186,3 +186,36 @@ def test_detail_uses_the_callers_owner_subject(monkeypatch) -> None:
     assert response.relevance_mark is not None
     assert response.relevance_mark.note == "A only"
     assert response.relevance_mark.profile_version_id == PROFILE_A
+
+
+def test_detail_reports_the_configured_absence_window(monkeypatch) -> None:
+    """R55-D5: the screen states the window the closing rule really uses."""
+    opportunity = _opportunity()
+
+    class Repository:
+        def __init__(self, session) -> None:
+            pass
+
+        def get(self, opportunity_id):
+            return opportunity
+
+        def current_relevance_mark(self, opportunity_id, *, owner_sub: str):
+            return None
+
+        def posting_group_siblings(self, item):
+            return []
+
+    monkeypatch.setattr(http_opportunities, "OpportunityRepository", Repository)
+    monkeypatch.setattr(
+        http_opportunities,
+        "get_settings",
+        lambda: SimpleNamespace(absence_after_hours=72),
+    )
+
+    response = http_opportunities.get_opportunity(
+        OPPORTUNITY_ID,
+        session=object(),
+        identity=RequestIdentity(sub=OWNER_A, is_owner=False),
+    )
+
+    assert response.absence_after_hours == 72

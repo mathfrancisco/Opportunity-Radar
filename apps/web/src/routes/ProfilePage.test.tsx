@@ -16,6 +16,7 @@ function version(
     skills?: object[]
     targetRoleFamilies?: string[]
     acceptedSeniorities?: string[]
+    countries?: string[]
   } = {},
 ) {
   return {
@@ -29,7 +30,7 @@ function version(
     preferences: {
       work_modes: [],
       contracts: [],
-      countries: [],
+      countries: extra.countries ?? [],
       timezone_start_hour: null,
       timezone_end_hour: null,
       compensation_min: null,
@@ -278,6 +279,197 @@ describe('ProfilePage', () => {
       'UNKNOWN',
       'SENIOR',
     ])
+  })
+})
+
+// R55-D4: "Não é para mim" feedback becomes a suggested adjustment, never an automatic one.
+describe('ProfilePage — ajustes sugeridos pelo feedback', () => {
+  const suggestionsBody = {
+    min_marks: 2,
+    suggestions: [
+      { kind: 'REMOVE_SENIORITY', value: 'MID', marks: 3 },
+      { kind: 'REMOVE_ROLE_FAMILY', value: 'DATA', marks: 2 },
+      { kind: 'LOWER_COMPANY_PRIORITY', value: 'Acme Corp', marks: 2 },
+    ],
+  }
+
+  function stubProfile(suggestions: unknown) {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input)
+      if (init?.method === 'POST') return new Response(JSON.stringify(version('version-2', 4, [])))
+      if (url.endsWith('/profile/suggestions')) {
+        return new Response(JSON.stringify(suggestions))
+      }
+      if (url.endsWith('/profile/versions')) return new Response('[]')
+      return new Response(
+        JSON.stringify(
+          version('version-1', 3, [], {
+            targetRoleFamilies: ['SOFTWARE_ENGINEERING', 'DATA'],
+          }),
+        ),
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  it('mostra cada sugestão com o motivo e a contagem de marcas', async () => {
+    stubProfile(suggestionsBody)
+
+    const container = renderPage(<ProfilePage />)
+    await flush(6)
+
+    const section = container.querySelector('#ajustes-sugeridos') as HTMLElement
+    expect(section.querySelector('h2')?.textContent).toBe('Ajustes sugeridos pelo seu feedback')
+    expect(section.textContent).toContain('Nada muda sozinho')
+    expect(section.textContent).toContain('Remover "Pleno" das senioridades aceitas.')
+    expect(section.textContent).toContain('3 vagas do nível Pleno marcadas')
+    expect(section.textContent).toContain('Remover "Dados" das áreas de interesse.')
+    expect(section.textContent).toContain('Reduzir a prioridade da empresa Acme Corp.')
+    expect(section.querySelector('a[href="/companies"]')).not.toBeNull()
+  })
+
+  it('não mostra a seção quando não há sugestão', async () => {
+    stubProfile({ min_marks: 2, suggestions: [] })
+
+    const container = renderPage(<ProfilePage />)
+    await flush(6)
+
+    expect(container.querySelector('#ajustes-sugeridos')).toBeNull()
+    expect(container.querySelector('form')).not.toBeNull()
+  })
+
+  it('aplicar altera só o rascunho do formulário e nunca grava uma versão', async () => {
+    const fetchMock = stubProfile(suggestionsBody)
+
+    const container = renderPage(<ProfilePage />)
+    await flush(6)
+
+    const boxes = () => [
+      ...container.querySelectorAll<HTMLInputElement>('form fieldset input[type="checkbox"]'),
+    ]
+    const box = (label: string) =>
+      boxes().find((input) => input.closest('label')?.textContent?.includes(label))
+    expect(box('Pleno')?.checked).toBe(true)
+    expect(box('Dados')?.checked).toBe(true)
+
+    const apply = [...container.querySelectorAll('#ajustes-sugeridos button')].find((button) =>
+      button.closest('li')?.textContent?.includes('Pleno'),
+    ) as HTMLButtonElement
+    expect(apply.textContent).toBe('Aplicar ao rascunho')
+    await act(async () => {
+      apply.click()
+    })
+
+    expect(box('Pleno')?.checked).toBe(false)
+    expect(box('Dados')?.checked).toBe(true)
+    expect(apply.textContent).toBe('Aplicado ao rascunho')
+    expect(apply.disabled).toBe(true)
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0)
+  })
+
+  it('aplicar compara sem diferenciar maiúsculas e minúsculas', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input)
+      if (init?.method === 'POST') return new Response(JSON.stringify(version('version-2', 4, [])))
+      if (url.endsWith('/profile/suggestions')) {
+        return new Response(
+          JSON.stringify({
+            min_marks: 2,
+            suggestions: [{ kind: 'REMOVE_COUNTRY', value: 'PT', marks: 2 }],
+          }),
+        )
+      }
+      if (url.endsWith('/profile/versions')) return new Response('[]')
+      return new Response(
+        JSON.stringify(version('version-1', 3, [], { countries: ['br', 'pt'] })),
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const container = renderPage(<ProfilePage />)
+    await flush(8)
+
+    const countries = () =>
+      (container.querySelector('input[placeholder="BR, PT"]') as HTMLInputElement).value
+    const apply = container.querySelectorAll<HTMLButtonElement>('#ajustes-sugeridos button')[0]
+    expect(countries()).toBe('br, pt')
+    expect(apply.disabled).toBe(false)
+    await act(async () => {
+      apply.click()
+    })
+
+    expect(countries()).toBe('br')
+    expect(apply.disabled).toBe(true)
+  })
+
+  it('aplicar não mexe em países que não casam com a sugestão', async () => {
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const url = String(input)
+      if (url.endsWith('/profile/suggestions')) {
+        return new Response(
+          JSON.stringify({
+            min_marks: 2,
+            suggestions: [{ kind: 'REMOVE_COUNTRY', value: 'PT', marks: 2 }],
+          }),
+        )
+      }
+      if (url.endsWith('/profile/versions')) return new Response('[]')
+      return new Response(JSON.stringify(version('version-1', 3, [], { countries: ['br'] })))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const container = renderPage(<ProfilePage />)
+    await flush(8)
+
+    const apply = container.querySelectorAll<HTMLButtonElement>('#ajustes-sugeridos button')[0]
+    expect(apply.textContent).toBe('Aplicado ao rascunho')
+    expect(apply.disabled).toBe(true)
+  })
+
+  it('salvar depois de aplicar envia a preferência ajustada como nova versão', async () => {
+    const fetchMock = stubProfile(suggestionsBody)
+
+    const container = renderPage(<ProfilePage />)
+    await flush(6)
+
+    const apply = [...container.querySelectorAll('#ajustes-sugeridos button')].find((button) =>
+      button.closest('li')?.textContent?.includes('Dados'),
+    ) as HTMLButtonElement
+    await act(async () => {
+      apply.click()
+    })
+    await act(async () => {
+      container
+        .querySelector('form')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+    await flush()
+
+    const posts = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')
+    expect(posts).toHaveLength(1)
+    const body = JSON.parse(String(posts[0][1]?.body)) as {
+      preferences: { target_role_families: string[] }
+    }
+    expect(body.preferences.target_role_families).toEqual(['SOFTWARE_ENGINEERING'])
+  })
+
+  it('uma falha ao ler as sugestões não impede editar o perfil', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.endsWith('/profile/suggestions')) return new Response('{}', { status: 500 })
+        if (url.endsWith('/profile/versions')) return new Response('[]')
+        return new Response(JSON.stringify(version('version-1', 3, [])))
+      }),
+    )
+
+    const container = renderPage(<ProfilePage />)
+    await flush(6)
+
+    expect(container.querySelector('#ajustes-sugeridos')).toBeNull()
+    expect(container.querySelector('form')).not.toBeNull()
   })
 })
 

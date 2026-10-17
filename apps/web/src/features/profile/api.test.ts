@@ -1,7 +1,7 @@
 import { installTestAuth } from '../../test/auth'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConflictError } from '../../lib/api'
-import { emptyPreferences, getActiveProfile, saveProfileVersion } from './api'
+import { emptyPreferences, getActiveProfile, getProfileSuggestions, saveProfileVersion } from './api'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -174,6 +174,48 @@ describe('saveProfileVersion', () => {
     await expect(saving).rejects.toBeInstanceOf(ConflictError)
     await expect(saving).rejects.toThrow(/nada foi gravado.*Recarregue para ver a versão atual/)
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('getProfileSuggestions (R55-D4)', () => {
+  it('lê as sugestões em somente leitura e descarta tipos desconhecidos', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            min_marks: 2,
+            suggestions: [
+              { kind: 'REMOVE_SENIORITY', value: 'MID', marks: 3 },
+              { kind: 'DELETE_EVERYTHING', value: 'x', marks: 9 },
+              { kind: 'REMOVE_COUNTRY', marks: 2 },
+            ],
+          }),
+        ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await getProfileSuggestions()
+
+    expect(result).toEqual({
+      minMarks: 2,
+      suggestions: [{ kind: 'REMOVE_SENIORITY', value: 'MID', marks: 3 }],
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const calls = fetchMock.mock.calls as unknown as [string, RequestInit | undefined][]
+    expect(calls[0][0]).toBe('/api/profile/suggestions')
+    expect(calls[0][1]?.method).toBeUndefined()
+  })
+
+  it('falha, em vez de inventar sugestões, quando a resposta não tem o formato esperado', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ items: [] }))))
+
+    await expect(getProfileSuggestions()).rejects.toThrow(/sugestões de perfil inválidas/)
+  })
+
+  it('falha com o status quando a API recusa', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 503 })))
+
+    await expect(getProfileSuggestions()).rejects.toThrow(/503/)
   })
 })
 
