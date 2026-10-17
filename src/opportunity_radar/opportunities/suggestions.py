@@ -1012,10 +1012,14 @@ def accept_suggestion(
             "the posting already has a country; reclassify instead of overwriting it"
         )
     if suggestion.field == SuggestibleField.COUNTRY.value:
+        from opportunity_radar.opportunities.service import (
+            AI_CONFIRMED_COUNTRIES_PREFIX,
+        )
+
         # A person confirmed it: only now does the posting carry the country, and only a
         # later re-evaluation (never this call) can turn it into a different verdict.
         opportunity.allowed_countries = [suggestion.value]
-        opportunity.allowed_countries_version = f"ai-confirmed:{suggestion.prompt_version}"[:32]
+        opportunity.allowed_countries_version = f"{AI_CONFIRMED_COUNTRIES_PREFIX}{suggestion.prompt_version}"[:32]
     elif suggestion.field == SuggestibleField.WORK_AUTHORIZATION.value:
         # No canonical column holds the stance yet: the review is recorded on the
         # suggestion and nothing else changes (documented gap of R55-C5).

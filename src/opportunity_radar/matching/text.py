@@ -77,20 +77,6 @@ _JOB_HEADINGS = (
     r"requisitos",
     r"qualifica[çc][õo]es",
     r"diferenciais",
-    # Plain-text headings that open the job part after an institutional block (R55-C review).
-    r"what we(?:'re| are) looking for",
-    r"your profile",
-    r"(?:technical |key |core )?skills(?: and experience)?",
-    r"must[- ]haves?",
-    r"(?:required )?experience",
-    r"job description",
-    r"(?:the )?position",
-    r"perfil(?: da vaga| desejado)?",
-    r"compet[êe]ncias",
-    r"habilidades",
-    r"experi[êe]ncia",
-    r"descri[çc][ãa]o da vaga",
-    r"o que buscamos",
 )
 
 
@@ -131,9 +117,28 @@ _DECISIVE_FACT = re.compile(
     re.IGNORECASE,
 )
 
+#: Plain-text headings that only end a dropped institutional block (R55-C review); kept out
+#: of `split_sections` so a bare "Skills" inside "Requirements" does not split it.
+_SKIP_EXIT_HEADINGS = (
+    r"what we(?:'re| are) looking for",
+    r"your profile",
+    r"(?:technical |key |core )?skills(?: and experience)?",
+    r"must[- ]haves?",
+    r"(?:required )?experience",
+    r"job description",
+    r"(?:the )?position",
+    r"perfil(?: da vaga| desejado)?",
+    r"compet[êe]ncias",
+    r"habilidades",
+    r"experi[êe]ncia",
+    r"descri[çc][ãa]o da vaga",
+    r"o que buscamos",
+)
+
 _BOILERPLATE = _whole_line(_BOILERPLATE_HEADINGS)
 _PRIORITY_HEADING = _whole_line(_PRIORITY_HEADINGS)
 _JOB_HEADING = _whole_line(_JOB_HEADINGS)
+_SKIP_EXIT_HEADING = _whole_line(_SKIP_EXIT_HEADINGS)
 # A marked heading — from `<hN>` or Markdown — or a short line ending in a colon ends a
 # boilerplate section. Anything else, bullets included, still belongs to it.
 _MARKED_HEADING = re.compile(r"^\s*(?:#+\s*\S.*|[^\s\-•*][^.!?]{0,60}:)\s*$")
@@ -187,6 +192,7 @@ def clean_description_report(text: str | None) -> CleanedText:
             continue
         if skipping and (
             _JOB_HEADING.match(line)
+            or _SKIP_EXIT_HEADING.match(line)
             or _MARKED_HEADING.match(line)
             or _opens_block(line, lines[index + 1 :])
         ):
