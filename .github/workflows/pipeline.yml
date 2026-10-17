@@ -151,7 +151,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -645,7 +645,7 @@ jobs:
           docker compose -f compose.yaml -f compose.ci.yaml up --detach --force-recreate worker
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/health/live
       - name: Set up Node.js for the browser journey
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -670,7 +670,7 @@ jobs:
         run: npx playwright test --project=offline-no-clerk-config --project=api-authenticated
       - name: Upload the offline browser project's screenshots
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           # Only the offline project produces browser output; the API project is Node-side
           # and its bearer never reaches a trace, report or screenshot.
@@ -728,7 +728,7 @@ jobs:
         run: python scripts/check_tenancy_release_gate.py
       - name: Set up QEMU for cloud runtime images
         if: matrix.cloud_runtime
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4
       - name: Log in to GHCR
