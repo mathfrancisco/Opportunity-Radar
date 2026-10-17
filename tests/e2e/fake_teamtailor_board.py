@@ -20,8 +20,12 @@ the collector under test sees.
 """
 
 import json
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
+
+#: Inside the 7-day ingest window (R55-E1).
+RECENT = (datetime.now(UTC) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 JOBS_PATH = "/jobs.json"
 
@@ -35,7 +39,7 @@ FEED = {
             "id": "radar-ci-1",
             "title": "Senior Python Engineer",
             "url": "https://jobs.example.test/jobs/radar-ci-1",
-            "date_published": "2026-09-20T12:00:00Z",
+            "date_published": RECENT,
             "content_html": "<p>Required: Python and ReactJS. Full-time remote position.</p>",
             "_jobposting": {
                 "@context": "https://schema.org",

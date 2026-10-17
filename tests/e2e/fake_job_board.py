@@ -29,12 +29,17 @@ runtime control file as `fake_groq.py`'s `FAKE_GROQ_MODE`, flipped with
 import json
 import os
 import re
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HEALTHY_BOARD = "radar-ci"
 #: A browser test's own board, one per run (F20-47's fix for the title collision above).
 DYNAMIC_BOARD_PREFIX = "e2e-"
 ETAG = '"radar-ci-v1"'
+
+#: Recent enough for the 7-day ingest window (R55-E1), fixed for the container's life so
+#: the ETag and repeated collections stay stable.
+UPDATED_AT = (datetime.now(UTC) - timedelta(days=1)).replace(microsecond=0).isoformat()
 
 MODE_FILE = os.environ.get("FAKE_BOARD_MODE_FILE", "/tmp/fake_board_mode")
 
@@ -44,7 +49,7 @@ JOBS = [
         "internal_job_id": 9001,
         "title": "Senior Python Engineer",
         "absolute_url": "https://jobs.example.test/radar-ci/4242",
-        "updated_at": "2026-09-20T12:00:00-04:00",
+        "updated_at": UPDATED_AT,
         "requisition_id": "RADAR-1",
         "location": {"name": "Remote"},
         "content": (
@@ -77,16 +82,16 @@ def _jobs_for(board: str) -> list[dict[str, object]] | None:
                 "internal_job_id": 9100,
                 "title": f"Senior Python Engineer ({board})",
                 "absolute_url": f"https://jobs.example.test/{board}/1",
-                "updated_at": "2026-09-20T12:00:00-04:00",
+                "updated_at": UPDATED_AT,
                 "requisition_id": f"{board.upper()}-1",
                 "location": {"name": "Remote"},
                 "content": (
-            "Required: Python and ReactJS. Full-time remote position. "
-            # Longer than the 200 characters the automatic analysis queue asks for (F51-12).
-            "The team ships a product used every day by its customers, plans the work in "
-            "short cycles, reviews every change before it goes out and writes down what "
-            "it decides so that people in other time zones can follow along."
-        ),
+                    "Required: Python and ReactJS. Full-time remote position. "
+                    # Longer than the 200 characters the automatic analysis queue asks for (F51-12).
+                    "The team ships a product used every day by its customers, plans the work in "
+                    "short cycles, reviews every change before it goes out and writes down what "
+                    "it decides so that people in other time zones can follow along."
+                ),
                 "departments": [{"id": 1, "name": "Engineering"}],
                 "offices": [{"id": 1, "name": "Remote"}],
                 "metadata": [],
