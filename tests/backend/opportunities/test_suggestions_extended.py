@@ -98,7 +98,11 @@ def test_the_v2_prompt_asks_for_all_five_fields() -> None:
 
     assert prompt.version == "job_classification/v2"
     assert set(prompt.output_schema["required"]) == {
-        "role_family", "seniority", "work_mode", "country", "work_authorization",
+        "role_family",
+        "seniority",
+        "work_mode",
+        "country",
+        "work_authorization",
     }
 
 
@@ -115,17 +119,26 @@ class TestWithDatabase:
             session.add(opportunity)
             session.commit()
             try:
-                provider = FakeProvider({_FAST_MODEL: [_answer(
-                    country={"value": "gb", "evidence": "United Kingdom only"},
-                    work_authorization={
-                        "value": "SPONSORSHIP_NOT_AVAILABLE",
-                        "evidence": "cannot offer visa sponsorship",
-                    },
-                )]})
+                provider = FakeProvider(
+                    {
+                        _FAST_MODEL: [
+                            _answer(
+                                country={"value": "gb", "evidence": "United Kingdom only"},
+                                work_authorization={
+                                    "value": "SPONSORSHIP_NOT_AVAILABLE",
+                                    "evidence": "cannot offer visa sponsorship",
+                                },
+                            )
+                        ]
+                    }
+                )
                 outcome = asyncio.run(
                     suggest_fields(
-                        session, _router(provider), opportunity,
-                        prompt=load_classification_prompt("v2"), extended=True,
+                        session,
+                        _router(provider),
+                        opportunity,
+                        prompt=load_classification_prompt("v2"),
+                        extended=True,
                     )
                 )
 
@@ -153,16 +166,26 @@ class TestWithDatabase:
             session.add(opportunity)
             session.commit()
             try:
-                provider = FakeProvider({_FAST_MODEL: [_answer(
-                    country={"value": "ANY", "evidence": "United Kingdom only"},
-                    work_authorization={
-                        "value": "SPONSORSHIP_AVAILABLE", "evidence": "we love sponsoring",
-                    },
-                )]})
+                provider = FakeProvider(
+                    {
+                        _FAST_MODEL: [
+                            _answer(
+                                country={"value": "ANY", "evidence": "United Kingdom only"},
+                                work_authorization={
+                                    "value": "SPONSORSHIP_AVAILABLE",
+                                    "evidence": "we love sponsoring",
+                                },
+                            )
+                        ]
+                    }
+                )
                 outcome = asyncio.run(
                     suggest_fields(
-                        session, _router(provider), opportunity,
-                        prompt=load_classification_prompt("v2"), extended=True,
+                        session,
+                        _router(provider),
+                        opportunity,
+                        prompt=load_classification_prompt("v2"),
+                        extended=True,
                     )
                 )
 
@@ -210,24 +233,37 @@ class TestWithDatabase:
                     ProfileSnapshot(profile_version_id=profile_id, countries=("BR",)),
                     default_rule_set(),
                 )
-                stored = session.execute(
-                    text(
-                        "SELECT verdict FROM matching.current_assessment "
-                        "WHERE opportunity_id = :id"
-                    ),
-                    {"id": row.id},
-                ).scalars().all()
+                stored = (
+                    session.execute(
+                        text(
+                            "SELECT verdict FROM matching.current_assessment "
+                            "WHERE opportunity_id = :id"
+                        ),
+                        {"id": row.id},
+                    )
+                    .scalars()
+                    .all()
+                )
                 return result.verdict.value, result.eligibility.status.value, ",".join(stored)
 
             try:
                 before = deterministic()
-                provider = FakeProvider({_FAST_MODEL: [_answer(
-                    country={"value": "GB", "evidence": "United Kingdom only"},
-                )]})
+                provider = FakeProvider(
+                    {
+                        _FAST_MODEL: [
+                            _answer(
+                                country={"value": "GB", "evidence": "United Kingdom only"},
+                            )
+                        ]
+                    }
+                )
                 asyncio.run(
                     suggest_fields(
-                        session, _router(provider), opportunity,
-                        prompt=load_classification_prompt("v2"), extended=True,
+                        session,
+                        _router(provider),
+                        opportunity,
+                        prompt=load_classification_prompt("v2"),
+                        extended=True,
                     )
                 )
 
@@ -289,6 +325,45 @@ class TestWithDatabase:
             finally:
                 _cleanup(session, [opportunity.id])
 
+    def test_a_country_suggestion_never_overwrites_a_country_already_set(self) -> None:
+        from opportunity_radar.opportunities.service import OpportunityVersionConflictError
+
+        engine = create_database_engine(os.environ["DATABASE_URL"])
+        with Session(engine) as session:
+            opportunity = _resolved()
+            opportunity.allowed_countries = ["BR"]
+            opportunity.allowed_countries_version = "regions-v1"
+            empty = _resolved()
+            session.add_all([opportunity, empty])
+            session.commit()
+            suggestions = [
+                OpportunitySuggestionModel(
+                    opportunity_id=row.id,
+                    opportunity_version=row.version,
+                    field="country",
+                    value="GB",
+                    evidence="United Kingdom only",
+                    model=_FAST_MODEL,
+                    prompt_version="job_classification/v2",
+                    status=SuggestionStatus.PENDING.value,
+                )
+                for row in (opportunity, empty)
+            ]
+            session.add_all(suggestions)
+            session.commit()
+            try:
+                with pytest.raises(OpportunityVersionConflictError):
+                    accept_suggestion(session, suggestions[0].id, decided_by="reviewer@test")
+                session.rollback()
+                session.refresh(opportunity)
+                assert opportunity.allowed_countries == ["BR"]
+
+                accept_suggestion(session, suggestions[1].id, decided_by="reviewer@test")
+                session.refresh(empty)
+                assert empty.allowed_countries == ["GB"]
+            finally:
+                _cleanup(session, [opportunity.id, empty.id])
+
     def test_the_database_only_accepts_origin_ai(self) -> None:
         engine = create_database_engine(os.environ["DATABASE_URL"])
         with Session(engine) as session:
@@ -296,16 +371,18 @@ class TestWithDatabase:
             session.add(opportunity)
             session.commit()
             try:
-                session.add(OpportunitySuggestionModel(
-                    opportunity_id=opportunity.id,
-                    opportunity_version=opportunity.version,
-                    field="country",
-                    value="GB",
-                    evidence="United Kingdom only",
-                    model=_FAST_MODEL,
-                    prompt_version="job_classification/v2",
-                    origin="human",
-                ))
+                session.add(
+                    OpportunitySuggestionModel(
+                        opportunity_id=opportunity.id,
+                        opportunity_version=opportunity.version,
+                        field="country",
+                        value="GB",
+                        evidence="United Kingdom only",
+                        model=_FAST_MODEL,
+                        prompt_version="job_classification/v2",
+                        origin="human",
+                    )
+                )
                 with pytest.raises(IntegrityError):
                     session.commit()
                 session.rollback()
@@ -331,3 +408,35 @@ class TestWithDatabase:
                 assert opportunity.id in {item.id for item in extended}
             finally:
                 session.rollback()
+
+
+@pytest.mark.parametrize(("raw", "expected"), [("gb", "GB"), ("UK", "GB"), (" br ", "BR")])
+def test_a_country_answer_is_an_iso_code(raw: str, expected: str) -> None:
+    from opportunity_radar.opportunities.suggestions import _valid_value
+
+    assert _valid_value(SuggestibleField.COUNTRY, raw) == expected
+
+
+@pytest.mark.parametrize("raw", ["EU", "ZZ", "XX", "ANY", "USA", "B"])
+def test_a_non_iso_country_answer_is_rejected(raw: str) -> None:
+    from opportunity_radar.opportunities.suggestions import _valid_value
+
+    with pytest.raises(ValueError):
+        _valid_value(SuggestibleField.COUNTRY, raw)
+
+
+def test_a_confirmed_country_survives_rules_that_find_none() -> None:
+    from types import SimpleNamespace
+
+    from opportunity_radar.opportunities.service import _keeps_confirmed_countries
+
+    confirmed = SimpleNamespace(
+        allowed_countries=["GB"], allowed_countries_version="ai-confirmed:job_classification/v2"
+    )
+    by_rules = SimpleNamespace(allowed_countries=["GB"], allowed_countries_version="rules-v1")
+    none_found = SimpleNamespace(allowed_countries=())
+    found = SimpleNamespace(allowed_countries=("BR",))
+
+    assert _keeps_confirmed_countries(confirmed, none_found)  # type: ignore[arg-type]
+    assert not _keeps_confirmed_countries(confirmed, found)  # type: ignore[arg-type]
+    assert not _keeps_confirmed_countries(by_rules, none_found)  # type: ignore[arg-type]

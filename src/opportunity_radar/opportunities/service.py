@@ -325,12 +325,8 @@ class OpportunityService:
                             }
                         ]
                     else:
-                        review_candidates = self.repository.identity_review_candidates(
-                            candidate
-                        )
-                        opportunity = _new_opportunity(
-                            candidate, first_seen_at=raw_item.fetched_at
-                        )
+                        review_candidates = self.repository.identity_review_candidates(candidate)
+                        opportunity = _new_opportunity(candidate, first_seen_at=raw_item.fetched_at)
                         self.session.add(opportunity)
                         created_opportunity = True
                         if review_candidates:
@@ -1287,7 +1283,7 @@ def reclassify_content(
                 new = _content_values(
                     candidate.seniority.value,
                     candidate.work_mode.value,
-                    candidate.allowed_countries,
+                    _rule_or_confirmed_countries(opportunity, candidate),
                 )
                 # A new work mode is a new fingerprint (F50-02 fix): refuse it when another
                 # opportunity already owns that identity, and keep the posting's work mode.
@@ -1745,6 +1741,30 @@ def _new_opportunity(candidate: CanonicalCandidate, *, first_seen_at: datetime) 
     )
 
 
+#: Prefix of `allowed_countries_version` for a country a person confirmed from an AI
+#: suggestion (R55-C5); see `suggestions.accept_suggestion`.
+AI_CONFIRMED_COUNTRIES_PREFIX = "ai-confirmed:"
+
+
+def _keeps_confirmed_countries(
+    opportunity: OpportunityModel, candidate: CanonicalCandidate
+) -> bool:
+    """A person-confirmed country survives a re-run whose rules still find no country."""
+    return (
+        not candidate.allowed_countries
+        and bool(opportunity.allowed_countries)
+        and (opportunity.allowed_countries_version or "").startswith(AI_CONFIRMED_COUNTRIES_PREFIX)
+    )
+
+
+def _rule_or_confirmed_countries(
+    opportunity: OpportunityModel, candidate: CanonicalCandidate
+) -> Collection[str] | None:
+    if _keeps_confirmed_countries(opportunity, candidate):
+        return opportunity.allowed_countries
+    return candidate.allowed_countries
+
+
 def _set_if_changed(opportunity: OpportunityModel, field: str, value: Any) -> bool:
     if getattr(opportunity, field) == value:
         return False
@@ -1768,14 +1788,15 @@ def _apply_rule_fields(opportunity: OpportunityModel, candidate: CanonicalCandid
     changed |= _set_if_changed(
         opportunity, "recency_exempt_program", candidate.recency_exempt_program
     )
-    changed |= _set_if_changed(
-        opportunity, "allowed_countries", list(candidate.allowed_countries) or None
-    )
-    changed |= _set_if_changed(
-        opportunity,
-        "allowed_countries_version",
-        candidate.allowed_countries_version if candidate.allowed_countries else None,
-    )
+    if not _keeps_confirmed_countries(opportunity, candidate):
+        changed |= _set_if_changed(
+            opportunity, "allowed_countries", list(candidate.allowed_countries) or None
+        )
+        changed |= _set_if_changed(
+            opportunity,
+            "allowed_countries_version",
+            candidate.allowed_countries_version if candidate.allowed_countries else None,
+        )
     changed |= _set_if_changed(opportunity, "role_family", candidate.role_family.value)
     changed |= _set_if_changed(
         opportunity,
@@ -1798,6 +1819,8 @@ def _apply_content_fields(
     if work_mode and _set_if_changed(opportunity, "work_mode", candidate.work_mode.value):
         opportunity.fingerprint = candidate.fingerprint
         opportunity.fingerprint_version = candidate.fingerprint_version
+    if _keeps_confirmed_countries(opportunity, candidate):
+        return
     countries = list(candidate.allowed_countries) or None
     if _set_if_changed(opportunity, "allowed_countries", countries):
         opportunity.allowed_countries_version = (

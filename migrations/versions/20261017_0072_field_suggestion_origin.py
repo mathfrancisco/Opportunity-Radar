@@ -8,6 +8,10 @@ left `UNKNOWN`, apart from the canonical row. This adds the `origin` column (alw
 today, so an audit can tell a model suggestion from any future human or rule source) and
 opens the `field` check to `country` and `work_authorization`. Nothing here touches a
 canonical column or an assessment.
+
+Downgrade deletes every `country` and `work_authorization` suggestion row, accepted ones
+included, so their audit trail is lost; a country already written onto
+`opportunities.allowed_countries` stays there.
 """
 from __future__ import annotations
 

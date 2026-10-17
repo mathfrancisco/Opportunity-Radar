@@ -25,7 +25,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import re
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -128,8 +127,6 @@ WORK_AUTHORIZATION_HINTS = (
     "authorised to work",
 )
 
-_COUNTRY_CODE = re.compile(r"^[A-Z]{2}$")
-
 
 #: Verdicts worth a background model call: a suggestion can only change what the user does
 #: with a posting the active profile already ranks at the top.
@@ -153,6 +150,28 @@ _FIELD_ENUMS: dict[SuggestibleField, type] = {
 }
 
 
+#: ISO 3166-1 alpha-2 codes; a model answer outside this set (EU, ZZ...) is rejected.
+_ISO_COUNTRY_CODES = frozenset(
+    (
+        "AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE "
+        "BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD "
+        "CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM "
+        "DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF "
+        "GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU "
+        "ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN "
+        "KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME "
+        "MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA "
+        "NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM "
+        "PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI "
+        "SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK "
+        "TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI "
+        "VN VU WF WS YE YT ZA ZM ZW"
+    ).split()
+)
+#: Common non-ISO spellings a model uses for a real country.
+_COUNTRY_ALIASES = {"UK": "GB"}
+
+
 def _valid_value(field: SuggestibleField, raw: object) -> str:
     """The canonical spelling of a model answer; `ValueError` when it is not allowed.
 
@@ -163,7 +182,8 @@ def _valid_value(field: SuggestibleField, raw: object) -> str:
     text_value = str(raw).strip()
     if field is SuggestibleField.COUNTRY:
         code = text_value.upper()
-        if not _COUNTRY_CODE.match(code):
+        code = _COUNTRY_ALIASES.get(code, code)
+        if code not in _ISO_COUNTRY_CODES:
             raise ValueError(f"not an ISO 3166-1 alpha-2 code: {text_value!r}")
         return code
     enum_type = _FIELD_ENUMS[field]
@@ -184,8 +204,7 @@ class OpportunitySuggestionModel(Base):
     __tablename__ = "field_suggestion"
     __table_args__ = (
         CheckConstraint(
-            "field IN ('role_family', 'seniority', 'work_mode', 'country', "
-            "'work_authorization')",
+            "field IN ('role_family', 'seniority', 'work_mode', 'country', 'work_authorization')",
             name="ck_field_suggestion_field",
         ),
         CheckConstraint("origin IN ('ai')", name="ck_field_suggestion_origin"),
@@ -425,8 +444,7 @@ def candidates_needing_suggestion(
                 ~exists().where(
                     OpportunitySuggestionModel.opportunity_id == OpportunityModel.id,
                     OpportunitySuggestionModel.opportunity_version == OpportunityModel.version,
-                    OpportunitySuggestionModel.field
-                    == SuggestibleField.WORK_AUTHORIZATION.value,
+                    OpportunitySuggestionModel.field == SuggestibleField.WORK_AUTHORIZATION.value,
                 ),
             ),
         )
@@ -454,14 +472,19 @@ def candidates_needing_suggestion(
             page_query = page_query.where(
                 or_(
                     OpportunityModel.created_at > created_at,
-                    and_(OpportunityModel.created_at == created_at,
-                         OpportunityModel.id > opportunity_id),
+                    and_(
+                        OpportunityModel.created_at == created_at,
+                        OpportunityModel.id > opportunity_id,
+                    ),
                 )
             )
-        page = list(session.scalars(
-            page_query.order_by(OpportunityModel.created_at, OpportunityModel.id)
-            .limit(page_size)
-        ).all())
+        page = list(
+            session.scalars(
+                page_query.order_by(OpportunityModel.created_at, OpportunityModel.id).limit(
+                    page_size
+                )
+            ).all()
+        )
         if not page:
             break
         cursor = (page[-1].created_at, page[-1].id)
@@ -470,27 +493,34 @@ def candidates_needing_suggestion(
             select(SuggestionDeferModel).where(
                 SuggestionDeferModel.opportunity_id.in_(ids),
                 SuggestionDeferModel.next_attempt_at > moment,
-                *([SuggestionDeferModel.prompt_version == prompt_version]
-                  if prompt_version is not None else []),
-                *([SuggestionDeferModel.route_hash == route_hash]
-                  if route_hash is not None else []),
+                *(
+                    [SuggestionDeferModel.prompt_version == prompt_version]
+                    if prompt_version is not None
+                    else []
+                ),
+                *(
+                    [SuggestionDeferModel.route_hash == route_hash]
+                    if route_hash is not None
+                    else []
+                ),
             )
         ).all()
         deferred_keys = {(item.opportunity_id, item.content_hash) for item in defers}
         for item in page:
-            fields = [field for field in unknown_fields(item, extended=extended)
-                      if field.value not in existing_suggestion_fields(session, item)]
+            fields = [
+                field
+                for field in unknown_fields(item, extended=extended)
+                if field.value not in existing_suggestion_fields(session, item)
+            ]
             if not fields:
                 continue
-            sanitized = sanitize_for_llm({
-                "title": item.canonical_title or "", "description": item.description or ""
-            })
+            sanitized = sanitize_for_llm(
+                {"title": item.canonical_title or "", "description": item.description or ""}
+            )
             title = str(sanitized.get("title") or "")
             description = str(sanitized.get("description") or "")
             if prompt is not None and route is not None:
-                title, description, _ = _fit_submission(
-                    prompt, route, fields, title, description
-                )
+                title, description, _ = _fit_submission(prompt, route, fields, title, description)
             digest = _suggestion_content_hash(title, description, fields)
             if (item.id, digest) not in deferred_keys:
                 rows.append(item)
@@ -531,12 +561,10 @@ def _fit_submission(
     """Return the exact sanitized/truncated description represented in the request."""
     while description and not fits(
         prompt.system,
-        _render_user_content(
-            prompt, pending_fields=pending, title=title, description=description
-        ),
+        _render_user_content(prompt, pending_fields=pending, title=title, description=description),
         route.budget,
     ):
-        description = description[:max(0, len(description) - 200)]
+        description = description[: max(0, len(description) - 200)]
     user_content = _render_user_content(
         prompt, pending_fields=pending, title=title, description=description
     )
@@ -661,9 +689,7 @@ async def _suggest_fields_claimed(
     except Exception:
         _finish_suggestion_operation(engine, operation_id, "internal_error", "route_error")
         raise
-    title, description, user_content = _fit_submission(
-        prompt, route, pending, title, description
-    )
+    title, description, user_content = _fit_submission(prompt, route, pending, title, description)
     if user_content is None:
         logger.info(
             "job_classification prompt does not fit the task budget even without a "
@@ -677,19 +703,24 @@ async def _suggest_fields_claimed(
     content_hash = _suggestion_content_hash(title, description, pending)
     route_hash = hashlib.sha256("\0".join(route.chain).encode()).hexdigest()
     now = datetime.now(UTC)
-    deferred = session.get(SuggestionDeferModel, (
-        opportunity.id, content_hash, prompt.version, route_hash,
-    ))
+    deferred = session.get(
+        SuggestionDeferModel,
+        (
+            opportunity.id,
+            content_hash,
+            prompt.version,
+            route_hash,
+        ),
+    )
     if deferred is not None and deferred.next_attempt_at > now:
         _finish_suggestion_operation(engine, operation_id, "deferred", deferred.reason)
         return SuggestionOutcome(
-            state="deferred", error_kind=deferred.reason,
+            state="deferred",
+            error_kind=deferred.reason,
             next_attempt_at=deferred.next_attempt_at,
         )
 
-    async def on_attempt_started(
-        op_id: UUID, ordinal: int, model: str, attempt: int
-    ) -> None:
+    async def on_attempt_started(op_id: UUID, ordinal: int, model: str, attempt: int) -> None:
         try:
             await asyncio.to_thread(
                 record_attempt_started,
@@ -724,29 +755,37 @@ async def _suggest_fields_claimed(
             extra={"opportunity_id": str(opportunity.id), "error_kind": error.kind.value},
         )
         _record_suggestion_operation(
-            engine, operation_id, attempts=error.attempts, state=(
-                "provider_error" if error.attempts else (
-                    "deferred" if error.quota_exhausted else "preflight"
-                )
-            ), error_kind=error.kind.value, prompt_version=prompt.version,
-            fallback_used=any(
-                attempt.model != route.chain[0] for attempt in error.attempts
+            engine,
+            operation_id,
+            attempts=error.attempts,
+            state=(
+                "provider_error"
+                if error.attempts
+                else ("deferred" if error.quota_exhausted else "preflight")
             ),
+            error_kind=error.kind.value,
+            prompt_version=prompt.version,
+            fallback_used=any(attempt.model != route.chain[0] for attempt in error.attempts),
         )
         retry_after = error.retry_after_seconds or min(
             6 * 60 * 60, 60 * (2 ** min(deferred.attempt_count if deferred else 0, 8))
         )
         next_attempt_at = now + timedelta(seconds=retry_after)
         _save_suggestion_defer(
-            session, opportunity_id=opportunity.id, content_hash=content_hash,
-            prompt_version=prompt.version, route_hash=route_hash,
-            prior=deferred, reason=("quota" if error.kind is ErrorKind.QUOTA else error.kind.value),
+            session,
+            opportunity_id=opportunity.id,
+            content_hash=content_hash,
+            prompt_version=prompt.version,
+            route_hash=route_hash,
+            prior=deferred,
+            reason=("quota" if error.kind is ErrorKind.QUOTA else error.kind.value),
             next_attempt_at=next_attempt_at,
         )
         return SuggestionOutcome(
             called=bool(error.attempts),
             state=("deferred" if error.quota_exhausted else "provider_error")
-            if error.attempts else ("deferred" if error.quota_exhausted else "preflight"),
+            if error.attempts
+            else ("deferred" if error.quota_exhausted else "preflight"),
             error_kind=error.kind.value,
             next_attempt_at=next_attempt_at,
             quota_exhausted=error.quota_exhausted,
@@ -754,15 +793,23 @@ async def _suggest_fields_claimed(
     except asyncio.CancelledError as cancellation:
         cancelled_attempts = getattr(cancellation, "attempts", ())
         _record_suggestion_operation(
-            engine, operation_id, attempts=cancelled_attempts,
+            engine,
+            operation_id,
+            attempts=cancelled_attempts,
             fallback_used=any(attempt.model != route.chain[0] for attempt in cancelled_attempts),
-            state="cancelled", error_kind="cancelled", prompt_version=prompt.version,
+            state="cancelled",
+            error_kind="cancelled",
+            prompt_version=prompt.version,
         )
         raise
     except Exception:
         _record_suggestion_operation(
-            engine, operation_id, attempts=(), state="internal_error",
-            error_kind="internal_error", prompt_version=prompt.version,
+            engine,
+            operation_id,
+            attempts=(),
+            state="internal_error",
+            error_kind="internal_error",
+            prompt_version=prompt.version,
         )
         raise
 
@@ -776,9 +823,14 @@ async def _suggest_fields_claimed(
             extra={"opportunity_id": str(opportunity.id)},
         )
         _record_suggestion_operation(
-            engine, operation_id, attempts=result.attempts,
-            fallback_used=result.fallback_used, response=result.response,
-            state="parse_error", error_kind="parse_error", prompt_version=prompt.version,
+            engine,
+            operation_id,
+            attempts=result.attempts,
+            fallback_used=result.fallback_used,
+            response=result.response,
+            state="parse_error",
+            error_kind="parse_error",
+            prompt_version=prompt.version,
         )
         return SuggestionOutcome(called=True, state="parse_error", error_kind="parse_error")
 
@@ -823,9 +875,13 @@ async def _suggest_fields_claimed(
         session.delete(deferred)
         session.commit()
     _record_suggestion_operation(
-        engine, operation_id, attempts=result.attempts,
-        fallback_used=result.fallback_used, response=result.response,
-        state="success", prompt_version=prompt.version,
+        engine,
+        operation_id,
+        attempts=result.attempts,
+        fallback_used=result.fallback_used,
+        response=result.response,
+        state="success",
+        prompt_version=prompt.version,
     )
     return SuggestionOutcome(
         created=tuple(created), discarded_fields=tuple(discarded), called=True, state="success"
@@ -836,9 +892,10 @@ def _suggestion_content_hash(
     title: str, description: str, pending: Sequence[SuggestibleField]
 ) -> str:
     material = json.dumps(
-        {"title": title, "description": description,
-         "fields": [field.value for field in pending]},
-        ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        {"title": title, "description": description, "fields": [field.value for field in pending]},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
     )
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
@@ -876,7 +933,9 @@ def _start_suggestion_operation(
 ) -> None:
     try:
         start_operation(
-            engine, operation_id=operation_id, task=AITask.JOB_CLASSIFICATION.value,
+            engine,
+            operation_id=operation_id,
+            task=AITask.JOB_CLASSIFICATION.value,
             prompt_version=prompt_version,
         )
     except Exception:  # telemetry must never block deterministic classification
@@ -946,6 +1005,12 @@ def accept_suggestion(
             "accepting a stale suggestion"
         )
 
+    if suggestion.field == SuggestibleField.COUNTRY.value and opportunity.allowed_countries:
+        from opportunity_radar.opportunities.service import OpportunityVersionConflictError
+
+        raise OpportunityVersionConflictError(
+            "the posting already has a country; reclassify instead of overwriting it"
+        )
     if suggestion.field == SuggestibleField.COUNTRY.value:
         # A person confirmed it: only now does the posting carry the country, and only a
         # later re-evaluation (never this call) can turn it into a different verdict.

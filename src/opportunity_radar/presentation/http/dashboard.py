@@ -562,16 +562,12 @@ def patch_saved_search(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
     try:
         saved_search = (
-            rename_saved_search(
-                session, saved_search_id, name=request.name, owner_sub=identity.sub
-            )
+            rename_saved_search(session, saved_search_id, name=request.name, owner_sub=identity.sub)
             if request.name is not None
             else None
         )
         if request.open:
-            saved_search = open_saved_search(
-                session, saved_search_id, owner_sub=identity.sub
-            )
+            saved_search = open_saved_search(session, saved_search_id, owner_sub=identity.sub)
         if saved_search is None:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
     except SavedSearchNotFoundError as error:
@@ -860,8 +856,12 @@ def get_ai_budget(
     settings: Settings = Depends(get_settings),
     identity: RequestIdentity = Depends(authenticated_identity),
 ) -> AIBudgetResponse:
-    """Card R55-C6: today's requests and tokens used and remaining, per route model."""
-    del identity
+    """Card R55-C6: today's requests and tokens used and remaining, per route model.
+
+    Operational telemetry: owner only, like the other operational metrics.
+    """
+    if not identity.is_owner:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     routes = default_routes(settings)
     models = list(dict.fromkeys(name for route in routes.values() for name in route.chain))
     report = ai_budget(

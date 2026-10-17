@@ -62,3 +62,16 @@ def test_analysis_metrics_carries_the_per_task_block() -> None:
     body = client.get("/analysis-metrics").json()
 
     assert isinstance(body["ai"]["by_task"], list)
+
+
+def test_a_non_owner_cannot_read_the_ai_budget() -> None:
+    from tests.backend.support.auth import auth_headers, shared_keypair
+
+    client = authenticated_test_client(
+        owner_sub="ai-budget-test-owner", database_url=os.environ["DATABASE_URL"]
+    )
+    private_key, _ = shared_keypair()
+
+    response = client.get("/ai-budget", headers=auth_headers(private_key, "someone-else"))
+
+    assert response.status_code == 403

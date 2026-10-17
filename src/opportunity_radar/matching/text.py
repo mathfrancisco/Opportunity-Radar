@@ -77,6 +77,20 @@ _JOB_HEADINGS = (
     r"requisitos",
     r"qualifica[çc][õo]es",
     r"diferenciais",
+    # Plain-text headings that open the job part after an institutional block (R55-C review).
+    r"what we(?:'re| are) looking for",
+    r"your profile",
+    r"(?:technical |key |core )?skills(?: and experience)?",
+    r"must[- ]haves?",
+    r"(?:required )?experience",
+    r"job description",
+    r"(?:the )?position",
+    r"perfil(?: da vaga| desejado)?",
+    r"compet[êe]ncias",
+    r"habilidades",
+    r"experi[êe]ncia",
+    r"descri[çc][ãa]o da vaga",
+    r"o que buscamos",
 )
 
 
@@ -123,6 +137,11 @@ _JOB_HEADING = _whole_line(_JOB_HEADINGS)
 # A marked heading — from `<hN>` or Markdown — or a short line ending in a colon ends a
 # boilerplate section. Anything else, bullets included, still belongs to it.
 _MARKED_HEADING = re.compile(r"^\s*(?:#+\s*\S.*|[^\s\-•*][^.!?]{0,60}:)\s*$")
+# A short unpunctuated line that opens a bullet list or a paragraph is a heading even when
+# no listed heading matches it and it carries no colon (conservative: ending the skip early
+# keeps text, it never loses a requirement).
+_HEADING_LIKE = re.compile(r"^[^\s\-•*][^.!?,;:]{0,50}$")
+_BULLET_OR_SENTENCE = re.compile(r"^(?:[\-•*]\s*\S|.*[.!?]$|(?:\S+\s+){8,}\S+)")
 _SPACES = re.compile(r"[ \t ]+")
 _BLANK_LINES = re.compile(r"\n{3,}")
 _SENTENCE_END = re.compile(r"[.!?](?=\s)|\n\n")
@@ -135,6 +154,14 @@ class CleanedText:
     text: str
     removed_sections: tuple[str, ...] = ()
     kept_facts: int = 0
+
+
+def _opens_block(line: str, following: Sequence[str]) -> bool:
+    """A short heading-like line whose next non-blank line is a bullet or a paragraph."""
+    if not line or not _HEADING_LIKE.match(line) or len(line.split()) > 6:
+        return False
+    next_line = next((candidate for candidate in following if candidate), "")
+    return bool(next_line) and bool(_BULLET_OR_SENTENCE.match(next_line))
 
 
 def clean_description_report(text: str | None) -> CleanedText:
@@ -153,12 +180,16 @@ def clean_description_report(text: str | None) -> CleanedText:
     removed: list[str] = []
     kept_facts = 0
     skipping = False
-    for line in lines:
+    for index, line in enumerate(lines):
         if _BOILERPLATE.match(line):
             skipping = True
             removed.append(line.lstrip("# ").rstrip(":.! ").strip())
             continue
-        if skipping and (_JOB_HEADING.match(line) or _MARKED_HEADING.match(line)):
+        if skipping and (
+            _JOB_HEADING.match(line)
+            or _MARKED_HEADING.match(line)
+            or _opens_block(line, lines[index + 1 :])
+        ):
             skipping = False
         if not skipping:
             kept.append(line)
@@ -203,8 +234,10 @@ def prompt_budget(max_input_tokens: int, max_output_tokens: int, margin: int | N
     The margin starts at 10% of `max_input_tokens`; a calibration whose observed prompts
     cost more than the ratio in use predicts widens it (`TokenCalibration.margin`).
     """
-    return max_input_tokens - max_output_tokens - (
-        max_input_tokens // 10 if margin is None else margin
+    return (
+        max_input_tokens
+        - max_output_tokens
+        - (max_input_tokens // 10 if margin is None else margin)
     )
 
 
@@ -353,7 +386,7 @@ def fit_description_by_section(
             cut, _ = truncate_at_sentence(block, room)
             if cut:
                 kept.append(cut)
-        break
+                used += len(cut) + (2 if len(kept) > 1 else 0)
     return FittedText(text=(chr(10) * 2).join(kept), truncated=True)
 
 
