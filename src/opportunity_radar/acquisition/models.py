@@ -138,6 +138,11 @@ class SourceRunModel(Base):
     skipped_stale: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
+    #: Items kept out of storage by the area/country prefilter (R55-B5). Also counted in
+    #: `items_skipped`.
+    skipped_off_target: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     http_requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rate_limit_events: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

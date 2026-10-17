@@ -113,6 +113,8 @@ class _Fixture:
         published_days: float | None = None,
         updated_days: float | None = None,
         full: bool = False,
+        role_family: str = "UNKNOWN",
+        allowed_countries: list[str] | None = None,
     ) -> UUID:
         s = self.session
         opportunity = OpportunityModel(
@@ -127,6 +129,8 @@ class _Fixture:
             first_seen_at=NOW - timedelta(days=age_days),
             published_at=None if published_days is None else NOW - timedelta(days=published_days),
             source_updated_at=None if updated_days is None else NOW - timedelta(days=updated_days),
+            role_family=role_family,
+            allowed_countries=allowed_countries,
             version=1,
         )
         s.add(opportunity)
@@ -841,3 +845,97 @@ def test_stale_report_counts_an_opportunity_without_occurrence_as_no_source(
 
     run_opportunity_retention(fx.engine, retention_days=7, dry_run=False)
     assert orphan not in fx.present()
+
+
+# --- R55-B5: shorter retention for opportunities outside the profile's areas/countries ------
+
+_TARGET_FAMILIES = ("SOFTWARE_ENGINEERING", "DATA")
+
+
+def _off_target_run(fx: _Fixture, **overrides: object):
+    options: dict[str, object] = {
+        "retention_days": 7,
+        "off_target_retention_days": 2,
+        "target_role_families": _TARGET_FAMILIES,
+        "target_countries": ("BR",),
+        "dry_run": False,
+    }
+    options.update(overrides)
+    return run_opportunity_retention(fx.engine, **options)  # type: ignore[arg-type]
+
+
+def test_off_target_area_goes_after_the_short_threshold_on_target_stays(fx: _Fixture) -> None:
+    off_area = fx.opportunity(3, role_family="SALES")
+    on_target = fx.opportunity(3, role_family="SOFTWARE_ENGINEERING")
+    unknown_area = fx.opportunity(3, role_family="UNKNOWN")
+    young_off_area = fx.opportunity(1, role_family="SALES")
+
+    report = _off_target_run(fx)
+
+    assert fx.present() == {on_target, unknown_area, young_off_area}
+    assert off_area not in fx.present()
+    assert report.rows["opportunity_off_target"] >= 1
+    assert report.off_target_retention_days == 2
+
+
+def test_off_target_country_goes_but_any_empty_and_target_country_stay(fx: _Fixture) -> None:
+    other_country = fx.opportunity(3, role_family="DATA", allowed_countries=["US"])
+    worldwide = fx.opportunity(3, role_family="DATA", allowed_countries=["ANY"])
+    unknown_country = fx.opportunity(3, role_family="DATA", allowed_countries=[])
+    never_derived = fx.opportunity(3, role_family="DATA", allowed_countries=None)
+    includes_target = fx.opportunity(3, role_family="DATA", allowed_countries=["US", "BR"])
+
+    _off_target_run(fx)
+
+    assert fx.present() == {worldwide, unknown_country, never_derived, includes_target}
+    assert other_country not in fx.present()
+
+
+def test_off_target_keeps_protected_opportunities(fx: _Fixture) -> None:
+    applied = fx.opportunity(3, role_family="SALES")
+    fx.application(applied)
+    marked = fx.opportunity(3, role_family="SALES")
+    fx.relevant_mark(marked)
+
+    _off_target_run(fx)
+
+    assert fx.present() == {applied, marked}
+
+
+def test_off_target_dry_run_deletes_nothing_and_counts(fx: _Fixture) -> None:
+    off_area = fx.opportunity(3, role_family="SALES", full=True)
+    on_target = fx.opportunity(3, role_family="DATA")
+
+    report = _off_target_run(fx, dry_run=True)
+
+    assert report.dry_run is True
+    assert fx.present() == {off_area, on_target}
+    assert report.rows["opportunity_off_target"] >= 1
+    assert report.rows["opportunity"] >= 1
+    assert isinstance(report.as_dict()["off_target_cutoff"], str)
+
+
+def test_off_target_threshold_is_inert_without_profile_scope_or_when_not_shorter(
+    fx: _Fixture,
+) -> None:
+    off_area = fx.opportunity(3, role_family="SALES")
+    other_country = fx.opportunity(3, role_family="DATA", allowed_countries=["US"])
+
+    no_scope = _off_target_run(fx, target_role_families=(), target_countries=())
+    assert no_scope.off_target_cutoff is None
+    not_shorter = _off_target_run(fx, off_target_retention_days=7)
+    assert not_shorter.off_target_cutoff is None
+    disabled = _off_target_run(fx, off_target_retention_days=0)
+    assert disabled.off_target_cutoff is None
+
+    assert fx.present() == {off_area, other_country}
+
+
+def test_off_target_old_opportunity_is_still_deleted_by_the_normal_threshold(
+    fx: _Fixture,
+) -> None:
+    old_on_target = fx.opportunity(8, role_family="DATA")
+
+    _off_target_run(fx)
+
+    assert old_on_target not in fx.present()

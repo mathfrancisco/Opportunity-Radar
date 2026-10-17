@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     # F50-04: a source whose share of target-area items over its last three complete runs
     # falls below this stops persisting new off-target items. 0 turns the filter off.
     collection_target_area_floor: float = 0.30
+    # R55-B5: on by default. A new item whose area is clearly outside the profile's target
+    # areas, or whose location names only countries outside the profile's countries, is not
+    # stored (counted in source_run.skipped_off_target). Unknown area, unknown or remote
+    # location and profiles without areas/countries are always kept. false = rollback.
+    collection_prefilter_enabled: bool = True
     collection_backoff_base_seconds: int = 300
     collection_backoff_ceiling_seconds: int = 86400
     # F51-06 deadlines are opt-in until a deployment has observed its source durations.
@@ -124,6 +129,10 @@ class Settings(BaseSettings):
     # Deleting is an owner decision: until this is true the pipeline stage only dry-runs
     # (counts per table in the log; nothing deleted, including ai_call_record and Tavily).
     opportunity_retention_apply: bool = False
+    # R55-B5: shorter age limit for stored opportunities clearly off-target (area or country
+    # of the active profile). Same protections and the same apply gate as above. 0 disables
+    # it; a value >= OPPORTUNITY_RETENTION_DAYS changes nothing.
+    opportunity_off_target_retention_days: int = Field(default=2, ge=0)
     # R55-E6: the daily window logs pg_database_size and warns above this share of the limit
     # (Neon free tier: 1 GB decimal). Warning only; nothing is deleted because of it.
     # The daily retention + reduction stage runs first in the window; this caps how long it

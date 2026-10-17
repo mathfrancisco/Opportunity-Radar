@@ -308,6 +308,7 @@ def _run_pipeline_once_settings(**overrides: object) -> SimpleNamespace:
     defaults = {
         "opportunity_retention_days": 0,
         "opportunity_retention_apply": False,
+        "opportunity_off_target_retention_days": 2,
         "opportunity_retention_batch_size": 500,
         "ai_call_record_retention_days": 7,
         "payload_retention_days": 2,
@@ -699,6 +700,22 @@ def test_retention_stage_applies_only_when_the_flag_is_on(
     assert harness.runs[0]["ai_call_record_retention_days"] == 7
     assert harness.due_checks == ["opportunity_retention"]
     assert harness.records == [{"success": True, "job_name": "opportunity_retention"}]
+
+
+def test_retention_stage_passes_the_profile_scope_for_off_target_retention(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harness = _RetentionHarness(monkeypatch)
+    monkeypatch.setattr(
+        run_pipeline_once,
+        "profile_target_scope",
+        lambda _engine, owner: (("DATA",), ("BR",)) if owner == "owner" else ((), ()),
+    )
+    harness.run()
+    assert harness.runs[0]["off_target_retention_days"] == 2
+    assert harness.runs[0]["target_role_families"] == ("DATA",)
+    assert harness.runs[0]["target_countries"] == ("BR",)
+    assert harness.runs[0]["dry_run"] is True
 
 
 def test_retention_stage_stopped_run_is_not_recorded_as_failure(

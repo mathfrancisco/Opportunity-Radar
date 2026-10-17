@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from time import monotonic
 
+from opportunity_radar.acquisition.prefilter import profile_target_scope
 from opportunity_radar.matching.adapters import build_analysis_adapter
 from opportunity_radar.operations.data_reduction import (
     DataReductionReport,
@@ -240,8 +241,14 @@ def _stages(engine, settings, measurements: dict[str, object] | None = None) -> 
         if context.should_stop():
             return StageCounts(stopped=1)
         try:
+            # R55-B5: shorter retention for opportunities outside the profile's areas and
+            # countries; no profile read (or none usable) simply leaves it off.
+            families, countries = profile_target_scope(engine, context.owner_sub)
             report = run_opportunity_retention(
                 engine,
+                off_target_retention_days=settings.opportunity_off_target_retention_days,
+                target_role_families=families,
+                target_countries=countries,
                 retention_days=settings.opportunity_retention_days,
                 batch_size=settings.opportunity_retention_batch_size,
                 ai_call_record_retention_days=settings.ai_call_record_retention_days,
