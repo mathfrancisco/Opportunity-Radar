@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help bootstrap dev up down restart status logs migrate test test-integration check doctor soak import-companies enable-sources discover-ats collect backup restore-check eval-analysis eval-search export-eval-cases
+.PHONY: help bootstrap dev up down restart status logs migrate test test-integration check doctor soak import-companies enable-sources discover-ats discover-boards collect backup restore-check eval-analysis eval-search export-eval-cases
 
 help:
 	@echo "Targets: bootstrap dev up down restart status logs migrate import-companies enable-sources discover-ats collect"
@@ -60,6 +60,10 @@ enable-sources:
 # Off by default: a manual run, or a low-frequency job an operator schedules separately.
 discover-ats:
 	@docker compose run --rm --build api python scripts/discover_ats.py
+
+# R55-B6: dry-run by default; APPLY=1 writes inert proposals, USE_TAVILY=1 spends credits.
+discover-boards:
+	@docker compose run --rm --build api python scripts/discover_boards.py $(if $(APPLY),--apply,) $(if $(USE_TAVILY),--use-tavily,)
 
 # Off by default (F20-36). One click deeper than discover-ats: robots.txt, sitemap(s),
 # and a handful of same-allowlist pages per eligible company, always inside budget.
