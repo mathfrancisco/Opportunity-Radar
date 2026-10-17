@@ -102,13 +102,37 @@ IDENTITY_KEYS: dict[str, tuple[str, ...]] = {
 _CONTAINER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 
-def source_identity(source_type: str, name: str, configuration: Any) -> tuple[Any, ...]:
-    """Endpoint identity of a source; (type, name) when its type has no endpoint key."""
+def _identity_values(source_type: str, configuration: Any) -> list[str] | None:
+    """Endpoint key values, or None when one is missing (the identity is then unknown)."""
     keys = IDENTITY_KEYS.get(source_type)
     if not keys:
-        return (source_type, "name", str(name).strip().lower())
+        return None
     config = configuration if isinstance(configuration, dict) else {}
-    return (source_type, *(str(config.get(key) or "").strip().lower() for key in keys))
+    values = []
+    for key in keys:
+        value = str(config.get(key) or "").strip().lower()
+        if not value and source_type == "lever" and key == "api_region":
+            value = "global"  # the default the probe applies (acquisition.probing)
+        if not value:
+            return None
+        values.append(value)
+    return values
+
+
+def identity_known(source_type: str, configuration: Any) -> bool:
+    return _identity_values(source_type, configuration) is not None
+
+
+def source_identity(source_type: str, name: str, configuration: Any) -> tuple[Any, ...]:
+    """Endpoint identity of a source.
+
+    A type without endpoint keys, or a configuration missing one of them, has an unknown
+    identity and falls back to (type, name): it can never be matched to another name.
+    """
+    values = _identity_values(source_type, configuration)
+    if values is None:
+        return (source_type, "name", str(name).strip().lower())
+    return (source_type, *values)
 
 
 # --------------------------------------------------------------------------- export
@@ -193,6 +217,7 @@ def run_export(
     out.parent.mkdir(parents=True, exist_ok=True)
     counts = {table: 0 for table, _ in _export_queries(job_days)}
     temporary = out.with_suffix(out.suffix + ".part")
+    temporary.unlink(missing_ok=True)  # a stale partial file from a killed run
     # Exclusive creation with owner-only permissions: never follow or reuse an existing path.
     descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
@@ -457,12 +482,21 @@ def _import_catalog(
     new_sources: list[dict[str, Any]] = []
     for row in tables["acquisition.source_definition"]:
         identity = source_identity(row["source_type"], row["name"], row["configuration"])
+        if row["source_type"] in IDENTITY_KEYS and not identity_known(
+            row["source_type"], row["configuration"]
+        ):
+            notes["sources_identity_unknown"] += 1
         same_name = by_name.get((row["source_type"], row["name"]))
         if same_name is not None:
             theirs = source_identity(
                 same_name["source_type"], same_name["name"], same_name["configuration"]
             )
-            notes["sources_preexisting" if theirs == identity else "source_conflicts"] += 1
+            # An unknown identity on either side falls back to the (type, name) match itself.
+            known = identity_known(row["source_type"], row["configuration"]) and identity_known(
+                same_name["source_type"], same_name["configuration"]
+            )
+            same = theirs == identity or not known
+            notes["sources_preexisting" if same else "source_conflicts"] += 1
         elif identity in by_identity:
             notes["sources_matched_other_name"] += 1
         else:

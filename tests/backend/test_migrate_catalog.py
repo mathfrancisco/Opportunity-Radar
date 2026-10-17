@@ -212,6 +212,60 @@ def test_source_identity_uses_the_endpoint_not_the_name() -> None:
     )
 
 
+def test_missing_identity_key_is_unknown_and_falls_back_to_name() -> None:
+    assert not migrate_catalog.identity_known("greenhouse", {})
+    assert not migrate_catalog.identity_known("greenhouse", {"board_token": " "})
+    assert migrate_catalog.identity_known("greenhouse", {"board_token": "a"})
+    one = migrate_catalog.source_identity("greenhouse", "A", {})
+    two = migrate_catalog.source_identity("greenhouse", "B", {})
+    assert one != two  # two unknowns are never the same endpoint
+
+
+def test_lever_region_defaults_to_global() -> None:
+    assert migrate_catalog.source_identity(
+        "lever", "A", {"site_identifier": "x"}
+    ) == migrate_catalog.source_identity(
+        "lever", "B", {"site_identifier": "x", "api_region": "global"}
+    )
+    assert migrate_catalog.source_identity(
+        "lever", "A", {"site_identifier": "x"}
+    ) != migrate_catalog.source_identity("lever", "A", {"site_identifier": "x", "api_region": "eu"})
+
+
+@integration
+def test_unknown_identity_with_same_name_is_preexisting_not_conflict(
+    databases: tuple[str, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, target = databases
+    _seed_source_database(source)
+    engine = create_database_engine(target)
+    with engine.begin() as c:
+        c.execute(
+            text(
+                "INSERT INTO acquisition.source_definition (id, source_type, name, configuration) "
+                "VALUES (:id, 'greenhouse', 'acme-board', CAST('{}' AS jsonb))"
+            ),
+            {"id": uuid4()},
+        )
+    engine.dispose()
+    export = _export(source, tmp_path, monkeypatch)
+    report = _import(target, export, apply=False)
+    assert report["notes"].get("source_conflicts", 0) == 0
+    assert report["notes"]["sources_preexisting"] == 1
+
+
+@integration
+def test_stale_partial_file_is_replaced_on_export(
+    databases: tuple[str, str], tmp_path: Path
+) -> None:
+    source, _ = databases
+    out = tmp_path / "export.jsonl"
+    (tmp_path / "export.jsonl.part").write_text("stale", encoding="utf-8")
+    migrate_catalog.run_export(out=out, container=None, source_url=source, job_days=7)
+    assert out.exists()
+    assert not (tmp_path / "export.jsonl.part").exists()
+
+
 @integration
 def test_eight_day_old_job_is_excluded_from_the_export(
     databases: tuple[str, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
