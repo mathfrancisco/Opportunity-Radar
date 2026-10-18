@@ -1,7 +1,7 @@
 """Count items the ingestion area/country prefilter kept out of storage (R55-B5).
 
-Revision ID: 20261017_0074
-Revises: 20261017_0073
+Revision ID: 20261017_0075
+Revises: 20261017_0074
 """
 
 from __future__ import annotations
@@ -9,8 +9,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "20261017_0074"
-down_revision = "20261017_0073"
+revision = "20261017_0075"
+down_revision = "20261017_0074"
 branch_labels = None
 depends_on = None
 
