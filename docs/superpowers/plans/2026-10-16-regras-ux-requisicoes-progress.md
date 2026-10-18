@@ -10,7 +10,14 @@
 - A evidência UX anterior antecede o patch final de `html_text` e permanece histórica. O replay offline atualizado e o digest da árvore final estão em `docs/56-regras-ux-trafego/ux-captures/report.json`.
 - O digest do runner agora exclui os prefixos gerados também do diff rastreado. Um teste em repositório temporário isolado confirmou que alterar uma captura rastreada mantém o digest (`e3b0c442...b855`) e alterar uma fonte rastreada o muda (`44113b9c...34f41`).
 - O replay final do Edge offline registrou 16 capturas, zero falhas e zero requests bloqueadas; quatro inspeções móveis não encontraram alvos menores que 44×44 px e oito focos da Inbox em 1440 px tiveram outline sólido de 3 px. A proveniência está no `report.json`; stdout/transcript foi preservado em `docs/56-regras-ux-trafego/artifacts/2026-10-18-r56-final-ux.stdout.log`. Essa evidência é visual e sintética, sem certificar WCAG ou produção.
-- O gate local backend terminou com `3181 passed, 10 skipped, 32 warnings in 635.11s (0:10:35)`, exit 0. É uma fotografia pré-publicação; push e CI são acompanhados externamente na PR e o estado remoto não é declarado concluído. Ruff raw e Mypy raw passaram, conforme `docs/56-regras-ux-trafego/artifacts/backend-validation.md`.
+- O gate local backend terminou com `3181 passed, 10 skipped, 32 warnings in 635.11s (0:10:35)`, exit 0. É uma fotografia pré-publicação. Ruff raw e Mypy raw passaram, conforme `docs/56-regras-ux-trafego/artifacts/backend-validation.md`.
+
+## Publicação e checks remotos — fotografia informada pelo coordenador, 2026-10-18
+
+- HEAD publicado informado: `79386260e724baa3a5dad4d8f34bfc2d267aa915`, na PR [#112](https://github.com/mathfrancisco/Opportunity-Radar/pull/112), ainda draft nessa fotografia.
+- O pipeline `39151042490` terminou com sucesso: backend `3182 passed, 9 skipped, 32 warnings` em `180.25s`; frontend `479 passed` em 50 arquivos. Este registro remoto atualiza o status antigo de CI pendente, sem alterar o valor histórico dos gates locais acima.
+- O deploy não foi declarado realizado. A inspeção de deploy foi autorizada e está em andamento; resultado do deploy e validação pós-deploy continuam pendentes até haver evidência.
+- Pendências reais desta frente: concluir a inspeção autorizada de deploy e registrar seu resultado; manter a PR como draft até a decisão de publicação. Os dados humanos continuam sem rotulagem suficiente (senioridade 300/0; conteúdo 0/200), portanto não há alegação de precisão. Isso é um limite de evidência, não um novo gate de produto R56.
 
 ## Continuação — fotografia anterior, 2026-10-18
 
@@ -33,7 +40,7 @@
 - A fixture de AI budget foi alinhada ao contrato `models[]` e ao erro quando falta orçamento; Overview focado ficou em 19/19 testes, lint e typecheck com saída 0.
 - O replay UX daquela árvore gerou 16 capturas com Edge instalado e APIs offline: zero falhas e zero requests bloqueadas/inesperadas. A inspeção cobriu mobile/desktop e controles móveis; o cartão de orçamento aparece como “Desligada” na fixture. O replay antecede a correção de `html_text` e não valida visualmente a árvore atual.
 - O gate backend daquela árvore terminou com 1 falha, 3.176 aprovados, 10 skipped e 32 avisos em 594,58 s. A falha foi o caso hostil de `html_text` (7,17 s contra limite de 0,5 s), também reproduzido em Python 3.12.8 em 6,652 s. O patch foi aplicado depois; a repetição completa segue **PENDENTE**. Mypy e Ruff passaram na fotografia atual, conforme as saídas acima.
-- O gate completo de backend e CI permanecem abertos. As amostras humanas seguem insuficientes: senioridade 300/0 rotuladas e conteúdo 0/200.
+- Naquela fotografia, o gate completo de backend e CI permaneciam abertos. As amostras humanas seguiam insuficientes: senioridade 300/0 rotuladas e conteúdo 0/200.
 
 ## Identidade e estado registrado — fotografia de 2026-10-17
 
@@ -141,3 +148,32 @@ gerou 16 capturas, zero falhas e zero requests bloqueadas; digest e checagens es
 pré-publicação. Push e CI são acompanhados externamente na PR; nenhuma conclusão de merge
 remoto é afirmada. Persistem os limites de amostras de senioridade (300/0 rotuladas) e
 conteúdo (0/200), sem alegação de precisão ou certificação de acessibilidade.
+
+## Imagens publicadas; deploy Oracle pendente — 2026-10-18
+
+O dispatch autorizado [#39171633133](https://github.com/mathfrancisco/Opportunity-Radar/actions/runs/39171633133)
+usa `publish=true` no SHA remoto confirmado
+`79386260e724baa3a5dad4d8f34bfc2d267aa915` da PR
+[#112](https://github.com/mathfrancisco/Opportunity-Radar/pull/112). Backend, frontend,
+lint/tipos, Terraform, E2E e os quatro jobs Publish concluíram com sucesso. Os digests
+publicados são API `sha256:c6019aa03a4107076ee02f6751d30c410142308a6fa32a44bdbc08a958400239`,
+worker `sha256:422940352bb7a8ff4d2f813c05c1072953a6071b4d5e9989d4b14c4827847961`, proxy
+`sha256:fc5b83b60f56e50f4fc0f80381e3bd660846971a04b4fa9003b39ae6daf7f902` e frontend
+`sha256:2ad7b7916566d1d0977ebfe0983093f70aa80c208d46fdb2cb8af8666fcb459d`. API, worker e
+proxy têm manifestos `linux/amd64` e `linux/arm64`; o frontend publicado tem manifesto
+`linux/amd64`.
+
+A inspeção read-only da VM Oracle encontrou API saudável e proxy ativos em `x86_64`; seus
+digests locais pré-publicação são, respectivamente,
+`sha256:7442f2af124e6c3e11b35bdd8b377caaf82a104d7f9ffc09b78024bbcf9e109f` e
+`sha256:f3fc3e0e4460c2d062357d39de7ea41715977af0a5ef1d24bff959e51cb19d5b`. O worker de
+execução finita não estava ativo; sua referência de rollback é
+`sha256:872b8c1ef73d6a4f2f5b097a961a09127c03ae1d7755c196fc575a28f3d121b8`. O arquivo-gatilho
+de migração está ausente, e logs do último container de
+migração (exit 0) não informam a revisão 0072/0073; por isso a revisão do banco não foi
+confirmada. Não houve consulta de banco, deploy, migração ou mudança de ambiente.
+
+A menção anterior a `TENANCY_OWNER_API_READY` fechado é histórica, referente ao registro de
+2026-10-17. O gate já está aceito no GitHub desde 2026-10-16, conforme
+`docs/53-roadmap-hospedagem/evidencias/2026-10-15-f53-tenancy-local.md`, e não foi alterado
+nesta publicação.

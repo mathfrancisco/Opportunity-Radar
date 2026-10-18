@@ -38,7 +38,7 @@ Este protótipo é uma proposta revisável anterior a qualquer mudança nas tela
 
 ## Aceite e aplicação
 
-O protótipo [prototipo.html](prototipo.html) foi aprovado explicitamente pelo usuário antes das mudanças visuais de produção. A implementação enxuta preserva as rotas, ações, filtros e paginação. `GET /saved-searches/summary` acrescenta `new_count` inteiro não negativo para itens válidos; para busca legada com filtros inválidos, o contrato acordado retorna `new_count: null` e `count_error: "invalid_filters"`. A interface mostra essa contagem como indisponível, não soma `null` como zero e mantém as demais buscas da resposta. Os filtros booleanos e numéricos aceitos pelo backend são preservados.
+O protótipo [prototipo.html](prototipo.html) recebeu aceite explícito do usuário antes da implementação visual. Em 18/10/2026, o usuário também aceitou visualmente a implementação apresentada. Esse aceite recente registra revisão visual, não rotulagem de dados nem certificação WCAG. A implementação enxuta preserva as rotas, ações, filtros e paginação. `GET /saved-searches/summary` acrescenta `new_count` inteiro não negativo para itens válidos; para busca legada com filtros inválidos, o contrato acordado retorna `new_count: null` e `count_error: "invalid_filters"`. A interface mostra essa contagem como indisponível, não soma `null` como zero e mantém as demais buscas da resposta. Os filtros booleanos e numéricos aceitos pelo backend são preservados.
 
 Na Inbox, score, fatores desconhecidos, análise semântica e frescor têm orientação junto da lista, além dos rótulos em português. No detalhe, a decisão determinística e seus estados aparecem no painel ao lado das ações, antes da descrição; a análise semântica segue separada e consultiva. Pipeline carrega apenas a aba escolhida e mantém o encerramento da candidatura como ação manual. Overview consome um resumo agregado e distingue carregamento, erro recuperável e recurso desativado. Status mostra “Ambiente não informado”, pois o modo do bundle não comprova o ambiente da API. Configurações de revisão são resumidas por campos seguros, respeitando mascaramento.
 
@@ -171,3 +171,47 @@ passou com `3181 passed, 10 skipped, 32 warnings in 635.11s (0:10:35)`. Push e C
 acompanhados no PR; a integração remota não é declarada concluída. O replay UX atual está
 registrado na seção acima. Os limites humanos e de fixture descritos neste documento
 permanecem aplicáveis.
+
+## Publicação e checks remotos — fotografia informada pelo coordenador, 2026-10-18
+
+O HEAD publicado informado foi `79386260e724baa3a5dad4d8f34bfc2d267aa915`, associado à PR
+[#112](https://github.com/mathfrancisco/Opportunity-Radar/pull/112), ainda draft nessa fotografia.
+O pipeline `39151042490` terminou com sucesso: backend `3182 passed, 9 skipped, 32 warnings`
+em `180.25s`; frontend `479 passed` em 50 arquivos. Estes são resultados remotos reportados
+pelo coordenador na rodada anterior, distintos dos gates locais pré-publicação registrados acima.
+
+O deploy não está registrado como realizado. Sua inspeção foi autorizada e está em andamento;
+até haver evidência do resultado, deploy e validação pós-deploy permanecem pendentes. Os limites
+de evidência humana (senioridade: 300 amostras, 0 rotuladas; conteúdo: 0/200) continuam limitando
+alegações de precisão, sem constituir critério novo de implantação R56.
+
+## Imagens publicadas; deploy Oracle pendente — 2026-10-18
+
+O workflow autorizado [#39171633133](https://github.com/mathfrancisco/Opportunity-Radar/actions/runs/39171633133)
+foi disparado com `publish=true` para o commit remoto confirmado
+`79386260e724baa3a5dad4d8f34bfc2d267aa915` da PR
+[#112](https://github.com/mathfrancisco/Opportunity-Radar/pull/112). No registro desta
+fotografia, todos os gates, E2E e os quatro jobs Publish terminaram com sucesso. Os manifestos
+publicados foram conferidos por digest imutável: API
+`sha256:c6019aa03a4107076ee02f6751d30c410142308a6fa32a44bdbc08a958400239`, worker
+`sha256:422940352bb7a8ff4d2f813c05c1072953a6071b4d5e9989d4b14c4827847961`, proxy
+`sha256:fc5b83b60f56e50f4fc0f80381e3bd660846971a04b4fa9003b39ae6daf7f902` e frontend
+`sha256:2ad7b7916566d1d0977ebfe0983093f70aa80c208d46fdb2cb8af8666fcb459d`. API, worker
+e proxy têm manifestos `linux/amd64` e `linux/arm64`; o frontend publicado tem manifesto
+`linux/amd64`.
+
+A inspeção somente leitura da VM Oracle confirmou host `x86_64`, API saudável e proxy em
+execução. Os digests locais que servem apenas como ponto de retorno pré-publicação são API
+`sha256:7442f2af124e6c3e11b35bdd8b377caaf82a104d7f9ffc09b78024bbcf9e109f` e proxy
+`sha256:f3fc3e0e4460c2d062357d39de7ea41715977af0a5ef1d24bff959e51cb19d5b`. O worker de
+execução finita não estava ativo; sua referência de rollback configurada é
+`sha256:872b8c1ef73d6a4f2f5b097a961a09127c03ae1d7755c196fc575a28f3d121b8`. O gatilho de
+migração está ausente (`migrate_env_present=false`); um
+container de migração anterior terminou com exit 0, mas seus logs Alembic não expõem a revisão
+0072 ou 0073. A revisão do banco, portanto, não foi confirmada, e não houve consulta ao banco,
+deploy, criação de gatilho ou migração nesta rodada.
+
+`TENANCY_OWNER_API_READY` já estava aceito no GitHub desde 2026-10-16, conforme
+[evidência de tenancy](../53-roadmap-hospedagem/evidencias/2026-10-15-f53-tenancy-local.md).
+Esta publicação não mudou esse gate. A frase histórica que o descreve como fechado no plano de
+progresso pertence ao estado de 2026-10-17 e não representa o gate aceito atual.
