@@ -16,8 +16,8 @@
 
 - HEAD publicado informado: `79386260e724baa3a5dad4d8f34bfc2d267aa915`, na PR [#112](https://github.com/mathfrancisco/Opportunity-Radar/pull/112), ainda draft nessa fotografia.
 - O pipeline `39151042490` terminou com sucesso: backend `3182 passed, 9 skipped, 32 warnings` em `180.25s`; frontend `479 passed` em 50 arquivos. Este registro remoto atualiza o status antigo de CI pendente, sem alterar o valor histórico dos gates locais acima.
-- O deploy não foi declarado realizado. A inspeção de deploy foi autorizada e está em andamento; resultado do deploy e validação pós-deploy continuam pendentes até haver evidência.
-- Pendências reais desta frente: concluir a inspeção autorizada de deploy e registrar seu resultado; manter a PR como draft até a decisão de publicação. Os dados humanos continuam sem rotulagem suficiente (senioridade 300/0; conteúdo 0/200), portanto não há alegação de precisão. Isso é um limite de evidência, não um novo gate de produto R56.
+- A afirmação anterior de deploy pendente é histórica. Após autorização explícita, a VM foi atualizada com os três digests publicados: a migração `20261017_0072 -> 20261017_0073` terminou com `20261017_0073 (head)`, API e proxy responderam saúde pública `200`, e a sessão anônima respondeu `401`. O worker foi puxado/configurado, sem executar pipeline.
+- A PR continua draft. Os dados humanos continuam sem rotulagem suficiente (senioridade 300/0; conteúdo 0/200), não houve smoke JWT real e o frontend não teve merge ou publicação de produção nesta rodada. Isso é um limite de evidência, não um novo gate de produto R56.
 
 ## Continuação — fotografia anterior, 2026-10-18
 
@@ -149,7 +149,7 @@ pré-publicação. Push e CI são acompanhados externamente na PR; nenhuma concl
 remoto é afirmada. Persistem os limites de amostras de senioridade (300/0 rotuladas) e
 conteúdo (0/200), sem alegação de precisão ou certificação de acessibilidade.
 
-## Imagens publicadas; deploy Oracle pendente — 2026-10-18
+## Imagens publicadas e deploy Oracle aplicado — 2026-10-18
 
 O dispatch autorizado [#39171633133](https://github.com/mathfrancisco/Opportunity-Radar/actions/runs/39171633133)
 usa `publish=true` no SHA remoto confirmado
@@ -171,7 +171,16 @@ execução finita não estava ativo; sua referência de rollback é
 `sha256:872b8c1ef73d6a4f2f5b097a961a09127c03ae1d7755c196fc575a28f3d121b8`. O arquivo-gatilho
 de migração está ausente, e logs do último container de
 migração (exit 0) não informam a revisão 0072/0073; por isso a revisão do banco não foi
-confirmada. Não houve consulta de banco, deploy, migração ou mudança de ambiente.
+confirmada; este é o pré-estado histórico. Com autorização explícita posterior, a revisão live
+foi lida como `20261017_0072`, a única migração aplicada foi `20261017_0073` com
+`lock_timeout=5s` e `statement_timeout=60s`, e Alembic confirmou `20261017_0073 (head)`.
+Metadados sem dados de negócio confirmaram as duas colunas nullable (timestamp com fuso e
+boolean). API e proxy foram recriados pelos digests publicados, com saúde pública `200` e sessão
+anônima `401`; o worker foi puxado/configurado, mas não executado. A configuração de imagens
+anterior foi preservada em modo `root:root 0600` para rollback de imagem, sem downgrade
+automático de banco. A prova de backup/restore cifrado de 2026-10-16 é histórica; nenhum
+backup/restore novo foi executado. O frontend permanece na PR #112 draft, sem merge ou
+publicação de produção nesta rodada.
 
 A menção anterior a `TENANCY_OWNER_API_READY` fechado é histórica, referente ao registro de
 2026-10-17. O gate já está aceito no GitHub desde 2026-10-16, conforme

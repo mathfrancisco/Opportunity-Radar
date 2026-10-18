@@ -19,7 +19,7 @@ concluíram com sucesso.
 | Proxy | `sha256:fc5b83b60f56e50f4fc0f80381e3bd660846971a04b4fa9003b39ae6daf7f902` | `linux/amd64`, `linux/arm64` |
 | Frontend | `sha256:2ad7b7916566d1d0977ebfe0983093f70aa80c208d46fdb2cb8af8666fcb459d` | `linux/amd64` |
 
-## Estado Oracle somente leitura
+## Pré-estado Oracle (somente leitura)
 
 - A VM responde em `x86_64`.
 - A API está saudável, com digest local pré-publicação
@@ -33,9 +33,26 @@ concluíram com sucesso.
   PostgreSQL, mas não registram a revisão 0072 nem 0073; a revisão do banco continua não
   confirmada.
 
-Não foram executadas consultas de banco, deploy, criação de gatilho de migração, migração ou
-alterações de ambiente. O procedimento de deploy permanece bloqueado até haver autorização
-operacional explícita para qualquer migração necessária.
+Este pré-estado antecede a autorização operacional explícita posterior e não descreve o estado
+final abaixo.
+
+## Migração e deploy Oracle — 2026-10-18
+
+Com autorização explícita, a revisão live foi lida como `20261017_0072 (head)`. A única
+migração foi `20261017_0072 -> 20261017_0073`, com `lock_timeout=5s` e
+`statement_timeout=60s`; Alembic confirmou `20261017_0073 (head)`. Sem ler dados de negócio,
+os metadados confirmaram `board_discovery_attempted_at` como `timestamp with time zone` nullable
+e `board_discovery_used_tavily` como `boolean` nullable.
+
+API e proxy foram recriados, nessa ordem, com os digests publicados e confirmados por
+`Config.Image`; o worker foi puxado e configurado, mas não executado para não iniciar pipeline
+ou operações de negócio. A saúde pública `/health/live` respondeu `200`; a sessão anônima e
+`/opportunities` sem autenticação responderam `401`. Logs recentes de API e proxy não continham
+os marcadores de segredo inspecionados.
+
+Antes da troca, `images.env` foi preservado para rollback com propriedade `root:root` e modo
+`0600`. A recuperação de dump cifrado, checksum e restore isolado aprovada em 2026-10-16 é
+histórica; nenhum backup ou restore novo foi executado, nem houve downgrade automático do banco.
 
 ## Gate e rollback
 
@@ -47,7 +64,9 @@ Se for necessário retorno após uma publicação posterior, o plano é restabel
 por digest imutável, usando os digests pré-publicação acima como referência e sem downgrade
 automático do banco. Não houve rollback executado.
 
-## Pendências
+## Limites atuais
 
-1. Manter a VM inalterada até autorização explícita para qualquer migração 0073; a revisão live
-   do banco não foi confirmada pelos logs disponíveis.
+1. O worker foi atualizado e puxado, mas não executado; esta rodada não rodou pipeline.
+2. Não há novos rótulos gold (senioridade `300/0`; conteúdo `0/200`) ou alegação de precisão.
+3. Não houve smoke com JWT de usuário real. O frontend permanece na PR #112 draft, sem merge
+   nem publicação de produção nesta rodada.

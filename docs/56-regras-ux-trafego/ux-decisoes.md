@@ -185,7 +185,7 @@ até haver evidência do resultado, deploy e validação pós-deploy permanecem 
 de evidência humana (senioridade: 300 amostras, 0 rotuladas; conteúdo: 0/200) continuam limitando
 alegações de precisão, sem constituir critério novo de implantação R56.
 
-## Imagens publicadas; deploy Oracle pendente — 2026-10-18
+## Imagens publicadas e deploy Oracle aplicado — 2026-10-18
 
 O workflow autorizado [#39171633133](https://github.com/mathfrancisco/Opportunity-Radar/actions/runs/39171633133)
 foi disparado com `publish=true` para o commit remoto confirmado
@@ -208,8 +208,16 @@ execução finita não estava ativo; sua referência de rollback configurada é
 `sha256:872b8c1ef73d6a4f2f5b097a961a09127c03ae1d7755c196fc575a28f3d121b8`. O gatilho de
 migração está ausente (`migrate_env_present=false`); um
 container de migração anterior terminou com exit 0, mas seus logs Alembic não expõem a revisão
-0072 ou 0073. A revisão do banco, portanto, não foi confirmada, e não houve consulta ao banco,
-deploy, criação de gatilho ou migração nesta rodada.
+0072 ou 0073; este é o pré-estado antes da autorização explícita posterior. A revisão live foi
+confirmada como `20261017_0072`, a migração única até `20261017_0073` foi aplicada com
+`lock_timeout=5s` e `statement_timeout=60s`, e Alembic confirmou `20261017_0073 (head)`.
+As duas colunas foram conferidas somente por metadados: timestamp com fuso e boolean, ambas
+nullable. API e proxy foram recriados pelos digests publicados; o worker foi puxado/configurado,
+mas não executado. A API saudável precedeu o proxy; `/health/live` público respondeu `200` e
+sessão anônima respondeu `401`. A configuração anterior de imagens foi preservada para rollback
+com `root:root 0600`, sem downgrade automático de banco. O backup/restore cifrado aprovado em
+2026-10-16 é histórico; não houve backup/restore novo. Persistem gold sem rótulos, ausência de
+smoke JWT real e frontend na PR #112 draft, sem merge ou publicação de produção nesta rodada.
 
 `TENANCY_OWNER_API_READY` já estava aceito no GitHub desde 2026-10-16, conforme
 [evidência de tenancy](../53-roadmap-hospedagem/evidencias/2026-10-15-f53-tenancy-local.md).
