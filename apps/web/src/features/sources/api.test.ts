@@ -7,6 +7,7 @@ import {
   normalizeRun,
   probeSource,
   runSource,
+  submitManualIntake,
   submitManualRun,
   updateSourceControls,
 } from './api'
@@ -188,6 +189,52 @@ describe('updateSourceControls', () => {
 })
 
 describe('entrada manual', () => {
+  it('persiste e devolve a normalização em uma única escrita', async () => {
+    respond({
+      run: { id: 'run-1', status: 'SUCCEEDED', items_seen: 1, items_persisted: 1 },
+      items: [
+        {
+          raw_item_id: 'raw-1',
+          canonical_url: null,
+          result: {
+            status: 'FAILED', identity_decision: null, error_summary: 'title is required', opportunity_id: null,
+          },
+          opportunity: null,
+        },
+      ],
+    }, 201)
+
+    const intake = await submitManualIntake('source-manual', [
+      { kind: 'TEXT', value: 'vaga sem título', metadata: {} },
+    ])
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/sources/source-manual/manual-intake',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(sentBody()).not.toHaveProperty('mode')
+    expect(intake.run.id).toBe('run-1')
+    expect(intake.items).toEqual([
+      expect.objectContaining({ rawItemId: 'raw-1', status: 'FAILED', errorSummary: 'title is required' }),
+    ])
+  })
+
+  it('expõe o identificador recuperável da execução se a normalização falhar depois da coleta', async () => {
+    respond({
+      detail: {
+        code: 'manual_intake_normalization_failed',
+        run_id: 'run-persisted',
+        message: 'A execução run-persisted foi registrada, mas a normalização falhou. Recupere-a em /opportunities/normalizations/runs/run-persisted.',
+      },
+    }, 500)
+
+    await expect(submitManualIntake('source-manual', [
+      { kind: 'TEXT', value: 'vaga persistida', metadata: {} },
+    ])).rejects.toThrow('run-persisted')
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('envia as entradas em modo manual, com o arquivo em base64', async () => {
     respond({ id: 'run-1', status: 'SUCCEEDED', items_seen: 1, items_persisted: 1 }, 201)
 

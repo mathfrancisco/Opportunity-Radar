@@ -108,7 +108,17 @@ describe('CompanyDetailPage', () => {
               evidence: null,
               last_verified_at: null,
               version: 1,
-              revisions: [],
+              revisions: [{
+                version: 2,
+                changed_at: '2040-01-02T00:00:00Z',
+                changes: {
+                  homologation_audit: {
+                    from: null,
+                    to: { status: 'reviewed', api_token: 'private-value', detail: { internal: true } },
+                  },
+                },
+                evidence_note: 'Revisão administrativa',
+              }],
               proposal: null,
             }],
             version: 1,
@@ -134,6 +144,9 @@ describe('CompanyDetailPage', () => {
     expect(container.querySelector('#fontes')).not.toBeNull()
     expect(container.textContent).toContain('ATS identificado')
     expect(container.textContent).toContain('Carreiras confirmadas')
+    expect(container.textContent).toContain('homologation_audit: status: reviewed')
+    expect(container.textContent).toContain('valor estruturado')
+    expect(container.textContent).not.toContain('private-value')
     expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent === 'Propor fonte a partir do ATS')).toBe(true)
     expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent === 'Registrar ATS')).toBe(true)
   })

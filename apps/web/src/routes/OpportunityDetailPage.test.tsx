@@ -551,6 +551,7 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     const title = container.querySelector('h1') as HTMLElement
     const facts = container.querySelector('#resumo') as HTMLElement
     const panel = container.querySelector('aside[aria-labelledby="painel-decisao"]') as HTMLElement
+    const decision = container.querySelector('#decisao') as HTMLElement
     const firstSection = panel.nextElementSibling?.querySelector('section') as HTMLElement
 
     expect(back.textContent).toContain('Voltar')
@@ -562,6 +563,8 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     expect(before(back, title)).toBe(true)
     expect(before(title, facts)).toBe(true)
     expect(before(facts, panel)).toBe(true)
+    expect(panel.contains(decision)).toBe(true)
+    expect(before(decision, firstSection)).toBe(true)
     expect(before(panel, firstSection)).toBe(true)
     // The panel carries the human actions that already existed.
     expect(panel.textContent).toContain('Relevante')

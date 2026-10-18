@@ -89,7 +89,9 @@ describe('RequireOwnerUi', () => {
     expect(client.getQueryData(['session', 'owner'])).toEqual({ is_owner: true })
     expect(container.textContent).toContain('owner content')
     expect(container.querySelector('[data-testid="location"]')?.textContent).toBe('/owner')
-    expect(privateFetchMock).toHaveBeenCalledWith('/api/session')
+    expect(privateFetchMock).toHaveBeenCalledWith('/api/session', expect.objectContaining({
+      signal: expect.any(AbortSignal),
+    }))
   })
 
   it.each([

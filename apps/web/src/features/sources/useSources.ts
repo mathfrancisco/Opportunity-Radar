@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { queryStaleTimes } from '../../lib/queryClient'
 import {
   type BatchProbeResult,
   type ManualInput,
@@ -10,10 +11,9 @@ import {
   getSourceCoverage,
   getSourceHealth,
   getSourceRuns,
-  normalizeRun,
   probeSource,
   runSource,
-  submitManualRun,
+  submitManualIntake,
   updateSourceControls,
   updateSourceSchedule,
 } from './api'
@@ -24,19 +24,21 @@ const DEFAULT_BATCH_PROBE_DELAY_MS = 500
 export function useSourceHealth(params?: { status?: 'proposed' }) {
   return useQuery({
     queryKey: ['source-health', params?.status ?? null],
-    queryFn: () => getSourceHealth(params),
+    queryFn: ({ signal }) => getSourceHealth(params, signal),
+    staleTime: queryStaleTimes.profile,
   })
 }
 
 export function useSourceCoverage() {
-  return useQuery({ queryKey: ['source-coverage'], queryFn: getSourceCoverage })
+  return useQuery({ queryKey: ['source-coverage'], queryFn: ({ signal }) => getSourceCoverage(signal), staleTime: queryStaleTimes.profile })
 }
 
 export function useSourceRuns(sourceId: string | null) {
   return useQuery({
     queryKey: ['source-runs', sourceId],
-    queryFn: () => getSourceRuns(sourceId ?? ''),
+    queryFn: ({ signal }) => getSourceRuns(sourceId ?? '', 10, signal),
     enabled: sourceId !== null,
+    staleTime: queryStaleTimes.standard,
   })
 }
 
@@ -64,8 +66,9 @@ function refreshCatalogue(client: ReturnType<typeof useQueryClient>) {
 export function useSource(sourceId: string | null) {
   return useQuery({
     queryKey: ['source', sourceId],
-    queryFn: () => getSource(sourceId ?? ''),
+    queryFn: ({ signal }) => getSource(sourceId ?? '', signal),
     enabled: sourceId !== null,
+    staleTime: queryStaleTimes.profile,
   })
 }
 
@@ -106,15 +109,12 @@ export function useUpdateSourceSchedule(sourceId: string) {
 export function useManualIntake(sourceId: string) {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: async (inputs: ManualInput[]) => {
-      const run = await submitManualRun(sourceId, inputs)
-      const items = await normalizeRun(run.id)
-      return { run, items }
-    },
+    mutationFn: (inputs: ManualInput[]) => submitManualIntake(sourceId, inputs),
     onSettled: () => {
       refreshCatalogue(client)
       void client.invalidateQueries({ queryKey: ['source-runs', sourceId] })
       void client.invalidateQueries({ queryKey: ['inbox'] })
+      void client.invalidateQueries({ queryKey: ['saved-searches'] })
     },
   })
 }

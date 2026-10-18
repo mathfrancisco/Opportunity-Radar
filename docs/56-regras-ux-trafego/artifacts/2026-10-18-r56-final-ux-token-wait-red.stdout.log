@@ -1,0 +1,5 @@
+page.waitForFunction: Timeout 8000ms exceeded.
+    at main (C:\Users\mathf\Documents\GitHub\Opportunity-Radar\.worktrees\r56-rules-ux-traffic\docs\56-regras-ux-trafego\run-isolated-ux.mjs:216:18) {
+  log: [],
+  name: 'TimeoutError'
+}

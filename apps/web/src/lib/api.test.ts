@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ConflictError,
   FieldError,
+  NetworkError,
   failureFrom,
   privateFetch,
   requestFailure,
@@ -179,5 +180,45 @@ describe('privateFetch', () => {
 
     await expect(request).rejects.toThrow('Entre na sua conta')
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('does not ask Clerk or the network for an already aborted request', async () => {
+    const getToken = vi.fn(async () => 'test-token')
+    const fetchMock = vi.fn()
+    const controller = new AbortController()
+    controller.abort()
+    vi.stubGlobal('fetch', fetchMock)
+    setAuthTokenGetter(getToken)
+    setAuthSession('user-a', true)
+
+    await expect(privateFetch('/private/aborted', { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' })
+    expect(getToken).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('stops after a token resolves if the query was cancelled', async () => {
+    let resolveToken: (token: string) => void = () => undefined
+    const token = new Promise<string>((resolve) => { resolveToken = resolve })
+    const getToken = vi.fn(() => token)
+    const fetchMock = vi.fn()
+    const controller = new AbortController()
+    vi.stubGlobal('fetch', fetchMock)
+    setAuthTokenGetter(getToken)
+    setAuthSession('user-a', true)
+
+    const request = privateFetch('/private/cancelled-after-token', { signal: controller.signal })
+    controller.abort()
+    resolveToken('test-token')
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('labels browser transport TypeError separately from response parsing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch') }))
+    setAuthTokenGetter(async () => 'test-token')
+    setAuthSession('user-a', true)
+
+    await expect(privateFetch('/private/offline')).rejects.toBeInstanceOf(NetworkError)
   })
 })

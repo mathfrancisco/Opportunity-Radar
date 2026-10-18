@@ -144,6 +144,45 @@ def test_manual_run_is_normalized_item_by_item() -> None:
     assert missing.status_code == 404
 
 
+def test_manual_intake_persists_and_normalizes_in_one_post() -> None:
+    client = _client()
+    source = client.post(
+        "/sources",
+        json={"source_type": "manual", "name": _unique("CI single-post intake"), "enabled": True},
+    ).json()
+    marker = uuid4().hex[:8]
+    inputs = [
+        {
+            "kind": "TEXT",
+            "value": f"Senior Python Engineer at Example {marker}. Remote, full time.",
+            "metadata": {"title": f"Senior Python Engineer {marker}", "company_name": "Example"},
+        }
+    ]
+
+    intake = client.post(f"/sources/{source['id']}/manual-intake", json={"inputs": inputs})
+    assert intake.status_code == 201
+    body = intake.json()
+    assert body["run"]["items_persisted"] == 1
+    assert len(body["items"]) == 1
+    assert body["items"][0]["result"]["raw_item_id"] == body["items"][0]["raw_item_id"]
+    assert body["items"][0]["result"]["status"] in {
+        "SUCCEEDED",
+        "REVIEW_REQUIRED",
+        "FAILED",
+    }
+
+    repeated = client.post(f"/sources/{source['id']}/manual-intake", json={"inputs": inputs})
+    assert repeated.status_code == 201
+    assert repeated.json()["run"]["items_skipped"] == 1
+    assert repeated.json()["run"]["items_persisted"] == 0
+    assert repeated.json()["items"] == []
+
+    invalid = client.post(f"/sources/{source['id']}/manual-intake", json={"inputs": []})
+    assert invalid.status_code == 422
+    missing = client.post(f"/sources/{uuid4()}/manual-intake", json={"inputs": inputs})
+    assert missing.status_code == 404
+
+
 def test_company_registration_reconciles_names_and_guards_identity() -> None:
     client = _client()
     total_before = client.get("/companies?page_size=1").json()["total"]
