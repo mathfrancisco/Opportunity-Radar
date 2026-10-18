@@ -11,10 +11,9 @@ import {
   getSourceCoverage,
   getSourceHealth,
   getSourceRuns,
-  normalizeRun,
   probeSource,
   runSource,
-  submitManualRun,
+  submitManualIntake,
   updateSourceControls,
   updateSourceSchedule,
 } from './api'
@@ -110,11 +109,7 @@ export function useUpdateSourceSchedule(sourceId: string) {
 export function useManualIntake(sourceId: string) {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: async (inputs: ManualInput[]) => {
-      const run = await submitManualRun(sourceId, inputs)
-      const items = await normalizeRun(run.id)
-      return { run, items }
-    },
+    mutationFn: (inputs: ManualInput[]) => submitManualIntake(sourceId, inputs),
     onSettled: () => {
       refreshCatalogue(client)
       void client.invalidateQueries({ queryKey: ['source-runs', sourceId] })

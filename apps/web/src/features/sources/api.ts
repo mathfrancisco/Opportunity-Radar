@@ -292,6 +292,11 @@ export interface RunNormalizationItem {
   opportunityTitle: string | null
 }
 
+export interface ManualIntakeResult {
+  run: SourceRun
+  items: RunNormalizationItem[]
+}
+
 function parseSource(value: unknown): SourceDefinition | null {
   if (!isRecord(value) || typeof value.id !== 'string') return null
   return {
@@ -383,8 +388,29 @@ export async function submitManualRun(
   sourceId: string,
   inputs: ManualInput[],
 ): Promise<SourceRun> {
-  const body = await send(`/sources/${sourceId}/runs`, 'POST', {
-    mode: 'MANUAL',
+  const body = await send(`/sources/${sourceId}/runs`, 'POST', manualIntakePayload(inputs, true))
+  const run = parseRun(body)
+  if (run === null) throw new Error('A API retornou uma execução inválida.')
+  return run
+}
+
+/** Persists and normalizes one manual intake without requiring a second client write. */
+export async function submitManualIntake(
+  sourceId: string,
+  inputs: ManualInput[],
+): Promise<ManualIntakeResult> {
+  const body = await send(`/sources/${sourceId}/manual-intake`, 'POST', manualIntakePayload(inputs))
+  if (!isRecord(body) || !Array.isArray(body.items)) {
+    throw new Error('A API retornou uma entrada manual inválida.')
+  }
+  const run = parseRun(body.run)
+  if (run === null) throw new Error('A API retornou uma execução inválida.')
+  return { run, items: parseNormalizationItems(body.items) }
+}
+
+function manualIntakePayload(inputs: ManualInput[], includeMode = false) {
+  return {
+    ...(includeMode ? { mode: 'MANUAL' } : {}),
     correlation_id: `manual-intake-${Date.now()}`,
     inputs: inputs.map((input) => ({
       kind: input.kind,
@@ -393,10 +419,7 @@ export async function submitManualRun(
       content_type: input.contentType ?? null,
       metadata: input.metadata,
     })),
-  })
-  const run = parseRun(body)
-  if (run === null) throw new Error('A API retornou uma execução inválida.')
-  return run
+  }
 }
 
 export async function normalizeRun(runId: string): Promise<RunNormalizationItem[]> {
@@ -404,7 +427,11 @@ export async function normalizeRun(runId: string): Promise<RunNormalizationItem[
   if (!isRecord(body) || !Array.isArray(body.items)) {
     throw new Error('A API retornou uma normalização inválida.')
   }
-  return body.items.flatMap((item): RunNormalizationItem[] => {
+  return parseNormalizationItems(body.items)
+}
+
+function parseNormalizationItems(items: unknown[]): RunNormalizationItem[] {
+  return items.flatMap((item): RunNormalizationItem[] => {
     if (!isRecord(item) || typeof item.raw_item_id !== 'string' || !isRecord(item.result)) {
       return []
     }

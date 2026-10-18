@@ -779,7 +779,7 @@ describe('request metrics harness', () => {
     expect(report.requests.filter(({ method }) => method === 'POST')).toEqual([expect.objectContaining({ endpoint: '/opportunities/duplicate-candidates/:id/confirm', outcome: 'success' })])
   })
 
-  it.skipIf(requestMetricsMode() === 'baseline')('runs each intentional manual-intake write once and refetches every active invalidated key once', async () => {
+  it.skipIf(requestMetricsMode() === 'baseline')('runs one manual-intake write and refetches every active invalidated key once', async () => {
     const activeRoutes = [
       { queryKey: ['source-health'], endpoint: '/source-health' }, { queryKey: ['source-coverage'], endpoint: '/sources/coverage' },
       { queryKey: ['source-metrics'], endpoint: '/source-metrics' }, { queryKey: ['overview'], endpoint: '/overview' },
@@ -790,14 +790,12 @@ describe('request metrics harness', () => {
     const metrics = createRequestMetricsFetch(async (request) => {
       const path = new URL(request.url).pathname
       if (request.method === 'GET') return new Response(JSON.stringify({ version: queryVersion }))
-      if (path === '/api/sources/source-1/runs') {
+      if (path === '/api/sources/source-1/manual-intake') {
         expect(request.method).toBe('POST')
         queryVersion = 2
-        return new Response(JSON.stringify({ id: 'run-1', status: 'SUCCEEDED', items_seen: 1, items_persisted: 1 }), { status: 201 })
-      }
-      if (path === '/api/opportunities/normalizations/runs/run-1') {
-        expect(request.method).toBe('POST')
-        return new Response(JSON.stringify({ items: [] }))
+        return new Response(JSON.stringify({
+          run: { id: 'run-1', status: 'SUCCEEDED', items_seen: 1, items_persisted: 1 }, items: [],
+        }), { status: 201 })
       }
       throw new Error(`Unregistered offline fixture: ${request.method} ${path}`)
     })
@@ -807,12 +805,10 @@ describe('request metrics harness', () => {
       input: [{ kind: 'URL', value: 'https://example.com/job', metadata: {} }],
       useMutationHook: () => useManualIntake('source-1'),
     })
-    const report = remember('manual-intake-two-writes-and-active-invalidations', metrics.report())
-    expect(report.requests).toEqual(expect.arrayContaining([
-      expect.objectContaining({ method: 'POST', endpoint: '/sources/:id/runs', outcome: 'success' }),
-      expect.objectContaining({ method: 'POST', endpoint: '/opportunities/normalizations/runs/:id', outcome: 'success' }),
-    ]))
-    expect(report.requests.filter(({ method }) => method === 'POST')).toHaveLength(2)
+    const report = remember('manual-intake-single-write-and-active-invalidations', metrics.report())
+    expect(report.requests.filter(({ method }) => method === 'POST')).toEqual([
+      expect.objectContaining({ method: 'POST', endpoint: '/sources/:id/manual-intake', outcome: 'success' }),
+    ])
   })
 
   it.skipIf(requestMetricsMode() === 'baseline')('retries one transient 5xx GET through the real QueryClient at most once', async () => {
