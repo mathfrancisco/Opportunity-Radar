@@ -16,10 +16,23 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
 from functools import reduce
-from typing import Any, Literal
+from typing import Any, Literal, Sequence
 from uuid import UUID
 
-from sqlalchemy import Select, String, and_, any_, case, cast, func, literal, select, true
+from sqlalchemy import (
+    BigInteger,
+    Select,
+    String,
+    and_,
+    any_,
+    case,
+    cast,
+    func,
+    literal,
+    select,
+    true,
+    union_all,
+)
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Session
 
@@ -962,6 +975,73 @@ def count_opportunity_inbox(
     statement, _ = _inbox_statement(query, owner_sub=owner_sub, totals_only=True)
     row = session.execute(statement.limit(1)).first()
     return int(row[-2]) if row is not None else 0
+
+
+def count_opportunity_inbox_batch(
+    session: Session,
+    queries: Sequence[InboxQuery],
+    *,
+    owner_sub: str,
+) -> tuple[int, ...]:
+    """Count saved Inbox queries in one statement, keeping assessments profile-scoped.
+
+    Each profile cohort owns its latest-assessment CTE. The source and application CTEs
+    are shared, while every query in a cohort becomes one conditional distinct aggregate.
+    A UNION ALL combines cohort rows without issuing a second database round trip.
+    """
+    if not queries:
+        return ()
+
+    first_sources = select(*_first_sources().c).cte("saved_search_first_sources")
+    applications = select(*_active_applications(owner_sub=owner_sub).c).cte(
+        "saved_search_active_applications"
+    )
+    cohorts: dict[UUID | None, list[tuple[int, InboxQuery]]] = {}
+    for index, query in enumerate(queries):
+        cohorts.setdefault(query.profile_version_id, []).append((index, query))
+
+    statements: list[Select[Any]] = []
+    for cohort_index, (profile_version_id, cohort_queries) in enumerate(cohorts.items()):
+        assessments = select(
+            *_latest_assessments(profile_version_id, owner_sub=owner_sub).c
+        ).cte(f"saved_search_assessments_{cohort_index}")
+        key = _posting_group_key(first_sources.c.first_source)
+        cohort_indexes = {index for index, _ in cohort_queries}
+        aggregates: list[Any] = []
+        queries_by_index = dict(cohort_queries)
+        for index in range(len(queries)):
+            if index not in cohort_indexes:
+                aggregates.append(literal(None, type_=BigInteger).label(f"count_{index}"))
+                continue
+            query = queries_by_index[index]
+            in_area = (
+                OpportunityModel.role_family.in_(query.role_families)
+                if query.role_families
+                else true()
+            )
+            condition = and_(
+                *_inbox_filters(query, assessments, applications),
+                in_area,
+            )
+            aggregates.append(
+                func.count(func.distinct(case((condition, key), else_=None))).label(
+                    f"count_{index}"
+                )
+            )
+        statements.append(
+            select(*aggregates)
+            .select_from(OpportunityModel)
+            .outerjoin(assessments, assessments.c.opportunity_id == OpportunityModel.id)
+            .outerjoin(applications, applications.c.opportunity_id == OpportunityModel.id)
+            .outerjoin(first_sources, first_sources.c.opportunity_id == OpportunityModel.id)
+        )
+
+    counts = [0] * len(queries)
+    for row in session.execute(union_all(*statements)):
+        for index, count in enumerate(row):
+            if count is not None:
+                counts[index] = int(count)
+    return tuple(counts)
 
 
 def _inbox_item(row: Any) -> InboxItem:

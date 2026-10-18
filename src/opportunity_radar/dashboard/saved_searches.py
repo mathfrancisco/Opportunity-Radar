@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -13,7 +13,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.dashboard.models import SavedSearchModel
-from opportunity_radar.dashboard.queries import InboxOrder, InboxQuery, count_opportunity_inbox
+from opportunity_radar.dashboard.queries import (
+    InboxOrder,
+    InboxQuery,
+    count_opportunity_inbox,
+    count_opportunity_inbox_batch,
+)
 from opportunity_radar.profile.domain import ProfileNotFoundError
 from opportunity_radar.profile.service import ProfileService
 
@@ -96,21 +101,42 @@ def list_saved_search_summaries(
     session: Session, *, owner_sub: str
 ) -> tuple[SavedSearchSummary, ...]:
     """List an owner's searches in the usual order with each Inbox-equivalent novelty count."""
-    summaries: list[SavedSearchSummary] = []
-    for saved_search in list_saved_searches(session, owner_sub=owner_sub):
+    saved_searches = list_saved_searches(session, owner_sub=owner_sub)
+    parsed: list[tuple[SavedSearch, InboxQuery, bool]] = []
+    invalid_ids: set[UUID] = set()
+    for saved_search in saved_searches:
         try:
-            count = new_count(session, saved_search, owner_sub=owner_sub)
+            query, needs_profile_fallback = _saved_search_inbox_query(saved_search)
         except InvalidSavedSearchFiltersError:
-            summaries.append(
-                SavedSearchSummary(
-                    saved_search=saved_search,
-                    new_count=None,
-                    count_error="invalid_filters",
-                )
-            )
-        else:
-            summaries.append(SavedSearchSummary(saved_search=saved_search, new_count=count))
-    return tuple(summaries)
+            invalid_ids.add(saved_search.id)
+            continue
+        parsed.append((saved_search, query, needs_profile_fallback))
+
+    fallback_role_families: tuple[str, ...] = ()
+    if any(needs_profile_fallback for _, _, needs_profile_fallback in parsed):
+        try:
+            active = ProfileService(session, owner_sub).get_active()
+            fallback_role_families = tuple(active.snapshot.preferences.target_role_families)
+        except ProfileNotFoundError:
+            pass
+    queries = tuple(
+        replace(query, role_families=fallback_role_families)
+        if needs_profile_fallback
+        else query
+        for _, query, needs_profile_fallback in parsed
+    )
+    counts = count_opportunity_inbox_batch(session, queries, owner_sub=owner_sub)
+    counts_by_id = {
+        saved_search.id: count for (saved_search, _, _), count in zip(parsed, counts, strict=True)
+    }
+    return tuple(
+        SavedSearchSummary(
+            saved_search=saved_search,
+            new_count=counts_by_id.get(saved_search.id),
+            count_error="invalid_filters" if saved_search.id in invalid_ids else None,
+        )
+        for saved_search in saved_searches
+    )
 
 
 def rename_saved_search(
@@ -140,6 +166,20 @@ def open_saved_search(session: Session, saved_search_id: UUID, *, owner_sub: str
 
 
 def new_count(session: Session, saved_search: SavedSearch, *, owner_sub: str) -> int:
+    query, needs_profile_fallback = _saved_search_inbox_query(saved_search)
+    if needs_profile_fallback:
+        try:
+            active = ProfileService(session, owner_sub).get_active()
+            query = replace(
+                query,
+                role_families=tuple(active.snapshot.preferences.target_role_families),
+            )
+        except ProfileNotFoundError:
+            pass
+    return count_opportunity_inbox(session, query, owner_sub=owner_sub)
+
+
+def _saved_search_inbox_query(saved_search: SavedSearch) -> tuple[InboxQuery, bool]:
     filters = saved_search.filters
     _validate_saved_search_filter_shapes(filters)
     search_filter = filters.get("search")
@@ -176,12 +216,7 @@ def new_count(session: Session, saved_search: SavedSearch, *, owner_sub: str) ->
     source_value = filters.get("source", filters.get("source_definition_id", ()))
     source_ids = _saved_search_string_values(source_value, "source")
     all_areas = filters.get("all_areas") is True or filters.get("all_areas") == "true"
-    if not role_families and not all_areas:
-        try:
-            active = ProfileService(session, owner_sub).get_active()
-            role_families = tuple(active.snapshot.preferences.target_role_families)
-        except ProfileNotFoundError:
-            role_families = ()
+    needs_profile_fallback = not role_families and not all_areas
 
     applied_value = filters.get("applied")
     applied = (
@@ -226,7 +261,7 @@ def new_count(session: Session, saved_search: SavedSearch, *, owner_sub: str) ->
         ),
         order=_saved_search_order(filters.get("order", InboxOrder.PRIORITY.value)),
     )
-    return count_opportunity_inbox(session, query, owner_sub=owner_sub)
+    return query, needs_profile_fallback
 
 
 def _saved_search_string_values(value: object, name: str) -> tuple[str, ...]:
