@@ -201,7 +201,33 @@ function TitleFacts({ opportunity }: { opportunity: OpportunityDetail }) {
           </li>
         ))}
       </ul>
+      <AbsenceRule hours={opportunity.absenceAfterHours} status={opportunity.lifecycleStatus} />
     </div>
+  )
+}
+
+/**
+ * R55-D5: when a posting closes by itself, in words. The rule lives in
+ * `OpportunityService.reconcile_run_closures` (setting `absence_after_hours`, default 24).
+ */
+export function AbsenceRule({ status, hours }: { status: string; hours: number | null }) {
+  // A closed posting says only what the rule is, never why this one closed: the screen
+  // does not know whether the posting left the board or the board run was read in full.
+  const absentFor = hours === null ? 'mais tempo que o prazo configurado' : `mais de ${hours} h`
+  return (
+    <p
+      className="mt-3 max-w-[72ch] text-body-sm text-subtle"
+      data-testid="absence-rule"
+      id="regra-ausencia"
+    >
+      <span className="font-medium text-ink">
+        {status === 'CLOSED' ? 'Regra de encerramento: ' : 'Quando a vaga é encerrada: '}
+      </span>
+      a vaga é encerrada quando some do quadro da fonte por {absentFor} (configuração{' '}
+      <code>absence_after_hours</code>) e a execução completa mais recente da fonte leu o quadro
+      inteiro. Execuções parciais ou com falha não encerram nada. Se a vaga reaparecer em uma execução completa, volta a ficar
+      ativa.
+    </p>
   )
 }
 

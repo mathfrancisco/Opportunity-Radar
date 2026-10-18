@@ -935,7 +935,7 @@ def test_candidate_enrichment_does_not_change_fingerprint() -> None:
 
 
 # ---------------------------------------------------------------------------------------
-# Card F48-15: seniority-v4 / work-mode-v7 / allowed-countries-v2 (content rules).
+# Card F48-15: seniority-v4 / work-mode-v7 / allowed-countries-v4 (content rules).
 # Phrases below are modelled on real postings (Greenhouse/Ashby/Lever, PT and EN).
 # ---------------------------------------------------------------------------------------
 
@@ -1176,13 +1176,13 @@ def test_content_rules_are_off_by_default_and_versioned_when_on() -> None:
     off = build_candidate(item)
     assert off.seniority is Seniority.UNKNOWN
     assert off.allowed_countries == ()
-    assert off.allowed_countries_version == "regions-v1"
+    assert off.allowed_countries_version == "regions-v2"
     assert off.classification_reasons == ()
 
     on = build_candidate(item, content_rules=True)
     assert on.seniority is Seniority.MID
     assert on.allowed_countries == ("BR",)
-    assert on.allowed_countries_version == REGIONS_VERSION_V2 == "allowed-countries-v2"
+    assert on.allowed_countries_version == REGIONS_VERSION_V2 == "allowed-countries-v4"
     codes = {reason["code"]: reason for reason in on.classification_reasons}
     assert codes["SENIORITY_CLASSIFICATION"]["mapping_version"] == "seniority-v4"
     assert codes["WORK_MODE_CLASSIFICATION"]["mapping_version"] == "work-mode-v7"

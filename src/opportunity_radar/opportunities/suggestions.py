@@ -54,8 +54,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Mapped, Session, mapped_column
+from sqlalchemy.sql.elements import ColumnElement
 
 from opportunity_radar.matching import currency
+from opportunity_radar.matching.domain import OpportunityWorkAuthorization
 from opportunity_radar.matching.models import CurrentAssessmentModel
 from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.domain import RoleFamily, Seniority, WorkMode
@@ -87,12 +89,43 @@ logger = get_logger("opportunity_radar.opportunities.suggestions")
 PROMPT_NAME = "job_classification/v1"
 _PROMPT_FAMILY = "job_classification"
 _DEFAULT_PROMPT_VERSION = "v1"
+#: The prompt that also asks for `country` and `work_authorization` (card R55-C5).
+_EXTENDED_PROMPT_VERSION = "v2"
 
 
 class SuggestibleField(StrEnum):
     ROLE_FAMILY = "role_family"
     SENIORITY = "seniority"
     WORK_MODE = "work_mode"
+    #: Card R55-C5: the country the posting restricts the work to, when the rules found none.
+    COUNTRY = "country"
+    #: Card R55-C5: the posting's visa / work-authorization stance, which has no rule today.
+    WORK_AUTHORIZATION = "work_authorization"
+
+
+#: The fields of the original card (F20-23); the extended ones are opt-in (R55-C5).
+BASE_FIELDS = (
+    SuggestibleField.ROLE_FAMILY,
+    SuggestibleField.SENIORITY,
+    SuggestibleField.WORK_MODE,
+)
+
+#: Where every suggestion in this module comes from. Stored on the row so an audit can
+#: always tell a model's suggestion from a decision a rule or a person made.
+SUGGESTION_ORIGIN = "ai"
+
+#: A posting is only asked about work authorization when its text speaks of it at all:
+#: a model has nothing to quote otherwise, and every silent posting would be asked again.
+WORK_AUTHORIZATION_HINTS = (
+    "visa",
+    "sponsor",
+    "work permit",
+    "work authorization",
+    "work authorisation",
+    "right to work",
+    "authorized to work",
+    "authorised to work",
+)
 
 
 #: Verdicts worth a background model call: a suggestion can only change what the user does
@@ -113,7 +146,49 @@ _FIELD_ENUMS: dict[SuggestibleField, type] = {
     SuggestibleField.ROLE_FAMILY: RoleFamily,
     SuggestibleField.SENIORITY: Seniority,
     SuggestibleField.WORK_MODE: WorkMode,
+    SuggestibleField.WORK_AUTHORIZATION: OpportunityWorkAuthorization,
 }
+
+
+#: ISO 3166-1 alpha-2 codes; a model answer outside this set (EU, ZZ...) is rejected.
+_ISO_COUNTRY_CODES = frozenset(
+    (
+        "AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE "
+        "BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD "
+        "CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM "
+        "DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF "
+        "GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU "
+        "ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN "
+        "KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME "
+        "MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA "
+        "NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM "
+        "PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI "
+        "SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK "
+        "TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI "
+        "VN VU WF WS YE YT ZA ZM ZW"
+    ).split()
+)
+#: Common non-ISO spellings a model uses for a real country.
+_COUNTRY_ALIASES = {"UK": "GB"}
+
+
+def _valid_value(field: SuggestibleField, raw: object) -> str:
+    """The canonical spelling of a model answer; `ValueError` when it is not allowed.
+
+    A country is an ISO 3166-1 alpha-2 code and never the `ANY` sentinel (a model must not
+    widen a posting to the whole world). The caller treats `UNKNOWN` and `NOT_STATED` as
+    "still unsure", not as a suggestion.
+    """
+    text_value = str(raw).strip()
+    if field is SuggestibleField.COUNTRY:
+        code = text_value.upper()
+        code = _COUNTRY_ALIASES.get(code, code)
+        if code not in _ISO_COUNTRY_CODES:
+            raise ValueError(f"not an ISO 3166-1 alpha-2 code: {text_value!r}")
+        return code
+    enum_type = _FIELD_ENUMS[field]
+    spelled = text_value if field is SuggestibleField.WORK_AUTHORIZATION else text_value.upper()
+    return str(enum_type(spelled).value)
 
 
 class OpportunitySuggestionModel(Base):
@@ -129,9 +204,10 @@ class OpportunitySuggestionModel(Base):
     __tablename__ = "field_suggestion"
     __table_args__ = (
         CheckConstraint(
-            "field IN ('role_family', 'seniority', 'work_mode')",
+            "field IN ('role_family', 'seniority', 'work_mode', 'country', 'work_authorization')",
             name="ck_field_suggestion_field",
         ),
+        CheckConstraint("origin IN ('ai')", name="ck_field_suggestion_origin"),
         CheckConstraint(
             "status IN ('PENDING', 'ACCEPTED', 'REJECTED')",
             name="ck_field_suggestion_status",
@@ -159,6 +235,9 @@ class OpportunitySuggestionModel(Base):
     model: Mapped[str] = mapped_column(String(128), nullable=False)
     prompt_version: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="PENDING")
+    origin: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=SUGGESTION_ORIGIN, server_default=SUGGESTION_ORIGIN
+    )
     decided_by: Mapped[str | None] = mapped_column(String(255))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -234,8 +313,19 @@ def load_classification_prompt(
     )
 
 
-def unknown_fields(opportunity: OpportunityModel) -> list[SuggestibleField]:
-    """Fields the deterministic rules left `UNKNOWN` on this row, right now."""
+def mentions_work_authorization(description: str | None) -> bool:
+    """Whether a description speaks of visa or work authorization at all (cheap pre-filter)."""
+    lowered = (description or "").lower()
+    return any(hint in lowered for hint in WORK_AUTHORIZATION_HINTS)
+
+
+def unknown_fields(
+    opportunity: OpportunityModel, *, extended: bool = False
+) -> list[SuggestibleField]:
+    """Fields the deterministic rules left `UNKNOWN` on this row, right now.
+
+    `extended` adds the R55-C5 fields: the country when `regions` resolved none, and the
+    work-authorization stance when the description mentions visa or work rights."""
     fields = []
     if opportunity.role_family == RoleFamily.UNKNOWN.value:
         fields.append(SuggestibleField.ROLE_FAMILY)
@@ -243,6 +333,11 @@ def unknown_fields(opportunity: OpportunityModel) -> list[SuggestibleField]:
         fields.append(SuggestibleField.SENIORITY)
     if opportunity.work_mode == WorkMode.UNKNOWN.value:
         fields.append(SuggestibleField.WORK_MODE)
+    if extended:
+        if not opportunity.allowed_countries and (opportunity.description or "").strip():
+            fields.append(SuggestibleField.COUNTRY)
+        if mentions_work_authorization(opportunity.description):
+            fields.append(SuggestibleField.WORK_AUTHORIZATION)
     return fields
 
 
@@ -269,6 +364,7 @@ def candidates_needing_suggestion(
     prompt: ClassificationPrompt | None = None,
     route: ModelRoute | None = None,
     now: datetime | None = None,
+    extended: bool = False,
 ) -> list[OpportunityModel]:
     """Return pending rows in stable `(created_at, id)` order.
 
@@ -282,7 +378,7 @@ def candidates_needing_suggestion(
     owner_sub = ProfileService.operational_owner(owner_sub)
     if owner_sub is None:
         return []
-    pending_fields = (
+    pending_fields: tuple[ColumnElement[bool], ...] = (
         and_(
             OpportunityModel.role_family == RoleFamily.UNKNOWN.value,
             ~exists().where(
@@ -323,6 +419,35 @@ def candidates_needing_suggestion(
         ),
         owner_assessment,
     )
+    if extended:
+        pending_fields = (
+            *pending_fields,
+            and_(
+                or_(
+                    OpportunityModel.allowed_countries.is_(None),
+                    func.cardinality(OpportunityModel.allowed_countries) == 0,
+                ),
+                func.length(func.trim(func.coalesce(OpportunityModel.description, ""))) > 0,
+                ~exists().where(
+                    OpportunitySuggestionModel.opportunity_id == OpportunityModel.id,
+                    OpportunitySuggestionModel.opportunity_version == OpportunityModel.version,
+                    OpportunitySuggestionModel.field == SuggestibleField.COUNTRY.value,
+                ),
+            ),
+            and_(
+                or_(
+                    *(
+                        OpportunityModel.description.ilike(f"%{hint}%")
+                        for hint in WORK_AUTHORIZATION_HINTS
+                    )
+                ),
+                ~exists().where(
+                    OpportunitySuggestionModel.opportunity_id == OpportunityModel.id,
+                    OpportunitySuggestionModel.opportunity_version == OpportunityModel.version,
+                    OpportunitySuggestionModel.field == SuggestibleField.WORK_AUTHORIZATION.value,
+                ),
+            ),
+        )
     selection = or_(*pending_fields, has_top_assessment)
     # The worker runs under one configured operational identity. Do not let the global
     # "unknown field" branch select postings that identity has not matched.
@@ -347,14 +472,19 @@ def candidates_needing_suggestion(
             page_query = page_query.where(
                 or_(
                     OpportunityModel.created_at > created_at,
-                    and_(OpportunityModel.created_at == created_at,
-                         OpportunityModel.id > opportunity_id),
+                    and_(
+                        OpportunityModel.created_at == created_at,
+                        OpportunityModel.id > opportunity_id,
+                    ),
                 )
             )
-        page = list(session.scalars(
-            page_query.order_by(OpportunityModel.created_at, OpportunityModel.id)
-            .limit(page_size)
-        ).all())
+        page = list(
+            session.scalars(
+                page_query.order_by(OpportunityModel.created_at, OpportunityModel.id).limit(
+                    page_size
+                )
+            ).all()
+        )
         if not page:
             break
         cursor = (page[-1].created_at, page[-1].id)
@@ -363,27 +493,34 @@ def candidates_needing_suggestion(
             select(SuggestionDeferModel).where(
                 SuggestionDeferModel.opportunity_id.in_(ids),
                 SuggestionDeferModel.next_attempt_at > moment,
-                *([SuggestionDeferModel.prompt_version == prompt_version]
-                  if prompt_version is not None else []),
-                *([SuggestionDeferModel.route_hash == route_hash]
-                  if route_hash is not None else []),
+                *(
+                    [SuggestionDeferModel.prompt_version == prompt_version]
+                    if prompt_version is not None
+                    else []
+                ),
+                *(
+                    [SuggestionDeferModel.route_hash == route_hash]
+                    if route_hash is not None
+                    else []
+                ),
             )
         ).all()
         deferred_keys = {(item.opportunity_id, item.content_hash) for item in defers}
         for item in page:
-            fields = [field for field in unknown_fields(item)
-                      if field.value not in existing_suggestion_fields(session, item)]
+            fields = [
+                field
+                for field in unknown_fields(item, extended=extended)
+                if field.value not in existing_suggestion_fields(session, item)
+            ]
             if not fields:
                 continue
-            sanitized = sanitize_for_llm({
-                "title": item.canonical_title or "", "description": item.description or ""
-            })
+            sanitized = sanitize_for_llm(
+                {"title": item.canonical_title or "", "description": item.description or ""}
+            )
             title = str(sanitized.get("title") or "")
             description = str(sanitized.get("description") or "")
             if prompt is not None and route is not None:
-                title, description, _ = _fit_submission(
-                    prompt, route, fields, title, description
-                )
+                title, description, _ = _fit_submission(prompt, route, fields, title, description)
             digest = _suggestion_content_hash(title, description, fields)
             if (item.id, digest) not in deferred_keys:
                 rows.append(item)
@@ -424,12 +561,10 @@ def _fit_submission(
     """Return the exact sanitized/truncated description represented in the request."""
     while description and not fits(
         prompt.system,
-        _render_user_content(
-            prompt, pending_fields=pending, title=title, description=description
-        ),
+        _render_user_content(prompt, pending_fields=pending, title=title, description=description),
         route.budget,
     ):
-        description = description[:max(0, len(description) - 200)]
+        description = description[: max(0, len(description) - 200)]
     user_content = _render_user_content(
         prompt, pending_fields=pending, title=title, description=description
     )
@@ -478,6 +613,7 @@ async def suggest_fields(
     prompt: ClassificationPrompt | None = None,
     quota_ceiling_requests: int | None = None,
     ai_enabled: bool = True,
+    extended: bool = False,
 ) -> SuggestionOutcome:
     """Ask the `job_classification` task for the fields still `UNKNOWN`, and persist
     what survives the evidence check. Never raises for a provider failure: the caller
@@ -500,6 +636,7 @@ async def suggest_fields(
             prompt=prompt,
             quota_ceiling_requests=quota_ceiling_requests,
             ai_enabled=ai_enabled,
+            extended=extended,
         )
 
 
@@ -511,12 +648,15 @@ async def _suggest_fields_claimed(
     prompt: ClassificationPrompt | None,
     quota_ceiling_requests: int | None,
     ai_enabled: bool,
+    extended: bool = False,
 ) -> SuggestionOutcome:
     operation_id = uuid4()
     bind = session.get_bind()
     engine = bind.engine if isinstance(bind, Connection) else bind
     try:
-        prompt = prompt or load_classification_prompt()
+        prompt = prompt or load_classification_prompt(
+            _EXTENDED_PROMPT_VERSION if extended else _DEFAULT_PROMPT_VERSION
+        )
     except Exception:
         _start_suggestion_operation(engine, operation_id, None)
         _finish_suggestion_operation(engine, operation_id, "internal_error", "prompt_error")
@@ -528,7 +668,7 @@ async def _suggest_fields_claimed(
 
     pending = [
         field
-        for field in unknown_fields(opportunity)
+        for field in unknown_fields(opportunity, extended=extended)
         if field.value not in existing_suggestion_fields(session, opportunity)
     ]
     if not pending:
@@ -549,9 +689,7 @@ async def _suggest_fields_claimed(
     except Exception:
         _finish_suggestion_operation(engine, operation_id, "internal_error", "route_error")
         raise
-    title, description, user_content = _fit_submission(
-        prompt, route, pending, title, description
-    )
+    title, description, user_content = _fit_submission(prompt, route, pending, title, description)
     if user_content is None:
         logger.info(
             "job_classification prompt does not fit the task budget even without a "
@@ -565,19 +703,24 @@ async def _suggest_fields_claimed(
     content_hash = _suggestion_content_hash(title, description, pending)
     route_hash = hashlib.sha256("\0".join(route.chain).encode()).hexdigest()
     now = datetime.now(UTC)
-    deferred = session.get(SuggestionDeferModel, (
-        opportunity.id, content_hash, prompt.version, route_hash,
-    ))
+    deferred = session.get(
+        SuggestionDeferModel,
+        (
+            opportunity.id,
+            content_hash,
+            prompt.version,
+            route_hash,
+        ),
+    )
     if deferred is not None and deferred.next_attempt_at > now:
         _finish_suggestion_operation(engine, operation_id, "deferred", deferred.reason)
         return SuggestionOutcome(
-            state="deferred", error_kind=deferred.reason,
+            state="deferred",
+            error_kind=deferred.reason,
             next_attempt_at=deferred.next_attempt_at,
         )
 
-    async def on_attempt_started(
-        op_id: UUID, ordinal: int, model: str, attempt: int
-    ) -> None:
+    async def on_attempt_started(op_id: UUID, ordinal: int, model: str, attempt: int) -> None:
         try:
             await asyncio.to_thread(
                 record_attempt_started,
@@ -612,29 +755,37 @@ async def _suggest_fields_claimed(
             extra={"opportunity_id": str(opportunity.id), "error_kind": error.kind.value},
         )
         _record_suggestion_operation(
-            engine, operation_id, attempts=error.attempts, state=(
-                "provider_error" if error.attempts else (
-                    "deferred" if error.quota_exhausted else "preflight"
-                )
-            ), error_kind=error.kind.value, prompt_version=prompt.version,
-            fallback_used=any(
-                attempt.model != route.chain[0] for attempt in error.attempts
+            engine,
+            operation_id,
+            attempts=error.attempts,
+            state=(
+                "provider_error"
+                if error.attempts
+                else ("deferred" if error.quota_exhausted else "preflight")
             ),
+            error_kind=error.kind.value,
+            prompt_version=prompt.version,
+            fallback_used=any(attempt.model != route.chain[0] for attempt in error.attempts),
         )
         retry_after = error.retry_after_seconds or min(
             6 * 60 * 60, 60 * (2 ** min(deferred.attempt_count if deferred else 0, 8))
         )
         next_attempt_at = now + timedelta(seconds=retry_after)
         _save_suggestion_defer(
-            session, opportunity_id=opportunity.id, content_hash=content_hash,
-            prompt_version=prompt.version, route_hash=route_hash,
-            prior=deferred, reason=("quota" if error.kind is ErrorKind.QUOTA else error.kind.value),
+            session,
+            opportunity_id=opportunity.id,
+            content_hash=content_hash,
+            prompt_version=prompt.version,
+            route_hash=route_hash,
+            prior=deferred,
+            reason=("quota" if error.kind is ErrorKind.QUOTA else error.kind.value),
             next_attempt_at=next_attempt_at,
         )
         return SuggestionOutcome(
             called=bool(error.attempts),
             state=("deferred" if error.quota_exhausted else "provider_error")
-            if error.attempts else ("deferred" if error.quota_exhausted else "preflight"),
+            if error.attempts
+            else ("deferred" if error.quota_exhausted else "preflight"),
             error_kind=error.kind.value,
             next_attempt_at=next_attempt_at,
             quota_exhausted=error.quota_exhausted,
@@ -642,15 +793,23 @@ async def _suggest_fields_claimed(
     except asyncio.CancelledError as cancellation:
         cancelled_attempts = getattr(cancellation, "attempts", ())
         _record_suggestion_operation(
-            engine, operation_id, attempts=cancelled_attempts,
+            engine,
+            operation_id,
+            attempts=cancelled_attempts,
             fallback_used=any(attempt.model != route.chain[0] for attempt in cancelled_attempts),
-            state="cancelled", error_kind="cancelled", prompt_version=prompt.version,
+            state="cancelled",
+            error_kind="cancelled",
+            prompt_version=prompt.version,
         )
         raise
     except Exception:
         _record_suggestion_operation(
-            engine, operation_id, attempts=(), state="internal_error",
-            error_kind="internal_error", prompt_version=prompt.version,
+            engine,
+            operation_id,
+            attempts=(),
+            state="internal_error",
+            error_kind="internal_error",
+            prompt_version=prompt.version,
         )
         raise
 
@@ -664,9 +823,14 @@ async def _suggest_fields_claimed(
             extra={"opportunity_id": str(opportunity.id)},
         )
         _record_suggestion_operation(
-            engine, operation_id, attempts=result.attempts,
-            fallback_used=result.fallback_used, response=result.response,
-            state="parse_error", error_kind="parse_error", prompt_version=prompt.version,
+            engine,
+            operation_id,
+            attempts=result.attempts,
+            fallback_used=result.fallback_used,
+            response=result.response,
+            state="parse_error",
+            error_kind="parse_error",
+            prompt_version=prompt.version,
         )
         return SuggestionOutcome(called=True, state="parse_error", error_kind="parse_error")
 
@@ -683,19 +847,19 @@ async def _suggest_fields_claimed(
         if raw_evidence not in submitted_text:
             discarded.append(field.value)
             continue
-        enum_type = _FIELD_ENUMS[field]
         try:
-            member = enum_type(str(raw_value).upper())
+            value = _valid_value(field, raw_value)
         except ValueError:
             discarded.append(field.value)
             continue
-        if member.value == "UNKNOWN":
+        if value in ("UNKNOWN", "NOT_STATED"):
             continue
         suggestion = OpportunitySuggestionModel(
             opportunity_id=opportunity.id,
             opportunity_version=opportunity.version,
             field=field.value,
-            value=member.value,
+            value=value,
+            origin=SUGGESTION_ORIGIN,
             evidence=raw_evidence,
             model=result.response.model,
             prompt_version=prompt.version,
@@ -711,9 +875,13 @@ async def _suggest_fields_claimed(
         session.delete(deferred)
         session.commit()
     _record_suggestion_operation(
-        engine, operation_id, attempts=result.attempts,
-        fallback_used=result.fallback_used, response=result.response,
-        state="success", prompt_version=prompt.version,
+        engine,
+        operation_id,
+        attempts=result.attempts,
+        fallback_used=result.fallback_used,
+        response=result.response,
+        state="success",
+        prompt_version=prompt.version,
     )
     return SuggestionOutcome(
         created=tuple(created), discarded_fields=tuple(discarded), called=True, state="success"
@@ -724,9 +892,10 @@ def _suggestion_content_hash(
     title: str, description: str, pending: Sequence[SuggestibleField]
 ) -> str:
     material = json.dumps(
-        {"title": title, "description": description,
-         "fields": [field.value for field in pending]},
-        ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        {"title": title, "description": description, "fields": [field.value for field in pending]},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
     )
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
@@ -764,7 +933,9 @@ def _start_suggestion_operation(
 ) -> None:
     try:
         start_operation(
-            engine, operation_id=operation_id, task=AITask.JOB_CLASSIFICATION.value,
+            engine,
+            operation_id=operation_id,
+            task=AITask.JOB_CLASSIFICATION.value,
             prompt_version=prompt_version,
         )
     except Exception:  # telemetry must never block deterministic classification
@@ -834,7 +1005,28 @@ def accept_suggestion(
             "accepting a stale suggestion"
         )
 
-    setattr(opportunity, suggestion.field, suggestion.value)
+    if suggestion.field == SuggestibleField.COUNTRY.value and opportunity.allowed_countries:
+        from opportunity_radar.opportunities.service import OpportunityVersionConflictError
+
+        raise OpportunityVersionConflictError(
+            "the posting already has a country; reclassify instead of overwriting it"
+        )
+    if suggestion.field == SuggestibleField.COUNTRY.value:
+        from opportunity_radar.opportunities.service import (
+            AI_CONFIRMED_COUNTRIES_PREFIX,
+        )
+
+        # A person confirmed it: only now does the posting carry the country, and only a
+        # later re-evaluation (never this call) can turn it into a different verdict.
+        opportunity.allowed_countries = [suggestion.value]
+        confirmed = f"{AI_CONFIRMED_COUNTRIES_PREFIX}{suggestion.prompt_version}"
+        opportunity.allowed_countries_version = confirmed[:32]
+    elif suggestion.field == SuggestibleField.WORK_AUTHORIZATION.value:
+        # No canonical column holds the stance yet: the review is recorded on the
+        # suggestion and nothing else changes (documented gap of R55-C5).
+        pass
+    else:
+        setattr(opportunity, suggestion.field, suggestion.value)
     if suggestion.field == SuggestibleField.ROLE_FAMILY.value:
         opportunity.role_family_evidence = {
             "origin": "llm_confirmed",
@@ -843,7 +1035,8 @@ def accept_suggestion(
             "prompt_version": suggestion.prompt_version,
         }
         opportunity.role_family_version = ROLE_FAMILY_VERSION
-    opportunity.version += 1
+    if suggestion.field != SuggestibleField.WORK_AUTHORIZATION.value:
+        opportunity.version += 1
 
     suggestion.status = SuggestionStatus.ACCEPTED.value
     suggestion.decided_by = decided_by
@@ -875,6 +1068,9 @@ def reject_suggestion(
 
 
 __all__ = [
+    "BASE_FIELDS",
+    "SUGGESTION_ORIGIN",
+    "WORK_AUTHORIZATION_HINTS",
     "ClassificationPrompt",
     "OpportunitySuggestionModel",
     "SuggestibleField",
@@ -886,6 +1082,7 @@ __all__ = [
     "accept_suggestion",
     "candidates_needing_suggestion",
     "load_classification_prompt",
+    "mentions_work_authorization",
     "reject_suggestion",
     "suggest_fields",
     "unknown_fields",

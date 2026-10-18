@@ -1,10 +1,19 @@
-"""Run one finite collection/normalization/evaluation(/daily retention) window and exit."""
+"""Run one finite collection/normalization/evaluation/analysis(/daily retention) window and exit."""
 
 from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Callable
+from dataclasses import replace
+from time import monotonic
 
+from opportunity_radar.matching.adapters import build_analysis_adapter
+from opportunity_radar.operations.data_reduction import (
+    DataReductionReport,
+    check_database_size,
+    run_data_reduction,
+)
 from opportunity_radar.operations.opportunity_retention import (
     DRY_RUN_JOB_NAME,
     JOB_NAME,
@@ -12,11 +21,14 @@ from opportunity_radar.operations.opportunity_retention import (
     retention_due,
     run_opportunity_retention,
 )
-from opportunity_radar.platform.config import get_settings
+from opportunity_radar.platform.ai.config import AIState, ai_status
+from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.platform.logging import get_logger
 from opportunity_radar.platform.pipeline import (
+    ANALYZE_STAGE,
     ConfigurationError,
+    ExitCode,
     PostgresWindowClaim,
     StageContext,
     StageCounts,
@@ -28,10 +40,15 @@ from opportunity_radar.platform.pipeline import (
     validate_owner,
 )
 from opportunity_radar.worker import (
+    analyze_pending,
     collect_enabled_sources,
+    collection_service_factory,
     evaluate_pending,
     normalize_opportunities,
 )
+
+#: Daily job name of the size watch that runs while the opportunity retention is off.
+SIZE_JOB_NAME = "database_size_check"
 
 logger = get_logger("opportunity_radar.scripts.run_pipeline_once")
 
@@ -43,7 +60,20 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _stages(engine, settings) -> list[StageSpec]:
+def analyze_window_cap(settings: Settings) -> int:
+    """Assessments one window may analyse: the day's request ceiling spread over its windows.
+
+    The ceiling is the soft day limit minus the interactive reserve (the free Groq quota is
+    1,000 requests a day on the 120b model), so 24 hourly windows cannot spend more than
+    the worker's share between them (R55-C1). At least 1, so a tiny ceiling still moves.
+    """
+    ceiling = settings.ai_daily_requests_soft_limit - settings.ai_interactive_reserve_requests
+    return max(1, ceiling // settings.pipeline_analyze_windows_per_day)
+
+
+def _stages(engine, settings, measurements: dict[str, object] | None = None) -> list[StageSpec]:
+    measurements = measurements if measurements is not None else {}
+
     def counts(result: dict[str, int]) -> StageCounts:
         return StageCounts(
             input=result["input"],
@@ -51,10 +81,40 @@ def _stages(engine, settings) -> list[StageSpec]:
             failed=result["failed"],
             skipped=result["skipped"],
             stopped=result["stopped"],
+            metrics={
+                key: result[key]
+                for key in ("eligible", "executed", "deadline_deferred")
+                if key in result
+            },
         )
 
+    def budgeted(context: StageContext, fraction: float):
+        """(stop callback, budget_spent) for a stage allowed `fraction` of the remaining time.
+
+        The stage stops at its own budget or the window's stop, whichever is first, but only
+        the window's stop makes it a stopped stage: spending its own share is a partial,
+        normal completion, and the stages after it still run.
+        """
+        ends_at = monotonic() + context.deadline.remaining() * fraction
+
+        def budget_spent() -> bool:
+            return monotonic() >= ends_at
+
+        return (lambda: context.should_stop() or budget_spent()), budget_spent
+
+    def finish(
+        result: dict[str, int], context: StageContext, budget_spent: Callable[[], bool]
+    ) -> StageCounts:
+        result = {**result, "stopped": int(context.should_stop())}
+        outcome = counts(result)
+        if budget_spent() and not outcome.stopped:
+            outcome = replace(outcome, metrics={**outcome.metrics, "budget_spent": 1})
+        return outcome
+
     def collect(context: StageContext) -> StageCounts:
-        return counts(
+        stop_requested, budget_spent = budgeted(context, settings.pipeline_collect_budget_fraction)
+        share = context.deadline.remaining() * settings.pipeline_collect_budget_fraction
+        return finish(
             collect_enabled_sources(
                 engine,
                 timezone=settings.collection_timezone,
@@ -62,19 +122,30 @@ def _stages(engine, settings) -> list[StageSpec]:
                 backoff_ceiling_seconds=settings.collection_backoff_ceiling_seconds,
                 source_deadline_seconds=settings.collection_source_deadline_seconds,
                 pass_deadline_seconds=min(
-                    settings.collection_pass_deadline_seconds or context.deadline.remaining(),
-                    context.deadline.remaining(),
+                    settings.collection_pass_deadline_seconds or share,
+                    share,
                 ),
                 host_concurrency=settings.collection_host_concurrency,
                 owner_sub=context.owner_sub,
-                stop_requested=context.should_stop,
-            )
+                service_factory=collection_service_factory(settings),
+                stop_requested=stop_requested,
+                manual_min_interval_hours=settings.manual_source_min_interval_hours,
+            ),
+            context,
+            budget_spent,
         )
 
     def normalize(context: StageContext) -> StageCounts:
         if context.should_stop():
             return StageCounts(stopped=1)
-        return counts(normalize_opportunities(engine, stop_requested=context.should_stop))
+        stop_requested, budget_spent = budgeted(
+            context, settings.pipeline_normalize_budget_fraction
+        )
+        return finish(
+            normalize_opportunities(engine, stop_requested=stop_requested),
+            context,
+            budget_spent,
+        )
 
     def evaluate(context: StageContext) -> StageCounts:
         if context.should_stop():
@@ -88,12 +159,80 @@ def _stages(engine, settings) -> list[StageSpec]:
             )
         )
 
+    def analyze(context: StageContext) -> StageCounts:
+        # R55-C1: gated by the kill switch and AI_ENABLED (with its key) before anything is
+        # built; a window with no quota left or no eligible verdict is a clean no-op.
+        if context.should_stop():
+            return StageCounts(stopped=1)
+        if not settings.worker_analyze_enabled or ai_status(settings) is not AIState.ENABLED:
+            return StageCounts(skipped=1, metrics={"ai_disabled": 1})
+        cap = analyze_window_cap(settings)
+        call_seconds = (
+            settings.ai_timeout_seconds * (settings.ai_max_retries + 1)
+            + settings.pipeline_analyze_margin_seconds
+        )
+        if context.deadline.remaining() < call_seconds:
+            return StageCounts(skipped=1, metrics={"deadline_deferred": 1})
+        try:
+            adapter = build_analysis_adapter(settings, engine)
+        except Exception as error:
+            # A provider that cannot even be set up is a degraded optional layer, not a
+            # failed window: the rules already ran.
+            logger.error("analysis adapter unavailable", extra={"error": type(error).__name__})
+            return StageCounts(skipped=1, metrics={"adapter_error": 1})
+        return counts(
+            analyze_pending(
+                engine,
+                adapter,
+                batch_size=cap,
+                eligible_verdicts=settings.analysis_eligible_verdicts,
+                cooldown_seconds=settings.analysis_retry_cooldown_seconds,
+                attempt_window_seconds=settings.analysis_retry_attempt_window_seconds,
+                max_attempts=settings.analysis_retry_max_attempts,
+                lease_seconds=settings.analysis_claim_lease_seconds,
+                aging_sample_ratio=settings.worker_analyze_aging_sample_ratio,
+                daily_cap_fraction=settings.worker_analyze_daily_cap_fraction,
+                worker_requests_ceiling=(
+                    settings.ai_daily_requests_soft_limit
+                    - settings.ai_interactive_reserve_requests
+                ),
+                owner_sub=context.owner_sub,
+                stop_requested=context.should_stop,
+                time_left=context.deadline.remaining,
+                min_call_seconds=call_seconds,
+            )
+        )
+
     def retention(context: StageContext) -> StageCounts:
-        # R55-E2: at most one run per UTC day; 0 days is the off switch. Deleting needs the
-        # owner's explicit OPPORTUNITY_RETENTION_APPLY=true; until then the stage only
-        # counts, and that dry run is tracked apart from applied runs.
+        # Nothing in the retention slot may block collection: any exception, from the due
+        # check to the bookkeeping, becomes a failed count, and either kind of failure is
+        # surfaced as `retention_failed` plus a nonzero exit once every stage has run.
+        try:
+            counts = retention_body(context)
+        except Exception as error:
+            logger.error("retention stage failed", extra={"error": type(error).__name__})
+            counts = StageCounts(input=1, failed=1)
+        if counts.failed:
+            measurements["retention_failed"] = True
+        return counts
+
+    def retention_body(context: StageContext) -> StageCounts:
+        # R55-E2/E6: at most one run per UTC day, and FIRST in the window so that the short
+        # hourly window always reaches it; it has its own budget (RETENTION_STAGE_BUDGET_
+        # SECONDS) so collection still runs, and a failure here never blocks collection.
+        # 0 days is the off switch for deletions, never for the 1 GB size watch.
+        # Deleting needs the owner's explicit OPPORTUNITY_RETENTION_APPLY=true; until then
+        # the stage only counts, and that dry run is tracked apart from applied runs.
+        budget_ends_at = monotonic() + settings.retention_stage_budget_seconds
+
+        def budget_spent() -> bool:
+            return monotonic() >= budget_ends_at
+
+        def should_stop() -> bool:
+            return context.should_stop() or budget_spent()
+
         if settings.opportunity_retention_days <= 0:
-            return StageCounts(skipped=1)
+            return size_only(context)
         apply = bool(settings.opportunity_retention_apply)
         job_name = JOB_NAME if apply else DRY_RUN_JOB_NAME
         if not retention_due(engine, job_name=job_name):
@@ -107,8 +246,27 @@ def _stages(engine, settings) -> list[StageSpec]:
                 batch_size=settings.opportunity_retention_batch_size,
                 ai_call_record_retention_days=settings.ai_call_record_retention_days,
                 dry_run=not apply,
-                should_stop=context.should_stop,
+                should_stop=should_stop,
             )
+            # R55-E6: payload expiry, superseded-assessment pruning and the size check share
+            # this daily slot and the same apply gate (dry run only counts). Skipped when the
+            # retention above already stopped or failed, so the day stays open for a retry.
+            if not report.stopped and not report.errors:
+                reduction = run_data_reduction(
+                    engine,
+                    apply=apply,
+                    payload_retention_days=settings.payload_retention_days,
+                    payload_batch_size=settings.payload_retention_batch_size,
+                    assessment_retention_days=settings.assessment_retention_days,
+                    assessment_batch_size=settings.assessment_retention_batch_size,
+                    size_limit_bytes=settings.database_size_limit_bytes,
+                    size_alert_ratio=settings.database_size_alert_ratio,
+                    should_stop=should_stop,
+                )
+                _note_size(reduction)
+                report.stopped = report.stopped or reduction.stopped
+                report.errors.update({f"reduction_{k}": v for k, v in reduction.errors.items()})
+                report.complete = report.complete and reduction.complete
         except Exception as error:
             try:
                 record_retention_attempt(
@@ -116,7 +274,12 @@ def _stages(engine, settings) -> list[StageSpec]:
                 )
             except Exception:  # never mask the original error
                 pass
-            raise
+            ensure_size()
+            # Logged and counted, not raised: a raising first stage would skip collection.
+            logger.error("retention stage failed", extra={"error": type(error).__name__})
+            return StageCounts(input=1, failed=1)
+        # The 70% warning must fire during a backlog too, so measure whatever happened above.
+        ensure_size()
         if not apply:
             # Per-table counts only, for the owner to read before enabling the apply flag.
             logger.info(
@@ -124,8 +287,11 @@ def _stages(engine, settings) -> list[StageSpec]:
                 extra={"job": JOB_NAME, "rows": dict(sorted(report.rows.items()))},
             )
         if report.stopped:
-            # A deadline or signal is not a failure; the day stays open for the next window.
-            return StageCounts(input=1, stopped=1)
+            # The day stays open for the next window. Only the stage's own budget running
+            # out is not a pipeline stop: collection must still run.
+            if context.should_stop():
+                return StageCounts(input=1, stopped=1)
+            return StageCounts(input=1, skipped=1)
         if report.errors:
             record_retention_attempt(
                 engine,
@@ -137,11 +303,52 @@ def _stages(engine, settings) -> list[StageSpec]:
         record_retention_attempt(engine, success=report.complete, job_name=job_name)
         return StageCounts(input=1, completed=int(report.complete))
 
+    def ensure_size() -> None:
+        if "database_size_bytes" in measurements:
+            return
+        try:
+            _note_size(
+                check_database_size(
+                    engine,
+                    size_limit_bytes=settings.database_size_limit_bytes,
+                    size_alert_ratio=settings.database_size_alert_ratio,
+                )
+            )
+        except Exception as error:  # a watch failure never fails the stage
+            logger.warning("size check failed", extra={"error": type(error).__name__})
+
+    def size_only(context: StageContext) -> StageCounts:
+        # Retention is off, but the size watch runs once per UTC day on its own job name.
+        if not retention_due(engine, job_name=SIZE_JOB_NAME):
+            return StageCounts(skipped=1)
+        if context.should_stop():
+            return StageCounts(stopped=1)
+        reduction = check_database_size(
+            engine,
+            size_limit_bytes=settings.database_size_limit_bytes,
+            size_alert_ratio=settings.database_size_alert_ratio,
+        )
+        _note_size(reduction)
+        ok = not reduction.errors
+        record_retention_attempt(
+            engine,
+            success=ok,
+            error=None if ok else ",".join(sorted(reduction.errors)),
+            job_name=SIZE_JOB_NAME,
+        )
+        return StageCounts(input=1, completed=int(ok), failed=int(not ok))
+
+    def _note_size(reduction: DataReductionReport) -> None:
+        if reduction.database_size_bytes is not None:
+            measurements["database_size_bytes"] = reduction.database_size_bytes
+            measurements["database_size_alert"] = reduction.size_alert
+
     return [
+        StageSpec("retention", retention),
         StageSpec("collect_enabled_sources", collect),
         StageSpec("normalize_opportunities", normalize),
         StageSpec("evaluate_pending", evaluate),
-        StageSpec("retention", retention),
+        StageSpec(ANALYZE_STAGE, analyze),
     ]
 
 
@@ -161,14 +368,19 @@ def main(argv: list[str] | None = None) -> int:
         engine = create_database_engine(settings.database_url)
         stop = StopSignal()
         with signal_stop(stop):
+            measurements: dict[str, object] = {}
             report = run_pipeline(
-                _stages(engine, settings),
+                _stages(engine, settings, measurements),
                 owner_sub=owner,
                 deadline_seconds=args.deadline_seconds,
                 claim_factory=lambda: PostgresWindowClaim(engine),
                 stop=stop,
             )
-        print(json.dumps(report.to_dict(), sort_keys=True))
+        # database_size_* appear only in the window that measured them (once per UTC day).
+        print(json.dumps({**report.to_dict(), **measurements}, sort_keys=True))
+        if measurements.get("retention_failed") and report.exit_code == ExitCode.SUCCESS:
+            # Collection ran, but the journal and the unit must show that retention did not.
+            return int(ExitCode.STAGE_FAILED)
         return int(report.exit_code)
     except ConfigurationError as error:
         print(

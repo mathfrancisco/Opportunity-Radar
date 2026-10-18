@@ -46,7 +46,7 @@ Na Inbox, score, fatores desconhecidos, análise semântica e frescor têm orien
 
 O runner `run-isolated-ux.mjs` montou Inbox, detalhe, Pipeline e Visão geral em viewport 360, 768 e 1440, mais erro recuperável no Inbox, estado desatualizado no detalhe, vazio no Pipeline e carregamento no Overview: 16 capturas. A Visão geral espera texto da fixture e dados renderizados antes da captura; detalhe espera `#decisao` e “Filtros eliminatórios”. O cenário loaded falha em alertas inesperados. As imagens estão em [ux-captures](ux-captures/), com proveniência em [report.json](ux-captures/report.json); uma comparação dos 12 estados carregados da base `a7f62e3` está em [baseline-a7f62e3](ux-captures/baseline-a7f62e3/).
 
-Resultado da última execução: `screenshots: 16`, `failures: []`, `blockedRequests: []`, nenhuma rolagem horizontal, e nenhum controle tocável abaixo de 44×44 px em 360 px nas quatro rotas. A inspeção tabulada cobriu os oito primeiros pontos de foco na Inbox em 1440 px: skip link, marca e seis itens de navegação exibiram outline sólido de 3 px. A inspeção visual manual das quatro capturas móveis mostrou conteúdo legível e sem clipping evidente; isso é observação das imagens, não teste de leitor de tela ou de usabilidade com participantes.
+Resultado da execução anterior à correção final: `screenshots: 16`, `failures: []`, `blockedRequests: []`, nenhuma rolagem horizontal, e nenhum controle tocável abaixo de 44×44 px em 360 px nas quatro rotas. A inspeção tabulada cobriu os oito primeiros pontos de foco na Inbox em 1440 px: skip link, marca e seis itens de navegação exibiram outline sólido de 3 px. A inspeção visual manual das quatro capturas móveis mostrou conteúdo legível e sem clipping evidente; isso é observação das imagens, não teste de leitor de tela ou de usabilidade com participantes. Essas capturas antecedem o patch final de `html_text` e não são replay da árvore atual.
 
 A checagem de contraste calcula luminância relativa sRGB e `(LmaisClaro + 0,05) / (LmaisEscuro + 0,05)` a partir dos tokens CSS. Pares avaliados: `ink/canvas` 15,32:1, `subtle/canvas` 7,77:1, `muted/surface` 6,34:1, `danger-ink/danger-surface` 7,19:1, `warning-ink/warning-surface` 7,88:1 e `surface/accent` (texto de ação primária) 7,58:1; todos acima do limite nominal 4,5:1 usado para texto. Isso cobre apenas esses valores de token, não cada estado, combinação renderizada ou requisito WCAG.
 
@@ -60,6 +60,7 @@ Comando da matriz (PowerShell; Node 24.19 do runtime local):
 $env:TEMP = (Join-Path (Resolve-Path 'docs/56-regras-ux-trafego').Path '.tmp')
 $env:TMP = $env:TEMP
 $env:UX_PLAYWRIGHT_MODULE = 'C:\Users\mathf\Documents\GitHub\Opportunity-Radar\tests\e2e\browser\node_modules\playwright\index.mjs'
+$env:UX_BROWSER_EXECUTABLE = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
 & 'C:\Users\mathf\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe' docs/56-regras-ux-trafego/run-isolated-ux.mjs
 ```
 
@@ -70,11 +71,11 @@ Test Files  4 passed (4)
 Tests       62 passed (62)
 ```
 
-O relatório registra HEAD `a7f62e302dc7633a005c5e7ada66402e0fa71435`, working tree dirty e SHA-256 do conteúdo-fonte analisado. As exclusões explícitas do hash são `docs/56-regras-ux-trafego/ux-captures/`, `docs/56-regras-ux-trafego/artifacts/`, `docs/56-regras-ux-trafego/.tmp/`, `apps/web/.tmp/`, `.validation/` e `.worktrees/`; esses caminhos contêm capturas/saídas ou worktrees auxiliares e não são código-fonte do runner.
+Os caminhos de Edge, Playwright e Node 24.19 acima foram confirmados no host em 2026-10-18. O relatório da execução anterior registra HEAD `a7f62e302dc7633a005c5e7ada66402e0fa71435`, working tree dirty e SHA-256 do conteúdo-fonte analisado. As exclusões do hash são `docs/56-regras-ux-trafego/ux-captures/`, `docs/56-regras-ux-trafego/artifacts/`, `docs/56-regras-ux-trafego/.tmp/`, `apps/web/.tmp/`, `.validation/` e `.worktrees/`; o runner aplica as exclusões ao diff rastreado e à lista de arquivos não rastreados. O teste isolado de proveniência confirmou digest invariável ao mudar saída rastreada e digest diferente ao mudar fonte rastreada.
 
 Clerk real, APIs externas, backend, dados/frescor de produção, leitores de tela, contraste de cada estado renderizado, zoom e teclado até o fim dos fluxos não foram exercitados. Os quatro estados especiais são respostas de fixture offline; o carregamento é deliberadamente mantido como fixture pendente e o cenário stale não prova comportamento de cache. Este documento não certifica conformidade WCAG, benchmark de usabilidade, build/lint/typecheck amplo nem conclusão da fase.
 
-## Follow-up de frontend — 2026-10-17
+## Follow-up histórico de frontend — 2026-10-17
 
 No checkout `C:\\Users\\mathf\\Documents\\GitHub\\Opportunity-Radar\\.worktrees\\r56-rules-ux-traffic`,
 o campo de busca da Inbox passou a manter o rascunho local até o submit e a restaurar o
@@ -95,7 +96,78 @@ orçamento de escrita: a interação Intake mantém `submitManualRun` seguido de
 portanto não se declara uma escrita por mutação nem aceite total de critérios. A saída e a
 proveniência do frontend ficam em `artifacts/frontend-gate-dependencies.md`.
 
-O gate backend final também terminou com saída 0 em banco efêmero isolado (`2728 passed`,
+O gate backend do commit `abd3fbe` também terminou com saída 0 em banco efêmero isolado (`2728 passed`,
 `10 skipped`, 15 avisos, 390.97 s). Essa evidência valida o escopo de backend exercitado, sem
 transformar as fixtures UX em prova de dados de produção ou remover a exceção de duas escritas
-do Intake.
+do Intake. Este resultado é histórico e anterior aos patches SQL/Intake e à integração local de
+`main`.
+
+## Continuação de Intake e integração — 2026-10-18
+
+O patch frontend local passou 49 testes em dois arquivos e lint; o backend teve 65 testes
+aprovados e seis avisos em 13,95 s, com Ruff limpo. Esses resultados são pré-merge. A interação
+usa um POST HTTP `manual-intake` para aquisição e normalização, mas pode realizar várias escritas
+SQL. Falhas de normalização retornam erro estruturado com `run_id` para recuperação. Não se
+conclui que há uma única escrita ou que os critérios de tráfego foram aceitos sem a validação
+integrada.
+
+A `main` inclui o cartão de orçamento de IA no Overview, elevando a medição histórica de quatro
+GETs para um alvo integrado de cinco GETs. Regenere a matriz de tráfego e proveniência após a
+integração. As 16 capturas, 35 testes de tráfego, 431 testes de frontend e 2.728 testes backend
+registrados acima pertencem à evidência anterior ao patch; não validam os novos commits.
+
+A evidência humana continua insuficiente para precisão de senioridade (300 amostras, nenhuma
+rotulada) e conteúdo (0 de 200). Não declarar precisão, conformidade UX certificada ou conclusão
+da fase com base nas capturas sintéticas.
+
+## Gates integrados focais — fotografia anterior, 2026-10-18
+
+`npm run check` integrado terminou com saída 0: lint/typecheck, 50 arquivos/479 testes e build
+em 2,09 s, com aviso de chunk acima de 500 kB. Testes focados integrados registraram backend
+304 aprovados, três avisos em 18,80 s, e frontend 84 aprovados. O gate completo de backend
+continua pendente. Naquela fotografia, tráfego e UX ainda aguardavam regeneração/capturas na
+árvore integrada. Não há confirmação de CI ou push atual.
+
+## Replay UX integrado — fotografia anterior à correção, 2026-10-18
+
+Uma execução posterior do runner gerou 16 capturas com Microsoft Edge instalado e respostas de
+API offline. O relatório registra zero falhas e zero requests bloqueadas/inesperadas. A inspeção
+coordenada cobriu desktop e mobile; no mobile verificou alvos de toque e no desktop percorreu
+foco por teclado com outline de 3 px. Na fixture, o cartão de orçamento aparece como “Desligada”.
+Relatório e imagens estão em [ux-captures](ux-captures/) e
+[report.json](ux-captures/report.json). Isso é evidência sintética e visual, não comprova dados
+de produção, acessibilidade WCAG ou usabilidade com participantes.
+
+A proveniência desse replay é transitória: regenere capturas e digest global depois que a árvore
+estabilizar. O patch para o teste hostil `html_text` foi aplicado posteriormente e a suíte backend
+completa está **PENDENTE**. Não tratar essas capturas como validação visual final da árvore atual.
+
+## Estado atual — 2026-10-18
+
+O replay offline da árvore atual gerou 16 capturas no Microsoft Edge instalado, com
+`failures: []` e `blockedRequests: []`. Não houve overflow horizontal; os quatro cenários
+móveis não tiveram controles abaixo de 44×44 px, e os oito primeiros focos da Inbox em
+1440 px mantiveram outline sólido de 3 px. A evidência está em [ux-captures](ux-captures/),
+no [report.json](ux-captures/report.json) e no transcript
+[2026-10-18-r56-final-ux.stdout.log](artifacts/2026-10-18-r56-final-ux.stdout.log).
+Uma primeira tentativa revelou que Chokidar observava o perfil temporário do Edge dentro de
+`apps/web/.tmp`; a configuração do fixture agora ignora esse diretório, mantendo `TEMP`/`TMP`
+e os critérios de avaliação inalterados. O stdout da falha de readiness está preservado em
+`artifacts/2026-10-18-r56-final-ux-css-diagnostic-red.stdout.log`.
+
+O digest do workspace exclui os mesmos prefixos de artefatos do diff de arquivos rastreados
+e não rastreados. A prova isolada confirmou que mudanças em capturas rastreadas não alteram
+o hash e mudanças em fonte rastreada alteram. O gate backend local pré-publicação terminou
+com `3181 passed, 10 skipped, 32 warnings in 635.11s (0:10:35)`; push e CI são acompanhados
+no PR, sem afirmar integração remota concluída.
+
+Uma tentativa de suíte backend completa teve cinco falhas de harness por montagens
+parciais (workflow ausente e frontend antigo). Após corrigir a montagem para o worktree
+completo somente leitura, cinco testes focados passaram em 3,12 s. Ruff raw terminou com
+`All checks passed!` e mypy raw com `Success: no issues found in 149 source files`;
+logs raw: `2026-10-18-r56-final-post-regions-ruff.stdout.log` e
+`2026-10-18-r56-final-post-regions-mypy.stdout.log`. O gate backend local pré-publicação
+passou com `3181 passed, 10 skipped, 32 warnings in 635.11s (0:10:35)`. Push e CI são
+acompanhados no PR; a integração remota não é declarada concluída. O replay UX atual está
+registrado na seção acima. Os limites humanos e de fixture descritos neste documento
+permanecem aplicáveis.

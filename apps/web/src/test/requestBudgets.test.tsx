@@ -240,6 +240,13 @@ function completePageMetrics(savedTotal = 0) {
     const path = new URL(request.url).pathname
     if (path === '/api/overview') return new Response(JSON.stringify(overviewFixture()))
     if (path === '/api/analysis-metrics') return new Response(JSON.stringify({ generated_at: '2040-01-01T00:00:00Z', current_model: '', pending: 0, windows: [], ai: { state: 'disabled', window_hours: 24, by_model: [], cache_hit_rate: null } }))
+    if (path === '/api/ai-budget') return new Response(JSON.stringify({
+      state: 'disabled',
+      day: '2026-10-18',
+      resets_at: '2026-10-19T00:00:00Z',
+      interactive_reserve_requests: 0,
+      models: [],
+    }))
     if (path === '/api/source-metrics') return new Response(JSON.stringify({ generated_at: '2040-01-01T00:00:00Z', windows: [] }))
     if (path === '/api/saved-searches/summary') return new Response(JSON.stringify(savedSearches(savedTotal).map((item) => ({ ...item, new_count: 0 }))))
     if (path === '/api/saved-searches') return new Response(JSON.stringify(savedSearches(savedTotal)))
@@ -464,7 +471,7 @@ describe('request metrics harness', () => {
     }
     mount.unmount()
     const report = remember(`cold-overview-${savedTotal}`, metrics.report())
-    expect(report.requests).toHaveLength(requestMetricsMode() === 'baseline' ? 4 + savedTotal : 4)
+    expect(report.requests).toHaveLength(requestMetricsMode() === 'baseline' ? 4 + savedTotal : 5)
     expect(report.requests.every((entry) => entry.outcome === 'success')).toBe(true)
   })
 

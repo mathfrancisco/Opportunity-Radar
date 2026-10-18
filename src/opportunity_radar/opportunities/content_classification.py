@@ -1,6 +1,6 @@
 """Content-based classification rules (card F48-15, SPEC 48 section 4.8).
 
-`seniority-v4`, `work-mode-v7` and `allowed-countries-v2` extend the title/location rules
+`seniority-v4`, `work-mode-v7` and `allowed-countries-v4` extend the title/location rules
 with evidence found in the job description. Every value carries the literal snippet that
 produced it; when no rule fires, or two rules disagree, the answer stays `UNKNOWN` (never a
 guess). Precedence, in order: structured collector field > title/location > description.
@@ -484,7 +484,7 @@ def classify_enabled_rules(
 ) -> PartialClassification:
     """Run only the description rules named in `enabled_rules`; everything else stays as it was.
 
-    A field takes the v4/v7/v2 answer only when a description rule that is enabled produced
+    A field takes the v4/v7/v4 answer only when a description rule that is enabled produced
     it, and then carries that version. Otherwise it keeps the v3/v6/regions-v1 answer and
     version, so a stored version never names a rule set that did not decide the value.
     """
@@ -509,9 +509,9 @@ def classify_enabled_rules(
     evidence: dict[str, str] | None = None
     if "allowed_countries:description" in enabled_rules:
         countries, evidence = resolve_allowed_countries_v2(location_text, description)
-    if evidence is not None:
         countries_version = REGIONS_VERSION_V2
-        reasons.append(allowed_countries_reason(countries, evidence))
+        if evidence is not None:
+            reasons.append(allowed_countries_reason(countries, evidence))
     else:
         countries = resolve_allowed_countries(location_text)
         countries_version = REGIONS_VERSION

@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { AIBudgetCard } from '../components/AIBudgetCard'
 import { ButtonLink } from '../components/Button'
 import { Card } from '../components/Card'
 import { Chip } from '../components/Chip'
@@ -471,11 +472,14 @@ function AIUsageCard() {
       </Card>
     )
   }
+  // R55-D6: until the metrics arrive nothing is known, so the card must not claim "Desligada".
   if (metrics.isPending) {
     return (
       <Card>
         <p className="text-sm text-muted">IA (Groq)</p>
-        <p className="mt-2 text-sm text-subtle" role="status">Verificando disponibilidade da IA…</p>
+        <p className="mt-2 text-sm text-subtle" role="status">
+          Carregando métricas de IA…
+        </p>
       </Card>
     )
   }
@@ -819,6 +823,9 @@ function Summary({ overview }: { overview: Overview }) {
         </div>
         <div className="mt-6">
           <AIUsageCard />
+        </div>
+        <div className="mt-6">
+          <AIBudgetCard />
         </div>
         <SourceMetricsSection />
       </Block>

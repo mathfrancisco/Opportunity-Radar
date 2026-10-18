@@ -1,4 +1,4 @@
-"""Unit coverage for the `regions-v1` table (card F17-06)."""
+"""Unit coverage for the `regions` table (card F17-06)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from opportunity_radar.opportunities.regions import (
 
 
 def test_regions_version_is_pinned() -> None:
-    assert REGIONS_VERSION == "regions-v1"
+    assert REGIONS_VERSION == "regions-v2"
 
 
 @pytest.mark.parametrize(
@@ -64,7 +64,67 @@ def test_returns_empty_for_unrecognizable_text(location_text: str | None) -> Non
     assert resolve_allowed_countries(location_text) == ()
 
 
-def test_allowed_countries_v2_uses_explicit_description_before_structured_location() -> None:
+# R55-D1: a structured location that ends in a country resolves to it (`regions-v2`).
+@pytest.mark.parametrize(
+    ("location_text", "expected"),
+    [
+        ("Remote, United Kingdom", ("GB",)),
+        ("Remote - US", ("US",)),
+        ("Remote, US", ("US",)),
+        ("Remote (Canada)", ("CA",)),
+        ("Toronto, Canada", ("CA",)),
+        ("London, UK (Remote)", ("GB",)),
+        ("New York, NY, United States", ("US",)),
+        ("Brazil - Remote", ("BR",)),
+        ("São Paulo, Brazil", ("BR",)),
+        ("London, UK; Berlin, Germany", ("GB", "DE")),
+        ("Sydney, Australia", ("AU",)),
+    ],
+)
+def test_structured_location_resolves_to_its_country(
+    location_text: str, expected: tuple[str, ...]
+) -> None:
+    assert resolve_allowed_countries(location_text) == expected
+
+
+@pytest.mark.parametrize(
+    "location_text",
+    [
+        "Remote",
+        "Remote, Hybrid",
+        "San Francisco, CA",  # CA is California here, never guessed as Canada
+        "Join us",
+        "London, UK; Remote",  # one part is unknown: the whole stays unknown
+        "Remote, Europe",
+        "Berlin",
+    ],
+)
+def test_structured_location_without_a_known_country_stays_unknown(location_text: str) -> None:
+    assert resolve_allowed_countries(location_text) == ()
+
+
+def test_latam_worldwide_and_brazil_keep_their_resolution() -> None:
+    assert "BR" in resolve_allowed_countries("LATAM")
+    assert resolve_allowed_countries("Worldwide") == (ANY_COUNTRY,)
+    assert resolve_allowed_countries("Brazil") == ("BR",)
+
+
+@pytest.mark.parametrize(
+    ("location_text", "expected"),
+    [
+        ("Remote, Brazil, Argentina", ("BR", "AR")),
+        ("Remote, Canada, US", ("CA", "US")),
+        ("Remote - US, Canada", ("US", "CA")),
+        ("Berlin, Germany, Brazil", ("DE", "BR")),
+        ("Toronto, Canada", ("CA",)),
+        ("Remote, Brazil, Argentina; London, UK", ("BR", "AR", "GB")),
+    ],
+)
+def test_every_trailing_country_counts(location_text: str, expected: tuple[str, ...]) -> None:
+    assert resolve_allowed_countries(location_text) == expected
+
+
+def test_allowed_countries_v4_uses_explicit_description_before_structured_location() -> None:
     countries, evidence = resolve_allowed_countries_v2(
         "Remote, United Kingdom",
         "Applicants must be located in Brazil.",
@@ -75,17 +135,39 @@ def test_allowed_countries_v2_uses_explicit_description_before_structured_locati
     assert evidence["source"] == "description"
 
 
-def test_allowed_countries_v2_uses_structured_remote_country_without_explicit_description() -> None:
+def test_allowed_countries_v4_keeps_office_location_out_of_eligibility() -> None:
     countries, evidence = resolve_allowed_countries_v2(
-        "Remote, United Kingdom",
-        "Our London office supports customers in Brazil.",
+        "London, United Kingdom",
+        "Our office is in London.",
     )
 
-    assert countries == ("GB",)
-    assert evidence == {"source": "location", "evidence": "Remote, United Kingdom"}
+    assert countries == ()
+    assert evidence is None
 
 
-def test_allowed_countries_v2_accepts_its_remote_alias_without_changing_regions_v1() -> None:
+@pytest.mark.parametrize(
+    "location",
+    (
+        "Remote, United Kingdom",
+        "United Kingdom - Remote",
+        "United Kingdom (Remote)",
+        "Brasil - Remoto",
+    ),
+)
+def test_allowed_countries_v4_keeps_explicit_remote_location_despite_office_perks(
+    location: str,
+) -> None:
+    countries, evidence = resolve_allowed_countries_v2(
+        location,
+        "Our London office offers lunch vouchers.",
+    )
+
+    expected = ("BR",) if location == "Brasil - Remoto" else ("GB",)
+    assert countries == expected
+    assert evidence == {"source": "location", "evidence": location}
+
+
+def test_allowed_countries_v4_alias_is_limited_to_content_resolution() -> None:
     assert resolve_allowed_countries("Remote, UnitedKingdom") == ()
 
     countries, evidence = resolve_allowed_countries_v2("Remote, UnitedKingdom", None)
@@ -94,8 +176,7 @@ def test_allowed_countries_v2_accepts_its_remote_alias_without_changing_regions_
     assert evidence == {"source": "location", "evidence": "Remote, UnitedKingdom"}
 
 
-def test_allowed_countries_v2_marks_conflicting_description_scope_unknown_without_fallback(
-) -> None:
+def test_allowed_countries_v4_conflict_remains_unknown_without_location_fallback() -> None:
     countries, evidence = resolve_allowed_countries_v2(
         "Remote, United Kingdom",
         "Remote within Brazil; applicants must be located in Portugal.",
@@ -106,17 +187,3 @@ def test_allowed_countries_v2_marks_conflicting_description_scope_unknown_withou
     assert evidence["source"] == "conflict"
     assert "brazil" in evidence["evidence"]
     assert "portugal" in evidence["evidence"]
-
-
-@pytest.mark.parametrize(
-    ("location", "description"),
-    [
-        ("London, United Kingdom", "Our office is in London."),
-        ("Remote", ""),
-        (None, None),
-    ],
-)
-def test_allowed_countries_v2_keeps_missing_scope_unknown(
-    location: str | None, description: str | None
-) -> None:
-    assert resolve_allowed_countries_v2(location, description) == ((), None)

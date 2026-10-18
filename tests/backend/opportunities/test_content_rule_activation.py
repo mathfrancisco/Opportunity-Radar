@@ -113,27 +113,27 @@ RULE_FIXTURES: dict[str, tuple[str, str, str]] = {
 BASE_PINS: dict[str, tuple[tuple[str, str, str | None], tuple[str, str, tuple[str, ...], str]]] = {
     "years_min": (
         (_TITLE, _LOCATION, "We need 5+ years of experience building APIs."),
-        ("UNKNOWN", "UNKNOWN", (), "regions-v1"),
+        ("UNKNOWN", "UNKNOWN", (), "regions-v2"),
     ),
     "years_range": (
         (_TITLE, _LOCATION, "Looking for 3-5 years of experience."),
-        ("UNKNOWN", "UNKNOWN", (), "regions-v1"),
+        ("UNKNOWN", "UNKNOWN", (), "regions-v2"),
     ),
     "entry": (
         (_TITLE, _LOCATION, "This is an entry-level position."),
-        ("UNKNOWN", "UNKNOWN", (), "regions-v1"),
+        ("UNKNOWN", "UNKNOWN", (), "regions-v2"),
     ),
     "intern": (
         (_TITLE, _LOCATION, "Vaga de estágio em dados, cursando graduação."),
-        ("UNKNOWN", "UNKNOWN", (), "regions-v1"),
+        ("UNKNOWN", "UNKNOWN", (), "regions-v2"),
     ),
     "work_mode": (
         ("Data Engineer", _LOCATION, "Regime híbrido, 3 dias."),
-        ("UNKNOWN", "UNKNOWN", (), "regions-v1"),
+        ("UNKNOWN", "UNKNOWN", (), "regions-v2"),
     ),
     "country": (
         ("Data Engineer", "Remote", "Trabalho remoto no Brasil."),
-        ("UNKNOWN", "REMOTE", (), "regions-v1"),
+        ("UNKNOWN", "REMOTE", (), "regions-v2"),
     ),
     "all_three": (
         (
@@ -141,11 +141,11 @@ BASE_PINS: dict[str, tuple[tuple[str, str, str | None], tuple[str, str, tuple[st
             _LOCATION,
             "5+ years of experience. Regime híbrido, 3 dias. Must be located in Brazil.",
         ),
-        ("UNKNOWN", "UNKNOWN", (), "regions-v1"),
+        ("UNKNOWN", "UNKNOWN", (), "regions-v2"),
     ),
     "title_and_location": (
         ("Senior Data Engineer", "Remote — Brazil", None),
-        ("SENIOR", "REMOTE", ("BR",), "regions-v1"),
+        ("SENIOR", "REMOTE", ("BR",), "regions-v2"),
     ),
 }
 
@@ -161,55 +161,12 @@ def test_flag_off_and_empty_list_keep_the_base_output(name: str) -> None:
         assert candidate.classification_reasons == ()
 
 
-def test_flag_off_keeps_regions_v1_remote_alias_unknown() -> None:
-    candidate = _candidate("Data Engineer", "Remote, UnitedKingdom", None)
-
-    assert _fields(candidate) == ("UNKNOWN", "REMOTE", (), "regions-v1")
-    assert candidate.classification_reasons == ()
-
-
-def test_country_rule_uses_v2_structured_location_when_enabled() -> None:
-    candidate = _candidate(
-        "Data Engineer",
-        "Remote, UnitedKingdom",
-        None,
-        content_rules=frozenset({"allowed_countries:description"}),
-    )
-
-    assert _fields(candidate) == ("UNKNOWN", "REMOTE", ("GB",), "allowed-countries-v2")
-    reason = next(
-        reason
-        for reason in candidate.classification_reasons
-        if reason["code"] == "ALLOWED_COUNTRIES_CLASSIFICATION"
-    )
-    assert reason["source"] == "location"
-    assert reason["value"] == "GB"
-
-
-def test_country_rule_keeps_description_conflict_unknown_in_v2() -> None:
-    candidate = _candidate(
-        "Data Engineer",
-        "Remote, UnitedKingdom",
-        "Remote within Brazil; applicants must be located in Portugal.",
-        content_rules=frozenset({"allowed_countries:description"}),
-    )
-
-    assert _fields(candidate) == ("UNKNOWN", "REMOTE", (), "allowed-countries-v2")
-    reason = next(
-        reason
-        for reason in candidate.classification_reasons
-        if reason["code"] == "ALLOWED_COUNTRIES_CLASSIFICATION"
-    )
-    assert reason["source"] == "conflict"
-    assert reason["value"] is None
-
-
 def test_only_years_min_enabled_changes_seniority_and_nothing_else() -> None:
     rules = frozenset({"seniority:description_years_min"})
     description = "5+ years of experience. Regime híbrido, 3 dias. Must be located in Brazil."
     candidate = _candidate(_TITLE, _LOCATION, description, content_rules=rules)
 
-    assert _fields(candidate) == ("SENIOR", "UNKNOWN", (), "regions-v1")
+    assert _fields(candidate) == ("SENIOR", "UNKNOWN", (), "regions-v2")
     (reason,) = candidate.classification_reasons
     assert reason["code"] == "SENIORITY_CLASSIFICATION"
     assert reason["rule"] == "description_years_min"
@@ -222,7 +179,7 @@ def test_only_years_min_enabled_changes_seniority_and_nothing_else() -> None:
         "UNKNOWN",
         "UNKNOWN",
         (),
-        "regions-v1",
+        "regions-v2",
     )
 
 
@@ -237,7 +194,7 @@ def test_a_title_decided_value_keeps_the_title_mapping_version_under_partial_act
     (reason,) = candidate.classification_reasons
     assert reason["source"] == "title"
     assert reason["mapping_version"] == "seniority-v7"
-    assert candidate.allowed_countries_version == "regions-v1"
+    assert candidate.allowed_countries_version == "regions-v2"
 
 
 @pytest.mark.parametrize("rule", sorted(DESCRIPTION_RULES))
@@ -269,7 +226,7 @@ def test_each_rule_alone_affects_only_its_own_field(rule: str) -> None:
         else:
             assert with_rule == before
     if field == "allowed_countries":
-        assert alone.allowed_countries_version == "allowed-countries-v2"
+        assert alone.allowed_countries_version == "allowed-countries-v4"
     else:
         assert alone.allowed_countries_version == baseline.allowed_countries_version
 
@@ -321,14 +278,14 @@ def test_old_boolean_still_enables_every_rule() -> None:
         "5+ years of experience. Regime híbrido, 3 dias. Must be located in Brazil.",
         content_rules=settings.content_rules,
     )
-    assert _fields(candidate) == ("SENIOR", "HYBRID", ("BR",), "allowed-countries-v2")
+    assert _fields(candidate) == ("SENIOR", "HYBRID", ("BR",), "allowed-countries-v4")
     versions = {
         reason["code"]: reason["mapping_version"] for reason in candidate.classification_reasons
     }
     assert versions == {
         "SENIORITY_CLASSIFICATION": "seniority-v4",
         "WORK_MODE_CLASSIFICATION": "work-mode-v7",
-        "ALLOWED_COUNTRIES_CLASSIFICATION": "allowed-countries-v2",
+        "ALLOWED_COUNTRIES_CLASSIFICATION": "allowed-countries-v4",
     }
 
 

@@ -187,7 +187,13 @@ def main() -> None:
             for index in range(20)
         )
         saved = tuple(
-            create_saved_search(session, name=f"Varied {index}", term=term, filters=filters, owner_sub=owner_sub)
+            create_saved_search(
+                session,
+                name=f"Varied {index}",
+                term=term,
+                filters=filters,
+                owner_sub=owner_sub,
+            )
             for index, (term, filters) in enumerate(variants)
         )
         cutoff = datetime.now(UTC)
@@ -198,13 +204,23 @@ def main() -> None:
         session.commit()
         legacy, legacy_statements, legacy_seconds = _measure(
             engine,
-            lambda: tuple(new_count(session, item, owner_sub=owner_sub) for item in list_saved_searches(session, owner_sub=owner_sub)),
+            lambda: tuple(
+                new_count(session, item, owner_sub=owner_sub)
+                for item in list_saved_searches(session, owner_sub=owner_sub)
+            ),
         )
         summaries, summary_statements, summary_seconds = _measure(
             engine, lambda: list_saved_search_summaries(session, owner_sub=owner_sub)
         )
         assert [summary.new_count for summary in summaries] == list(legacy)
-        varied = {"saved_searches": 20, "legacy_statements": legacy_statements, "summary_statements": summary_statements, "legacy_seconds": round(legacy_seconds, 6), "summary_seconds": round(summary_seconds, 6), "cutoff_searches": 4}
+        varied = {
+            "saved_searches": 20,
+            "legacy_statements": legacy_statements,
+            "summary_statements": summary_statements,
+            "legacy_seconds": round(legacy_seconds, 6),
+            "summary_seconds": round(summary_seconds, 6),
+            "cutoff_searches": 4,
+        }
 
     print(
         json.dumps(

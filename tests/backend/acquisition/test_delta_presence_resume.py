@@ -345,6 +345,10 @@ def test_two_identical_visits_update_presence_without_duplicate_content_or_ai() 
             session.refresh(occurrence)
             assert occurrence.last_seen_at > first_last_seen
             assert occurrence.last_seen_run_id == second_run.id
+            # The revisit confirms presence, so reconciling the run closes nothing.
+            OpportunityService(session).reconcile_run_closures(second_run.id)
+            session.refresh(occurrence.opportunity)
+            assert occurrence.opportunity.lifecycle_status != "CLOSED"
 
             observations = list(
                 session.scalars(
@@ -353,16 +357,11 @@ def test_two_identical_visits_update_presence_without_duplicate_content_or_ai() 
                     )
                 )
             )
-            assert len(observations) == 2
-            assert {observation.source_run_id for observation in observations} == {
-                first_run.id,
-                second_run.id,
-            }
+            # R55-E3: the unchanged second visit moved presence only, it wrote no observation.
+            assert len(observations) == 1
+            assert {observation.source_run_id for observation in observations} == {first_run.id}
             assert {observation.raw_item_id for observation in observations} == {raw_item.id}
-            assert {observation.content_hash_matched for observation in observations} == {
-                False,
-                True,
-            }
+            assert {observation.content_hash_matched for observation in observations} == {False}
         finally:
             fixture.cleanup()
 
@@ -716,8 +715,8 @@ def test_out_of_order_replay_does_not_regress_last_seen() -> None:
                     )
                 )
             )
-            assert len(observations) == 1
-            assert observations[0].source_run_id == run_early.id
+            # R55-E3: an unchanged replay of a live occurrence writes no observation.
+            assert observations == []
         finally:
             fixture.cleanup()
 

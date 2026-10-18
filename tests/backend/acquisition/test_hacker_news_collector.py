@@ -36,6 +36,7 @@ from opportunity_radar.acquisition.probing import PROBE_TYPES
 from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.companies.models import Company
+from opportunity_radar.platform.config import get_settings
 from opportunity_radar.platform.database import create_database_engine
 
 _ALGOLIA = {
@@ -82,6 +83,12 @@ _COMMENTS: dict[int, dict[str, object]] = {
 }
 
 Handler = Callable[[httpx.Request], httpx.Response]
+
+
+@pytest.fixture(autouse=True)
+def _old_fixture_dates_are_not_stale(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These fixtures use fixed past dates; the R55-E1 freshness filter is not under test."""
+    monkeypatch.setattr(get_settings(), "ingest_max_age_days", 0)
 
 
 def _handler(calls: list[httpx.Request], *, comments: dict[int, Any] | None = None) -> Handler:

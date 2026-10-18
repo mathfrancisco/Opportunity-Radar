@@ -1,6 +1,6 @@
 import { installTestAuth } from '../../test/auth'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getAnalysisMetrics, getInbox, getOverview, getSourceMetrics } from './api'
+import { getAIBudget, getAnalysisMetrics, getInbox, getOverview, getSourceMetrics } from './api'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -427,7 +427,116 @@ describe('getAnalysisMetrics', () => {
       windowHours: 24,
       byModel: [],
       cacheHitRate: null,
+      byTask: [],
     })
+  })
+
+  it('lê o custo por vaga e a taxa de fallback por tarefa (R55-C4)', async () => {
+    respond({
+      generated_at: '',
+      current_model: 'x',
+      pending: 0,
+      windows: [{ window: '24h', since: '', until: '', models: [] }],
+      ai: {
+        state: 'enabled',
+        window_hours: 24,
+        by_model: [],
+        cache_hit_rate: null,
+        by_task: [
+          {
+            task: 'job_match',
+            jobs: 2,
+            cache_hits: 1,
+            requests: 3,
+            tokens: 1700,
+            avg_tokens_per_job: 850,
+            avg_requests_per_job: 1.5,
+            fallback_jobs: 1,
+            fallback_rate: 0.5,
+          },
+          { jobs: 1 },
+        ],
+      },
+    })
+
+    const report = await getAnalysisMetrics()
+
+    expect(report.ai.byTask).toEqual([
+      {
+        task: 'job_match',
+        jobs: 2,
+        cacheHits: 1,
+        requests: 3,
+        tokens: 1700,
+        avgTokensPerJob: 850,
+        avgRequestsPerJob: 1.5,
+        fallbackJobs: 1,
+        fallbackRate: 0.5,
+      },
+    ])
+  })
+})
+
+describe('getAIBudget', () => {
+  it('lê o saldo do dia por modelo e mantém o limite do provedor como null quando não há', async () => {
+    respond({
+      state: 'enabled',
+      day: '2026-10-17T00:00:00Z',
+      resets_at: '2026-10-18T00:00:00Z',
+      interactive_reserve_requests: 100,
+      models: [
+        {
+          model: 'openai/gpt-oss-120b',
+          provider_requests_limit: 1000,
+          requests_soft_limit: 850,
+          requests_used: 120,
+          requests_remaining: 880,
+          requests_remaining_operational: 730,
+          tokens_limit: 170000,
+          tokens_used: 40000,
+          tokens_remaining: 130000,
+        },
+        {
+          model: 'tokenharbor/x',
+          provider_requests_limit: null,
+          requests_soft_limit: 850,
+          requests_used: 0,
+          requests_remaining: null,
+          requests_remaining_operational: 850,
+          tokens_limit: 170000,
+          tokens_used: 0,
+          tokens_remaining: 170000,
+        },
+        { requests_used: 5 },
+      ],
+    })
+
+    const budget = await getAIBudget()
+
+    expect(fetch).toHaveBeenCalledWith('/api/ai-budget', expect.any(Object))
+    expect(budget.interactiveReserveRequests).toBe(100)
+    expect(budget.models).toHaveLength(2)
+    expect(budget.models[0]).toMatchObject({
+      model: 'openai/gpt-oss-120b',
+      providerRequestsLimit: 1000,
+      requestsUsed: 120,
+      requestsRemaining: 880,
+      tokensRemaining: 130000,
+    })
+    expect(budget.models[1].providerRequestsLimit).toBeNull()
+    expect(budget.models[1].requestsRemaining).toBeNull()
+  })
+
+  it('rejeita uma resposta sem a lista de modelos', async () => {
+    respond({ state: 'enabled' })
+
+    await expect(getAIBudget()).rejects.toThrow('orçamento de IA inválido')
+  })
+
+  it('propaga a falha HTTP', async () => {
+    respond({}, 503)
+
+    await expect(getAIBudget()).rejects.toThrow('503')
   })
 })
 

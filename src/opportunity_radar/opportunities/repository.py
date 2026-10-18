@@ -251,6 +251,16 @@ class OpportunityRepository:
             .first()
         )
 
+    def is_primary_occurrence(self, occurrence: SourceOccurrenceModel) -> bool:
+        """Whether this is the opportunity's first-attached occurrence (oldest, then id)."""
+        primary = self.session.scalar(
+            select(SourceOccurrenceModel.id)
+            .where(SourceOccurrenceModel.opportunity_id == occurrence.opportunity_id)
+            .order_by(SourceOccurrenceModel.first_seen_at, SourceOccurrenceModel.id)
+            .limit(1)
+        )
+        return primary is None or primary == occurrence.id
+
     def opportunity_by_fingerprint(
         self, *, fingerprint: str, fingerprint_version: str
     ) -> OpportunityModel | None:
@@ -289,43 +299,35 @@ class OpportunityRepository:
             )
         )
 
-    def previous_complete_run_id(
-        self, source_definition_id: UUID, *, before_run_id: UUID
-    ) -> UUID | None:
-        """The complete run immediately preceding `before_run_id` for this source."""
-        before_started_at = (
-            select(SourceRunModel.started_at)
-            .where(SourceRunModel.id == before_run_id)
-            .scalar_subquery()
-        )
-        return self.session.scalar(
-            select(SourceRunModel.id)
-            .where(
-                SourceRunModel.source_definition_id == source_definition_id,
-                SourceRunModel.complete.is_(True),
-                SourceRunModel.id != before_run_id,
-                SourceRunModel.started_at < before_started_at,
+    def complete_run_started_since(self, source_definition_id: UUID, since: datetime) -> bool:
+        """Whether a complete run of this source started after `since`."""
+        return bool(
+            self.session.scalar(
+                select(SourceRunModel.id)
+                .where(
+                    SourceRunModel.source_definition_id == source_definition_id,
+                    SourceRunModel.complete.is_(True),
+                    SourceRunModel.started_at > since,
+                )
+                .limit(1)
             )
-            .order_by(SourceRunModel.started_at.desc())
-            .limit(1)
         )
 
-    def occurrences_missing_from_both_runs(
-        self,
-        source_definition_id: UUID,
-        *,
-        current_run_id: UUID,
-        previous_complete_run_id: UUID,
+    def occurrences_unseen_since(
+        self, source_definition_id: UUID, *, cutoff: datetime
     ) -> list[SourceOccurrenceModel]:
-        """Occurrences of this source last seen in neither of the two latest complete runs."""
+        """Occurrences of this source whose `last_seen_at` is older than `cutoff`.
+
+        Presence is the occurrence's own `last_seen_*` (R55-E3: an unchanged item writes no
+        observation row, so observations cannot be the absence signal).
+        """
         return list(
             self.session.scalars(
                 select(SourceOccurrenceModel)
                 .where(
                     SourceOccurrenceModel.source_definition_id == source_definition_id,
                     SourceOccurrenceModel.last_seen_run_id.is_not(None),
-                    SourceOccurrenceModel.last_seen_run_id != current_run_id,
-                    SourceOccurrenceModel.last_seen_run_id != previous_complete_run_id,
+                    SourceOccurrenceModel.last_seen_at < cutoff,
                 )
                 .options(joinedload(SourceOccurrenceModel.opportunity))
             )

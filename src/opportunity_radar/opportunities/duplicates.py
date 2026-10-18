@@ -17,10 +17,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, exists, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
+from opportunity_radar.opportunities.domain import CanonicalCandidate
 from opportunity_radar.opportunities.models import (
     DuplicateCandidateModel,
     OpportunityModel,
@@ -30,6 +31,13 @@ from opportunity_radar.pipeline.models import ApplicationProcessModel
 
 #: A confirmed pair is never suggested again outside this window (SPEC 43 SS9).
 TITLE_LOCATION_WINDOW_DAYS = 14
+
+
+#: R55-E4: a posting is auto-attached to an open opportunity of another source only when
+#: company, title and location agree and both were published this close together.
+CROSS_SOURCE_WINDOW_DAYS = 7
+CROSS_SOURCE_RULE = "company_title_location_7d"
+_OPEN_STATUSES = ("DISCOVERED", "ACTIVE", "STALE")
 
 
 class DuplicateCandidateNotFoundError(LookupError):
@@ -71,6 +79,67 @@ def resolve_survivor(
     if (first.created_at, first.id) <= (second.created_at, second.id):
         return first, second
     return second, first
+
+
+def find_cross_source_strong_match(
+    session: Session, candidate: CanonicalCandidate, *, source_definition_id: UUID
+) -> OpportunityModel | None:
+    """The single open opportunity this posting strongly matches in *another* source.
+
+    Strong means: same company (canonical id, else normalized name), same normalized
+    title, same non-empty normalized location, no conflicting known work mode or seniority, and
+    `published_at` within `CROSS_SOURCE_WINDOW_DAYS` of each other. Anything weaker (no
+    location, no publication date, a different location, a longer gap) returns `None`
+    and stays with the `duplicate_candidate` review path.
+
+    Two guards keep a legitimate pair of requisitions apart: an opportunity that already
+    has an occurrence from this same source is never a match (one board listing the same
+    title twice is two jobs), and more than one match is ambiguous, so none is chosen.
+    The opportunity catalogue is shared; owner-scoped rows (marks, assessments,
+    applications) hang off `opportunity_id` and are never read or moved here.
+    """
+    if (
+        candidate.published_at is None
+        or candidate.normalized_location is None
+        or (candidate.company_id is None and not candidate.normalized_company_name)
+    ):
+        return None
+    company_clauses = []
+    if candidate.company_id is not None:
+        company_clauses.append(OpportunityModel.canonical_company_id == candidate.company_id)
+    # An empty key (every non-ASCII name folds to "") is a missing name, never a match.
+    if candidate.normalized_company_name:
+        company_clauses.append(
+            OpportunityModel.normalized_company_name == candidate.normalized_company_name
+        )
+    window = timedelta(days=CROSS_SOURCE_WINDOW_DAYS)
+    filters = [
+        OpportunityModel.duplicate_of.is_(None),
+        OpportunityModel.lifecycle_status.in_(_OPEN_STATUSES),
+        or_(*company_clauses),
+        OpportunityModel.normalized_title == candidate.normalized_title,
+        OpportunityModel.normalized_location == candidate.normalized_location,
+        OpportunityModel.published_at.is_not(None),
+        OpportunityModel.published_at >= candidate.published_at - window,
+        OpportunityModel.published_at <= candidate.published_at + window,
+        ~exists().where(
+            and_(
+                SourceOccurrenceModel.opportunity_id == OpportunityModel.id,
+                SourceOccurrenceModel.source_definition_id == source_definition_id,
+            )
+        ),
+    ]
+    if candidate.work_mode.value != "UNKNOWN":
+        filters.append(OpportunityModel.work_mode.in_((candidate.work_mode.value, "UNKNOWN")))
+    if candidate.seniority.value != "UNKNOWN":
+        filters.append(OpportunityModel.seniority.in_((candidate.seniority.value, "UNKNOWN")))
+    matches = session.scalars(
+        select(OpportunityModel)
+        .where(*filters)
+        .order_by(OpportunityModel.created_at, OpportunityModel.id)
+        .limit(2)
+    ).all()
+    return matches[0] if len(matches) == 1 else None
 
 
 def find_title_location_window_candidates(

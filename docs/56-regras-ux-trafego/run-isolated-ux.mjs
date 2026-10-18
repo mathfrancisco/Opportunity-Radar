@@ -18,11 +18,13 @@ const host = '127.0.0.1'
 const port = 54156
 const origin = `http://${host}:${port}`
 const vite = process.env.UX_VITE_MODULE ?? path.join(root, 'apps/web/node_modules/vite/bin/vite.js')
+const browserExecutable = process.env.UX_BROWSER_EXECUTABLE
 const failures = []
 const blockedRequests = []
 const screenshots = []
 const focusChecks = []
 const targetChecks = []
+let serverOutput = ''
 let contrastEvidence
 let readyStatus = 'pending'
 let readyError = ''
@@ -105,8 +107,8 @@ async function startServer() {
     cwd: root, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
   })
   let stderr = ''
-  child.stdout.on('data', (chunk) => { stderr += chunk })
-  child.stderr.on('data', (chunk) => { stderr += chunk })
+  child.stdout.on('data', (chunk) => { stderr += chunk; serverOutput += chunk })
+  child.stderr.on('data', (chunk) => { stderr += chunk; serverOutput += chunk })
   const deadline = Date.now() + 15000
   while (Date.now() < deadline) {
     if (child.exitCode !== null) throw new Error(`Fixture Vite stopped: ${stderr.trim()}`)
@@ -130,10 +132,11 @@ async function git(args) {
 async function workspaceEvidence() {
   const head = await git(['rev-parse', 'HEAD'])
   const status = await git(['status', '--porcelain=v1'])
-  const trackedDiff = await git(['diff', '--binary', 'HEAD'])
+  const generatedPrefixes = ['docs/56-regras-ux-trafego/ux-captures/', 'docs/56-regras-ux-trafego/artifacts/', 'docs/56-regras-ux-trafego/.tmp/', 'apps/web/.tmp/', '.validation/', '.worktrees/']
+  const diffPathspecs = ['.', ...generatedPrefixes.map((prefix) => `:(exclude)${prefix}**`)]
+  const trackedDiff = await git(['diff', '--binary', 'HEAD', '--', ...diffPathspecs])
   const untracked = await git(['ls-files', '--others', '--exclude-standard'])
   const hash = createHash('sha256').update(trackedDiff)
-  const generatedPrefixes = ['docs/56-regras-ux-trafego/ux-captures/', 'docs/56-regras-ux-trafego/artifacts/', 'docs/56-regras-ux-trafego/.tmp/', 'apps/web/.tmp/', '.validation/', '.worktrees/']
   for (const file of untracked.split('\n').filter(Boolean).sort()) {
     if (generatedPrefixes.some((prefix) => file.replaceAll('\\', '/').startsWith(prefix))) continue
     hash.update(file).update(await fs.readFile(path.join(root, file)))
@@ -168,6 +171,7 @@ function fixtureResponse(url, state, route) {
   }
   if (pathname === '/overview') return { body: overview }
   if (pathname === '/analysis-metrics') return { body: { generated_at: '', current_model: '', pending: 0, windows: [], ai: { state: 'disabled', window_hours: 24, by_model: [], cache_hit_rate: null } } }
+  if (pathname === '/ai-budget') return { body: { state: 'disabled', day: '2026-10-18', resets_at: '2026-10-19T00:00:00Z', interactive_reserve_requests: 0, models: [] } }
   if (pathname === '/source-metrics') return { body: { generated_at: '', windows: [{ window: '24h', since: '', until: '', sources: [] }, { window: '7d', since: '', until: '', sources: [] }] } }
   return undefined
 }
@@ -177,7 +181,7 @@ async function main() {
   const server = await startServer()
   let browser
   try {
-    browser = await chromium.launch({ headless: true })
+    browser = await chromium.launch({ headless: true, ...(browserExecutable ? { executablePath: browserExecutable } : {}) })
     const cases = [
       ...['inbox', 'detail', 'pipeline', 'overview'].flatMap((route) =>
         [['1440', 1440], ['768', 768], ['360', 360]].map(([label, width]) => ({ route, state: 'loaded', label, width }))),
@@ -207,9 +211,28 @@ async function main() {
         return route.continue()
       })
       const page = await context.newPage()
+      const failedResources = []
       page.on('pageerror', (error) => fail(`Browser error (${itemCase.route}/${itemCase.state}): ${error.message}`))
+      page.on('requestfailed', (request) => failedResources.push({ url: request.url(), error: request.failure()?.errorText }))
       const response = await page.goto(`${origin}/docs/56-regras-ux-trafego/ux-fixture.html?route=${itemCase.route}&state=${itemCase.state}`, { waitUntil: 'domcontentloaded' })
       if (response?.status() !== 200) fail(`Fixture page did not load (${itemCase.route}/${itemCase.state}): HTTP ${response?.status() ?? 'no response'}`)
+      try {
+        await page.waitForFunction(() => {
+          const styles = getComputedStyle(document.documentElement)
+          return ['ink', 'canvas', 'subtle', 'muted', 'surface', 'accent', 'danger-ink', 'danger-surface', 'warning-ink', 'warning-surface']
+            .every((token) => styles.getPropertyValue(`--color-${token}`).trim())
+        }, null, { timeout: 8000 })
+      } catch (error) {
+        const diagnostics = await page.evaluate(() => {
+          const styles = getComputedStyle(document.documentElement)
+          return {
+            styleSheets: [...document.styleSheets].map((sheet) => ({ href: sheet.href, disabled: sheet.disabled })),
+            tokens: Object.fromEntries(['ink', 'canvas', 'subtle', 'muted', 'surface', 'accent', 'danger-ink', 'danger-surface', 'warning-ink', 'warning-surface']
+              .map((token) => [token, styles.getPropertyValue(`--color-${token}`).trim()])),
+          }
+        })
+        throw new Error(`CSS token readiness failed for ${itemCase.route}/${itemCase.state}: ${JSON.stringify({ ...diagnostics, failedResources, browserErrors: failures.slice(-5), viteExitCode: server.exitCode, viteSignalCode: server.signalCode, viteOutput: serverOutput.slice(-4000) })}; ${error instanceof Error ? error.message : String(error)}`)
+      }
       try {
         if (itemCase.state === 'loading') await page.waitForTimeout(250)
         else if (itemCase.state === 'error') await page.getByRole('alert').first().waitFor({ timeout: 8000 })
@@ -307,6 +330,7 @@ async function main() {
     const evidence = {
       generatedAt: new Date().toISOString(),
       workspace: await workspaceEvidence(),
+      browserExecutable: browserExecutable ?? 'Playwright managed Chromium',
       screenshots,
       focusChecks,
       targetChecks,

@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { Field, controlClassName } from '../components/Field'
 import { PageShell } from '../components/PageShell'
@@ -9,10 +10,12 @@ import {
   emptyPreferences,
   type ProfilePreferences,
   type ProfileSkill,
+  type ProfileSuggestion,
   type ProfileVersion,
 } from '../features/profile/api'
 import {
   useActiveProfile,
+  useProfileSuggestions,
   useProfileVersions,
   useSaveProfile,
 } from '../features/profile/useProfile'
@@ -85,6 +88,150 @@ function EmptyProfileWarning({ noAreas, noSkills }: { noAreas: boolean; noSkills
         </p>
       )}
     </div>
+  )
+}
+
+function suggestionLabel(suggestion: ProfileSuggestion): string {
+  if (suggestion.kind === 'REMOVE_ROLE_FAMILY') {
+    return roleFamilies.find((item) => item.code === suggestion.value)?.label ?? suggestion.value
+  }
+  if (suggestion.kind === 'REMOVE_SENIORITY') {
+    return seniorities.find((item) => item.code === suggestion.value)?.label ?? suggestion.value
+  }
+  return suggestion.value
+}
+
+const suggestionText: Record<ProfileSuggestion['kind'], (label: string) => string> = {
+  REMOVE_ROLE_FAMILY: (label) => `Remover "${label}" das áreas de interesse.`,
+  REMOVE_SENIORITY: (label) => `Remover "${label}" das senioridades aceitas.`,
+  REMOVE_COUNTRY: (label) => `Remover ${label} dos países.`,
+  LOWER_COMPANY_PRIORITY: (label) => `Reduzir a prioridade da empresa ${label}.`,
+}
+
+const suggestionCause: Record<ProfileSuggestion['kind'], string> = {
+  REMOVE_ROLE_FAMILY: 'da área',
+  REMOVE_SENIORITY: 'do nível',
+  REMOVE_COUNTRY: 'de localização em',
+  LOWER_COMPANY_PRIORITY: 'da empresa',
+}
+
+/** Preference codes compare ignoring case, so "pt" and "PT" are the same country. */
+function sameCode(left: string, right: string): boolean {
+  return left.toLowerCase() === right.toLowerCase()
+}
+
+function hasCode(list: string[], value: string): boolean {
+  return list.some((item) => sameCode(item, value))
+}
+
+/** Whether the draft already carries the change a suggestion asks for. */
+function isApplied(suggestion: ProfileSuggestion, preferences: ProfilePreferences): boolean {
+  if (suggestion.kind === 'REMOVE_ROLE_FAMILY') {
+    return !hasCode(preferences.targetRoleFamilies, suggestion.value)
+  }
+  if (suggestion.kind === 'REMOVE_SENIORITY') {
+    return !hasCode(preferences.acceptedSeniorities, suggestion.value)
+  }
+  if (suggestion.kind === 'REMOVE_COUNTRY') {
+    return !hasCode(preferences.countries, suggestion.value)
+  }
+  return false
+}
+
+function applySuggestion(
+  suggestion: ProfileSuggestion,
+  preferences: ProfilePreferences,
+): Partial<ProfilePreferences> {
+  if (suggestion.kind === 'REMOVE_ROLE_FAMILY') {
+    return {
+      targetRoleFamilies: preferences.targetRoleFamilies.filter((item) => !sameCode(item, suggestion.value)),
+    }
+  }
+  if (suggestion.kind === 'REMOVE_SENIORITY') {
+    return {
+      acceptedSeniorities: preferences.acceptedSeniorities.filter(
+        (item) => !sameCode(item, suggestion.value),
+      ),
+    }
+  }
+  if (suggestion.kind === 'REMOVE_COUNTRY') {
+    return { countries: preferences.countries.filter((item) => !sameCode(item, suggestion.value)) }
+  }
+  return {}
+}
+
+/**
+ * R55-D4: what the "Não é para mim" marks suggest changing in the profile. Never automatic:
+ * "Aplicar ao rascunho" edits the form below and nothing else; the profile changes only when
+ * the owner saves a new version.
+ */
+export function SuggestedAdjustments({
+  suggestions,
+  minMarks,
+  preferences,
+  onApply,
+}: {
+  suggestions: ProfileSuggestion[]
+  minMarks: number
+  preferences: ProfilePreferences
+  onApply: (changes: Partial<ProfilePreferences>) => void
+}) {
+  if (suggestions.length === 0) return null
+  return (
+    <section
+      aria-labelledby="ajustes-sugeridos-title"
+      className="mt-8 grid gap-3 scroll-mt-6"
+      id="ajustes-sugeridos"
+    >
+      <div>
+        <h2 className="text-section" id="ajustes-sugeridos-title">
+          Ajustes sugeridos pelo seu feedback
+        </h2>
+        <p className="mt-1 max-w-[72ch] text-sm text-muted">
+          Aparecem quando você marca {minMarks} ou mais vagas como &quot;Não é para mim&quot; pelo
+          mesmo motivo. Nada muda sozinho: aplicar altera só o formulário abaixo, e o perfil só
+          muda quando você salvar uma nova versão.
+        </p>
+      </div>
+      <ul className="grid gap-2">
+        {suggestions.map((suggestion) => {
+          const label = suggestionLabel(suggestion)
+          const applied = isApplied(suggestion, preferences)
+          return (
+            <li
+              className="flex flex-wrap items-center justify-between gap-3 rounded-control border border-line bg-surface p-4 text-sm"
+              key={`${suggestion.kind}-${suggestion.value}`}
+            >
+              <span>
+                <span className="block font-medium">{suggestionText[suggestion.kind](label)}</span>
+                <span className="block text-muted">
+                  {suggestion.marks} vagas {suggestionCause[suggestion.kind]} {label} marcadas
+                  como &quot;Não é para mim&quot;.
+                </span>
+              </span>
+              {suggestion.kind === 'LOWER_COMPANY_PRIORITY' ? (
+                <Link
+                  className="font-medium underline decoration-accent decoration-2 underline-offset-4"
+                  to="/companies"
+                >
+                  Ver empresas
+                </Link>
+              ) : (
+                <Button
+                  disabled={applied}
+                  onClick={() => onApply(applySuggestion(suggestion, preferences))}
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                >
+                  {applied ? 'Aplicado ao rascunho' : 'Aplicar ao rascunho'}
+                </Button>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }
 
@@ -240,6 +387,7 @@ export function ProfilePage() {
   const active = useActiveProfile()
   const versions = useProfileVersions()
   const save = useSaveProfile()
+  const suggestions = useProfileSuggestions()
   const { skillsText, preferences, setSkillsText, updatePreferences } = useProfileDraft(active.data)
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -295,6 +443,15 @@ export function ProfilePage() {
           <EmptyState className="mt-8">Nenhum perfil ativo ainda. Preencha o formulário para criar a primeira versão.</EmptyState>
         )}
       </div>
+
+      {active.isSuccess && active.data !== null && suggestions.data && (
+        <SuggestedAdjustments
+          minMarks={suggestions.data.minMarks}
+          onApply={updatePreferences}
+          preferences={preferences}
+          suggestions={suggestions.data.suggestions}
+        />
+      )}
 
       {!active.isPending && !active.isError && (
         <form className="mt-6 grid gap-8" onSubmit={submit}>

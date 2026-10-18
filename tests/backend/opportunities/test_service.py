@@ -155,6 +155,9 @@ class _NormalizationSession:
     def refresh(self, _value) -> None:
         pass
 
+    def scalar(self, _statement):
+        return None  # no earlier-version result: a first-time normalization
+
     def execute(self, _statement):
         class _Result:
             @staticmethod

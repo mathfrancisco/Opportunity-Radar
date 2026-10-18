@@ -1,0 +1,9 @@
+page.evaluate: TypeError: Cannot read properties of null (reading 'map')
+    at luminance (eval at evaluate (:311:30), <anonymous>:5:65)
+    at ratio (eval at evaluate (:311:30), <anonymous>:10:29)
+    at eval (eval at evaluate (:311:30), <anonymous>:14:101)
+    at UtilityScript.evaluate (<anonymous>:313:16)
+    at UtilityScript.<anonymous> (<anonymous>:1:44)
+    at main (C:\Users\mathf\Documents\GitHub\Opportunity-Radar\.worktrees\r56-rules-ux-traffic\docs\56-regras-ux-trafego\run-isolated-ux.mjs:241:39) {
+  log: []
+}

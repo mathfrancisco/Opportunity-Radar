@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { queryStaleTimes } from '../../lib/queryClient'
-import { getAnalysisMetrics, getOverview, getSourceMetrics } from './api'
+import { getAIBudget, getAnalysisMetrics, getOverview, getSourceMetrics } from './api'
 
 export function useOverview() {
   return useQuery({ queryKey: ['overview'], queryFn: ({ signal }) => getOverview(signal), staleTime: queryStaleTimes.standard })
@@ -12,4 +12,8 @@ export function useSourceMetrics() {
 
 export function useAnalysisMetrics() {
   return useQuery({ queryKey: ['analysis-metrics'], queryFn: ({ signal }) => getAnalysisMetrics(signal), staleTime: queryStaleTimes.standard })
+}
+
+export function useAIBudget() {
+  return useQuery({ queryKey: ['ai-budget'], queryFn: ({ signal }) => getAIBudget(signal), staleTime: queryStaleTimes.standard })
 }

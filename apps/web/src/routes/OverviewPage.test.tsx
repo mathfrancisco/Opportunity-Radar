@@ -235,17 +235,26 @@ const disabledAnalysisMetrics = {
   ai: { state: 'disabled', window_hours: 24, by_model: [], cache_hit_rate: null },
 }
 
-/** Routes /overview, /source-metrics, /analysis-metrics and /saved-searches by URL. */
+const disabledAIBudget = {
+  state: 'disabled',
+  day: '2026-10-18',
+  resets_at: '2026-10-19T00:00:00Z',
+  interactive_reserve_requests: 0,
+  models: [],
+}
+
+/** Routes /overview, /source-metrics, /analysis-metrics, /ai-budget and saved-search summary by URL. */
 function stubOverviewFetch(overview: ReturnType<typeof overviewBody>, sourceTypes: string[]) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: unknown) => {
       const url = String(input)
-      if (url.endsWith('/saved-searches')) return new Response('[]', { status: 200 })
+      if (url.endsWith('/saved-searches/summary')) return new Response('[]', { status: 200 })
       if (url.endsWith('/overview')) return new Response(JSON.stringify(overview), { status: 200 })
       if (url.endsWith('/analysis-metrics')) {
         return new Response(JSON.stringify(disabledAnalysisMetrics), { status: 200 })
       }
+      if (url.endsWith('/ai-budget')) return new Response(JSON.stringify(disabledAIBudget), { status: 200 })
       if (url.endsWith('/source-metrics')) {
         return new Response(
           JSON.stringify({
@@ -378,7 +387,7 @@ describe('OverviewPage — composição', () => {
     )
   })
 
-  it('consulta uma vez o resumo agregado de buscas, sem chamadas por busca', async () => {
+  it('faz as mesmas requisições de antes, mais o orçamento diário de IA (R55-C6), sem outras', async () => {
     stubOverviewFetch(overviewBody(), ['greenhouse'])
 
     renderWithProviders(<OverviewPage />)
@@ -386,12 +395,14 @@ describe('OverviewPage — composição', () => {
 
     const calls = (fetch as ReturnType<typeof vi.fn>).mock.calls.map(([input]) => String(input))
     expect([...new Set(calls)].sort()).toEqual([
+      '/api/ai-budget',
       '/api/analysis-metrics',
       '/api/overview',
       '/api/saved-searches/summary',
       '/api/source-metrics',
     ])
-    expect(calls).toHaveLength(4)
+    expect(calls).toHaveLength(5)
+    expect(document.body.textContent).not.toContain('Não foi possível carregar o orçamento de IA.')
   })
 
   it('mantém contagens válidas quando outra busca salva tem filtros inválidos', async () => {
@@ -403,6 +414,7 @@ describe('OverviewPage — composição', () => {
       ]), { status: 200 })
       if (url.endsWith('/overview')) return new Response(JSON.stringify(overviewBody()), { status: 200 })
       if (url.endsWith('/analysis-metrics')) return new Response(JSON.stringify(disabledAnalysisMetrics), { status: 200 })
+      if (url.endsWith('/ai-budget')) return new Response(JSON.stringify(disabledAIBudget), { status: 200 })
       return new Response(JSON.stringify({ generated_at: '', windows: [] }), { status: 200 })
     }))
     const container = renderWithProviders(<OverviewPage />)
@@ -417,7 +429,7 @@ describe('OverviewPage — composição', () => {
     const base = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input)
       if (url.endsWith('/saved-searches/summary')) {
-        return new Response(JSON.stringify([{ ...search, new_count: 2 }]), { status: 200 })
+        return new Response(JSON.stringify([{ ...search, new_count: 2, count_error: null }]), { status: 200 })
       }
       if (url.endsWith('/saved-searches/saved-1') && init?.method === 'PATCH') {
         return new Response(JSON.stringify(search), { status: 200 })
@@ -428,6 +440,7 @@ describe('OverviewPage — composição', () => {
       if (url.endsWith('/analysis-metrics')) {
         return new Response(JSON.stringify(disabledAnalysisMetrics), { status: 200 })
       }
+      if (url.endsWith('/ai-budget')) return new Response(JSON.stringify(disabledAIBudget), { status: 200 })
       return new Response(JSON.stringify({ generated_at: '', windows: [] }), { status: 200 })
     })
     vi.stubGlobal('fetch', base)
@@ -463,6 +476,57 @@ describe('OverviewPage — composição', () => {
 
     expect(container.querySelector('h1')?.textContent).toBe('O que move sua busca esta semana?')
     expect(container.querySelector('#decisao-de-hoje')).not.toBeNull()
+  })
+})
+
+// R55-D6: the AI card said "Desligada" while the metrics were still loading.
+describe('OverviewPage — cartão de IA', () => {
+  function stubAnalysisMetrics(respond: () => Promise<Response>) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.endsWith('/analysis-metrics')) return respond()
+        if (url.endsWith('/saved-searches/summary')) return new Response('[]', { status: 200 })
+        if (url.endsWith('/overview')) {
+          return new Response(JSON.stringify(overviewBody()), { status: 200 })
+        }
+        if (url.endsWith('/ai-budget')) return new Response(JSON.stringify(disabledAIBudget), { status: 200 })
+        return new Response(JSON.stringify({ generated_at: '', windows: [] }), { status: 200 })
+      }),
+    )
+  }
+
+  it('mostra "carregando" e não "Desligada" enquanto as métricas não chegam', async () => {
+    stubAnalysisMetrics(() => new Promise<Response>(() => {}))
+
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    expect(container.textContent).toContain('Carregando métricas de IA')
+    expect(container.textContent).not.toContain('Desligada')
+  })
+
+  it('mostra "Desligada" só depois que a API informa IA desligada', async () => {
+    stubAnalysisMetrics(
+      async () => new Response(JSON.stringify(disabledAnalysisMetrics), { status: 200 }),
+    )
+
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    expect(container.textContent).not.toContain('Carregando métricas de IA')
+    expect(container.textContent).toContain('Desligada (AI_ENABLED=false).')
+  })
+
+  it('mostra o erro, e não "Desligada", quando as métricas falham', async () => {
+    stubAnalysisMetrics(async () => new Response('{}', { status: 500 }))
+
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    expect(container.textContent).toContain('Não foi possível carregar as métricas de IA.')
+    expect(container.textContent).not.toContain('Desligada')
   })
 })
 

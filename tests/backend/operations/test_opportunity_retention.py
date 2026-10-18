@@ -36,6 +36,7 @@ from opportunity_radar.operations.opportunity_retention import (
     record_retention_attempt,
     retention_due,
     run_opportunity_retention,
+    stale_by_source,
 )
 from opportunity_radar.opportunities.domain import SKILL_TAXONOMY_VERSION
 from opportunity_radar.opportunities.models import (
@@ -106,7 +107,12 @@ class _Fixture:
         return version.id
 
     def opportunity(
-        self, age_days: float, *, published_days: float | None = None, full: bool = False
+        self,
+        age_days: float,
+        *,
+        published_days: float | None = None,
+        updated_days: float | None = None,
+        full: bool = False,
     ) -> UUID:
         s = self.session
         opportunity = OpportunityModel(
@@ -120,6 +126,7 @@ class _Fixture:
             lifecycle_status="ACTIVE",
             first_seen_at=NOW - timedelta(days=age_days),
             published_at=None if published_days is None else NOW - timedelta(days=published_days),
+            source_updated_at=None if updated_days is None else NOW - timedelta(days=updated_days),
             version=1,
         )
         s.add(opportunity)
@@ -414,6 +421,53 @@ def test_recent_opportunity_is_kept(fx: _Fixture) -> None:
     run_opportunity_retention(fx.engine, retention_days=7, dry_run=False)
     assert recent in fx.present()
     assert len(fx.raw_present()) == 1
+
+
+def test_old_multi_occurrence_opportunity_goes_with_every_occurrence_and_raw_item(
+    fx: _Fixture,
+) -> None:
+    """R55-E4: a job attached to two sources is one opportunity, deleted once, whole."""
+    old = fx.opportunity(8, full=True)
+    fx.raw_item(old)
+    fx.session.commit()
+    assert fx.count(SourceOccurrenceModel, SourceOccurrenceModel.opportunity_id, [old]) == 2
+
+    report = run_opportunity_retention(fx.engine, retention_days=7, dry_run=False)
+
+    assert old not in fx.present()
+    assert fx.count(SourceOccurrenceModel, SourceOccurrenceModel.opportunity_id, [old]) == 0
+    assert fx.raw_present() == set()
+    assert report.rows.get("source_occurrence", 0) >= 2
+    assert report.rows.get("raw_item", 0) >= 2
+
+
+def test_recent_multi_occurrence_opportunity_is_kept_with_both_occurrences(
+    fx: _Fixture,
+) -> None:
+    recent = fx.opportunity(2, full=True)
+    fx.raw_item(recent)
+    fx.session.commit()
+
+    run_opportunity_retention(fx.engine, retention_days=7, dry_run=False)
+
+    assert recent in fx.present()
+    assert fx.count(SourceOccurrenceModel, SourceOccurrenceModel.opportunity_id, [recent]) == 2
+    assert len(fx.raw_present()) == 2
+
+
+def test_old_multi_occurrence_opportunity_with_application_keeps_every_occurrence(
+    fx: _Fixture,
+) -> None:
+    kept = fx.opportunity(30, full=True)
+    fx.raw_item(kept)
+    fx.session.commit()
+    fx.application(kept)
+
+    run_opportunity_retention(fx.engine, retention_days=7, dry_run=False)
+
+    assert kept in fx.present()
+    assert fx.count(SourceOccurrenceModel, SourceOccurrenceModel.opportunity_id, [kept]) == 2
+    assert len(fx.raw_present()) == 2
 
 
 def test_published_at_wins_over_first_seen(fx: _Fixture) -> None:
@@ -714,3 +768,76 @@ def test_retention_is_due_once_per_utc_day(fx: _Fixture) -> None:
             s.execute(
                 text("DELETE FROM platform.worker_job_state WHERE job_name = :j"), {"j": JOB_NAME}
             )
+
+
+def test_undated_opportunity_with_old_source_updated_at_is_old(fx: _Fixture) -> None:
+    # R55-A5: first seen today, but the source says it last changed 20 days ago.
+    stale = fx.opportunity(0, updated_days=20)
+    fresh_update = fx.opportunity(0, updated_days=2)
+    never_updated = fx.opportunity(0)
+    dated = fx.opportunity(0, published_days=1, updated_days=20)
+
+    run_opportunity_retention(fx.engine, retention_days=7, dry_run=False)
+
+    assert stale not in fx.present()
+    assert {fresh_update, never_updated, dated} <= fx.present()
+
+
+def test_stale_report_counts_per_source_and_applies_with_protections(fx: _Fixture) -> None:
+    from scripts import stale_cleanup_report
+
+    plain = fx.opportunity(0, updated_days=20)
+    with_application = fx.opportunity(0, updated_days=20)
+    fx.application(with_application)
+    marked = fx.opportunity(0, updated_days=30)
+    fx.relevant_mark(marked)
+    fresh = fx.opportunity(0, updated_days=1)
+
+    def mine() -> dict[str, int]:
+        rows = [r for r in stale_by_source(fx.engine) if r.source_name == fx.source.name]
+        assert len(rows) == 1
+        return {
+            "stale": rows[0].stale_opportunities,
+            "application": rows[0].kept_with_application,
+            "relevant": rows[0].kept_with_relevant_mark,
+            "eligible": rows[0].eligible_opportunities,
+            "raw": rows[0].linked_raw_items,
+        }
+
+    assert mine() == {"stale": 3, "application": 1, "relevant": 1, "eligible": 1, "raw": 1}
+    # Reporting deletes nothing.
+    assert {plain, with_application, marked, fresh} <= fx.present()
+
+    stale_cleanup_report.main(["--apply"])
+
+    assert plain not in fx.present()
+    assert {with_application, marked, fresh} <= fx.present()
+    assert mine()["eligible"] == 0
+
+
+def test_stale_report_counts_an_opportunity_without_occurrence_as_no_source(
+    fx: _Fixture,
+) -> None:
+    orphan = fx.opportunity(0, updated_days=20)
+    fx.session.execute(
+        text("DELETE FROM opportunities.normalization_result WHERE opportunity_id = :o"),
+        {"o": orphan},
+    )
+    fx.session.execute(
+        text(
+            "DELETE FROM opportunities.source_occurrence_observation WHERE source_occurrence_id "
+            "IN (SELECT id FROM opportunities.source_occurrence WHERE opportunity_id = :o)"
+        ),
+        {"o": orphan},
+    )
+    fx.session.execute(
+        text("DELETE FROM opportunities.source_occurrence WHERE opportunity_id = :o"),
+        {"o": orphan},
+    )
+    fx.session.commit()
+
+    rows = {r.source_name: r for r in stale_by_source(fx.engine)}
+    assert rows["no_source"].eligible_opportunities >= 1
+
+    run_opportunity_retention(fx.engine, retention_days=7, dry_run=False)
+    assert orphan not in fx.present()

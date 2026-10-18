@@ -58,6 +58,7 @@ from opportunity_radar.opportunities.models import (
 )
 from opportunity_radar.opportunities.service import OpportunityService
 from opportunity_radar.platform.database import create_database_engine
+from tests.backend.support.absence import age_occurrences
 
 pytestmark = [
     pytest.mark.integration,
@@ -485,11 +486,10 @@ def test_stale_owner_leaves_no_occurrence_or_observation_rows_after_recovery(
                 ).where(SourceOccurrenceObservationModel.source_run_id.in_([a_run_id, b_run.id]))
             )
         )
-        id_to_external = {occurrence.id: key for key, occurrence in occurrences.items()}
-        # A has no observation of the row it tried to write after the loss.
-        assert sorted(
-            (str(run_id), id_to_external[occurrence_id]) for run_id, occurrence_id in observed
-        ) == sorted([(str(a_run_id), "seen-by-a"), (str(b_run.id), "seen-by-b")])
+        # R55-E3: unchanged, live occurrences take no observation row; presence is the
+        # occurrence's own last_seen_run_id. A's pre-loss item stays, its late items leave none.
+        assert observed == []
+        assert occurrences["seen-by-a"].last_seen_run_id == a_run_id
         assert occurrences["seen-by-b"].last_seen_run_id == b_run.id
     assert board.run(a_run_id).error_code == "FENCE_REJECTED"
     assert "a-after-loss" not in board.external_ids()
@@ -899,6 +899,7 @@ def test_stale_complete_run_does_not_close_absences_once_a_newer_run_started(
     assert third.complete is True and fourth.complete is True
     with Session(board.engine) as session:
         _normalize_source(session, board)
+        age_occurrences(session, [board.source_id], external_ids=["absent"])
         guard = board.service(board.board_of(), session)
 
         closed = OpportunityService(session).reconcile_run_closures(
@@ -976,6 +977,7 @@ def test_closure_without_claims_behaves_as_before(board: _Board) -> None:
     assert third.fencing_token is None
     with Session(board.engine) as session:
         _normalize_source(session, board)
+        age_occurrences(session, [board.source_id], external_ids=["absent"])
         guard = board.service(board.board_of(), session, claims=False)
 
         assert OpportunityService(session).reconcile_run_closures(
@@ -1036,7 +1038,8 @@ def test_complete_run_after_timeout_partial_closes_absences(board: _Board) -> No
         opportunities.reconcile_run_closures(partial.id)
         assert _absent_status(session, board) != "CLOSED"
 
-        # Control: the next complete run closes the absence.
+        # Control: once unseen for over 24 h, the next complete run closes the absence.
+        age_occurrences(session, [board.source_id], external_ids=["absent"])
         third = board.run_one(board.board_of("present"))
         assert third.complete is True
         _normalize_source(session, board)
@@ -1073,6 +1076,9 @@ def test_partial_pass_between_sources_preserves_absences(
 
         # Both sources are scheduled, so the second one is skipped only by the stop.
         with Session(engine) as session:
+            age_occurrences(
+                session, [board.source_id, other.source_id], external_ids=["absent"]
+            )
             session.execute(
                 update(SourceDefinitionModel)
                 .where(

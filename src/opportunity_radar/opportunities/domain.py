@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
@@ -25,6 +25,7 @@ from opportunity_radar.opportunities.role_family import (
     classify_role_family,
     departments_from_metadata,
 )
+from opportunity_radar.platform.html_text import html_to_text
 
 
 class WorkMode(StrEnum):
@@ -955,7 +956,13 @@ _SENIORITY_WORDS: tuple[tuple[Seniority | None, str], ...] = (
     (Seniority.STAFF, r"\bstaff\b|\bespecialista\b|\bprincipal\b"),
     (Seniority.MID, r"\bsemi[- ]?senior\b|\bssr\b"),
     (Seniority.SENIOR, r"\bsenior\b|\bsr\b"),
-    (Seniority.MID, r"\bmid(?:[- ]?level)?\b|\bmiddle\b|\bintermediate\b|\bplen[oa]\b|\bpl\b"),
+    # seniority-v7 (R55-B4): "intermediate" / "intermediario(a)" are the English and
+    # Portuguese words for the mid tier (accents are folded before this runs).
+    (
+        Seniority.MID,
+        r"\bmid(?:[- ]?level)?\b|\bmiddle\b|\bplen[oa]\b|\bpl\b"
+        r"|\bintermediate\b|\bintermediari[oa]\b",
+    ),
     # seniority-v6: "associate" is the job name here, not a level. Deliberately narrow:
     # only this short list of role phrases, so "Associate Software Engineer" stays JUNIOR.
     (None, r"\blabell?ing associate\b"),
@@ -1083,9 +1090,8 @@ def infer_seniority(
 #: titles fall back to the other words of the title, or UNKNOWN. Changes titles that were
 #: already classified.
 #:
-#: v6 -> v7: explicit "Intermediate" in a title or homologated structured field maps to
-#: MID. Description text remains limited to its phrase/years rules, so "intermediate
-#: English" does not name a seniority level.
+#: v6 -> v7 (R55-B4): "intermediate" and "intermediario/a" are MID. Only titles that were
+#: UNKNOWN change.
 SENIORITY_MAPPING_VERSION = "seniority-v7"
 
 # Collector payloads are intentionally listed even when they have no approved level
@@ -1263,11 +1269,14 @@ def normalize_candidate(
 ) -> CanonicalCandidate:
     """Normalize one collected item without guessing omitted source fields.
 
-    `content_rules` switches to `seniority-v4` / `work-mode-v7` / `allowed-countries-v2`
+    `content_rules` switches to `seniority-v4` / `work-mode-v7` / `allowed-countries-v4`
     (card F48-15, description-aware, evidence cited): `True` runs every rule, a set of rule
     names runs only those (card F50-02), empty or `False` none. Off by default until the
     precision gate is met; see `content_classification`.
     """
+    # R55-B3: every ATS reaches the rules below as plain text, never as (escaped) HTML.
+    if value.description is not None:
+        value = replace(value, description=html_to_text(value.description))
     original_title = _clean_text(value.title)
     normalized_title = normalize_title(value.title)
     if original_title is None or normalized_title is None:

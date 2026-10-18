@@ -1,6 +1,39 @@
 # Validação backend R56
 
-## Prova final do backend
+## Estado da repetição integrada — 2026-10-18
+
+**APROVADA.** A suíte backend completa da árvore atual terminou com `3181 passed, 10
+skipped, 32 warnings in 635.11s (0:10:35)`. A saída integral está em
+[`2026-10-18-r56-final-backend-current-tree.stdout.log`](2026-10-18-r56-final-backend-current-tree.stdout.log).
+Esta é uma fotografia de validação local pré-publicação. Push e CI estão sendo
+acompanhados no PR; a integração remota está em andamento e não é declarada concluída.
+
+Uma execução RED anterior falhou por montagens parciais do harness: workflow ausente e
+frontend antigo; registrou 5 falhas, 3175 aprovados e 11 skipped. Após corrigir a montagem
+para usar o worktree completo somente leitura, os cinco testes de harness passaram em
+3,12 s. O RED de harness não representa falha de produto. Uma fotografia backend anterior
+ao patch de `html_text` teve 1 falha e 3176 aprovados, com 10 skipped; esse resultado
+histórico está descrito abaixo.
+
+Após a revisão do caso hostil de `html_text`, foi aplicado patch em
+`src/opportunity_radar/platform/html_text.py`: uma abertura de tag só inicia o
+parser quando há um terminador `>`. O teste de regressão correspondente está em
+`tests/backend/platform/test_html_text.py`. O teste de `html_text` passou em 36 testes;
+regressões de matching/normalização passaram em 28 testes. Separadamente, a suíte focada
+de regiões, `test_content_rule_activation` e `test_domain` reportou `295 passed in 4.97s`;
+esse resultado focado não substitui a suíte backend completa.
+
+Na resolução de regiões, a execução red registrou 3 falhas e a green após correção
+registrou 4 aprovados. Ruff raw terminou com `All checks passed!`; mypy raw terminou com
+`Success: no issues found in 149 source files`. Esses checks não substituem a suíte
+backend completa. Os logs raw são `2026-10-18-r56-final-post-regions-mypy.stdout.log`
+e `2026-10-18-r56-final-post-regions-ruff.stdout.log`; os arquivos `final-mypy` e
+`final-ruff` anteriores são saídas compactadas pelo RTK, não logs raw.
+
+As amostras humanas continuam sem alteração: senioridade tem 300 entradas e 0
+rotuladas; conteúdo tem 0/200 empregos rotulados. Nenhuma precisão foi medida.
+
+## Prova histórica do backend — fotografia anterior ao patch de `html_text`
 
 - Contêiner `r56-rules-ux-full-final`, imagem `f53-tenancy-api:latest`, comando `pytest -q -p no:cacheprovider`, mount do worktree em `/app` somente leitura. Início `2026-10-17 09:37:32 -03`; fim `09:44:08 -03`; exit code `0`.
 - Resultado: `2728 passed, 10 skipped, 15 warnings in 390.97s (0:06:30)`. Output completo em [backend-validation-full-final-output.log](backend-validation-full-final-output.log); metadados e proveniência sanitizada em [backend-validation-full-final.log](backend-validation-full-final.log).

@@ -80,7 +80,7 @@ from opportunity_radar.profile.domain import (
 )
 from opportunity_radar.profile.service import ProfileService
 
-RULES_VERSION = "matching-v5"
+RULES_VERSION = "matching-v6"
 
 # Section 50: the semantic layer is spent where it can still change a decision. A verdict
 # the rules already settled downwards gets no model time.

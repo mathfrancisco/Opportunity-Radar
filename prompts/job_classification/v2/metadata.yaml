@@ -1,0 +1,21 @@
+prompt_version: job_classification/v2
+schema_version: job_classification-v2
+created_at: "2026-10-17"
+response_format: json_schema
+summary: >-
+  Suggests role_family, seniority, work_mode, country or work_authorization for the fields
+  a deterministic rule left unknown. Carries no authority: the suggestion is stored apart
+  with origin `ai` and never changes a verdict or a score until a person accepts it
+  (card R55-C5).
+variables:
+  - pending_fields
+  - title
+  - description
+artifacts:
+  - system.md
+  - user.md.j2
+  - output.schema.json
+notes: >-
+  Loaded by opportunity_radar.opportunities.suggestions when the extended fields are
+  enabled (worker_suggest_extended_fields). v1 stays the default for the three original
+  fields.

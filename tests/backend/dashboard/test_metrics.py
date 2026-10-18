@@ -358,10 +358,9 @@ def test_errors_are_segmented_by_code_and_rates_are_computed() -> None:
             _cleanup(session, [source])
 
 
-def test_presence_confirmed_without_reprocessing_counts_matched_revisits() -> None:
-    """F20-39: a revisit whose raw evidence matched is operational work avoided — no
-    normalization, no AI — and must be visible in the window's metrics, not just as an
-    unlabeled share of `items_skipped`."""
+def test_presence_confirmed_without_reprocessing_comes_from_run_counters() -> None:
+    """F20-39 / R55-E3: unchanged revisits write no observation row, so a healthy board is
+    counted from the runs: items skipped minus the ones the freshness filter dropped."""
     engine = create_database_engine(os.environ["DATABASE_URL"])
     with Session(engine) as session:
         source = _source(session)
@@ -371,37 +370,16 @@ def test_presence_confirmed_without_reprocessing_counts_matched_revisits() -> No
                 source,
                 status="SUCCEEDED",
                 started_at=NOW - timedelta(minutes=5),
-                items_seen=2,
-                items_persisted=0,
-                items_skipped=2,
+                items_seen=6,
+                items_persisted=1,
+                items_skipped=5,
             )
-            raw_item = RawItemModel(
-                id=uuid4(),
-                source_run_id=run.id,
-                source_definition_id=source.id,
-                external_id=uuid4().hex,
-                identity_key=f"external:{uuid4().hex}",
-                payload_hash=uuid4().hex + uuid4().hex,
-                item_metadata={},
-            )
-            session.add(raw_item)
-            session.flush()
-            session.add_all(
-                [
-                    SourceOccurrenceObservationModel(
-                        source_occurrence_id=None,
-                        source_run_id=run.id,
-                        raw_item_id=raw_item.id,
-                        observed_at=run.started_at,
-                        content_hash_matched=True,
-                    ),
-                ]
-            )
+            run.skipped_stale = 2
             session.commit()
 
             metrics = _metrics_for(session, source.id, "24h")
 
-            assert metrics.presence_confirmed_without_reprocessing == 1
+            assert metrics.presence_confirmed_without_reprocessing == 3
         finally:
             _cleanup(session, [source])
 

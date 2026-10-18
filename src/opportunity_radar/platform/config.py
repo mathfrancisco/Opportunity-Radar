@@ -39,7 +39,10 @@ class Settings(BaseSettings):
     # own separate table.
     worker_suggest_enabled: bool = False
     worker_suggest_batch_size: int = 20
-    # Off by default (card F48-15): `seniority-v4`, `work-mode-v7` and `allowed-countries-v2`
+    # Off by default (card R55-C5): also asks the model for the `country` and the
+    # `work_authorization` the rules did not find. Suggestions only, origin `ai`.
+    worker_suggest_extended_fields: bool = False
+    # Off by default (card F48-15): `seniority-v4`, `work-mode-v7` and `allowed-countries-v4`
     # read the description. Turn on only after `scripts/measure_content_classification.py
     # --check-gate` reports >= 90% precision per rule on the human-labelled gold set.
     content_classification_v4_enabled: bool = False
@@ -95,13 +98,23 @@ class Settings(BaseSettings):
     source_alert_webhook_url: str = ""
     source_alert_failure_threshold: int = 3
     source_alert_timeout_seconds: float = 5.0
-    payload_retention_days: int = 365
+    # R55-E1: an item published more than this many days before collection is dropped
+    # before any row is written; an undated one is judged by its first observation.
+    # 0 disables the filter.
+    ingest_max_age_days: int = 7
+    # R55-E3/D5: an occurrence is absent only after this many hours unseen, across a
+    # complete run of its source that started after that mark.
+    absence_after_hours: int = 24
+    # R55-E6: a normalized raw item keeps its body only briefly; the hash, the envelope and
+    # the occurrence stay. Only already-normalized items are ever expired.
+    payload_retention_days: int = 2
     payload_retention_batch_size: int = 500
     payload_retention_interval_seconds: int = 21600
     # Off by default (card F50-08): it deletes data. Turn on only after
     # `scripts/prune_assessments.py` (dry run) reports what it would delete.
     worker_assessment_retention_enabled: bool = False
-    assessment_retention_days: int = 7
+    # R55-E6: superseded assessments older than this are pruned (current is always kept).
+    assessment_retention_days: int = 1
     assessment_retention_batch_size: int = 500
     # R55-E2: daily deletion of opportunities older than N days (age = published_at, else
     # first seen) and their dependents, run by the pipeline's `retention` stage. 0 disables
@@ -111,6 +124,28 @@ class Settings(BaseSettings):
     # Deleting is an owner decision: until this is true the pipeline stage only dry-runs
     # (counts per table in the log; nothing deleted, including ai_call_record and Tavily).
     opportunity_retention_apply: bool = False
+    # R55-E6: the daily window logs pg_database_size and warns above this share of the limit
+    # (Neon free tier: 1 GB decimal). Warning only; nothing is deleted because of it.
+    # The daily retention + reduction stage runs first in the window; this caps how long it
+    # may take so the hourly collection still gets its share of the short deadline.
+    retention_stage_budget_seconds: float = Field(default=300.0, gt=0)
+    database_size_limit_bytes: int = Field(default=1_000_000_000, ge=1)
+    database_size_alert_ratio: float = Field(default=0.7, gt=0, le=1)
+    # R55-B2: an enabled source with no cron ("manual" or empty schedule) is collected by the
+    # finite window once its last successful run is older than this many hours. 0 turns it
+    # off (such sources are then skipped, as before). Host budgets still apply.
+    manual_source_min_interval_hours: float = Field(default=1.0, ge=0)
+    # R55-B1: share of the window's remaining time each of these stages may use, so that
+    # evaluation and analysis always get theirs. A stage that spends its share is a normal
+    # (partial) completion: later stages still run and the exit stays SUCCESS.
+    pipeline_collect_budget_fraction: float = Field(default=0.4, gt=0, le=1)
+    pipeline_normalize_budget_fraction: float = Field(default=0.3, gt=0, le=1)
+    # R55-C1: seconds kept beyond the worst case of one AI call before the analysis stage
+    # declines to start another (AI_TIMEOUT_SECONDS * (AI_MAX_RETRIES + 1) + this).
+    pipeline_analyze_margin_seconds: float = Field(default=5.0, ge=0)
+    # R55-C1: the finite window analyses at most (daily request ceiling / this) assessments,
+    # so a day of hourly windows stays under the free quota. Quota guard reads still apply.
+    pipeline_analyze_windows_per_day: int = Field(default=24, ge=1)
     # How late a job may be before the doctor calls it late rather than merely busy.
     doctor_job_grace_seconds: int = 120
 
@@ -140,6 +175,9 @@ class Settings(BaseSettings):
     ai_reasoning_effort_job_extraction: str | None = None
     ai_analysis_prompt: str = "v1"
     ai_daily_requests_soft_limit: int = 850
+    # What the Groq free tier grants one model per UTC day (card R55-C6); shown next to
+    # the operational soft limit above so the panel states both.
+    ai_provider_daily_requests_limit: int = 1000
     ai_daily_tokens_soft_limit: int = 170_000
     # Part of the day's Groq request quota the worker's own batch never spends, so
     # analysis requested from the UI always has room even on a day the backlog is deep
@@ -172,6 +210,9 @@ class Settings(BaseSettings):
     # monthly ceiling is a concern, until real usage is measured (docs/41-spec-tavily.md,
     # section 9).
     tavily_credit_budget_per_run: int = 100
+    # R55-B6: `discover_boards --apply` does not retry a company it found no board for
+    # within this many days.
+    board_discovery_retry_days: int = 14
     # F48-08: source types whose items never go through Tavily `/extract` (comma
     # separated). Workday pages are JS-rendered: every call failed and burned credits.
     extraction_skip_source_types: str = "workday,inhire"
@@ -217,9 +258,7 @@ class Settings(BaseSettings):
     @property
     def analysis_eligible_verdicts(self) -> tuple[str, ...]:
         return tuple(
-            item.strip().upper()
-            for item in self.worker_analyze_verdicts.split(",")
-            if item.strip()
+            item.strip().upper() for item in self.worker_analyze_verdicts.split(",") if item.strip()
         )
 
     @model_validator(mode="after")
@@ -274,6 +313,14 @@ class Settings(BaseSettings):
         for name, value in positive_limits.items():
             if value <= 0:
                 raise ValueError(f"{name} must be positive, got {value!r}")
+        if self.ingest_max_age_days < 0:
+            raise ValueError(
+                f"INGEST_MAX_AGE_DAYS cannot be negative, got {self.ingest_max_age_days!r}"
+            )
+        if self.absence_after_hours <= 0:
+            raise ValueError(
+                f"ABSENCE_AFTER_HOURS must be positive, got {self.absence_after_hours!r}"
+            )
         if self.ai_max_retries < 0:
             raise ValueError(f"AI_MAX_RETRIES cannot be negative, got {self.ai_max_retries!r}")
         if not 0 <= self.ai_interactive_reserve_requests < self.ai_daily_requests_soft_limit:

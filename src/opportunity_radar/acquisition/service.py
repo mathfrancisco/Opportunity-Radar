@@ -25,7 +25,7 @@ from opportunity_radar.acquisition.alerts import (
     SourceAlertService,
 )
 from opportunity_radar.acquisition.ashby import AshbyCollector
-from opportunity_radar.acquisition.collectors import CollectorRegistry, ManualCollector
+from opportunity_radar.acquisition.collectors import CollectorRegistry
 from opportunity_radar.acquisition.concurrency import source_host_key
 from opportunity_radar.acquisition.domain import (
     AcquisitionError,
@@ -69,9 +69,10 @@ from opportunity_radar.acquisition.proposals import (
     IDENTIFIER_KEYS,
     follow_inert_correction,
 )
-from opportunity_radar.acquisition.remotive import RemotiveCollector
+from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.repository import (
     SOURCE_CLAIM_LEASE,
+    STALE,
     AcquisitionRepository,
     FencedWriteRejected,
     RawEvidenceWrite,
@@ -101,6 +102,7 @@ from opportunity_radar.opportunities.role_family import (
     classify_role_family,
     departments_from_metadata,
 )
+from opportunity_radar.platform.config import get_settings
 from opportunity_radar.platform.logging import get_logger
 from opportunity_radar.profile.domain import ProfileNotFoundError
 from opportunity_radar.profile.service import ProfileService
@@ -441,19 +443,14 @@ class AcquisitionService:
         claims_enabled: bool = False,
         claim_renew_interval_seconds: float | None = None,
         inventory_contract_enabled: bool = True,
+        ingest_max_age_days: int | None = None,
     ) -> None:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
         self.alerts = alerts or SourceAlertService(session, notifier=alert_notifier)
-        self.registry = registry or CollectorRegistry(
-            (
-                ManualCollector(),
-                AshbyCollector(),
-                LeverCollector(),
-                GreenhouseCollector(),
-                RemotiveCollector(),
-            )
-        )
+        # R55-A5: the default is the deployment registry, not a hand-kept subset, so a
+        # collector added to `build_collector_registry` can never be missing here.
+        self.registry = registry or build_collector_registry()
         self._sleeper = sleeper
         # F20-45: fills in a missing description via Tavily `/extract` after discovery,
         # for any collector's items, not only tavily_search's own. `None` (the default)
@@ -478,6 +475,7 @@ class AcquisitionService:
         self._claims_enabled = claims_enabled
         # F51-13: off restores unscoped validators and the earlier terminal-status rule.
         self._inventory_contract_enabled = inventory_contract_enabled
+        self._ingest_max_age_days = ingest_max_age_days
         self._claim_renew_interval = (
             claim_renew_interval_seconds
             if claim_renew_interval_seconds is not None
@@ -1392,8 +1390,7 @@ class AcquisitionService:
         # request cursor; a prior run's checkpoint is evidence, not an implicit cursor.
         checkpoint_before = request.cursor
         if request.resume_of_run_id is not None and (
-            self.repository.resumable_run(request.resume_of_run_id, source_id=source.id)
-            is None
+            self.repository.resumable_run(request.resume_of_run_id, source_id=source.id) is None
         ):
             raise AcquisitionError(
                 AcquisitionErrorCode.INVALID_CONFIGURATION,
@@ -1551,7 +1548,7 @@ class AcquisitionService:
             pending.clear()
             observed_at = run.started_at or datetime.now(UTC)
 
-            def write(batch: list[tuple[CollectedItem, bool]]) -> list[bool | Exception]:
+            def write(batch: list[tuple[CollectedItem, bool]]) -> list[bool | str | Exception]:
                 # Any failure must end the transaction here: left open it would keep the
                 # claim row lock (taken by the fence) on an aborted transaction, and the
                 # renewal task would then wait on it from this same thread, forever.
@@ -1572,7 +1569,9 @@ class AcquisitionService:
                         self.session.rollback()
                     raise
 
-            def attempt(batch: list[tuple[CollectedItem, bool]]) -> list[bool | Exception] | None:
+            def attempt(
+                batch: list[tuple[CollectedItem, bool]],
+            ) -> list[bool | str | Exception] | None:
                 """Fence, then write; `None` only when the database refused the data itself.
 
                 The fence sits outside the refusal handling: a lost lease or a database
@@ -1600,7 +1599,7 @@ class AcquisitionService:
             if batch_outcomes is None:
                 # One item the database refuses must not sink its batch mates: retry item by
                 # item and count only the refused one invalid.
-                outcomes: list[bool | Exception] = []
+                outcomes: list[bool | str | Exception] = []
                 for entry in entries:
                     single = attempt([entry])
                     outcomes.append(
@@ -1616,6 +1615,11 @@ class AcquisitionService:
                         str(outcome),
                         retryable=False,
                     )
+                    continue
+                if outcome == STALE:
+                    run.record_items(skipped=1, stale=1)
+                    if item.cursor is not None:
+                        last_cursor = item.cursor
                     continue
                 if outcome:
                     run.record_items(persisted=1)
@@ -1679,9 +1683,13 @@ class AcquisitionService:
                 if source.source_type == "inhire"
                 else (request.fetch_detail, request.detail_max_requests)
             )
-            approval_valid, approval_reason = _workday_detail_approval(
-                source.configuration, source.id, company_reference, api_region
-            ) if source.source_type == "workday" else (False, "approval_missing")
+            approval_valid, approval_reason = (
+                _workday_detail_approval(
+                    source.configuration, source.id, company_reference, api_region
+                )
+                if source.source_type == "workday"
+                else (False, "approval_missing")
+            )
             budget_host = _budget_host_for_source(source.source_type, source.configuration)
 
             def reserve_request(is_detail: bool) -> str | None:
@@ -1698,15 +1706,12 @@ class AcquisitionService:
 
             def persist_cooldown(until: datetime) -> None:
                 with Session(bind=self.session.get_bind()) as budget_session:
-                    AcquisitionRepository(budget_session).persist_host_cooldown(
-                        budget_host, until
-                    )
+                    AcquisitionRepository(budget_session).persist_host_cooldown(budget_host, until)
 
             def persist_detail(telemetry: CollectionTelemetry) -> None:
                 with Session(bind=self.session.get_bind()) as budget_session:
-                    AcquisitionRepository(budget_session).persist_detail_counters(
-                        run.id, telemetry
-                    )
+                    AcquisitionRepository(budget_session).persist_detail_counters(run.id, telemetry)
+
             collector_request = replace(
                 request,
                 target_role_families=tuple(sorted(targets)),
@@ -1895,9 +1900,7 @@ class AcquisitionService:
             await scope.stop_renewal()
             scope.fence(self.session)
         if run_telemetry.skipped_items:
-            run.record_items(
-                seen=run_telemetry.skipped_items, skipped=run_telemetry.skipped_items
-            )
+            run.record_items(seen=run_telemetry.skipped_items, skipped=run_telemetry.skipped_items)
         if run_telemetry.invalid_items:
             run.record_items(
                 seen=run_telemetry.invalid_items,
@@ -2208,14 +2211,14 @@ class AcquisitionService:
         entries: list[tuple[CollectedItem, bool]],
         *,
         observed_at: datetime,
-    ) -> list[bool | Exception]:
+    ) -> list[bool | str | Exception]:
         """Persist `(item, persist_new)` pairs in order; per item, whether it created evidence.
 
         An item that can never be stored yields its `ValueError`/`TypeError` instead. The
         real repository writes the whole batch in a fixed number of statements; any other
         repository (in-memory adapters) is driven one item at a time as before.
         """
-        results: list[bool | Exception] = [False] * len(entries)
+        results: list[bool | str | Exception] = [False] * len(entries)
         if not isinstance(self.repository, AcquisitionRepository):
             for index, (item, persist_new) in enumerate(entries):
                 try:
@@ -2238,11 +2241,17 @@ class AcquisitionService:
                 )
             except (TypeError, ValueError) as invalid:
                 results[index] = invalid
+        max_age_days = (
+            self._ingest_max_age_days
+            if self._ingest_max_age_days is not None
+            else get_settings().ingest_max_age_days
+        )
         created = self.repository.record_evidence_batch(
             source_id=source_id,
             run_id=run_id,
             writes=[write for _, write in prepared],
             observed_at=observed_at,
+            stale_before=observed_at - timedelta(days=max_age_days) if max_age_days > 0 else None,
         )
         for (index, _), was_created in zip(prepared, created, strict=True):
             results[index] = was_created
@@ -2377,6 +2386,8 @@ class AcquisitionService:
             metadata={**metadata, COLLECTED_ITEM_V1_KEY: semantic_payload},
             payload=payload,
             persist_new=persist_new,
+            published_at=item.published_at,
+            source_updated_at=item.updated_at,
         )
 
     @staticmethod
@@ -2388,6 +2399,7 @@ class AcquisitionService:
         model.items_persisted = run.items_persisted
         model.items_skipped = run.items_skipped
         model.items_invalid = run.items_invalid
+        model.skipped_stale = run.skipped_stale
         model.http_requests = run.http_requests
         model.retry_count = run.retry_count
         model.rate_limit_events = run.rate_limit_events
@@ -2602,9 +2614,7 @@ def _workday_detail_approval(
         if len(reviewed) == 10:
             reviewed_date = date.fromisoformat(reviewed)
         else:
-            reviewed_date = datetime.fromisoformat(
-                reviewed.replace("Z", "+00:00")
-            ).date()
+            reviewed_date = datetime.fromisoformat(reviewed.replace("Z", "+00:00")).date()
         if reviewed_date > datetime.now(UTC).date():
             return False, "approval_future_date"
     except ValueError:

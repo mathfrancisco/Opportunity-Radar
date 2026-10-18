@@ -7,11 +7,12 @@ from binascii import Error as Base64Error
 from collections import Counter
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError, InterfaceError, OperationalError
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import RawItemModel, SourceRunModel
@@ -30,7 +31,12 @@ from opportunity_radar.opportunities.domain import (
     recency_basis_of,
     seniority_classification,
 )
-from opportunity_radar.opportunities.duplicates import find_title_location_window_candidates
+from opportunity_radar.opportunities.duplicates import (
+    CROSS_SOURCE_RULE,
+    CROSS_SOURCE_WINDOW_DAYS,
+    find_cross_source_strong_match,
+    find_title_location_window_candidates,
+)
 from opportunity_radar.opportunities.models import (
     NormalizationResultModel,
     OpportunityCompensationModel,
@@ -55,7 +61,7 @@ from opportunity_radar.platform.logging import get_logger
 
 logger = get_logger("opportunity_radar.opportunities")
 
-NORMALIZER_VERSION = "v6"
+NORMALIZER_VERSION = "v7"
 
 
 class PayloadExpiredError(NormalizationError):
@@ -191,6 +197,15 @@ class OpportunityService:
         )
         if company_key:
             identity_locks.add(f"review:{company_key}:{candidate.normalized_title}")
+        # R55-E4: the same job in two sources is keyed by company id on one side and by
+        # company name on the other, so the lock above would not serialize them. Take both
+        # keys: any two postings the matcher can pair share at least one.
+        if candidate.company_id:
+            identity_locks.add(f"xsource:{candidate.company_id}:{candidate.normalized_title}")
+        if candidate.normalized_company_name:
+            identity_locks.add(
+                f"xsource:{candidate.normalized_company_name}:{candidate.normalized_title}"
+            )
         self.repository.lock_candidate_identities(identity_locks)
         refresh_changed = False
         occurrence = self.repository.occurrence_by_external_identity(
@@ -207,7 +222,12 @@ class OpportunityService:
                 current_raw_item is None or raw_item.fetched_at >= current_raw_item.fetched_at
             )
             previous_fingerprint = opportunity.fingerprint
-            identity_changed = (
+            # R55-E4: the primary (first-attached) occurrence is the only one that may
+            # rewrite the opportunity; a secondary source updates just its own row and
+            # presence, so two sources with different wording cannot flip fields back and
+            # forth (and bump `version`) on every collection.
+            is_primary = self.repository.is_primary_occurrence(occurrence)
+            identity_changed = is_primary and (
                 previous_fingerprint != candidate.fingerprint
                 or opportunity.fingerprint_version != candidate.fingerprint_version
             )
@@ -237,8 +257,12 @@ class OpportunityService:
             else:
                 decision = "REFRESHED"
                 result_status = "SUCCEEDED"
-                reasons = [{"code": "SAME_SOURCE_EXTERNAL_IDENTITY"}]
-                if content_is_current:
+                reasons = [
+                    {"code": "SAME_SOURCE_EXTERNAL_IDENTITY"}
+                    if is_primary
+                    else {"code": "SECONDARY_SOURCE_OCCURRENCE"}
+                ]
+                if content_is_current and is_primary:
                     refresh_changed = _refresh_opportunity(opportunity, candidate)
                     if opportunity.fingerprint != previous_fingerprint:
                         reasons = [{"code": "IDENTITY_REFRESHED_SAME_EXTERNAL_ID"}]
@@ -261,6 +285,12 @@ class OpportunityService:
                 occurrence.source_updated_at = candidate.source_updated_at
                 occurrence.source_valid_through = candidate.valid_through
         else:
+            stale = self._stale_without_occurrence(raw_item, candidate.published_at)
+            if stale is not None:
+                self.session.add(stale)
+                self.session.commit()
+                self.session.refresh(stale)
+                return stale
             url_match = self.repository.opportunity_by_normalized_url(candidate.normalized_url)
             if url_match is not None:
                 opportunity = url_match
@@ -278,25 +308,42 @@ class OpportunityService:
                     result_status = "SUCCEEDED"
                     reasons = [{"code": "EXACT_VERSIONED_FINGERPRINT"}]
                 else:
-                    review_candidates = self.repository.identity_review_candidates(candidate)
-                    opportunity = _new_opportunity(candidate, first_seen_at=raw_item.fetched_at)
-                    self.session.add(opportunity)
-                    created_opportunity = True
-                    if review_candidates:
-                        decision = "REVIEW"
-                        result_status = "REVIEW_REQUIRED"
+                    cross_source_match = find_cross_source_strong_match(
+                        self.session,
+                        candidate,
+                        source_definition_id=raw_item.source_definition_id,
+                    )
+                    if cross_source_match is not None:
+                        opportunity = cross_source_match
+                        decision = "MERGED"
+                        result_status = "SUCCEEDED"
                         reasons = [
                             {
-                                "code": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
-                                "candidate_opportunity_ids": [
-                                    str(item.id) for item in review_candidates
-                                ],
+                                "code": "CROSS_SOURCE_STRONG_MATCH",
+                                "rule": CROSS_SOURCE_RULE,
+                                "window_days": CROSS_SOURCE_WINDOW_DAYS,
                             }
                         ]
                     else:
-                        decision = "NEW"
-                        result_status = "SUCCEEDED"
-                        reasons = [{"code": "NO_IDENTITY_MATCH"}]
+                        review_candidates = self.repository.identity_review_candidates(candidate)
+                        opportunity = _new_opportunity(candidate, first_seen_at=raw_item.fetched_at)
+                        self.session.add(opportunity)
+                        created_opportunity = True
+                        if review_candidates:
+                            decision = "REVIEW"
+                            result_status = "REVIEW_REQUIRED"
+                            reasons = [
+                                {
+                                    "code": "SAME_COMPANY_AND_TITLE_DIFFERENT_IDENTITY",
+                                    "candidate_opportunity_ids": [
+                                        str(item.id) for item in review_candidates
+                                    ],
+                                }
+                            ]
+                        else:
+                            decision = "NEW"
+                            result_status = "SUCCEEDED"
+                            reasons = [{"code": "NO_IDENTITY_MATCH"}]
             occurrence = SourceOccurrenceModel(
                 opportunity=opportunity,
                 raw_item_id=raw_item.id,
@@ -370,6 +417,71 @@ class OpportunityService:
         self.session.commit()
         self.session.refresh(result)
         return result
+
+    def _record_unexpected_failure(
+        self, raw_item_id: UUID, error: Exception
+    ) -> NormalizationResultModel:
+        result = NormalizationResultModel(
+            raw_item_id=raw_item_id,
+            status="FAILED",
+            normalizer_version=NORMALIZER_VERSION,
+            identity_decision=None,
+            reasons=[{"code": "NORMALIZATION_ERROR", "error": type(error).__name__}],
+            error_summary=f"unexpected {type(error).__name__} while normalizing",
+        )
+        try:
+            self.session.add(result)
+            self.session.commit()
+            self.session.refresh(result)
+        except Exception:
+            self.session.rollback()
+            raise
+        return result
+
+    def _stale_without_occurrence(
+        self, raw_item: RawItemModel, published_at: datetime | None
+    ) -> NormalizationResultModel | None:
+        """R55-E1 cutoff for a REPROCESSED item that has no occurrence.
+
+        Only an item that already has a result from an earlier normalizer version qualifies:
+        first-time normalization is never skipped (a fresh item may wait in the backlog for
+        days). Such an item is not turned into an opportunity when its posting is older than
+        `INGEST_MAX_AGE_DAYS`, judged like the collector does: by the published date, else by
+        when its identity was first stored (the oldest raw item of that source and identity).
+        0 disables it."""
+        max_age_days = get_settings().ingest_max_age_days
+        if max_age_days <= 0:
+            return None
+        reprocessed = self.session.scalar(
+            select(NormalizationResultModel.id)
+            .where(
+                NormalizationResultModel.raw_item_id == raw_item.id,
+                NormalizationResultModel.normalizer_version != NORMALIZER_VERSION,
+            )
+            .limit(1)
+        )
+        if reprocessed is None:
+            return None
+        reference = published_at or self.session.scalar(
+            select(func.min(RawItemModel.fetched_at)).where(
+                RawItemModel.source_definition_id == raw_item.source_definition_id,
+                RawItemModel.identity_key == raw_item.identity_key,
+            )
+        )
+        if reference is None:
+            return None
+        if reference.tzinfo is None:
+            reference = reference.replace(tzinfo=UTC)
+        if reference >= datetime.now(UTC) - timedelta(days=max_age_days):
+            return None
+        return NormalizationResultModel(
+            raw_item_id=raw_item.id,
+            status="FAILED",
+            normalizer_version=NORMALIZER_VERSION,
+            identity_decision=None,
+            reasons=[{"code": "STALE_POSTING_SKIPPED"}],
+            error_summary="posting older than the ingestion window; no opportunity created",
+        )
 
     def _short_circuit_cosmetic_change(
         self, raw_item: RawItemModel
@@ -457,13 +569,43 @@ class OpportunityService:
             for raw_item in self.repository.run_raw_items(source_run_id)
         ]
 
-    def normalize_pending(self, limit: int = 100) -> NormalizationBatch:
+    def normalize_pending(
+        self, limit: int = 100, *, should_stop: Callable[[], bool] | None = None
+    ) -> NormalizationBatch:
+        """Normalize up to `limit` pending items; `should_stop` is read before each one.
+
+        A batch cut short by `should_stop` has fewer results than `limit`, which the
+        looping caller reads as "stop", so it checks `should_stop` itself as well.
+        """
         if limit < 1 or limit > 500:
             raise ValueError("normalization batch limit must be between 1 and 500")
-        results = [
-            self.normalize(raw_item_id)
-            for raw_item_id in self.repository.pending_raw_item_ids(limit, NORMALIZER_VERSION)
-        ]
+        results: list[NormalizationResultModel] = []
+        for raw_item_id in self.repository.pending_raw_item_ids(limit, NORMALIZER_VERSION):
+            if should_stop is not None and should_stop():
+                break
+            try:
+                results.append(self.normalize(raw_item_id))
+            except IntegrityError:
+                # A concurrent normalization of the same item (or identity) won the race.
+                # That is not the item's fault: use the result that exists, else leave it
+                # pending for the next pass. Never recorded as a permanent failure.
+                self.session.rollback()
+                existing = self.repository.normalization_result(raw_item_id, NORMALIZER_VERSION)
+                if existing is not None:
+                    results.append(existing)
+            except (OperationalError, InterfaceError):
+                raise  # the database is unreachable: nothing to record, and not the item's fault
+            except RawItemNotFoundError:
+                raise
+            except Exception as error:
+                # A poison item must not stall the queue: it would stay pending and fail
+                # every pass. Record it as FAILED for this version and go on.
+                self.session.rollback()
+                logger.exception(
+                    "raw item normalization failed",
+                    extra={"job": "normalize", "raw_item_id": str(raw_item_id)},
+                )
+                results.append(self._record_unexpected_failure(raw_item_id, error))
         return NormalizationBatch(
             processed=len(results),
             succeeded=sum(item.status == "SUCCEEDED" for item in results),
@@ -476,8 +618,14 @@ class OpportunityService:
         source_run_id: UUID,
         *,
         may_close: Callable[[SourceRunModel], bool] | None = None,
+        now: datetime | None = None,
+        absence_after_hours: int | None = None,
     ) -> bool:
-        """Close jobs that vanished for two complete runs in a row, and reopen ones back.
+        """Close jobs unseen for `absence_after_hours` (default 24), and reopen ones back.
+
+        An occurrence is absent only when its `last_seen_at` is older than that window and a
+        complete run of its source started after the window's start (so the board was
+        actually re-read since). The signal is `last_seen_at`, not per-run observations.
 
         Only a complete run may change anything here: a partial or failed run tells us
         nothing about what the board still has, so absence from it is not evidence.
@@ -506,14 +654,15 @@ class OpportunityService:
             }
             opportunity.version += 1
 
-        previous_run_id = self.repository.previous_complete_run_id(
-            source_definition_id, before_run_id=source_run_id
+        hours = (
+            absence_after_hours
+            if absence_after_hours is not None
+            else get_settings().absence_after_hours
         )
-        if previous_run_id is not None:
-            for occurrence in self.repository.occurrences_missing_from_both_runs(
-                source_definition_id,
-                current_run_id=source_run_id,
-                previous_complete_run_id=previous_run_id,
+        cutoff = (now or datetime.now(UTC)) - timedelta(hours=hours)
+        if self.repository.complete_run_started_since(source_definition_id, cutoff):
+            for occurrence in self.repository.occurrences_unseen_since(
+                source_definition_id, cutoff=cutoff
             ):
                 opportunity = occurrence.opportunity
                 current_status = OpportunityStatus(opportunity.lifecycle_status)
@@ -529,7 +678,9 @@ class OpportunityService:
                     continue
                 opportunity.lifecycle_status = OpportunityStatus.CLOSED.value
                 opportunity.closure_evidence = {
-                    "closed_by_run_ids": [str(previous_run_id), str(source_run_id)],
+                    "closed_by_run_ids": [str(source_run_id)],
+                    "absence_after_hours": hours,
+                    "last_seen_at": occurrence.last_seen_at.isoformat(),
                 }
                 opportunity.version += 1
 
@@ -1132,7 +1283,7 @@ def reclassify_content(
                 new = _content_values(
                     candidate.seniority.value,
                     candidate.work_mode.value,
-                    candidate.allowed_countries,
+                    _rule_or_confirmed_countries(opportunity, candidate),
                 )
                 # A new work mode is a new fingerprint (F50-02 fix): refuse it when another
                 # opportunity already owns that identity, and keep the posting's work mode.
@@ -1590,6 +1741,30 @@ def _new_opportunity(candidate: CanonicalCandidate, *, first_seen_at: datetime) 
     )
 
 
+#: Prefix of `allowed_countries_version` for a country a person confirmed from an AI
+#: suggestion (R55-C5); see `suggestions.accept_suggestion`.
+AI_CONFIRMED_COUNTRIES_PREFIX = "ai-confirmed:"
+
+
+def _keeps_confirmed_countries(
+    opportunity: OpportunityModel, candidate: CanonicalCandidate
+) -> bool:
+    """A person-confirmed country survives a re-run whose rules still find no country."""
+    return (
+        not candidate.allowed_countries
+        and bool(opportunity.allowed_countries)
+        and (opportunity.allowed_countries_version or "").startswith(AI_CONFIRMED_COUNTRIES_PREFIX)
+    )
+
+
+def _rule_or_confirmed_countries(
+    opportunity: OpportunityModel, candidate: CanonicalCandidate
+) -> Collection[str] | None:
+    if _keeps_confirmed_countries(opportunity, candidate):
+        return opportunity.allowed_countries
+    return candidate.allowed_countries
+
+
 def _set_if_changed(opportunity: OpportunityModel, field: str, value: Any) -> bool:
     if getattr(opportunity, field) == value:
         return False
@@ -1613,14 +1788,15 @@ def _apply_rule_fields(opportunity: OpportunityModel, candidate: CanonicalCandid
     changed |= _set_if_changed(
         opportunity, "recency_exempt_program", candidate.recency_exempt_program
     )
-    changed |= _set_if_changed(
-        opportunity, "allowed_countries", list(candidate.allowed_countries) or None
-    )
-    changed |= _set_if_changed(
-        opportunity,
-        "allowed_countries_version",
-        candidate.allowed_countries_version if candidate.allowed_countries else None,
-    )
+    if not _keeps_confirmed_countries(opportunity, candidate):
+        changed |= _set_if_changed(
+            opportunity, "allowed_countries", list(candidate.allowed_countries) or None
+        )
+        changed |= _set_if_changed(
+            opportunity,
+            "allowed_countries_version",
+            candidate.allowed_countries_version if candidate.allowed_countries else None,
+        )
     changed |= _set_if_changed(opportunity, "role_family", candidate.role_family.value)
     changed |= _set_if_changed(
         opportunity,
@@ -1643,6 +1819,8 @@ def _apply_content_fields(
     if work_mode and _set_if_changed(opportunity, "work_mode", candidate.work_mode.value):
         opportunity.fingerprint = candidate.fingerprint
         opportunity.fingerprint_version = candidate.fingerprint_version
+    if _keeps_confirmed_countries(opportunity, candidate):
+        return
     countries = list(candidate.allowed_countries) or None
     if _set_if_changed(opportunity, "allowed_countries", countries):
         opportunity.allowed_countries_version = (

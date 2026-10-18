@@ -12,6 +12,8 @@
       "src\\app\\RouteGuards.tsx",
       "src\\app\\WebApplication.test.tsx",
       "src\\app\\WebApplication.tsx",
+      "src\\components\\AIBudgetCard.test.tsx",
+      "src\\components\\AIBudgetCard.tsx",
       "src\\components\\AppShell.test.tsx",
       "src\\components\\AppShell.tsx",
       "src\\components\\ApplicationPanel.tsx",
@@ -23,6 +25,8 @@
       "src\\components\\Chip.tsx",
       "src\\components\\CompanyForm.tsx",
       "src\\components\\CompanySourceForm.tsx",
+      "src\\components\\ConfigValue.test.tsx",
+      "src\\components\\ConfigValue.tsx",
       "src\\components\\DataTable.test.tsx",
       "src\\components\\DataTable.tsx",
       "src\\components\\Field.test.tsx",
@@ -54,6 +58,7 @@
       "src\\components\\Unavailable.tsx",
       "src\\components\\cells.test.tsx",
       "src\\components\\cells.tsx",
+      "src\\components\\configText.ts",
       "src\\components\\icons.tsx",
       "src\\components\\skeletons.test.tsx",
       "src\\components\\skeletons.tsx",
@@ -136,7 +141,7 @@
       "tsconfig.app.json",
       "vite.config.ts"
     ],
-    "sha256": "a614db4fbcded0aa6339d9e12863eac0b0cf1e8b03192e1ba9257215e800b777"
+    "sha256": "357d328ef883d9cbbd8c9c1403441a45b0032a9701334b92e67460de154233c3"
   },
   "scenarios": [
     "saved-searches-0",
@@ -160,7 +165,7 @@
     "profile-write-and-active-invalidations",
     "application-write-and-active-invalidations",
     "duplicate-write-and-active-invalidations",
-    "manual-intake-two-writes-and-active-invalidations",
+    "manual-intake-single-write-and-active-invalidations",
     "retry-5xx",
     "no-retry-401",
     "no-retry-403",
