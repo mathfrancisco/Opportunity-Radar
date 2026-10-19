@@ -162,6 +162,8 @@ def test_title_match_ranks_above_description_only_match() -> None:
         ("Programação Backend", ("programação", "programacao")),
         ("Ação Social", ("ação", "acao")),
         ("Gestao sem acento", ("gestão", "gestao")),
+        ("Analista Júnior", ("júnior", "junior")),
+        ("Engenheiro Sênior", ("sênior", "senior")),
     ],
 )
 def test_accented_and_plain_queries_find_the_same_title(
@@ -189,6 +191,9 @@ def test_accented_phrase_and_negation_keep_their_semantics() -> None:
         estagio = _opportunity(
             session, company, title="Engenharia de Dados Estágio", published_at=NOW
         )
+        pleno = _opportunity(
+            session, company, title="Engenharia de Dados Pleno", published_at=NOW
+        )
         session.commit()
 
         def ids(search: str) -> list:
@@ -198,7 +203,9 @@ def test_accented_phrase_and_negation_keep_their_semantics() -> None:
             return [item.opportunity_id for item in found.items]
 
         assert ids('"ciência de dados"') == [ciencia_de_dados.id]
-        assert estagio.id not in ids("dados -estágio")
+        negated = ids("dados -estágio")
+        assert pleno.id in negated
+        assert estagio.id not in negated
 
 
 @pytest.mark.parametrize("term", ["ção", "-", '""', "- ção"])
