@@ -36,6 +36,39 @@ describe('getInbox', () => {
     )
   })
 
+  it('envia moeda e período só quando há limite salarial', async () => {
+    respond({ items: [], total: 0, offset: 0, limit: 25 })
+    await getInbox({ page: 1, pageSize: 25, salaryMin: '5000', salaryCurrency: 'USD', salaryPeriod: 'YEAR' })
+    const withSalary = String(vi.mocked(fetch).mock.calls[0][0])
+    expect(withSalary).toContain('salary_min=5000')
+    expect(withSalary).toContain('salary_currency=USD')
+    expect(withSalary).toContain('salary_period=YEAR')
+
+    respond({ items: [], total: 0, offset: 0, limit: 25 })
+    await getInbox({ page: 1, pageSize: 25, salaryCurrency: 'USD', salaryPeriod: 'YEAR' })
+    const calls = vi.mocked(fetch).mock.calls
+    const without = String(calls[calls.length - 1][0])
+    expect(without).not.toContain('salary_currency')
+    expect(without).not.toContain('salary_period')
+  })
+
+  it('lê salary_match do item do Inbox', async () => {
+    const base = { opportunity_id: 'o1', title: 'T' }
+    respond({
+      items: [
+        { ...base, salary_match: 'unknown' },
+        { ...base, opportunity_id: 'o2', salary_match: 'matched' },
+        { ...base, opportunity_id: 'o3', salary_match: 'weird' },
+        { ...base, opportunity_id: 'o4' },
+      ],
+      total: 4,
+      offset: 0,
+      limit: 25,
+    })
+    const page = await getInbox({ page: 1, pageSize: 25 })
+    expect(page.items.map((item) => item.salaryMatch)).toEqual(['unknown', 'matched', null, null])
+  })
+
   it('mantém oportunidades ainda não avaliadas', async () => {
     respond({
       items: [

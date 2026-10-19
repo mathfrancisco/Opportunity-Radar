@@ -15,6 +15,8 @@ export interface SavedSearch {
 export interface SavedSearchSummary extends SavedSearch {
   newCount: number | null
   countError: 'invalid_filters' | 'invalid_summary' | null
+  /** `salary_unit_defaulted`: a legacy salary filter counted as BRL/month. */
+  countNote: 'salary_unit_defaulted' | null
 }
 
 export interface NewSavedSearch {
@@ -94,6 +96,7 @@ export function parseSummary(value: unknown): SavedSearchSummary[] {
   return value.flatMap((item): SavedSearchSummary[] => {
     if (!isRecord(item) || typeof item.id !== 'string' || typeof item.name !== 'string') return []
     const countError = item.count_error === 'invalid_filters' ? 'invalid_filters' : null
+    const countNote = item.count_note === 'salary_unit_defaulted' ? 'salary_unit_defaulted' : null
     const parsed = parseSavedSearch(item)
     const base: SavedSearch = parsed ?? {
       id: item.id,
@@ -106,9 +109,9 @@ export function parseSummary(value: unknown): SavedSearchSummary[] {
     const rawCount = item.new_count
     const validCount = typeof rawCount === 'number' && Number.isInteger(rawCount) && rawCount >= 0
     if (countError === 'invalid_filters' || !parsed || !validCount) {
-      return [{ ...base, newCount: null, countError: countError ?? 'invalid_summary' }]
+      return [{ ...base, newCount: null, countError: countError ?? 'invalid_summary', countNote }]
     }
-    return [{ ...base, newCount: rawCount, countError: null }]
+    return [{ ...base, newCount: rawCount, countError: null, countNote }]
   })
 }
 
