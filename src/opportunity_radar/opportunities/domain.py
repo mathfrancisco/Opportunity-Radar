@@ -498,13 +498,13 @@ def _period_from_text(value: Any) -> CompensationPeriod | None:
                 r"\bannual",
                 r"\bannum",
                 r"\bano\b",
-                r"\banual",
+                r"\banua(?:l|is)",
             ),
             CompensationPeriod.MONTH: (
                 r"\bmonth",
                 r"\bmonthly",
                 r"\bm[eê]s\b",
-                r"\bmensal",
+                r"\bmensa(?:l|is)",
             ),
             CompensationPeriod.WEEK: (
                 r"\bweek",
@@ -578,7 +578,7 @@ def _text_compensation(
             or match.group("currency_after")
             or currency_symbol
             or re.search(
-                r"\b(?:salary|compensation|pay|remunera[çc][ãa]o)\b", nearby, re.I
+                r"\b(?:salary|compensation|pay|sal[áa]rio|remunera[çc][ãa]o)\b", nearby, re.I
             )
         ):
             continue
@@ -597,7 +597,10 @@ def _text_compensation(
                 currency=currency or None,
                 # Matched span plus a short tail only: the wide window picks
                 # up "4-day week" or "weekly 1:1" from unrelated prose.
-                period=_period_from_text(text[match.start() : match.end() + 16]),
+                period=_period_from_text(
+                    _period_prefix(text, match.start())
+                    + text[match.start() : match.end() + 16]
+                ),
                 gross_net=_gross_net_from_text(nearby),
                 evidence=match.group(0).strip(),
                 evidence_source=evidence_source,
@@ -605,6 +608,13 @@ def _text_compensation(
         except NormalizationError:
             continue
     return None
+
+
+def _period_prefix(text: str, start: int) -> str:
+    """Up to 24 characters before a match, cut after the last sentence end."""
+    prefix = text[max(0, start - 24) : start]
+    cut = max(prefix.rfind(mark) for mark in ".;!?\n")
+    return prefix[cut + 1 :]
 
 
 def _money_amount(value: str | None) -> Decimal | None:
