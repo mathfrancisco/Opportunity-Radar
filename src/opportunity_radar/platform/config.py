@@ -72,7 +72,8 @@ class Settings(BaseSettings):
     analysis_retry_max_attempts: int = 3
     analysis_claim_lease_seconds: int = 900
     # F50-04: a source whose share of target-area items over its last three complete runs
-    # falls below this stops persisting new off-target items. 0 (default: collection is general) turns the filter off.
+    # falls below this stops persisting new off-target items. 0 (the default, collection is
+    # general) turns the filter off.
     collection_target_area_floor: float = 0.0
     # R55-B5: off by default. Collection is general (owner decision 2026-10-19): every
     # vacancy is stored and the profile filters only what each person sees. When true, a

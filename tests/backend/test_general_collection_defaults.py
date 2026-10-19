@@ -7,7 +7,9 @@ import pytest
 from opportunity_radar.platform.config import Settings
 
 
-def test_prefilter_and_off_target_retention_are_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_prefilter_and_off_target_retention_are_off_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("COLLECTION_PREFILTER_ENABLED", raising=False)
     monkeypatch.delenv("OPPORTUNITY_OFF_TARGET_RETENTION_DAYS", raising=False)
     monkeypatch.delenv("COLLECTION_TARGET_AREA_FLOOR", raising=False)
