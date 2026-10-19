@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from opportunity_radar.opportunities.domain import RoleFamily, WorkMode
 from opportunity_radar.opportunities.suggestions import (
+    OpportunitySuggestionModel,
     SuggestionUnansweredModel,
     candidates_needing_suggestion,
     suggest_fields,
@@ -178,3 +179,40 @@ def test_the_queue_skips_a_marked_field_only_for_the_same_key() -> None:
             assert queued(edited, _PROMPT.version) is True
         finally:
             session.rollback()
+
+
+def test_a_discarded_answer_is_remembered_and_never_becomes_a_suggestion() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        opportunity = _opportunity(
+            title="Backend Engineer",
+            description="Remote role building Python APIs.",
+            role_family=RoleFamily.DATA.value,
+            work_mode=WorkMode.REMOTE.value,
+        )
+        session.add(opportunity)
+        session.commit()
+        try:
+            # The quote never appears in the title or description: the answer is discarded.
+            invented = {"seniority": {"value": "senior", "evidence": "startup vibes"}}
+            provider = FakeProvider({_FAST_MODEL: [_classification_response(invented)]})
+            router = _router(provider)
+
+            first = _run(suggest_fields(session, router, opportunity, prompt=_PROMPT))
+            assert first.called is True and first.created == ()
+            assert first.discarded_fields == ("seniority",)
+            assert _markers(session, opportunity.id) == [(1, "seniority", _PROMPT.version)]
+            assert (
+                session.scalar(
+                    select(OpportunitySuggestionModel).where(
+                        OpportunitySuggestionModel.opportunity_id == opportunity.id
+                    )
+                )
+                is None
+            )
+
+            second = _run(suggest_fields(session, router, opportunity, prompt=_PROMPT))
+            assert second.called is False
+            assert len(provider.requests) == 1
+        finally:
+            _cleanup(session, [opportunity.id])

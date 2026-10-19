@@ -690,3 +690,35 @@ def test_primary_is_kept_while_it_is_open_or_when_every_occurrence_closed(
     )
     assert none_open.reasons[0]["code"] == "SECONDARY_SOURCE_OCCURRENCE"
     assert _description(world, opportunity_id) == "Greenhouse text"
+
+
+def test_closing_the_primary_applies_the_next_open_sources_content_without_a_new_post(
+    world: _World,
+) -> None:
+    """R55-E4 follow-up: reconciliation alone re-elects the primary and applies its content."""
+    greenhouse, _remotive, opportunity_id = _merged_pair(world)
+    assert _description(world, opportunity_id) == "Greenhouse text"
+    # The greenhouse board was re-read in a complete run (started after the absence cutoff)
+    # that no longer lists the job; remotive still lists it in its own latest complete run.
+    run = world.new_run(greenhouse)
+    run.started_at = NOW + timedelta(hours=3)
+    world.session.commit()
+
+    world.service.reconcile_run_closures(
+        run.id, now=NOW + timedelta(hours=2), absence_after_hours=1
+    )
+
+    assert _description(world, opportunity_id) == "Remotive text"
+
+
+def test_closing_a_secondary_leaves_the_primary_content_alone(world: _World) -> None:
+    _greenhouse, remotive, opportunity_id = _merged_pair(world)
+    run = world.new_run(remotive)
+    run.started_at = NOW + timedelta(hours=3)
+    world.session.commit()
+
+    world.service.reconcile_run_closures(
+        run.id, now=NOW + timedelta(hours=2), absence_after_hours=1
+    )
+
+    assert _description(world, opportunity_id) == "Greenhouse text"

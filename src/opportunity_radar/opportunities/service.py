@@ -440,11 +440,29 @@ class OpportunityService:
             self.session.refresh(result)
         except IntegrityError:
             self.session.rollback()
-            return self.repository.normalization_result(raw_item_id, NORMALIZER_VERSION)
+            return self._race_winner_result(raw_item_id)
         except Exception:
             self.session.rollback()
             raise
         return result
+
+    def _race_winner_result(self, raw_item_id: UUID) -> NormalizationResultModel | None:
+        """The result a concurrent worker stored for this item (R55-B1 follow-up).
+
+        A first read can miss a row that committed just after our rollback, so it is tried
+        once more on a fresh transaction. Still unreadable means the item stays pending for
+        the next pass; that is logged instead of silently shrinking the batch."""
+        for attempt in range(2):
+            winner = self.repository.normalization_result(raw_item_id, NORMALIZER_VERSION)
+            if winner is not None:
+                return winner
+            if attempt == 0:
+                self.session.rollback()
+        logger.warning(
+            "normalization race winner could not be read; item left pending",
+            extra={"job": "normalize", "raw_item_id": str(raw_item_id)},
+        )
+        return None
 
     def _stale_without_occurrence(
         self, raw_item: RawItemModel, published_at: datetime | None
@@ -692,6 +710,7 @@ class OpportunityService:
                 # complete run.
                 self.session.flush()
                 if self.repository.opportunity_is_open_at_source(opportunity.id):
+                    self._reelect_primary_content(opportunity, vanished=occurrence)
                     continue
                 opportunity.lifecycle_status = OpportunityStatus.CLOSED.value
                 opportunity.closure_evidence = {
@@ -703,6 +722,39 @@ class OpportunityService:
 
         self.session.commit()
         return True
+
+    def _reelect_primary_content(
+        self, opportunity: OpportunityModel, *, vanished: SourceOccurrenceModel
+    ) -> None:
+        """R55-E4: when a vanished occurrence leaves another source as the primary, apply
+        that source's current content now, instead of waiting for it to be renormalized.
+
+        Best effort and idempotent: nothing changes when the new primary's payload is gone
+        or unreadable, when its identity would collide with another opportunity, or when
+        its content already matches (no `version` bump)."""
+        primary_id = self.repository.primary_occurrence_id(opportunity.id)
+        if primary_id is None or primary_id == vanished.id:
+            return
+        primary = self.session.get(SourceOccurrenceModel, primary_id)
+        evidence = (
+            self.repository.raw_item_evidence(primary.raw_item_id) if primary is not None else None
+        )
+        if evidence is None:
+            return
+        try:
+            candidate = build_candidate(
+                _normalization_input(evidence), content_rules=self._content_rules_enabled()
+            )
+        except (PayloadExpiredError, NormalizationError, TypeError, ValueError):
+            return
+        if candidate.fingerprint != opportunity.fingerprint:
+            competing = self.repository.opportunity_by_fingerprint(
+                fingerprint=candidate.fingerprint,
+                fingerprint_version=candidate.fingerprint_version,
+            )
+            if competing is not None and competing.id != opportunity.id:
+                return
+        _refresh_opportunity(opportunity, candidate)
 
     def mark_relevance(
         self,
