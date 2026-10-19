@@ -1098,6 +1098,12 @@ describe('InboxPage salary unit (D1)', () => {
     expect(inbox.searchParams.get('salary_period')).toBe('YEAR')
     expect(search(container).get('salary_currency')).toBe('USD')
     expect(search(container).get('salary_period')).toBe('YEAR')
+    const describedBy = (id: string) =>
+      container.querySelector(`#${id}`)?.getAttribute('aria-describedby') ?? ''
+    for (const id of ['inbox-salary-currency', 'inbox-salary-period']) {
+      const description = container.querySelector(`#${describedBy(id)}`)
+      expect(description?.textContent).toContain('Compara só vagas')
+    }
   })
 
   it('sem valor salarial não envia moeda nem período e desabilita os selects', async () => {

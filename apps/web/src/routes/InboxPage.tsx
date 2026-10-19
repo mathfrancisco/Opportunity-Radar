@@ -502,6 +502,8 @@ export function InboxPage() {
   const salaryMin = params.get('salary_min') ?? ''
   const salaryMax = params.get('salary_max') ?? ''
   const hasSalary = Boolean(salaryMin || salaryMax)
+  const salaryHelp =
+    'Compara só vagas na mesma moeda e período. Vagas sem remuneração informada continuam na lista.'
   const { currency: salaryCurrency, period: salaryPeriod } = salaryUnit(params)
   const sources = params.getAll('source').filter(Boolean)
   const source = sources[0] ?? ''
@@ -770,6 +772,7 @@ export function InboxPage() {
 
           <Field label="Remuneração mínima">
             <input
+              aria-describedby="inbox-salary-help"
               className={controlClassName}
               min={0}
               onChange={(event) => update({ salary_min: event.target.value })}
@@ -780,6 +783,7 @@ export function InboxPage() {
 
           <Field label="Remuneração máxima">
             <input
+              aria-describedby="inbox-salary-help"
               className={controlClassName}
               min={0}
               onChange={(event) => update({ salary_max: event.target.value })}
@@ -790,7 +794,7 @@ export function InboxPage() {
 
           <FilterPill
             description={
-              hasSalary ? undefined : 'Preencha a remuneração mínima ou máxima para escolher a moeda.'
+              hasSalary ? salaryHelp : 'Preencha a remuneração mínima ou máxima para escolher a moeda.'
             }
             disabled={!hasSalary}
             id="inbox-salary-currency"
@@ -802,7 +806,7 @@ export function InboxPage() {
           />
           <FilterPill
             description={
-              hasSalary ? undefined : 'Preencha a remuneração mínima ou máxima para escolher o período.'
+              hasSalary ? salaryHelp : 'Preencha a remuneração mínima ou máxima para escolher o período.'
             }
             disabled={!hasSalary}
             id="inbox-salary-period"
@@ -813,8 +817,7 @@ export function InboxPage() {
             defaultValue={defaultSalaryPeriod}
           />
           <p className="text-sm text-muted sm:col-span-full" id="inbox-salary-help">
-            Compara só vagas na mesma moeda e período. Vagas sem remuneração informada continuam
-            na lista.
+            {salaryHelp}
           </p>
 
           <Field label="Fonte (id)">
