@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from base64 import b64decode
 from binascii import Error as Base64Error
 from collections import Counter
@@ -1772,6 +1773,21 @@ def _stored_description(description: str | None) -> str | None:
     return trim_stored_description(description, get_settings().stored_description_max_chars)
 
 
+def _description_full_hash(description: str | None) -> str | None:
+    """R55-E6: sha256 hex of the full cleaned description, only when the cap cut it.
+
+    The stored text cannot show a change that happens past the cap; this hash can. It is
+    `None` when the text fits (stored text is then the full text and compares exactly), when
+    the cap is off, or when there is no description.
+    """
+    from opportunity_radar.matching.text import clean_description
+
+    cap = get_settings().stored_description_max_chars
+    if not description or cap <= 0 or len(description) <= cap:
+        return None
+    return hashlib.sha256(clean_description(description).encode("utf-8")).hexdigest()
+
+
 def _new_opportunity(candidate: CanonicalCandidate, *, first_seen_at: datetime) -> OpportunityModel:
     return OpportunityModel(
         fingerprint=candidate.fingerprint,
@@ -1787,6 +1803,7 @@ def _new_opportunity(candidate: CanonicalCandidate, *, first_seen_at: datetime) 
         seniority=candidate.seniority.value,
         contract_type=candidate.contract_type.value,
         description=_stored_description(candidate.description),
+        description_full_hash=_description_full_hash(candidate.description),
         lifecycle_status=OpportunityStatus.DISCOVERED.value,
         published_at=candidate.published_at,
         source_updated_at=candidate.source_updated_at,
@@ -1928,11 +1945,17 @@ def _apply_evidence_fields(opportunity: OpportunityModel, candidate: CanonicalCa
     # one a backfill stored: it must not erase it.
     if candidate.description is not None and candidate.description.strip():
         stored = _stored_description(candidate.description)
-        if opportunity.description != stored:
+        full_hash = _description_full_hash(candidate.description)
+        if opportunity.description_full_hash is not None and full_hash is not None:
+            # Both sides know the full text: a change past the cap shows only here.
+            changed |= opportunity.description_full_hash != full_hash
+            opportunity.description = stored
+        elif opportunity.description != stored:
             # A row still holding the untrimmed text of this same posting is trimmed in
             # place without a version bump (no reanalysis wave); a real edit bumps.
             changed |= _stored_description(opportunity.description) != stored
             opportunity.description = stored
+        opportunity.description_full_hash = full_hash
     changed |= _set_if_changed(opportunity, "published_at", candidate.published_at)
     changed |= _set_if_changed(opportunity, "source_updated_at", candidate.source_updated_at)
     changed |= _set_if_changed(

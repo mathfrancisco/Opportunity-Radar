@@ -55,6 +55,7 @@ from opportunity_radar.acquisition.workday import _PARSER_VERSION, WorkdayCollec
 from opportunity_radar.companies.models import CompanySource  # noqa: F401
 from opportunity_radar.opportunities.models import OpportunityModel, SourceOccurrenceModel
 from opportunity_radar.opportunities.service import (
+    _description_full_hash,
     _stored_description,
     recompute_from_stored_description,
 )
@@ -194,6 +195,7 @@ def _write_description(session: Session, opportunity_id: str, description: str) 
         .values(
             # R55-E6: the same cleaned, capped form every other write path stores.
             description=_stored_description(description),
+            description_full_hash=_description_full_hash(description),
             version=OpportunityModel.version + 1,
             # An explicit value keeps the column's `onupdate` from moving it.
             updated_at=OpportunityModel.updated_at,
@@ -424,6 +426,8 @@ def rollback(
                 .where(OpportunityModel.id == UUID(entry["opportunity_id"]))
                 .values(
                     description=entry["backup"]["description"],
+                    # The restored text is not the one the hash describes.
+                    description_full_hash=None,
                     version=OpportunityModel.version + 1,
                     updated_at=OpportunityModel.updated_at,
                 )
