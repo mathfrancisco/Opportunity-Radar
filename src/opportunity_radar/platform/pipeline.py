@@ -12,18 +12,20 @@ retention stage whether it is due, the analysis stage whether AI is enabled and 
 from __future__ import annotations
 
 import hashlib
+import re
 import signal
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field
 from enum import IntEnum
 from math import isfinite
-from time import monotonic
+from time import monotonic, sleep
 from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.exc import InterfaceError, OperationalError
 
 from opportunity_radar.platform.logging import get_logger
 
@@ -52,6 +54,10 @@ class ExitCode(IntEnum):
 
 class ConfigurationError(ValueError):
     """The window was refused before it touched a database or a source."""
+
+
+CLAIM_RETRY_DELAY_SECONDS = 5.0
+_CLAIM_RETRYABLE = (OperationalError, InterfaceError)
 
 
 class ClaimBusyError(RuntimeError):
@@ -164,9 +170,14 @@ class PostgresWindowClaim:
 
     def __enter__(self) -> PostgresWindowClaim:
         self.connection = self.engine.connect()
-        acquired = self.connection.scalar(
-            text("SELECT pg_try_advisory_lock(:key)"), {"key": self.key}
-        )
+        try:
+            acquired = self.connection.scalar(
+                text("SELECT pg_try_advisory_lock(:key)"), {"key": self.key}
+            )
+        except BaseException:
+            self.connection.close()
+            self.connection = None
+            raise
         if not acquired:
             self.connection.close()
             self.connection = None
@@ -222,8 +233,14 @@ def run_pipeline(
     claim_factory: Callable[[], PostgresWindowClaim],
     clock: Callable[[], float] = monotonic,
     stop: StopSignal | None = None,
+    claim_retry_delay: float = CLAIM_RETRY_DELAY_SECONDS,
+    claim_sleep: Callable[[float], None] = sleep,
 ) -> PipelineReport:
-    """Run each allowed stage once. A returned failure never triggers a retry."""
+    """Run each allowed stage once. A returned failure never triggers a retry.
+
+    Only the claim acquisition is retried, once, on a connection error (for example a
+    database compute waking from scale-to-zero); stages are never retried.
+    """
     owner = validate_owner(owner_sub)
     names = tuple(stage.name for stage in stages)
     if names not in ALLOWED_STAGE_ORDERS:
@@ -237,7 +254,7 @@ def run_pipeline(
         return _stopped_report(stages, stop.reason or "deadline")
     started_at = clock()
     try:
-        with claim_factory():
+        with _claim_with_retry(claim_factory, claim_retry_delay, claim_sleep):
             reports: list[StageReport] = []
             context = StageContext(owner, deadline, stop)
             for index, stage in enumerate(stages):
@@ -319,12 +336,39 @@ def run_pipeline(
             [StageReport(stage.name, "skipped", "claim_busy") for stage in stages],
         )
     except Exception as error:
-        logger.error("pipeline claim unavailable", extra={"error": _safe_error(error)})
+        logger.error(
+            "pipeline claim unavailable: %s",
+            _error_cause(error),
+            extra={"error": _safe_error(error)},
+        )
         return PipelineReport(
             ExitCode.CONFIGURATION_ERROR,
             "claim_unavailable",
             [StageReport(stage.name, "skipped", "claim_unavailable") for stage in stages],
         )
+
+
+@contextmanager
+def _claim_with_retry(
+    claim_factory: Callable[[], Any], delay: float, sleep_fn: Callable[[float], None]
+) -> Iterator[None]:
+    """Acquire the claim, retrying once on a connection error; never on a busy claim."""
+    with ExitStack() as stack:
+        for attempt in (1, 2):
+            try:
+                stack.enter_context(claim_factory())
+                break
+            except ClaimBusyError:
+                raise
+            except _CLAIM_RETRYABLE as error:
+                if attempt == 2:
+                    raise
+                logger.warning(
+                    "pipeline claim connection failed, retrying once: %s",
+                    _error_cause(error),
+                )
+                sleep_fn(delay)
+        yield
 
 
 def _stopped_report(stages: list[StageSpec], reason: str) -> PipelineReport:
@@ -340,6 +384,19 @@ def _stopped_report(stages: list[StageSpec], reason: str) -> PipelineReport:
 def _safe_error(error: BaseException) -> str:
     """Do not put stage messages (which can carry URLs/payloads) in the report."""
     return type(error).__name__
+
+
+def _error_cause(error: BaseException) -> str:
+    """Allow-list only: exception class, driver class and SQLSTATE. Never the message text."""
+    orig = getattr(error, "orig", None)
+    cause = type(error).__name__
+    if orig is None:
+        return cause
+    sqlstate = getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
+    cause += f" (orig={type(orig).__name__}"
+    if isinstance(sqlstate, str) and re.fullmatch(r"[0-9A-Z]{5}", sqlstate):
+        cause += f", sqlstate={sqlstate}"
+    return cause + ")"
 
 
 def _duration_ms(clock: Callable[[], float], started_at: float) -> int:

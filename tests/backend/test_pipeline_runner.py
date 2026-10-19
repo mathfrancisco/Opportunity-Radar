@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from opportunity_radar import worker
 from opportunity_radar.acquisition.collectors import CollectorCapabilities
@@ -152,6 +153,192 @@ def test_busy_claim_does_no_work() -> None:
     )
     assert report.exit_code == ExitCode.CLAIM_BUSY
     assert events == []
+
+
+def _connect_error(detail: str = "connection refused") -> OperationalError:
+    return OperationalError("SELECT pg_try_advisory_lock", {}, Exception(detail))
+
+
+def _flaky_claim(failures: list[BaseException]):
+    """Claim factory that raises the queued errors, then yields a working claim."""
+    attempts: list[int] = []
+
+    def factory():
+        attempts.append(1)
+        if failures:
+            raise failures.pop(0)
+        return nullcontext()
+
+    return factory, attempts
+
+
+def test_claim_is_retried_once_after_a_connection_error() -> None:
+    events: list[str] = []
+    sleeps: list[float] = []
+    factory, attempts = _flaky_claim([_connect_error()])
+    report = run_pipeline(
+        _stages(events),
+        owner_sub="owner",
+        deadline_seconds=30,
+        claim_factory=factory,
+        claim_retry_delay=2.5,
+        claim_sleep=sleeps.append,
+    )
+    assert report.exit_code == ExitCode.SUCCESS
+    assert len(attempts) == 2
+    assert sleeps == [2.5]
+    assert events == ["collect_enabled_sources", "normalize_opportunities", "evaluate_pending"]
+
+
+def test_claim_unavailable_after_the_single_retry_fails_too() -> None:
+    events: list[str] = []
+    sleeps: list[float] = []
+    factory, attempts = _flaky_claim([_connect_error(), _connect_error()])
+    report = run_pipeline(
+        _stages(events),
+        owner_sub="owner",
+        deadline_seconds=30,
+        claim_factory=factory,
+        claim_sleep=sleeps.append,
+    )
+    assert report.exit_code == ExitCode.CONFIGURATION_ERROR
+    assert report.outcome == "claim_unavailable"
+    assert len(attempts) == 2
+    assert len(sleeps) == 1
+    assert events == []
+
+
+def test_busy_claim_is_not_retried() -> None:
+    sleeps: list[float] = []
+    factory, attempts = _flaky_claim([ClaimBusyError()])
+    report = run_pipeline(
+        _stages([]),
+        owner_sub="owner",
+        deadline_seconds=30,
+        claim_factory=factory,
+        claim_sleep=sleeps.append,
+    )
+    assert report.exit_code == ExitCode.CLAIM_BUSY
+    assert len(attempts) == 1
+    assert sleeps == []
+
+
+def test_non_connection_claim_error_is_not_retried() -> None:
+    sleeps: list[float] = []
+    factory, attempts = _flaky_claim([RuntimeError("boom")])
+    report = run_pipeline(
+        _stages([]),
+        owner_sub="owner",
+        deadline_seconds=30,
+        claim_factory=factory,
+        claim_sleep=sleeps.append,
+    )
+    assert report.outcome == "claim_unavailable"
+    assert len(attempts) == 1
+    assert sleeps == []
+
+
+def test_claim_unavailable_logs_only_class_and_sqlstate_never_the_message(caplog) -> None:
+    class DriverError(Exception):
+        sqlstate = "08006"
+
+    message = (
+        'connection to server at "db" (::1), port 5432 failed: FATAL: password '
+        'authentication failed for user "radar_user" password=hunter2'
+    )
+    error = OperationalError("SELECT 1", {}, DriverError(message))
+    factory, _ = _flaky_claim([error, error])
+    with caplog.at_level("DEBUG"):
+        run_pipeline(
+            _stages([]),
+            owner_sub="owner",
+            deadline_seconds=30,
+            claim_factory=factory,
+            claim_sleep=lambda _seconds: None,
+        )
+    text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "pipeline claim unavailable: OperationalError (orig=DriverError, sqlstate=08006)" in text
+    for leaked in ("db", "::1", "radar_user", "hunter2", "5432", "authentication", "FATAL"):
+        assert leaked not in text.replace("DriverError", "").replace("pipeline claim", "")
+    for record in caplog.records:
+        assert message not in str(record.__dict__)
+
+
+class _FakeConnection:
+    def __init__(self, scalar_result: object) -> None:
+        self.scalar_result = scalar_result
+        self.closed = 0
+        self.executed = 0
+
+    def scalar(self, *_args, **_kwargs):
+        if isinstance(self.scalar_result, BaseException):
+            raise self.scalar_result
+        return self.scalar_result
+
+    def execute(self, *_args, **_kwargs) -> None:
+        self.executed += 1
+
+    def commit(self) -> None:
+        pass
+
+    def close(self) -> None:
+        self.closed += 1
+
+
+def test_claim_connection_is_closed_when_the_lock_query_fails_and_retry_succeeds() -> None:
+    connections = [_FakeConnection(_connect_error()), _FakeConnection(True)]
+    engine = SimpleNamespace(connect=lambda: connections.pop(0))
+    created: list[_FakeConnection] = list(connections)
+    events: list[str] = []
+    report = run_pipeline(
+        _stages(events),
+        owner_sub="owner",
+        deadline_seconds=30,
+        claim_factory=lambda: PostgresWindowClaim(engine),
+        claim_sleep=lambda _seconds: None,
+    )
+    failed, second = created
+    assert failed.closed == 1
+    assert failed.executed == 0
+    assert report.exit_code == ExitCode.SUCCESS
+    assert second.closed == 1
+    assert second.executed == 1  # unlock ran once on exit
+
+
+def test_claim_exit_runs_once_after_a_retry_and_not_for_the_failed_attempt() -> None:
+    class CountingClaim:
+        def __init__(self) -> None:
+            self.entered = 0
+            self.exited = 0
+
+        def __enter__(self):
+            self.entered += 1
+            return self
+
+        def __exit__(self, *_args) -> None:
+            self.exited += 1
+
+    claim = CountingClaim()
+    failures: list[BaseException] = [_connect_error()]
+    factories_called: list[int] = []
+
+    def factory():
+        factories_called.append(1)
+        if failures:
+            raise failures.pop(0)
+        return claim
+
+    report = run_pipeline(
+        _stages([]),
+        owner_sub="owner",
+        deadline_seconds=30,
+        claim_factory=factory,
+        claim_sleep=lambda _seconds: None,
+    )
+    assert report.exit_code == ExitCode.SUCCESS
+    assert len(factories_called) == 2
+    assert claim.entered == 1
+    assert claim.exited == 1
 
 
 def test_failed_stage_is_sanitized_and_is_not_retried() -> None:
