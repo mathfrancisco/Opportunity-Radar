@@ -19,7 +19,7 @@ Estado: `main` em `5bb8e08` (#116). Produção (VM Oracle) com as imagens do run
 | 18/10 23:36 | 181 MB | 429 fontes ligadas (427 após desligar 2 workday), backlog drenado |
 | 19/10 01:55 | 183 MB | após o deploy #4; 6832 oportunidades, 12375 raw items |
 
-Crescimento observado: cerca de 40 MB/dia sem retenção aplicada e sem o pré-filtro. O pré-filtro B5 barrou 53 % das vagas da primeira janela. A retenção diária está em dry-run (`OPPORTUNITY_RETENTION_APPLY=false`).
+Crescimento observado: cerca de 31 MB/dia (139,1 MB em 17/10 15:37 para 181 MB em 18/10 23:36) sem retenção aplicada e sem o pré-filtro. O pré-filtro B5 barrou 53 % das vagas da primeira janela. A retenção diária está em dry-run (`OPPORTUNITY_RETENTION_APPLY=false`).
 
 ## Dry-run da retenção (2026-10-19 01:54 UTC, nada apagado)
 
@@ -42,8 +42,8 @@ Protegidas: 0 com candidatura e 0 com marca de relevância nesse corte. Ligar ex
 ## Consumo do Neon
 
 - Projeto criado em 16/10 14:05 UTC. Até 19/10 ~02:00 (cerca de 60 h): `compute_time_seconds=10147` (2,82 CU-h), `active_time_seconds=38156` (10,6 h ativas). Autoscaling de 0,25 a 2 CU, suspensão padrão.
-- Projeção linear: 2,82 / 60 × 720 ≈ **34 CU-h/mês** (meta < 80). Está próxima da estimativa do E5 (31 típica, 62 pior caso).
-- Armazenamento: 183 MB de 1 GB. Projeção: sem aplicar a retenção, os 600 MB chegariam em cerca de 10 dias. Com a retenção de 7 dias e o pré-filtro, o volume deve estabilizar. Isso só fica provado depois de ligar o apply e medir alguns dias: **sem prova ainda**.
+- Projeção linear (sem prova; inclui a drenagem do backlog e assume que `compute_time_seconds` já está em CU-segundos, como a métrica do Neon descreve): 2,82 / 60 × 720 ≈ **34 CU-h/mês** (meta < 80 do plano, Frente E). Está próxima da estimativa do E5 (31 típica, 62 pior caso).
+- Armazenamento: 183 MB de 1 GB. Projeção: sem aplicar a retenção, os 600 MB chegariam em cerca de 13 dias. Com a retenção de 7 dias e o pré-filtro, o volume deve estabilizar. Isso só fica provado depois de ligar o apply e medir alguns dias: **sem prova ainda**.
 
 ## Cards
 
@@ -65,7 +65,7 @@ Protegidas: 0 com candidatura e 0 com marca de relevância nesse corte. Ligar ex
 | E1, E3 | feito | `2026-10-16-r55-e1-e3-ingestao.md`; 103 fora dos 7 dias na janela de 19/10 |
 | E2 | código feito, apply desligado | dry-run acima; apagar exige OK do dono |
 | E4 | feito | `2026-10-16-r55-e4.md`; reeleição do primário no #115 |
-| E5 | feito | timer horário, janela de 900 s; 34 CU-h/mês projetados |
+| E5 | feito (consumo: projeção, sem prova) | timer horário, janela de 900 s; 34 CU-h/mês projetados |
 | E6 | parcial | tamanho medido; meta < 600 MB com 7 dias: **sem prova** até ligar a retenção |
 
 ## Pendências conhecidas
