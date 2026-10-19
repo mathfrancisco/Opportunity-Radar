@@ -98,11 +98,11 @@ def off_target_predicate(a: str) -> str:
     """
     evidence = f"{a}.role_family_evidence"
     # The stored family is the combined one, where a department overrides the title. Only
-    # evidence that the title itself decided it (with no unmatched department beside it), or
+    # evidence that the title itself decided it with no department at all (marker
+    # `departments: none`; legacy rows lack it and are kept), or
     # that title and department both name an off-target area, counts; anything else is kept.
     title_decided = (
-        f"({evidence} ->> 'rule' = 'title' "
-        f"AND coalesce({evidence} ->> 'department_unmatched', 'false') <> 'true')"
+        f"({evidence} ->> 'rule' = 'title' AND {evidence} ->> 'departments' = 'none')"
     )
     both_off = (
         f"({evidence} ->> 'rule' = 'department_refined_by_title' "

@@ -628,6 +628,7 @@ def test_manual_intake_keeps_the_persisted_run_recoverable_when_normalization_cr
     )
     monkeypatch.setattr(acquisition, "AcquisitionService", FakeAcquisitionService)
     monkeypatch.setattr(acquisition, "active_profile_target_role_families", lambda *_: lambda: ())
+    monkeypatch.setattr(acquisition, "single_active_owner", lambda *_: True)
 
     def normalization_crashed(*args: object, **kwargs: object) -> object:
         raise RuntimeError("database unavailable")

@@ -448,7 +448,7 @@ class AcquisitionService:
         ingest_max_age_days: int | None = None,
         target_countries: Callable[[], tuple[str, ...]] | None = None,
         prefilter_enabled: bool = False,
-        single_owner: bool = True,
+        single_owner: bool = False,
     ) -> None:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
@@ -479,7 +479,8 @@ class AcquisitionService:
         # the source's history; the worker passes COLLECTION_PREFILTER_ENABLED (default on).
         self._target_countries = target_countries
         self._prefilter_enabled = prefilter_enabled
-        # False when more than one owner has an active profile: no area-based dropping.
+        # Fail closed: area-based dropping needs the caller to vouch that at most one owner
+        # has an active profile (`single_active_owner`); the default keeps everything.
         self._single_owner = single_owner
         # F51-07: off keeps the unclaimed behaviour (the active-run unique index stays the
         # only single-flight); on needs a repository that can claim, i.e. a real database.

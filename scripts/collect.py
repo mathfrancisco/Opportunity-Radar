@@ -25,6 +25,7 @@ from opportunity_radar.acquisition.domain import (
     CollectionRequest,
 )
 from opportunity_radar.acquisition.models import RawItemModel, SourceDefinitionModel
+from opportunity_radar.acquisition.prefilter import single_active_owner
 from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.service import (
     AcquisitionService,
@@ -211,6 +212,7 @@ async def _collect_one(
                 registry=_registry(settings),
                 target_role_families=target_role_families,
                 target_area_floor=settings.collection_target_area_floor,
+                single_owner=single_active_owner(session),
                 claims_enabled=settings.collection_claim_enabled,
                 inventory_contract_enabled=settings.collection_inventory_contract_enabled,
             )

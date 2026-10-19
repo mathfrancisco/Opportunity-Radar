@@ -29,6 +29,7 @@ from opportunity_radar.acquisition.models import (
     SourceProbeModel,
     SourceRunModel,
 )
+from opportunity_radar.acquisition.prefilter import single_active_owner
 from opportunity_radar.acquisition.service import (
     AcquisitionService,
     SourceClaimedElsewhereError,
@@ -451,6 +452,7 @@ async def _execute_source_run(
             alerts=alerts,
             target_role_families=active_profile_target_role_families(session, identity.sub),
             target_area_floor=get_settings().collection_target_area_floor,
+            single_owner=single_active_owner(session),
             claims_enabled=get_settings().collection_claim_enabled,
             inventory_contract_enabled=get_settings().collection_inventory_contract_enabled,
         ).execute(source_id, request)

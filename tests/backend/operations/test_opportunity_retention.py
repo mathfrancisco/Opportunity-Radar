@@ -853,7 +853,12 @@ def test_stale_report_counts_an_opportunity_without_occurrence_as_no_source(
 
 _TARGET_FAMILIES = ("SOFTWARE_ENGINEERING", "DATA")
 #: What `classify_role_family` stores when the title alone decided the area.
-_TITLE = {"rule": "title", "term": "account executive", "origin": "title"}
+_TITLE = {
+    "rule": "title",
+    "term": "account executive",
+    "origin": "title",
+    "departments": "none",
+}
 
 
 def _off_target_run(fx: _Fixture, **overrides: object):
@@ -991,12 +996,16 @@ def test_off_target_keeps_a_duplicate_survivor_when_evidence_has_no_rule(fx: _Fi
     assert fx.present() == {survivor, kept_duplicate}
 
 
-def test_off_target_title_rule_with_an_unmatched_department_is_kept(fx: _Fixture) -> None:
-    evidence = {**_TITLE, "department_unmatched": True}
-    unmatched = fx.opportunity(3, role_family="SALES", evidence=evidence)
-    plain = fx.opportunity(3, role_family="SALES", evidence=_TITLE)
+def test_off_target_title_rule_without_the_no_department_marker_is_kept(fx: _Fixture) -> None:
+    # Rows classified before the marker, or with a department that matched no rule.
+    legacy = fx.opportunity(
+        3,
+        role_family="SALES",
+        evidence={"rule": "title", "term": "account executive", "origin": "title"},
+    )
+    marked = fx.opportunity(3, role_family="SALES", evidence=_TITLE)
 
     _off_target_run(fx)
 
-    assert fx.present() == {unmatched}
-    assert plain not in fx.present()
+    assert fx.present() == {legacy}
+    assert marked not in fx.present()

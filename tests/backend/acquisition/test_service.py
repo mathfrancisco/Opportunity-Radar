@@ -1701,6 +1701,7 @@ def _filtering_service(
         alerts=SourceAlertService(session),  # type: ignore[arg-type]
         target_role_families=(lambda: families) if families is not None else None,
         target_area_floor=floor,
+        single_owner=True,
     )
     return service, session, repository
 

@@ -88,12 +88,37 @@ def test_profile_countries_reader_swallows_any_exception() -> None:
     assert active_profile_target_countries(Broken(), "owner")() == ()  # type: ignore[arg-type]
 
 
-def test_classifier_records_an_unmatched_department_beside_a_title_decision() -> None:
+def test_classifier_marks_a_title_decision_made_with_no_department_at_all() -> None:
     from opportunity_radar.opportunities.role_family import classify_role_family
 
     with_department = classify_role_family(title="Account Executive", departments=("Wizards",))
     without = classify_role_family(title="Account Executive", departments=())
 
     assert with_department.evidence["rule"] == "title"
-    assert with_department.evidence["department_unmatched"] is True
-    assert "department_unmatched" not in without.evidence
+    assert "departments" not in with_department.evidence
+    assert without.evidence["departments"] == "none"
+    assert all(isinstance(value, str) for value in without.evidence.values())
+
+
+@pytest.mark.parametrize(
+    ("title", "departments"),
+    [
+        ("Account Executive", ()),
+        ("Account Executive", ("Wizards",)),
+        ("Account Executive", ("Engineering",)),
+        ("Backend Engineer", ("Engineering",)),
+        ("Wizard of Light", ()),
+    ],
+)
+def test_classifier_evidence_serializes_through_the_http_schema(
+    title: str, departments: tuple[str, ...]
+) -> None:
+    from pydantic import TypeAdapter
+
+    from opportunity_radar.opportunities.role_family import classify_role_family
+    from opportunity_radar.presentation.http.opportunities import OpportunityResponse
+
+    evidence = classify_role_family(title=title, departments=departments).evidence
+    annotation = OpportunityResponse.model_fields["role_family_evidence"].annotation
+
+    assert TypeAdapter(annotation).validate_python(evidence) == evidence
