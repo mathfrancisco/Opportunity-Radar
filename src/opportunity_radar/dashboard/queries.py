@@ -859,10 +859,12 @@ def _search_tsquery(term: str) -> Any:
 
     Quoted phrases, `AND`/`OR`/`-negation` in `term` come from `websearch_to_tsquery`
     itself; `synonym_variants` only substitutes plain tokens before parsing, so those
-    semantics survive (SPEC 37, "Contrato de consulta").
+    semantics survive (SPEC 37, "Contrato de consulta"). The variant goes through
+    `opportunities.f_unaccent` like `search_document` does, so accented and plain
+    spellings match the same rows.
     """
     expressions: list[Any] = [
-        func.websearch_to_tsquery(dictionary, variant)
+        func.websearch_to_tsquery(dictionary, func.opportunities.f_unaccent(variant))
         for variant in synonym_variants(term)
         for dictionary in _DICTIONARIES
     ]

@@ -25,7 +25,7 @@ FTS_INDEX_CONFIG = {
         "description": "C",
         "location": "D",
     },
-    "query": "websearch_to_tsquery_bilingual_or",
+    "query": "websearch_to_tsquery_bilingual_or_unaccent",
     "rank": "ts_rank_cd",
     "synonyms_version": "synonyms-v1",
 }

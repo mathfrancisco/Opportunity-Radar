@@ -151,3 +151,60 @@ def test_title_match_ranks_above_description_only_match() -> None:
             title_match.id,
             description_match.id,
         ]
+
+
+@pytest.mark.parametrize(
+    ("title", "queries"),
+    [
+        ("Gestão de Produto", ("gestão", "gestao")),
+        ("Análise de Dados", ("análise", "analise")),
+        ("Ciência de Dados", ("ciência de dados", "ciencia de dados")),
+        ("Programação Backend", ("programação", "programacao")),
+        ("Ação Social", ("ação", "acao")),
+        ("Gestao sem acento", ("gestão", "gestao")),
+    ],
+)
+def test_accented_and_plain_queries_find_the_same_title(
+    title: str, queries: tuple[str, ...]
+) -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        target = _opportunity(session, company, title=title, published_at=NOW)
+        session.commit()
+
+        for query in queries:
+            found = list_opportunity_inbox(
+                session, InboxQuery(company_id=company.id, search=query)
+            )
+            assert [item.opportunity_id for item in found.items] == [target.id], query
+
+
+def test_accented_phrase_and_negation_keep_their_semantics() -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        ciencia_de_dados = _opportunity(
+            session, company, title="Ciência de Dados", published_at=NOW
+        )
+        _opportunity(session, company, title="Dados de Ciência", published_at=NOW)
+        estagio = _opportunity(
+            session, company, title="Engenharia de Dados Estágio", published_at=NOW
+        )
+        session.commit()
+
+        def ids(search: str) -> list:
+            found = list_opportunity_inbox(
+                session, InboxQuery(company_id=company.id, search=search)
+            )
+            return [item.opportunity_id for item in found.items]
+
+        assert ids('"ciência de dados"') == [ciencia_de_dados.id]
+        assert estagio.id not in ids("dados -estágio")
+
+
+@pytest.mark.parametrize("term", ["ção", "-", '""', "- ção"])
+def test_operator_only_or_accent_only_queries_do_not_raise(term: str) -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        session.commit()
+
+        list_opportunity_inbox(session, InboxQuery(company_id=company.id, search=term))
