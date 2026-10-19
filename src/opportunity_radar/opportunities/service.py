@@ -1537,8 +1537,20 @@ def retag_skills(
     }
 
 
-def recompute_from_stored_description(session: Session, opportunity_id: UUID) -> bool:
+def recompute_from_stored_description(
+    session: Session,
+    opportunity_id: UUID,
+    *,
+    full_description: str | None = None,
+    skipped: Counter[str] | None = None,
+) -> bool:
     """Redo skills and seniority from the description now stored on the opportunity.
+
+    With `STORED_DESCRIPTION_MAX_CHARS > 0` (R55-E6) the stored text may be cut, and there is
+    no reliable mark of that: rebuilding skills from it would drop what the cut removed. The
+    caller must then pass the full text as `full_description`; without it the posting is
+    skipped (counted under `full_description_required` in `skipped`) and `version` is not
+    bumped. Only with the cap at 0 does the stored text stand in for the full one.
 
     A description written outside normalization (the Workday detail backfill) is not in the
     raw evidence the retag scripts read, so they would never see it. Each occurrence's evidence
@@ -1548,6 +1560,11 @@ def recompute_from_stored_description(session: Session, opportunity_id: UUID) ->
     opportunity = session.get(OpportunityModel, opportunity_id)
     if opportunity is None or not (opportunity.description or "").strip():
         return False
+    if full_description is None and get_settings().stored_description_max_chars > 0:
+        if skipped is not None:
+            skipped["full_description_required"] += 1
+        return False
+    source_description = full_description or opportunity.description
     repository = OpportunityRepository(session)
     state = _enrichment_state(opportunity)[1]
     seniority = opportunity.seniority
@@ -1561,7 +1578,7 @@ def recompute_from_stored_description(session: Session, opportunity_id: UUID) ->
             continue
         try:
             candidate = build_candidate(
-                replace(_normalization_input(evidence), description=opportunity.description),
+                replace(_normalization_input(evidence), description=source_description),
                 content_rules=get_settings().content_rules,
             )
         except (NormalizationError, TypeError, ValueError):
@@ -1730,6 +1747,13 @@ def _search_skills_text(skills: list[OpportunitySkillModel]) -> str | None:
     return " ".join(names) or None
 
 
+def _stored_description(description: str | None) -> str | None:
+    """R55-E6: the description as stored (cleaned and capped); extraction ran on the full text."""
+    from opportunity_radar.matching.text import trim_stored_description
+
+    return trim_stored_description(description, get_settings().stored_description_max_chars)
+
+
 def _new_opportunity(candidate: CanonicalCandidate, *, first_seen_at: datetime) -> OpportunityModel:
     return OpportunityModel(
         fingerprint=candidate.fingerprint,
@@ -1744,7 +1768,7 @@ def _new_opportunity(candidate: CanonicalCandidate, *, first_seen_at: datetime) 
         work_mode=candidate.work_mode.value,
         seniority=candidate.seniority.value,
         contract_type=candidate.contract_type.value,
-        description=candidate.description,
+        description=_stored_description(candidate.description),
         lifecycle_status=OpportunityStatus.DISCOVERED.value,
         published_at=candidate.published_at,
         source_updated_at=candidate.source_updated_at,
@@ -1885,7 +1909,12 @@ def _apply_evidence_fields(opportunity: OpportunityModel, candidate: CanonicalCa
     # A candidate without a description (detail fetch off for the source) says nothing about
     # one a backfill stored: it must not erase it.
     if candidate.description is not None and candidate.description.strip():
-        changed |= _set_if_changed(opportunity, "description", candidate.description)
+        stored = _stored_description(candidate.description)
+        if opportunity.description != stored:
+            # A row still holding the untrimmed text of this same posting is trimmed in
+            # place without a version bump (no reanalysis wave); a real edit bumps.
+            changed |= _stored_description(opportunity.description) != stored
+            opportunity.description = stored
     changed |= _set_if_changed(opportunity, "published_at", candidate.published_at)
     changed |= _set_if_changed(opportunity, "source_updated_at", candidate.source_updated_at)
     changed |= _set_if_changed(
