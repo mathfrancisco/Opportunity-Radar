@@ -489,7 +489,8 @@ def _compensation_from_range(value: Any, evidence_source: str) -> Compensation |
 def _period_from_text(value: Any) -> CompensationPeriod | None:
     if not isinstance(value, str):
         return None
-    text = value.casefold()
+    # "dia a dia" is an idiom for daily routine, not a daily rate.
+    text = re.sub(r"\bdia\s+a\s+dia\b", " ", value.casefold())
     matches = {
         period
         for period, patterns in {
@@ -518,7 +519,7 @@ def _period_from_text(value: Any) -> CompensationPeriod | None:
                 r"\bdia\b",
                 r"\bdi[aá]ria",
             ),
-            CompensationPeriod.HOUR: (r"\bhour", r"\bhourly", r"\bhora"),
+            CompensationPeriod.HOUR: (r"\bhour", r"\bhourly", r"\bhoras?\b"),
         }.items()
         if any(re.search(pattern, text) for pattern in patterns)
     }
@@ -546,7 +547,13 @@ _TEXT_COMPENSATION = re.compile(
     r"(?:\s*(?P<currency_after>\b(?:USD|BRL|EUR|GBP|CAD|AUD|reais)\b))?"
     r"(?:\s*(?:per|/|por|ao)\s*(?P<period>year|yearly|annual|month|monthly|week"
     r"|weekly|day|daily|hour|hourly|m[eê]s|mensal|ano|anual|semana|semanal|dia"
-    r"|di[aá]ria|hora)\b)?",
+    r"|di[aá]ria|horas?|mensais|anuais)\b)?",
+    re.IGNORECASE,
+)
+
+
+_BENEFIT_WORD = re.compile(
+    r"\b(?:vale|vr|va|aux[ií]lio|b[oô]nus|plr|refei[çc][ãa]o|alimenta[çc][ãa]o)\b",
     re.IGNORECASE,
 )
 
@@ -557,6 +564,8 @@ def _text_compensation(
     text = _clean_text(value)
     if text is None:
         return None
+    # Drop the idiom first so the short period tail cannot cut it in half.
+    text = re.sub(r"\bdia\s+a\s+dia\b", " ", text, flags=re.I)
     for match in _TEXT_COMPENSATION.finditer(text):
         first = _money_amount(match.group("first"))
         second = _money_amount(match.group("second"))
@@ -582,6 +591,11 @@ def _text_compensation(
             )
         ):
             continue
+        # A benefit amount ("VR R$ 40/dia") is not pay. Look only at the short
+        # prefix before the match, not the tail: the tail of the salary match
+        # in "Salário: R$ 5.000 por mês + VR R$ 40/dia" holds the benefit.
+        if _BENEFIT_WORD.search(_period_prefix(text, match.start())):
+            continue
         currency = (
             match.group("currency")
             or match.group("currency_after")
@@ -597,7 +611,8 @@ def _text_compensation(
                 currency=currency or None,
                 # Matched span plus a short tail only: the wide window picks
                 # up "4-day week" or "weekly 1:1" from unrelated prose.
-                period=_period_from_text(
+                period=_period_from_text(match.group("period"))
+                or _period_from_text(
                     _period_prefix(text, match.start())
                     + text[match.start() : match.end() + 16]
                 ),

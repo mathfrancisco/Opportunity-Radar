@@ -84,7 +84,11 @@ H = CompensationPeriod.HOUR
         ("R$ 5.000 ao mês", "BRL", M, 5000, None),
         ("Salary: 5-10k", None, None, 5000, 10000),
         ("Pagamos valores mensais de R$ 5.000", "BRL", M, 5000, None),
-        ("Bônus anuais de R$ 5.000", "BRL", Y, 5000, None),
+        ("Salário anual de R$ 60.000", "BRL", Y, 60000, None),
+        ("Salário: R$ 5.000 por mês + VR R$ 40/dia", "BRL", M, 5000, None),
+        ("R$ 5.000 por mês + VR R$ 40/dia", "BRL", M, 5000, None),
+        ("Salário R$ 5.000 por mês, horário flexível", "BRL", M, 5000, None),
+        ("Salário R$ 5.000 mensal, dia a dia ágil", "BRL", M, 5000, None),
         ("We meet weekly. Salary: R$ 5.000", "BRL", None, 5000, None),
     ],
 )
@@ -102,3 +106,17 @@ def test_period_read_from_short_prefix_and_salary_words(
 
 def test_bare_number_range_without_salary_word_is_ignored():
     assert extract_compensation({}, "Founded 2020-2k", source_type="test") is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Bônus anuais de R$ 5.000",
+        "Auxílio home office R$ 150/mês",
+        "VR R$ 40/dia",
+        "Vale-refeição de R$ 30 por dia",
+        "PLR de R$ 10.000",
+    ],
+)
+def test_benefit_amounts_are_not_compensation(text):
+    assert extract_compensation({}, text, source_type="test") is None
