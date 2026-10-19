@@ -1,18 +1,21 @@
 """Daily data reduction for the 1 GB Neon ceiling (card R55-E6).
 
-Three steps run once per UTC day inside the pipeline's `retention` stage, after the
+Four steps run once per UTC day inside the pipeline's `retention` stage, after the
 opportunity retention itself, and all share its `OPPORTUNITY_RETENTION_APPLY` gate because
 two of them destroy data:
 
 * expire raw payloads of items that finished normalization (the envelope, the hash and the
   occurrence stay; see `operations/retention.py`, which never touches an item still waiting
   for the current normalizer);
+* shrink superseded raw items: once a newer item carries the posting and the old one is
+  normalized, its `collected_item_v1` snapshot is dropped, the row stays (see
+  `operations/raw_item_retention.py`);
 * prune superseded match assessments (the current one and anything protected is kept; see
   `operations/assessment_retention.py`);
 * measure `pg_database_size` and warn above a share of the limit. The measurement is
   read-only, so it also runs while the gate is off.
 
-Without the gate the first two only count. Each step captures its own error so one failing
+Without the gate the first three only count. Each step captures its own error so one failing
 step cannot hide the others; a deadline or signal ends the pass without being a failure.
 """
 
@@ -27,6 +30,7 @@ from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session
 
 from opportunity_radar.operations.assessment_retention import prune_superseded_assessments
+from opportunity_radar.operations.raw_item_retention import lean_superseded_raw_items
 from opportunity_radar.operations.retention import PayloadRetentionService
 from opportunity_radar.platform.logging import get_logger
 
@@ -43,6 +47,8 @@ class DataReductionReport:
     payloads: int = 0
     #: Deleted by this run, or (dry run) what a run would delete under the batch bound.
     assessments: int = 0
+    #: Superseded raw items shrunk by this run, or (dry run) what a run would shrink.
+    raw_items_lean: int = 0
     database_size_bytes: int | None = None
     size_limit_bytes: int = DEFAULT_SIZE_LIMIT_BYTES
     size_alert: bool = False
@@ -96,6 +102,14 @@ def run_data_reduction(
         )
     except Exception as error:
         _fail(report, "payloads", error)
+
+    if not stop():
+        try:
+            report.raw_items_lean = _lean(
+                engine, apply, payload_retention_days, payload_batch_size, max_batches, stop, moment
+            )
+        except Exception as error:
+            _fail(report, "raw_items_lean", error)
 
     if stop():
         report.stopped, report.complete = True, False
@@ -189,6 +203,27 @@ def _payloads(
             if outcome.examined < batch_size:
                 break
         return expired
+
+
+def _lean(
+    engine: Engine,
+    apply: bool,
+    retention_days: int,
+    batch_size: int,
+    max_batches: int,
+    stop: Callable[[], bool],
+    moment: datetime,
+) -> int:
+    outcome = lean_superseded_raw_items(
+        engine,
+        retention_days=retention_days,
+        batch_size=batch_size,
+        max_batches=max_batches,
+        dry_run=not apply,
+        should_stop=stop,
+        now=moment,
+    )
+    return outcome.raw_items
 
 
 def _fail(report: DataReductionReport, step: str, error: Exception) -> None:

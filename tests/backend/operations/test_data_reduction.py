@@ -171,6 +171,7 @@ class _Prune:
 
         monkeypatch.setattr(data_reduction, "prune_superseded_assessments", prune)
         monkeypatch.setattr(data_reduction, "_payloads", lambda *_a: 2)
+        monkeypatch.setattr(data_reduction, "_lean", lambda *_a: 4)
         monkeypatch.setattr(data_reduction, "measure_database_size", lambda *_a, **_k: (800, True))
 
 
@@ -182,6 +183,7 @@ def test_assessments_are_pruned_only_when_applying(monkeypatch: pytest.MonkeyPat
     assert [call["dry_run"] for call in prune.calls] == [False, True]
     assert all(call["retention_days"] == 1 for call in prune.calls)
     assert (applied.payloads, applied.assessments, applied.size_alert) == (2, 3, True)
+    assert applied.raw_items_lean == 4
     assert applied.complete and dry.complete
 
 

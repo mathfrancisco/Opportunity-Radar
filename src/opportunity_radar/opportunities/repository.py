@@ -226,6 +226,9 @@ class OpportunityRepository:
                     .as_boolean()
                     .is_not(True)
                 )
+                # R55-E6: superseded history shrunk by retention has no snapshot left, and
+                # its posting is carried by a newer item; re-normalizing it would only fail.
+                .where(RawItemModel.item_metadata["lean"].is_(None))
                 .order_by(RawItemModel.fetched_at, RawItemModel.id)
                 .limit(limit)
             )
