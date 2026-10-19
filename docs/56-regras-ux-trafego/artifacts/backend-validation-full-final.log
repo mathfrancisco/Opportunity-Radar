@@ -1,0 +1,34 @@
+Evidence source: `docker logs r56-rules-ux-full-final`; inspect exit code 0.
+Image: `f53-tenancy-api:latest` (`sha256:6261e32254b6f825e397ca7c5df5c1f2dcd524e751a944546c6960d7c98358d8`).
+Command: `pytest -q -p no:cacheprovider`.
+Worktree mount: `/app`, read-only.
+Started: 2026-10-17 09:37:32 -03 (`2026-10-17T12:37:32Z`).
+Finished: 2026-10-17 09:44:08 -03 (`2026-10-17T12:44:08Z`).
+Exit code: 0.
+
+Captured pytest result: `2728 passed, 10 skipped, 15 warnings in 390.97s (0:06:30)`.
+
+Sanitized runtime evidence: `RUN_DATABASE_INTEGRATION=1` and
+`DATABASE_INTEGRATION_ISOLATED=1`; database name `opportunity_radar_r56_test`;
+database host was the dedicated network alias `r56-postgres`. The network was
+`r56-rules-ux-proof-20261017`. The database container `r56-rules-ux-postgres-proof`
+used the existing `pgvector/pgvector:0.8.6-pg17` image, had no Docker mounts,
+stored its data in a 1 GiB tmpfs, and had no published ports. Migrations completed
+with exit code 0 on this fresh database. The API container mounted the worktree
+read-only. No connection string or credential values are recorded.
+
+Validated source digests (SHA-256):
+- `src/opportunity_radar/dashboard/saved_searches.py`: `020AC48ABEFCD520B6078F470419A9BBEFABAA4A69A1F94924F395915AF55C03`
+- `tests/backend/dashboard/test_saved_searches.py`: `016C2E2C27DA7F58667C64CF40529B7D23E0300B41AF5CA65CE62133E59A6DB8`
+
+The 10 skipped tests are not individually identified in the quiet output. One
+earlier attempt on the same disposable database was intentionally stopped at
+42% after review found additional malformed filter shapes; its exit 137 and
+partial output are preserved in `backend-validation-full-interrupted-shape-audit.log`.
+After capturing evidence, the named test containers and dedicated network were
+removed. The first discarded PostgreSQL startup created an anonymous Docker
+volume before being replaced with the tmpfs-backed container. After confirming
+the exact anonymous volume ID
+`c46e2fa3098559f6925171bf12589397e34a92c7f758d9bdc17b499fb6b98534` belonged
+to that first task-owned container and no container referenced it, that single
+volume was removed explicitly. No volume prune was run.

@@ -1,4 +1,4 @@
-import { apiUrl, privateFetch } from '../../lib/api'
+import { apiUrl, failureFrom, privateFetch } from '../../lib/api'
 
 export interface MatchFactor {
   factorCode: string
@@ -235,12 +235,14 @@ function parseAssessment(value: unknown): MatchAssessment | null {
 /** The most recent assessment of an opportunity, or null when it was never evaluated. */
 export async function getLatestAssessment(
   opportunityId: string,
+  signal?: AbortSignal,
 ): Promise<MatchAssessment | null> {
   const params = new URLSearchParams({ opportunity_id: opportunityId, limit: '1' })
   const response = await privateFetch(apiUrl(`/matches?${params.toString()}`), {
     headers: { Accept: 'application/json' },
+    signal,
   })
-  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  if (!response.ok) throw await failureFrom(response)
   const body: unknown = await response.json()
   if (!isRecord(body) || !Array.isArray(body.items)) {
     throw new Error('A API retornou uma lista de avaliações inválida.')

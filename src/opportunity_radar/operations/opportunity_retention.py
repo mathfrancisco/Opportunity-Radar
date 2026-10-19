@@ -160,6 +160,7 @@ _BY_OPPORTUNITY: tuple[tuple[str, str], ...] = (
     ("opportunity_skill", "opportunities.opportunity_skill"),
     ("field_suggestion", "opportunities.field_suggestion"),
     ("ai_suggestion_defer", "platform.ai_suggestion_defer"),
+    ("ai_suggestion_unanswered", "platform.ai_suggestion_unanswered"),
     ("relevance_mark", "opportunities.relevance_mark"),
     ("source_occurrence", "opportunities.source_occurrence"),
     ("normalization_result", "opportunities.normalization_result"),

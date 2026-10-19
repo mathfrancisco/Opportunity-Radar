@@ -1,6 +1,6 @@
 import { installTestAuth } from '../../test/auth'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createSavedSearch, getSavedSearches, openSavedSearch } from './api'
+import { createSavedSearch, getSavedSearches, getSavedSearchSummary, openSavedSearch, parseSummary } from './api'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -55,6 +55,34 @@ describe('saved searches API', () => {
       term: 'backend',
       filters: { work_mode: 'REMOTE' },
     })
+  })
+
+  it('consulta o resumo aditivo e valida contagens não negativas inteiras', async () => {
+    const summary = {
+      id: 'saved-1', name: 'Backend remoto', term: null, filters: {},
+      last_opened_at: null, created_at: '2040-01-01T00:00:00Z', new_count: 2,
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([summary]), { status: 200 }),
+    ))
+
+    await expect(getSavedSearchSummary()).resolves.toMatchObject([
+      { id: 'saved-1', newCount: 2 },
+    ])
+    expect(fetch).toHaveBeenCalledWith('/api/saved-searches/summary', expect.any(Object))
+    expect(parseSummary([{ ...summary, new_count: -1 }])[0]).toMatchObject({ newCount: null, countError: 'invalid_summary' })
+    expect(parseSummary([{ ...summary, new_count: 1.5 }])[0]).toMatchObject({ newCount: null, countError: 'invalid_summary' })
+  })
+
+  it('isola filtros legados inválidos e preserva contagens válidas e filtros booleanos', () => {
+    const result = parseSummary([
+      { id: 'bad', name: 'Legada', filters: { order: 42 }, new_count: null, count_error: 'invalid_filters' },
+      { id: 'good', name: 'Válida', filters: { only_startups: true }, new_count: 3, count_error: null },
+    ])
+    expect(result).toMatchObject([
+      { id: 'bad', filters: {}, newCount: null, countError: 'invalid_filters' },
+      { id: 'good', filters: { only_startups: true }, newCount: 3, countError: null },
+    ])
   })
 })
 

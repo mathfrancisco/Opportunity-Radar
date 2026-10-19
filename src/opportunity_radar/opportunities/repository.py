@@ -72,6 +72,22 @@ def posting_group_key() -> Any:
     )
 
 
+def open_occurrence_condition() -> Any:
+    """This occurrence was seen in the latest complete run of its own source."""
+    latest_complete_run = (
+        select(SourceRunModel.id)
+        .where(
+            SourceRunModel.source_definition_id == SourceOccurrenceModel.source_definition_id,
+            SourceRunModel.complete.is_(True),
+        )
+        .order_by(SourceRunModel.started_at.desc())
+        .limit(1)
+        .correlate(SourceOccurrenceModel)
+        .scalar_subquery()
+    )
+    return SourceOccurrenceModel.last_seen_run_id == latest_complete_run
+
+
 def open_at_source_condition() -> Any:
     """Some occurrence of the opportunity was seen in the latest complete run of *its own*
     source (`last_seen_run_id` equals that run), whatever its age. Shared by the Inbox
@@ -252,13 +268,22 @@ class OpportunityRepository:
         )
 
     def is_primary_occurrence(self, occurrence: SourceOccurrenceModel) -> bool:
-        """Whether this is the opportunity's first-attached occurrence (oldest, then id)."""
-        primary = self.session.scalar(
-            select(SourceOccurrenceModel.id)
-            .where(SourceOccurrenceModel.opportunity_id == occurrence.opportunity_id)
-            .order_by(SourceOccurrenceModel.first_seen_at, SourceOccurrenceModel.id)
-            .limit(1)
+        """Whether this is the opportunity's primary occurrence (R55-E4).
+
+        The primary is the oldest (`first_seen_at`, then id) occurrence among those still
+        open at their source (seen in the latest complete run of their own source). When
+        the earliest one has closed, another source that still lists the vacancy takes
+        over, so content does not stay frozen on a vanished posting. With no open
+        occurrence at all, the oldest one overall keeps the role."""
+        base = select(SourceOccurrenceModel.id).where(
+            SourceOccurrenceModel.opportunity_id == occurrence.opportunity_id
         )
+        order = (SourceOccurrenceModel.first_seen_at, SourceOccurrenceModel.id)
+        primary = self.session.scalar(
+            base.where(open_occurrence_condition()).order_by(*order).limit(1)
+        )
+        if primary is None:
+            primary = self.session.scalar(base.order_by(*order).limit(1))
         return primary is None or primary == occurrence.id
 
     def opportunity_by_fingerprint(

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { queryStaleTimes } from '../../lib/queryClient'
 import {
   confirmDuplicate,
   getDuplicateCandidates,
@@ -10,7 +11,8 @@ import {
 export function useOpportunity(opportunityId: string) {
   return useQuery({
     queryKey: ['opportunity', opportunityId],
-    queryFn: () => getOpportunity(opportunityId),
+    queryFn: ({ signal }) => getOpportunity(opportunityId, signal),
+    staleTime: queryStaleTimes.standard,
   })
 }
 
@@ -30,8 +32,9 @@ export function useMarkRelevance(opportunityId: string) {
 export function useDuplicateCandidates(opportunityId: string) {
   return useQuery({
     queryKey: ['duplicate-candidates', opportunityId],
-    queryFn: () => getDuplicateCandidates(opportunityId),
+    queryFn: ({ signal }) => getDuplicateCandidates(opportunityId, signal),
     enabled: opportunityId !== '',
+    staleTime: queryStaleTimes.standard,
   })
 }
 
@@ -46,7 +49,10 @@ function invalidateAfterDuplicateDecision(
   void client.invalidateQueries({ queryKey: ['opportunity', opportunityId] })
   void client.invalidateQueries({ queryKey: ['opportunity', otherOpportunityId] })
   void client.invalidateQueries({ queryKey: ['inbox'] })
-  if (includeOverview) void client.invalidateQueries({ queryKey: ['overview'] })
+  if (includeOverview) {
+    void client.invalidateQueries({ queryKey: ['overview'] })
+    void client.invalidateQueries({ queryKey: ['saved-searches'] })
+  }
 }
 
 export function useConfirmDuplicate(opportunityId: string, otherOpportunityId: string) {

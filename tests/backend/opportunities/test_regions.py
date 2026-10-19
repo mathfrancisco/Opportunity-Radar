@@ -8,6 +8,7 @@ from opportunity_radar.opportunities.regions import (
     ANY_COUNTRY,
     REGIONS_VERSION,
     resolve_allowed_countries,
+    resolve_allowed_countries_v2,
 )
 
 
@@ -121,3 +122,68 @@ def test_latam_worldwide_and_brazil_keep_their_resolution() -> None:
 )
 def test_every_trailing_country_counts(location_text: str, expected: tuple[str, ...]) -> None:
     assert resolve_allowed_countries(location_text) == expected
+
+
+def test_allowed_countries_v4_uses_explicit_description_before_structured_location() -> None:
+    countries, evidence = resolve_allowed_countries_v2(
+        "Remote, United Kingdom",
+        "Applicants must be located in Brazil.",
+    )
+
+    assert countries == ("BR",)
+    assert evidence is not None
+    assert evidence["source"] == "description"
+
+
+def test_allowed_countries_v4_keeps_office_location_out_of_eligibility() -> None:
+    countries, evidence = resolve_allowed_countries_v2(
+        "London, United Kingdom",
+        "Our office is in London.",
+    )
+
+    assert countries == ()
+    assert evidence is None
+
+
+@pytest.mark.parametrize(
+    "location",
+    (
+        "Remote, United Kingdom",
+        "United Kingdom - Remote",
+        "United Kingdom (Remote)",
+        "Brasil - Remoto",
+    ),
+)
+def test_allowed_countries_v4_keeps_explicit_remote_location_despite_office_perks(
+    location: str,
+) -> None:
+    countries, evidence = resolve_allowed_countries_v2(
+        location,
+        "Our London office offers lunch vouchers.",
+    )
+
+    expected = ("BR",) if location == "Brasil - Remoto" else ("GB",)
+    assert countries == expected
+    assert evidence == {"source": "location", "evidence": location}
+
+
+def test_allowed_countries_v4_alias_is_limited_to_content_resolution() -> None:
+    assert resolve_allowed_countries("Remote, UnitedKingdom") == ()
+
+    countries, evidence = resolve_allowed_countries_v2("Remote, UnitedKingdom", None)
+
+    assert countries == ("GB",)
+    assert evidence == {"source": "location", "evidence": "Remote, UnitedKingdom"}
+
+
+def test_allowed_countries_v4_conflict_remains_unknown_without_location_fallback() -> None:
+    countries, evidence = resolve_allowed_countries_v2(
+        "Remote, United Kingdom",
+        "Remote within Brazil; applicants must be located in Portugal.",
+    )
+
+    assert countries == ()
+    assert evidence is not None
+    assert evidence["source"] == "conflict"
+    assert "brazil" in evidence["evidence"]
+    assert "portugal" in evidence["evidence"]

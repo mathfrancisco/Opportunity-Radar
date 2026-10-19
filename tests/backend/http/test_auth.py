@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import time
@@ -518,7 +519,7 @@ def test_operational_owner_guard_allows_the_configured_owner() -> None:
 
 
 @pytest.mark.parametrize("owner_sub", ["owner-a-synthetic", "owner-b-synthetic"])
-def test_execute_source_uses_the_verified_owner_for_target_roles(
+def test_manual_intake_uses_the_verified_owner_for_target_roles(
     keypair, monkeypatch: pytest.MonkeyPatch, owner_sub: str
 ) -> None:
     """A source run never falls back to a different active profile."""
@@ -535,12 +536,14 @@ def test_execute_source_uses_the_verified_owner_for_target_roles(
         captured.append(owner)
         return lambda: ()
 
+    run_id = uuid4()
+
     class FakeAcquisitionService:
         def __init__(self, *args: object, **kwargs: object) -> None:
             pass
 
-        async def execute(self, *args: object) -> object:
-            return object()
+        async def execute(self, *args: object) -> SimpleNamespace:
+            return SimpleNamespace(id=run_id)
 
     client = _production_client(keypair, monkeypatch, owner_sub)
     client.app.dependency_overrides.update(
@@ -552,6 +555,11 @@ def test_execute_source_uses_the_verified_owner_for_target_roles(
     )
     monkeypatch.setattr(acquisition, "active_profile_target_role_families", target_roles)
     monkeypatch.setattr(acquisition, "AcquisitionService", FakeAcquisitionService)
+    monkeypatch.setattr(
+        acquisition,
+        "normalize_opportunity_run",
+        lambda _run_id, *, session: SimpleNamespace(items=[]),
+    )
     monkeypatch.setattr(
         acquisition,
         "_run_response",
@@ -579,13 +587,111 @@ def test_execute_source_uses_the_verified_owner_for_target_roles(
     )
 
     response = client.post(
-        f"/sources/{uuid4()}/runs",
+        f"/sources/{uuid4()}/manual-intake",
         headers={"Authorization": f"Bearer {_token(keypair[0], sub=owner_sub)}"},
-        json={},
+        json={"inputs": [{"kind": "TEXT", "value": "Manual role-scoped job"}]},
     )
 
     assert response.status_code == 201
     assert captured == [owner_sub]
+
+
+def test_manual_intake_keeps_the_persisted_run_recoverable_when_normalization_crashes(
+    keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A second write is never retried after persistence; the legacy recovery route gets the id."""
+    from opportunity_radar.presentation.http import acquisition
+    from opportunity_radar.presentation.http.dependencies import (
+        get_alert_service,
+        get_collector_registry,
+        get_session,
+    )
+
+    run_id = uuid4()
+    rollbacks: list[None] = []
+    session = SimpleNamespace(rollback=lambda: rollbacks.append(None))
+
+    class FakeAcquisitionService:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        async def execute(self, *args: object) -> SimpleNamespace:
+            return SimpleNamespace(id=run_id)
+
+    client = _production_client(keypair, monkeypatch, OWNER)
+    client.app.dependency_overrides.update(
+        {
+            get_session: lambda: session,
+            get_alert_service: lambda: object(),
+            get_collector_registry: lambda: object(),
+        }
+    )
+    monkeypatch.setattr(acquisition, "AcquisitionService", FakeAcquisitionService)
+    monkeypatch.setattr(acquisition, "active_profile_target_role_families", lambda *_: lambda: ())
+
+    def normalization_crashed(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(acquisition, "normalize_opportunity_run", normalization_crashed)
+
+    response = client.post(
+        f"/sources/{uuid4()}/manual-intake",
+        headers={"Authorization": f"Bearer {_token(keypair[0], sub=OWNER)}"},
+        json={"inputs": [{"kind": "TEXT", "value": "Persisted manual job"}]},
+    )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == {
+        "code": "manual_intake_normalization_failed",
+        "run_id": str(run_id),
+        "message": (
+            f"A execução {run_id} foi registrada, mas a normalização falhou. "
+            f"Recupere-a em /opportunities/normalizations/runs/{run_id}."
+        ),
+    }
+    assert rollbacks == [None]
+
+
+def test_manual_intake_keeps_the_event_loop_responsive_while_normalizing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The synchronous normalizer must yield the request loop while it runs."""
+    from opportunity_radar.presentation.http import acquisition
+
+    run_id = uuid4()
+
+    async def execute_source_run(**_: object) -> SimpleNamespace:
+        return SimpleNamespace(id=run_id)
+
+    def blocking_normalization(*_: object, **__: object) -> SimpleNamespace:
+        time.sleep(0.05)
+        return SimpleNamespace(items=[])
+
+    monkeypatch.setattr(acquisition, "_execute_source_run", execute_source_run)
+    monkeypatch.setattr(acquisition, "normalize_opportunity_run", blocking_normalization)
+    monkeypatch.setattr(
+        acquisition, "_run_response", lambda _: acquisition.SourceRunResponse.model_construct()
+    )
+
+    async def invoke() -> bool:
+        task = asyncio.create_task(
+            acquisition.manual_intake(
+                source_id=uuid4(),
+                body=acquisition.ManualIntakeBody.model_validate(
+                    {"inputs": [{"kind": "TEXT", "value": "Responsive manual intake"}]}
+                ),
+                session=SimpleNamespace(rollback=lambda: None),
+                alerts=object(),
+                registry=object(),
+                identity=RequestIdentity(sub=OWNER, is_owner=True),
+            )
+        )
+        await asyncio.sleep(0.01)
+        responsive_while_normalizing = not task.done()
+        await task
+        return responsive_while_normalizing
+
+    assert asyncio.run(invoke())
 
 
 @pytest.mark.parametrize("owner_sub", ["owner-a-synthetic", "owner-b-synthetic"])

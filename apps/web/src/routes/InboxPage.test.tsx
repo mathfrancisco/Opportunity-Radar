@@ -1,7 +1,7 @@
 import { installTestAuth } from '../test/auth'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
-import { MemoryRouter, useLocation } from 'react-router-dom'
+import { createMemoryRouter, MemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render } from '../components/testing'
 import { type SavedSearchFilters } from '../features/saved-searches/api'
@@ -662,6 +662,47 @@ describe('InboxPage table, pagination and filters', () => {
     expect(container.textContent).toContain('1 oportunidade encontrada.')
   })
 
+  it('sincroniza busca submetida e filtros ao navegar para trás e para frente no histórico do Router', async () => {
+    const urls: string[] = []
+    stubInbox(1, urls)
+    const router = createMemoryRouter([
+      { path: '/inbox', element: <><InboxPage /><Probe /></> },
+    ], { initialEntries: ['/inbox?search=backend'] })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const container = render(
+      <QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>,
+    )
+    await flush()
+    const input = container.querySelector('#inbox-search') as HTMLInputElement
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    act(() => {
+      setter?.call(input, 'plataforma')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.closest('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+    await flush()
+    expect(search(container).get('search')).toBe('plataforma')
+    choose(container.querySelector('#inbox-verdict') as HTMLSelectElement, 'RECOMMENDED')
+    await flush()
+    expect(search(container).get('verdict')).toBe('RECOMMENDED')
+    act(() => { void router.navigate(-1) })
+    await flush()
+    expect(search(container).get('search')).toBe('plataforma')
+    expect(search(container).get('verdict')).toBeNull()
+    expect((container.querySelector('#inbox-search') as HTMLInputElement).value).toBe('plataforma')
+    act(() => { void router.navigate(-1) })
+    await flush()
+    expect(search(container).get('search')).toBe('backend')
+    expect((container.querySelector('#inbox-search') as HTMLInputElement).value).toBe('backend')
+    act(() => { void router.navigate(1) })
+    await flush()
+    expect(search(container).get('search')).toBe('plataforma')
+    expect((container.querySelector('#inbox-search') as HTMLInputElement).value).toBe('plataforma')
+    act(() => { void router.navigate(1) })
+    await flush()
+    expect(search(container).get('verdict')).toBe('RECOMMENDED')
+  })
+
   it('abaixo de xl a mesma tabela vira cartões sem perder a semântica de tabela', async () => {
     vi.stubGlobal(
       'matchMedia',
@@ -725,6 +766,18 @@ describe('InboxPage table, pagination and filters', () => {
     expect(
       [...header.querySelectorAll('button')].some((button) => button.textContent === 'Buscas salvas'),
     ).toBe(true)
+  })
+
+  it('explica a leitura do score, fatores desconhecidos, análise semântica e avaliações stale', async () => {
+    stubInbox(0, [])
+    const container = renderAt('/inbox')
+    await flush()
+
+    const guidance = container.querySelector('aside[aria-label="Como interpretar as avaliações"]')
+    expect(guidance?.textContent).toContain('regras determinísticas')
+    expect(guidance?.textContent).toContain('pedem revisão')
+    expect(guidance?.textContent).toContain('consultiva')
+    expect(guidance?.textContent).toContain('desatualizados')
   })
 
   it('distingue o vazio sem dados do vazio por filtro', async () => {
@@ -892,6 +945,25 @@ describe('InboxPage table, pagination and filters', () => {
     await flush()
     expect(search(container).get('work_mode')).toBe('REMOTE')
     expect(button.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('limpa o rascunho não submetido quando uma busca salva sem termo é aplicada', async () => {
+    stubInbox(1, [])
+    const container = renderAt('/inbox')
+    await flush()
+
+    typeInto(container.querySelector('#inbox-search') as HTMLInputElement, 'rascunho')
+    const menu = Array.from(container.querySelectorAll('button')).find(
+      (candidate) => candidate.textContent === 'Buscas salvas',
+    ) as HTMLButtonElement
+    act(() => menu.click())
+    await flush()
+    clickButton(container, 'Backend remoto')
+    await flush()
+
+    expect(search(container).get('search')).toBeNull()
+    expect(search(container).get('work_mode')).toBe('REMOTE')
+    expect((container.querySelector('#inbox-search') as HTMLInputElement).value).toBe('')
   })
 })
 

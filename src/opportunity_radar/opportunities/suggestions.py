@@ -52,6 +52,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Mapped, Session, mapped_column
 from sqlalchemy.sql.elements import ColumnElement
@@ -268,6 +269,30 @@ class SuggestionDeferModel(Base):
     )
 
 
+class SuggestionUnansweredModel(Base):
+    """Marker: the model was asked about a field and answered null (R55-C5 follow-up).
+
+    Keyed by `(opportunity_id, opportunity_version, field, prompt_version)`. While the key
+    matches, `candidates_needing_suggestion` and `suggest_fields` do not ask again, so a
+    null answer cannot make the same opportunity cost a request on every pass. A new
+    opportunity version or a new prompt version changes the key and asks anew."""
+
+    __tablename__ = "ai_suggestion_unanswered"
+    __table_args__ = ({"schema": "platform"},)
+
+    opportunity_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey(f"{SCHEMA}.opportunity.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    opportunity_version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    field: Mapped[str] = mapped_column(String(32), primary_key=True)
+    prompt_version: Mapped[str] = mapped_column(String(32), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class SuggestionNotFoundError(LookupError):
     pass
 
@@ -341,15 +366,32 @@ def unknown_fields(
     return fields
 
 
-def existing_suggestion_fields(session: Session, opportunity: OpportunityModel) -> set[str]:
-    """Fields already carrying a suggestion (any status) for this opportunity's version."""
-    rows = session.scalars(
-        select(OpportunitySuggestionModel.field).where(
-            OpportunitySuggestionModel.opportunity_id == opportunity.id,
-            OpportunitySuggestionModel.opportunity_version == opportunity.version,
+def existing_suggestion_fields(
+    session: Session, opportunity: OpportunityModel, prompt_version: str | None = None
+) -> set[str]:
+    """Fields already carrying a suggestion (any status) for this opportunity's version.
+
+    With `prompt_version`, fields the model already answered null for under that prompt
+    and this opportunity version count too (`SuggestionUnansweredModel`)."""
+    rows = set(
+        session.scalars(
+            select(OpportunitySuggestionModel.field).where(
+                OpportunitySuggestionModel.opportunity_id == opportunity.id,
+                OpportunitySuggestionModel.opportunity_version == opportunity.version,
+            )
+        ).all()
+    )
+    if prompt_version is not None:
+        rows.update(
+            session.scalars(
+                select(SuggestionUnansweredModel.field).where(
+                    SuggestionUnansweredModel.opportunity_id == opportunity.id,
+                    SuggestionUnansweredModel.opportunity_version == opportunity.version,
+                    SuggestionUnansweredModel.prompt_version == prompt_version,
+                )
+            ).all()
         )
-    ).all()
-    return set(rows)
+    return rows
 
 
 def candidates_needing_suggestion(
@@ -510,7 +552,7 @@ def candidates_needing_suggestion(
             fields = [
                 field
                 for field in unknown_fields(item, extended=extended)
-                if field.value not in existing_suggestion_fields(session, item)
+                if field.value not in existing_suggestion_fields(session, item, prompt_version)
             ]
             if not fields:
                 continue
@@ -669,7 +711,7 @@ async def _suggest_fields_claimed(
     pending = [
         field
         for field in unknown_fields(opportunity, extended=extended)
-        if field.value not in existing_suggestion_fields(session, opportunity)
+        if field.value not in existing_suggestion_fields(session, opportunity, prompt.version)
     ]
     if not pending:
         _finish_suggestion_operation(engine, operation_id, "preflight", "no_pending_fields")
@@ -836,13 +878,16 @@ async def _suggest_fields_claimed(
 
     created: list[OpportunitySuggestionModel] = []
     discarded: list[str] = []
+    unanswered: list[str] = []
     for field in pending:
         entry = payload.get(field.value)
         if not isinstance(entry, Mapping):
+            unanswered.append(field.value)
             continue
         raw_value = entry.get("value")
         raw_evidence = entry.get("evidence")
         if raw_value is None or not isinstance(raw_evidence, str) or not raw_evidence.strip():
+            unanswered.append(field.value)
             continue
         if raw_evidence not in submitted_text:
             discarded.append(field.value)
@@ -853,6 +898,7 @@ async def _suggest_fields_claimed(
             discarded.append(field.value)
             continue
         if value in ("UNKNOWN", "NOT_STATED"):
+            unanswered.append(field.value)
             continue
         suggestion = OpportunitySuggestionModel(
             opportunity_id=opportunity.id,
@@ -867,7 +913,23 @@ async def _suggest_fields_claimed(
         )
         session.add(suggestion)
         created.append(suggestion)
-    if created:
+    if unanswered:
+        session.execute(
+            pg_insert(SuggestionUnansweredModel)
+            .values(
+                [
+                    {
+                        "opportunity_id": opportunity.id,
+                        "opportunity_version": opportunity.version,
+                        "field": name,
+                        "prompt_version": prompt.version,
+                    }
+                    for name in unanswered
+                ]
+            )
+            .on_conflict_do_nothing()
+        )
+    if created or unanswered:
         session.commit()
         for suggestion in created:
             session.refresh(suggestion)

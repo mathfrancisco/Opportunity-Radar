@@ -165,6 +165,11 @@ def test_plain_text_with_entities_but_no_tags_is_decoded_once() -> None:
     assert html_to_text("&amp;lt;") == "&lt;"
 
 
+def test_unterminated_tag_openers_are_plain_text() -> None:
+    assert html_to_text("A <a broken") == "A <a broken"
+    assert html_to_text("A &lt;a broken") == "A <a broken"
+
+
 @pytest.mark.parametrize("tag", ["script", "style", "noscript", "template"])
 def test_unclosed_dropped_element_keeps_the_text_after_it(tag: str) -> None:
     text = html_to_text(f"<p>Hi</p><{tag}>x{{}}<p>Job at Acme, R&amp;D")

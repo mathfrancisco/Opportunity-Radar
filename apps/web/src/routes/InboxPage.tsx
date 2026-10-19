@@ -26,6 +26,7 @@ import { verdictLabels, verdictTones } from '../features/matching/verdicts'
 import { useMarkRelevance } from '../features/opportunities/useOpportunity'
 import { type ApplicationStage, stageLabels } from '../features/pipeline/api'
 import { roleFamilies } from '../features/dashboard/roleFamilies'
+import { opportunityLabel, seniorityLabels, workModeLabels } from '../features/opportunities/labels'
 import type { SavedSearch, SavedSearchFilters } from '../features/saved-searches/api'
 import {
   useCreateSavedSearch,
@@ -57,6 +58,9 @@ const seniorities = [
   'DIRECTOR',
   'UNKNOWN',
 ]
+const lifecycleLabels: Record<string, string> = {
+  DISCOVERED: 'Descoberta', ACTIVE: 'Ativa', STALE: 'Desatualizada', CLOSED: 'Encerrada',
+}
 
 function display(value: string | null) {
   return value === null || value === '' ? '—' : value
@@ -139,7 +143,7 @@ function ItemRow({ item }: { item: InboxItem }) {
       <td className="xl:min-w-56" role="cell">
         <PrimaryText className="break-anywhere">
           <Link
-            className="underline decoration-accent decoration-2 underline-offset-4"
+            className="inline-flex min-h-11 items-center underline decoration-accent decoration-2 underline-offset-4"
             to={`/opportunities/${item.opportunityId}`}
           >
             {item.title}
@@ -176,9 +180,9 @@ function ItemRow({ item }: { item: InboxItem }) {
       </td>
       <td className="xl:max-w-64" role="cell">
         <PrimaryText className="font-medium">
-          {item.workMode} · {item.seniority}
+          {opportunityLabel(item.workMode, workModeLabels)} · {opportunityLabel(item.seniority, seniorityLabels)}
         </PrimaryText>
-        <SecondaryText>Status {item.lifecycleStatus}</SecondaryText>
+        <SecondaryText>Status {lifecycleLabels[item.lifecycleStatus] ?? 'Em revisão'}</SecondaryText>
         {item.isStale && (
           <SecondaryText className="mt-1.5 text-warning-ink">
             <span role="status">
@@ -253,7 +257,7 @@ function paramsFromFilters(filters: SavedSearchFilters): URLSearchParams {
   const next = new URLSearchParams()
   for (const [key, value] of Object.entries(filters)) {
     if (Array.isArray(value)) value.forEach((item) => next.append(key, item))
-    else next.set(key, value)
+    else next.set(key, String(value))
   }
   return next
 }
@@ -440,6 +444,28 @@ export function SavedSearchesMenu({
   )
 }
 
+function InboxSearch({
+  search,
+  onSubmit,
+}: {
+  search: string
+  onSubmit: (value: string) => void
+}) {
+  const [searchInput, setSearchInput] = useState(search)
+
+  return (
+    <SearchInput
+      fullWidth
+      id="inbox-search"
+      label="Buscar oportunidades"
+      onChange={setSearchInput}
+      onSubmit={() => onSubmit(searchInput.trim())}
+      placeholder="Título ou empresa"
+      value={searchInput}
+    />
+  )
+}
+
 export function InboxPage() {
   const [params, setParams] = useSearchParams()
   const verdict = params.get('verdict') ?? ''
@@ -459,7 +485,6 @@ export function InboxPage() {
   const pageSize = (pageSizeOptions as readonly number[]).includes(rawSize)
     ? rawSize
     : defaultPageSize
-  const [searchInput, setSearchInput] = useState(search)
   const allAreas = params.get('all_areas') === 'true'
   const areaFilter = params.getAll('area')
   const seniority = params.get('seniority') ?? ''
@@ -514,6 +539,7 @@ export function InboxPage() {
     !onlyRecent,
     onlyStartups,
   ].filter(Boolean).length
+  const [searchReset, setSearchReset] = useState(0)
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(advancedFilterCount > 0)
 
   const inbox = useInbox({
@@ -572,13 +598,13 @@ export function InboxPage() {
     setParams(next)
   }
 
-  function submitSearch() {
-    update({ search: searchInput.trim() })
+  function submitSearch(value: string) {
+    update({ search: value })
   }
 
   function applySavedSearch(filters: SavedSearchFilters) {
     const next = paramsFromFilters(filters)
-    setSearchInput(next.get('search') ?? '')
+    setSearchReset((value) => value + 1)
     setParams(next)
   }
 
@@ -607,15 +633,7 @@ export function InboxPage() {
     >
       <FilterBar
         search={
-          <SearchInput
-            fullWidth
-            id="inbox-search"
-            label="Buscar oportunidades"
-            onChange={setSearchInput}
-            onSubmit={submitSearch}
-            placeholder="Título ou empresa"
-            value={searchInput}
-          />
+          <InboxSearch key={JSON.stringify([search, searchReset])} search={search} onSubmit={submitSearch} />
         }
         variant="toolbar"
       >
@@ -635,7 +653,7 @@ export function InboxPage() {
           onChange={(value) => update({ work_mode: value })}
           options={[
             { value: '', label: 'Todas' },
-            ...workModes.map((value) => ({ value, label: value })),
+            ...workModes.map((value) => ({ value, label: opportunityLabel(value, workModeLabels) })),
           ]}
           value={workMode}
         />
@@ -706,7 +724,7 @@ export function InboxPage() {
             onChange={(value) => update({ seniority: value })}
             options={[
               { value: '', label: 'Todas' },
-              ...seniorities.map((value) => ({ value, label: value })),
+              ...seniorities.map((value) => ({ value, label: opportunityLabel(value, seniorityLabels) })),
             ]}
             value={seniority}
           />
@@ -853,6 +871,23 @@ export function InboxPage() {
         </p>
       )}
       </details>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        {inbox.data?.items.some((item) => item.isStale) ? (
+          <p className="text-sm text-warning-ink" role="status">
+            Há avaliações desatualizadas; os resultados anteriores continuam identificados.
+          </p>
+        ) : <span />}
+        <Button onClick={() => void inbox.refetch()} size="sm" variant="secondary">
+          Atualizar resultados
+        </Button>
+      </div>
+
+      <aside className="mt-4 rounded-panel border border-line bg-surface px-4 py-3 text-sm text-subtle" aria-label="Como interpretar as avaliações">
+        Score, veredito e elegibilidade vêm de regras determinísticas. Fatores ausentes ou
+        desconhecidos pedem revisão; a análise semântica, quando disponível, é consultiva e
+        não altera a decisão. Resultados desatualizados permanecem identificados até nova avaliação.
+      </aside>
 
       <div className="mt-5 grid gap-3">
         {inbox.isPending && (

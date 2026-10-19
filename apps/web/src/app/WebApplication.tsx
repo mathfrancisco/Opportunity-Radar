@@ -1,15 +1,12 @@
 import { ClerkProvider, useAuth } from '@clerk/react'
 import { Fragment, type ReactNode, useLayoutEffect, useRef } from 'react'
-import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
+import { QueryClientProvider, useQueryClient } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import { App } from './App'
 import { setAuthSession, setAuthTokenGetter } from '../lib/api'
+import { createQueryClient } from '../lib/queryClient'
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { retry: 1, refetchOnWindowFocus: false },
-  },
-})
+const queryClient = createQueryClient()
 
 /**
  * Wires Clerk into the API layer and isolates the query cache per identity.

@@ -299,3 +299,43 @@ def test_budget_shows_used_and_remaining_per_model_for_the_day() -> None:
     assert by_model["tokenharbor/x"].requests_remaining is None
     assert report.resets_at - report.day == timedelta(days=1)
     assert report.interactive_reserve_requests == 100
+
+
+def test_calls_without_an_operation_id_are_each_a_job_and_cache_hits_are_not() -> None:
+    """R55-C3 follow-up: NULL `operation_id` must neither be dropped nor merged into one job."""
+    from uuid import uuid4
+
+    from opportunity_radar.platform.ai.telemetry import start_operation
+
+    engine = _engine()
+    _reset(engine)
+    operation = uuid4()
+    start_operation(engine, operation_id=operation, task="job_match", prompt_version="v2")
+    record_calls(
+        engine,
+        [
+            # Two orphan calls (one answered by a fallback) and an orphan cache reuse ...
+            _record(operation_id=None, prompt_tokens=100, completion_tokens=10),
+            _record(operation_id=None, fallback_used=True, prompt_tokens=200, completion_tokens=20),
+            _record(operation_id=None, cache_hit=True, provider="cache",
+                    prompt_tokens=None, completion_tokens=None),
+            # ... beside one real operation of two attempts, which stays one job.
+            _record(operation_id=operation, prompt_tokens=300, completion_tokens=30),
+            _record(operation_id=operation, attempt=1, success=False, error_kind="quota",
+                    prompt_tokens=None, completion_tokens=None),
+        ],
+        now=NOW - timedelta(minutes=5),
+    )
+
+    [match] = [
+        item
+        for item in ai_metrics(engine, state="enabled", guard=None, breaker=None, now=NOW).by_task
+        if item.task == "job_match"
+    ]
+
+    assert match.jobs == 3  # the operation, plus each orphan call on its own; no cache hit
+    assert match.cache_hits == 1
+    assert match.requests == 4
+    assert match.tokens == 110 + 220 + 330
+    assert match.avg_tokens_per_job == pytest.approx(220.0)
+    assert match.fallback_jobs == 1 and match.fallback_rate == pytest.approx(1 / 3)

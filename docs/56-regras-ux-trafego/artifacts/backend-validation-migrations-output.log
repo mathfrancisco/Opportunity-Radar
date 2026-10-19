@@ -1,0 +1,61 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 20260910_0001, Create bounded-context schemas.
+INFO  [alembic.runtime.migration] Running upgrade 20260910_0001 -> 20260910_0002, Create Profile and Company Radar catalogs.
+INFO  [alembic.runtime.migration] Running upgrade 20260910_0002 -> 20260911_0003, Create the Acquisition framework tables.
+INFO  [alembic.runtime.migration] Running upgrade 20260911_0003 -> 20260913_0004, Persist source HTTP throttling and rate-limit observability.
+INFO  [alembic.runtime.migration] Running upgrade 20260913_0004 -> 20260914_0005, Create Opportunities persistence tables.
+INFO  [alembic.runtime.migration] Running upgrade 20260914_0005 -> 20260915_0006, Add compensation and skill evidence to opportunities.
+INFO  [alembic.runtime.migration] Running upgrade 20260915_0006 -> 20260916_0007, Create immutable deterministic matching assessments.
+INFO  [alembic.runtime.migration] Running upgrade 20260916_0007 -> 20260917_0008, Persist the advisory semantic analysis of a matching assessment.
+INFO  [alembic.runtime.migration] Running upgrade 20260917_0008 -> 20260918_0009, Track candidacies and their immutable stage history.
+INFO  [alembic.runtime.migration] Running upgrade 20260918_0009 -> 20260921_0010, Add the initiation origin for source runs.
+INFO  [alembic.runtime.migration] Running upgrade 20260921_0010 -> 20260921_0011, Add the exclusive claim over the semantic analysis of an assessment.
+INFO  [alembic.runtime.migration] Running upgrade 20260921_0011 -> 20260922_0012, Persist observed execution state for functional worker jobs.
+INFO  [alembic.runtime.migration] Running upgrade 20260922_0012 -> 20260922_0013, Persist source alert incidents so restarts cannot duplicate a message.
+INFO  [alembic.runtime.migration] Running upgrade 20260922_0013 -> 20260922_0014, Split the immutable RawItem envelope from the payload that may later expire.
+INFO  [alembic.runtime.migration] Running upgrade 20260922_0014 -> 20260922_0015, Let a raw payload expire, and record every expiry that happens.
+INFO  [alembic.runtime.migration] Running upgrade 20260922_0015 -> 20260923_0016, Let an operator correct a researched ATS record without losing what it said before.
+INFO  [alembic.runtime.migration] Running upgrade 20260923_0016 -> 20260923_0017, Record every live test of a source's collector.
+INFO  [alembic.runtime.migration] Running upgrade 20260923_0017 -> 20260924_0018, Record what every analysis cost.
+INFO  [alembic.runtime.migration] Running upgrade 20260924_0018 -> 20260924_0019, Record the prompt's size and its token estimate before sending.
+INFO  [alembic.runtime.migration] Running upgrade 20260924_0019 -> 20260925_0020, Let a profile version declare the areas it is interested in.
+INFO  [alembic.runtime.migration] Running upgrade 20260925_0020 -> 20260925_0023, Record what each analysis sent and was keyed by.
+INFO  [alembic.runtime.migration] Running upgrade 20260925_0023 -> 20260925_0024, Store one embedding per opportunity, with what produced it.
+INFO  [alembic.runtime.migration] Running upgrade 20260925_0024 -> 20260925_0025, Run completeness, its announced-vs-seen counter, and an occurrence's last complete run.
+INFO  [alembic.runtime.migration] Running upgrade 20260925_0025 -> 20260925_0026, Add the append-only operator relevance mark.
+INFO  [alembic.runtime.migration] Running upgrade 20260925_0026 -> 20260925_0027, Classify each opportunity's area (`role-family-v1`) with its evidence.
+INFO  [alembic.runtime.migration] Running upgrade 20260925_0027 -> 20260925_0028, Full-text search document for the Inbox (F17-03).
+INFO  [alembic.runtime.migration] Running upgrade 20260925_0028 -> 20260925_0029, Add `allowed_countries` and its `regions-v1` version to `opportunity`.
+INFO  [alembic.runtime.migration] Running upgrade 20260925_0029 -> 20260925_0050, Persist provider credits spent per source run.
+INFO  [alembic.runtime.migration] Running upgrade 20260925_0050 -> 20260925_0051, Cache table for Tavily `/extract` results, keyed by canonical URL hash.
+INFO  [alembic.runtime.migration] Running upgrade 20260925_0051 -> 20260926_0030, Add `platform.ai_quota_usage`, the persistent per-model quota counter.
+INFO  [alembic.runtime.migration] Running upgrade 20260926_0030 -> 20260926_0031, Add `opportunities.duplicate_candidate` and `opportunity.duplicate_of`.
+INFO  [alembic.runtime.migration] Running upgrade 20260926_0031 -> 20260926_0032, Add `company_radar.discovery_attempt`.
+INFO  [alembic.runtime.migration] Running upgrade 20260926_0032 -> 20260926_0033, Add `platform.ai_call_record`, one row per Groq call (no PII).
+INFO  [alembic.runtime.migration] Running upgrade 20260926_0033 -> 20260926_0034, Add absolute provider-reported ceilings to `platform.ai_quota_usage`.
+INFO  [alembic.runtime.migration] Running upgrade 20260926_0034 -> 20260926_0035, Add profile target titles for keyword search.
+INFO  [alembic.runtime.migration] Running upgrade 20260926_0035 -> 20260926_0036, Add saved searches for the dashboard.
+INFO  [alembic.runtime.migration] Running upgrade 20260926_0036 -> 20260926_0037, Add rejected-version columns to `opportunities.duplicate_candidate`.
+INFO  [alembic.runtime.migration] Running upgrade 20260926_0037 -> 20260926_0040, Add `acquisition.host_budget_state` for the shared request budget per host/provider.
+INFO  [alembic.runtime.migration] Running upgrade 20260926_0040 -> 20260926_0041, Add F20-39 semantic evidence and per-run presence observations.
+INFO  [alembic.runtime.migration] Running upgrade 20260926_0041 -> 20260926_0042, Permit append-only raw evidence variants from distinct parser interpretations.
+INFO  [alembic.runtime.migration] Running upgrade 20260926_0042 -> 20260926_0043, Add F20-39 resume provenance between runs of the same source.
+INFO  [alembic.runtime.migration] Running upgrade 20260926_0043 -> 20260926_0044, Add multi-page discovery columns to `company_radar.discovery_attempt`.
+INFO  [alembic.runtime.migration] Running upgrade 20260926_0044 -> 20260926_0052, Add `opportunities.field_suggestion`.
+INFO  [alembic.runtime.migration] Running upgrade 20260926_0052 -> 20260928_0053, Add recency-filter columns to `opportunities.opportunity` and `source_occurrence`.
+INFO  [alembic.runtime.migration] Running upgrade 20260928_0053 -> 20260929_0054, Add `company_radar.company_startup_evidence` (append-only startup evidence).
+INFO  [alembic.runtime.migration] Running upgrade 20260929_0054 -> 20260929_0055, Run telemetry for the collection-gap alarm and a short history of worker passes.
+INFO  [alembic.runtime.migration] Running upgrade 20260929_0055 -> 20260929_0056, Split the aggregate host budget rows of per-tenant source types into one row per tenant.
+INFO  [alembic.runtime.migration] Running upgrade 20260929_0056 -> 20260929_0057, Add `opportunities.opportunity.recency_basis` (recency reference basis).
+INFO  [alembic.runtime.migration] Running upgrade 20260929_0057 -> 20260929_0058, Add the accepted seniorities preference to the profile.
+INFO  [alembic.runtime.migration] Running upgrade 20260929_0058 -> 20260929_0060, Separate research maturity from company priority.
+INFO  [alembic.runtime.migration] Running upgrade 20260929_0060 -> 20261004_0061, Index source occurrences by opportunity.
+INFO  [alembic.runtime.migration] Running upgrade 20261004_0061 -> 20261005_0062, Count each run's items inside and outside the active profile's target areas.
+INFO  [alembic.runtime.migration] Running upgrade 20261005_0062 -> 20261005_0063, Materialise the latest assessment per posting and profile version.
+INFO  [alembic.runtime.migration] Running upgrade 20261005_0063 -> 20261005_0064, Let the retention job delete superseded assessments.
+INFO  [alembic.runtime.migration] Running upgrade 20261005_0064 -> 20261005_0065, Persist logical AI operations and correlate provider attempts.
+INFO  [alembic.runtime.migration] Running upgrade 20261005_0065 -> 20261005_0066, Persist Workday request reservations and detail telemetry.
+INFO  [alembic.runtime.migration] Running upgrade 20261005_0066 -> 20261005_0067, Add source-scoped execution leases and fencing generations.
+INFO  [alembic.runtime.migration] Running upgrade 20261005_0067 -> 20261006_0068, Record which board and filters a stored validator describes (F51-13).
+INFO  [alembic.runtime.migration] Running upgrade 20261006_0068 -> 20261008_0069, Add immutable Clerk ownership to the personal-data roots.

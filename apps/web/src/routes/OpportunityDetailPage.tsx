@@ -19,6 +19,7 @@ import {
   useLatestAssessment,
 } from '../features/matching/useAssessment'
 import { type DuplicateCandidate, type OpportunityDetail } from '../features/opportunities/api'
+import { opportunityLabel, seniorityLabels, workModeLabels } from '../features/opportunities/labels'
 import { estimatedDateHint } from '../features/dashboard/api'
 import { verdictLabels } from '../features/matching/verdicts'
 import {
@@ -37,24 +38,6 @@ const resultLabels: Record<string, string> = {
   TRUE: 'Atende',
   FALSE: 'Não atende',
   UNKNOWN: 'Desconhecido',
-}
-
-const workModeLabels: Record<string, string> = {
-  REMOTE: 'Remoto',
-  HYBRID: 'Híbrido',
-  ONSITE: 'Presencial',
-  UNKNOWN: 'Não informado',
-}
-
-const seniorityLabels: Record<string, string> = {
-  INTERN: 'Estágio',
-  JUNIOR: 'Júnior',
-  MID: 'Pleno',
-  SENIOR: 'Sênior',
-  STAFF: 'Staff',
-  LEAD: 'Liderança',
-  PRINCIPAL: 'Principal',
-  UNKNOWN: 'Não informada',
 }
 
 const contractLabels: Record<string, string> = {
@@ -193,8 +176,8 @@ function Section({
 /** Meta line and fact chips of the title block; `#resumo` is the local-navigation anchor. */
 function TitleFacts({ opportunity }: { opportunity: OpportunityDetail }) {
   const facts = [
-    ['Modalidade', label(opportunity.workMode, workModeLabels)],
-    ['Senioridade', label(opportunity.seniority, seniorityLabels)],
+    ['Modalidade', opportunityLabel(opportunity.workMode, workModeLabels)],
+    ['Senioridade', opportunityLabel(opportunity.seniority, seniorityLabels)],
     ['Contrato', label(opportunity.contractType, contractLabels)],
     ['Status', label(opportunity.lifecycleStatus, lifecycleLabels)],
     ['Versão do conteúdo', String(opportunity.version)],
@@ -331,6 +314,9 @@ export function SiblingLocations({ opportunity }: { opportunity: OpportunityDeta
 function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
   return (
     <>
+      <p className="mb-3 rounded-control border border-info-line bg-info-surface p-3 text-sm text-info-ink">
+        Regra do ciclo da oportunidade: duas coletas completas consecutivas sem ocorrência podem encerrá-la; uma coleta parcial ou com falha não conta, e outra fonte ativa que ainda a encontre a preserva. A evidência disponível nesta tela não informa a causa específica do status atual.
+      </p>
       <ul className="grid gap-3">
         {opportunity.occurrences.map((occurrence) => (
           <Card as="li" className="text-sm" key={occurrence.id}>
@@ -439,8 +425,8 @@ const DUPLICATE_COMPARISON_FIELDS: {
   { label: 'Título', read: (o) => o.title },
   { label: 'Empresa', read: (o) => display(o.companyName) },
   { label: 'Localização', read: (o) => display(o.location) },
-  { label: 'Modalidade', read: (o) => label(o.workMode, workModeLabels) },
-  { label: 'Senioridade', read: (o) => label(o.seniority, seniorityLabels) },
+  { label: 'Modalidade', read: (o) => opportunityLabel(o.workMode, workModeLabels) },
+  { label: 'Senioridade', read: (o) => opportunityLabel(o.seniority, seniorityLabels) },
   { label: 'Contrato', read: (o) => label(o.contractType, contractLabels) },
   { label: 'Publicada', read: (o) => formatDate(o.publishedAt) },
 ]
@@ -628,7 +614,13 @@ function Factors({ factors }: { factors: MatchFactor[] }) {
               <td>{formatNumber(factor.weight, 2)}</td>
               <td>{formatNumber(factor.contribution, 2)}</td>
               <td>
-                {factor.status}
+                {factor.status === 'UNKNOWN'
+                  ? 'Desconhecido; requer revisão'
+                  : factor.status === 'TRUE'
+                    ? 'Atende'
+                    : factor.status === 'FALSE'
+                      ? 'Não atende'
+                      : 'Em revisão'}
                 {factor.status === 'UNKNOWN' && (
                   <span className="block text-xs text-muted">
                     {factor.missingPolicy}
@@ -730,7 +722,7 @@ export function OpportunityDetailPage() {
       }
       back={
         <Link
-          className="text-sm text-subtle underline decoration-accent decoration-2 underline-offset-4"
+          className="inline-flex items-center text-sm text-subtle underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11"
           to="/inbox"
         >
           ← Voltar para as oportunidades
@@ -750,7 +742,7 @@ export function OpportunityDetailPage() {
           <LoadingState className="mt-2">Carregando oportunidade…</LoadingState>
         )}
         {opportunity.isError && (
-          <ErrorState className="mt-2" onRetry={() => void opportunity.refetch()}>{opportunity.error.message}</ErrorState>
+          <ErrorState className="mt-2" onRetry={() => void opportunity.refetch()}>Não foi possível carregar esta oportunidade. Tente novamente.</ErrorState>
         )}
 
         {opportunity.data && (
@@ -769,6 +761,24 @@ export function OpportunityDetailPage() {
                   Marque a relevância e acompanhe a candidatura. A análise de IA é apoio, não decide por você.
                 </p>
               </div>
+              <Section
+                id="decisao"
+                lead="Matching determinístico: score, veredito e elegibilidade calculados por regras, fora da IA."
+                title="Decisão"
+              >
+                <div className="mb-4 flex flex-wrap items-center gap-3 empty:hidden">
+                  {evaluate.isSuccess && <span className="text-sm text-subtle">Avaliação atualizada.</span>}
+                  {evaluate.isError && <span className="text-sm text-danger-ink">Não foi possível avaliar agora.</span>}
+                </div>
+                {assessment.isPending && <LoadingState>Carregando a avaliação…</LoadingState>}
+                {assessment.isError && (
+                  <ErrorState onRetry={() => void assessment.refetch()}>Não foi possível carregar a avaliação.</ErrorState>
+                )}
+                {assessment.data === null && (
+                  <EmptyState>Esta oportunidade ainda não foi avaliada contra o perfil ativo.</EmptyState>
+                )}
+                {assessment.data && <Decision assessment={assessment.data} />}
+              </Section>
               <Section nested title="Relevância">
                 <RelevanceMark opportunity={opportunity.data} />
               </Section>
@@ -779,10 +789,10 @@ export function OpportunityDetailPage() {
 
             <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8 lg:col-start-1 lg:row-start-1">
               <nav aria-label="Navegar nesta oportunidade" className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
-                <a className="underline decoration-accent decoration-2 underline-offset-4" href="#resumo">Resumo</a>
-                <a className="underline decoration-accent decoration-2 underline-offset-4" href="#decisao">Decisão</a>
-                <a className="underline decoration-accent decoration-2 underline-offset-4" href="#candidatura">Candidatura</a>
-                <a className="underline decoration-accent decoration-2 underline-offset-4" href="#procedencia">Procedência</a>
+                <a className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11" href="#resumo">Resumo</a>
+                <a className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11" href="#decisao">Decisão</a>
+                <a className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11" href="#candidatura">Candidatura</a>
+                <a className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11" href="#procedencia">Procedência</a>
               </nav>
 
               <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
@@ -798,27 +808,6 @@ export function OpportunityDetailPage() {
 
                 <Section title="Skills">
                   <Skills opportunity={opportunity.data} />
-                </Section>
-
-                <Section
-                  id="decisao"
-                  lead="Matching determinístico: score, veredito e elegibilidade calculados por regras, fora da IA."
-                  title="Decisão"
-                >
-                  <div className="mb-4 flex flex-wrap items-center gap-3 empty:hidden">
-                    {evaluate.isSuccess && <span className="text-sm text-subtle">Avaliação atualizada.</span>}
-                    {evaluate.isError && <span className="text-sm text-danger-ink">Não foi possível avaliar agora.</span>}
-                  </div>
-                  {assessment.isPending && (
-                    <LoadingState>Carregando a avaliação…</LoadingState>
-                  )}
-                  {assessment.isError && (
-                    <ErrorState onRetry={() => void assessment.refetch()}>Não foi possível carregar a avaliação.</ErrorState>
-                  )}
-                  {assessment.data === null && (
-                    <EmptyState>Esta oportunidade ainda não foi avaliada contra o perfil ativo.</EmptyState>
-                  )}
-                  {assessment.data && <Decision assessment={assessment.data} />}
                 </Section>
 
                 {assessment.data && (

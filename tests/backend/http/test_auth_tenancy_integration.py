@@ -15,6 +15,7 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import delete, select, text
 from sqlalchemy.orm import Session
 
@@ -27,6 +28,7 @@ from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.presentation.http import app as app_module
 from opportunity_radar.presentation.http.app import create_app
 from opportunity_radar.presentation.http.auth import JwksClient
+from opportunity_radar.presentation.http.dashboard import SavedSearchSummaryResponse
 from opportunity_radar.presentation.http.dependencies import get_session
 from opportunity_radar.profile.models import CareerProfileModel
 
@@ -154,8 +156,15 @@ def test_authenticated_identities_cannot_read_or_mutate_each_others_saved_search
     search_id = created.json()["id"]
 
     assert client.get("/saved-searches", headers=_headers(private, owner_a)).json() == []
+    assert client.get("/saved-searches/summary", headers=_headers(private, owner_a)).json() == []
     b_searches = client.get("/saved-searches", headers=b_headers).json()
     assert [item["id"] for item in b_searches] == [search_id]
+    b_summary = client.get("/saved-searches/summary", headers=b_headers)
+    assert b_summary.status_code == 200
+    assert [item["id"] for item in b_summary.json()] == [search_id]
+    individual_count = client.get(f"/saved-searches/{search_id}/new-count", headers=b_headers)
+    assert individual_count.status_code == 200
+    assert b_summary.json()[0]["new_count"] == individual_count.json()["new_count"]
     for method, path, body in (
         ("PATCH", f"/saved-searches/{search_id}", {"name": "A attempt"}),
         ("DELETE", f"/saved-searches/{search_id}", None),
@@ -257,8 +266,24 @@ def test_private_http_routes_fail_closed_without_a_valid_bearer_token(
     client: TestClient,
 ) -> None:
     assert client.get("/saved-searches").status_code == 401
+    assert client.get("/saved-searches/summary").status_code == 401
     invalid = client.get("/saved-searches", headers={"Authorization": "Bearer invalid"})
     assert invalid.status_code == 401
+
+
+def test_saved_search_summary_response_rejects_negative_new_count() -> None:
+    with pytest.raises(ValidationError):
+        SavedSearchSummaryResponse.model_validate(
+            {
+                "id": str(uuid4()),
+                "name": "Invalid count",
+                "term": None,
+                "filters": {},
+                "last_opened_at": None,
+                "created_at": datetime.now(UTC),
+                "new_count": -1,
+            }
+        )
 
 
 def test_foreign_profile_version_is_rejected_by_pipeline_and_matching(

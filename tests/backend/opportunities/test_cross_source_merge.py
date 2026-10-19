@@ -623,3 +623,70 @@ def test_measurement_ignores_closed_and_same_source_pairs(world: _World) -> None
         {"c": twin.canonical_company_id},
     )
     world.session.commit()
+
+
+def _merged_pair(world: _World) -> tuple[str, str, UUID]:
+    greenhouse, remotive = _greenhouse_and_remotive(world)
+    first = world.post(
+        greenhouse, company="a", description="Greenhouse text", updated=NOW - timedelta(days=2),
+        external_id="gh-1",
+    )
+    assert first.opportunity_id is not None
+    world.post(
+        remotive, company="a", description="Remotive text", updated=NOW - timedelta(hours=1),
+        external_id="rem-1", fetched_at=NOW + timedelta(seconds=1),
+    )
+    return greenhouse, remotive, first.opportunity_id
+
+
+def _description(world: _World, opportunity_id: UUID) -> str | None:
+    world.session.expire_all()
+    opportunity = world.session.get(OpportunityModel, opportunity_id)
+    assert opportunity is not None
+    return opportunity.description
+
+
+def test_primary_is_re_elected_when_the_first_source_stops_listing_the_job(
+    world: _World,
+) -> None:
+    """R55-E4 follow-up: content must not stay frozen on a vanished primary occurrence."""
+    greenhouse, remotive, opportunity_id = _merged_pair(world)
+    assert _description(world, opportunity_id) == "Greenhouse text"
+    # The greenhouse board was re-read in a complete run that no longer lists the job; the
+    # remotive board still does (its occurrence belongs to its latest complete run).
+    world.new_run(greenhouse)
+    world.session.commit()
+
+    result = world.post(
+        remotive, company="a", description="Remotive text v2", updated=NOW + timedelta(hours=1),
+        external_id="rem-1", fetched_at=NOW + timedelta(minutes=1),
+    )
+
+    assert result.reasons[0]["code"] != "SECONDARY_SOURCE_OCCURRENCE"
+    assert _description(world, opportunity_id) == "Remotive text v2"
+
+
+def test_primary_is_kept_while_it_is_open_or_when_every_occurrence_closed(
+    world: _World,
+) -> None:
+    greenhouse, remotive, opportunity_id = _merged_pair(world)
+
+    # Negative 1: the first source still lists it, so the later source stays secondary.
+    still_open = world.post(
+        remotive, company="a", description="Remotive text v2", updated=NOW + timedelta(hours=1),
+        external_id="rem-1", fetched_at=NOW + timedelta(minutes=1),
+    )
+    assert still_open.reasons[0]["code"] == "SECONDARY_SOURCE_OCCURRENCE"
+    assert _description(world, opportunity_id) == "Greenhouse text"
+
+    # Negative 2: both boards were re-read without the job; nothing is open, so the oldest
+    # occurrence keeps the role instead of the role flipping to whichever reports first.
+    world.new_run(greenhouse)
+    world.new_run(remotive)
+    world.session.commit()
+    none_open = world.post(
+        remotive, company="a", description="Remotive text v3", updated=NOW + timedelta(hours=2),
+        external_id="rem-1", fetched_at=NOW + timedelta(minutes=2),
+    )
+    assert none_open.reasons[0]["code"] == "SECONDARY_SOURCE_OCCURRENCE"
+    assert _description(world, opportunity_id) == "Greenhouse text"

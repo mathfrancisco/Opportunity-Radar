@@ -70,6 +70,11 @@ MANIFEST_EXCLUDED_TABLES: dict[str, str] = {
         "content hash), SPEC 51. Losing it after a restore only makes a deferred "
         "opportunity eligible again sooner; no suggestion or decision lives here."
     ),
+    "platform.ai_suggestion_unanswered": (
+        "Markers of fields the model already answered null for (opportunity, version, field, "
+        "prompt version), R55-C5. Losing them after a restore only asks those fields once "
+        "more; no suggestion or decision lives here."
+    ),
 }
 
 #: Never allowed to appear in a manifest's serialized JSON. The Groq API key never enters

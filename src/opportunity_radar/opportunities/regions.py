@@ -230,9 +230,10 @@ def resolve_allowed_countries(location_text: str | None) -> tuple[str, ...]:
     return _structured_countries(text)
 
 
-#: v2 -> v3 (R55-D1): the location step is the `regions-v2` table, which also reads
-#: structured locations ("Remote, United Kingdom"), so the same input can yield a country.
-REGIONS_VERSION_V2 = "allowed-countries-v3"
+#: v3 -> v4: explicit eligibility language in a description is more specific than an
+#: office location. Conflicting description scopes stay UNKNOWN and must never fall back
+#: to a structured location.
+REGIONS_VERSION_V2 = "allowed-countries-v4"
 
 _PLACE_NAMES = sorted(
     [*_COUNTRY_NAME_TO_CODE, "latam", "americas", "emea", "worldwide", "anywhere"],
@@ -267,28 +268,43 @@ def _place_codes(place: str) -> tuple[str, ...]:
     return (code,) if code else ()
 
 
+def _resolve_allowed_countries_v2_location(location_text: str | None) -> tuple[str, ...]:
+    """Resolve the content-rule-only UnitedKingdom alias without changing regions-v2."""
+    text = re.sub(r"\bunitedkingdom\b", "united kingdom", location_text or "", flags=re.IGNORECASE)
+    return resolve_allowed_countries(text)
+
+
 def resolve_allowed_countries_v2(
     location_text: str | None, description: str | None
 ) -> tuple[tuple[str, ...], dict[str, str] | None]:
-    """`allowed-countries-v3`: location (`regions-v2` table) first, then description phrases.
+    """`allowed-countries-v4`: explicit eligibility phrases, then `regions-v2` location.
 
-    Returns `(countries, evidence)`. `()` stays "unknown". Two description phrases that
-    resolve to different country sets are ambiguous and yield `()`.
+    Returns `(countries, evidence)`. `()` stays "unknown". Conflicting explicit
+    description scopes return conflict evidence so callers cannot silently fall back to
+    an office or structured location.
     """
-    from_location = resolve_allowed_countries(location_text)
+    text = re.sub(r"\s+", " ", (description or "").casefold()).strip()
+    found: dict[tuple[str, ...], str] = {}
+    if text:
+        for pattern in _DESCRIPTION_COUNTRY_PATTERNS:
+            for match in pattern.finditer(text):
+                codes = _place_codes(match.group(1))
+                if codes:
+                    start, end = max(0, match.start() - 40), min(len(text), match.end() + 40)
+                    found.setdefault(codes, text[start:end].strip())
+    if len(found) > 1:
+        return (), {"source": "conflict", "evidence": " | ".join(found.values())}
+    if found:
+        codes, snippet = next(iter(found.items()))
+        return codes, {"source": "description", "evidence": snippet}
+    # An office mention is not an eligibility statement, even when its structured
+    # location has a recognizable country.
+    office_only_location = not re.search(
+        r"\b(?:remote|remoto)\b", location_text or "", re.IGNORECASE
+    )
+    if re.search(r"\boffice\b", text) and office_only_location:
+        return (), None
+    from_location = _resolve_allowed_countries_v2_location(location_text)
     if from_location:
         return from_location, {"source": "location", "evidence": (location_text or "").strip()}
-    text = re.sub(r"\s+", " ", (description or "").casefold()).strip()
-    if not text:
-        return (), None
-    found: dict[tuple[str, ...], str] = {}
-    for pattern in _DESCRIPTION_COUNTRY_PATTERNS:
-        for match in pattern.finditer(text):
-            codes = _place_codes(match.group(1))
-            if codes:
-                start, end = max(0, match.start() - 40), min(len(text), match.end() + 40)
-                found.setdefault(codes, text[start:end].strip())
-    if len(found) != 1:
-        return (), None
-    codes, snippet = next(iter(found.items()))
-    return codes, {"source": "description", "evidence": snippet}
+    return (), None

@@ -360,9 +360,15 @@ def default_rule_set(version: str = RULES_VERSION_V6) -> MatchingRuleSet:
 
 
 def _version_number(version: str) -> int:
-    """The N of `matching-vN`; a version that does not follow the pattern is current."""
-    match = re.fullmatch(r"matching-v(\d+)", version.strip())
-    return int(match.group(1)) if match else RULES_VERSION_CURRENT_NUMBER
+    """The N of `matching-vN`. Anything else is refused: silently treating a typo as the
+    current rules would stamp assessments with a version that names no rule set."""
+    match = re.fullmatch(r"matching-v(\d+)", version)
+    if match is None:
+        raise ValueError(
+            f"unknown rules version {version!r}: expected the pattern 'matching-vN' "
+            f"(for example {RULES_VERSION_V6!r})"
+        )
+    return int(match.group(1))
 
 
 def evaluate_match(

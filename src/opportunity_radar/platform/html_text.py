@@ -46,7 +46,11 @@ _CELLS = frozenset({"td", "th"})
 
 
 def _has_real_tag(text: str) -> bool:
-    return _TAG_OPEN.search(text) is not None
+    opening = _TAG_OPEN.search(text)
+    # HTMLParser can take a pathological amount of time buffering repeated
+    # openers such as ``"<a" * 40_000``.  Without the tag terminator, this is
+    # plain text rather than markup for our normalisation contract.
+    return opening is not None and text.find(">", opening.end()) != -1
 
 
 def _has_escaped_tag(text: str) -> bool:
