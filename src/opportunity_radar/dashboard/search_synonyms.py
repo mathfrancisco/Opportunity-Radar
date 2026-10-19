@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-SYNONYMS_VERSION = "synonyms-v1"
+SYNONYMS_VERSION = "synonyms-v2"
 
 _GROUPS: tuple[frozenset[str], ...] = (
     frozenset(
@@ -67,4 +67,31 @@ def synonym_variants(query: str) -> list[str]:
     return variants
 
 
-__all__ = ["SYNONYMS_VERSION", "synonym_variants"]
+#: Above this many tokens the per-concept form is skipped (keeps the tsquery bounded).
+MAX_SYNONYM_GROUPS = 8
+
+
+def synonym_groups(query: str) -> list[list[str]] | None:
+    """One group per plain token (the token plus its synonyms), to be ANDed by the caller.
+
+    This lets `desenvolvedor dados` match "Data Developer": each concept is translated
+    on its own instead of one token at a time. Returns `None` when the query has quotes,
+    a negated token (`-word`), an `OR`, or more than `MAX_SYNONYM_GROUPS` tokens; the
+    caller then keeps the `synonym_variants` path so `websearch_to_tsquery` semantics are
+    preserved.
+    """
+    if '"' in query:
+        return None
+    tokens = query.split()
+    if not tokens or len(tokens) > MAX_SYNONYM_GROUPS:
+        return None
+    if any(token.startswith("-") or token.lower() == "or" for token in tokens):
+        return None
+    groups: list[list[str]] = []
+    for token in tokens:
+        synonyms = _TERM_TO_SYNONYMS.get(token.lower(), frozenset())
+        groups.append([token, *sorted(s for s in synonyms if s != token.lower())])
+    return groups
+
+
+__all__ = ["SYNONYMS_VERSION", "synonym_groups", "synonym_variants"]

@@ -1,0 +1,1348 @@
+{
+ "version": "f2-sinonimos-v1",
+ "corpus": [
+  {
+   "key": "o01",
+   "title": "Data Developer",
+   "company": "Cedro Analytics 01",
+   "description": "Build and maintain data products for our analytics platform. Work closely with product squads.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "SQL",
+    "Python",
+    "dbt"
+   ]
+  },
+  {
+   "key": "o02",
+   "title": "Data Developer II",
+   "company": "Atlas Imaginário 02",
+   "description": "Join the platform team to develop ingestion services and internal data tooling.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Scala",
+    "Spark",
+    "Airflow"
+   ]
+  },
+  {
+   "key": "o03",
+   "title": "Desenvolvedor de Dados",
+   "company": "Caravela IT 03",
+   "description": "Desenvolvimento de rotinas de integração e modelagem para o time de inteligência.",
+   "location": "Belo Horizonte, MG",
+   "skills": [
+    "SQL",
+    "Python"
+   ]
+  },
+  {
+   "key": "o04",
+   "title": "Developer, Data Platform",
+   "company": "Vento Norte Ltda 04",
+   "description": "Own services that power the company data platform in a small, senior team.",
+   "location": "Remote (US)",
+   "skills": [
+    "Go",
+    "Kafka",
+    "SQL"
+   ]
+  },
+  {
+   "key": "o05",
+   "title": "Software Developer - Data Products",
+   "company": "Nimbus Fictício 05",
+   "description": "Ship customer-facing reports and APIs backed by our warehouse.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "TypeScript",
+    "PostgreSQL"
+   ]
+  },
+  {
+   "key": "o06",
+   "title": "Data Engineer",
+   "company": "Bambu Soluções 06",
+   "description": "Design batch and streaming pipelines for the analytics group.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Spark",
+    "Airflow",
+    "SQL"
+   ]
+  },
+  {
+   "key": "o07",
+   "title": "Engenheiro de Dados Pleno",
+   "company": "Fogo Azul 07",
+   "description": "Construção de pipelines e manutenção do data lake em nuvem.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Python",
+    "AWS",
+    "Spark"
+   ]
+  },
+  {
+   "key": "o08",
+   "title": "Desenvolvedor Backend",
+   "company": "Mar Aberto Software 08",
+   "description": "API de pagamentos em microsserviços, equipe de 8 pessoas.",
+   "location": "Curitiba, PR",
+   "skills": [
+    "Java",
+    "Spring"
+   ]
+  },
+  {
+   "key": "o09",
+   "title": "Desenvolvedor Frontend",
+   "company": "Brisa Pagamentos 09",
+   "description": "Interfaces web para o portal de clientes.",
+   "location": "Porto Alegre, RS",
+   "skills": [
+    "React",
+    "TypeScript"
+   ]
+  },
+  {
+   "key": "o10",
+   "title": "Analista de Dados",
+   "company": "Zênite Labs 10",
+   "description": "Criação de painéis e análises para as áreas de negócio.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "SQL",
+    "Power BI"
+   ]
+  },
+  {
+   "key": "o11",
+   "title": "Cientista de Dados",
+   "company": "Cobalto Sistemas 11",
+   "description": "Modelos preditivos de churn e recomendação.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Python",
+    "scikit-learn"
+   ]
+  },
+  {
+   "key": "o12",
+   "title": "Job: Data Analyst",
+   "company": "Trilha Verde 12",
+   "description": "Open role on the finance analytics team. Reporting and ad hoc analysis.",
+   "location": "Remote (US)",
+   "skills": [
+    "SQL",
+    "Tableau"
+   ]
+  },
+  {
+   "key": "o13",
+   "title": "Vaga Analista de Dados",
+   "company": "Safira Systems 13",
+   "description": "Atuação com indicadores comerciais, consolidação de bases e relatórios semanais.",
+   "location": "Rio de Janeiro, RJ",
+   "skills": [
+    "SQL",
+    "Excel"
+   ]
+  },
+  {
+   "key": "o14",
+   "title": "Data Specialist (Job Opening)",
+   "company": "Jacaranda Cloud 14",
+   "description": "We are hiring a specialist to improve data quality across CRM systems.",
+   "location": "Lisboa, Portugal",
+   "skills": [
+    "SQL",
+    "Salesforce"
+   ]
+  },
+  {
+   "key": "o15",
+   "title": "Vaga Cientista de Dados",
+   "company": "Orbita Digital 15",
+   "description": "Time de risco de crédito procura profissional para modelagem estatística.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Python",
+    "R"
+   ]
+  },
+  {
+   "key": "o16",
+   "title": "Job Opening - Data Steward",
+   "company": "Ipê Dados 16",
+   "description": "Define ownership and standards for datasets in a regulated environment.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Governance",
+    "SQL"
+   ]
+  },
+  {
+   "key": "o17",
+   "title": "Vaga Recepcionista",
+   "company": "Pampa Digital 17",
+   "description": "Atendimento a visitantes e cadastro de dados de entrada. Data de início imediata.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Atendimento"
+   ]
+  },
+  {
+   "key": "o18",
+   "title": "Data Entry Clerk",
+   "company": "Lumen Labs 18",
+   "description": "Typing records into internal systems, mostly paper forms.",
+   "location": "Belo Horizonte, MG",
+   "skills": [
+    "Excel"
+   ]
+  },
+  {
+   "key": "o19",
+   "title": "Senior Engineer (Remote)",
+   "company": "Faroeste Cloud 19",
+   "description": "Lead technical design for our billing services. Fully distributed team.",
+   "location": "Remote (US)",
+   "skills": [
+    "Java",
+    "AWS"
+   ]
+  },
+  {
+   "key": "o20",
+   "title": "Sr Software Engineer - Remote",
+   "company": "Rio Claro Tech 20",
+   "description": "Work on core search infrastructure, async collaboration across time zones.",
+   "location": "Remote (US)",
+   "skills": [
+    "Go",
+    "Elasticsearch"
+   ]
+  },
+  {
+   "key": "o21",
+   "title": "Engenheiro de Software Sênior - Remoto",
+   "company": "Lótus Engenharia 21",
+   "description": "Evolução da plataforma de pedidos, com foco em confiabilidade.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Kotlin",
+    "PostgreSQL"
+   ]
+  },
+  {
+   "key": "o22",
+   "title": "Engenheiro Sênior de Plataforma",
+   "company": "Pixel Quintal 22",
+   "description": "Time presencial, escritório no centro. Infraestrutura como código.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Terraform",
+    "Kubernetes"
+   ]
+  },
+  {
+   "key": "o23",
+   "title": "Remote Engineer, Mid-level",
+   "company": "Quasar Works 23",
+   "description": "Backend engineer for payments, remote within Brazil and Portugal.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Python",
+    "Django"
+   ]
+  },
+  {
+   "key": "o24",
+   "title": "Senior Remote Developer",
+   "company": "Meridiano Corp 24",
+   "description": "Build mobile APIs for a travel marketplace.",
+   "location": "Remote (US)",
+   "skills": [
+    "Node.js",
+    "GraphQL"
+   ]
+  },
+  {
+   "key": "o25",
+   "title": "Staff Engineer",
+   "company": "Aurora Tecnologia 25",
+   "description": "Architecture ownership across three product areas, hybrid two days a week.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Java",
+    "Kubernetes"
+   ]
+  },
+  {
+   "key": "o26",
+   "title": "Desenvolvedor Python Sênior",
+   "company": "Cedro Analytics 26",
+   "description": "Serviços de automação e integrações com parceiros. Modelo híbrido.",
+   "location": "Curitiba, PR",
+   "skills": [
+    "Python",
+    "FastAPI"
+   ]
+  },
+  {
+   "key": "o27",
+   "title": "Senior Backend Developer",
+   "company": "Atlas Imaginário 27",
+   "description": "Greenfield services for a logistics startup, remote-first.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Rust",
+    "PostgreSQL"
+   ]
+  },
+  {
+   "key": "o28",
+   "title": "Desenvolvedor Fullstack Remoto",
+   "company": "Caravela IT 28",
+   "description": "Trabalho 100% remoto em produto B2B de agendamento.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "React",
+    "Node.js"
+   ]
+  },
+  {
+   "key": "o29",
+   "title": "Remote Developer - Mobile",
+   "company": "Vento Norte Ltda 29",
+   "description": "Flutter app for a fintech, remote anywhere in LATAM.",
+   "location": "Remote (US)",
+   "skills": [
+    "Flutter",
+    "Dart"
+   ]
+  },
+  {
+   "key": "o30",
+   "title": "Desenvolvedor Java",
+   "company": "Nimbus Fictício 30",
+   "description": "Manutenção de sistemas legados bancários, presencial.",
+   "location": "Belo Horizonte, MG",
+   "skills": [
+    "Java",
+    "Oracle"
+   ]
+  },
+  {
+   "key": "o31",
+   "title": "Desenvolvedor Backend Júnior",
+   "company": "Bambu Soluções 31",
+   "description": "Primeira vaga em engenharia, mentoria diária e revisão de código.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Python",
+    "SQL"
+   ]
+  },
+  {
+   "key": "o32",
+   "title": "Junior Developer",
+   "company": "Fogo Azul 32",
+   "description": "Entry-level role on the web team, pairing with senior colleagues.",
+   "location": "Lisboa, Portugal",
+   "skills": [
+    "JavaScript",
+    "HTML"
+   ]
+  },
+  {
+   "key": "o33",
+   "title": "Desenvolvedor Jr - Remoto",
+   "company": "Mar Aberto Software 33",
+   "description": "Suporte ao time de produto em tarefas de interface.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "React",
+    "CSS"
+   ]
+  },
+  {
+   "key": "o34",
+   "title": "Vaga Estagiário de Tecnologia",
+   "company": "Brisa Pagamentos 34",
+   "description": "Programa de estágio com rodízio entre áreas.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Lógica",
+    "SQL"
+   ]
+  },
+  {
+   "key": "o35",
+   "title": "Junior Data Analyst",
+   "company": "Zênite Labs 35",
+   "description": "Support the BI team with dashboards and QA of metrics.",
+   "location": "Remote (US)",
+   "skills": [
+    "SQL",
+    "Looker"
+   ]
+  },
+  {
+   "key": "o36",
+   "title": "Analista Júnior de Suporte",
+   "company": "Cobalto Sistemas 36",
+   "description": "Atendimento técnico de nível 1, escala 6x1.",
+   "location": "Porto Alegre, RS",
+   "skills": [
+    "Suporte"
+   ]
+  },
+  {
+   "key": "o37",
+   "title": "Vaga Remota Atendimento ao Cliente",
+   "company": "Trilha Verde 37",
+   "description": "Atendimento por chat, trabalho de casa, equipamento fornecido.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Atendimento"
+   ]
+  },
+  {
+   "key": "o38",
+   "title": "Remote Customer Support Agent",
+   "company": "Safira Systems 38",
+   "description": "Handle email and chat tickets in English, flexible hours.",
+   "location": "Remote (US)",
+   "skills": [
+    "Zendesk"
+   ]
+  },
+  {
+   "key": "o39",
+   "title": "Vaga Desenvolvedor Pleno",
+   "company": "Jacaranda Cloud 39",
+   "description": "Equipe de e-commerce, stack moderna e deploy contínuo.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Node.js",
+    "AWS"
+   ]
+  },
+  {
+   "key": "o40",
+   "title": "Pleno Engenheiro de Software",
+   "company": "Orbita Digital 40",
+   "description": "Desenvolvimento de módulos de faturamento. Híbrido.",
+   "location": "Rio de Janeiro, RJ",
+   "skills": [
+    "C#",
+    ".NET"
+   ]
+  },
+  {
+   "key": "o41",
+   "title": "Mid-level Backend Developer",
+   "company": "Ipê Dados 41",
+   "description": "Own services in our subscription product, remote friendly.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Python",
+    "Redis"
+   ]
+  },
+  {
+   "key": "o42",
+   "title": "Mid-Level Data Engineer",
+   "company": "Pampa Digital 42",
+   "description": "Maintain our lakehouse and improve pipeline reliability.",
+   "location": "Remote (US)",
+   "skills": [
+    "Spark",
+    "Databricks"
+   ]
+  },
+  {
+   "key": "o43",
+   "title": "Engenheiro de Machine Learning Pleno",
+   "company": "Lumen Labs 43",
+   "description": "Colocar modelos em produção e monitorar desempenho.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Python",
+    "MLflow"
+   ]
+  },
+  {
+   "key": "o44",
+   "title": "Engenheiro DevOps",
+   "company": "Faroeste Cloud 44",
+   "description": "Automação de deploys e observabilidade para múltiplos times.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Docker",
+    "Terraform"
+   ]
+  },
+  {
+   "key": "o45",
+   "title": "DevOps Engineer",
+   "company": "Rio Claro Tech 45",
+   "description": "Maintain CI/CD and cost controls on cloud accounts.",
+   "location": "Remote (US)",
+   "skills": [
+    "AWS",
+    "GitHub Actions"
+   ]
+  },
+  {
+   "key": "o46",
+   "title": "Analytics Engineer",
+   "company": "Lótus Engenharia 46",
+   "description": "Model the semantic layer for self-service analytics.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "dbt",
+    "SQL",
+    "Snowflake"
+   ]
+  },
+  {
+   "key": "o47",
+   "title": "Engenheiro Civil Pleno",
+   "company": "Pixel Quintal 47",
+   "description": "Acompanhamento de obras residenciais, medições e cronograma físico-financeiro.",
+   "location": "Curitiba, PR",
+   "skills": [
+    "AutoCAD",
+    "Obras"
+   ]
+  },
+  {
+   "key": "o48",
+   "title": "Engenheira Civil Sênior",
+   "company": "Quasar Works 48",
+   "description": "Gestão técnica de canteiro de obras de grande porte.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Revit",
+    "Planejamento"
+   ]
+  },
+  {
+   "key": "o49",
+   "title": "Engenheiro de Obras",
+   "company": "Meridiano Corp 49",
+   "description": "Fiscalização de empreitadas e controle de qualidade.",
+   "location": "Belo Horizonte, MG",
+   "skills": [
+    "Obras",
+    "Orçamento"
+   ]
+  },
+  {
+   "key": "o50",
+   "title": "Mechanical Engineer",
+   "company": "Aurora Tecnologia 50",
+   "description": "Design of hydraulic components for agricultural machinery.",
+   "location": "Porto Alegre, RS",
+   "skills": [
+    "SolidWorks"
+   ]
+  },
+  {
+   "key": "o51",
+   "title": "Engenheiro de Segurança do Trabalho",
+   "company": "Cedro Analytics 51",
+   "description": "Elaboração de laudos e treinamentos de segurança em fábrica.",
+   "location": "Rio de Janeiro, RJ",
+   "skills": [
+    "NR-12"
+   ]
+  },
+  {
+   "key": "o52",
+   "title": "Analista de Privacidade e LGPD",
+   "company": "Atlas Imaginário 52",
+   "description": "Condução de adequações à LGPD, mapeamento de dados pessoais e resposta a titulares.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "LGPD",
+    "Compliance"
+   ]
+  },
+  {
+   "key": "o53",
+   "title": "Data Protection Officer",
+   "company": "Caravela IT 53",
+   "description": "Oversee privacy program, handle regulator contact and breach response.",
+   "location": "Lisboa, Portugal",
+   "skills": [
+    "GDPR",
+    "Privacy"
+   ]
+  },
+  {
+   "key": "o54",
+   "title": "Analista de Compliance - LGPD",
+   "company": "Vento Norte Ltda 54",
+   "description": "Revisão de contratos, políticas e registros de tratamento de dados pessoais.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "LGPD",
+    "Contratos"
+   ]
+  },
+  {
+   "key": "o55",
+   "title": "Analista de Segurança da Informação",
+   "company": "Nimbus Fictício 55",
+   "description": "Gestão de vulnerabilidades e resposta a incidentes. Conhecimento de LGPD desejável.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "SIEM",
+    "Segurança"
+   ]
+  },
+  {
+   "key": "o56",
+   "title": "Data Engineer - Privacy",
+   "company": "Bambu Soluções 56",
+   "description": "Build pipelines that anonymize personal data before analytics. LGPD awareness required.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Python",
+    "Spark"
+   ]
+  },
+  {
+   "key": "o57",
+   "title": "Analista Financeiro",
+   "company": "Fogo Azul 57",
+   "description": "Fechamento mensal e conciliações. Data de início imediata.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Excel",
+    "ERP"
+   ]
+  },
+  {
+   "key": "o58",
+   "title": "Contador",
+   "company": "Mar Aberto Software 58",
+   "description": "Escrituração fiscal e obrigações acessórias. Data de início a combinar.",
+   "location": "Belo Horizonte, MG",
+   "skills": [
+    "Contabilidade"
+   ]
+  },
+  {
+   "key": "o59",
+   "title": "Assistente Administrativo",
+   "company": "Brisa Pagamentos 59",
+   "description": "Rotinas de escritório. Vaga de estacionamento no local para funcionários.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Office"
+   ]
+  },
+  {
+   "key": "o60",
+   "title": "Motorista Entregador",
+   "company": "Zênite Labs 60",
+   "description": "Entregas urbanas com veículo próprio ou da empresa.",
+   "location": "Rio de Janeiro, RJ",
+   "skills": [
+    "CNH B"
+   ]
+  },
+  {
+   "key": "o61",
+   "title": "Operador de Estacionamento",
+   "company": "Cobalto Sistemas 61",
+   "description": "Controle de entrada e saída de veículos, cobrança e atendimento.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Atendimento"
+   ]
+  },
+  {
+   "key": "o62",
+   "title": "Gerente de Facilities",
+   "company": "Trilha Verde 62",
+   "description": "Gestão de contratos de limpeza e manutenção predial. Estacionamento coberto para colaboradores.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Facilities"
+   ]
+  },
+  {
+   "key": "o63",
+   "title": "Analista de Suporte",
+   "company": "Safira Systems 63",
+   "description": "Atendimento interno, benefício de vaga de garagem incluso.",
+   "location": "Curitiba, PR",
+   "skills": [
+    "Suporte"
+   ]
+  },
+  {
+   "key": "o64",
+   "title": "Software Engineer",
+   "company": "Jacaranda Cloud 64",
+   "description": "Join a team of twelve building a marketplace. Start date flexible within 60 days.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Python",
+    "React"
+   ]
+  },
+  {
+   "key": "o65",
+   "title": "Product Designer",
+   "company": "Orbita Digital 65",
+   "description": "Design systems and flows for a banking app. Hybrid.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Figma"
+   ]
+  },
+  {
+   "key": "o66",
+   "title": "Account Executive Mid-Market",
+   "company": "Ipê Dados 66",
+   "description": "Own full sales cycle for mid-market SaaS accounts in Brazil.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Vendas",
+    "CRM"
+   ]
+  },
+  {
+   "key": "o67",
+   "title": "Gerente Comercial Mid Market",
+   "company": "Pampa Digital 67",
+   "description": "Liderança de time de vendas para o segmento mid market.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Vendas",
+    "Liderança"
+   ]
+  },
+  {
+   "key": "o68",
+   "title": "Customer Success Mid-Market",
+   "company": "Lumen Labs 68",
+   "description": "Onboard and retain mid-market customers, quarterly business reviews.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "CS",
+    "Salesforce"
+   ]
+  },
+  {
+   "key": "o69",
+   "title": "Mid-level Frontend Developer",
+   "company": "Faroeste Cloud 69",
+   "description": "Component library and checkout experience for retail.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "React",
+    "TypeScript"
+   ]
+  },
+  {
+   "key": "o70",
+   "title": "Analista Comercial Pleno",
+   "company": "Rio Claro Tech 70",
+   "description": "Apoio à diretoria com análise de carteira e propostas.",
+   "location": "Rio de Janeiro, RJ",
+   "skills": [
+    "Excel",
+    "CRM"
+   ]
+  },
+  {
+   "key": "o71",
+   "title": "Job Rotation Program",
+   "company": "Lótus Engenharia 71",
+   "description": "Rotation program across finance, operations and technology for recent graduates.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Trainee"
+   ]
+  },
+  {
+   "key": "o72",
+   "title": "Programa de Trainee Tecnologia",
+   "company": "Pixel Quintal 72",
+   "description": "Rodízio por áreas durante 18 meses, início em março.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Lógica"
+   ]
+  },
+  {
+   "key": "o73",
+   "title": "Engineering Manager",
+   "company": "Quasar Works 73",
+   "description": "Lead two squads building internal tooling, remote friendly.",
+   "location": "Remote (US)",
+   "skills": [
+    "Liderança",
+    "Python"
+   ]
+  },
+  {
+   "key": "o74",
+   "title": "Tech Lead Backend",
+   "company": "Meridiano Corp 74",
+   "description": "Liderança técnica de squad de pagamentos, 3 dias presenciais.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Java",
+    "Kafka"
+   ]
+  },
+  {
+   "key": "o75",
+   "title": "QA Engineer",
+   "company": "Aurora Tecnologia 75",
+   "description": "Test automation for web and API.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Cypress",
+    "Python"
+   ]
+  },
+  {
+   "key": "o76",
+   "title": "Engenheiro de Qualidade de Software",
+   "company": "Cedro Analytics 76",
+   "description": "Automação de testes e pipelines de qualidade.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Selenium",
+    "Java"
+   ]
+  },
+  {
+   "key": "o77",
+   "title": "Site Reliability Engineer",
+   "company": "Atlas Imaginário 77",
+   "description": "On-call rotation and SLO ownership for core services, remote.",
+   "location": "Remote (US)",
+   "skills": [
+    "Kubernetes",
+    "Prometheus"
+   ]
+  },
+  {
+   "key": "o78",
+   "title": "Kubernetes Platform Engineer",
+   "company": "Caravela IT 78",
+   "description": "Operate multi-tenant clusters and developer platform.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Kubernetes",
+    "Go"
+   ]
+  },
+  {
+   "key": "o79",
+   "title": "Python Developer",
+   "company": "Vento Norte Ltda 79",
+   "description": "Backend services and scripts for an energy trading desk.",
+   "location": "Lisboa, Portugal",
+   "skills": [
+    "Python",
+    "FastAPI"
+   ]
+  },
+  {
+   "key": "o80",
+   "title": "Desenvolvedor Python Pleno",
+   "company": "Nimbus Fictício 80",
+   "description": "Integrações e APIs para plataforma de seguros.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Python",
+    "Django"
+   ]
+  },
+  {
+   "key": "o81",
+   "title": "Backend Engineer - Kubernetes Experience",
+   "company": "Bambu Soluções 81",
+   "description": "Run services on Kubernetes in a regulated setting.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "Kubernetes",
+    "Java"
+   ]
+  },
+  {
+   "key": "o82",
+   "title": "Analista de Business Intelligence",
+   "company": "Fogo Azul 82",
+   "description": "Modelagem dimensional e dashboards executivos.",
+   "location": "São Paulo, SP",
+   "skills": [
+    "SQL",
+    "Power BI"
+   ]
+  },
+  {
+   "key": "o83",
+   "title": "Data Analyst",
+   "company": "Mar Aberto Software 83",
+   "description": "Weekly reporting and cohort analysis for growth.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "SQL",
+    "Python"
+   ]
+  },
+  {
+   "key": "o84",
+   "title": "Vaga Gerente de Projetos",
+   "company": "Brisa Pagamentos 84",
+   "description": "Condução de projetos de implantação de ERP.",
+   "location": "Belo Horizonte, MG",
+   "skills": [
+    "PMO",
+    "ERP"
+   ]
+  },
+  {
+   "key": "o85",
+   "title": "Job Coach",
+   "company": "Zênite Labs 85",
+   "description": "Career coaching for people changing fields.",
+   "location": "Lisboa, Portugal",
+   "skills": [
+    "Coaching"
+   ]
+  },
+  {
+   "key": "o86",
+   "title": "Desenvolvedor Mobile Sênior",
+   "company": "Cobalto Sistemas 86",
+   "description": "Aplicativos nativos para banco digital, remoto.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Swift",
+    "Kotlin"
+   ]
+  },
+  {
+   "key": "o87",
+   "title": "Remote Data Scientist",
+   "company": "Trilha Verde 87",
+   "description": "Forecasting models for supply chain, async team.",
+   "location": "Remote (US)",
+   "skills": [
+    "Python",
+    "SQL"
+   ]
+  },
+  {
+   "key": "o88",
+   "title": "Vaga Engenheiro de Dados Remoto",
+   "company": "Safira Systems 88",
+   "description": "Equipe distribuída, pipelines em nuvem e governança.",
+   "location": "Remoto (Brasil)",
+   "skills": [
+    "Python",
+    "BigQuery"
+   ]
+  }
+ ],
+ "queries": [
+  {
+   "id": "q01",
+   "query": "desenvolvedor dados",
+   "category": "bilingual_two_concepts",
+   "intent": "Find developer roles that work with data (data developer, data platform), whether titled in Portuguese or English."
+  },
+  {
+   "id": "q02",
+   "query": "vaga dados",
+   "category": "bilingual_two_concepts",
+   "intent": "Find open roles about data work, whether the posting says vaga or job and dados or data."
+  },
+  {
+   "id": "q03",
+   "query": "engenheiro remoto sênior",
+   "category": "bilingual_two_concepts",
+   "intent": "Find senior engineering positions that can be done remotely, titled in either language."
+  },
+  {
+   "id": "q04",
+   "query": "desenvolvedor remoto",
+   "category": "bilingual_two_concepts",
+   "intent": "Find developer jobs that are remote, in Portuguese or English."
+  },
+  {
+   "id": "q05",
+   "query": "engenheiro dados pleno",
+   "category": "bilingual_two_concepts",
+   "intent": "Find mid-level data engineering roles, titled in Portuguese or English."
+  },
+  {
+   "id": "q06",
+   "query": "vaga remoto júnior",
+   "category": "bilingual_two_concepts",
+   "intent": "Find junior roles open to remote work, in any language."
+  },
+  {
+   "id": "q07",
+   "query": "desenvolvedor sênior",
+   "category": "bilingual_two_concepts",
+   "intent": "Find senior developer or software engineering roles, titled in either language."
+  },
+  {
+   "id": "q08",
+   "query": "vaga engenheiro",
+   "category": "bilingual_two_concepts",
+   "intent": "Find open engineering positions (software engineering), in either language."
+  },
+  {
+   "id": "q09",
+   "query": "dados remoto",
+   "category": "bilingual_two_concepts",
+   "intent": "Find remote roles that involve data work."
+  },
+  {
+   "id": "q10",
+   "query": "desenvolvedor júnior",
+   "category": "bilingual_two_concepts",
+   "intent": "Find junior developer roles, titled in Portuguese or English."
+  },
+  {
+   "id": "q11",
+   "query": "remoto",
+   "category": "one_concept",
+   "intent": "Find roles that can be done remotely."
+  },
+  {
+   "id": "q12",
+   "query": "engenheiro",
+   "category": "one_concept",
+   "intent": "Find engineering roles."
+  },
+  {
+   "id": "q13",
+   "query": "júnior",
+   "category": "one_concept",
+   "intent": "Find junior-level roles."
+  },
+  {
+   "id": "q14",
+   "query": "pleno",
+   "category": "one_concept",
+   "intent": "Find mid-level roles."
+  },
+  {
+   "id": "q15",
+   "query": "kubernetes",
+   "category": "one_concept",
+   "intent": "Find roles that involve Kubernetes."
+  },
+  {
+   "id": "q16",
+   "query": "data de início",
+   "category": "negative",
+   "intent": "Find postings that mention a start date. Does NOT want data/dados roles."
+  },
+  {
+   "id": "q17",
+   "query": "vaga de estacionamento",
+   "category": "negative",
+   "intent": "Find postings that offer parking for employees, or parking-related work. Does NOT want every job opening."
+  },
+  {
+   "id": "q18",
+   "query": "dados pessoais LGPD analista",
+   "category": "negative",
+   "intent": "Find privacy / LGPD analyst roles. Does NOT want generic data engineering or data analyst roles."
+  },
+  {
+   "id": "q19",
+   "query": "engenheiro civil",
+   "category": "negative",
+   "intent": "Find civil engineering roles. Does NOT want software engineers or other engineering disciplines."
+  },
+  {
+   "id": "q20",
+   "query": "mid market",
+   "category": "negative",
+   "intent": "Find sales and customer roles for the mid-market segment. Does NOT want mid-level (pleno) developer roles."
+  }
+ ],
+ "card": "F2 (auditoria de busca 2026-10-19)",
+ "gerado_em": "2026-10-19",
+ "fonte": "corpus sintético (empresas fictícias, sem PII)",
+ "metodologia": "Dois rotuladores independentes; adjudicação do controlador nas divergências (q08, q12, q16). Medição: list_opportunity_inbox top-10 no banco de teste da auditoria.",
+ "reviewers": [
+  "labeler-a",
+  "labeler-b"
+ ],
+ "adjudicacao": {
+  "q08": "include data/ML/analytics engineers (B): engineering roles in software",
+  "q12": "include o56 (A): data engineer is an engineering role",
+  "q16": "include o72 (A): posting states a start month"
+ },
+ "gold": {
+  "q01": [
+   "o01",
+   "o02",
+   "o03",
+   "o04",
+   "o05"
+  ],
+  "q02": [
+   "o01",
+   "o02",
+   "o03",
+   "o04",
+   "o05",
+   "o06",
+   "o07",
+   "o10",
+   "o11",
+   "o12",
+   "o13",
+   "o14",
+   "o15",
+   "o16",
+   "o35",
+   "o42",
+   "o46",
+   "o56",
+   "o82",
+   "o83",
+   "o87",
+   "o88"
+  ],
+  "q03": [
+   "o19",
+   "o20",
+   "o21",
+   "o24",
+   "o27",
+   "o86"
+  ],
+  "q04": [
+   "o01",
+   "o04",
+   "o05",
+   "o19",
+   "o20",
+   "o21",
+   "o23",
+   "o24",
+   "o27",
+   "o28",
+   "o29",
+   "o31",
+   "o33",
+   "o41",
+   "o64",
+   "o69",
+   "o80",
+   "o86"
+  ],
+  "q05": [
+   "o07",
+   "o42"
+  ],
+  "q06": [
+   "o31",
+   "o33",
+   "o35"
+  ],
+  "q07": [
+   "o19",
+   "o20",
+   "o21",
+   "o24",
+   "o26",
+   "o27",
+   "o86"
+  ],
+  "q08": [
+   "o06",
+   "o07",
+   "o19",
+   "o20",
+   "o21",
+   "o22",
+   "o23",
+   "o25",
+   "o40",
+   "o42",
+   "o43",
+   "o44",
+   "o45",
+   "o46",
+   "o64",
+   "o75",
+   "o76",
+   "o77",
+   "o78",
+   "o81",
+   "o88"
+  ],
+  "q09": [
+   "o01",
+   "o04",
+   "o05",
+   "o07",
+   "o11",
+   "o12",
+   "o16",
+   "o35",
+   "o42",
+   "o46",
+   "o56",
+   "o83",
+   "o87",
+   "o88"
+  ],
+  "q10": [
+   "o31",
+   "o32",
+   "o33"
+  ],
+  "q11": [
+   "o01",
+   "o04",
+   "o05",
+   "o07",
+   "o11",
+   "o12",
+   "o16",
+   "o19",
+   "o20",
+   "o21",
+   "o23",
+   "o24",
+   "o27",
+   "o28",
+   "o29",
+   "o31",
+   "o33",
+   "o35",
+   "o37",
+   "o38",
+   "o41",
+   "o42",
+   "o43",
+   "o44",
+   "o45",
+   "o46",
+   "o54",
+   "o56",
+   "o64",
+   "o68",
+   "o69",
+   "o73",
+   "o75",
+   "o76",
+   "o77",
+   "o78",
+   "o80",
+   "o83",
+   "o86",
+   "o87",
+   "o88"
+  ],
+  "q12": [
+   "o06",
+   "o07",
+   "o19",
+   "o20",
+   "o21",
+   "o22",
+   "o23",
+   "o25",
+   "o40",
+   "o42",
+   "o43",
+   "o44",
+   "o45",
+   "o46",
+   "o47",
+   "o48",
+   "o49",
+   "o50",
+   "o51",
+   "o56",
+   "o64",
+   "o73",
+   "o75",
+   "o76",
+   "o77",
+   "o78",
+   "o81",
+   "o88"
+  ],
+  "q13": [
+   "o31",
+   "o32",
+   "o33",
+   "o35",
+   "o36"
+  ],
+  "q14": [
+   "o07",
+   "o23",
+   "o39",
+   "o40",
+   "o41",
+   "o42",
+   "o43",
+   "o47",
+   "o69",
+   "o70",
+   "o80"
+  ],
+  "q15": [
+   "o22",
+   "o25",
+   "o77",
+   "o78",
+   "o81"
+  ],
+  "q16": [
+   "o17",
+   "o57",
+   "o58",
+   "o64",
+   "o72"
+  ],
+  "q17": [
+   "o59",
+   "o61",
+   "o62",
+   "o63"
+  ],
+  "q18": [
+   "o52",
+   "o53",
+   "o54"
+  ],
+  "q19": [
+   "o47",
+   "o48",
+   "o49"
+  ],
+  "q20": [
+   "o66",
+   "o67",
+   "o68"
+  ]
+ }
+}

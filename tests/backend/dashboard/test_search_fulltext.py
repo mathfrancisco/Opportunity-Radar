@@ -215,3 +215,73 @@ def test_operator_only_or_accent_only_queries_do_not_raise(term: str) -> None:
         session.commit()
 
         list_opportunity_inbox(session, InboxQuery(company_id=company.id, search=term))
+
+
+@pytest.mark.parametrize(
+    ("query", "title"),
+    [
+        ("desenvolvedor remoto", "Developer Remote"),
+        ("engenheiro junior", "Junior Engineer"),
+        ("dados remoto", "Data Remote"),
+        ("desenvolvedor dados", "Data Developer"),
+        ("vaga dados", "Data Job"),
+    ],
+)
+def test_two_concept_bilingual_queries_find_the_translated_title(
+    query: str, title: str
+) -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        target = _opportunity(session, company, title=title, published_at=NOW)
+        _opportunity(session, company, title="Unrelated Analyst", published_at=NOW)
+        session.commit()
+
+        found = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search=query)
+        )
+        assert target.id in [item.opportunity_id for item in found.items]
+
+
+def test_synonym_groups_require_every_concept() -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        both = _opportunity(session, company, title="Data Developer", published_at=NOW)
+        only_dev = _opportunity(
+            session, company, title="Backend Developer", published_at=NOW
+        )
+        only_data = _opportunity(
+            session, company, title="Data Analyst", published_at=NOW
+        )
+        session.commit()
+
+        found = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search="desenvolvedor dados")
+        )
+        ids = [item.opportunity_id for item in found.items]
+        assert both.id in ids
+        assert only_dev.id not in ids
+        assert only_data.id not in ids
+
+
+def test_quoted_phrase_and_negation_do_not_expand_across_concepts() -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        data_developer = _opportunity(
+            session, company, title="Data Developer", published_at=NOW
+        )
+        desenvolvedor_dados = _opportunity(
+            session, company, title="Desenvolvedor de Dados", published_at=NOW
+        )
+        session.commit()
+
+        def ids(search: str) -> list:
+            found = list_opportunity_inbox(
+                session, InboxQuery(company_id=company.id, search=search)
+            )
+            return [item.opportunity_id for item in found.items]
+
+        assert data_developer.id not in ids('"desenvolvedor dados"')
+        # Negation stays literal (current websearch_to_tsquery path): `-dados` excludes
+        # the Portuguese title; it is not widened to the synonym "data".
+        negated = ids("desenvolvedor -dados")
+        assert desenvolvedor_dados.id not in negated
