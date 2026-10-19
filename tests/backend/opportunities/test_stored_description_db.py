@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from opportunity_radar.matching.text import trim_stored_description
 from opportunity_radar.opportunities.models import NormalizationResultModel, OpportunityModel
 from opportunity_radar.opportunities.service import recompute_from_stored_description
 from scripts import trim_stored_descriptions as trim_script
@@ -42,13 +43,15 @@ def _opportunity(session: Session, fixture: _Fixture) -> OpportunityModel:
     return opportunity
 
 
-def test_recompute_refuses_a_description_that_reached_the_cap() -> None:
+def test_recompute_without_the_full_text_is_skipped_for_real_trim_output() -> None:
     engine = _engine()
     with Session(engine) as session:
         fixture = _Fixture(session)
         try:
             opportunity = _opportunity(session, fixture)
-            opportunity.description = _LONG[:4000]  # what a capped write leaves behind
+            trimmed = trim_stored_description(_LONG, 4000)
+            assert trimmed is not None and len(trimmed) < len(_LONG)
+            opportunity.description = trimmed
             session.commit()
             version = opportunity.version
             skipped: Counter[str] = Counter()
@@ -58,8 +61,30 @@ def test_recompute_refuses_a_description_that_reached_the_cap() -> None:
 
             session.refresh(opportunity)
             assert changed is False
-            assert skipped == {"description_trimmed": 1}
+            assert skipped == {"full_description_required": 1}
             assert opportunity.version == version
+            assert not any(s.canonical_name == "kubernetes" for s in opportunity.skills)
+        finally:
+            fixture.cleanup()
+
+
+def test_recompute_with_the_full_text_derives_skills_past_the_cut() -> None:
+    engine = _engine()
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        try:
+            opportunity = _opportunity(session, fixture)
+            opportunity.description = trim_stored_description(_LONG, 4000)
+            session.commit()
+
+            changed = recompute_from_stored_description(
+                session, opportunity.id, full_description=_LONG
+            )
+            session.commit()
+
+            session.refresh(opportunity)
+            assert changed is True
+            assert "kubernetes" in {s.canonical_name for s in opportunity.skills}
         finally:
             fixture.cleanup()
 

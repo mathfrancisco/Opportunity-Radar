@@ -1527,12 +1527,6 @@ def retag_skills(
     }
 
 
-def description_was_trimmed(description: str | None) -> bool:
-    """R55-E6: a stored description at the cap may have been cut, so it is not full evidence."""
-    cap = get_settings().stored_description_max_chars
-    return cap > 0 and len(description or "") >= cap
-
-
 def recompute_from_stored_description(
     session: Session,
     opportunity_id: UUID,
@@ -1542,10 +1536,11 @@ def recompute_from_stored_description(
 ) -> bool:
     """Redo skills and seniority from the description now stored on the opportunity.
 
-    A stored description that reaches the R55-E6 cap may be cut text: rebuilding skills from
-    it would drop what the cut removed, so the posting is skipped (counted under
-    `description_trimmed` in `skipped`) and `version` is not bumped. A caller holding the
-    full text (the Workday backfill) passes it as `full_description`.
+    With `STORED_DESCRIPTION_MAX_CHARS > 0` (R55-E6) the stored text may be cut, and there is
+    no reliable mark of that: rebuilding skills from it would drop what the cut removed. The
+    caller must then pass the full text as `full_description`; without it the posting is
+    skipped (counted under `full_description_required` in `skipped`) and `version` is not
+    bumped. Only with the cap at 0 does the stored text stand in for the full one.
 
     A description written outside normalization (the Workday detail backfill) is not in the
     raw evidence the retag scripts read, so they would never see it. Each occurrence's evidence
@@ -1555,9 +1550,9 @@ def recompute_from_stored_description(
     opportunity = session.get(OpportunityModel, opportunity_id)
     if opportunity is None or not (opportunity.description or "").strip():
         return False
-    if full_description is None and description_was_trimmed(opportunity.description):
+    if full_description is None and get_settings().stored_description_max_chars > 0:
         if skipped is not None:
-            skipped["description_trimmed"] += 1
+            skipped["full_description_required"] += 1
         return False
     source_description = full_description or opportunity.description
     repository = OpportunityRepository(session)

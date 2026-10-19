@@ -175,11 +175,14 @@ def test_recompute_from_the_stored_description_works_with_the_payload_gone() -> 
                 )
             ))
             assert opportunity is not None
-            opportunity.description = "We need Docker and Kubernetes. Senior engineer, 8+ years."
+            full = "We need Docker and Kubernetes. Senior engineer, 8+ years."
+            opportunity.description = full
             session.commit()
             before = {skill.canonical_name for skill in opportunity.skills}
 
-            changed = recompute_from_stored_description(session, opportunity.id)
+            changed = recompute_from_stored_description(
+                session, opportunity.id, full_description=full
+            )
             session.commit()
 
             session.refresh(opportunity)
