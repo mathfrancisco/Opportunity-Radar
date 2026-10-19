@@ -280,8 +280,46 @@ def test_quoted_phrase_and_negation_do_not_expand_across_concepts() -> None:
             )
             return [item.opportunity_id for item in found.items]
 
-        assert data_developer.id not in ids('"desenvolvedor dados"')
+        quoted = ids('"desenvolvedor de dados"')
+        assert desenvolvedor_dados.id in quoted
+        assert data_developer.id not in quoted
         # Negation stays literal (current websearch_to_tsquery path): `-dados` excludes
         # the Portuguese title; it is not widened to the synonym "data".
         negated = ids("desenvolvedor -dados")
         assert desenvolvedor_dados.id not in negated
+
+
+@pytest.mark.parametrize(
+    ("query", "title", "description"),
+    [
+        (
+            "desenvolvedor de dados",
+            "Data Developer",
+            "Build pipelines for the analytics platform with the product team.",
+        ),
+        (
+            "engenheiro de software",
+            "Software Engineer",
+            "Design and build backend services for a growing team.",
+        ),
+        (
+            "head of data",
+            "Head de Dados",
+            "Lidera a area de dados e a estrategia de analytics da empresa.",
+        ),
+    ],
+)
+def test_stopword_of_one_dictionary_does_not_become_required(
+    query: str, title: str, description: str
+) -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        target = _opportunity(
+            session, company, title=title, published_at=NOW, description=description
+        )
+        session.commit()
+
+        found = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search=query)
+        )
+        assert target.id in [item.opportunity_id for item in found.items]

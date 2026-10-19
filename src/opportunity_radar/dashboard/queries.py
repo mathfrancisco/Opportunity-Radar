@@ -29,6 +29,7 @@ from sqlalchemy import (
     cast,
     func,
     literal,
+    or_,
     select,
     true,
     union_all,
@@ -857,8 +858,8 @@ _DICTIONARIES = ("portuguese", "english")
 def _search_tsquery(term: str) -> Any:
     """`websearch_to_tsquery` over both dictionaries, combined across synonyms.
 
-    Plain queries are split per concept: each token's alternatives (itself plus
-    synonyms) are ORed and the concepts ANDed, so `desenvolvedor dados` finds "Data
+    Plain queries are split per concept: each synonym token's alternatives (itself plus
+    synonyms) are ORed and the concepts ANDed with the remaining text, so `desenvolvedor dados` finds "Data
     Developer". Queries with quotes, `-negation` or `OR` (or too many tokens) keep the
     `synonym_variants` path, where `websearch_to_tsquery` parses the text itself and
     only plain tokens are substituted (SPEC 37, "Contrato de consulta"). Every text goes
@@ -872,8 +873,9 @@ def _search_tsquery(term: str) -> Any:
             for dictionary in _DICTIONARIES
         ]
 
-    groups = synonym_groups(term)
-    if groups is not None:
+    split = synonym_groups(term)
+    if split is not None:
+        groups, rest = split
         concepts = [
             reduce(
                 lambda left, right: left.op("||")(right),
@@ -881,6 +883,21 @@ def _search_tsquery(term: str) -> Any:
             )
             for group in groups
         ]
+        if rest:
+            # Untranslated text: each dictionary parses it and drops its own stopwords.
+            # If either side drops everything (e.g. `de`), the text is a stopword there
+            # and must not become a required lexeme from the other side; an empty
+            # tsquery is ignored by `&&`.
+            pt_rest, en_rest = parsed(rest)
+            concepts.append(
+                case(
+                    (
+                        or_(func.numnode(pt_rest) == 0, func.numnode(en_rest) == 0),
+                        func.websearch_to_tsquery("simple", ""),
+                    ),
+                    else_=pt_rest.op("||")(en_rest),
+                )
+            )
         return reduce(lambda left, right: left.op("&&")(right), concepts)
     expressions = [expr for variant in synonym_variants(term) for expr in parsed(variant)]
     return reduce(lambda left, right: left.op("||")(right), expressions)
