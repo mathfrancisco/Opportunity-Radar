@@ -5,11 +5,12 @@ from __future__ import annotations
 import os
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import (
@@ -19,7 +20,11 @@ from opportunity_radar.acquisition.models import (
 )
 from opportunity_radar.companies.models import Company, CompanyStartupEvidence
 from opportunity_radar.dashboard.models import SavedSearchModel
-from opportunity_radar.opportunities.models import OpportunityModel, SourceOccurrenceModel
+from opportunity_radar.opportunities.models import (
+    OpportunityCompensationModel,
+    OpportunityModel,
+    SourceOccurrenceModel,
+)
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.presentation.http.app import create_development_app
@@ -87,6 +92,69 @@ def test_new_count_of_legacy_invalid_saved_search_returns_422_not_500(
     assert next(i for i in summary if i["id"] == str(legacy.id))["count_error"] == "invalid_filters"
 
 
+@pytest.mark.parametrize(
+    "filters",
+    [
+        {"salary_min": "5000"},
+        {"salary_max": "5000"},
+        {"salary_min": "5000", "salary_currency": "BRL"},
+        {"salary_min": "5000", "salary_period": "MONTH"},
+        {"salary_min": "5000", "salary_currency": "reais", "salary_period": "MONTH"},
+        {"salary_min": "5000", "salary_currency": "BRL", "salary_period": "UNKNOWN"},
+    ],
+)
+def test_post_saved_search_with_salary_bound_and_incomplete_unit_returns_422(
+    owner_client: tuple[TestClient, Session, str], filters: dict[str, str]
+) -> None:
+    client, _, _ = owner_client
+
+    response = client.post("/saved-searches", json={"name": "x", "filters": filters})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "invalid_filters"
+    assert client.get("/saved-searches").json() == []
+
+
+def test_post_saved_search_with_complete_salary_unit_is_created(
+    owner_client: tuple[TestClient, Session, str],
+) -> None:
+    client, _, _ = owner_client
+    filters = {"salary_min": "5000", "salary_currency": "BRL", "salary_period": "MONTH"}
+
+    response = client.post("/saved-searches", json={"name": "x", "filters": filters})
+
+    assert response.status_code == 201
+    assert response.json()["filters"] == filters
+
+
+def test_summary_exposes_count_note_only_for_a_legacy_salary_search(
+    owner_client: tuple[TestClient, Session, str],
+) -> None:
+    client, session, owner = owner_client
+    legacy = SavedSearchModel(
+        owner_sub=owner, name="legacy", filters={"salary_min": "5000", "all_areas": True}
+    )
+    complete = SavedSearchModel(
+        owner_sub=owner,
+        name="complete",
+        filters={
+            "salary_min": "5000",
+            "salary_currency": "BRL",
+            "salary_period": "MONTH",
+            "all_areas": True,
+        },
+    )
+    session.add_all([legacy, complete])
+    session.commit()
+
+    summary = {item["id"]: item for item in client.get("/saved-searches/summary").json()}
+
+    assert summary[str(legacy.id)]["count_note"] == "salary_unit_defaulted"
+    assert summary[str(legacy.id)]["count_error"] is None
+    assert isinstance(summary[str(legacy.id)]["new_count"], int)
+    assert summary[str(complete.id)]["count_note"] is None
+
+
 def _http_params(saved_params: dict[str, str]) -> dict[str, str]:
     """What the Inbox page sends for the same URL params (`InboxPage.tsx` useInbox call)."""
     params = {key: value for key, value in saved_params.items() if key != "lens"}
@@ -107,6 +175,35 @@ def _http_params(saved_params: dict[str, str]) -> dict[str, str]:
         ({"all_areas": "true", "lens": "novas"}, 2),
         ({"all_areas": "true", "lens": "abertas"}, 4),
         ({"all_areas": "true", "lens": "abertas", "only_startups": "true"}, 2),
+        # startup_recent pays BRL/MONTH 6000-8000, plain_recent USD/YEAR 90000-120000;
+        # the other three have no compensation (unknown, kept).
+        (
+            {
+                "all_areas": "true",
+                "salary_min": "5000",
+                "salary_currency": "BRL",
+                "salary_period": "MONTH",
+            },
+            2,
+        ),
+        (
+            {
+                "all_areas": "true",
+                "salary_max": "500",
+                "salary_currency": "BRL",
+                "salary_period": "MONTH",
+            },
+            1,
+        ),
+        (
+            {
+                "all_areas": "true",
+                "salary_min": "100000",
+                "salary_currency": "USD",
+                "salary_period": "YEAR",
+            },
+            2,
+        ),
     ],
 )
 def test_saved_search_new_count_equals_inbox_total_for_same_url_params(
@@ -196,6 +293,53 @@ def test_saved_search_new_count_equals_inbox_total_for_same_url_params(
                 first_seen_at=run.started_at,
                 last_seen_at=run.started_at,
                 last_seen_run_id=run.id,
+            )
+        )
+    # Compensation needs an occurrence: startup_recent reuses its own; plain_recent gets
+    # one that no run saw, so it stays "not open at source" for the abertas lens.
+    startup_occurrence = session.scalar(
+        select(SourceOccurrenceModel).where(
+            SourceOccurrenceModel.opportunity_id == startup_recent.id
+        )
+    )
+    assert startup_occurrence is not None
+    plain_raw = RawItemModel(
+        id=uuid4(),
+        source_run_id=run.id,
+        source_definition_id=source.id,
+        external_id=f"ext-{uuid4().hex[:8]}",
+        identity_key=f"external:{uuid4().hex[:8]}",
+        payload_hash=uuid4().hex + uuid4().hex,
+        item_metadata={},
+    )
+    session.add(plain_raw)
+    session.flush()
+    raw_ids.append(plain_raw.id)
+    plain_occurrence = SourceOccurrenceModel(
+        id=uuid4(),
+        opportunity_id=plain_recent.id,
+        raw_item_id=plain_raw.id,
+        source_definition_id=source.id,
+        external_id=plain_raw.external_id,
+        first_seen_at=run.started_at,
+        last_seen_at=run.started_at,
+    )
+    session.add(plain_occurrence)
+    session.flush()
+    for target, occurrence, amounts, currency, period in (
+        (startup_recent, startup_occurrence, ("6000", "8000"), "BRL", "MONTH"),
+        (plain_recent, plain_occurrence, ("90000", "120000"), "USD", "YEAR"),
+    ):
+        session.add(
+            OpportunityCompensationModel(
+                opportunity_id=target.id,
+                amount_min=Decimal(amounts[0]),
+                amount_max=Decimal(amounts[1]),
+                currency=currency,
+                period=period,
+                normalizer_version="test",
+                source_occurrence_id=occurrence.id,
+                raw_item_id=occurrence.raw_item_id,
             )
         )
     saved = SavedSearchModel(

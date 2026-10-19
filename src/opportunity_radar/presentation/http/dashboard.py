@@ -172,6 +172,7 @@ class SavedSearchNewCountResponse(BaseModel):
 class SavedSearchSummaryResponse(SavedSearchResponse):
     new_count: int | None = Field(default=None, ge=0)
     count_error: Literal["invalid_filters"] | None = None
+    count_note: Literal["salary_unit_defaulted"] | None = None
 
 
 class SourceHealthResponse(BaseModel):
@@ -576,6 +577,7 @@ def get_saved_searches_summary(
             **_saved_search_response(item.saved_search).model_dump(),
             new_count=item.new_count,
             count_error=item.count_error,
+            count_note=item.count_note,
         )
         for item in list_saved_search_summaries(session, owner_sub=identity.sub)
     ]

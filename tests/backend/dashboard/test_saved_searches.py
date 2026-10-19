@@ -30,7 +30,7 @@ from opportunity_radar.dashboard.saved_searches import (
 )
 from opportunity_radar.matching.models import MatchAssessmentModel
 from opportunity_radar.matching.service import RULES_VERSION
-from opportunity_radar.opportunities.domain import SKILL_TAXONOMY_VERSION
+from opportunity_radar.opportunities.domain import SKILL_TAXONOMY_VERSION, CompensationPeriod
 from opportunity_radar.opportunities.models import OpportunityModel, SourceOccurrenceModel
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.profile.domain import EmploymentPreference, ProfileSnapshot
@@ -862,3 +862,93 @@ def test_saved_search_recency_keys_map_to_inbox_query(
 def test_saved_search_invalid_recency_keys_are_rejected(filters: dict[str, object]) -> None:
     with pytest.raises(InvalidSavedSearchFiltersError):
         saved_search_service.validate_saved_search_filters(filters)
+
+
+@pytest.mark.parametrize(
+    "filters",
+    [
+        {"salary_min": "5000"},
+        {"salary_max": "5000"},
+        {"salary_min": "5000", "salary_currency": "BRL"},
+        {"salary_min": "5000", "salary_period": "MONTH"},
+        {"salary_min": "5000", "salary_currency": "reais", "salary_period": "MONTH"},
+        {"salary_min": "5000", "salary_currency": "BRL", "salary_period": "UNKNOWN"},
+        {"salary_min": "5000", "salary_currency": "BRL", "salary_period": "FORTNIGHT"},
+    ],
+)
+def test_create_saved_search_requires_a_complete_salary_unit(
+    filters: dict[str, object],
+) -> None:
+    with pytest.raises(InvalidSavedSearchFiltersError):
+        saved_search_service.validate_saved_search_filters(filters)
+
+
+def test_create_saved_search_accepts_salary_unit_and_ignores_it_without_a_bound() -> None:
+    saved_search_service.validate_saved_search_filters(
+        {"salary_min": "5000", "salary_currency": "USD", "salary_period": "YEAR"}
+    )
+    saved_search_service.validate_saved_search_filters(
+        {"salary_currency": "USD", "salary_period": "YEAR"}
+    )
+
+
+def test_saved_search_salary_unit_maps_to_inbox_query() -> None:
+    query = _query_for(
+        {"salary_min": "5000", "salary_currency": "USD", "salary_period": "YEAR"}
+    )
+
+    assert (query.salary_currency, query.salary_period) == ("USD", CompensationPeriod.YEAR)
+
+
+def test_legacy_saved_search_salary_defaults_to_brl_month_when_read() -> None:
+    query = _query_for({"salary_min": "5000"})
+
+    assert query.salary_currency == "BRL"
+    assert query.salary_period == CompensationPeriod.MONTH
+
+
+def test_legacy_saved_search_summary_notes_the_defaulted_salary_unit() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    owner_sub = f"{OWNER_A}-salary-unit-{uuid4().hex}"
+    with Session(engine) as session:
+        # Legacy rows predate create-time validation, so they are seeded directly.
+        models = {
+            "legacy": SavedSearchModel(
+                owner_sub=owner_sub,
+                name="legacy",
+                filters={"salary_min": "5000", "all_areas": True},
+            ),
+            "complete": SavedSearchModel(
+                owner_sub=owner_sub,
+                name="complete",
+                filters={
+                    "salary_min": "5000",
+                    "salary_currency": "USD",
+                    "salary_period": "YEAR",
+                    "all_areas": True,
+                },
+            ),
+            "no_salary": SavedSearchModel(
+                owner_sub=owner_sub, name="no_salary", filters={"all_areas": True}
+            ),
+            "bad_unit": SavedSearchModel(
+                owner_sub=owner_sub,
+                name="bad_unit",
+                filters={"salary_min": "5000", "salary_currency": "reais", "all_areas": True},
+            ),
+        }
+        session.add_all(models.values())
+        session.commit()
+
+        by_name = {
+            item.saved_search.name: item
+            for item in list_saved_search_summaries(session, owner_sub=owner_sub)
+        }
+
+        assert by_name["legacy"].count_note == "salary_unit_defaulted"
+        assert by_name["legacy"].count_error is None
+        assert by_name["legacy"].new_count is not None
+        assert by_name["complete"].count_note is None
+        assert by_name["no_salary"].count_note is None
+        assert by_name["bad_unit"].count_error == "invalid_filters"
+        assert by_name["bad_unit"].count_note is None
