@@ -2337,4 +2337,70 @@ def test_prefilter_keeps_presence_of_stored_off_target_item() -> None:
 
     assert existing in repository.presence
     assert "sales" not in _persisted_ids(session)
+    # Identical to what is stored: unchanged, not something the prefilter kept out.
+    assert run.items_skipped == 1
+    assert run.skipped_off_target == 0
+
+
+def test_prefilter_counts_changed_stored_off_target_item_as_prefiltered() -> None:
+    service, session, repository = _prefilter_service(share=None)
+    repository.latest["external:sales"] = RawItemModel(external_id="sales", item_metadata={})
+
+    run = _run_filtering(service)
+
+    assert "sales" not in _persisted_ids(session)
     assert run.skipped_off_target == 1
+
+
+class _DepartmentCollector(_Collector):
+    """Title and department disagree, or only one of them is known."""
+
+    async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        del request
+        for external_id, title, department in (
+            ("tpm", "Technical Product Manager", "Engineering"),
+            ("sales-in-sales", "Account Executive", "Sales"),
+            ("sales-in-eng", "Account Executive", "Engineering"),
+            ("sales-unknown-dept", "Account Executive", "Wizards"),
+            ("sales-no-dept", "Account Executive", None),
+            ("unknown-in-sales", "Wizard of Light", "Sales"),
+        ):
+            yield CollectedItem(
+                source_type=self.source_type,
+                external_id=external_id,
+                title=title,
+                metadata={"department": department} if department else {},
+                raw_payload={"id": external_id, "title": title},
+            )
+
+
+def test_prefilter_keeps_item_when_title_and_department_disagree_on_area() -> None:
+    # A PRODUCT profile: the combined family of the Engineering TPM is SOFTWARE_ENGINEERING.
+    service, session, _ = _prefilter_service(
+        collector=_DepartmentCollector(), families=("PRODUCT",), countries=None
+    )
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {"tpm", "sales-unknown-dept", "unknown-in-sales"}
+    # Title and department both name another area (sales), or the title alone does.
+    assert run.skipped_off_target == 3
+
+
+def test_prefilter_drops_only_when_title_and_department_both_off_target() -> None:
+    service, session, _ = _prefilter_service(
+        collector=_DepartmentCollector(),
+        families=("SOFTWARE_ENGINEERING",),
+        countries=None,
+    )
+
+    run = _run_filtering(service)
+
+    # Dropped: SALES title in SALES department, and SALES title with no department.
+    assert _persisted_ids(session) == {
+        "tpm",
+        "sales-in-eng",
+        "sales-unknown-dept",
+        "unknown-in-sales",
+    }
+    assert run.skipped_off_target == 2

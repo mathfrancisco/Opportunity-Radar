@@ -20,7 +20,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from opportunity_radar.acquisition.prefilter import profile_target_scope
+from opportunity_radar.acquisition.prefilter import owner_target_scope
 from opportunity_radar.operations.opportunity_retention import off_target_predicate
 from opportunity_radar.platform.database import create_database_engine
 
@@ -60,7 +60,16 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--days", type=int, default=7)
     args = parser.parse_args(argv)
     engine = create_database_engine(os.environ["DATABASE_URL"])
-    families, countries = profile_target_scope(engine, os.environ.get("WORKER_OWNER_SUB"))
+    owner_sub = os.environ.get("WORKER_OWNER_SUB", "").strip()
+    if not owner_sub:
+        raise SystemExit("WORKER_OWNER_SUB is not set: no profile defines off-target")
+    try:
+        families, countries = owner_target_scope(engine, owner_sub)
+    except Exception as error:  # noqa: BLE001 - zero off-target would be misleading
+        raise SystemExit(
+            f"could not read the active profile ({type(error).__name__}): "
+            "off-target counts would be wrong, aborting"
+        ) from None
     since = datetime.now(UTC) - timedelta(days=args.days)
     sources: dict[tuple[str, str], dict[str, int | str]] = {}
     with Session(engine) as session:
@@ -88,8 +97,8 @@ def main(argv: list[str] | None = None) -> None:
         json.dumps(
             {
                 "days": args.days,
-                "target_role_families": list(families),
-                "target_countries": list(countries),
+                "target_role_family_count": len(families),
+                "target_country_count": len(countries),
                 "sources": rows,
             },
             indent=2,

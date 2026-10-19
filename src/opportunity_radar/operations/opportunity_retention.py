@@ -25,8 +25,10 @@ defer rows. A `raw_item` (and its `raw_item_payload`) goes only when nothing els
 references it: no remaining occurrence, normalization result or compensation row.
 
 Off-target opportunities (R55-B5) get a shorter age limit: one whose `role_family` is known
-and outside the active profile's target areas, or whose `allowed_countries` names only
-countries outside the profile's countries, is old after `off_target_retention_days` instead.
+and outside the active profile's target areas (and was decided by the title, or by title and
+department together: a family the department alone set is kept), or whose `allowed_countries`
+names only countries outside the profile's countries, is old after
+`off_target_retention_days` instead.
 `UNKNOWN` area, empty/unknown countries and the `ANY` sentinel are never off-target, and the
 exceptions above (applications, relevant marks) protect it exactly as before.
 
@@ -90,12 +92,22 @@ def off_target_predicate(a: str) -> str:
     """R55-B5: known area outside the target areas, or only countries outside the targets.
 
     With no families / no countries bound (empty arrays) the matching half is false, so a
-    profile without areas or countries never makes anything off-target.
+    profile without areas or countries never makes anything off-target. The area half needs
+    evidence that the title alone (rule `title`), or title and department both, name an
+    off-target area; a family set by the department alone, or with no evidence, is kept.
     """
     return (
         "("
         f"(cardinality(CAST(:families AS text[])) > 0 AND {a}.role_family <> 'UNKNOWN' "
-        f"AND NOT ({a}.role_family = ANY(CAST(:families AS text[])))) "
+        f"AND NOT ({a}.role_family = ANY(CAST(:families AS text[]))) "
+        # The stored family is the combined one, where a department overrides the title.
+        # Only evidence that the *title itself* decided it (or that title and department
+        # both name an off-target area) counts; anything else is kept.
+        f"AND ({a}.role_family_evidence ->> 'rule' = 'title' "
+        f"OR ({a}.role_family_evidence ->> 'rule' = 'department_refined_by_title' "
+        f"AND coalesce({a}.role_family_evidence ->> 'department_family', 'UNKNOWN') <> 'UNKNOWN' "
+        f"AND NOT (({a}.role_family_evidence ->> 'department_family') "
+        "= ANY(CAST(:families AS text[])))))) "
         "OR (cardinality(CAST(:countries AS text[])) > 0 "
         f"AND cardinality({a}.allowed_countries) > 0 "
         f"AND NOT ('ANY' = ANY({a}.allowed_countries)) "
@@ -210,7 +222,8 @@ def run_opportunity_retention(
     `retention_days <= 0` skips the opportunity part (the operator's off switch).
     `max_batches=None` runs until nothing eligible is left or `should_stop()` turns true.
     `off_target_retention_days` (R55-B5) applies only when positive, shorter than
-    `retention_days`, and the profile gave target areas or countries.
+    `retention_days`, and the profile gave target areas or countries. The caller binds empty
+    scopes when more than one owner has an active profile (rows are shared).
     """
     batch_size = max(1, batch_size)
     moment = now or datetime.now(UTC)

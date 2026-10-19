@@ -115,6 +115,7 @@ class _Fixture:
         full: bool = False,
         role_family: str = "UNKNOWN",
         allowed_countries: list[str] | None = None,
+        evidence: dict[str, str] | None = None,
     ) -> UUID:
         s = self.session
         opportunity = OpportunityModel(
@@ -130,6 +131,7 @@ class _Fixture:
             published_at=None if published_days is None else NOW - timedelta(days=published_days),
             source_updated_at=None if updated_days is None else NOW - timedelta(days=updated_days),
             role_family=role_family,
+            role_family_evidence=evidence,
             allowed_countries=allowed_countries,
             version=1,
         )
@@ -850,6 +852,8 @@ def test_stale_report_counts_an_opportunity_without_occurrence_as_no_source(
 # --- R55-B5: shorter retention for opportunities outside the profile's areas/countries ------
 
 _TARGET_FAMILIES = ("SOFTWARE_ENGINEERING", "DATA")
+#: What `classify_role_family` stores when the title alone decided the area.
+_TITLE = {"rule": "title", "term": "account executive", "origin": "title"}
 
 
 def _off_target_run(fx: _Fixture, **overrides: object):
@@ -865,10 +869,10 @@ def _off_target_run(fx: _Fixture, **overrides: object):
 
 
 def test_off_target_area_goes_after_the_short_threshold_on_target_stays(fx: _Fixture) -> None:
-    off_area = fx.opportunity(3, role_family="SALES")
+    off_area = fx.opportunity(3, role_family="SALES", evidence=_TITLE)
     on_target = fx.opportunity(3, role_family="SOFTWARE_ENGINEERING")
     unknown_area = fx.opportunity(3, role_family="UNKNOWN")
-    young_off_area = fx.opportunity(1, role_family="SALES")
+    young_off_area = fx.opportunity(1, role_family="SALES", evidence=_TITLE)
 
     report = _off_target_run(fx)
 
@@ -892,9 +896,9 @@ def test_off_target_country_goes_but_any_empty_and_target_country_stay(fx: _Fixt
 
 
 def test_off_target_keeps_protected_opportunities(fx: _Fixture) -> None:
-    applied = fx.opportunity(3, role_family="SALES")
+    applied = fx.opportunity(3, role_family="SALES", evidence=_TITLE)
     fx.application(applied)
-    marked = fx.opportunity(3, role_family="SALES")
+    marked = fx.opportunity(3, role_family="SALES", evidence=_TITLE)
     fx.relevant_mark(marked)
 
     _off_target_run(fx)
@@ -903,7 +907,7 @@ def test_off_target_keeps_protected_opportunities(fx: _Fixture) -> None:
 
 
 def test_off_target_dry_run_deletes_nothing_and_counts(fx: _Fixture) -> None:
-    off_area = fx.opportunity(3, role_family="SALES", full=True)
+    off_area = fx.opportunity(3, role_family="SALES", evidence=_TITLE, full=True)
     on_target = fx.opportunity(3, role_family="DATA")
 
     report = _off_target_run(fx, dry_run=True)
@@ -918,7 +922,7 @@ def test_off_target_dry_run_deletes_nothing_and_counts(fx: _Fixture) -> None:
 def test_off_target_threshold_is_inert_without_profile_scope_or_when_not_shorter(
     fx: _Fixture,
 ) -> None:
-    off_area = fx.opportunity(3, role_family="SALES")
+    off_area = fx.opportunity(3, role_family="SALES", evidence=_TITLE)
     other_country = fx.opportunity(3, role_family="DATA", allowed_countries=["US"])
 
     no_scope = _off_target_run(fx, target_role_families=(), target_countries=())
@@ -939,3 +943,37 @@ def test_off_target_old_opportunity_is_still_deleted_by_the_normal_threshold(
     _off_target_run(fx)
 
     assert old_on_target not in fx.present()
+
+
+def test_off_target_area_needs_title_evidence_a_department_alone_keeps_it(fx: _Fixture) -> None:
+    department_only = fx.opportunity(
+        3,
+        role_family="SALES",
+        evidence={"rule": "department", "term": "sales", "origin": "department"},
+    )
+    no_evidence = fx.opportunity(3, role_family="SALES")
+    title_and_department_off = fx.opportunity(
+        3,
+        role_family="SALES",
+        evidence={
+            "rule": "department_refined_by_title",
+            "origin": "title",
+            "department_family": "MARKETING",
+        },
+    )
+    department_on_target = fx.opportunity(
+        3,
+        role_family="SALES",
+        evidence={
+            "rule": "department_refined_by_title",
+            "origin": "title",
+            "department_family": "DATA",
+        },
+    )
+    title_only = fx.opportunity(3, role_family="SALES", evidence=_TITLE)
+
+    _off_target_run(fx)
+
+    assert fx.present() == {department_only, no_evidence, department_on_target}
+    assert title_and_department_off not in fx.present()
+    assert title_only not in fx.present()

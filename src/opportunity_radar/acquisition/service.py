@@ -59,7 +59,7 @@ from opportunity_radar.acquisition.models import (
     SourceProbeModel,
     SourceRunModel,
 )
-from opportunity_radar.acquisition.prefilter import location_outside_countries
+from opportunity_radar.acquisition.prefilter import area_off_target, location_outside_countries
 from opportunity_radar.acquisition.probing import (
     PROBE_TYPES,
     ProbeOutcome,
@@ -72,6 +72,7 @@ from opportunity_radar.acquisition.proposals import (
 )
 from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.repository import (
+    EXISTING,
     SOURCE_CLAIM_LEASE,
     STALE,
     AcquisitionRepository,
@@ -1393,8 +1394,9 @@ class AcquisitionService:
             share = self.repository.target_area_share(source.id)
             filter_active = share is not None and share < self._target_area_floor
         target_countries: tuple[str, ...] = ()
+        prefilter_active = False
         if self._prefilter_enabled and source.source_type != "manual":
-            filter_active = filter_active or bool(targets)
+            prefilter_active = bool(targets)
             if self._target_countries is not None:
                 target_countries = self._target_countries()
 
@@ -1633,7 +1635,10 @@ class AcquisitionService:
                     if item.cursor is not None:
                         last_cursor = item.cursor
                     continue
-                if outcome:
+                if outcome == EXISTING:
+                    # Identical to what is stored: unchanged, not kept out by the prefilter.
+                    run.record_items(skipped=1)
+                elif outcome:
                     run.record_items(persisted=1)
                 else:
                     # Not stored; `prefiltered` marks the ones kept out for being off-target.
@@ -1804,6 +1809,7 @@ class AcquisitionService:
                             if deadline.expired():
                                 raise TimeoutError("source collection deadline exceeded")
                             off_target = False
+                            strict_off_area = False
                             if targets:
                                 try:
                                     family = classify_role_family(
@@ -1818,6 +1824,14 @@ class AcquisitionService:
                                         target=0 if off_target else 1,
                                         off_target=1 if off_target else 0,
                                     )
+                                if prefilter_active and off_target:
+                                    # R55-B5: the combined family lets the department override
+                                    # the title; only drop when title and department agree.
+                                    strict_off_area = area_off_target(
+                                        item.title,
+                                        departments_from_metadata(item.metadata),
+                                        targets,
+                                    )
                             if scope is not None and scope.lost:
                                 scope.fence(self.session)  # raises: the lease is gone
                             if not pending:
@@ -1826,7 +1840,14 @@ class AcquisitionService:
                                 item.location_text, target_countries
                             )
                             pending.append(
-                                (item, not ((filter_active and off_target) or off_country))
+                                (
+                                    item,
+                                    not (
+                                        (filter_active and off_target)
+                                        or strict_off_area
+                                        or off_country
+                                    ),
+                                )
                             )
                             if (
                                 len(pending) >= _ITEM_BATCH_SIZE
@@ -2284,7 +2305,7 @@ class AcquisitionService:
         *,
         observed_at: datetime,
         persist_new: bool = True,
-    ) -> bool:
+    ) -> bool | str:
         write = self._prepare_write(source_type, item, persist_new=persist_new)
         envelope_lookup = getattr(self.repository, "raw_item_by_envelope", None)
         existing = (
@@ -2312,7 +2333,7 @@ class AcquisitionService:
                     observed_at=observed_at,
                     content_hash_matched=True,
                 )
-            return False
+            return EXISTING if not persist_new else False
         if not persist_new:
             # An off-target posting already stored with other content is still on the
             # board: confirm its presence on the stored row (no new evidence), or a

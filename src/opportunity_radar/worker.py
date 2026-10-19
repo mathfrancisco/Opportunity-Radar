@@ -32,7 +32,10 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
     SourceRunModel,
 )
-from opportunity_radar.acquisition.prefilter import active_profile_target_countries
+from opportunity_radar.acquisition.prefilter import (
+    active_profile_target_countries,
+    single_active_owner,
+)
 from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.scheduling import (
     CollectionGate,
@@ -1156,7 +1159,9 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
             profile_owner_sub=owner,
             target_area_floor=settings.collection_target_area_floor,
             target_countries=active_profile_target_countries(session, owner),
-            prefilter_enabled=settings.collection_prefilter_enabled,
+            prefilter_enabled=(
+                settings.collection_prefilter_enabled and single_active_owner(session)
+            ),
             claims_enabled=settings.collection_claim_enabled,
             inventory_contract_enabled=settings.collection_inventory_contract_enabled,
         )
