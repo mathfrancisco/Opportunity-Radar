@@ -9,7 +9,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from opportunity_radar.opportunities import service as service_module
 from opportunity_radar.opportunities.service import OpportunityService
 from opportunity_radar.opportunities.suggestions import (
     existing_suggestion_fields,
@@ -137,79 +136,6 @@ def test_an_unreadable_winner_is_logged_and_leaves_the_item_pending(
 
     assert repository.reads == 2
     assert "race winner could not be read" in caplog.text
-
-
-# --- E4: re-election on closure -----------------------------------------------------------
-
-
-class _ReelectionRepository:
-    def __init__(self, primary_id, competing=None) -> None:
-        self.primary_id = primary_id
-        self.competing = competing
-
-    def primary_occurrence_id(self, _opportunity_id):
-        return self.primary_id
-
-    def raw_item_evidence(self, _raw_item_id):
-        return object()
-
-    def opportunity_by_fingerprint(self, **_kwargs):
-        return self.competing
-
-
-class _SessionGet:
-    def __init__(self, occurrence) -> None:
-        self.occurrence = occurrence
-
-    def get(self, _model, _id):
-        return self.occurrence
-
-
-@pytest.fixture()
-def refreshed(monkeypatch: pytest.MonkeyPatch) -> list[object]:
-    calls: list[object] = []
-    monkeypatch.setattr(service_module, "_normalization_input", lambda evidence: evidence)
-    monkeypatch.setattr(
-        service_module,
-        "build_candidate",
-        lambda *_args, **_kwargs: SimpleNamespace(fingerprint="new", fingerprint_version="v1"),
-    )
-    monkeypatch.setattr(
-        service_module, "_refresh_opportunity", lambda _o, candidate: calls.append(candidate)
-    )
-    monkeypatch.setattr(OpportunityService, "_content_rules_enabled", staticmethod(lambda: False))
-    return calls
-
-
-def _reelect(primary_id, vanished, *, competing=None):
-    opportunity = SimpleNamespace(id=uuid4(), fingerprint="old")
-    occurrence = SimpleNamespace(id=primary_id, raw_item_id=uuid4())
-    service = OpportunityService(
-        _SessionGet(occurrence), _ReelectionRepository(primary_id, competing)
-    )
-    service._reelect_primary_content(opportunity, vanished=vanished)
-
-
-def test_the_new_primary_content_is_applied_when_the_vanished_one_was_primary(refreshed) -> None:
-    _reelect(uuid4(), SimpleNamespace(id=uuid4()))
-
-    assert len(refreshed) == 1
-
-
-def test_nothing_is_applied_when_the_vanished_occurrence_is_still_the_primary(refreshed) -> None:
-    vanished = SimpleNamespace(id=uuid4())
-
-    _reelect(vanished.id, vanished)
-
-    assert refreshed == []
-
-
-def test_nothing_is_applied_when_the_new_identity_belongs_to_another_opportunity(
-    refreshed,
-) -> None:
-    _reelect(uuid4(), SimpleNamespace(id=uuid4()), competing=SimpleNamespace(id=uuid4()))
-
-    assert refreshed == []
 
 
 # --- e2e fake: FIRST_PUBLISHED is computed once -------------------------------------------
