@@ -979,6 +979,12 @@ def _compensation_reason(value: OpportunityCompensationModel) -> dict[str, Any]:
 def _normalization_input(evidence: RawItemEvidence) -> NormalizationInput:
     snapshot = evidence.raw_item.item_metadata.get(COLLECTED_ITEM_V1_KEY)
     if not isinstance(snapshot, Mapping):
+        if evidence.raw_item.item_metadata.get("lean") is not None:
+            # R55-E6: retention dropped the snapshot of this superseded item on purpose.
+            raise NormalizationError(
+                "raw item was shrunk by retention (superseded); only a new collection "
+                "can reprocess it"
+            )
         snapshot = _legacy_collected_item_v1(evidence)
     if snapshot.get("version") != 1:
         raise NormalizationError("raw item has an unsupported collected item version")
@@ -1144,6 +1150,10 @@ def _latest_occurrence_departments(session: Session, opportunity_id: UUID) -> tu
         return ()
     snapshot = raw_item.item_metadata.get(COLLECTED_ITEM_V1_KEY)
     if not isinstance(snapshot, Mapping):
+        if raw_item.item_metadata.get("lean") is not None:
+            raise NormalizationError(
+                "occurrence evidence was shrunk by retention; departments are unavailable"
+            )
         return ()
     metadata = snapshot.get("metadata")
     if not isinstance(metadata, Mapping):

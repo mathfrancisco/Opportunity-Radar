@@ -322,3 +322,48 @@ def test_data_reduction_is_gated_by_the_apply_flag() -> None:
             assert LEAN_KEY in fixture.metadata(old)
         finally:
             fixture.cleanup()
+
+
+def test_a_shrunk_item_fails_fast_in_normalization_and_departments() -> None:
+    from types import SimpleNamespace
+
+    from opportunity_radar.opportunities.service import (
+        NormalizationError,
+        _latest_occurrence_departments,
+        _normalization_input,
+    )
+
+    evidence = SimpleNamespace(raw_item=SimpleNamespace(item_metadata={LEAN_KEY: "e6-v1"}))
+    with pytest.raises(NormalizationError, match="shrunk by retention"):
+        _normalization_input(evidence)  # type: ignore[arg-type]
+
+    engine = _engine()
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        try:
+            fixture.raw_item(
+                age_days=5, current=True, metadata={"parser_version": "p1", LEAN_KEY: "e6-v1"}
+            )
+            with pytest.raises(NormalizationError, match="shrunk by retention"):
+                _latest_occurrence_departments(session, fixture.opportunity.id)
+        finally:
+            fixture.cleanup()
+
+
+def test_the_update_itself_refuses_an_item_an_occurrence_points_at() -> None:
+    from sqlalchemy import text
+
+    from opportunity_radar.operations.raw_item_retention import _SHRINK
+
+    engine = _engine()
+    with Session(engine) as session:
+        fixture = _Fixture(session)
+        try:
+            current = fixture.raw_item(age_days=5, current=True)
+            # Simulates the race: the id was locked as eligible, then an occurrence took it.
+            with Session(engine) as other, other.begin():
+                result = other.execute(text(_SHRINK), {"ids": [current.id], "marker": "e6-v1"})
+                assert result.rowcount == 0  # type: ignore[attr-defined]
+            assert fixture.metadata(current)["collected_item_v1"] == _SNAPSHOT
+        finally:
+            fixture.cleanup()

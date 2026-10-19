@@ -19,6 +19,11 @@ without a SUCCEEDED / REVIEW_REQUIRED result at the current normalizer version (
 failed work needs its snapshot), a source-proposal candidate, and anything younger than the
 payload retention. `pending_raw_item_ids` skips lean items so that a normalizer bump does not
 turn history into failures.
+
+`RawItemModel` has an ORM `before_update` listener that refuses updates ("RawItem is
+immutable"). This module intentionally bypasses it with a raw SQL UPDATE of `metadata` only;
+there is no database trigger. The UPDATE re-asserts "no occurrence points at it" so an
+occurrence that moved onto the item between the lock and the write keeps its snapshot.
 """
 
 from __future__ import annotations
@@ -69,6 +74,9 @@ SET metadata = jsonb_strip_nulls(jsonb_build_object(
   'content_type', r.metadata -> 'content_type',
   '{LEAN_KEY}', CAST(:marker AS text)))
 WHERE r.id = ANY(:ids)
+  AND r.metadata -> '{LEAN_KEY}' IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM opportunities.source_occurrence s WHERE s.raw_item_id = r.id)
 """
 
 
