@@ -122,6 +122,10 @@ def active_profile_target_countries(
         except ProfileNotFoundError:
             return ()
         except Exception:  # noqa: BLE001 - a failed read means "no countries": keep
+            try:
+                session.rollback()
+            except Exception:  # noqa: BLE001 - best effort
+                pass
             return ()
         preferences = profile.snapshot.preferences
         if preferences.relocation_allowed:

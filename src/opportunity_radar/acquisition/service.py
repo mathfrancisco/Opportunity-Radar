@@ -448,6 +448,7 @@ class AcquisitionService:
         ingest_max_age_days: int | None = None,
         target_countries: Callable[[], tuple[str, ...]] | None = None,
         prefilter_enabled: bool = False,
+        single_owner: bool = True,
     ) -> None:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
@@ -478,6 +479,8 @@ class AcquisitionService:
         # the source's history; the worker passes COLLECTION_PREFILTER_ENABLED (default on).
         self._target_countries = target_countries
         self._prefilter_enabled = prefilter_enabled
+        # False when more than one owner has an active profile: no area-based dropping.
+        self._single_owner = single_owner
         # F51-07: off keeps the unclaimed behaviour (the active-run unique index stays the
         # only single-flight); on needs a repository that can claim, i.e. a real database.
         self._claims_enabled = claims_enabled
@@ -1390,13 +1393,19 @@ class AcquisitionService:
             else frozenset()
         )
         filter_active = False
-        if targets and self._target_area_floor > 0 and source.source_type != "manual":
+        # Rows are shared across owners: one owner's areas must not drop what another wants.
+        if (
+            targets
+            and self._single_owner
+            and self._target_area_floor > 0
+            and source.source_type != "manual"
+        ):
             share = self.repository.target_area_share(source.id)
             filter_active = share is not None and share < self._target_area_floor
         target_countries: tuple[str, ...] = ()
         prefilter_active = False
         if self._prefilter_enabled and source.source_type != "manual":
-            prefilter_active = bool(targets)
+            prefilter_active = bool(targets) and self._single_owner
             if self._target_countries is not None:
                 target_countries = self._target_countries()
 
@@ -1824,7 +1833,7 @@ class AcquisitionService:
                                         target=0 if off_target else 1,
                                         off_target=1 if off_target else 0,
                                     )
-                                if prefilter_active and off_target:
+                                if (prefilter_active or filter_active) and off_target:
                                     # R55-B5: the combined family lets the department override
                                     # the title; only drop when title and department agree.
                                     strict_off_area = area_off_target(
@@ -1843,9 +1852,7 @@ class AcquisitionService:
                                 (
                                     item,
                                     not (
-                                        (filter_active and off_target)
-                                        or strict_off_area
-                                        or off_country
+                                        strict_off_area or off_country
                                     ),
                                 )
                             )

@@ -96,23 +96,31 @@ def off_target_predicate(a: str) -> str:
     evidence that the title alone (rule `title`), or title and department both, name an
     off-target area; a family set by the department alone, or with no evidence, is kept.
     """
+    evidence = f"{a}.role_family_evidence"
+    # The stored family is the combined one, where a department overrides the title. Only
+    # evidence that the title itself decided it (with no unmatched department beside it), or
+    # that title and department both name an off-target area, counts; anything else is kept.
+    title_decided = (
+        f"({evidence} ->> 'rule' = 'title' "
+        f"AND coalesce({evidence} ->> 'department_unmatched', 'false') <> 'true')"
+    )
+    both_off = (
+        f"({evidence} ->> 'rule' = 'department_refined_by_title' "
+        f"AND coalesce({evidence} ->> 'department_family', 'UNKNOWN') <> 'UNKNOWN' "
+        f"AND NOT (({evidence} ->> 'department_family') = ANY(CAST(:families AS text[]))))"
+    )
+    # Missing evidence makes the tests NULL; COALESCE turns that into "not off-target" so
+    # `NOT off_target` stays true for such rows (the duplicate-survivor check relies on it).
     return (
-        "("
+        "coalesce("
         f"(cardinality(CAST(:families AS text[])) > 0 AND {a}.role_family <> 'UNKNOWN' "
         f"AND NOT ({a}.role_family = ANY(CAST(:families AS text[]))) "
-        # The stored family is the combined one, where a department overrides the title.
-        # Only evidence that the *title itself* decided it (or that title and department
-        # both name an off-target area) counts; anything else is kept.
-        f"AND ({a}.role_family_evidence ->> 'rule' = 'title' "
-        f"OR ({a}.role_family_evidence ->> 'rule' = 'department_refined_by_title' "
-        f"AND coalesce({a}.role_family_evidence ->> 'department_family', 'UNKNOWN') <> 'UNKNOWN' "
-        f"AND NOT (({a}.role_family_evidence ->> 'department_family') "
-        "= ANY(CAST(:families AS text[])))))) "
+        f"AND ({title_decided} OR {both_off})) "
         "OR (cardinality(CAST(:countries AS text[])) > 0 "
         f"AND cardinality({a}.allowed_countries) > 0 "
         f"AND NOT ('ANY' = ANY({a}.allowed_countries)) "
-        f"AND NOT (CAST({a}.allowed_countries AS text[]) && CAST(:countries AS text[])))"
-        ")"
+        f"AND NOT (CAST({a}.allowed_countries AS text[]) && CAST(:countries AS text[]))), "
+        "false)"
     )
 
 

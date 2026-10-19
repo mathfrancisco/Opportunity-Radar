@@ -2228,6 +2228,7 @@ def _prefilter_service(
     countries: tuple[str, ...] | None = ("BR",),
     prefilter: bool = True,
     share: float | None = None,
+    single_owner: bool = True,
 ) -> tuple[AcquisitionService, _MemorySession, _ShareRepository]:
     source = SourceDefinitionModel(
         id=uuid4(), source_type="example", name="Example", enabled=True, configuration={}
@@ -2242,6 +2243,7 @@ def _prefilter_service(
         target_role_families=(lambda: families) if families is not None else None,
         target_countries=(lambda: countries) if countries is not None else None,
         prefilter_enabled=prefilter,
+        single_owner=single_owner,
         target_area_floor=0.30,
     )
     return service, session, repository
@@ -2404,3 +2406,34 @@ def test_prefilter_drops_only_when_title_and_department_both_off_target() -> Non
         "unknown-in-sales",
     }
     assert run.skipped_off_target == 2
+
+
+def test_floor_filter_also_keeps_a_title_the_department_overrides() -> None:
+    # Source below the floor (filter active), PRODUCT profile, TPM filed under Engineering.
+    service, session, _ = _prefilter_service(
+        collector=_DepartmentCollector(),
+        families=("PRODUCT",),
+        countries=None,
+        prefilter=False,
+        share=0.1,
+    )
+
+    _run_filtering(service)
+
+    assert "tpm" in _persisted_ids(session)
+    assert "sales-in-sales" not in _persisted_ids(session)
+
+
+def test_more_than_one_active_owner_disables_every_area_drop() -> None:
+    service, session, _ = _prefilter_service(
+        collector=_DepartmentCollector(),
+        families=("PRODUCT",),
+        countries=None,
+        share=0.1,
+        single_owner=False,
+    )
+
+    run = _run_filtering(service)
+
+    assert len(_persisted_ids(session)) == 6
+    assert run.skipped_off_target == 0

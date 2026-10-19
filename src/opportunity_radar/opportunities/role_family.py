@@ -1091,10 +1091,12 @@ def classify_role_family(
             evidence={"rule": "boundary_title", "term": title_terms, "origin": "title"},
         )
     if title_family is not None:
-        return RoleFamilyDecision(
-            role_family=title_family,
-            evidence={"rule": "title", "term": title_terms, "origin": "title"},
-        )
+        evidence = {"rule": "title", "term": title_terms, "origin": "title"}
+        if any(name and name.strip() for name in departments):
+            # Departments came with the posting but matched no rule: the title decided
+            # alone, yet a consumer that wants "no contrary department" can tell (R55-B5).
+            evidence["department_unmatched"] = True
+        return RoleFamilyDecision(role_family=title_family, evidence=evidence)
 
     tied = ",".join(sorted(family.value for family in title_families))
     winner = _description_winner(title_families, description)

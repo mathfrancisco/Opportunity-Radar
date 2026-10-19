@@ -20,7 +20,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from opportunity_radar.acquisition.prefilter import owner_target_scope
+from opportunity_radar.acquisition.prefilter import owner_target_scope, single_active_owner
 from opportunity_radar.operations.opportunity_retention import off_target_predicate
 from opportunity_radar.platform.database import create_database_engine
 
@@ -70,6 +70,11 @@ def main(argv: list[str] | None = None) -> None:
             f"could not read the active profile ({type(error).__name__}): "
             "off-target counts would be wrong, aborting"
         ) from None
+    with Session(engine) as session:
+        off_target_enabled = single_active_owner(session)
+    if not off_target_enabled:
+        # Same rule as the prefilter and the short retention: shared rows, several owners.
+        families, countries = (), ()
     since = datetime.now(UTC) - timedelta(days=args.days)
     sources: dict[tuple[str, str], dict[str, int | str]] = {}
     with Session(engine) as session:
@@ -97,6 +102,7 @@ def main(argv: list[str] | None = None) -> None:
         json.dumps(
             {
                 "days": args.days,
+                "off_target_enabled": off_target_enabled,
                 "target_role_family_count": len(families),
                 "target_country_count": len(countries),
                 "sources": rows,

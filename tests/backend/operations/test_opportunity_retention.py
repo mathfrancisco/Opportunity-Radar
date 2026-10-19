@@ -977,3 +977,26 @@ def test_off_target_area_needs_title_evidence_a_department_alone_keeps_it(fx: _F
     assert fx.present() == {department_only, no_evidence, department_on_target}
     assert title_and_department_off not in fx.present()
     assert title_only not in fx.present()
+
+
+def test_off_target_keeps_a_duplicate_survivor_when_evidence_has_no_rule(fx: _Fixture) -> None:
+    # LLM-confirmed rows carry evidence without a `rule`; the predicate must be false, not NULL.
+    survivor = fx.opportunity(30)
+    kept_duplicate = fx.opportunity(3, role_family="SALES", evidence={"origin": "llm"})
+    fx.session.get(OpportunityModel, kept_duplicate).duplicate_of = survivor  # type: ignore[union-attr]
+    fx.session.commit()
+
+    _off_target_run(fx)
+
+    assert fx.present() == {survivor, kept_duplicate}
+
+
+def test_off_target_title_rule_with_an_unmatched_department_is_kept(fx: _Fixture) -> None:
+    evidence = {**_TITLE, "department_unmatched": True}
+    unmatched = fx.opportunity(3, role_family="SALES", evidence=evidence)
+    plain = fx.opportunity(3, role_family="SALES", evidence=_TITLE)
+
+    _off_target_run(fx)
+
+    assert fx.present() == {unmatched}
+    assert plain not in fx.present()

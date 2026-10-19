@@ -86,3 +86,14 @@ def test_profile_countries_reader_swallows_any_exception() -> None:
             raise RuntimeError("database gone")
 
     assert active_profile_target_countries(Broken(), "owner")() == ()  # type: ignore[arg-type]
+
+
+def test_classifier_records_an_unmatched_department_beside_a_title_decision() -> None:
+    from opportunity_radar.opportunities.role_family import classify_role_family
+
+    with_department = classify_role_family(title="Account Executive", departments=("Wizards",))
+    without = classify_role_family(title="Account Executive", departments=())
+
+    assert with_department.evidence["rule"] == "title"
+    assert with_department.evidence["department_unmatched"] is True
+    assert "department_unmatched" not in without.evidence

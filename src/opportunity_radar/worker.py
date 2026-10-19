@@ -1145,6 +1145,7 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
         if owner is None:
             raise ValueError("collection requires an explicit operational owner")
         target_roles = active_profile_target_role_families(session, owner)
+        one_owner = single_active_owner(session)
         return AcquisitionService(
             session,
             registry=registry,
@@ -1160,8 +1161,9 @@ def collection_service_factory(settings: Settings) -> Callable[[Session], Acquis
             target_area_floor=settings.collection_target_area_floor,
             target_countries=active_profile_target_countries(session, owner),
             prefilter_enabled=(
-                settings.collection_prefilter_enabled and single_active_owner(session)
+                settings.collection_prefilter_enabled and one_owner
             ),
+            single_owner=one_owner,
             claims_enabled=settings.collection_claim_enabled,
             inventory_contract_enabled=settings.collection_inventory_contract_enabled,
         )
