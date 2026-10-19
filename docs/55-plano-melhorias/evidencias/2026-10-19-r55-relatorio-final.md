@@ -63,13 +63,14 @@ Protegidas: 0 com candidatura e 0 com marca de relevância nesse corte. Ligar ex
 | D1 | feito | `2026-10-16-r55-b3-b4-d1.md` |
 | D2 a D6 | feito | `2026-10-17-r55-d2-d6.md`, #110; verificação visual da UI em produção: **sem prova** |
 | E1, E3 | feito | `2026-10-16-r55-e1-e3-ingestao.md`; 103 fora dos 7 dias na janela de 19/10 |
-| E2 | código feito, apply desligado | dry-run acima; apagar exige OK do dono |
-| E4 | feito | `2026-10-16-r55-e4.md`; reeleição do primário no #115 |
-| E5 | feito (consumo: projeção, sem prova) | timer horário, janela de 900 s; 34 CU-h/mês projetados |
-| E6 | parcial | tamanho medido; meta < 600 MB com 7 dias: **sem prova** até ligar a retenção |
+| E2 | feito, retenção de 5 dias ligada | `2026-10-19-r55-remedicao.md`: 189 MiB estável; vários dias: **sem prova** |
+| E4 | feito; reeleição do primário **adiada** | `2026-10-16-r55-e4.md`; riscos em `2026-10-17-r55-followups.md` |
+| E5 | feito | 3,51 CU-h em ~74 h, 34 CU-h/mês projetados; mês completo: **sem prova** |
+| E6 | feito | 189 MiB < 600 MB, `description_full_hash` (#126); tendência: **sem prova** |
 
 ## Pendências conhecidas
 
-- Aprovar e ligar `OPPORTUNITY_RETENTION_APPLY`, depois medir o tamanho por alguns dias (E2/E6).
+- Retenção ligada em 19/10 (5 dias). Fase fechada em 19/10; ver `2026-10-19-r55-remedicao.md`.
+- `claim_unavailable` em 3 de 20 janelas de 19/10, causa não registrada no log; proposta de correção no mesmo arquivo.
 - O espaço apagado não volta ao sistema operacional sem `VACUUM FULL`; o Postgres reutiliza o espaço livre.
 - Amarelos de revisão listados nos PRs #115 e #116. Exemplo: linhas antigas sem o marcador `departments: none` só entram na retenção curta por país, não por área, até serem reingeridas.
