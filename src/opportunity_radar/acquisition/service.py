@@ -476,7 +476,8 @@ class AcquisitionService:
         self._target_role_families = target_role_families
         self._target_area_floor = target_area_floor
         # R55-B5: when on, a new off-target item (area or country) is never stored, whatever
-        # the source's history; the worker passes COLLECTION_PREFILTER_ENABLED (default on).
+        # the source's history; the worker passes COLLECTION_PREFILTER_ENABLED (default off:
+        # collection is general).
         self._target_countries = target_countries
         self._prefilter_enabled = prefilter_enabled
         # Fail closed: area-based dropping needs the caller to vouch that at most one owner
