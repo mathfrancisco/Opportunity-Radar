@@ -49,3 +49,7 @@ prompts/opportunity_analysis/eval/drafts/
 
 # R55 catalogue export (private)
 .tmp/
+
+# Terraform variable files (keep the examples)
+*.tfvars
+!*.tfvars.example
