@@ -54,7 +54,10 @@ from opportunity_radar.acquisition.service import (
 from opportunity_radar.acquisition.workday import _PARSER_VERSION, WorkdayCollector, _DetailRun
 from opportunity_radar.companies.models import CompanySource  # noqa: F401
 from opportunity_radar.opportunities.models import OpportunityModel, SourceOccurrenceModel
-from opportunity_radar.opportunities.service import recompute_from_stored_description
+from opportunity_radar.opportunities.service import (
+    _stored_description,
+    recompute_from_stored_description,
+)
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 
@@ -189,7 +192,8 @@ def _write_description(session: Session, opportunity_id: str, description: str) 
             | (func.btrim(OpportunityModel.description) == ""),
         )
         .values(
-            description=description,
+            # R55-E6: the same cleaned, capped form every other write path stores.
+            description=_stored_description(description),
             version=OpportunityModel.version + 1,
             # An explicit value keeps the column's `onupdate` from moving it.
             updated_at=OpportunityModel.updated_at,
@@ -199,8 +203,10 @@ def _write_description(session: Session, opportunity_id: str, description: str) 
     return bool(cast(CursorResult[Any], result).rowcount)
 
 
-def _recompute_derived(session: Session, opportunity_id: str) -> bool:
-    changed = recompute_from_stored_description(session, UUID(opportunity_id))
+def _recompute_derived(session: Session, opportunity_id: str, full_description: str) -> bool:
+    changed = recompute_from_stored_description(
+        session, UUID(opportunity_id), full_description=full_description
+    )
     session.commit()
     return changed
 
@@ -320,11 +326,15 @@ def run_backfill(
                     if _write_description(session, target["opportunity_id"], result.description):
                         entry.update(
                             status="applied",
-                            description_sha256=_sha256(result.description),
+                            description_sha256=_sha256(
+                                _stored_description(result.description) or ""
+                            ),
                             written_at=datetime.now(UTC).isoformat(),
                         )
                         outcomes["applied"] += 1
-                        if _recompute_derived(session, target["opportunity_id"]):
+                        if _recompute_derived(
+                            session, target["opportunity_id"], result.description
+                        ):
                             outcomes["derived_changed"] += 1
                     else:
                         entry["status"] = "conflict"

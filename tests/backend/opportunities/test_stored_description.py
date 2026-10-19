@@ -78,6 +78,15 @@ def test_short_description_is_unchanged_even_with_a_boilerplate_heading() -> Non
     assert trim_stored_description(_long_posting(), 0) == _long_posting()
 
 
+def test_an_all_boilerplate_description_is_never_stored_empty() -> None:
+    text = f"About us\n{_INSTITUTIONAL}\n\nBenefits\n{_INSTITUTIONAL}"
+    assert len(text) > CAP
+
+    trimmed = trim_stored_description(text, CAP)
+
+    assert trimmed and trimmed.strip() and len(trimmed) <= CAP
+
+
 def test_extraction_runs_on_the_full_text_but_storage_is_trimmed() -> None:
     text = f"{_REQUIREMENTS}\nHow we work:\n{_FILLER}\n\nNice to have\n- Experience with Rust\n"
     # The skill appears only past the cap.

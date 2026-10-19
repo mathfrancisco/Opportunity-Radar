@@ -241,9 +241,13 @@ def trim_stored_description(text: str | None, max_chars: int) -> str | None:
     if not text or max_chars <= 0 or len(text) <= max_chars:
         return text
     cleaned = clean_description(text)
-    return fit_description_by_section(
+    trimmed = fit_description_by_section(
         cleaned, available_tokens=max_chars, tokens_per_char=1.0
     ).text
+    if trimmed.strip():
+        return trimmed
+    # Everything was boilerplate (or nothing fit): never store an empty description.
+    return truncate_at_sentence(text.strip(), max_chars)[0] or text.strip()[:max_chars]
 
 
 def estimate_tokens(chars: int, tokens_per_char: float) -> int:

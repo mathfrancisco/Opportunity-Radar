@@ -8,6 +8,7 @@ service first, so the backfill sees real occurrences, raw items and opportunitie
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 from collections.abc import Callable, Iterator
@@ -462,6 +463,30 @@ def test_workday_backfill_apply_recomputes_skills_from_the_written_description(
     assert {skill.canonical_name for skill in after.skills} >= {"python"}
     assert after.search_skills and "python" in after.search_skills
     assert after.version == version + 2  # the description, then the derived fields
+
+
+@integration
+def test_workday_backfill_stores_the_capped_description_and_derives_from_the_full_one(
+    make_env: Callable[[list[dict[str, object]]], _Env], tmp_path: Path
+) -> None:
+    """R55-E6: the write honours the cap; skills past the cut still come from the full text."""
+    env = make_env(_board(1))
+    filler = "The team ships weekly and values clear writing. " * 120
+    body = f"<p>Requirements: Python.</p><p>{filler}</p><p>Nice to have: Kubernetes.</p>"
+    env.on_detail = lambda path: httpx.Response(
+        200, json={"jobPostingInfo": {"jobDescription": body}}
+    )
+
+    report = env.run(tmp_path / "manifest.json", apply=True)
+
+    after = env.opportunity(0)
+    assert report["applied"] == 1
+    assert after.description is not None and len(after.description) <= 4000
+    assert "Kubernetes" not in after.description
+    assert {"python", "kubernetes"} <= {skill.canonical_name for skill in after.skills}
+    entries = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))["entries"]
+    stored_hash = hashlib.sha256(after.description.encode("utf-8")).hexdigest()
+    assert [entry["description_sha256"] for entry in entries.values()] == [stored_hash]
 
 
 @integration

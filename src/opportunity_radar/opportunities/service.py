@@ -1527,8 +1527,25 @@ def retag_skills(
     }
 
 
-def recompute_from_stored_description(session: Session, opportunity_id: UUID) -> bool:
+def description_was_trimmed(description: str | None) -> bool:
+    """R55-E6: a stored description at the cap may have been cut, so it is not full evidence."""
+    cap = get_settings().stored_description_max_chars
+    return cap > 0 and len(description or "") >= cap
+
+
+def recompute_from_stored_description(
+    session: Session,
+    opportunity_id: UUID,
+    *,
+    full_description: str | None = None,
+    skipped: Counter[str] | None = None,
+) -> bool:
     """Redo skills and seniority from the description now stored on the opportunity.
+
+    A stored description that reaches the R55-E6 cap may be cut text: rebuilding skills from
+    it would drop what the cut removed, so the posting is skipped (counted under
+    `description_trimmed` in `skipped`) and `version` is not bumped. A caller holding the
+    full text (the Workday backfill) passes it as `full_description`.
 
     A description written outside normalization (the Workday detail backfill) is not in the
     raw evidence the retag scripts read, so they would never see it. Each occurrence's evidence
@@ -1538,6 +1555,11 @@ def recompute_from_stored_description(session: Session, opportunity_id: UUID) ->
     opportunity = session.get(OpportunityModel, opportunity_id)
     if opportunity is None or not (opportunity.description or "").strip():
         return False
+    if full_description is None and description_was_trimmed(opportunity.description):
+        if skipped is not None:
+            skipped["description_trimmed"] += 1
+        return False
+    source_description = full_description or opportunity.description
     repository = OpportunityRepository(session)
     state = _enrichment_state(opportunity)[1]
     seniority = opportunity.seniority
@@ -1551,7 +1573,7 @@ def recompute_from_stored_description(session: Session, opportunity_id: UUID) ->
             continue
         try:
             candidate = build_candidate(
-                replace(_normalization_input(evidence), description=opportunity.description),
+                replace(_normalization_input(evidence), description=source_description),
                 content_rules=get_settings().content_rules,
             )
         except (NormalizationError, TypeError, ValueError):
