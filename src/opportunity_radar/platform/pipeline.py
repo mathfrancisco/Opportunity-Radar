@@ -12,18 +12,20 @@ retention stage whether it is due, the analysis stage whether AI is enabled and 
 from __future__ import annotations
 
 import hashlib
+import re
 import signal
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field
 from enum import IntEnum
 from math import isfinite
-from time import monotonic
+from time import monotonic, sleep
 from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.exc import InterfaceError, OperationalError
 
 from opportunity_radar.platform.logging import get_logger
 
@@ -52,6 +54,10 @@ class ExitCode(IntEnum):
 
 class ConfigurationError(ValueError):
     """The window was refused before it touched a database or a source."""
+
+
+CLAIM_RETRY_DELAY_SECONDS = 5.0
+_CLAIM_RETRYABLE = (OperationalError, InterfaceError)
 
 
 class ClaimBusyError(RuntimeError):
@@ -222,8 +228,14 @@ def run_pipeline(
     claim_factory: Callable[[], PostgresWindowClaim],
     clock: Callable[[], float] = monotonic,
     stop: StopSignal | None = None,
+    claim_retry_delay: float = CLAIM_RETRY_DELAY_SECONDS,
+    claim_sleep: Callable[[float], None] = sleep,
 ) -> PipelineReport:
-    """Run each allowed stage once. A returned failure never triggers a retry."""
+    """Run each allowed stage once. A returned failure never triggers a retry.
+
+    Only the claim acquisition is retried, once, on a connection error (for example a
+    database compute waking from scale-to-zero); stages are never retried.
+    """
     owner = validate_owner(owner_sub)
     names = tuple(stage.name for stage in stages)
     if names not in ALLOWED_STAGE_ORDERS:
@@ -237,7 +249,7 @@ def run_pipeline(
         return _stopped_report(stages, stop.reason or "deadline")
     started_at = clock()
     try:
-        with claim_factory():
+        with _claim_with_retry(claim_factory, claim_retry_delay, claim_sleep):
             reports: list[StageReport] = []
             context = StageContext(owner, deadline, stop)
             for index, stage in enumerate(stages):
@@ -319,12 +331,41 @@ def run_pipeline(
             [StageReport(stage.name, "skipped", "claim_busy") for stage in stages],
         )
     except Exception as error:
-        logger.error("pipeline claim unavailable", extra={"error": _safe_error(error)})
+        logger.error(
+            "pipeline claim unavailable: %s: %s",
+            _safe_error(error),
+            _safe_message(error),
+            extra={"error": _safe_error(error)},
+        )
         return PipelineReport(
             ExitCode.CONFIGURATION_ERROR,
             "claim_unavailable",
             [StageReport(stage.name, "skipped", "claim_unavailable") for stage in stages],
         )
+
+
+@contextmanager
+def _claim_with_retry(
+    claim_factory: Callable[[], Any], delay: float, sleep_fn: Callable[[float], None]
+) -> Iterator[None]:
+    """Acquire the claim, retrying once on a connection error; never on a busy claim."""
+    with ExitStack() as stack:
+        for attempt in (1, 2):
+            try:
+                stack.enter_context(claim_factory())
+                break
+            except ClaimBusyError:
+                raise
+            except _CLAIM_RETRYABLE as error:
+                if attempt == 2:
+                    raise
+                logger.warning(
+                    "pipeline claim connection failed, retrying once: %s: %s",
+                    _safe_error(error),
+                    _safe_message(error),
+                )
+                sleep_fn(delay)
+        yield
 
 
 def _stopped_report(stages: list[StageSpec], reason: str) -> PipelineReport:
@@ -340,6 +381,27 @@ def _stopped_report(stages: list[StageSpec], reason: str) -> PipelineReport:
 def _safe_error(error: BaseException) -> str:
     """Do not put stage messages (which can carry URLs/payloads) in the report."""
     return type(error).__name__
+
+
+_SECRET_PATTERNS = (
+    (re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://\S+"), "<url>"),
+    (
+        re.compile(r"(?i)\b(password|passwd|pwd|token|secret|api[_-]?key)\b\s*[=:]\s*\S+"),
+        r"\1=<redacted>",
+    ),
+    (re.compile(r"\"[^\"]*\"|'[^']*'"), "<redacted>"),
+    (re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b"), "<ip>"),
+    (re.compile(r"\b[\w-]+(?:\.[\w-]+)+\b"), "<host>"),
+)
+
+
+def _safe_message(error: BaseException) -> str:
+    """First line of the error text with URLs, credentials, quoted values and hosts removed."""
+    lines = str(error).strip().splitlines()
+    message = lines[0] if lines else ""
+    for pattern, replacement in _SECRET_PATTERNS:
+        message = pattern.sub(replacement, message)
+    return message[:200]
 
 
 def _duration_ms(clock: Callable[[], float], started_at: float) -> int:

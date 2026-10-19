@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from opportunity_radar import worker
 from opportunity_radar.acquisition.collectors import CollectorCapabilities
@@ -152,6 +153,110 @@ def test_busy_claim_does_no_work() -> None:
     )
     assert report.exit_code == ExitCode.CLAIM_BUSY
     assert events == []
+
+
+def _connect_error(detail: str = "connection refused") -> OperationalError:
+    return OperationalError("SELECT pg_try_advisory_lock", {}, Exception(detail))
+
+
+def _flaky_claim(failures: list[BaseException]):
+    """Claim factory that raises the queued errors, then yields a working claim."""
+    attempts: list[int] = []
+
+    def factory():
+        attempts.append(1)
+        if failures:
+            raise failures.pop(0)
+        return nullcontext()
+
+    return factory, attempts
+
+
+def test_claim_is_retried_once_after_a_connection_error() -> None:
+    events: list[str] = []
+    sleeps: list[float] = []
+    factory, attempts = _flaky_claim([_connect_error()])
+    report = run_pipeline(
+        _stages(events),
+        owner_sub="owner",
+        deadline_seconds=30,
+        claim_factory=factory,
+        claim_retry_delay=2.5,
+        claim_sleep=sleeps.append,
+    )
+    assert report.exit_code == ExitCode.SUCCESS
+    assert len(attempts) == 2
+    assert sleeps == [2.5]
+    assert events == ["collect_enabled_sources", "normalize_opportunities", "evaluate_pending"]
+
+
+def test_claim_unavailable_after_the_single_retry_fails_too() -> None:
+    events: list[str] = []
+    sleeps: list[float] = []
+    factory, attempts = _flaky_claim([_connect_error(), _connect_error()])
+    report = run_pipeline(
+        _stages(events),
+        owner_sub="owner",
+        deadline_seconds=30,
+        claim_factory=factory,
+        claim_sleep=sleeps.append,
+    )
+    assert report.exit_code == ExitCode.CONFIGURATION_ERROR
+    assert report.outcome == "claim_unavailable"
+    assert len(attempts) == 2
+    assert len(sleeps) == 1
+    assert events == []
+
+
+def test_busy_claim_is_not_retried() -> None:
+    sleeps: list[float] = []
+    factory, attempts = _flaky_claim([ClaimBusyError()])
+    report = run_pipeline(
+        _stages([]),
+        owner_sub="owner",
+        deadline_seconds=30,
+        claim_factory=factory,
+        claim_sleep=sleeps.append,
+    )
+    assert report.exit_code == ExitCode.CLAIM_BUSY
+    assert len(attempts) == 1
+    assert sleeps == []
+
+
+def test_non_connection_claim_error_is_not_retried() -> None:
+    sleeps: list[float] = []
+    factory, attempts = _flaky_claim([RuntimeError("boom")])
+    report = run_pipeline(
+        _stages([]),
+        owner_sub="owner",
+        deadline_seconds=30,
+        claim_factory=factory,
+        claim_sleep=sleeps.append,
+    )
+    assert report.outcome == "claim_unavailable"
+    assert len(attempts) == 1
+    assert sleeps == []
+
+
+def test_claim_unavailable_logs_the_cause_without_secrets(caplog) -> None:
+    secret_dsn = "postgresql://radar:hunter2@ep-cool-1234.neon.tech/radar"
+    detail = (
+        f'connection to server at "ep-cool-1234.neon.tech" (10.1.2.3) failed: {secret_dsn} '
+        "password=hunter2 token: abc123"
+    )
+    factory, _ = _flaky_claim([_connect_error(detail), _connect_error(detail)])
+    with caplog.at_level("WARNING"):
+        run_pipeline(
+            _stages([]),
+            owner_sub="owner",
+            deadline_seconds=30,
+            claim_factory=factory,
+            claim_sleep=lambda _seconds: None,
+        )
+    text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "pipeline claim unavailable: OperationalError:" in text
+    for leaked in ("hunter2", "abc123", "neon.tech", "10.1.2.3", "postgresql://", "radar:"):
+        assert leaked not in text
 
 
 def test_failed_stage_is_sanitized_and_is_not_retried() -> None:
