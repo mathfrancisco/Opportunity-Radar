@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -72,6 +72,20 @@ def _find_saved_search(session: Session, saved_search_id: UUID, owner_sub: str) 
     return saved_search
 
 
+def validate_saved_search_filters(filters: dict[str, Any]) -> None:
+    """Raise InvalidSavedSearchFiltersError unless the filters parse back into an Inbox query."""
+    _saved_search_inbox_query(
+        SavedSearch(
+            id=uuid4(),
+            name="",
+            term=None,
+            filters=filters,
+            last_opened_at=None,
+            created_at=datetime.now(UTC),
+        )
+    )
+
+
 def create_saved_search(
     session: Session,
     *,
@@ -80,6 +94,7 @@ def create_saved_search(
     filters: dict[str, Any],
     owner_sub: str,
 ) -> SavedSearch:
+    validate_saved_search_filters(filters)
     saved_search = SavedSearchModel(owner_sub=owner_sub, name=name, term=term, filters=filters)
     session.add(saved_search)
     session.flush()
