@@ -45,6 +45,9 @@ const orderLabels: Record<InboxOrder, string> = {
   score: 'Maior score',
 }
 
+const searchOrderDescription =
+  'Com texto na busca, os resultados são ordenados por relevância'
+
 const workModes = ['REMOTE', 'HYBRID', 'ONSITE', 'UNKNOWN']
 const lifecycleStatuses = ['DISCOVERED', 'ACTIVE', 'STALE', 'CLOSED']
 const seniorities = [
@@ -478,6 +481,7 @@ export function InboxPage() {
   const onlyAssessed = params.get('only_assessed') === 'true'
   const appliedFilter = params.get('applied') ?? ''
   const search = params.get('search') ?? ''
+  const searching = search !== ''
   const rawOrder = params.get('order') ?? 'priority'
   const order: InboxOrder = inboxOrders.includes(rawOrder as InboxOrder)
     ? (rawOrder as InboxOrder)
@@ -663,11 +667,17 @@ export function InboxPage() {
         />
         <FilterPill
           defaultValue="priority"
+          description={searching ? searchOrderDescription : undefined}
+          disabled={searching}
           id="inbox-order"
           label="Ordenar por"
           onChange={(value) => update({ order: value })}
-          options={inboxOrders.map((value) => ({ value, label: orderLabels[value] }))}
-          value={order}
+          options={
+            searching
+              ? [{ value: 'relevance', label: 'Relevância' }]
+              : inboxOrders.map((value) => ({ value, label: orderLabels[value] }))
+          }
+          value={searching ? 'relevance' : order}
         />
         <FilterPill
           id="inbox-recency-lens"

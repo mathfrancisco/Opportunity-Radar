@@ -81,6 +81,33 @@ describe('FilterPill', () => {
 
     expect(container.firstElementChild?.getAttribute('data-active')).toBe('false')
   })
+  it('desabilita o select e liga a descrição acessível quando disabled', () => {
+    const container = render(
+      <FilterPill
+        description="Explicação do estado"
+        disabled
+        id="verdict"
+        label="Decisão"
+        onChange={() => {}}
+        options={options}
+        value=""
+      />,
+    )
+    const select = container.querySelector<HTMLSelectElement>('select')
+    const describedBy = select?.getAttribute('aria-describedby') ?? ''
+
+    expect(select?.disabled).toBe(true)
+    expect(describedBy).not.toBe('')
+    expect(document.getElementById(describedBy)?.textContent).toBe('Explicação do estado')
+  })
+
+  it('não liga descrição nem desabilita por padrão', () => {
+    const container = pill('')
+    const select = container.querySelector<HTMLSelectElement>('select')
+
+    expect(select?.disabled).toBe(false)
+    expect(select?.hasAttribute('aria-describedby')).toBe(false)
+  })
 })
 
 describe('SearchInput', () => {

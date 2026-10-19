@@ -979,6 +979,31 @@ describe('InboxPage table, pagination and filters', () => {
     expect(search(container).get('work_mode')).toBe('REMOTE')
     expect((container.querySelector('#inbox-search') as HTMLInputElement).value).toBe('')
   })
+  it('mostra Relevância e desabilita a ordenação enquanto há texto na busca, preservando order', async () => {
+    stubInbox(1, [])
+    const container = renderAt('/inbox?search=react&order=score')
+    await flush()
+
+    const select = container.querySelector('#inbox-order') as HTMLSelectElement
+    expect(select.disabled).toBe(true)
+    expect(select.selectedOptions[0].textContent).toBe('Relevância')
+    const description = document.getElementById(select.getAttribute('aria-describedby') ?? '')
+    expect(description?.textContent).toBe(
+      'Com texto na busca, os resultados são ordenados por relevância',
+    )
+    expect(search(container).get('order')).toBe('score')
+  })
+
+  it('mantém a ordenação habilitada e com o valor da URL sem texto na busca', async () => {
+    stubInbox(1, [])
+    const container = renderAt('/inbox?order=score')
+    await flush()
+
+    const select = container.querySelector('#inbox-order') as HTMLSelectElement
+    expect(select.disabled).toBe(false)
+    expect(select.selectedOptions[0].textContent).toBe('Maior score')
+    expect(select.hasAttribute('aria-describedby')).toBe(false)
+  })
 })
 
 installTestAuth()
