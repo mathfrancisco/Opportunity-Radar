@@ -42,7 +42,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
       - name: Install backend tooling
         run: |
           python -m pip install -r requirements-dev.txt
@@ -95,7 +97,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
       - name: Install PostgreSQL 17 client tools
         run: |
           sudo install --directory --mode 0755 /usr/share/postgresql-common/pgdg
@@ -124,9 +128,7 @@ jobs:
           fi
           test "$(alembic current | awk '{print $1}')" = "$(alembic heads | awk '{print $1}')"
       - name: Run backend tests
-        run: pytest -q
-      - name: Smoke the fail-closed production factory offline
-        run: pytest -q tests/backend/http/test_auth.py -k production_factory_leaves_only_liveness_public
+        run: pytest -q --durations=15
       - name: Measure content classification on the versioned gold
         run: python scripts/measure_content_classification.py --gold docs/50-roadmap-motor-de-busca/rotulagem/f50-01-gold.json --gold-text
       - name: Measure the seniority classifier on the versioned title sample
@@ -206,7 +208,6 @@ jobs:
     name: Compose / smoke E2E and persistence
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    needs: [backend-quality, backend-tests, frontend]
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -566,12 +567,28 @@ jobs:
           $compose logs --no-color --no-log-prefix worker | \
             python -c "import json,sys; lines=[json.loads(line) for line in sys.stdin if line.startswith('{')]; assert any(line.get('correlation_id') == '$scheduled_run' for line in lines), 'no worker log carried the run correlation id'"
 
-          # A restart re-reads the same state and must add nothing to it.
+          # A restart re-reads the same state and must add nothing to it. Stop before
+          # recording the database clock: otherwise a pass from the old process could
+          # satisfy the proof while the new worker has not executed yet.
           assessments_before="$(count_rows 'SELECT count(*) FROM matching.match_assessment')"
           analyses_before="$(count_rows "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
-          $compose restart worker
+          $compose stop worker
+          restart_after="$(count_rows "SELECT extract(epoch FROM clock_timestamp())")"
+          $compose start worker
           curl --fail --retry 30 --retry-all-errors --retry-delay 2 --silent --output /dev/null http://127.0.0.1:8000/health/live
-          sleep 150
+          # `first_run` schedules these jobs immediately. A completed, successful history
+          # row after the stopped-worker timestamp proves the restarted process made a full
+          # pass; readiness or an unchanged count alone would not.
+          for _ in $(seq 1 36); do
+            restarted_passes="$(count_rows "SELECT count(DISTINCT job_name) FROM platform.worker_pass_history WHERE job_name IN ('normalize_opportunities', 'evaluate_pending', 'analyze_pending') AND started_at >= to_timestamp($restart_after) AND finished_at IS NOT NULL AND success")"
+            test "$restarted_passes" = "3" && break
+            sleep 5
+          done
+          test "$restarted_passes" = "3" || {
+            echo "timed out waiting for complete post-restart worker passes" >&2
+            $compose logs --no-color --tail=200 worker >&2
+            exit 1
+          }
           test "$assessments_before" = "$(count_rows 'SELECT count(*) FROM matching.match_assessment')"
           test "$analyses_before" = "$(count_rows "SELECT count(*) FROM matching.match_analysis WHERE status = 'AI_COMPLETED'")"
           test "0" = "$(count_rows "SELECT count(*) FROM matching.match_analysis_claim")"
@@ -706,11 +723,16 @@ jobs:
     name: Publish / ${{ matrix.image }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    needs: [e2e]
+    needs: [backend-quality, backend-tests, frontend, terraform-static, e2e]
     if: >-
-      (github.event_name == 'push' &&
-       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))) ||
-      (github.event_name == 'workflow_dispatch' && inputs.publish)
+      needs.backend-quality.result == 'success' &&
+      needs.backend-tests.result == 'success' &&
+      needs.frontend.result == 'success' &&
+      needs.terraform-static.result == 'success' &&
+      needs.e2e.result == 'success' &&
+      ((github.event_name == 'push' &&
+        (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))) ||
+       (github.event_name == 'workflow_dispatch' && inputs.publish))
     permissions:
       contents: read
       packages: write
