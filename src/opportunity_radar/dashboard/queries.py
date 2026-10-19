@@ -859,10 +859,11 @@ def _search_tsquery(term: str) -> Any:
     """`websearch_to_tsquery` over both dictionaries, combined across synonyms.
 
     Plain queries are split per concept: each synonym token's alternatives (itself plus
-    synonyms) are ORed and the concepts ANDed with the remaining text, so `desenvolvedor dados` finds "Data
-    Developer". Queries with quotes, `-negation` or `OR` (or too many tokens) keep the
-    `synonym_variants` path, where `websearch_to_tsquery` parses the text itself and
-    only plain tokens are substituted (SPEC 37, "Contrato de consulta"). Every text goes
+    synonyms) are ORed and the concepts ANDed with the remaining text, so
+    `desenvolvedor dados` finds "Data Developer". Queries with quotes, `-negation` or
+    `OR` (or too many tokens) keep the `synonym_variants` path, where
+    `websearch_to_tsquery` parses the text itself and only plain tokens are substituted
+    (SPEC 37, "Contrato de consulta"). Every text goes
     through `opportunities.f_unaccent` like `search_document` does, so accented and
     plain spellings match the same rows.
     """
