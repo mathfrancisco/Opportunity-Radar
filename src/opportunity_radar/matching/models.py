@@ -141,7 +141,8 @@ class MatchFactorModel(Base):
             "'REQUIRE_REVIEW')",
             name="ck_match_factor_missing_policy",
         ),
-        Index("ix_match_factor_assessment", "assessment_id"),
+        # No index on `assessment_id` alone: the unique constraint above leads with it
+        # (R55-E6 dropped the redundant `ix_match_factor_assessment`).
         {"schema": SCHEMA},
     )
 
