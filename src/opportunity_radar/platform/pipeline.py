@@ -170,9 +170,14 @@ class PostgresWindowClaim:
 
     def __enter__(self) -> PostgresWindowClaim:
         self.connection = self.engine.connect()
-        acquired = self.connection.scalar(
-            text("SELECT pg_try_advisory_lock(:key)"), {"key": self.key}
-        )
+        try:
+            acquired = self.connection.scalar(
+                text("SELECT pg_try_advisory_lock(:key)"), {"key": self.key}
+            )
+        except BaseException:
+            self.connection.close()
+            self.connection = None
+            raise
         if not acquired:
             self.connection.close()
             self.connection = None
@@ -332,9 +337,8 @@ def run_pipeline(
         )
     except Exception as error:
         logger.error(
-            "pipeline claim unavailable: %s: %s",
-            _safe_error(error),
-            _safe_message(error),
+            "pipeline claim unavailable: %s",
+            _error_cause(error),
             extra={"error": _safe_error(error)},
         )
         return PipelineReport(
@@ -360,9 +364,8 @@ def _claim_with_retry(
                 if attempt == 2:
                     raise
                 logger.warning(
-                    "pipeline claim connection failed, retrying once: %s: %s",
-                    _safe_error(error),
-                    _safe_message(error),
+                    "pipeline claim connection failed, retrying once: %s",
+                    _error_cause(error),
                 )
                 sleep_fn(delay)
         yield
@@ -383,25 +386,17 @@ def _safe_error(error: BaseException) -> str:
     return type(error).__name__
 
 
-_SECRET_PATTERNS = (
-    (re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://\S+"), "<url>"),
-    (
-        re.compile(r"(?i)\b(password|passwd|pwd|token|secret|api[_-]?key)\b\s*[=:]\s*\S+"),
-        r"\1=<redacted>",
-    ),
-    (re.compile(r"\"[^\"]*\"|'[^']*'"), "<redacted>"),
-    (re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b"), "<ip>"),
-    (re.compile(r"\b[\w-]+(?:\.[\w-]+)+\b"), "<host>"),
-)
-
-
-def _safe_message(error: BaseException) -> str:
-    """First line of the error text with URLs, credentials, quoted values and hosts removed."""
-    lines = str(error).strip().splitlines()
-    message = lines[0] if lines else ""
-    for pattern, replacement in _SECRET_PATTERNS:
-        message = pattern.sub(replacement, message)
-    return message[:200]
+def _error_cause(error: BaseException) -> str:
+    """Allow-list only: exception class, driver class and SQLSTATE. Never the message text."""
+    orig = getattr(error, "orig", None)
+    cause = type(error).__name__
+    if orig is None:
+        return cause
+    sqlstate = getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
+    cause += f" (orig={type(orig).__name__}"
+    if isinstance(sqlstate, str) and re.fullmatch(r"[0-9A-Z]{5}", sqlstate):
+        cause += f", sqlstate={sqlstate}"
+    return cause + ")"
 
 
 def _duration_ms(clock: Callable[[], float], started_at: float) -> int:
