@@ -9,6 +9,7 @@ from opportunity_radar.matching.text import trim_stored_description
 from opportunity_radar.opportunities.domain import NormalizationInput, build_candidate
 from opportunity_radar.opportunities.service import (
     _apply_evidence_fields,
+    _description_full_hash,
     _new_opportunity,
     _stored_description,
 )
@@ -119,3 +120,45 @@ def test_a_real_edit_of_the_posting_still_bumps() -> None:
 
     assert _apply_evidence_fields(opportunity, edited) is True
     assert "payments platform" in (opportunity.description or "")
+
+
+def _past_cap_posting(tail: str) -> str:
+    return f"{_REQUIREMENTS}\nHow we work:\n{_FILLER}\n\nNice to have\n- {tail}\n"
+
+
+def test_a_change_only_past_the_cap_is_detected_by_the_hash() -> None:
+    first = build_candidate(_input(_past_cap_posting("Experience with Rust")))
+    second = build_candidate(_input(_past_cap_posting("Experience with Go")))
+    assert _stored_description(first.description) == _stored_description(second.description)
+    opportunity = _new_opportunity(first, first_seen_at=_SEEN)
+    assert opportunity.description_full_hash is not None
+    assert len(opportunity.description_full_hash) == 64
+
+    assert _apply_evidence_fields(opportunity, second) is True
+    assert opportunity.description_full_hash == _description_full_hash(second.description)
+
+
+def test_identical_full_text_is_not_a_change() -> None:
+    candidate = build_candidate(_input(_past_cap_posting("Experience with Rust")))
+    opportunity = _new_opportunity(candidate, first_seen_at=_SEEN)
+
+    assert _apply_evidence_fields(opportunity, candidate) is False
+
+
+def test_a_null_stored_hash_keeps_the_previous_comparison() -> None:
+    first = build_candidate(_input(_past_cap_posting("Experience with Rust")))
+    second = build_candidate(_input(_past_cap_posting("Experience with Go")))
+    opportunity = _new_opportunity(first, first_seen_at=_SEEN)
+    opportunity.description_full_hash = None  # a row written before the hash existed
+
+    # Same stored text: old behavior cannot see the change, and no bump.
+    assert _apply_evidence_fields(opportunity, second) is False
+    # The row now carries the hash, so the next real change past the cap is seen.
+    assert opportunity.description_full_hash == _description_full_hash(second.description)
+    third = build_candidate(_input(_past_cap_posting("Experience with Zig")))
+    assert _apply_evidence_fields(opportunity, third) is True
+
+
+def test_short_description_has_no_hash() -> None:
+    assert _description_full_hash("Small team.\nRequirements\n- Python") is None
+    assert _description_full_hash(None) is None

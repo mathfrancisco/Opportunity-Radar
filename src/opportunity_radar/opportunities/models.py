@@ -114,6 +114,9 @@ class OpportunityModel(Base):
     seniority: Mapped[str] = mapped_column(String(16), nullable=False, default="UNKNOWN")
     contract_type: Mapped[str] = mapped_column(String(16), nullable=False, default="UNKNOWN")
     description: Mapped[str | None] = mapped_column(Text)
+    #: R55-E6: sha256 hex of the full cleaned description when the stored one was capped;
+    #: lets the churn guard see a change past the cap. NULL for old rows and short texts.
+    description_full_hash: Mapped[str | None] = mapped_column(String(64))
     lifecycle_status: Mapped[str] = mapped_column(String(16), nullable=False, default="DISCOVERED")
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
