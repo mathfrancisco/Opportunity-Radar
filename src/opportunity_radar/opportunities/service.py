@@ -420,7 +420,12 @@ class OpportunityService:
 
     def _record_unexpected_failure(
         self, raw_item_id: UUID, error: Exception
-    ) -> NormalizationResultModel:
+    ) -> NormalizationResultModel | None:
+        """Store a FAILED result so a poison item leaves the pending set.
+
+        An IntegrityError while recording means a concurrent worker stored a result for
+        this item and version first: answer that result (None only if it cannot be read)
+        instead of aborting the rest of the batch."""
         result = NormalizationResultModel(
             raw_item_id=raw_item_id,
             status="FAILED",
@@ -433,6 +438,9 @@ class OpportunityService:
             self.session.add(result)
             self.session.commit()
             self.session.refresh(result)
+        except IntegrityError:
+            self.session.rollback()
+            return self.repository.normalization_result(raw_item_id, NORMALIZER_VERSION)
         except Exception:
             self.session.rollback()
             raise
@@ -585,12 +593,19 @@ class OpportunityService:
                 break
             try:
                 results.append(self.normalize(raw_item_id))
-            except IntegrityError:
-                # A concurrent normalization of the same item (or identity) won the race.
-                # That is not the item's fault: use the result that exists, else leave it
-                # pending for the next pass. Never recorded as a permanent failure.
+            except IntegrityError as error:
+                # A concurrent normalization of the same item may have won the race: its
+                # result then exists and is used. Without one the conflict is deterministic
+                # for this item (R55-B1 follow-up), so it is recorded as a counted FAILED
+                # result; leaving it pending would retry it forever and shrink the batch.
                 self.session.rollback()
                 existing = self.repository.normalization_result(raw_item_id, NORMALIZER_VERSION)
+                if existing is None:
+                    logger.exception(
+                        "raw item normalization hit a deterministic integrity error",
+                        extra={"job": "normalize", "raw_item_id": str(raw_item_id)},
+                    )
+                    existing = self._record_unexpected_failure(raw_item_id, error)
                 if existing is not None:
                     results.append(existing)
             except (OperationalError, InterfaceError):
@@ -605,7 +620,9 @@ class OpportunityService:
                     "raw item normalization failed",
                     extra={"job": "normalize", "raw_item_id": str(raw_item_id)},
                 )
-                results.append(self._record_unexpected_failure(raw_item_id, error))
+                recorded = self._record_unexpected_failure(raw_item_id, error)
+                if recorded is not None:
+                    results.append(recorded)
         return NormalizationBatch(
             processed=len(results),
             succeeded=sum(item.status == "SUCCEEDED" for item in results),

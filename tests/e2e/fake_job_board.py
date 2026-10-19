@@ -40,6 +40,9 @@ ETAG = '"radar-ci-v1"'
 #: Recent enough for the 7-day ingest window (R55-E1), fixed for the container's life so
 #: the ETag and repeated collections stay stable.
 UPDATED_AT = (datetime.now(UTC) - timedelta(days=1)).replace(microsecond=0).isoformat()
+#: Greenhouse's `first_published` (when the posting first went live): earlier than
+#: `updated_at`, still inside the 7-day window, and fixed for the container's life.
+FIRST_PUBLISHED = (datetime.now(UTC) - timedelta(days=2)).replace(microsecond=0).isoformat()
 
 MODE_FILE = os.environ.get("FAKE_BOARD_MODE_FILE", "/tmp/fake_board_mode")
 
@@ -50,6 +53,7 @@ JOBS = [
         "title": "Senior Python Engineer",
         "absolute_url": "https://jobs.example.test/radar-ci/4242",
         "updated_at": UPDATED_AT,
+        "first_published": FIRST_PUBLISHED,
         "requisition_id": "RADAR-1",
         "location": {"name": "Remote"},
         "content": (
@@ -83,6 +87,7 @@ def _jobs_for(board: str) -> list[dict[str, object]] | None:
                 "title": f"Senior Python Engineer ({board})",
                 "absolute_url": f"https://jobs.example.test/{board}/1",
                 "updated_at": UPDATED_AT,
+                "first_published": FIRST_PUBLISHED,
                 "requisition_id": f"{board.upper()}-1",
                 "location": {"name": "Remote"},
                 "content": (

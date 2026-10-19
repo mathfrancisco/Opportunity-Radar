@@ -34,6 +34,7 @@ from opportunity_radar.opportunities.suggestions import (
     SuggestionDeferModel,
     SuggestionNotFoundError,
     SuggestionStatus,
+    SuggestionUnansweredModel,
     _suggestion_content_hash,
     accept_suggestion,
     candidates_needing_suggestion,
@@ -1731,7 +1732,14 @@ def test_a_defer_is_scoped_to_its_content_hash_and_changed_content_is_selectable
                 item.id, first_hash, _PROMPT.version, route_hash
             )).next_attempt_at == expires_at
 
-            # Back to H once its defer has expired: selectable again.
+            # Back to H once its defer has expired: selectable again. A real edit bumps
+            # `opportunity.version`, which changes the null-answer marker key (R55-C5);
+            # this test edits in place, so the marker the H2 request left is cleared.
+            session.execute(
+                delete(SuggestionUnansweredModel).where(
+                    SuggestionUnansweredModel.opportunity_id == item.id
+                )
+            )
             item.description = "We build APIs in Python."
             defer.next_attempt_at = datetime.now(UTC) - timedelta(seconds=1)
             session.flush()

@@ -8,10 +8,31 @@ page with no markup at all.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta, timezone
+
 PAGE_URL = "https://careers.example.test/jobs/senior-engineer"
 
 
+def _days_ago(days: int, *, offset_hours: int = 0) -> str:
+    """An ISO-8601 instant `days` before now, so a posting stays inside the 7-day ingestion
+    window (R55-E1) whenever the suite runs. `offset_hours` renders a non-UTC offset."""
+    zone = UTC if offset_hours == 0 else timezone(timedelta(hours=offset_hours))
+    moment = datetime.now(UTC) - timedelta(days=days)
+    return moment.astimezone(zone).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _days_ahead(days: int) -> str:
+    return (datetime.now(UTC) + timedelta(days=days)).replace(microsecond=0).isoformat().replace(
+        "+00:00", "Z"
+    )
+
+
 def _wrap(jsonld: str) -> str:
+    jsonld = (
+        jsonld.replace("@POSTED@", _days_ago(1))
+        .replace("@POSTED_BRT@", _days_ago(2, offset_hours=-3))
+        .replace("@VALID_THROUGH@", _days_ahead(60))
+    )
     return (
         "<html><head>"
         f'<script type="application/ld+json">{jsonld}</script>'
@@ -30,8 +51,8 @@ def single_object_en() -> str:
           "description": "<p>Build the platform.</p>",
           "hiringOrganization": {"@type": "Organization", "name": "Acme Corp"},
           "url": "https://careers.example.test/jobs/senior-engineer",
-          "datePosted": "2026-09-01T00:00:00Z",
-          "validThrough": "2026-12-01T00:00:00Z",
+          "datePosted": "@POSTED@",
+          "validThrough": "@VALID_THROUGH@",
           "employmentType": "FULL_TIME",
           "jobLocation": {
             "@type": "Place",
@@ -68,7 +89,7 @@ def single_object_pt() -> str:
           "description": "<p>Construa a plataforma.</p>",
           "hiringOrganization": {"@type": "Organization", "name": "Acme Corp Brasil"},
           "url": "https://careers.example.test/vagas/engenheiro-backend",
-          "datePosted": "2026-09-05T00:00:00-03:00",
+          "datePosted": "@POSTED_BRT@",
           "applicantLocationRequirements": [
             {"@type": "Country", "name": "Brazil"}
           ]
