@@ -59,6 +59,7 @@ from opportunity_radar.acquisition.models import (
     SourceProbeModel,
     SourceRunModel,
 )
+from opportunity_radar.acquisition.prefilter import area_off_target, location_outside_countries
 from opportunity_radar.acquisition.probing import (
     PROBE_TYPES,
     ProbeOutcome,
@@ -71,6 +72,7 @@ from opportunity_radar.acquisition.proposals import (
 )
 from opportunity_radar.acquisition.registry import build_collector_registry
 from opportunity_radar.acquisition.repository import (
+    EXISTING,
     SOURCE_CLAIM_LEASE,
     STALE,
     AcquisitionRepository,
@@ -444,6 +446,9 @@ class AcquisitionService:
         claim_renew_interval_seconds: float | None = None,
         inventory_contract_enabled: bool = True,
         ingest_max_age_days: int | None = None,
+        target_countries: Callable[[], tuple[str, ...]] | None = None,
+        prefilter_enabled: bool = False,
+        single_owner: bool = False,
     ) -> None:
         self.session = session
         self.repository = repository or AcquisitionRepository(session)
@@ -470,6 +475,13 @@ class AcquisitionService:
         # items. No callable or a zero floor leaves the filter off.
         self._target_role_families = target_role_families
         self._target_area_floor = target_area_floor
+        # R55-B5: when on, a new off-target item (area or country) is never stored, whatever
+        # the source's history; the worker passes COLLECTION_PREFILTER_ENABLED (default on).
+        self._target_countries = target_countries
+        self._prefilter_enabled = prefilter_enabled
+        # Fail closed: area-based dropping needs the caller to vouch that at most one owner
+        # has an active profile (`single_active_owner`); the default keeps everything.
+        self._single_owner = single_owner
         # F51-07: off keeps the unclaimed behaviour (the active-run unique index stays the
         # only single-flight); on needs a repository that can claim, i.e. a real database.
         self._claims_enabled = claims_enabled
@@ -1382,9 +1394,21 @@ class AcquisitionService:
             else frozenset()
         )
         filter_active = False
-        if targets and self._target_area_floor > 0 and source.source_type != "manual":
+        # Rows are shared across owners: one owner's areas must not drop what another wants.
+        if (
+            targets
+            and self._single_owner
+            and self._target_area_floor > 0
+            and source.source_type != "manual"
+        ):
             share = self.repository.target_area_share(source.id)
             filter_active = share is not None and share < self._target_area_floor
+        target_countries: tuple[str, ...] = ()
+        prefilter_active = False
+        if self._prefilter_enabled and source.source_type != "manual":
+            prefilter_active = bool(targets) and self._single_owner
+            if self._target_countries is not None:
+                target_countries = self._target_countries()
 
         # A new collection starts at the beginning. Resumption is explicit through the
         # request cursor; a prior run's checkpoint is evidence, not an implicit cursor.
@@ -1607,7 +1631,7 @@ class AcquisitionService:
                     )
             else:
                 outcomes = batch_outcomes
-            for (item, _), outcome in zip(entries, outcomes, strict=True):
+            for (item, persist_new), outcome in zip(entries, outcomes, strict=True):
                 if isinstance(outcome, Exception):
                     run.record_items(invalid=1)
                     error = AcquisitionError(
@@ -1621,10 +1645,14 @@ class AcquisitionService:
                     if item.cursor is not None:
                         last_cursor = item.cursor
                     continue
-                if outcome:
+                if outcome == EXISTING:
+                    # Identical to what is stored: unchanged, not kept out by the prefilter.
+                    run.record_items(skipped=1)
+                elif outcome:
                     run.record_items(persisted=1)
                 else:
-                    run.record_items(skipped=1)
+                    # Not stored; `prefiltered` marks the ones kept out for being off-target.
+                    run.record_items(skipped=1, prefiltered=0 if persist_new else 1)
                 logger.info(
                     "source collection item processed",
                     extra={
@@ -1791,6 +1819,7 @@ class AcquisitionService:
                             if deadline.expired():
                                 raise TimeoutError("source collection deadline exceeded")
                             off_target = False
+                            strict_off_area = False
                             if targets:
                                 try:
                                     family = classify_role_family(
@@ -1805,11 +1834,29 @@ class AcquisitionService:
                                         target=0 if off_target else 1,
                                         off_target=1 if off_target else 0,
                                     )
+                                if (prefilter_active or filter_active) and off_target:
+                                    # R55-B5: the combined family lets the department override
+                                    # the title; only drop when title and department agree.
+                                    strict_off_area = area_off_target(
+                                        item.title,
+                                        departments_from_metadata(item.metadata),
+                                        targets,
+                                    )
                             if scope is not None and scope.lost:
                                 scope.fence(self.session)  # raises: the lease is gone
                             if not pending:
                                 pending_since = time.monotonic()
-                            pending.append((item, not (filter_active and off_target)))
+                            off_country = bool(target_countries) and location_outside_countries(
+                                item.location_text, target_countries
+                            )
+                            pending.append(
+                                (
+                                    item,
+                                    not (
+                                        strict_off_area or off_country
+                                    ),
+                                )
+                            )
                             if (
                                 len(pending) >= _ITEM_BATCH_SIZE
                                 or time.monotonic() - pending_since >= _ITEM_BATCH_MAX_SECONDS
@@ -2266,7 +2313,7 @@ class AcquisitionService:
         *,
         observed_at: datetime,
         persist_new: bool = True,
-    ) -> bool:
+    ) -> bool | str:
         write = self._prepare_write(source_type, item, persist_new=persist_new)
         envelope_lookup = getattr(self.repository, "raw_item_by_envelope", None)
         existing = (
@@ -2294,7 +2341,7 @@ class AcquisitionService:
                     observed_at=observed_at,
                     content_hash_matched=True,
                 )
-            return False
+            return EXISTING if not persist_new else False
         if not persist_new:
             # An off-target posting already stored with other content is still on the
             # board: confirm its presence on the stored row (no new evidence), or a
@@ -2400,6 +2447,7 @@ class AcquisitionService:
         model.items_skipped = run.items_skipped
         model.items_invalid = run.items_invalid
         model.skipped_stale = run.skipped_stale
+        model.skipped_off_target = run.skipped_off_target
         model.http_requests = run.http_requests
         model.retry_count = run.retry_count
         model.rate_limit_events = run.rate_limit_events

@@ -467,6 +467,8 @@ class SourceRun:
     items_invalid: int = 0
     #: Subset of `items_skipped` dropped by the ingestion freshness filter (R55-E1).
     skipped_stale: int = 0
+    #: Subset of `items_skipped` kept out by the ingestion area/country prefilter (R55-B5).
+    skipped_off_target: int = 0
     http_requests: int = 0
     retry_count: int = 0
     rate_limit_events: int = 0
@@ -508,9 +510,10 @@ class SourceRun:
         skipped: int = 0,
         invalid: int = 0,
         stale: int = 0,
+        prefiltered: int = 0,
     ) -> None:
         self._require_running()
-        values = (seen, persisted, skipped, invalid, stale)
+        values = (seen, persisted, skipped, invalid, stale, prefiltered)
         if any(value < 0 for value in values):
             raise ValueError("source run counters cannot be negative")
         self.items_seen += seen
@@ -518,6 +521,7 @@ class SourceRun:
         self.items_skipped += skipped
         self.items_invalid += invalid
         self.skipped_stale += stale
+        self.skipped_off_target += prefiltered
 
     def record_target_area(self, *, target: int = 0, off_target: int = 0) -> None:
         self._require_running()

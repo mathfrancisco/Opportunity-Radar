@@ -293,7 +293,12 @@ def _presence_confirmed_without_reprocessing(session: Session, since: datetime) 
         select(
             SourceRunModel.source_definition_id,
             func.sum(
-                func.greatest(SourceRunModel.items_skipped - SourceRunModel.skipped_stale, 0)
+                func.greatest(
+                    SourceRunModel.items_skipped
+                    - SourceRunModel.skipped_stale
+                    - SourceRunModel.skipped_off_target,
+                    0,
+                )
             ).label("confirmed"),
         )
         .where(

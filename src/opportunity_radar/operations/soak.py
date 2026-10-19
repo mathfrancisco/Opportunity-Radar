@@ -45,6 +45,7 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
     SourceRunModel,
 )
+from opportunity_radar.acquisition.prefilter import single_active_owner
 from opportunity_radar.acquisition.service import AcquisitionService
 from opportunity_radar.dashboard.metrics import source_metrics
 from opportunity_radar.matching.adapters import build_analysis_adapter
@@ -242,6 +243,7 @@ def _bootstrap(
                 session, owner_sub
             ),
             profile_owner_sub=owner_sub,
+            single_owner=single_active_owner(session),
         )
 
     with Session(engine) as session:

@@ -24,6 +24,14 @@ exist at that point), `normalization_result`, and the compensation, skill, sugge
 defer rows. A `raw_item` (and its `raw_item_payload`) goes only when nothing else still
 references it: no remaining occurrence, normalization result or compensation row.
 
+Off-target opportunities (R55-B5) get a shorter age limit: one whose `role_family` is known
+and outside the active profile's target areas (and was decided by the title, or by title and
+department together: a family the department alone set is kept), or whose `allowed_countries`
+names only countries outside the profile's countries, is old after
+`off_target_retention_days` instead.
+`UNKNOWN` area, empty/unknown countries and the `ANY` sentinel are never off-target, and the
+exceptions above (applications, relevant marks) protect it exactly as before.
+
 Nothing else is touched. Raw items that were never linked to an old opportunity (for
 example a collection that failed to normalise) are out of scope here. Rows are tenanted by
 `owner_sub`, but age is global: the delete never reads or writes `owner_sub`.
@@ -34,7 +42,7 @@ The same pass also purges `platform.ai_call_record` older than its own window an
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -80,12 +88,53 @@ _HAS_APPLICATION = _has_application("o")
 _HAS_RELEVANT_MARK = _has_relevant_mark("o")
 # `duplicate_of` is SET NULL: deleting a survivor would silently orphan a duplicate that
 # stays. A survivor is kept while any opportunity pointing at it is itself kept.
+def off_target_predicate(a: str) -> str:
+    """R55-B5: known area outside the target areas, or only countries outside the targets.
+
+    With no families / no countries bound (empty arrays) the matching half is false, so a
+    profile without areas or countries never makes anything off-target. The area half needs
+    evidence that the title alone (rule `title`), or title and department both, name an
+    off-target area; a family set by the department alone, or with no evidence, is kept.
+    """
+    evidence = f"{a}.role_family_evidence"
+    # The stored family is the combined one, where a department overrides the title. Only
+    # evidence that the title itself decided it with no department at all (marker
+    # `departments: none`; legacy rows lack it and are kept), or
+    # that title and department both name an off-target area, counts; anything else is kept.
+    title_decided = (
+        f"({evidence} ->> 'rule' = 'title' AND {evidence} ->> 'departments' = 'none')"
+    )
+    both_off = (
+        f"({evidence} ->> 'rule' = 'department_refined_by_title' "
+        f"AND coalesce({evidence} ->> 'department_family', 'UNKNOWN') <> 'UNKNOWN' "
+        f"AND NOT (({evidence} ->> 'department_family') = ANY(CAST(:families AS text[]))))"
+    )
+    # Missing evidence makes the tests NULL; COALESCE turns that into "not off-target" so
+    # `NOT off_target` stays true for such rows (the duplicate-survivor check relies on it).
+    return (
+        "coalesce("
+        f"(cardinality(CAST(:families AS text[])) > 0 AND {a}.role_family <> 'UNKNOWN' "
+        f"AND NOT ({a}.role_family = ANY(CAST(:families AS text[]))) "
+        f"AND ({title_decided} OR {both_off})) "
+        "OR (cardinality(CAST(:countries AS text[])) > 0 "
+        f"AND cardinality({a}.allowed_countries) > 0 "
+        f"AND NOT ('ANY' = ANY({a}.allowed_countries)) "
+        f"AND NOT (CAST({a}.allowed_countries AS text[]) && CAST(:countries AS text[]))), "
+        "false)"
+    )
+
+
+def _old(a: str) -> str:
+    """Older than `:cutoff`, or off-target and older than the shorter `:off_cutoff`."""
+    return f"({_age(a)} < :cutoff OR ({_age(a)} < :off_cutoff AND {off_target_predicate(a)}))"
+
+
 _HAS_KEPT_DUPLICATE = (
     "EXISTS (SELECT 1 FROM opportunities.opportunity k WHERE k.duplicate_of = o.id AND ("
-    f"{_age('k')} >= :cutoff OR {_protected('k')}))"
+    f"NOT {_old('k')} OR {_protected('k')}))"
 )
 _ELIGIBLE = (
-    f"{_AGE} < :cutoff AND NOT ({_protected('o')}) AND NOT {_HAS_KEPT_DUPLICATE}"
+    f"{_old('o')} AND NOT ({_protected('o')}) AND NOT {_HAS_KEPT_DUPLICATE}"
 )
 
 _LOCK_BATCH = f"""
@@ -131,6 +180,9 @@ class OpportunityRetentionReport:
     dry_run: bool
     retention_days: int
     cutoff: datetime | None
+    #: Shorter age limit for off-target opportunities (R55-B5); 0 = not applied this run.
+    off_target_retention_days: int = 0
+    off_target_cutoff: datetime | None = None
     #: Opportunities older than the cutoff that an exception protects.
     kept_with_application: int = 0
     kept_with_relevant_mark: int = 0
@@ -152,6 +204,9 @@ class OpportunityRetentionReport:
     def as_dict(self) -> dict[str, Any]:
         report = asdict(self)
         report["cutoff"] = self.cutoff.isoformat() if self.cutoff else None
+        report["off_target_cutoff"] = (
+            self.off_target_cutoff.isoformat() if self.off_target_cutoff else None
+        )
         report["rows"] = dict(sorted(self.rows.items()))
         return report
 
@@ -167,11 +222,17 @@ def run_opportunity_retention(
     dry_run: bool = True,
     should_stop: Callable[[], bool] | None = None,
     now: datetime | None = None,
+    off_target_retention_days: int = 0,
+    target_role_families: Sequence[str] = (),
+    target_countries: Sequence[str] = (),
 ) -> OpportunityRetentionReport:
     """Delete (or, by default, only count) old opportunities, then the two cache-like tables.
 
     `retention_days <= 0` skips the opportunity part (the operator's off switch).
     `max_batches=None` runs until nothing eligible is left or `should_stop()` turns true.
+    `off_target_retention_days` (R55-B5) applies only when positive, shorter than
+    `retention_days`, and the profile gave target areas or countries. The caller binds empty
+    scopes when more than one owner has an active profile (rows are shared).
     """
     batch_size = max(1, batch_size)
     moment = now or datetime.now(UTC)
@@ -180,12 +241,29 @@ def run_opportunity_retention(
     report = OpportunityRetentionReport(
         dry_run=dry_run, retention_days=retention_days, cutoff=cutoff
     )
+    families = [value.strip().upper() for value in target_role_families if value.strip()]
+    countries = [value.strip().upper() for value in target_countries if value.strip()]
+    off_cutoff = cutoff
+    if (
+        cutoff is not None
+        and 0 < off_target_retention_days < retention_days
+        and (families or countries)
+    ):
+        off_cutoff = moment - timedelta(days=off_target_retention_days)
+        report.off_target_retention_days = off_target_retention_days
+        report.off_target_cutoff = off_cutoff
+    window = {
+        "cutoff": cutoff,
+        "off_cutoff": off_cutoff,
+        "families": families if report.off_target_cutoff else [],
+        "countries": countries if report.off_target_cutoff else [],
+    }
     if cutoff is not None:
         try:
             if dry_run:
-                _count_all(engine, cutoff, report)
+                _count_all(engine, window, report)
             else:
-                _delete_all(engine, cutoff, batch_size, max_batches, stop, report)
+                _delete_all(engine, window, batch_size, max_batches, stop, report)
         except Exception as error:
             _fail(report, "opportunities", error)
     # The two purges do not depend on how the opportunity delete went, only on nobody
@@ -225,7 +303,7 @@ def _fail(report: OpportunityRetentionReport, step: str, error: Exception) -> No
 
 def _delete_all(
     engine: Engine,
-    cutoff: datetime,
+    window: dict[str, Any],
     batch_size: int,
     max_batches: int | None,
     stop: Callable[[], bool],
@@ -239,7 +317,7 @@ def _delete_all(
             report.complete = False
             report.stopped = True
             return
-        locked, counts = _delete_batch(engine, cutoff, batch_size)
+        locked, counts = _delete_batch(engine, window, batch_size)
         if not locked:
             return
         report.batches += 1
@@ -248,14 +326,14 @@ def _delete_all(
 
 
 def _delete_batch(
-    engine: Engine, cutoff: datetime, batch_size: int
+    engine: Engine, window: dict[str, Any], batch_size: int
 ) -> tuple[int, dict[str, int]]:
     """One transaction: lock a batch of old opportunities and delete them with dependents."""
     with Session(engine) as session, session.begin():
         ids = [
             row[0]
             for row in session.execute(
-                text(_LOCK_BATCH), {"cutoff": cutoff, "batch_size": batch_size}
+                text(_LOCK_BATCH), {**window, "batch_size": batch_size}
             )
         ]
         if not ids:
@@ -263,12 +341,20 @@ def _delete_batch(
         locked = len(ids)
         ids = [
             row[0]
-            for row in session.execute(text(_RECHECK), {"ids": ids, "cutoff": cutoff})
+            for row in session.execute(text(_RECHECK), {**window, "ids": ids})
         ]
         if not ids:
             return locked, {}
         params = {"ids": ids}
         counts: dict[str, int] = {}
+        # Of these, the ones only the shorter off-target age limit made eligible.
+        counts["opportunity_off_target"] = session.execute(
+            text(
+                "SELECT count(*) FROM opportunities.opportunity o WHERE o.id = ANY(:ids) "
+                f"AND {_AGE} >= :cutoff"
+            ),
+            {**window, "ids": ids},
+        ).scalar_one()
 
         def count(label: str, sql: str) -> int:
             number = session.execute(text(sql), params).scalar_one()
@@ -465,15 +551,20 @@ def stale_by_source(
     with Session(engine) as session:
         session.execute(text("SET TRANSACTION READ ONLY"))
         return [
-            StaleSourceRow(*row) for row in session.execute(text(sql), {"cutoff": cutoff})
+            StaleSourceRow(*row) for row in session.execute(
+                text(sql),
+                {"cutoff": cutoff, "off_cutoff": cutoff, "families": [], "countries": []},
+            )
         ]
 
 
-def _count_all(engine: Engine, cutoff: datetime, report: OpportunityRetentionReport) -> None:
+def _count_all(
+    engine: Engine, window: dict[str, Any], report: OpportunityRetentionReport
+) -> None:
     """Dry run: what an unbounded run would delete, in one read-only transaction."""
     with Session(engine) as session:
         session.execute(text("SET TRANSACTION READ ONLY"))
-        params = {"cutoff": cutoff}
+        params = window
         report.kept_with_application, report.kept_with_relevant_mark = session.execute(
             text(
                 f"SELECT count(*) FILTER (WHERE {_HAS_APPLICATION}), "
@@ -485,6 +576,10 @@ def _count_all(engine: Engine, cutoff: datetime, report: OpportunityRetentionRep
         elig = f"(SELECT o.id FROM opportunities.opportunity o WHERE {_ELIGIBLE})"
         counts = {
             "opportunity": f"SELECT count(*) FROM {elig} e",
+            "opportunity_off_target": (
+                "SELECT count(*) FROM opportunities.opportunity o "
+                f"WHERE o.id IN {elig} AND {_AGE} >= :cutoff"
+            ),
             "duplicate_candidate": (
                 "SELECT count(*) FROM opportunities.duplicate_candidate d WHERE "
                 f"d.opportunity_id IN {elig} OR d.duplicate_opportunity_id IN {elig}"
@@ -702,5 +797,6 @@ __all__ = [
     "OpportunityRetentionReport",
     "record_retention_attempt",
     "retention_due",
+    "off_target_predicate",
     "run_opportunity_retention",
 ]

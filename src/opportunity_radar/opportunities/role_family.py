@@ -1091,10 +1091,13 @@ def classify_role_family(
             evidence={"rule": "boundary_title", "term": title_terms, "origin": "title"},
         )
     if title_family is not None:
-        return RoleFamilyDecision(
-            role_family=title_family,
-            evidence={"rule": "title", "term": title_terms, "origin": "title"},
-        )
+        evidence = {"rule": "title", "term": title_terms, "origin": "title"}
+        if not any(name and name.strip() for name in departments):
+            # Positive marker (string, the evidence is typed `dict[str, str]`): the posting
+            # came with no department at all, so the title alone is the whole evidence.
+            # Rows classified before this marker lack it and are treated as unknown (R55-B5).
+            evidence["departments"] = "none"
+        return RoleFamilyDecision(role_family=title_family, evidence=evidence)
 
     tied = ",".join(sorted(family.value for family in title_families))
     winner = _description_winner(title_families, description)

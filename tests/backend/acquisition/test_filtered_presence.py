@@ -141,6 +141,7 @@ def test_changed_off_target_item_is_not_closed_as_absent() -> None:
                 ),
                 target_role_families=(lambda: ("SOFTWARE_ENGINEERING",)) if filtered else None,
                 target_area_floor=0.30 if filtered else 0.0,
+                single_owner=True,
             )
             return asyncio.run(
                 service.execute(source.id, CollectionRequest(mode=CollectionMode.DISCOVERY))

@@ -69,6 +69,9 @@ class RawEvidenceWrite:
 
 #: `record_evidence_batch` outcome for an item dropped by the freshness filter (R55-E1).
 STALE = "stale"
+#: Outcome of an identical stored item that arrived with `persist_new=False`: unchanged
+#: evidence, not something the off-target prefilter kept out.
+EXISTING = "existing"
 
 
 @dataclass(frozen=True, slots=True)
@@ -626,6 +629,8 @@ class AcquisitionRepository:
             known = exact.get(key)
             if known is not None:
                 observed.append((known, True))
+                if not write.persist_new:
+                    created[index] = EXISTING
                 continue
             if not write.persist_new:
                 newest = latest.get(write.identity_key)

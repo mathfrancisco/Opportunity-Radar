@@ -1701,6 +1701,7 @@ def _filtering_service(
         alerts=SourceAlertService(session),  # type: ignore[arg-type]
         target_role_families=(lambda: families) if families is not None else None,
         target_area_floor=floor,
+        single_owner=True,
     )
     return service, session, repository
 
@@ -2192,3 +2193,248 @@ def test_lever_page_of_already_read_postings_is_no_progress() -> None:
     assert calls == ["0", "100"]
     assert run.status == "PARTIAL"
     assert run.complete is False
+
+
+# R55-B5: area/country prefilter before the raw item is written.
+
+
+class _LocatedCollector(_Collector):
+    """Engineering titles in different places, plus one sales title in the target country."""
+
+    async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        del request
+        for external_id, title, location in (
+            ("br", "Senior Backend Engineer", "São Paulo, Brazil"),
+            ("us", "Backend Engineer", "New York, United States"),
+            ("remote", "Data Engineer", "Remote"),
+            ("nolocation", "Backend Engineer", None),
+            ("worldwide", "Software Engineer", "Worldwide"),
+            ("latam", "Software Engineer II", "LATAM"),
+            ("unparsed", "Backend Developer", "Springfield"),
+            ("sales-br", "Account Executive", "Brazil"),
+        ):
+            yield CollectedItem(
+                source_type=self.source_type,
+                external_id=external_id,
+                title=title,
+                location_text=location,
+                raw_payload={"id": external_id, "title": title},
+            )
+
+
+def _prefilter_service(
+    *,
+    collector: _Collector | None = None,
+    families: tuple[str, ...] | None = ("SOFTWARE_ENGINEERING", "DATA"),
+    countries: tuple[str, ...] | None = ("BR",),
+    prefilter: bool = True,
+    share: float | None = None,
+    single_owner: bool = True,
+) -> tuple[AcquisitionService, _MemorySession, _ShareRepository]:
+    source = SourceDefinitionModel(
+        id=uuid4(), source_type="example", name="Example", enabled=True, configuration={}
+    )
+    session = _MemorySession()
+    repository = _ShareRepository(source, share)
+    service = AcquisitionService(
+        session,  # type: ignore[arg-type]
+        registry=CollectorRegistry((collector or _MixedTitlesCollector(),)),
+        repository=repository,  # type: ignore[arg-type]
+        alerts=SourceAlertService(session),  # type: ignore[arg-type]
+        target_role_families=(lambda: families) if families is not None else None,
+        target_countries=(lambda: countries) if countries is not None else None,
+        prefilter_enabled=prefilter,
+        single_owner=single_owner,
+        target_area_floor=0.30,
+    )
+    return service, session, repository
+
+
+def test_prefilter_drops_new_off_target_area_without_source_history() -> None:
+    service, session, _ = _prefilter_service(share=None)
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {"eng", "unknown"}
+    assert run.items_persisted == 2
+    assert run.items_skipped == 1
+    assert run.skipped_off_target == 1
+    assert run.items_off_target == 1
+    assert run.items_target_area == 1
+
+
+def test_prefilter_off_keeps_every_item_and_counts_nothing() -> None:
+    service, session, _ = _prefilter_service(prefilter=False, share=None)
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {"eng", "sales", "unknown"}
+    assert run.skipped_off_target == 0
+    assert run.items_off_target == 1
+
+
+def test_prefilter_without_target_areas_drops_nothing_by_area() -> None:
+    for families in ((), None):
+        service, session, _ = _prefilter_service(families=families, countries=None)
+
+        run = _run_filtering(service)
+
+        assert _persisted_ids(session) == {"eng", "sales", "unknown"}
+        assert run.skipped_off_target == 0
+
+
+def test_prefilter_drops_item_outside_target_countries_and_keeps_unknown_places() -> None:
+    service, session, _ = _prefilter_service(collector=_LocatedCollector())
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {
+        "br",
+        "remote",
+        "nolocation",
+        "worldwide",
+        "latam",
+        "unparsed",
+    }
+    # "us" is off by country, "sales-br" is off by area even though it is in Brazil.
+    assert run.skipped_off_target == 2
+    assert run.items_persisted == 6
+    assert run.items_seen == 8
+
+
+def test_prefilter_country_filter_needs_profile_countries() -> None:
+    for countries in ((), None):
+        service, session, _ = _prefilter_service(
+            collector=_LocatedCollector(), families=(), countries=countries
+        )
+
+        run = _run_filtering(service)
+
+        assert "us" in _persisted_ids(session)
+        assert run.skipped_off_target == 0
+
+
+def test_prefilter_country_filter_works_without_target_areas() -> None:
+    service, session, _ = _prefilter_service(collector=_LocatedCollector(), families=())
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {
+        "br",
+        "remote",
+        "nolocation",
+        "worldwide",
+        "latam",
+        "unparsed",
+        "sales-br",
+    }
+    assert run.skipped_off_target == 1
+
+
+def test_prefilter_keeps_presence_of_stored_off_target_item() -> None:
+    service, session, repository = _prefilter_service(share=None)
+    existing = RawItemModel(external_id="sales", item_metadata={})
+    repository.known["external:sales"] = existing
+
+    run = _run_filtering(service)
+
+    assert existing in repository.presence
+    assert "sales" not in _persisted_ids(session)
+    # Identical to what is stored: unchanged, not something the prefilter kept out.
+    assert run.items_skipped == 1
+    assert run.skipped_off_target == 0
+
+
+def test_prefilter_counts_changed_stored_off_target_item_as_prefiltered() -> None:
+    service, session, repository = _prefilter_service(share=None)
+    repository.latest["external:sales"] = RawItemModel(external_id="sales", item_metadata={})
+
+    run = _run_filtering(service)
+
+    assert "sales" not in _persisted_ids(session)
+    assert run.skipped_off_target == 1
+
+
+class _DepartmentCollector(_Collector):
+    """Title and department disagree, or only one of them is known."""
+
+    async def discover(self, request: CollectionRequest) -> AsyncIterator[CollectedItem]:
+        del request
+        for external_id, title, department in (
+            ("tpm", "Technical Product Manager", "Engineering"),
+            ("sales-in-sales", "Account Executive", "Sales"),
+            ("sales-in-eng", "Account Executive", "Engineering"),
+            ("sales-unknown-dept", "Account Executive", "Wizards"),
+            ("sales-no-dept", "Account Executive", None),
+            ("unknown-in-sales", "Wizard of Light", "Sales"),
+        ):
+            yield CollectedItem(
+                source_type=self.source_type,
+                external_id=external_id,
+                title=title,
+                metadata={"department": department} if department else {},
+                raw_payload={"id": external_id, "title": title},
+            )
+
+
+def test_prefilter_keeps_item_when_title_and_department_disagree_on_area() -> None:
+    # A PRODUCT profile: the combined family of the Engineering TPM is SOFTWARE_ENGINEERING.
+    service, session, _ = _prefilter_service(
+        collector=_DepartmentCollector(), families=("PRODUCT",), countries=None
+    )
+
+    run = _run_filtering(service)
+
+    assert _persisted_ids(session) == {"tpm", "sales-unknown-dept", "unknown-in-sales"}
+    # Title and department both name another area (sales), or the title alone does.
+    assert run.skipped_off_target == 3
+
+
+def test_prefilter_drops_only_when_title_and_department_both_off_target() -> None:
+    service, session, _ = _prefilter_service(
+        collector=_DepartmentCollector(),
+        families=("SOFTWARE_ENGINEERING",),
+        countries=None,
+    )
+
+    run = _run_filtering(service)
+
+    # Dropped: SALES title in SALES department, and SALES title with no department.
+    assert _persisted_ids(session) == {
+        "tpm",
+        "sales-in-eng",
+        "sales-unknown-dept",
+        "unknown-in-sales",
+    }
+    assert run.skipped_off_target == 2
+
+
+def test_floor_filter_also_keeps_a_title_the_department_overrides() -> None:
+    # Source below the floor (filter active), PRODUCT profile, TPM filed under Engineering.
+    service, session, _ = _prefilter_service(
+        collector=_DepartmentCollector(),
+        families=("PRODUCT",),
+        countries=None,
+        prefilter=False,
+        share=0.1,
+    )
+
+    _run_filtering(service)
+
+    assert "tpm" in _persisted_ids(session)
+    assert "sales-in-sales" not in _persisted_ids(session)
+
+
+def test_more_than_one_active_owner_disables_every_area_drop() -> None:
+    service, session, _ = _prefilter_service(
+        collector=_DepartmentCollector(),
+        families=("PRODUCT",),
+        countries=None,
+        share=0.1,
+        single_owner=False,
+    )
+
+    run = _run_filtering(service)
+
+    assert len(_persisted_ids(session)) == 6
+    assert run.skipped_off_target == 0
