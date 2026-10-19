@@ -11,6 +11,7 @@ still in the inbox: hiding it would make the screen quietly disagree with the ca
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -54,6 +55,7 @@ from opportunity_radar.matching.models import (
 from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.domain import (
     DEFAULT_RECENCY_WINDOW_DAYS,
+    CompensationPeriod,
     OpportunityStatus,
     RecencyBasis,
     recency_reference,
@@ -117,6 +119,10 @@ class InboxItem:
     #: Persisted `opportunity.recency_basis`: `published`, `updated` or `first_seen`.
     recency_basis: str
     opportunity_version: int
+    #: D1: with a salary filter, `matched` when a compensation in the requested currency
+    #: and period overlaps the range, `unknown` when the posting has no comparable
+    #: compensation at all; `None` when no salary filter was asked.
+    salary_match: Literal["matched", "unknown"] | None = None
     assessment_id: UUID | None = None
     assessment_opportunity_version: int | None = None
     assessment_profile_version_id: UUID | None = None
@@ -167,6 +173,13 @@ class InboxPage:
     off_filter_count: int = 0
 
 
+_CURRENCY_CODE = re.compile(r"[A-Z]{3}")
+
+
+class InvalidInboxQueryError(ValueError):
+    """The Inbox query is self-contradictory (e.g. a salary bound without a unit)."""
+
+
 @dataclass(frozen=True, slots=True)
 class InboxQuery:
     """Filters from section 50 of the roadmap, minus the ones phase 8 has to enable."""
@@ -192,12 +205,15 @@ class InboxQuery:
     #: still matches — unknown never becomes an implicit exclusion (card F17-06, same
     #: contract as `role_families`/`seniorities` above).
     allowed_country: str | None = None
-    #: Compensation range, compared as-is against `OpportunityCompensationModel`
-    #: amounts. No currency conversion: mixing currencies in one query compares raw
-    #: numbers, a known limitation until a conversion service exists for filtering
-    #: (`matching.currency` only converts for scoring today).
+    #: Compensation range (D1). Compared only against compensation in the same
+    #: `salary_currency` and `salary_period` — no currency or period conversion. Both
+    #: are required when a bound is set (`InvalidInboxQueryError` otherwise) and are
+    #: ignored when no bound is set. A posting whose compensation is unknown (no row,
+    #: no currency, period `UNKNOWN`) stays in the result, flagged `salary_match`.
     salary_min: Decimal | None = None
     salary_max: Decimal | None = None
+    salary_currency: str | None = None
+    salary_period: CompensationPeriod | None = None
     #: `SourceDefinitionModel` ids. Matches on the opportunity's occurrences (`EXISTS`),
     #: never a join — an opportunity with several matching sources still appears once
     #: (SPEC 37, "Contrato de consulta": "fonte filtra ocorrências, não duplica").
@@ -229,6 +245,18 @@ class InboxQuery:
     #: real clock exactly once, at construction — never re-reading it later — while a
     #: test can freeze it by passing an explicit value.
     now: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    def __post_init__(self) -> None:
+        if self.salary_min is None and self.salary_max is None:
+            return
+        if self.salary_currency is None or not _CURRENCY_CODE.fullmatch(self.salary_currency):
+            raise InvalidInboxQueryError(
+                "salary_currency must be an ISO 4217 code when a salary bound is set"
+            )
+        if self.salary_period is None or self.salary_period == CompensationPeriod.UNKNOWN:
+            raise InvalidInboxQueryError(
+                "salary_period must be a known compensation period when a salary bound is set"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -707,6 +735,7 @@ def _inbox_statement(
             OpportunityModel.source_updated_at,
             OpportunityModel.recency_basis,
             counted.c.group_size,
+            _salary_match_column(query),
             counted.c.total,
             counted.c.broader_total,
         )
@@ -717,6 +746,54 @@ def _inbox_statement(
         .where(wanted)
     )
     return grouped, counted.c.page_position
+
+
+def _compensation_postings(*conditions: Any) -> Select[Any]:
+    """Posting ids with a compensation row satisfying `conditions`.
+
+    Deliberately uncorrelated and used as `id IN (...)`: Postgres hashes it once. A
+    correlated `EXISTS` here re-scans `opportunity_compensation` for every posting (there
+    is no index on `opportunity_id`) and, under the `OR` of the salary filter, cannot be
+    pulled up into a semi-join.
+    """
+    return select(OpportunityCompensationModel.opportunity_id).where(*conditions)
+
+
+def _has_known_compensation() -> Any:
+    """A compensation row whose unit is known: currency set, period not `UNKNOWN`, some amount."""
+    return OpportunityModel.id.in_(
+        _compensation_postings(
+            OpportunityCompensationModel.currency.is_not(None),
+            OpportunityCompensationModel.period != CompensationPeriod.UNKNOWN.value,
+            OpportunityCompensationModel.amount_min.is_not(None)
+            | OpportunityCompensationModel.amount_max.is_not(None),
+        )
+    )
+
+
+def _salary_in_range(query: InboxQuery) -> Any:
+    """A compensation in the query's own currency and period that overlaps its range (D1)."""
+    conditions: list[Any] = [
+        OpportunityCompensationModel.currency == query.salary_currency,
+        OpportunityCompensationModel.period == query.salary_period,
+    ]
+    if query.salary_min is not None:
+        conditions.append(
+            OpportunityCompensationModel.amount_max.is_(None)
+            | (OpportunityCompensationModel.amount_max >= query.salary_min)
+        )
+    if query.salary_max is not None:
+        conditions.append(
+            OpportunityCompensationModel.amount_min.is_(None)
+            | (OpportunityCompensationModel.amount_min <= query.salary_max)
+        )
+    return OpportunityModel.id.in_(_compensation_postings(*conditions))
+
+
+def _salary_match_column(query: InboxQuery) -> Any:
+    if query.salary_min is None and query.salary_max is None:
+        return literal(None, type_=String).label("salary_match")
+    return case((_salary_in_range(query), "matched"), else_="unknown").label("salary_match")
 
 
 def _pending_duplicate_column(opportunity_id: Any) -> Any:
@@ -817,24 +894,7 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
             | OpportunityModel.allowed_countries.any(ANY_COUNTRY)
         )
     if query.salary_min is not None or query.salary_max is not None:
-        compensation_conditions = [
-            OpportunityCompensationModel.opportunity_id == OpportunityModel.id
-        ]
-        if query.salary_min is not None:
-            compensation_conditions.append(
-                OpportunityCompensationModel.amount_max.is_(None)
-                | (OpportunityCompensationModel.amount_max >= query.salary_min)
-            )
-        if query.salary_max is not None:
-            compensation_conditions.append(
-                OpportunityCompensationModel.amount_min.is_(None)
-                | (OpportunityCompensationModel.amount_min <= query.salary_max)
-            )
-        filters.append(
-            select(OpportunityCompensationModel.id)
-            .where(*compensation_conditions)
-            .exists()
-        )
+        filters.append(_salary_in_range(query) | ~_has_known_compensation())
     if query.source_definition_ids:
         filters.append(
             select(SourceOccurrenceModel.id)
@@ -1120,6 +1180,7 @@ def _inbox_item(row: Any) -> InboxItem:
         startup_strength=row[32],
         startup_batch=row[33],
         sibling_count=max(int(row[36]) - 1, 0),
+        salary_match=row[37],
     )
 
 

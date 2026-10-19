@@ -21,10 +21,13 @@ from opportunity_radar.acquisition.models import (
     SourceDefinitionModel,
     SourceRunModel,
 )
+from opportunity_radar.companies.models import Company
 from opportunity_radar.dashboard.queries import (
     InboxQuery,
+    InvalidInboxQueryError,
 )
 from opportunity_radar.dashboard.queries import list_opportunity_inbox as _list_opportunity_inbox
+from opportunity_radar.opportunities.domain import CompensationPeriod
 from opportunity_radar.opportunities.models import (
     OpportunityCompensationModel,
     OpportunityModel,
@@ -124,6 +127,8 @@ def _compensation(
     *,
     amount_min: Decimal | None,
     amount_max: Decimal | None,
+    currency: str | None = None,
+    period: str = "UNKNOWN",
 ) -> None:
     session.add(
         OpportunityCompensationModel(
@@ -132,6 +137,8 @@ def _compensation(
             raw_item_id=occurrence.raw_item_id,
             amount_min=amount_min,
             amount_max=amount_max,
+            currency=currency,
+            period=period,
             normalizer_version="v3",
         )
     )
@@ -167,6 +174,8 @@ def test_salary_range_filter_matches_overlapping_compensation() -> None:
             _occurrence(session, in_range, source),
             amount_min=Decimal("8000"),
             amount_max=Decimal("12000"),
+            currency="BRL",
+            period="MONTH",
         )
         _compensation(
             session,
@@ -174,6 +183,8 @@ def test_salary_range_filter_matches_overlapping_compensation() -> None:
             _occurrence(session, out_of_range, source),
             amount_min=Decimal("2000"),
             amount_max=Decimal("3000"),
+            currency="BRL",
+            period="MONTH",
         )
         session.commit()
 
@@ -183,6 +194,8 @@ def test_salary_range_filter_matches_overlapping_compensation() -> None:
                 company_id=company.id,
                 salary_min=Decimal("6000"),
                 salary_max=Decimal("15000"),
+                salary_currency="BRL",
+                salary_period=CompensationPeriod.MONTH,
             ),
         )
         assert [item.opportunity_id for item in filtered.items] == [in_range.id]
@@ -229,3 +242,154 @@ def test_source_filter_does_not_duplicate_a_multi_source_opportunity() -> None:
         )
         assert [item.opportunity_id for item in filtered.items] == [opportunity.id]
         assert filtered.total == 1
+
+
+def _seed_salary_cases(session: Session) -> tuple[Company, dict[str, OpportunityModel]]:
+    company = _company(session, "normal")
+    source = _source(session)
+    cases: dict[str, tuple[str | None, str, Decimal, Decimal] | None] = {
+        "brl_month_in_range": ("BRL", "MONTH", Decimal("6000"), Decimal("8000")),
+        "brl_month_below": ("BRL", "MONTH", Decimal("3000"), Decimal("4000")),
+        "usd_year": ("USD", "YEAR", Decimal("6000"), Decimal("8000")),
+        "brl_unknown_period": ("BRL", "UNKNOWN", Decimal("6000"), Decimal("8000")),
+        "null_currency_month": (None, "MONTH", Decimal("6000"), Decimal("8000")),
+        "no_row": None,
+    }
+    found: dict[str, OpportunityModel] = {}
+    for name, spec in cases.items():
+        opportunity = _opportunity(session, company, title=name, published_at=NOW)
+        found[name] = opportunity
+        if spec is not None:
+            currency, period, low, high = spec
+            _compensation(
+                session,
+                opportunity,
+                _occurrence(session, opportunity, source),
+                amount_min=low,
+                amount_max=high,
+                currency=currency,
+                period=period,
+            )
+    session.commit()
+    return company, found
+
+
+def test_salary_filter_compares_only_within_the_same_unit_and_marks_unknown() -> None:
+    with _session() as session:
+        company, found = _seed_salary_cases(session)
+
+        page = list_opportunity_inbox(
+            session,
+            InboxQuery(
+                company_id=company.id,
+                salary_min=Decimal("5000"),
+                salary_currency="BRL",
+                salary_period=CompensationPeriod.MONTH,
+            ),
+        )
+
+        by_title = {item.title: item.salary_match for item in page.items}
+        assert by_title == {
+            "brl_month_in_range": "matched",
+            "brl_unknown_period": "unknown",
+            "null_currency_month": "unknown",
+            "no_row": "unknown",
+        }
+        assert found["usd_year"].id not in {item.opportunity_id for item in page.items}
+        assert page.total == 4
+
+
+def test_salary_max_bound_uses_the_same_unit_rule() -> None:
+    with _session() as session:
+        company, _ = _seed_salary_cases(session)
+
+        page = list_opportunity_inbox(
+            session,
+            InboxQuery(
+                company_id=company.id,
+                salary_max=Decimal("5000"),
+                salary_currency="BRL",
+                salary_period=CompensationPeriod.MONTH,
+            ),
+        )
+
+        assert {item.title: item.salary_match for item in page.items} == {
+            "brl_month_below": "matched",
+            "brl_unknown_period": "unknown",
+            "null_currency_month": "unknown",
+            "no_row": "unknown",
+        }
+
+
+def test_salary_match_is_none_without_a_salary_filter() -> None:
+    with _session() as session:
+        company, _ = _seed_salary_cases(session)
+
+        page = list_opportunity_inbox(session, InboxQuery(company_id=company.id))
+
+        assert len(page.items) == 6
+        assert {item.salary_match for item in page.items} == {None}
+
+
+def test_one_comparable_row_in_range_makes_a_multi_row_posting_matched() -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        source = _source(session)
+        opportunity = _opportunity(session, company, title="two rows", published_at=NOW)
+        for low, high, currency in (
+            (Decimal("1000"), Decimal("2000"), "BRL"),
+            (Decimal("6000"), Decimal("8000"), "BRL"),
+        ):
+            _compensation(
+                session,
+                opportunity,
+                _occurrence(session, opportunity, source),
+                amount_min=low,
+                amount_max=high,
+                currency=currency,
+                period="MONTH",
+            )
+        session.commit()
+
+        page = list_opportunity_inbox(
+            session,
+            InboxQuery(
+                company_id=company.id,
+                salary_min=Decimal("5000"),
+                salary_currency="BRL",
+                salary_period=CompensationPeriod.MONTH,
+            ),
+        )
+
+        assert [(item.title, item.salary_match) for item in page.items] == [
+            ("two rows", "matched")
+        ]
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"salary_min": Decimal("1")},
+        {"salary_max": Decimal("1")},
+        {"salary_min": Decimal("1"), "salary_currency": "BRL"},
+        {"salary_min": Decimal("1"), "salary_period": CompensationPeriod.MONTH},
+        {
+            "salary_min": Decimal("1"),
+            "salary_currency": "reais",
+            "salary_period": CompensationPeriod.MONTH,
+        },
+        {
+            "salary_min": Decimal("1"),
+            "salary_currency": "BRL",
+            "salary_period": CompensationPeriod.UNKNOWN,
+        },
+    ],
+)
+def test_inbox_query_rejects_a_salary_bound_without_a_valid_unit(kwargs: dict) -> None:
+    with pytest.raises(InvalidInboxQueryError):
+        InboxQuery(**kwargs)
+
+
+def test_inbox_query_ignores_unit_without_a_salary_bound() -> None:
+    query = InboxQuery(salary_currency="BRL", salary_period=CompensationPeriod.MONTH)
+    assert query.salary_min is None and query.salary_max is None

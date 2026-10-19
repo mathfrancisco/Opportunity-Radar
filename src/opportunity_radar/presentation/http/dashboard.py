@@ -30,6 +30,7 @@ from opportunity_radar.dashboard.queries import (
     InboxItem,
     InboxOrder,
     InboxQuery,
+    InvalidInboxQueryError,
     OverviewSummary,
     SearchMetricsReport,
     SourceCoverageReport,
@@ -60,6 +61,7 @@ from opportunity_radar.matching.service import MatchingService
 from opportunity_radar.operations.collection_alarm import collection_gap_report
 from opportunity_radar.opportunities.domain import (
     DEFAULT_RECENCY_WINDOW_DAYS,
+    CompensationPeriod,
     OpportunityStatus,
     Seniority,
     WorkMode,
@@ -130,6 +132,8 @@ class InboxItemResponse(BaseModel):
     startup_batch: str | None = None
     #: Card F48-10: other postings of the same company/title/source folded into this row.
     sibling_count: int = 0
+    #: D1: `matched`/`unknown` with a salary filter, `null` without one.
+    salary_match: Literal["matched", "unknown"] | None = None
 
 
 class InboxPageResponse(BaseModel):
@@ -655,6 +659,9 @@ def list_inbox(
     allowed_country: str | None = None,
     salary_min: Decimal | None = Query(default=None, ge=0),
     salary_max: Decimal | None = Query(default=None, ge=0),
+    #: D1: required with `salary_min`/`salary_max`; ignored without one.
+    salary_currency: str | None = Query(default=None, pattern=r"^[A-Z]{3}$"),
+    salary_period: CompensationPeriod | None = None,
     source_definition_id: list[UUID] | None = Query(default=None),
     profile_version_id: UUID | None = None,
     order: InboxOrder = InboxOrder.PRIORITY,
@@ -686,9 +693,8 @@ def list_inbox(
             role_families = tuple(active.snapshot.preferences.target_role_families)
         except ProfileNotFoundError:
             role_families = ()
-    page = list_opportunity_inbox(
-        session,
-        InboxQuery(
+    try:
+        inbox_query = InboxQuery(
             verdicts=tuple(verdict or ()),
             minimum_score=minimum_score,
             company_id=company_id,
@@ -702,6 +708,8 @@ def list_inbox(
             allowed_country=allowed_country,
             salary_min=salary_min,
             salary_max=salary_max,
+            salary_currency=salary_currency,
+            salary_period=salary_period,
             source_definition_ids=tuple(source_definition_id or ()),
             role_families=role_families,
             profile_version_id=profile_version_id,
@@ -712,7 +720,14 @@ def list_inbox(
             recency_window_days=recency_window_days,
             open_at_source=open_at_source,
             only_startups=only_startups,
-        ),
+        )
+    except InvalidInboxQueryError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
+        ) from error
+    page = list_opportunity_inbox(
+        session,
+        inbox_query,
         owner_sub=identity.sub,
     )
     return InboxPageResponse(
@@ -1077,6 +1092,7 @@ def _inbox_item_response(item: InboxItem) -> InboxItemResponse:
         startup_strength=item.startup_strength,
         startup_batch=item.startup_batch,
         sibling_count=item.sibling_count,
+        salary_match=item.salary_match,
     )
 
 

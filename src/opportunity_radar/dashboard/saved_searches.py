@@ -16,6 +16,7 @@ from opportunity_radar.dashboard.models import SavedSearchModel
 from opportunity_radar.dashboard.queries import (
     InboxOrder,
     InboxQuery,
+    InvalidInboxQueryError,
     count_opportunity_inbox,
     count_opportunity_inbox_batch,
 )
@@ -199,6 +200,15 @@ def new_count(session: Session, saved_search: SavedSearch, *, owner_sub: str) ->
 
 
 def _saved_search_inbox_query(saved_search: SavedSearch) -> tuple[InboxQuery, bool]:
+    # D1-1 stopgap: `InboxQuery` now rejects a salary bound without a unit; until the
+    # adapter supplies the unit (D1-2) such a saved search is reported as invalid filters.
+    try:
+        return _read_saved_search_inbox_query(saved_search)
+    except InvalidInboxQueryError as error:
+        raise InvalidSavedSearchFiltersError(str(error)) from error
+
+
+def _read_saved_search_inbox_query(saved_search: SavedSearch) -> tuple[InboxQuery, bool]:
     """Read a saved search's filters back as the Inbox query the Inbox page would run.
 
     Recency rules (single source of truth, mirrors `GET /inbox` and `InboxPage`):
