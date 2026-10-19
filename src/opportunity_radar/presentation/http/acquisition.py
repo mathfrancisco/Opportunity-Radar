@@ -11,6 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from opportunity_radar.acquisition.alerts import SourceAlertService
 from opportunity_radar.acquisition.collectors import CollectorRegistry
@@ -43,6 +44,10 @@ from opportunity_radar.presentation.http.dependencies import (
     get_alert_service,
     get_collector_registry,
     get_session,
+)
+from opportunity_radar.presentation.http.opportunities import RunNormalizationItemResponse
+from opportunity_radar.presentation.http.opportunities import (
+    normalize_run as normalize_opportunity_run,
 )
 
 router = APIRouter(tags=["acquisition"])
@@ -150,6 +155,13 @@ class CreateRunBody(BaseModel):
     correlation_id: str | None = Field(default=None, max_length=255)
 
 
+class ManualIntakeBody(BaseModel):
+    """Manual evidence that must be persisted and normalized in one interaction."""
+
+    inputs: list[ManualInputBody] = Field(min_length=1)
+    correlation_id: str | None = Field(default=None, max_length=255)
+
+
 class SourceRunResponse(BaseModel):
     id: UUID
     source_definition_id: UUID
@@ -170,6 +182,11 @@ class SourceRunResponse(BaseModel):
     checkpoint_before: str | None
     checkpoint_after: str | None
     correlation_id: str | None
+
+
+class ManualIntakeResponse(BaseModel):
+    run: SourceRunResponse
+    items: list[RunNormalizationItemResponse]
 
 
 class SourceRunPageResponse(BaseModel):
@@ -349,6 +366,72 @@ async def execute_source(
     registry: CollectorRegistry = Depends(get_collector_registry),
     identity: RequestIdentity = Depends(authenticated_identity),
 ) -> SourceRunResponse:
+    run = await _execute_source_run(
+        source_id=source_id,
+        body=body,
+        session=session,
+        alerts=alerts,
+        registry=registry,
+        identity=identity,
+    )
+    return _run_response(run)
+
+
+@router.post(
+    "/sources/{source_id}/manual-intake",
+    response_model=ManualIntakeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def manual_intake(
+    source_id: UUID,
+    body: ManualIntakeBody,
+    session: Session = Depends(get_session),
+    alerts: SourceAlertService = Depends(get_alert_service),
+    registry: CollectorRegistry = Depends(get_collector_registry),
+    identity: RequestIdentity = Depends(authenticated_identity),
+) -> ManualIntakeResponse:
+    run = await _execute_source_run(
+        source_id=source_id,
+        body=CreateRunBody(
+            mode=CollectionMode.MANUAL,
+            inputs=body.inputs,
+            correlation_id=body.correlation_id,
+        ),
+        session=session,
+        alerts=alerts,
+        registry=registry,
+        identity=identity,
+    )
+    run_id = str(run.id)
+    try:
+        normalization = await run_in_threadpool(
+            normalize_opportunity_run, run.id, session=session
+        )
+    except Exception as error:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "manual_intake_normalization_failed",
+                "run_id": run_id,
+                "message": (
+                    f"A execução {run_id} foi registrada, mas a normalização falhou. "
+                    f"Recupere-a em /opportunities/normalizations/runs/{run_id}."
+                ),
+            },
+        ) from error
+    return ManualIntakeResponse(run=_run_response(run), items=normalization.items)
+
+
+async def _execute_source_run(
+    *,
+    source_id: UUID,
+    body: CreateRunBody,
+    session: Session,
+    alerts: SourceAlertService,
+    registry: CollectorRegistry,
+    identity: RequestIdentity,
+) -> SourceRunModel:
     try:
         manual_inputs = tuple(_manual_input(item) for item in body.inputs)
         mode = body.mode or (
@@ -380,7 +463,7 @@ async def execute_source(
                 summary=str(error),
             )
         )
-    return _run_response(run)
+    return run
 
 
 @router.get("/source-runs", response_model=SourceRunPageResponse)

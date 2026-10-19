@@ -1,4 +1,4 @@
-import { apiUrl, privateFetch, requestFailure } from '../../lib/api'
+import { apiUrl, failureFrom, privateFetch, requestFailure } from '../../lib/api'
 
 export const applicationStages = [
   'INTERESTED',
@@ -144,6 +144,7 @@ async function send(
 
 export async function listApplications(
   params: { status?: string; stage?: string; opportunityId?: string; offset?: number; limit?: number } = {},
+  signal?: AbortSignal,
 ): Promise<ApplicationPage> {
   const query = new URLSearchParams({ limit: String(params.limit ?? 100) })
   if (params.offset && params.offset > 0) query.set('offset', String(params.offset))
@@ -152,8 +153,9 @@ export async function listApplications(
   if (params.opportunityId) query.set('opportunity_id', params.opportunityId)
   const response = await privateFetch(apiUrl(`/applications?${query.toString()}`), {
     headers: { Accept: 'application/json' },
+    signal,
   })
-  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  if (!response.ok) throw await failureFrom(response)
   const body: unknown = await response.json()
   if (!isRecord(body) || !Array.isArray(body.items)) {
     throw new Error('A API retornou uma lista de candidaturas inválida.')
@@ -171,8 +173,9 @@ export async function listApplications(
 /** The active application of an opportunity, or null when there is none. */
 export async function getApplicationForOpportunity(
   opportunityId: string,
+  signal?: AbortSignal,
 ): Promise<Application | null> {
-  const page = await listApplications({ opportunityId, status: 'ACTIVE', limit: 1 })
+  const page = await listApplications({ opportunityId, status: 'ACTIVE', limit: 1 }, signal)
   return page.items[0] ?? null
 }
 

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { queryStaleTimes } from '../../lib/queryClient'
 import {
   type CompanyInput,
   type CompanyListParams,
@@ -14,13 +15,14 @@ import {
 } from './api'
 
 export function useCompanies(params: CompanyListParams) {
-  return useQuery({ queryKey: ['companies', params], queryFn: () => getCompanies(params) })
+  return useQuery({ queryKey: ['companies', params], queryFn: ({ signal }) => getCompanies(params, signal), staleTime: queryStaleTimes.standard })
 }
 
 export function useCompany(companyId: string) {
   return useQuery({
     queryKey: ['company', companyId],
-    queryFn: () => getCompany(companyId),
+    queryFn: ({ signal }) => getCompany(companyId, signal),
+    staleTime: queryStaleTimes.standard,
   })
 }
 
@@ -56,6 +58,7 @@ export function useUpdateCompany(companyId: string) {
     onSuccess: (company) => {
       client.setQueryData(['company', companyId], company)
       void client.invalidateQueries({ queryKey: ['companies'] })
+      void client.invalidateQueries({ queryKey: ['inbox'] })
     },
   })
 }

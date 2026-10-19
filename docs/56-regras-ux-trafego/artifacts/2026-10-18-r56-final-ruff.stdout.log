@@ -1,0 +1,5 @@
+Command: rtk ruff check .
+Working directory: C:\Users\mathf\Documents\GitHub\Opportunity-Radar\.worktrees\r56-rules-ux-traffic
+Exit code: 0
+
+Ruff: No issues found

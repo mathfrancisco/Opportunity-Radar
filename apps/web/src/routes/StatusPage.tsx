@@ -141,6 +141,7 @@ function SourceMetrics() {
 
 export function StatusPage() {
   const readiness = useReadiness()
+  const environmentLabel = 'Ambiente não informado'
   const state = readiness.isPending
     ? 'loading'
     : readiness.isError
@@ -151,7 +152,7 @@ export function StatusPage() {
   return (
     <PageShell
       current="/status"
-      eyebrow="Estado do ambiente"
+      eyebrow={environmentLabel}
       title={view.title}
       description={readiness.data?.detail ?? view.description}
       footer="Descubra oportunidades, preserve evidências e decida com contexto."

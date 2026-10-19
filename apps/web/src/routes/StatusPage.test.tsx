@@ -115,7 +115,7 @@ describe('StatusPage', () => {
     const main = container.querySelector('main')?.textContent ?? container.textContent ?? ''
     expect(main).not.toContain('Ambiente local')
     expect(main).not.toMatch(/local/i)
-    expect(main).toContain('Estado do ambiente')
+    expect(main).toContain('Ambiente não informado')
   })
 
   it('apresenta estado degradado quando os sinais de saúde não estão completos', async () => {

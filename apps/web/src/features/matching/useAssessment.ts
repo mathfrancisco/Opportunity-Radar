@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { queryStaleTimes } from '../../lib/queryClient'
 import { analyzeAssessment, evaluateOpportunity, getLatestAssessment } from './api'
 
 export function useLatestAssessment(opportunityId: string) {
   return useQuery({
     queryKey: ['assessment', opportunityId],
-    queryFn: () => getLatestAssessment(opportunityId),
-    refetchInterval: 15_000,
+    queryFn: ({ signal }) => getLatestAssessment(opportunityId, signal),
+    staleTime: queryStaleTimes.standard,
   })
 }
 
@@ -26,6 +27,9 @@ export function useEvaluateOpportunity(opportunityId: string) {
     mutationFn: () => evaluateOpportunity(opportunityId),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ['assessment', opportunityId] })
+      void client.invalidateQueries({ queryKey: ['inbox'] })
+      void client.invalidateQueries({ queryKey: ['overview'] })
+      void client.invalidateQueries({ queryKey: ['saved-searches'] })
     },
   })
 }

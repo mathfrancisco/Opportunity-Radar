@@ -1,0 +1,157 @@
+{
+  "generatedAt": "2026-10-18T17:42:24.667Z",
+  "workspace": {
+    "head": "c147ac5bf5aa3a07d258165374ae8ceeb0b0ce05",
+    "dirty": true,
+    "status": "M  .env.example\nM  .github/workflows/pipeline.yml\nM  .gitignore\nM  Makefile\nA  apps/web/src/components/AIBudgetCard.test.tsx\nA  apps/web/src/components/AIBudgetCard.tsx\nA  apps/web/src/components/ConfigValue.test.tsx\nA  apps/web/src/components/ConfigValue.tsx\nM  apps/web/src/components/HomologationQueue.test.tsx\nM  apps/web/src/components/HomologationQueue.tsx\nA  apps/web/src/components/configText.ts\nM  apps/web/src/features/dashboard/api.test.ts\nM  apps/web/src/features/dashboard/api.ts\nM  apps/web/src/features/dashboard/useOverview.ts\nM  apps/web/src/features/opportunities/api.test.ts\nM  apps/web/src/features/opportunities/api.ts\nM  apps/web/src/features/profile/api.test.ts\nM  apps/web/src/features/profile/api.ts\nM  apps/web/src/features/profile/useProfile.ts\nM  apps/web/src/routes/OpportunityDetailPage.test.tsx\nM  apps/web/src/routes/OpportunityDetailPage.tsx\nMM apps/web/src/routes/OverviewPage.test.tsx\nMM apps/web/src/routes/OverviewPage.tsx\nM  apps/web/src/routes/ProfilePage.test.tsx\nM  apps/web/src/routes/ProfilePage.tsx\nMM apps/web/src/routes/StatusPage.test.tsx\nM  apps/web/src/routes/StatusPage.tsx\n M apps/web/src/test/requestBudgets.test.tsx\nM  compose.cloud.yaml\nM  compose.yaml\nM  docs/53-roadmap-hospedagem/variaveis-e-runbooks.md\nA  docs/55-plano-melhorias/evidencias/2026-10-16-r55-a1-inventario.md\nA  docs/55-plano-melhorias/evidencias/2026-10-16-r55-a2-a3.md\nA  docs/55-plano-melhorias/evidencias/2026-10-16-r55-b1-b2-c1.md\nA  docs/55-plano-melhorias/evidencias/2026-10-16-r55-b3-b4-d1.md\nA  docs/55-plano-melhorias/evidencias/2026-10-16-r55-deploy-frente-e.md\nA  docs/55-plano-melhorias/evidencias/2026-10-16-r55-e1-e3-ingestao.md\nA  docs/55-plano-melhorias/evidencias/2026-10-16-r55-e4.md\nA  docs/55-plano-melhorias/evidencias/2026-10-16-r55-e5-e6.md\nA  docs/55-plano-melhorias/evidencias/2026-10-17-r55-a4-producao.md\nA  docs/55-plano-melhorias/evidencias/2026-10-17-r55-a5-fixes.md\nA  docs/55-plano-melhorias/evidencias/2026-10-17-r55-b6.md\nA  docs/55-plano-melhorias/evidencias/2026-10-17-r55-c2-c6.md\nA  docs/55-plano-melhorias/evidencias/2026-10-17-r55-d2-d6.md\nA  docs/55-plano-melhorias/evidencias/2026-10-17-r55-deploy-b1-c1-e4.md\nA  docs/55-plano-melhorias/evidencias/2026-10-17-r55-deploy3-limpeza.md\n M docs/56-regras-ux-trafego/artifacts/backend-validation.md\n M docs/56-regras-ux-trafego/artifacts/request-metrics-final.json\n M docs/56-regras-ux-trafego/artifacts/request-metrics-final.manifest.json\n M docs/56-regras-ux-trafego/regras-decisao.md\n M docs/56-regras-ux-trafego/run-isolated-ux.mjs\n M docs/56-regras-ux-trafego/summary-api.md\n M docs/56-regras-ux-trafego/trafego-evidencias.md\n M docs/56-regras-ux-trafego/ux-captures/detail-1440.png\n M docs/56-regras-ux-trafego/ux-captures/detail-360.png\n M docs/56-regras-ux-trafego/ux-captures/detail-768.png\n M docs/56-regras-ux-trafego/ux-captures/detail-state-stale.png\n M docs/56-regras-ux-trafego/ux-captures/inbox-1440.png\n M docs/56-regras-ux-trafego/ux-captures/inbox-360.png\n M docs/56-regras-ux-trafego/ux-captures/inbox-768.png\n M docs/56-regras-ux-trafego/ux-captures/inbox-state-error.png\n M docs/56-regras-ux-trafego/ux-captures/overview-1440.png\n M docs/56-regras-ux-trafego/ux-captures/overview-360.png\n M docs/56-regras-ux-trafego/ux-captures/overview-768.png\n M docs/56-regras-ux-trafego/ux-captures/overview-state-loading.png\n M docs/56-regras-ux-trafego/ux-captures/pipeline-1440.png\n M docs/56-regras-ux-trafego/ux-captures/pipeline-360.png\n M docs/56-regras-ux-trafego/ux-captures/pipeline-768.png\n M docs/56-regras-ux-trafego/ux-captures/pipeline-state-empty.png\n M docs/56-regras-ux-trafego/ux-captures/report.json\n M docs/56-regras-ux-trafego/ux-decisoes.md\n M docs/56-regras-ux-trafego/vite.ux.config.ts\n M docs/superpowers/plans/2026-10-16-regras-ux-requisicoes-progress.md\nM  infra/systemd/README.md\nM  infra/systemd/opportunity-radar-pipeline.service\nM  infra/systemd/opportunity-radar-pipeline.timer\nM  infra/systemd/run-opportunity-radar-window\nA  migrations/versions/20261016_0070_source_run_skipped_stale.py\nA  migrations/versions/20261016_0071_toast_lz4_compression.py\nA  migrations/versions/20261017_0072_field_suggestion_origin.py\nA  migrations/versions/20261017_0073_company_board_discovery_attempt.py\nA  prompts/job_classification/v2/metadata.yaml\nA  prompts/job_classification/v2/output.schema.json\nA  prompts/job_classification/v2/system.md\nA  prompts/job_classification/v2/user.md.j2\n M scripts/benchmark_saved_search_summaries.py\nA  scripts/discover_boards.py\nA  scripts/measure_cross_source_duplicates.py\nA  scripts/measure_prompt_tokens.py\nM  scripts/measure_seniority_titles.py\nA  scripts/migrate_catalog.py\nM  scripts/retention_report.py\nM  scripts/run_pipeline_once.py\nA  scripts/stale_cleanup_report.py\nA  src/opportunity_radar/acquisition/board_discovery.py\nM  src/opportunity_radar/acquisition/domain.py\nM  src/opportunity_radar/acquisition/greenhouse.py\nM  src/opportunity_radar/acquisition/models.py\nM  src/opportunity_radar/acquisition/registry.py\nM  src/opportunity_radar/acquisition/repository.py\nM  src/opportunity_radar/acquisition/scheduling.py\nM  src/opportunity_radar/acquisition/service.py\nM  src/opportunity_radar/companies/models.py\nM  src/opportunity_radar/dashboard/metrics.py\nM  src/opportunity_radar/matching/domain.py\nM  src/opportunity_radar/matching/groq.py\nM  src/opportunity_radar/matching/service.py\nM  src/opportunity_radar/matching/text.py\nA  src/opportunity_radar/operations/cross_source_duplicates.py\nA  src/opportunity_radar/operations/data_reduction.py\nM  src/opportunity_radar/operations/opportunity_retention.py\nM  src/opportunity_radar/operations/retention.py\n M src/opportunity_radar/opportunities/content_classification.py\nMM src/opportunity_radar/opportunities/domain.py\nM  src/opportunity_radar/opportunities/duplicates.py\nMM src/opportunity_radar/opportunities/regions.py\nM  src/opportunity_radar/opportunities/repository.py\nM  src/opportunity_radar/opportunities/service.py\nM  src/opportunity_radar/opportunities/suggestions.py\nM  src/opportunity_radar/platform/ai/metrics.py\nMM src/opportunity_radar/platform/config.py\nAM src/opportunity_radar/platform/html_text.py\nM  src/opportunity_radar/platform/pipeline.py\nM  src/opportunity_radar/presentation/http/auth.py\nM  src/opportunity_radar/presentation/http/dashboard.py\nM  src/opportunity_radar/presentation/http/opportunities.py\nM  src/opportunity_radar/presentation/http/profile.py\nA  src/opportunity_radar/profile/suggestions.py\nM  src/opportunity_radar/worker.py\nA  tests/backend/acquisition/test_board_discovery.py\nM  tests/backend/acquisition/test_collectable_sources.py\nM  tests/backend/acquisition/test_concurrent_pass_database.py\nM  tests/backend/acquisition/test_delta_presence_resume.py\nM  tests/backend/acquisition/test_filtered_presence.py\nM  tests/backend/acquisition/test_greenhouse_collector.py\nM  tests/backend/acquisition/test_hacker_news_collector.py\nA  tests/backend/acquisition/test_ingest_freshness_and_dedupe.py\nM  tests/backend/acquisition/test_inhire_integration.py\nA  tests/backend/acquisition/test_manual_schedule_gate.py\nM  tests/backend/acquisition/test_source_run_claim_fencing.py\nA  tests/backend/acquisition/test_window_collector_registry.py\nM  tests/backend/acquisition/test_workday_detail_budget_integration.py\nA  tests/backend/dashboard/test_ai_budget.py\nM  tests/backend/dashboard/test_metrics.py\nA  tests/backend/fixtures/r55_c2_postings.json\nA  tests/backend/fixtures/r55_seniority_titles.json\nM  tests/backend/http/test_opportunity_relevance_tenancy.py\nA  tests/backend/matching/test_analysis_cache_key.py\nA  tests/backend/matching/test_boilerplate_headings.py\nM  tests/backend/matching/test_domain.py\nM  tests/backend/matching/test_matching_v2_regression.py\nA  tests/backend/matching/test_prompt_sections.py\nA  tests/backend/matching/test_r55_unknown_and_bands.py\nM  tests/backend/matching/test_reevaluation.py\nA  tests/backend/operations/test_data_reduction.py\nM  tests/backend/operations/test_opportunity_retention.py\nA  tests/backend/opportunities/test_absence_rule_text.py\nM  tests/backend/opportunities/test_content_rule_activation.py\nA  tests/backend/opportunities/test_cross_source_merge.py\nMM tests/backend/opportunities/test_domain.py\nM  tests/backend/opportunities/test_identity_refresh.py\nA  tests/backend/opportunities/test_normalization_description.py\nA  tests/backend/opportunities/test_normalize_poison_and_stale.py\nA  tests/backend/opportunities/test_normalizer_v7_renormalization.py\nM  tests/backend/opportunities/test_reclassify_content_integration.py\nMM tests/backend/opportunities/test_regions.py\nM  tests/backend/opportunities/test_reprocessing.py\nM  tests/backend/opportunities/test_run_closures.py\nA  tests/backend/opportunities/test_seniority_r55.py\nM  tests/backend/opportunities/test_service.py\nA  tests/backend/opportunities/test_suggestions_extended.py\nM  tests/backend/platform/ai/test_metrics.py\nA  tests/backend/platform/ai/test_task_models.py\nAM tests/backend/platform/test_html_text.py\nA  tests/backend/profile/test_suggestions.py\nA  tests/backend/profile/test_suggestions_integration.py\nA  tests/backend/support/absence.py\nM  tests/backend/test_allowed_countries_integration.py\nA  tests/backend/test_migrate_catalog.py\nM  tests/backend/test_neon_budget_projection.py\nA  tests/backend/test_normalize_window_loop.py\nA  tests/backend/test_pipeline_analyze_deadline.py\nA  tests/backend/test_pipeline_analyze_stage.py\nM  tests/backend/test_pipeline_runner.py\nA  tests/backend/test_pipeline_stage_budgets.py\nM  tests/backend/test_systemd_units.py\nA  tests/backend/test_toast_compression_migration.py\nM  tests/e2e/fake_job_board.py\nM  tests/e2e/fake_teamtailor_board.py\nM  tests/e2e/fake_workable_board.py\n?? docs/56-regras-ux-trafego/artifacts/2026-10-18-r56-final-backend-current-tree.stdout.log\n?? docs/56-regras-ux-trafego/artifacts/2026-10-18-r56-final-backend.stdout.log\n?? docs/56-regras-ux-trafego/artifacts/2026-10-18-r56-final-mypy.stdout.log\n?? docs/56-regras-ux-trafego/artifacts/2026-10-18-r56-final-post-regions-mypy.stdout.log\n?? docs/56-regras-ux-trafego/artifacts/2026-10-18-r56-final-post-regions-ruff.stdout.log\n?? docs/56-regras-ux-trafego/artifacts/2026-10-18-r56-final-ruff.stdout.log\n?? docs/56-regras-ux-trafego/artifacts/2026-10-18-r56-final-ux-css-diagnostic-red.stdout.log\n?? docs/56-regras-ux-trafego/artifacts/2026-10-18-r56-final-ux-readiness-red.stdout.log\n?? docs/56-regras-ux-trafego/artifacts/2026-10-18-r56-final-ux-token-wait-red.stdout.log\n?? docs/56-regras-ux-trafego/artifacts/2026-10-18-r56-final-ux.stdout.log",
+    "workingTreeSha256": "fa4fa73db3289773035e2b615b3b15fe836a10d52b160d666e3a51f65eaa7ed9",
+    "hashExcludes": [
+      "docs/56-regras-ux-trafego/ux-captures/",
+      "docs/56-regras-ux-trafego/artifacts/",
+      "docs/56-regras-ux-trafego/.tmp/",
+      "apps/web/.tmp/",
+      ".validation/",
+      ".worktrees/"
+    ]
+  },
+  "browserExecutable": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+  "screenshots": [
+    "docs\\56-regras-ux-trafego\\ux-captures\\inbox-1440.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\inbox-768.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\inbox-360.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\detail-1440.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\detail-768.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\detail-360.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\pipeline-1440.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\pipeline-768.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\pipeline-360.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\overview-1440.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\overview-768.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\overview-360.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\inbox-state-error.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\detail-state-stale.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\pipeline-state-empty.png",
+    "docs\\56-regras-ux-trafego\\ux-captures\\overview-state-loading.png"
+  ],
+  "focusChecks": [
+    {
+      "route": "inbox",
+      "viewport": 1440,
+      "stops": [
+        {
+          "label": "Pular para o conteúdo",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        },
+        {
+          "label": "◉\nOpportunity Radar",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        },
+        {
+          "label": "Visão geral",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        },
+        {
+          "label": "Inbox",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        },
+        {
+          "label": "Pipeline",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        },
+        {
+          "label": "Empresas",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        },
+        {
+          "label": "Fontes",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        },
+        {
+          "label": "Homologação",
+          "outlineWidth": "3px",
+          "outlineStyle": "solid"
+        }
+      ]
+    }
+  ],
+  "targetChecks": [
+    {
+      "route": "inbox",
+      "viewport": 360,
+      "tooSmall": []
+    },
+    {
+      "route": "detail",
+      "viewport": 360,
+      "tooSmall": []
+    },
+    {
+      "route": "pipeline",
+      "viewport": 360,
+      "tooSmall": []
+    },
+    {
+      "route": "overview",
+      "viewport": 360,
+      "tooSmall": []
+    }
+  ],
+  "contrastEvidence": [
+    {
+      "pair": "ink/canvas (page title/body)",
+      "foreground": "ink",
+      "background": "canvas",
+      "ratio": 15.32,
+      "minimum": 4.5
+    },
+    {
+      "pair": "subtle/canvas (secondary text)",
+      "foreground": "subtle",
+      "background": "canvas",
+      "ratio": 7.77,
+      "minimum": 4.5
+    },
+    {
+      "pair": "muted/surface (metadata)",
+      "foreground": "muted",
+      "background": "surface",
+      "ratio": 6.34,
+      "minimum": 4.5
+    },
+    {
+      "pair": "danger-ink/danger-surface",
+      "foreground": "danger-ink",
+      "background": "danger-surface",
+      "ratio": 7.19,
+      "minimum": 4.5
+    },
+    {
+      "pair": "warning-ink/warning-surface",
+      "foreground": "warning-ink",
+      "background": "warning-surface",
+      "ratio": 7.88,
+      "minimum": 4.5
+    },
+    {
+      "pair": "surface/accent (primary button)",
+      "foreground": "surface",
+      "background": "accent",
+      "ratio": 7.58,
+      "minimum": 4.5
+    }
+  ],
+  "blockedRequests": [],
+  "failures": [],
+  "limits": [
+    "Components are mounted directly with a test-only Clerk identity shim; this is not an authentication test.",
+    "All API responses are deterministic local fixtures and do not prove backend data or runtime freshness.",
+    "Screenshots are visual review evidence only; they do not establish WCAG conformance or production readiness."
+  ]
+}

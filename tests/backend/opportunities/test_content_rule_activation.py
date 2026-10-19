@@ -226,7 +226,7 @@ def test_each_rule_alone_affects_only_its_own_field(rule: str) -> None:
         else:
             assert with_rule == before
     if field == "allowed_countries":
-        assert alone.allowed_countries_version == "allowed-countries-v3"
+        assert alone.allowed_countries_version == "allowed-countries-v4"
     else:
         assert alone.allowed_countries_version == baseline.allowed_countries_version
 
@@ -278,14 +278,14 @@ def test_old_boolean_still_enables_every_rule() -> None:
         "5+ years of experience. Regime híbrido, 3 dias. Must be located in Brazil.",
         content_rules=settings.content_rules,
     )
-    assert _fields(candidate) == ("SENIOR", "HYBRID", ("BR",), "allowed-countries-v3")
+    assert _fields(candidate) == ("SENIOR", "HYBRID", ("BR",), "allowed-countries-v4")
     versions = {
         reason["code"]: reason["mapping_version"] for reason in candidate.classification_reasons
     }
     assert versions == {
         "SENIORITY_CLASSIFICATION": "seniority-v4",
         "WORK_MODE_CLASSIFICATION": "work-mode-v7",
-        "ALLOWED_COUNTRIES_CLASSIFICATION": "allowed-countries-v3",
+        "ALLOWED_COUNTRIES_CLASSIFICATION": "allowed-countries-v4",
     }
 
 

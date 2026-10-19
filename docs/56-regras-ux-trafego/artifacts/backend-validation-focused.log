@@ -1,0 +1,10 @@
+Fresh PostgreSQL migrations: `alembic upgrade head`, `r56-rules-ux-migrate`, exit 0.
+Test: `tests/backend/dashboard/test_saved_searches.py::test_saved_search_summary_isolates_invalid_legacy_filters_per_owner`.
+Pre-fix reproduction: exit 1 with `AttributeError: 'list' object has no attribute 'strip'` in the Inbox query.
+Post-fix isolated integration test: exit 0, `1 passed in 3.30s` (`r56-rules-ux-focused-final`).
+Ruff: exit 0, `All checks passed!` for the changed source and test files.
+Mypy: exit 0, `Success: no issues found in 1 source file` for `saved_searches.py`.
+Focused logs are in `backend-validation-migrations-output.log`,
+`backend-validation-focused-red-output.log`, `backend-validation-focused-final-output.log`,
+and `backend-validation-static-output.log`. Both test containers used the isolated
+`opportunity_radar_r56_test` database with both integration guards enabled.

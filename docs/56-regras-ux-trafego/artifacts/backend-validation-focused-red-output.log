@@ -1,0 +1,112 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____ test_saved_search_summary_isolates_invalid_legacy_filters_per_owner ______
+
+    def test_saved_search_summary_isolates_invalid_legacy_filters_per_owner() -> None:
+        engine = create_database_engine(os.environ["DATABASE_URL"])
+        owner_sub = f"{OWNER_A}-invalid-summary-{uuid4().hex}"
+        with Session(engine) as session:
+            company = _company(session)
+            _opportunity(
+                session,
+                company,
+                title="Valid summary alongside invalid legacy filters",
+                created_at=datetime.now(UTC),
+            )
+            valid = create_saved_search(
+                session,
+                name="Valid",
+                term=None,
+                filters={"company_id": str(company.id), "all_areas": True},
+                owner_sub=owner_sub,
+            )
+            invalid_filters = (
+                ("Invalid legacy order", {"order": "not-an-inbox-order", "all_areas": True}),
+                ("Object search", {"search": {"query": "backend"}, "all_areas": True}),
+                ("List search", {"search": ["backend"], "all_areas": True}),
+                ("Non-string verdict", {"verdict": ["RECOMMENDED", 1], "all_areas": True}),
+                ("Non-string seniority", {"seniority": ["SENIOR", None], "all_areas": True}),
+            )
+            invalid = [
+                create_saved_search(
+                    session,
+                    name=name,
+                    term=None,
+                    filters=filters,
+                    owner_sub=owner_sub,
+                )
+                for name, filters in invalid_filters
+            ]
+    
+            summaries = {
+                item.saved_search.id: item
+>               for item in list_saved_search_summaries(session, owner_sub=owner_sub)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            }
+
+tests/backend/dashboard/test_saved_searches.py:467: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/opportunity_radar/dashboard/saved_searches.py:102: in list_saved_search_summaries
+    count = new_count(session, saved_search, owner_sub=owner_sub)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/opportunity_radar/dashboard/saved_searches.py:252: in new_count
+    return count_opportunity_inbox(session, query, owner_sub=owner_sub)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/opportunity_radar/dashboard/queries.py:962: in count_opportunity_inbox
+    statement, _ = _inbox_statement(query, owner_sub=owner_sub, totals_only=True)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+query = InboxQuery(verdicts=(), minimum_score=None, company_id=None, work_mode=None, lifecycle_status=None, published_after=No...w_days=30, open_at_source=False, now=datetime.datetime(2026, 10, 17, 12, 29, 39, 702687, tzinfo=datetime.timezone.utc))
+owner_sub = 'user-saved-search-a-invalid-summary-e159fab2c81b44c7ad37f357fdfea7a9'
+totals_only = True
+
+    def _inbox_statement(
+        query: InboxQuery,
+        *,
+        owner_sub: str,
+        totals_only: bool = False,
+    ) -> tuple[Select[Any], Any]:
+        """The Inbox rows for `query`, the column that puts them in the requested order, and
+        after the item columns `total` and `broader_total` (the totals of the same pass).
+    
+        With `totals_only` the statement returns one row, whatever the page holds: the way to
+        read the totals when the requested page is empty."""
+        assessments = _latest_assessments(query.profile_version_id, owner_sub=owner_sub)
+        analyses = _latest_analyses(owner_sub=owner_sub)
+        applications = _active_applications(owner_sub=owner_sub)
+        first_sources = _first_sources()
+        # Card F48-10: one row per posting group, the best one in the requested order (the
+        # window uses the very ordering of the page, so the representative is the row the
+        # ungrouped list would have shown first). `group_size` counts the group's rows that
+        # passed every filter, so "+N locais" never names a hidden row.
+        #
+        # One pass over the filtered rows, not a join back to them: the planner guesses a
+        # filter on a window column at 0.5% of its input, and with that guess it re-ran the
+        # latest-assessment subquery once per joined row.
+        #
+        # Card F50-10: the area filter is not a WHERE. Rows outside the target areas stay in the
+        # pass, flagged, and groups and positions are numbered per flag, so one execution yields
+        # the page (in-area rows), its total and the total without the area filter (the "N hidden
+        # by area" count). Windows cannot read other windows, hence the extra level.
+        #
+        # Cost shape, measured on 25k postings: the windows sort every filtered posting, so they
+        # run over narrow rows (ids, the assessment, what the ordering reads). The wide posting
+        # columns, the company, the analysis and the per-posting lookups are attached afterwards,
+        # to the group representatives, or after the LIMIT for the lookups that only the page
+        # needs.
+        key = _posting_group_key(first_sources.c.first_source)
+        ordering = _inbox_ordering(
+            query.order,
+            assessments,
+>           (query.search or "").strip(),
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+            query.profile_version_id,
+            owner_sub,
+        )
+E       AttributeError: 'list' object has no attribute 'strip'
+
+src/opportunity_radar/dashboard/queries.py:610: AttributeError
+=========================== short test summary info ============================
+FAILED tests/backend/dashboard/test_saved_searches.py::test_saved_search_summary_isolates_invalid_legacy_filters_per_owner
+1 failed in 4.53s

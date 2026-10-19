@@ -1269,7 +1269,7 @@ def normalize_candidate(
 ) -> CanonicalCandidate:
     """Normalize one collected item without guessing omitted source fields.
 
-    `content_rules` switches to `seniority-v4` / `work-mode-v7` / `allowed-countries-v2`
+    `content_rules` switches to `seniority-v4` / `work-mode-v7` / `allowed-countries-v4`
     (card F48-15, description-aware, evidence cited): `True` runs every rule, a set of rule
     names runs only those (card F50-02), empty or `False` none. Off by default until the
     precision gate is met; see `content_classification`.

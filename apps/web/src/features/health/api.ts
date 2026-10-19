@@ -1,4 +1,4 @@
-import { apiUrl, privateFetch } from '../../lib/api'
+import { apiUrl, failureFrom, privateFetch } from '../../lib/api'
 
 export type ServiceHealth = 'ready' | 'degraded'
 
@@ -11,13 +11,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-export async function getReadiness(): Promise<Readiness> {
+export async function getReadiness(signal?: AbortSignal): Promise<Readiness> {
   const response = await privateFetch(apiUrl('/health/ready'), {
     headers: { Accept: 'application/json' },
+    signal,
   })
 
   if (!response.ok) {
-    throw new Error(`A API respondeu com ${response.status}.`)
+    throw await failureFrom(response)
   }
 
   const body: unknown = await response.json()
@@ -31,10 +32,11 @@ export async function getReadiness(): Promise<Readiness> {
 
   const healthResponse = await privateFetch(apiUrl('/health'), {
     headers: { Accept: 'application/json' },
+    signal,
   })
 
   if (!healthResponse.ok) {
-    throw new Error(`A API respondeu com ${healthResponse.status}.`)
+    throw await failureFrom(healthResponse)
   }
 
   const health: unknown = await healthResponse.json()

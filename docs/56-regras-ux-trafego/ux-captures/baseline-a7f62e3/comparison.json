@@ -1,0 +1,22 @@
+{
+  "sourceHead": "a7f62e302dc7633a005c5e7ada66402e0fa71435",
+  "capturedAt": "2026-10-17T03:38:03.368Z",
+  "screenshots": 16,
+  "blockedRequests": 0,
+  "failures": [
+    "inbox 360px has interactive targets below 44px: [{\"label\":\"Buscar\",\"width\":32,\"height\":36,\"prose\":false},{\"label\":\"Todas\\nAlta prioridade\\nRecomendada\\nObservação\\nRevisão necessária\\nBaixa aderência\\nInelegível\",\"width\":154,\"height\":42,\"prose\":false},{\"label\":\"Todas\\nRemoto\\nHíbrido\\nPresencial\\nNão informado\",\"width\":133,\"height\":42,\"prose\":false},{\"label\":\"Prioridade\\nMais recentes\\nMaior score\",\"width\":123,\"height\":42,\"prose\":false},{\"label\":\"Últimos 30 dias\\nNovas (14 dias)\\nAbertas na fonte\",\"width\":143,\"height\":42,\"prose\":false},{\"label\":\"Engenheira de Plataforma\",\"width\":164.359375,\"height\":19,\"prose\":false}]",
+    "detail 360px has interactive targets below 44px: [{\"label\":\"← Voltar para as oportunidades\",\"width\":194.328125,\"height\":19,\"prose\":false},{\"label\":\"Resumo\",\"width\":49.421875,\"height\":20,\"prose\":false},{\"label\":\"Decisão\",\"width\":48.265625,\"height\":20,\"prose\":false},{\"label\":\"Candidatura\",\"width\":75.375,\"height\":20,\"prose\":false},{\"label\":\"Procedência\",\"width\":75.171875,\"height\":20,\"prose\":false}]",
+    "pipeline 360px has interactive targets below 44px: [{\"label\":\"Engenheira de Plataforma\",\"width\":164.359375,\"height\":19,\"prose\":false}]",
+    "overview 360px has interactive targets below 44px: [{\"label\":\"Alta prioridade\",\"width\":92.015625,\"height\":19,\"prose\":false},{\"label\":\"Recomendadas\",\"width\":93.9375,\"height\":19,\"prose\":false},{\"label\":\"Ver só startups\",\"width\":91.328125,\"height\":19,\"prose\":false},{\"label\":\"Plataforma híbrida\",\"width\":118.265625,\"height\":19,\"prose\":false},{\"label\":\"Avaliadas\",\"width\":57.8125,\"height\":19,\"prose\":false},{\"label\":\"Candidaturas ativas\",\"width\":120.1875,\"height\":19,\"prose\":false}]"
+  ],
+  "hashExcludes": [
+    "docs/56-regras-ux-trafego/ux-captures/",
+    "docs/56-regras-ux-trafego/artifacts/",
+    "docs/56-regras-ux-trafego/.tmp/",
+    "apps/web/.tmp/",
+    ".validation/",
+    ".worktrees/"
+  ],
+  "workingTreeSha256": "a60027eebad5251a4d2a42c49fb12d1ca4159879436cf3f2aacb37b68bc9caf8",
+  "comparisonBasis": "Same 12 route/viewport loaded screenshots; only runner/config/fixture/Clerk shim/queryClient support overlaid on detached source. API data from deterministic fixture."
+}

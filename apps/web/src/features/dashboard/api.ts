@@ -1,4 +1,4 @@
-import { apiUrl, privateFetch } from '../../lib/api'
+import { apiUrl, failureFrom, privateFetch } from '../../lib/api'
 
 export const inboxOrders = ['priority', 'recency', 'score'] as const
 export type InboxOrder = (typeof inboxOrders)[number]
@@ -400,7 +400,7 @@ export async function getInbox({
   recencyWindowDays,
   openAtSource,
   onlyStartups,
-}: InboxParams): Promise<InboxPage> {
+}: InboxParams, signal?: AbortSignal): Promise<InboxPage> {
   const params = new URLSearchParams({
     offset: String((page - 1) * pageSize),
     limit: String(pageSize),
@@ -428,8 +428,9 @@ export async function getInbox({
 
   const response = await privateFetch(apiUrl(`/inbox?${params.toString()}`), {
     headers: { Accept: 'application/json' },
+    signal,
   })
-  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  if (!response.ok) throw await failureFrom(response)
   const body: unknown = await response.json()
   if (!isRecord(body) || !Array.isArray(body.items)) {
     throw new Error('A API retornou uma inbox inválida.')
@@ -499,11 +500,12 @@ function parseSourceMetrics(value: unknown): SourceMetrics | null {
   }
 }
 
-export async function getSourceMetrics(): Promise<SourceMetricsReport> {
+export async function getSourceMetrics(signal?: AbortSignal): Promise<SourceMetricsReport> {
   const response = await privateFetch(apiUrl('/source-metrics'), {
     headers: { Accept: 'application/json' },
+    signal,
   })
-  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  if (!response.ok) throw await failureFrom(response)
   const body: unknown = await response.json()
   if (!isRecord(body) || !Array.isArray(body.windows)) {
     throw new Error('A API retornou métricas de fontes inválidas.')
@@ -621,9 +623,10 @@ function parseModelBudget(value: unknown): ModelBudget | null {
 }
 
 /** `GET /ai-budget`: today's (UTC) requests and tokens used and remaining, per model. */
-export async function getAIBudget(): Promise<AIBudget> {
+export async function getAIBudget(signal?: AbortSignal): Promise<AIBudget> {
   const response = await privateFetch(apiUrl('/ai-budget'), {
     headers: { Accept: 'application/json' },
+    signal,
   })
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
   const body: unknown = await response.json()
@@ -641,11 +644,12 @@ export async function getAIBudget(): Promise<AIBudget> {
   }
 }
 
-export async function getAnalysisMetrics(): Promise<AnalysisMetricsReport> {
+export async function getAnalysisMetrics(signal?: AbortSignal): Promise<AnalysisMetricsReport> {
   const response = await privateFetch(apiUrl('/analysis-metrics'), {
     headers: { Accept: 'application/json' },
+    signal,
   })
-  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  if (!response.ok) throw await failureFrom(response)
   const body: unknown = await response.json()
   if (!isRecord(body) || !Array.isArray(body.windows)) {
     throw new Error('A API retornou métricas de análise inválidas.')
@@ -673,11 +677,12 @@ export async function getAnalysisMetrics(): Promise<AnalysisMetricsReport> {
   }
 }
 
-export async function getOverview(): Promise<Overview> {
+export async function getOverview(signal?: AbortSignal): Promise<Overview> {
   const response = await privateFetch(apiUrl('/overview'), {
     headers: { Accept: 'application/json' },
+    signal,
   })
-  if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
+  if (!response.ok) throw await failureFrom(response)
   const body: unknown = await response.json()
   if (!isRecord(body)) throw new Error('A API retornou um resumo inválido.')
   const verdictCounts = countMap(body.verdict_counts)
