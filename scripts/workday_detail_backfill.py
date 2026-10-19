@@ -426,6 +426,8 @@ def rollback(
                 .where(OpportunityModel.id == UUID(entry["opportunity_id"]))
                 .values(
                     description=entry["backup"]["description"],
+                    # The restored text is not the one the hash describes.
+                    description_full_hash=None,
                     version=OpportunityModel.version + 1,
                     updated_at=OpportunityModel.updated_at,
                 )
