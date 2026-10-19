@@ -57,6 +57,7 @@ from opportunity_radar.matching.analysis import (
 from opportunity_radar.matching.service import (
     DEFAULT_ANALYSIS_VERDICTS,
     AnalysisInProgressError,
+    AnalysisLeaseLostError,
     MatchingService,
     is_reused_analysis,
 )
@@ -398,8 +399,9 @@ def analyze_pending(
                             quota_ceiling_requests=worker_requests_ceiling,
                         )
                     )
-                except AnalysisInProgressError:
-                    # The manual action or another worker holds it. Not an error.
+                except (AnalysisInProgressError, AnalysisLeaseLostError):
+                    # The manual action or another worker holds it, or took over our
+                    # expired lease. Not an error.
                     claimed_elsewhere += 1
                     continue
                 except Exception:

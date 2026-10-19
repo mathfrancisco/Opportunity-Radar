@@ -7,6 +7,7 @@ on what gets queued and what gets persisted — never on the content of an analy
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import hashlib
 import os
 import threading
@@ -16,7 +17,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import delete, func, select
+from sqlalchemy import Engine, delete, func, select, update
 from sqlalchemy.orm import Session
 
 from opportunity_radar.companies.models import Company
@@ -44,6 +45,7 @@ from opportunity_radar.matching.repository import (
 from opportunity_radar.matching.service import (
     DEFAULT_ANALYSIS_VERDICTS,
     AnalysisInProgressError,
+    AnalysisLeaseLostError,
     MatchingService,
 )
 from opportunity_radar.opportunities.models import OpportunityModel
@@ -230,9 +232,7 @@ def _failed() -> AnalysisOutcome:
     )
 
 
-def _profile_version(
-    session: Session, *, owner_sub: str = _TEST_OWNER_SUB
-) -> ProfileVersionModel:
+def _profile_version(session: Session, *, owner_sub: str = _TEST_OWNER_SUB) -> ProfileVersionModel:
     """Each test appends a version to this suite's explicit owner profile."""
     profile = session.scalar(
         select(CareerProfileModel).where(CareerProfileModel.owner_sub == owner_sub)
@@ -1465,3 +1465,190 @@ def test_two_workers_on_the_same_assessment_run_it_once() -> None:
     assert adapter.calls_by_opportunity.get(opportunity_id) == 1
     with Session(engine) as session:
         assert _analyses_for(session, [assessment_id]) == [AnalysisStatus.AI_COMPLETED.value]
+
+
+class _BlockingAdapter:
+    """Wraps a stub: blocks inside `analyze` until released, answering with `label`."""
+
+    def __init__(
+        self,
+        base: _StubAdapter,
+        *,
+        label: str,
+        started: threading.Event,
+        release: threading.Event,
+    ) -> None:
+        self._base = base
+        self._label = label
+        self._started = started
+        self._release = release
+
+    @property
+    def model(self) -> str:
+        return self._base.model
+
+    @property
+    def prompt_version(self) -> str:
+        return self._base.prompt_version
+
+    @property
+    def requires(self) -> frozenset[str]:
+        return self._base.requires
+
+    @property
+    def quota_guard(self) -> None:
+        return None
+
+    def prepare(self, request: AnalysisRequest) -> PreparedAnalysis:
+        return self._base.prepare(request)
+
+    async def analyze(self, request: AnalysisRequest, **kwargs: object) -> AnalysisOutcome:
+        del request, kwargs
+        self._started.set()
+        await asyncio.to_thread(self._release.wait)
+        outcome = self._base._outcome
+        return dataclasses.replace(
+            outcome, analysis=dataclasses.replace(outcome.analysis, summary=self._label)
+        )
+
+    async def warm_up(self, *, only_if_idle: bool = False) -> None:
+        del only_if_idle
+
+
+def _expire_claim(engine: Engine, assessment_id: UUID) -> None:
+    # Controlled synthetic expiry; the check constraint needs expires_at > claimed_at.
+    with Session(engine) as session:
+        now = datetime.now(UTC)
+        session.execute(
+            update(MatchAnalysisClaimModel)
+            .where(MatchAnalysisClaimModel.assessment_id == assessment_id)
+            .values(claimed_at=now - timedelta(seconds=2), expires_at=now - timedelta(seconds=1))
+        )
+        session.commit()
+
+
+def _run_blocked_attempt(
+    engine: Engine,
+    assessment_id: UUID,
+    *,
+    owner: str,
+    label: str,
+    started: threading.Event,
+    release: threading.Event,
+    errors: list[BaseException],
+) -> threading.Thread:
+    def run() -> None:
+        try:
+            with Session(engine) as session:
+                adapter = _BlockingAdapter(
+                    _StubAdapter(_completed()), label=label, started=started, release=release
+                )
+                asyncio.run(
+                    MatchingService(session, owner_sub=_TEST_OWNER_SUB).analyze(
+                        assessment_id, adapter, owner=owner, lease=timedelta(minutes=15)
+                    )
+                )
+        except BaseException as error:  # noqa: BLE001 - surfaced by the test
+            errors.append(error)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    return thread
+
+
+_RaceHandles = tuple[
+    threading.Event, threading.Event, threading.Thread, threading.Thread, list[BaseException]
+]
+
+
+def _expired_holder_then_successor(
+    assessment_id: UUID, engine: Engine, *, first_owner: str, second_owner: str
+) -> _RaceHandles:
+    first_started, first_release = threading.Event(), threading.Event()
+    second_started, second_release = threading.Event(), threading.Event()
+    errors: list[BaseException] = []
+    first = _run_blocked_attempt(
+        engine,
+        assessment_id,
+        owner=first_owner,
+        label="first",
+        started=first_started,
+        release=first_release,
+        errors=errors,
+    )
+    assert first_started.wait(10), "first did not acquire its claim"
+    _expire_claim(engine, assessment_id)
+    second = _run_blocked_attempt(
+        engine,
+        assessment_id,
+        owner=second_owner,
+        label="second",
+        started=second_started,
+        release=second_release,
+        errors=errors,
+    )
+    assert second_started.wait(10), "second did not take the expired claim"
+    return first_release, second_release, first, second, errors
+
+
+def test_expired_holder_release_does_not_drop_the_successor_claim() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        assessment_id = _seed_assessment(session)
+    first_release, second_release, first, second, _errors = _expired_holder_then_successor(
+        assessment_id, engine, first_owner="manual", second_owner="manual"
+    )
+    try:
+        first_release.set()
+        first.join(10)
+        assert not first.is_alive()
+        with Session(engine) as session:
+            live_claim_count_while_second_blocked = session.scalar(
+                select(func.count())
+                .select_from(MatchAnalysisClaimModel)
+                .where(MatchAnalysisClaimModel.assessment_id == assessment_id)
+            )
+        assert live_claim_count_while_second_blocked == 1
+    finally:
+        first_release.set()
+        second_release.set()
+        first.join(10)
+        second.join(10)
+
+
+def test_expired_holder_cannot_overwrite_the_successor_analysis() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        assessment_id = _seed_assessment(session)
+        score_before = session.scalar(
+            select(MatchAssessmentModel.score).where(MatchAssessmentModel.id == assessment_id)
+        )
+    first_release, second_release, first, second, errors = _expired_holder_then_successor(
+        assessment_id, engine, first_owner="stale-owner", second_owner="successor-owner"
+    )
+    try:
+        second_release.set()
+        second.join(10)
+        first_release.set()
+        first.join(10)
+        assert not first.is_alive() and not second.is_alive()
+        assert [type(error) for error in errors] == [AnalysisLeaseLostError]
+        with Session(engine) as session:
+            latest = MatchingService(session, owner_sub=_TEST_OWNER_SUB).latest_analysis(
+                assessment_id
+            )
+            assert latest is not None and latest.summary == "second"
+            assert _analyses_for(session, [assessment_id]) == [AnalysisStatus.AI_COMPLETED.value]
+            assert (
+                session.scalar(
+                    select(MatchAssessmentModel.score).where(
+                        MatchAssessmentModel.id == assessment_id
+                    )
+                )
+                == score_before
+            )
+    finally:
+        first_release.set()
+        second_release.set()
+        first.join(10)
+        second.join(10)

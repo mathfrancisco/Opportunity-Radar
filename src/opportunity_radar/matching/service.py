@@ -110,6 +110,10 @@ class AnalysisInProgressError(RuntimeError):
     """Another holder — the job or the manual action — owns this analysis right now."""
 
 
+class AnalysisLeaseLostError(RuntimeError):
+    """The lease this attempt took expired and was taken over; its answer must not be stored."""
+
+
 def _require_owner(owner_sub: str | None) -> str:
     if owner_sub is None or not owner_sub.strip():
         raise ProfileOwnerRequiredError("profile owner subject is required")
@@ -378,6 +382,9 @@ class MatchingService:
         assessment twice. It is taken after the cache lookup, so a reader of an already
         completed analysis never waits on a claim it does not need.
         """
+        # A claim belongs to one attempt, not to a caller name: every HTTP call is "manual",
+        # so a bare owner would let an expired attempt release or fence a successor's lease.
+        attempt_owner = f"{owner[:31]}:{uuid4().hex}"
         # Fail on an unknown assessment before taking a claim.
         request, skip_reason = self._analysis_request(self.get(assessment_id), adapter)
         prepared = adapter.prepare(request) if skip_reason is None else None
@@ -395,7 +402,7 @@ class MatchingService:
 
         now = datetime.now(UTC)
         if not self.repository.acquire_analysis_claim(
-            assessment_id, owner=owner, now=now, lease=lease
+            assessment_id, owner=attempt_owner, now=now, lease=lease
         ):
             self.session.rollback()
             raise AnalysisInProgressError(str(assessment_id))
@@ -460,6 +467,12 @@ class MatchingService:
                         model_id=adapter.model,
                         prompt_version=adapter.prompt_version,
                     )
+            # The model call can outlive the lease; a successor then owns this assessment.
+            if not self.repository.holds_analysis_claim(
+                assessment_id, owner=attempt_owner, now=datetime.now(UTC)
+            ):
+                self.session.rollback()
+                raise AnalysisLeaseLostError(str(assessment_id))
             analysis = self.repository.add_analysis(record)
             self.session.commit()
             self.session.refresh(analysis)
@@ -468,7 +481,7 @@ class MatchingService:
             # Releasing must succeed even when the body failed, so the assessment is not
             # retired from the queue until the lease would have expired on its own.
             self.session.rollback()
-            self.repository.release_analysis_claim(assessment_id, owner=owner)
+            self.repository.release_analysis_claim(assessment_id, owner=attempt_owner)
             self.session.commit()
 
     def pending_analysis_ids(
