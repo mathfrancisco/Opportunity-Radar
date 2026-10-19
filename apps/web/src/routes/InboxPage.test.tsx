@@ -811,6 +811,20 @@ describe('InboxPage table, pagination and filters', () => {
     expect(inbox.searchParams.get('limit')).toBe('50')
   })
 
+  it('envia à API todos os valores repetidos de verdict, seniority e source da URL', async () => {
+    const urls: string[] = []
+    stubInbox(1, urls, [inboxItem()])
+    renderAt(
+      '/inbox?seniority=JUNIOR&seniority=MID&verdict=RECOMMENDED&verdict=WATCHLIST&source=src-a&source=src-b',
+    )
+    await flush()
+
+    const inbox = new URL(urls.find((url) => url.includes('/inbox')) as string, 'http://localhost')
+    expect(inbox.searchParams.getAll('seniority')).toEqual(['JUNIOR', 'MID'])
+    expect(inbox.searchParams.getAll('verdict')).toEqual(['RECOMMENDED', 'WATCHLIST'])
+    expect(inbox.searchParams.getAll('source_definition_id')).toEqual(['src-a', 'src-b'])
+  })
+
   it('pagina pelo Pagination, preserva ?page= e envia a página à API', async () => {
     const urls: string[] = []
     stubInbox(60, urls)

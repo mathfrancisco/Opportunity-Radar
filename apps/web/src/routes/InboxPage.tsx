@@ -468,7 +468,9 @@ function InboxSearch({
 
 export function InboxPage() {
   const [params, setParams] = useSearchParams()
-  const verdict = params.get('verdict') ?? ''
+  // Repeated values survive from the URL to the query; the single-select pills show the first.
+  const verdicts = params.getAll('verdict').filter(Boolean)
+  const verdict = verdicts[0] ?? ''
   const companyId = params.get('company_id') ?? ''
   const workMode = params.get('work_mode') ?? ''
   const lifecycleStatus = params.get('lifecycle_status') ?? ''
@@ -487,10 +489,12 @@ export function InboxPage() {
     : defaultPageSize
   const allAreas = params.get('all_areas') === 'true'
   const areaFilter = params.getAll('area')
-  const seniority = params.get('seniority') ?? ''
+  const seniorityValues = params.getAll('seniority').filter(Boolean)
+  const seniority = seniorityValues[0] ?? ''
   const salaryMin = params.get('salary_min') ?? ''
   const salaryMax = params.get('salary_max') ?? ''
-  const source = params.get('source') ?? ''
+  const sources = params.getAll('source').filter(Boolean)
+  const source = sources[0] ?? ''
   const allowedCountry = params.get('allowed_country') ?? ''
   // Card F20-61: absent parameter means "filtered", matching the server's own
   // default — only an explicit `only_recent=false` (the "mostrar tudo" click) turns
@@ -504,7 +508,7 @@ export function InboxPage() {
   // Card F20-54: display/filter only, never changes score or verdict.
   const onlyStartups = params.get('only_startups') === 'true'
   const activeFilterCount = [
-    verdict,
+    verdicts.length > 0,
     companyId,
     workMode,
     lifecycleStatus,
@@ -514,10 +518,10 @@ export function InboxPage() {
     order !== 'priority',
     allAreas,
     ...areaFilter,
-    seniority,
+    seniorityValues.length > 0,
     salaryMin,
     salaryMax,
-    source,
+    sources.length > 0,
     allowedCountry,
     !onlyRecent,
     recencyLens,
@@ -531,10 +535,10 @@ export function InboxPage() {
     appliedFilter,
     allAreas,
     ...areaFilter,
-    seniority,
+    seniorityValues.length > 0,
     salaryMin,
     salaryMax,
-    source,
+    sources.length > 0,
     allowedCountry,
     !onlyRecent,
     onlyStartups,
@@ -545,7 +549,7 @@ export function InboxPage() {
   const inbox = useInbox({
     page,
     pageSize,
-    verdicts: verdict ? [verdict] : undefined,
+    verdicts: verdicts.length > 0 ? verdicts : undefined,
     minimumScore: minimumScore || undefined,
     companyId: companyId || undefined,
     workMode: workMode || undefined,
@@ -556,10 +560,10 @@ export function InboxPage() {
     order,
     roleFamilies: allAreas || areaFilter.length === 0 ? undefined : areaFilter,
     allAreas,
-    seniorities: seniority ? [seniority] : undefined,
+    seniorities: seniorityValues.length > 0 ? seniorityValues : undefined,
     salaryMin: salaryMin || undefined,
     salaryMax: salaryMax || undefined,
-    sourceDefinitionIds: source ? [source] : undefined,
+    sourceDefinitionIds: sources.length > 0 ? sources : undefined,
     allowedCountry: allowedCountry || undefined,
     onlyRecent,
     recencyWindowDays: recencyLens === 'novas' ? 14 : undefined,
