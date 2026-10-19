@@ -804,3 +804,61 @@ def test_saved_search_summary_keeps_assessments_scoped_to_each_profile_and_owner
         assert {
             saved_search_id: item.new_count for saved_search_id, item in summaries.items()
         } == expected
+
+
+def _query_for(filters: dict[str, object]) -> InboxQuery:
+    saved = saved_search_service.SavedSearch(
+        id=uuid4(),
+        name="",
+        term=None,
+        filters=filters,
+        last_opened_at=None,
+        created_at=datetime.now(UTC),
+    )
+    return saved_search_service._saved_search_inbox_query(saved)[0]
+
+
+@pytest.mark.parametrize(
+    ("filters", "only_recent", "window", "open_at_source"),
+    [
+        ({}, True, 30, False),
+        ({"only_recent": True}, True, 30, False),
+        ({"only_recent": "true"}, True, 30, False),
+        ({"only_recent": False}, False, 30, False),
+        ({"only_recent": "false"}, False, 30, False),
+        ({"lens": ""}, True, 30, False),
+        ({"lens": "novas"}, True, 14, False),
+        ({"lens": "abertas"}, True, 30, True),
+        ({"recency_window_days": 7}, True, 7, False),
+        ({"recency_window_days": "90"}, True, 90, False),
+        ({"recency_window_days": 365}, True, 365, False),
+        ({"recency_window_days": 90, "lens": "novas"}, True, 14, False),
+        ({"open_at_source": "true"}, True, 30, True),
+    ],
+)
+def test_saved_search_recency_keys_map_to_inbox_query(
+    filters: dict[str, object], only_recent: bool, window: int, open_at_source: bool
+) -> None:
+    query = _query_for(filters)
+
+    assert query.only_recent is only_recent
+    assert query.recency_window_days == window
+    assert query.open_at_source is open_at_source
+
+
+@pytest.mark.parametrize(
+    "filters",
+    [
+        {"lens": "recentes"},
+        {"lens": 5},
+        {"recency_window_days": 0},
+        {"recency_window_days": 366},
+        {"recency_window_days": "abc"},
+        {"recency_window_days": True},
+        {"only_recent": "maybe"},
+        {"only_startups": "yes"},
+    ],
+)
+def test_saved_search_invalid_recency_keys_are_rejected(filters: dict[str, object]) -> None:
+    with pytest.raises(InvalidSavedSearchFiltersError):
+        saved_search_service.validate_saved_search_filters(filters)

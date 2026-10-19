@@ -60,6 +60,17 @@ def test_post_saved_search_with_invalid_filter_returns_422(
     assert client.get("/saved-searches").json() == []
 
 
+def test_post_saved_search_with_invalid_lens_returns_422(
+    owner_client: tuple[TestClient, Session, str],
+) -> None:
+    client, _, _ = owner_client
+
+    response = client.post("/saved-searches", json={"name": "x", "filters": {"lens": "recentes"}})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "invalid_filters"
+
+
 def test_new_count_of_legacy_invalid_saved_search_returns_422_not_500(
     owner_client: tuple[TestClient, Session, str],
 ) -> None:
@@ -89,12 +100,13 @@ def _http_params(saved_params: dict[str, str]) -> dict[str, str]:
 @pytest.mark.parametrize(
     ("params", "expected_total"),
     [
-        ({"all_areas": "true"}, 2),
+        # Each total differs from the default (3) so dropping a filter changes the count.
+        ({"all_areas": "true"}, 3),
         ({"all_areas": "true", "only_startups": "true"}, 1),
-        ({"all_areas": "true", "only_recent": "false"}, 4),
+        ({"all_areas": "true", "only_recent": "false"}, 5),
         ({"all_areas": "true", "lens": "novas"}, 2),
-        ({"all_areas": "true", "lens": "abertas"}, 2),
-        ({"all_areas": "true", "lens": "abertas", "only_startups": "true"}, 1),
+        ({"all_areas": "true", "lens": "abertas"}, 4),
+        ({"all_areas": "true", "lens": "abertas", "only_startups": "true"}, 2),
     ],
 )
 def test_saved_search_new_count_equals_inbox_total_for_same_url_params(
@@ -135,7 +147,9 @@ def test_saved_search_new_count_equals_inbox_total_for_same_url_params(
     startup_old = opportunity("b", age_days=60, startup=True)
     plain_recent = opportunity("c", age_days=1, startup=False)
     plain_old_open = opportunity("d", age_days=90, startup=False)
-    opportunities = [startup_recent, startup_old, plain_recent, plain_old_open]
+    # 20 days old: inside the default 30-day window, outside the 14-day "novas" lens.
+    plain_mid = opportunity("e", age_days=20, startup=False)
+    opportunities = [startup_recent, startup_old, plain_recent, plain_old_open, plain_mid]
     source = SourceDefinitionModel(
         id=uuid4(),
         source_type="manual",
@@ -158,7 +172,8 @@ def test_saved_search_new_count_equals_inbox_total_for_same_url_params(
     session.add_all(opportunities)
     session.flush()
     raw_ids = []
-    for open_item in (startup_recent, plain_old_open):
+    # plain_recent is the only row not open at source.
+    for open_item in (startup_recent, startup_old, plain_old_open, plain_mid):
         raw = RawItemModel(
             id=uuid4(),
             source_run_id=run.id,
