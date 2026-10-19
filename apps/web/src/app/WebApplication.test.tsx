@@ -20,6 +20,7 @@ vi.mock('@clerk/react', () => ({
     signInUrl,
     signUpFallbackRedirectUrl,
     signUpUrl,
+    localization,
   }: {
     afterSignOutUrl?: string
     children: ReactNode
@@ -27,9 +28,11 @@ vi.mock('@clerk/react', () => ({
     signInUrl?: string
     signUpFallbackRedirectUrl?: string
     signUpUrl?: string
+    localization?: { locale?: string }
   }) => (
     <div
       data-after-sign-out-url={afterSignOutUrl}
+      data-localization={localization?.locale}
       data-sign-in-fallback-redirect-url={signInFallbackRedirectUrl}
       data-sign-in-url={signInUrl}
       data-sign-up-fallback-redirect-url={signUpFallbackRedirectUrl}
@@ -117,6 +120,12 @@ describe('WebApplication', () => {
     expect(provider?.getAttribute('data-sign-in-fallback-redirect-url')).toBe('/')
     expect(provider?.getAttribute('data-sign-up-fallback-redirect-url')).toBe('/')
     expect(provider?.getAttribute('data-after-sign-out-url')).toBe('/')
+  })
+
+  it('configura o Clerk com a localização oficial pt-BR', () => {
+    const container = render(<WebApplication publishableKey="pk_test_example" />)
+
+    expect(container.querySelector('[data-testid="clerk-provider"]')?.getAttribute('data-localization')).toBe('pt-BR')
   })
 
   it.each([

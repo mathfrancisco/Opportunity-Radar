@@ -26,15 +26,6 @@ vi.mock('@clerk/react', () => ({
       Entrar na conta
     </div>
   ),
-  SignInButton: ({
-    children,
-    fallbackRedirectUrl,
-    mode,
-  }: {
-    children: ReactElement
-    fallbackRedirectUrl?: string
-    mode?: string
-  }) => <div data-fallback-redirect-url={fallbackRedirectUrl} data-mode={mode} data-testid="sign-in-button">{children}</div>,
   SignUp: (props: { fallbackRedirectUrl?: string; path?: string; routing?: string; signInUrl?: string }) => (
     <div
       data-fallback-redirect-url={props.fallbackRedirectUrl}
@@ -45,15 +36,6 @@ vi.mock('@clerk/react', () => ({
       Criar conta
     </div>
   ),
-  SignUpButton: ({
-    children,
-    fallbackRedirectUrl,
-    mode,
-  }: {
-    children: ReactElement
-    fallbackRedirectUrl?: string
-    mode?: string
-  }) => <div data-fallback-redirect-url={fallbackRedirectUrl} data-mode={mode} data-testid="sign-up-button">{children}</div>,
   useAuth: () => clerkMock,
 }))
 
@@ -129,6 +111,10 @@ describe('App', () => {
     expect(container.querySelector('h1')?.textContent).toBe('Encontre oportunidades alinhadas à sua carreira.')
     expect(container.textContent).toContain('Entrar')
     expect(container.textContent).toContain('Criar conta')
+    expect(container.querySelector('a[href="/sign-in"]')?.textContent).toContain('Entrar')
+    expect(container.querySelector('a[href="/sign-up"]')?.textContent).toContain('Criar conta')
+    expect(container.querySelector('[data-testid="product-preview"]')?.textContent).toContain('Demonstração com dados fictícios')
+    expect(container.querySelectorAll('details')).toHaveLength(3)
     expect(fetchMock).not.toHaveBeenCalled()
     expect(clerkMock.getToken).not.toHaveBeenCalled()
   })
@@ -175,6 +161,7 @@ describe('App', () => {
     )
 
     expect(container.textContent).toContain(expectedText)
+    expect(container.querySelector('a[href="/"]')?.textContent).toContain('Opportunity Radar')
   })
 
   it.each([
@@ -198,14 +185,39 @@ describe('App', () => {
     expect(form?.getAttribute('data-sign-up-url') ?? form?.getAttribute('data-sign-in-url')).toBe(adjacentAuthPath)
   })
 
-  it('configura os botões públicos para redirecionar pelas rotas Clerk e voltar à visão geral', () => {
+  it('usa links locais da página pública para as rotas Clerk', () => {
     clerkMock.isSignedIn = false
     const container = renderApp(<App />, '/')
 
-    for (const id of ['sign-in-button', 'sign-up-button']) {
-      const button = container.querySelector(`[data-testid="${id}"]`)
-      expect(button?.getAttribute('data-mode')).toBe('redirect')
-      expect(button?.getAttribute('data-fallback-redirect-url')).toBe('/')
+    expect(container.querySelectorAll('a[href="/sign-in"]')).not.toHaveLength(0)
+    expect(container.querySelectorAll('a[href="/sign-up"]')).not.toHaveLength(0)
+  })
+
+  it('mantém a marca e os CTAs do cabeçalho utilizáveis em telas pequenas', () => {
+    clerkMock.isSignedIn = false
+    const container = renderApp(<App />, '/')
+    const homeLink = container.querySelector('a[aria-label="Opportunity Radar — início"]')
+
+    expect(homeLink?.className).toContain('min-h-11')
+    expect(homeLink?.className).toContain('min-w-11')
+    expect(homeLink?.querySelector(':scope > span > span:nth-child(2)')?.className).toContain('hidden')
+  })
+
+  it('oferece alvos de toque no rodapé público', () => {
+    clerkMock.isSignedIn = false
+    const container = renderApp(<App />, '/')
+
+    for (const link of container.querySelectorAll('footer a')) {
+      expect(link.className).toContain('min-h-11')
+    }
+  })
+
+  it('oferece alvos de toque no shell de autenticação', () => {
+    clerkMock.isSignedIn = false
+    const container = renderApp(<App />, '/sign-in/sso-callback')
+
+    for (const link of container.querySelectorAll('a[href="/"]')) {
+      expect(link.className).toContain('min-h-11')
     }
   })
 
