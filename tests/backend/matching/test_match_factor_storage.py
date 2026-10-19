@@ -81,7 +81,10 @@ def test_redundant_factor_index_is_gone_and_the_unique_index_serves_the_lookup(
     with engine.connect() as connection:
         names = set(
             connection.scalars(
-                text("SELECT indexname FROM pg_indexes WHERE tablename = 'match_factor'")
+                text(
+                    "SELECT indexname FROM pg_indexes "
+                    "WHERE schemaname = 'matching' AND tablename = 'match_factor'"
+                )
             )
         )
         connection.execute(text("SET LOCAL enable_seqscan = off"))

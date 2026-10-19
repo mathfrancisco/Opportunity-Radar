@@ -127,6 +127,8 @@ jobs:
             exit 1
           fi
           test "$(alembic current | awk '{print $1}')" = "$(alembic heads | awk '{print $1}')"
+      - name: Check models and migrations have not drifted
+        run: alembic check
       - name: Run backend tests
         run: pytest -q --durations=15
       - name: Measure content classification on the versioned gold
