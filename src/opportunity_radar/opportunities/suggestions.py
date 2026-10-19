@@ -372,26 +372,45 @@ def existing_suggestion_fields(
     """Fields already carrying a suggestion (any status) for this opportunity's version.
 
     With `prompt_version`, fields the model already answered null for under that prompt
-    and this opportunity version count too (`SuggestionUnansweredModel`)."""
-    rows = set(
-        session.scalars(
-            select(OpportunitySuggestionModel.field).where(
-                OpportunitySuggestionModel.opportunity_id == opportunity.id,
-                OpportunitySuggestionModel.opportunity_version == opportunity.version,
-            )
-        ).all()
-    )
+    (or answered with a value that was discarded) and this opportunity version count too
+    (`SuggestionUnansweredModel`)."""
+    return existing_suggestion_fields_many(session, [opportunity], prompt_version)[opportunity.id]
+
+
+def existing_suggestion_fields_many(
+    session: Session,
+    opportunities: Sequence[OpportunityModel],
+    prompt_version: str | None = None,
+) -> dict[UUID, set[str]]:
+    """`existing_suggestion_fields` for a page of opportunities in two queries, not 2 each."""
+    found: dict[UUID, set[str]] = {item.id: set() for item in opportunities}
+    if not opportunities:
+        return found
+    ids = list(found)
+    versions = {item.id: item.version for item in opportunities}
+    for opportunity_id, version, field in session.execute(
+        select(
+            OpportunitySuggestionModel.opportunity_id,
+            OpportunitySuggestionModel.opportunity_version,
+            OpportunitySuggestionModel.field,
+        ).where(OpportunitySuggestionModel.opportunity_id.in_(ids))
+    ):
+        if versions[opportunity_id] == version:
+            found[opportunity_id].add(field)
     if prompt_version is not None:
-        rows.update(
-            session.scalars(
-                select(SuggestionUnansweredModel.field).where(
-                    SuggestionUnansweredModel.opportunity_id == opportunity.id,
-                    SuggestionUnansweredModel.opportunity_version == opportunity.version,
-                    SuggestionUnansweredModel.prompt_version == prompt_version,
-                )
-            ).all()
-        )
-    return rows
+        for opportunity_id, version, field in session.execute(
+            select(
+                SuggestionUnansweredModel.opportunity_id,
+                SuggestionUnansweredModel.opportunity_version,
+                SuggestionUnansweredModel.field,
+            ).where(
+                SuggestionUnansweredModel.opportunity_id.in_(ids),
+                SuggestionUnansweredModel.prompt_version == prompt_version,
+            )
+        ):
+            if versions[opportunity_id] == version:
+                found[opportunity_id].add(field)
+    return found
 
 
 def candidates_needing_suggestion(
@@ -548,11 +567,12 @@ def candidates_needing_suggestion(
             )
         ).all()
         deferred_keys = {(item.opportunity_id, item.content_hash) for item in defers}
+        known = existing_suggestion_fields_many(session, page, prompt_version)
         for item in page:
             fields = [
                 field
                 for field in unknown_fields(item, extended=extended)
-                if field.value not in existing_suggestion_fields(session, item, prompt_version)
+                if field.value not in known[item.id]
             ]
             if not fields:
                 continue
@@ -913,6 +933,9 @@ async def _suggest_fields_claimed(
         )
         session.add(suggestion)
         created.append(suggestion)
+    # A discarded answer (evidence not in the text, or an invalid value) is remembered like a
+    # null one: it never becomes a suggestion, and the same prompt is not asked again.
+    unanswered.extend(discarded)
     if unanswered:
         session.execute(
             pg_insert(SuggestionUnansweredModel)

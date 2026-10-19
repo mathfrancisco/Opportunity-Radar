@@ -270,8 +270,8 @@ class OpportunityRepository:
             .first()
         )
 
-    def is_primary_occurrence(self, occurrence: SourceOccurrenceModel) -> bool:
-        """Whether this is the opportunity's primary occurrence (R55-E4).
+    def primary_occurrence_id(self, opportunity_id: UUID) -> UUID | None:
+        """The opportunity's primary occurrence (R55-E4).
 
         The primary is the oldest (`first_seen_at`, then id) occurrence among those still
         open at their source (seen in the latest complete run of their own source). When
@@ -279,7 +279,7 @@ class OpportunityRepository:
         over, so content does not stay frozen on a vanished posting. With no open
         occurrence at all, the oldest one overall keeps the role."""
         base = select(SourceOccurrenceModel.id).where(
-            SourceOccurrenceModel.opportunity_id == occurrence.opportunity_id
+            SourceOccurrenceModel.opportunity_id == opportunity_id
         )
         order = (SourceOccurrenceModel.first_seen_at, SourceOccurrenceModel.id)
         primary = self.session.scalar(
@@ -287,6 +287,10 @@ class OpportunityRepository:
         )
         if primary is None:
             primary = self.session.scalar(base.order_by(*order).limit(1))
+        return primary
+
+    def is_primary_occurrence(self, occurrence: SourceOccurrenceModel) -> bool:
+        primary = self.primary_occurrence_id(occurrence.opportunity_id)
         return primary is None or primary == occurrence.id
 
     def opportunity_by_fingerprint(

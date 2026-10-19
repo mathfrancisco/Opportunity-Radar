@@ -440,11 +440,29 @@ class OpportunityService:
             self.session.refresh(result)
         except IntegrityError:
             self.session.rollback()
-            return self.repository.normalization_result(raw_item_id, NORMALIZER_VERSION)
+            return self._race_winner_result(raw_item_id)
         except Exception:
             self.session.rollback()
             raise
         return result
+
+    def _race_winner_result(self, raw_item_id: UUID) -> NormalizationResultModel | None:
+        """The result a concurrent worker stored for this item (R55-B1 follow-up).
+
+        A first read can miss a row that committed just after our rollback, so it is tried
+        once more on a fresh transaction. Still unreadable means the item stays pending for
+        the next pass; that is logged instead of silently shrinking the batch."""
+        for attempt in range(2):
+            winner = self.repository.normalization_result(raw_item_id, NORMALIZER_VERSION)
+            if winner is not None:
+                return winner
+            if attempt == 0:
+                self.session.rollback()
+        logger.warning(
+            "normalization race winner could not be read; item left pending",
+            extra={"job": "normalize", "raw_item_id": str(raw_item_id)},
+        )
+        return None
 
     def _stale_without_occurrence(
         self, raw_item: RawItemModel, published_at: datetime | None
