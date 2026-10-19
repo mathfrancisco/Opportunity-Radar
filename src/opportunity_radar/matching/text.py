@@ -228,6 +228,24 @@ def truncate_at_sentence(text: str, max_chars: int) -> tuple[str, bool]:
     return (window[:space] if space > 0 else window).rstrip(), True
 
 
+def trim_stored_description(text: str | None, max_chars: int) -> str | None:
+    """The form of a description kept in the database (card R55-E6).
+
+    Up to `max_chars` (or with `max_chars <= 0`) the text is returned untouched. Longer
+    text loses its boilerplate sections (`clean_description`) and, if still too long, is
+    cut with the requirements and responsibilities sections first
+    (`fit_description_by_section`). Idempotent: a trimmed text is within the cap, so a
+    second pass returns it as is. Skills, seniority and country rules read the full
+    text before this runs; they never see the trimmed one.
+    """
+    if not text or max_chars <= 0 or len(text) <= max_chars:
+        return text
+    cleaned = clean_description(text)
+    return fit_description_by_section(
+        cleaned, available_tokens=max_chars, tokens_per_char=1.0
+    ).text
+
+
 def estimate_tokens(chars: int, tokens_per_char: float) -> int:
     return math.ceil(chars * tokens_per_char)
 
@@ -407,6 +425,7 @@ __all__ = [
     "clean_description",
     "clean_description_report",
     "estimate_tokens",
+    "trim_stored_description",
     "fit_description",
     "fit_description_by_section",
     "split_sections",

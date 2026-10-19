@@ -231,6 +231,11 @@ class Settings(BaseSettings):
     # comma separated. Types not listed use the scheduler default (1000 per hour).
     host_request_ceilings: str = "workday=500,hacker_news=500,inhire=1200"
 
+    # R55-E6: cap, in characters, of the description stored on `opportunities.opportunity`.
+    # Longer text is cleaned (company boilerplate dropped) and cut with requirements and
+    # responsibilities first. 0 stores the description untouched.
+    stored_description_max_chars: int = Field(default=4000, ge=0)
+
     @property
     def extraction_skip_source_type_set(self) -> frozenset[str]:
         return frozenset(

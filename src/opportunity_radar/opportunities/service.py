@@ -1720,6 +1720,13 @@ def _search_skills_text(skills: list[OpportunitySkillModel]) -> str | None:
     return " ".join(names) or None
 
 
+def _stored_description(description: str | None) -> str | None:
+    """R55-E6: the description as stored (cleaned and capped); extraction ran on the full text."""
+    from opportunity_radar.matching.text import trim_stored_description
+
+    return trim_stored_description(description, get_settings().stored_description_max_chars)
+
+
 def _new_opportunity(candidate: CanonicalCandidate, *, first_seen_at: datetime) -> OpportunityModel:
     return OpportunityModel(
         fingerprint=candidate.fingerprint,
@@ -1734,7 +1741,7 @@ def _new_opportunity(candidate: CanonicalCandidate, *, first_seen_at: datetime) 
         work_mode=candidate.work_mode.value,
         seniority=candidate.seniority.value,
         contract_type=candidate.contract_type.value,
-        description=candidate.description,
+        description=_stored_description(candidate.description),
         lifecycle_status=OpportunityStatus.DISCOVERED.value,
         published_at=candidate.published_at,
         source_updated_at=candidate.source_updated_at,
@@ -1875,7 +1882,12 @@ def _apply_evidence_fields(opportunity: OpportunityModel, candidate: CanonicalCa
     # A candidate without a description (detail fetch off for the source) says nothing about
     # one a backfill stored: it must not erase it.
     if candidate.description is not None and candidate.description.strip():
-        changed |= _set_if_changed(opportunity, "description", candidate.description)
+        stored = _stored_description(candidate.description)
+        if opportunity.description != stored:
+            # A row still holding the untrimmed text of this same posting is trimmed in
+            # place without a version bump (no reanalysis wave); a real edit bumps.
+            changed |= _stored_description(opportunity.description) != stored
+            opportunity.description = stored
     changed |= _set_if_changed(opportunity, "published_at", candidate.published_at)
     changed |= _set_if_changed(opportunity, "source_updated_at", candidate.source_updated_at)
     changed |= _set_if_changed(
