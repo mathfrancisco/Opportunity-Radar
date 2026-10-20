@@ -32,6 +32,7 @@ from tests.backend.dashboard.test_coverage_funnel import (
     _opportunity as _opportunity_with_sources,
 )
 from tests.backend.dashboard.test_inbox_pointer import _Fixture
+from tests.backend.dashboard.test_queries import TEST_OWNER_SUB
 
 pytestmark = [
     pytest.mark.integration,
@@ -222,4 +223,29 @@ def test_inbox_request_runs_one_statement_for_the_list_and_totals() -> None:
         # list, its total and the "hidden by area" count are still one statement.
         profile_areas = _inbox_statements(session, **params)
         assert sum("current_assessment" in statement for statement in profile_areas) == 1
+        session.rollback()
+
+
+def test_inbox_top_factors_cost_one_batch_statement_not_one_per_item() -> None:
+    statements: list[str] = []
+
+    def record(conn: Any, cursor: Any, statement: str, *args: Any) -> None:
+        del conn, cursor, args
+        statements.append(statement)
+
+    with Session(create_database_engine(os.environ["DATABASE_URL"])) as session:
+        fixture = _Fixture(session)
+        query = InboxQuery(company_id=fixture.company.id, only_recent=False)
+        engine = session.get_bind()
+        event.listen(engine, "before_cursor_execute", record)
+        try:
+            page = queries.list_opportunity_inbox(session, query, owner_sub=TEST_OWNER_SUB)
+        finally:
+            event.remove(engine, "before_cursor_execute", record)
+
+        assert sum(item.assessment_id is not None for item in page.items) > 1
+        # The list with its totals is one statement; every assessed row shares one batch.
+        assert len(statements) == 2
+        assert sum("match_factor" in statement for statement in statements) == 1
+        assert "IN (" in statements[1]
         session.rollback()

@@ -134,6 +134,8 @@ class InboxItemResponse(BaseModel):
     sibling_count: int = 0
     #: D1: `matched`/`unknown` with a salary filter, `null` without one.
     salary_match: Literal["matched", "unknown"] | None = None
+    #: Task 10: the met factor with the highest contribution; `null` when none is met.
+    top_factor_code: str | None = None
 
 
 class InboxPageResponse(BaseModel):
@@ -1095,6 +1097,7 @@ def _inbox_item_response(item: InboxItem) -> InboxItemResponse:
         startup_batch=item.startup_batch,
         sibling_count=item.sibling_count,
         salary_match=item.salary_match,
+        top_factor_code=item.top_factor_code,
     )
 
 

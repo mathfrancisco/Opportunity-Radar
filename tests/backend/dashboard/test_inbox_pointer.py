@@ -250,9 +250,11 @@ def test_inbox_page_and_totals_come_from_a_single_select() -> None:
     with Session(create_database_engine(os.environ["DATABASE_URL"])) as session:
         fixture = _Fixture(session)
         base = InboxQuery(company_id=fixture.company.id, only_recent=False)
-        assert _count_selects(session, base) == 1
+        # The page, its totals and the area count are one SELECT; the page's top factors
+        # add one batch SELECT (Task 10), never one per row.
+        assert _count_selects(session, base) == 2
         with_area = replace(base, role_families=("UNKNOWN",))
-        assert _count_selects(session, with_area) == 1
+        assert _count_selects(session, with_area) == 2
         # A filter that hides every row leaves no page row to carry the totals.
         hidden = replace(base, role_families=("BACKEND",))
         page = list_opportunity_inbox(session, hidden)
