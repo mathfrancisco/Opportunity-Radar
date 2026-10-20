@@ -1,6 +1,7 @@
 import { act, type ReactElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { writeThemePreference } from '../../lib/theme'
 import { ThemeToggle } from './ThemeToggle'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -58,5 +59,21 @@ describe('ThemeToggle', () => {
       [...c.querySelectorAll('button')].map((b) => b.getAttribute('aria-pressed'))
     expect(pressed(first)).toEqual(['false', 'false', 'true'])
     expect(pressed(second)).toEqual(['false', 'false', 'true'])
+  })
+
+  it('mostra a escolha mesmo com o armazenamento bloqueado', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    const container = render(<ThemeToggle />)
+    const buttons = [...container.querySelectorAll('button')]
+    act(() => buttons[2].click())
+    expect(buttons.map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'false', 'true'])
+    expect(document.documentElement.dataset.theme).toBe('dark')
+    vi.restoreAllMocks()
+    writeThemePreference('system')
   })
 })
