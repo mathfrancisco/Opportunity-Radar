@@ -758,7 +758,7 @@ function Summary({ overview }: { overview: Overview }) {
         >
           <div className="grid gap-3">
             <MetricBlock
-              hint="Com decisão determinística registrada"
+              hint="Com match registrado"
               label="Avaliadas"
               to="/inbox?only_assessed=true"
               value={String(overview.assessedOpportunities)}

@@ -312,7 +312,7 @@ describe('InboxPage primeiro acesso', () => {
     expect(Array.from(container.querySelectorAll('h2')).some((h) => h.textContent === 'Monte sua bateia')).toBe(true)
     const cta = Array.from(container.querySelectorAll('a')).find((a) => a.textContent === 'Começar pelo perfil')
     expect(cta?.getAttribute('href')).toBe('/profile')
-    expect(container.textContent).not.toContain('Ainda não há oportunidades para mostrar')
+    expect(container.textContent).not.toContain('Nada novo para decidir. A próxima coleta acontece no próximo ciclo.')
   })
 
   it('sem perfil mas com vagas, a lista aparece como de costume', async () => {
@@ -332,7 +332,7 @@ describe('InboxPage primeiro acesso', () => {
     await flush(6)
 
     expect(container.textContent).not.toContain('Monte sua bateia')
-    expect(container.textContent).toContain('Ainda não há oportunidades para mostrar')
+    expect(container.textContent).toContain('Nada novo para decidir. A próxima coleta acontece no próximo ciclo.')
   })
 })
 
@@ -716,7 +716,7 @@ describe('InboxPage table, pagination and filters', () => {
     expect(row.textContent).toContain('Possível duplicata')
     expect(row.querySelector('[data-testid="startup-badge"]')).not.toBeNull()
     expect(row.textContent).toContain('Não é para mim')
-    expect(container.textContent).toContain('1 oportunidade encontrada.')
+    expect(container.textContent).toContain('1 vaga encontrada.')
   })
 
   it('sincroniza busca submetida e filtros ao navegar para trás e para frente no histórico do Router', async () => {
@@ -789,7 +789,7 @@ describe('InboxPage table, pagination and filters', () => {
 
     const table = container.querySelector('[role="table"]') as HTMLElement
     expect(table).not.toBeNull()
-    expect(table.querySelector('caption')?.textContent).toBe('Oportunidades')
+    expect(table.querySelector('caption')?.textContent).toBe('Vagas')
     expect(
       [...table.querySelectorAll('[role="columnheader"]')].map((header) => header.textContent),
     ).toEqual(['Vaga', 'Score e decisão', 'Sinais', 'Publicada', 'Ações'])
@@ -863,13 +863,13 @@ describe('InboxPage table, pagination and filters', () => {
     ).toBe(true)
   })
 
-  it('explica a leitura do score, fatores desconhecidos, análise semântica e avaliações stale', async () => {
+  it('explica a leitura do score, fatores desconhecidos, leitura da IA e avaliações stale', async () => {
     stubInbox(0, [])
     const container = renderAt('/inbox')
     await flush()
 
     const guidance = container.querySelector('aside[aria-label="Como interpretar as avaliações"]')
-    expect(guidance?.textContent).toContain('regras determinísticas')
+    expect(guidance?.textContent).toContain('regras fixas')
     expect(guidance?.textContent).toContain('pedem revisão')
     expect(guidance?.textContent).toContain('consultiva')
     expect(guidance?.textContent).toContain('desatualizados')
@@ -879,12 +879,12 @@ describe('InboxPage table, pagination and filters', () => {
     stubInbox(0, [], [])
     const bare = renderAt('/inbox')
     await flush()
-    expect(bare.textContent).toContain('Ainda não há oportunidades para mostrar')
-    expect(bare.textContent).not.toContain('Nenhuma oportunidade encontrada com esses filtros.')
+    expect(bare.textContent).toContain('Nada novo para decidir. A próxima coleta acontece no próximo ciclo.')
+    expect(bare.textContent).not.toContain('Nenhuma vaga encontrada com esses filtros.')
 
     const filtered = renderAt('/inbox?work_mode=REMOTE')
     await flush()
-    expect(filtered.textContent).toContain('Nenhuma oportunidade encontrada com esses filtros.')
+    expect(filtered.textContent).toContain('Nenhuma vaga encontrada com esses filtros.')
   })
 
   it('envia à API os mesmos parâmetros de sempre para os filtros primários e avançados', async () => {

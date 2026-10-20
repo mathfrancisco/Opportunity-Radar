@@ -447,7 +447,7 @@ describe('OpportunityDetailPage', () => {
     )
     await flush(6)
 
-    const navigation = container.querySelector('nav[aria-label="Navegar nesta oportunidade"]')
+    const navigation = container.querySelector('nav[aria-label="Navegar nesta vaga"]')
     expect(navigation?.querySelector('a[href="#resumo"]')?.textContent).toBe('Resumo')
     expect(navigation?.querySelector('a[href="#decisao"]')?.textContent).toBe('Decisão')
     expect(navigation?.querySelector('a[href="#candidatura"]')?.textContent).toBe('Candidatura')
@@ -605,7 +605,7 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     const firstSection = panel.nextElementSibling?.querySelector('section') as HTMLElement
 
     expect(back.textContent).toContain('Voltar')
-    expect(kicker.textContent).toBe('Oportunidade')
+    expect(kicker.textContent).toBe('Vaga')
     expect(title.textContent).toBe('Backend Engineer')
     expect(facts.textContent).toContain('Acme')
     expect(facts.textContent).toContain('Remoto')
@@ -689,7 +689,7 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     const nameOf = (section: HTMLElement) =>
       container.querySelector(`#${section.getAttribute('aria-labelledby')}`)?.textContent
     expect(nameOf(deterministic)).toBe('Decisão')
-    expect(nameOf(analysis)).toBe('Análise semântica')
+    expect(nameOf(analysis)).toBe('Leitura da IA')
     expect(deterministic.textContent).toContain('Recomendada')
     expect(deterministic.textContent).not.toContain('Analisar com IA')
     expect(analysis.textContent).toContain('Analisar com IA')

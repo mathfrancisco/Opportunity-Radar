@@ -161,7 +161,7 @@ describe('App', () => {
     )
 
     expect(container.textContent).toContain(expectedText)
-    expect(container.querySelector('a[href="/"]')?.textContent).toContain('Opportunity Radar')
+    expect(container.querySelector('a[href="/"]')?.textContent).toContain('Bateia')
   })
 
   it.each([

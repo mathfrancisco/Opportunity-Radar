@@ -184,7 +184,7 @@ function ItemRow({ item }: { item: InboxItem }) {
         {item.isStale && (
           <SecondaryText className="mt-1.5 text-warning-ink">
             <span role="status">
-              Esta avaliação usa uma versão anterior do perfil ou da oportunidade. A
+              Esta avaliação usa uma versão anterior do perfil ou da vaga. A
               reavaliação está pendente; o resultado anterior continua disponível.
               {item.assessmentProfileVersionId && item.currentProfileVersionId && (
                 <> Perfil avaliado: {item.assessmentProfileVersionId.slice(0, 8)} · perfil atual: {item.currentProfileVersionId.slice(0, 8)}.</>
@@ -193,14 +193,17 @@ function ItemRow({ item }: { item: InboxItem }) {
           </SecondaryText>
         )}
         {item.analysisStatus && item.analysisStatus !== 'AI_COMPLETED' && (
-          <SecondaryText className="mt-1.5 text-warning-ink">
-            Análise semântica indisponível ({item.analysisStatus}). A decisão determinística
-            permanece completa.
-          </SecondaryText>
+          <div className="mt-1.5 text-caption text-warning-ink">
+            <p>A IA não leu esta vaga. O match ao lado continua valendo.</p>
+            <details className="mt-1">
+              <summary className="cursor-pointer">Detalhe técnico</summary>
+              <p>{item.analysisStatus}</p>
+            </details>
+          </div>
         )}
         {item.analysisRecommendedReview === true && (
           <SecondaryText className="mt-1 font-medium text-warning-ink">
-            A análise sugere revisão humana antes de aplicar.
+            A leitura da IA sugere revisar antes de se candidatar.
           </SecondaryText>
         )}
       </td>
@@ -884,9 +887,9 @@ export function InboxPage() {
       </div>
 
       <aside className="mt-4 rounded-panel border border-line bg-surface px-4 py-3 text-sm text-subtle" aria-label="Como interpretar as avaliações">
-        Score, veredito e elegibilidade vêm de regras determinísticas. Fatores ausentes ou
-        desconhecidos pedem revisão; a análise semântica, quando disponível, é consultiva e
-        não altera a decisão. Resultados desatualizados permanecem identificados até nova avaliação.
+        Score, veredito e elegibilidade vêm de regras fixas. Fatores ausentes ou
+        desconhecidos pedem revisão; a leitura da IA, quando existe, é consultiva e
+        não altera o match. Resultados desatualizados permanecem identificados até nova avaliação.
       </aside>
 
       <div className="mt-5 grid gap-3">
@@ -894,10 +897,10 @@ export function InboxPage() {
           <>
             {/* One skeleton per breakpoint, the hidden one out of the accessibility tree. */}
             <div className="hidden xl:block">
-              <TableSkeleton columns={tableColumns.length} label="Carregando oportunidades…" />
+              <TableSkeleton columns={tableColumns.length} label="Carregando vagas…" />
             </div>
             <div className="xl:hidden">
-              <CardListSkeleton count={5} label="Carregando oportunidades…" />
+              <CardListSkeleton count={5} label="Carregando vagas…" />
             </div>
           </>
         )}
@@ -910,20 +913,19 @@ export function InboxPage() {
               <FirstRunGuide />
             ) : (
             <EmptyState>
-              Ainda não há oportunidades para mostrar. Quando uma fonte trouxer vagas, elas
-              aparecem aqui.
+              Nada novo para decidir. A próxima coleta acontece no próximo ciclo.
             </EmptyState>
             )
           ) : (
-            <EmptyState>Nenhuma oportunidade encontrada com esses filtros.</EmptyState>
+            <EmptyState>Nenhuma vaga encontrada com esses filtros.</EmptyState>
           ))}
         {inbox.data && inbox.data.items.length > 0 && (
           <>
             <p className="text-sm text-muted">
-              {inbox.data.total} oportunidade{inbox.data.total === 1 ? '' : 's'} encontrada
+              {inbox.data.total} vaga{inbox.data.total === 1 ? '' : 's'} encontrada
               {inbox.data.total === 1 ? '' : 's'}.
             </p>
-            <DataTable caption="Oportunidades" columns={tableColumns} stackBelowXl>
+            <DataTable caption="Vagas" columns={tableColumns} stackBelowXl>
               {inbox.data.items.map((item) => (
                 <ItemRow item={item} key={item.opportunityId} />
               ))}

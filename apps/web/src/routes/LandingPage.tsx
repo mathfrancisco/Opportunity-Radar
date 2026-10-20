@@ -19,7 +19,7 @@ function ProductPreview() {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-divider pb-4">
         <div>
           <p className="text-caption font-semibold uppercase tracking-[0.12em] text-muted">Visão da semana</p>
-          <h2 className="mt-1 text-section">Oportunidades para decidir</h2>
+          <h2 className="mt-1 text-section">Vagas para decidir</h2>
         </div>
         <span className="rounded-chip border border-line-strong bg-panel px-2 py-1 text-caption text-neutral-ink">Demonstração com dados fictícios</span>
       </div>

@@ -559,7 +559,7 @@ export function DuplicateCandidates({ opportunity }: { opportunity: OpportunityD
   }
   const pending = candidates.data.filter((candidate) => candidate.status === 'PENDING')
   if (pending.length === 0) {
-    return <EmptyState>Nenhum candidato a duplicata pendente para esta oportunidade.</EmptyState>
+    return <EmptyState>Nenhum candidato a duplicata pendente para esta vaga.</EmptyState>
   }
   return (
     <div className="grid gap-4">
@@ -697,7 +697,7 @@ function AnalysisSection({
     <Section
       id="analise"
       lead="Comentário consultivo gerado por IA para apoiar sua leitura. Não é veredito nem aprovação, e não decide nada por você."
-      title="Análise semântica"
+      title="Leitura da IA"
     >
       <AnalysisPanel
         analysis={assessment.analysis}
@@ -734,24 +734,24 @@ export function OpportunityDetailPage() {
           className="inline-flex items-center text-sm text-subtle underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11"
           to="/inbox"
         >
-          ← Voltar para as oportunidades
+          ← Voltar para as vagas
         </Link>
       }
-      eyebrow="Oportunidade"
+      eyebrow="Vaga"
       meta={opportunity.data && <TitleFacts opportunity={opportunity.data} />}
-      title={opportunity.data?.title ?? 'Detalhe da oportunidade'}
+      title={opportunity.data?.title ?? 'Detalhe da vaga'}
       description={
         opportunity.data
           ? undefined
-          : 'Carregando os dados preservados desta oportunidade.'
+          : 'Carregando os dados preservados desta vaga.'
       }
     >
       <div>
         {opportunity.isPending && (
-          <LoadingState className="mt-2">Carregando oportunidade…</LoadingState>
+          <LoadingState className="mt-2">Carregando vaga…</LoadingState>
         )}
         {opportunity.isError && (
-          <ErrorState className="mt-2" onRetry={() => void opportunity.refetch()}>Não foi possível carregar esta oportunidade. Tente novamente.</ErrorState>
+          <ErrorState className="mt-2" onRetry={() => void opportunity.refetch()}>Não foi possível carregar esta vaga. Tente novamente.</ErrorState>
         )}
 
         {opportunity.data && (
@@ -767,12 +767,12 @@ export function OpportunityDetailPage() {
                   Sua decisão
                 </h2>
                 <p className="mt-1 text-body-sm text-subtle">
-                  Marque a relevância e acompanhe a candidatura. A análise de IA é apoio, não decide por você.
+                  Marque a relevância e acompanhe a candidatura. A leitura da IA é apoio, não decide por você.
                 </p>
               </div>
               <Section
                 id="decisao"
-                lead="Matching determinístico: score, veredito e elegibilidade calculados por regras, fora da IA."
+                lead="Match por regras: score, veredito e elegibilidade são calculados fora da IA."
                 title="Decisão"
               >
                 <div className="mb-4 flex flex-wrap items-center gap-3 empty:hidden">
@@ -784,7 +784,7 @@ export function OpportunityDetailPage() {
                   <ErrorState onRetry={() => void assessment.refetch()}>Não foi possível carregar a avaliação.</ErrorState>
                 )}
                 {assessment.data === null && (
-                  <EmptyState>Esta oportunidade ainda não foi avaliada contra o perfil ativo.</EmptyState>
+                  <EmptyState>Esta vaga ainda não foi avaliada contra o perfil ativo.</EmptyState>
                 )}
                 {assessment.data && <Decision assessment={assessment.data} />}
               </Section>
@@ -797,11 +797,11 @@ export function OpportunityDetailPage() {
             </aside>
 
             <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8 lg:col-start-1 lg:row-start-1">
-              <nav aria-label="Navegar nesta oportunidade" className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+              <nav aria-label="Navegar nesta vaga" className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
                 <a className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11" href="#resumo">Resumo</a>
                 <a className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11" href="#decisao">Decisão</a>
                 <a className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11" href="#candidatura">Candidatura</a>
-                <a className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11" href="#procedencia">Procedência</a>
+                <a className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11" href="#procedencia">De onde veio</a>
               </nav>
 
               <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
@@ -835,7 +835,7 @@ export function OpportunityDetailPage() {
                 <Section
                   id="procedencia"
                   lead="De onde veio a vaga e quando foi vista pela última vez."
-                  title="Procedência"
+                  title="De onde veio"
                 >
                   <Provenance opportunity={opportunity.data} />
                 </Section>
