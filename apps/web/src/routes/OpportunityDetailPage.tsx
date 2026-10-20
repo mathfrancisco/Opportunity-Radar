@@ -4,9 +4,9 @@ import { ApplicationPanel } from '../components/ApplicationPanel'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { Chip } from '../components/Chip'
-import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
 import { EmptyState, ErrorState, LoadingState } from '../components/states'
+import { NuggetMeter } from '../components/ui/NuggetMeter'
 import { AnalysisPanel } from '../features/matching/AnalysisPanel'
 import {
   type EligibilityDetail,
@@ -21,7 +21,8 @@ import {
 import { type DuplicateCandidate, type OpportunityDetail } from '../features/opportunities/api'
 import { opportunityLabel, seniorityLabels, workModeLabels } from '../features/opportunities/labels'
 import { estimatedDateHint } from '../features/dashboard/api'
-import { verdictLabels } from '../features/matching/verdicts'
+import { countFactors } from '../features/matching/nuggets'
+import { verdictLabels, verdictTones } from '../features/matching/verdicts'
 import {
   useConfirmDuplicate,
   useDuplicateCandidates,
@@ -600,37 +601,52 @@ function Eligibility({ details }: { details: EligibilityDetail[] }) {
   )
 }
 
+type FactorMark = { symbol: string; tone: string; word: string }
+
+const factorMarks: Record<'met' | 'missed' | 'unknown', FactorMark> = {
+  met: { symbol: '✓', tone: 'text-success-ink', word: 'Atendido' },
+  missed: { symbol: '−', tone: 'text-warning-ink', word: 'Faltante' },
+  unknown: { symbol: '?', tone: 'text-muted', word: 'Sem dado' },
+}
+
+function factorMark(factor: MatchFactor): FactorMark | null {
+  if (factor.status === 'UNKNOWN') return factorMarks.unknown
+  if (factor.status !== 'KNOWN') return null
+  return factor.rawScore !== null && Number(factor.rawScore) >= 0.5
+    ? factorMarks.met
+    : factorMarks.missed
+}
+
+/** The applicable factors as a nugget ruler plus one explained line each. */
 function Factors({ factors }: { factors: MatchFactor[] }) {
-  if (factors.length === 0) return <p className="text-subtle">Nenhum fator calculado.</p>
+  const counts = countFactors(factors)
+  const total = counts.met + counts.missed + counts.unknown
+  if (total === 0) return <p className="text-subtle">Nenhum fator avaliado</p>
+  const label = `${counts.met} de ${total} fatores atendidos${
+    counts.unknown > 0 ? `, ${counts.unknown} sem dado` : ''
+  }`
   return (
-    <DataTable
-      caption="Fatores que compõem o score desta avaliação"
-      columns={['Fator', 'Peso', 'Contribuição', 'Estado', 'Explicação']}
-      stickyFirstColumn
-    >
-      {factors.map((factor) => (
-            <tr key={factor.factorCode}>
-              <td className="font-medium">{factor.factorCode}</td>
-              <td>{formatNumber(factor.weight, 2)}</td>
-              <td>{formatNumber(factor.contribution, 2)}</td>
-              <td>
-                {factor.status === 'UNKNOWN'
-                  ? 'Desconhecido; requer revisão'
-                  : factor.status === 'TRUE'
-                    ? 'Atende'
-                    : factor.status === 'FALSE'
-                      ? 'Não atende'
-                      : 'Em revisão'}
-                {factor.status === 'UNKNOWN' && (
-                  <span className="block text-xs text-muted">
-                    {factor.missingPolicy}
-                  </span>
-                )}
-              </td>
-              <td className="text-subtle">{factor.explanation}</td>
-            </tr>
-      ))}
-    </DataTable>
+    <div className="grid gap-3">
+      <NuggetMeter label={label} met={counts.met} missed={counts.missed} unknown={counts.unknown} />
+      <ul className="grid gap-2">
+        {factors.map((factor) => {
+          const mark = factorMark(factor)
+          if (!mark) return null
+          return (
+            <li className="flex items-baseline gap-2 text-sm" key={factor.factorCode}>
+              <span aria-hidden="true" className={`w-4 shrink-0 text-center font-semibold ${mark.tone}`}>
+                {mark.symbol}
+              </span>
+              <span>
+                <span className="font-medium">{factor.factorCode}</span>
+                <span className="sr-only"> ({mark.word})</span>
+                <span className="block text-subtle">{factor.explanation}</span>
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }
 
@@ -642,7 +658,7 @@ function Decision({ assessment }: { assessment: MatchAssessment }) {
         <span className="text-metric-lg">
           {formatNumber(assessment.score)}
         </span>
-        <Chip className="text-body-sm font-medium">
+        <Chip className="text-body-sm font-medium" tone={verdictTones[assessment.verdict]}>
           {verdictLabels[assessment.verdict] ?? assessment.verdict}
         </Chip>
         <span className="text-sm text-muted">
@@ -663,11 +679,11 @@ function Decision({ assessment }: { assessment: MatchAssessment }) {
       </p>
 
       <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6">
-        <Section nested title="Filtros eliminatórios">
+        <Section nested title="O que impede">
           <Eligibility details={assessment.eligibilityDetails} />
         </Section>
 
-        <Section nested title="Fatores do score">
+        <Section nested title="Por que combina">
           <Factors factors={assessment.factors} />
         </Section>
       </div>

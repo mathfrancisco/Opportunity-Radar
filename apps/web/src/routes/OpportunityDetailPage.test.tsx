@@ -480,7 +480,47 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     analysis: null,
   }
 
-  async function renderDetail() {
+  const baseFactor = {
+    weight: '0.20',
+    contribution: '0.10',
+    confidence: '0.8',
+    missing_policy: 'NEUTRAL',
+    evidence_refs: [],
+  }
+  let factorSeq = 0
+  const known = (rawScore: string) => ({
+    ...baseFactor,
+    factor_code: `FATOR_${(factorSeq += 1)}`,
+    raw_score: rawScore,
+    status: 'KNOWN',
+    explanation: `Explicação ${factorSeq}`,
+  })
+  const unknown = () => ({
+    ...baseFactor,
+    factor_code: `FATOR_${(factorSeq += 1)}`,
+    raw_score: null,
+    status: 'UNKNOWN',
+    explanation: `Sem dado ${factorSeq}`,
+  })
+  const notApplicable = () => ({
+    ...baseFactor,
+    factor_code: `FATOR_${(factorSeq += 1)}`,
+    raw_score: null,
+    status: 'NOT_APPLICABLE',
+    explanation: `Não se aplica ${factorSeq}`,
+  })
+  const failedFilter = () => ({
+    code: 'LOCALIDADE',
+    result: 'FALSE',
+    reason: 'Fora da região aceita.',
+    severity: 'HARD',
+    confidence: '1',
+    evidence_refs: [],
+  })
+
+  async function renderDetail(
+    payload: { factors?: unknown[]; eligibility?: unknown[] } = {},
+  ) {
     const detail = opportunity({ description: 'Pesquisa com pessoas usuárias.' })
     vi.stubGlobal(
       'fetch',
@@ -488,7 +528,17 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
         const url = String(input)
         if (url.includes('/duplicate-candidates')) return new Response(JSON.stringify({ items: [] }))
         if (url.includes('/matches?')) {
-          return new Response(JSON.stringify({ items: [assessmentPayload] }))
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  ...assessmentPayload,
+                  factors: payload.factors ?? assessmentPayload.factors,
+                  eligibility_details: payload.eligibility ?? assessmentPayload.eligibility_details,
+                },
+              ],
+            }),
+          )
         }
         if (url.includes('/applications?')) {
           return new Response(JSON.stringify({ items: [], total: 0, offset: 0, limit: 1 }))
@@ -584,6 +634,28 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     expect(rule.textContent).toContain('execução completa')
     expect(rule.textContent).toContain('Execuções parciais ou com falha não encerram nada')
     expect(rule.textContent).toContain('reaparecer')
+  })
+
+  it('resume os fatores em pepitas', async () => {
+    const container = await renderDetail({
+      factors: [known('0.9'), known('0.8'), known('0.1'), unknown()],
+    })
+    const meter = container.querySelector('[role="img"][aria-label$="fatores atendidos, 1 sem dado"]')
+    expect(meter?.getAttribute('aria-label')).toBe('2 de 4 fatores atendidos, 1 sem dado')
+  })
+
+  it('sem fatores aplicáveis, diz Nenhum fator avaliado', async () => {
+    const container = await renderDetail({ factors: [notApplicable()] })
+    expect(container.textContent).toContain('Nenhum fator avaliado')
+    expect(container.querySelector('[role="img"][aria-label*="fatores atendidos"]')).toBeNull()
+  })
+
+  it('mostra O que impede antes de Por que combina', async () => {
+    const container = await renderDetail({ eligibility: [failedFilter()] })
+    const headings = Array.from(container.querySelectorAll('h1,h2,h3')).map((h) => h.textContent)
+    expect(headings).toContain('O que impede')
+    expect(headings).toContain('Por que combina')
+    expect(headings.indexOf('O que impede')).toBeLessThan(headings.indexOf('Por que combina'))
   })
 
   it('separa o matching determinístico da análise de IA em regiões rotuladas', async () => {
