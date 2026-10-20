@@ -744,25 +744,60 @@ describe('InboxPage table, pagination and filters', () => {
     expect(table.querySelectorAll('[role="rowgroup"]')).toHaveLength(2)
   })
 
-  it('mostra o score em caixa tabular e, ao lado, o nome do veredito', async () => {
-    stubInbox(1, [], [inboxItem({ score: '82', verdict: 'RECOMMENDED' })])
+  it('mostra a régua de pepitas a partir do score, com o nome do veredito', async () => {
+    stubInbox(1, [], [inboxItem({ score: '76.0', verdict: 'HIGH_PRIORITY' })])
     const container = renderAt('/inbox')
     await flush()
 
     const cell = container.querySelectorAll('tbody [role="cell"]')[1] as HTMLElement
-    expect(cell.textContent).toContain('82.0')
-    expect(cell.querySelector('.tabular-nums')?.textContent).toBe('82.0')
-    expect(cell.textContent).toContain('Recomendada')
+    const meter = cell.querySelector('[role="img"]')
+    expect(meter?.getAttribute('aria-label')).toBe('76 de 100')
+    expect(meter?.querySelectorAll('[data-nugget="met"]')).toHaveLength(8)
+    expect(meter?.querySelectorAll('[data-nugget="missed"]')).toHaveLength(2)
+    expect(cell.textContent).toContain('76 de 100')
+    expect(cell.textContent).toContain('Alta prioridade')
   })
 
-  it('desenha o kicker "Decidir", o título novo e as buscas salvas no cabeçalho', async () => {
+  it('sem score, não mostra régua e diz Sem avaliação', async () => {
+    stubInbox(1, [], [inboxItem({ score: null, verdict: null })])
+    const container = renderAt('/inbox')
+    await flush()
+
+    expect(container.textContent).toContain('Sem avaliação')
+    expect(container.querySelector('[role="img"][aria-label$="de 100"]')).toBeNull()
+  })
+
+  it('mostra o resumo da IA como motivo e não inventa motivo sem ele', async () => {
+    stubInbox(1, [], [inboxItem({ analysis_summary: 'Resumo X' })])
+    const withSummary = renderAt('/inbox')
+    await flush()
+    expect(withSummary.querySelector('[data-testid="inbox-reason"]')?.textContent).toBe('Resumo X')
+
+    stubInbox(1, [], [inboxItem({ analysis_summary: null })])
+    const without = renderAt('/inbox')
+    await flush()
+    expect(without.querySelector('[data-testid="inbox-reason"]')).toBeNull()
+  })
+
+  it('título longo continua quebrando dentro da linha', async () => {
+    const title = 'A'.repeat(200)
+    stubInbox(1, [], [inboxItem({ title })])
+    const container = renderAt('/inbox')
+    await flush()
+
+    const link = [...container.querySelectorAll('a')].find((a) => a.textContent === title)
+    expect(link?.closest('.break-anywhere')).not.toBeNull()
+  })
+
+  it('desenha o kicker "Decidir", o título Inbox e as buscas salvas no cabeçalho', async () => {
     stubInbox(1, [])
     const container = renderAt('/inbox')
     await flush()
 
     const header = container.querySelector('header') as HTMLElement
     expect(header.querySelector('p')?.textContent).toBe('Decidir')
-    expect(header.querySelector('h1')?.textContent).toBe('Quais vagas merecem sua atenção agora?')
+    expect(header.querySelector('h1')?.textContent).toBe('Inbox')
+    expect(header.textContent).toContain('1 vaga para decidir.')
     expect(
       [...header.querySelectorAll('button')].some((button) => button.textContent === 'Buscas salvas'),
     ).toBe(true)

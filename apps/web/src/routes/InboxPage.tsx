@@ -7,6 +7,7 @@ import { DataTable } from '../components/DataTable'
 import { FilterBar } from '../components/FilterBar'
 import { FilterPill } from '../components/FilterPill'
 import { ChevronDownIcon } from '../components/icons'
+import { NuggetMeter } from '../components/ui/NuggetMeter'
 import { PageSizeSelect } from '../components/PageSizeSelect'
 import { Pagination } from '../components/Pagination'
 import { Field, controlClassName } from '../components/Field'
@@ -22,6 +23,7 @@ import {
   inboxOrders,
 } from '../features/dashboard/api'
 import { useInbox } from '../features/dashboard/useInbox'
+import { nuggetsFromScore } from '../features/matching/nuggets'
 import { verdictLabels, verdictTones } from '../features/matching/verdicts'
 import { useMarkRelevance } from '../features/opportunities/useOpportunity'
 import { type ApplicationStage, stageLabels } from '../features/pipeline/api'
@@ -72,12 +74,6 @@ function formatDate(value: string | null) {
   return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleDateString('pt-BR')
 }
 
-function formatScore(value: string | null) {
-  if (value === null) return '—'
-  const parsed = Number(value)
-  return Number.isNaN(parsed) ? value : parsed.toFixed(1)
-}
-
 function VerdictBadge({ verdict }: { verdict: string | null }) {
   return (
     <StatusBadge
@@ -95,24 +91,19 @@ const appliedOptions = [
   { value: 'false', label: 'Ainda não aplicada' },
 ] as const
 
-const neutralScoreTone = 'border-line-strong bg-canvas text-neutral-ink'
-const absentScoreTone = 'border-dashed border-line-strong bg-surface text-muted'
-
 /**
- * The score as a tabular number in a box toned by the verdict. The tone only reinforces: the
- * verdict name is always written next to it by `VerdictBadge`, never colour alone.
+ * The score as a ten-nugget meter with the score in words beside it. Without a score the meter
+ * is absent and the text says so; the verdict name is always written next to it by `VerdictBadge`.
  */
-function ScoreBox({ item }: { item: InboxItem }) {
-  const tone =
-    item.score === null
-      ? absentScoreTone
-      : ((item.verdict && verdictTones[item.verdict]) ?? neutralScoreTone)
+function ScoreMeter({ score }: { score: string | null }) {
+  const met = nuggetsFromScore(score)
+  if (score === null || met === null) return <span className="text-body-sm text-muted">Sem avaliação</span>
   return (
-    <span
-      className={`inline-grid h-8 min-w-12 place-items-center rounded-chip border px-2 text-body-sm font-semibold tabular-nums ${tone}`}
-    >
-      {formatScore(item.score)}
-    </span>
+    <NuggetMeter
+      label={`${Math.round(Number(score))} de 100`}
+      met={met}
+      missed={10 - met}
+    />
   )
 }
 
@@ -152,6 +143,11 @@ function ItemRow({ item }: { item: InboxItem }) {
         <SecondaryText className="break-anywhere">
           {display(item.companyName)} · {display(item.location)}
         </SecondaryText>
+        {item.analysisSummary && (
+          <SecondaryText className="mt-1 break-anywhere text-ink">
+            <span data-testid="inbox-reason">{item.analysisSummary}</span>
+          </SecondaryText>
+        )}
         {(item.hasPendingDuplicate || item.startupStrength || item.siblingCount > 0) && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {item.siblingCount > 0 && (
@@ -168,7 +164,7 @@ function ItemRow({ item }: { item: InboxItem }) {
       </td>
       <td role="cell">
         <div className="flex flex-wrap items-center gap-2 xl:flex-col xl:items-start xl:gap-1.5">
-          <ScoreBox item={item} />
+          <ScoreMeter score={item.score} />
           <VerdictBadge verdict={item.verdict} />
           {item.applied && (
             <Chip tone={appliedTone}>
@@ -199,9 +195,6 @@ function ItemRow({ item }: { item: InboxItem }) {
             Análise semântica indisponível ({item.analysisStatus}). A decisão determinística
             permanece completa.
           </SecondaryText>
-        )}
-        {item.analysisSummary && (
-          <SecondaryText className="mt-1.5 text-subtle">{item.analysisSummary}</SecondaryText>
         )}
         {item.analysisRecommendedReview === true && (
           <SecondaryText className="mt-1 font-medium text-warning-ink">
@@ -628,8 +621,12 @@ export function InboxPage() {
       }
       current="/inbox"
       eyebrow="Decidir"
-      title="Quais vagas merecem sua atenção agora?"
-      description="Compare sinais, evidências e recência antes de decidir o que acompanhar. Cada vaga mostra a decisão determinística mais recente; as ainda não avaliadas continuam visíveis."
+      title="Inbox"
+      description={
+        inbox.data
+          ? `${inbox.data.total} ${inbox.data.total === 1 ? 'vaga' : 'vagas'} para decidir.`
+          : undefined
+      }
     >
       <FilterBar
         search={
