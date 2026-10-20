@@ -17,7 +17,7 @@ export function PageHeader({ title, description, eyebrow, meta, actions }: PageH
     <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
       <div className="min-w-0">
         {eyebrow && <p className="mb-1 text-caption font-semibold text-accent-ink">{eyebrow}</p>}
-        <h1 className="text-page-title">{title}</h1>
+        <h1 className="font-display text-page-title">{title}</h1>
         {description && (
           <p className="mt-1 max-w-2xl text-body-sm text-subtle">{description}</p>
         )}

@@ -616,7 +616,7 @@ describe('request metrics harness', () => {
     await flush()
     await flush()
     expect(metrics.report().requests).toHaveLength(requestMetricsMode() === 'baseline' ? 2 : 1)
-    const closed = container.querySelector<HTMLButtonElement>('button[aria-pressed="false"]')
+    const closed = container.querySelector<HTMLButtonElement>('main button[aria-pressed="false"]')
     expect(closed?.textContent).toContain('Encerradas')
     await act(async () => { closed?.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     await flush()

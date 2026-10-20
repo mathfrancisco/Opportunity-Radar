@@ -58,12 +58,23 @@ describe('Sidebar', () => {
     expect(renderSidebar().querySelector('nav [aria-current]')).toBeNull()
   })
 
-  it('esconde o ícone do leitor de tela e mantém o logotipo petróleo com glifo claro', () => {
+  it('esconde o ícone do leitor de tela', () => {
     const container = renderSidebar('/sources')
 
     for (const link of container.querySelectorAll('nav a')) {
       expect(link.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true')
     }
-    expect(container.querySelector('.bg-brand.text-surface')).not.toBeNull()
+  })
+
+  it('mostra a marca, a nota de privacidade e o seletor de tema', () => {
+    const container = renderSidebar()
+
+    expect(container.querySelector('[role="img"][aria-label="Bateia"]')).not.toBeNull()
+    expect(container.textContent).toContain('Nenhuma empresa vê seu perfil aqui.')
+    expect(container.querySelector('[role="group"][aria-label="Tema"]')).not.toBeNull()
+    for (const label of container.querySelectorAll('nav p')) {
+      expect(label.className).toContain('font-semibold')
+      expect(label.className).not.toMatch(/uppercase|tracking-/)
+    }
   })
 })
