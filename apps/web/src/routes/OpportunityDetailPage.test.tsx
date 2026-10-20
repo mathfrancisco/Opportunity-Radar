@@ -644,6 +644,24 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     expect(meter?.getAttribute('aria-label')).toBe('2 de 4 fatores atendidos, 1 sem dado')
   })
 
+  it('marca cada fator com símbolo, palavra e explicação', async () => {
+    const container = await renderDetail({
+      factors: [known('0.9'), known('0.1'), unknown(), notApplicable()],
+    })
+    const items = Array.from(container.querySelectorAll('li')).filter((li) =>
+      li.textContent?.includes('FATOR_'),
+    )
+    const rows = items.map((li) => [
+      li.querySelector('[aria-hidden="true"]')?.textContent,
+      li.querySelector('.sr-only')?.textContent?.trim(),
+      li.querySelector('.block')?.textContent,
+    ])
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toEqual(['✓', '(Atendido)', expect.stringMatching(/^Explicação \d+$/)])
+    expect(rows[1]).toEqual(['−', '(Faltante)', expect.stringMatching(/^Explicação \d+$/)])
+    expect(rows[2]).toEqual(['?', '(Sem dado)', expect.stringMatching(/^Sem dado \d+$/)])
+  })
+
   it('sem fatores aplicáveis, diz Nenhum fator avaliado', async () => {
     const container = await renderDetail({ factors: [notApplicable()] })
     expect(container.textContent).toContain('Nenhum fator avaliado')

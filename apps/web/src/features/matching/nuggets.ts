@@ -8,16 +8,21 @@ export function nuggetsFromScore(score: string | null): number | null {
   return Math.round(Math.min(100, Math.max(0, value)) / 10)
 }
 
+export type FactorState = 'met' | 'missed' | 'unknown'
+
+/** Classifies one factor; null when it does not apply. The single source for meter and list. */
+export function factorState(factor: MatchFactor): FactorState | null {
+  if (factor.status === 'UNKNOWN') return 'unknown'
+  if (factor.status !== 'KNOWN') return null
+  return factor.rawScore !== null && Number(factor.rawScore) >= 0.5 ? 'met' : 'missed'
+}
+
 /** One nugget per applicable factor: met, missed (known but weak) or unknown. */
-export function countFactors(factors: MatchFactor[]): { met: number; missed: number; unknown: number } {
+export function countFactors(factors: MatchFactor[]): Record<FactorState, number> {
   const counts = { met: 0, missed: 0, unknown: 0 }
   for (const factor of factors) {
-    if (factor.status === 'KNOWN') {
-      if (factor.rawScore !== null && Number(factor.rawScore) >= 0.5) counts.met += 1
-      else counts.missed += 1
-    } else if (factor.status === 'UNKNOWN') {
-      counts.unknown += 1
-    }
+    const state = factorState(factor)
+    if (state) counts[state] += 1
   }
   return counts
 }

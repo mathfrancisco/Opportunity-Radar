@@ -21,7 +21,7 @@ import {
 import { type DuplicateCandidate, type OpportunityDetail } from '../features/opportunities/api'
 import { opportunityLabel, seniorityLabels, workModeLabels } from '../features/opportunities/labels'
 import { estimatedDateHint } from '../features/dashboard/api'
-import { countFactors } from '../features/matching/nuggets'
+import { countFactors, factorState } from '../features/matching/nuggets'
 import { verdictLabels, verdictTones } from '../features/matching/verdicts'
 import {
   useConfirmDuplicate,
@@ -609,14 +609,6 @@ const factorMarks: Record<'met' | 'missed' | 'unknown', FactorMark> = {
   unknown: { symbol: '?', tone: 'text-muted', word: 'Sem dado' },
 }
 
-function factorMark(factor: MatchFactor): FactorMark | null {
-  if (factor.status === 'UNKNOWN') return factorMarks.unknown
-  if (factor.status !== 'KNOWN') return null
-  return factor.rawScore !== null && Number(factor.rawScore) >= 0.5
-    ? factorMarks.met
-    : factorMarks.missed
-}
-
 /** The applicable factors as a nugget ruler plus one explained line each. */
 function Factors({ factors }: { factors: MatchFactor[] }) {
   const counts = countFactors(factors)
@@ -630,8 +622,9 @@ function Factors({ factors }: { factors: MatchFactor[] }) {
       <NuggetMeter label={label} met={counts.met} missed={counts.missed} unknown={counts.unknown} />
       <ul className="grid gap-2">
         {factors.map((factor) => {
-          const mark = factorMark(factor)
-          if (!mark) return null
+          const state = factorState(factor)
+          if (!state) return null
+          const mark = factorMarks[state]
           return (
             <li className="flex items-baseline gap-2 text-sm" key={factor.factorCode}>
               <span aria-hidden="true" className={`w-4 shrink-0 text-center font-semibold ${mark.tone}`}>

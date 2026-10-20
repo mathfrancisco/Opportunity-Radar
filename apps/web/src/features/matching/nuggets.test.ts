@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { MatchFactor } from './api'
-import { countFactors, nuggetsFromScore } from './nuggets'
+import { countFactors, factorState, nuggetsFromScore } from './nuggets'
 
 function factor(status: string, rawScore: string | null): MatchFactor {
   return {
@@ -36,5 +36,13 @@ describe('nuggets', () => {
       ]),
     ).toEqual({ met: 1, missed: 2, unknown: 1 })
     expect(countFactors([factor('NOT_APPLICABLE', null)])).toEqual({ met: 0, missed: 0, unknown: 0 })
+  })
+
+  it('classifica cada fator', () => {
+    expect(factorState(factor('KNOWN', '0.5'))).toBe('met')
+    expect(factorState(factor('KNOWN', '0.49'))).toBe('missed')
+    expect(factorState(factor('KNOWN', null))).toBe('missed')
+    expect(factorState(factor('UNKNOWN', null))).toBe('unknown')
+    expect(factorState(factor('NOT_APPLICABLE', null))).toBeNull()
   })
 })
