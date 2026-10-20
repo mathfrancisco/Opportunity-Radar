@@ -63,6 +63,16 @@ const eligibilityLabels: Record<string, string> = {
   UNKNOWN: 'Aguardando confirmação',
 }
 
+const filterLabels: Record<string, string> = {
+  OPPORTUNITY_ACTIVE: 'Vaga aberta',
+  WORK_MODE_COMPATIBLE: 'Regime de trabalho',
+  COUNTRY_ALLOWED: 'País aceito',
+  SENIORITY_COMPATIBLE: 'Senioridade',
+  WORK_AUTHORIZATION_COMPATIBLE: 'Autorização de trabalho',
+  TIMEZONE_COMPATIBLE: 'Fuso horário',
+  CONTRACT_COMPATIBLE: 'Tipo de contrato',
+}
+
 const factorLabels: Record<string, string> = {
   GEOGRAPHY_CONTRACT_FIT: 'Local e contrato',
   TECHNOLOGY_FIT: 'Skills da vaga',
@@ -591,7 +601,7 @@ function Eligibility({ details }: { details: EligibilityDetail[] }) {
       {details.map((detail) => (
         <Card as="li" className="text-sm" key={detail.code}>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="font-medium">{detail.code}</span>
+            <span className="font-medium">{label(detail.code, filterLabels)}</span>
             <span
               className={
                 detail.result === 'FALSE'

@@ -19,6 +19,7 @@ describe('FirstRunGuide', () => {
       'Diga o que você sabe',
       'Defina seus limites',
     ])
+    expect(container.textContent).toContain('Fora do país, a vaga fica inelegível; abaixo do salário, perde pontos.')
     expect(container.querySelector('a[href="/profile"]')?.textContent).toBe('Começar pelo perfil')
   })
 })

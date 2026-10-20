@@ -696,6 +696,15 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     expect(text).toMatch(/FATOR_\d+/)
   })
 
+  it('rotula filtros de elegibilidade conhecidos e mantém o código dos desconhecidos', async () => {
+    const country = { ...failedFilter(), code: 'COUNTRY_ALLOWED' }
+    const container = await renderDetail({ eligibility: [country, failedFilter()] })
+    const text = container.textContent ?? ''
+    expect(text).toContain('País aceito')
+    expect(text).not.toContain('COUNTRY_ALLOWED')
+    expect(text).toContain('LOCALIDADE')
+  })
+
   it('mostra O que impede antes de Por que combina', async () => {
     const container = await renderDetail({ eligibility: [failedFilter()] })
     const headings = Array.from(container.querySelectorAll('h1,h2,h3')).map((h) => h.textContent)

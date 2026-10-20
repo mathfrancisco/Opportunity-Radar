@@ -62,16 +62,16 @@ export function LandingPage() {
   return (
     <main className="min-h-screen overflow-x-hidden bg-canvas text-ink">
       <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8 lg:px-10">
+        <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-2 px-4 sm:gap-4 sm:px-8 lg:px-10">
           <Link aria-label="Bateia — início" className="inline-flex min-h-11 min-w-11 items-center" to="/"><BrandMark /></Link>
           <nav aria-label="Navegação da página" className="hidden items-center gap-6 text-sm text-subtle md:flex">
             <a className="hover:text-accent-ink" href="#como-funciona">Como funciona</a>
             <a className="hover:text-accent-ink" href="#recursos">Recursos</a>
             <a className="hover:text-accent-ink" href="#perguntas">Perguntas</a>
           </nav>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Link className="inline-flex min-h-11 items-center justify-center rounded-control px-3 text-sm font-semibold text-ink hover:text-accent-ink sm:px-4" to="/sign-in">Entrar</Link>
-            <Link className="inline-flex min-h-11 items-center justify-center rounded-control bg-accent px-3 text-sm font-semibold text-surface hover:bg-accent-hover sm:px-4" to="/sign-up">Criar conta</Link>
+          <div className="flex items-center gap-1 sm:gap-3">
+            <Link className="inline-flex min-h-11 items-center whitespace-nowrap justify-center rounded-control px-2.5 text-sm font-semibold text-ink hover:text-accent-ink sm:px-4" to="/sign-in">Entrar</Link>
+            <Link className="inline-flex min-h-11 items-center whitespace-nowrap justify-center rounded-control bg-accent px-2.5 text-sm font-semibold text-surface hover:bg-accent-hover sm:px-4" to="/sign-up">Criar conta</Link>
           </div>
         </div>
       </header>
