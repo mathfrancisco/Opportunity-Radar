@@ -4,6 +4,7 @@ import { Fragment, type ReactNode, useLayoutEffect, useRef } from 'react'
 import { QueryClientProvider, useQueryClient } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import { App } from './App'
+import { clerkAppearance } from './clerkAppearance'
 import { setAuthSession, setAuthTokenGetter } from '../lib/api'
 import { createQueryClient } from '../lib/queryClient'
 
@@ -65,6 +66,7 @@ export function WebApplication({ publishableKey }: { publishableKey: string }) {
 
   return (
     <ClerkProvider
+      appearance={clerkAppearance}
       afterSignOutUrl="/"
       localization={ptBR}
       publishableKey={key}
