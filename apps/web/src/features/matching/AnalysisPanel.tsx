@@ -72,17 +72,22 @@ export function AnalysisPanel({
   return (
     <>
       {analysis === null && (
-        <EmptyState>Nenhuma análise semântica registrada para esta avaliação.</EmptyState>
+        <EmptyState>A IA ainda não leu esta vaga.</EmptyState>
       )}
       {analysis && analysis.status !== 'AI_COMPLETED' && (
-        <div className="rounded-control border border-warning-line bg-warning-surface p-5 text-sm">
-          <p className="font-medium text-warning-ink">
-            Camada semântica degradada ({analysis.status}
-            {analysis.failureCode ? `, ${analysis.failureCode}` : ''}).
+        <div className="rounded-control border border-line bg-panel p-5 text-sm">
+          <p className="font-medium text-subtle">
+            A IA não leu esta vaga. O match acima continua valendo.
           </p>
-          <p className="mt-2 text-subtle">
-            {analysis.detail ?? 'A decisão determinística acima permanece completa.'}
-          </p>
+          {analysis.detail && <p className="mt-2 text-subtle">{analysis.detail}</p>}
+          <details className="mt-2 text-xs text-muted">
+            <summary className="cursor-pointer">Detalhe técnico</summary>
+            <p className="mt-1">
+              {analysis.status}
+              {analysis.failureCode ? `, ${analysis.failureCode}` : ''}
+            </p>
+            <p className="mt-1">avaliação {assessment.id.slice(0, 8)}</p>
+          </details>
         </div>
       )}
       {analysis?.status === 'AI_COMPLETED' && (
@@ -112,7 +117,7 @@ export function AnalysisPanel({
           )}
           {analysis.recommendedReview && (
             <p className="mt-4 font-medium text-warning-ink">
-              A análise sugere revisão humana antes de aplicar.
+              A leitura da IA sugere revisar antes de se candidatar.
             </p>
           )}
           {analysis.contextRefs.length > 0 && (
@@ -144,8 +149,7 @@ export function AnalysisPanel({
               : 'Analisar com IA'}
         </Button>
         <span className="text-xs text-muted">
-          A análise é consultiva: não altera score, verdict nem elegibilidade da avaliação{' '}
-          {assessment.id.slice(0, 8)}.
+          A leitura da IA é consultiva: não altera score, veredito nem elegibilidade.
         </span>
       </div>
       {failed && (

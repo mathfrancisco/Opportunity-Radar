@@ -1,16 +1,26 @@
 @import "tailwindcss";
 
 /*
- * Inter variável, subset latin, auto-hospedada (SPEC 46, R3): sem terceiro em tempo de
- * execução e `swap` para não bloquear a renderização. O arquivo vem do pacote
- * `@fontsource-variable/inter`, resolvido no build.
+ * Schibsted Grotesk (interface) e Young Serif (títulos), subset latin, auto-hospedadas
+ * (DESIGN.md §7): sem terceiro em tempo de execução e `swap` para não bloquear a
+ * renderização. Os arquivos vêm dos pacotes `@fontsource-variable/schibsted-grotesk` e
+ * `@fontsource/young-serif`, resolvidos no build.
  */
 @font-face {
-  font-family: "Inter Variable";
+  font-family: "Schibsted Grotesk Variable";
   font-style: normal;
   font-display: swap;
-  font-weight: 100 900;
-  src: url("../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2") format("woff2-variations");
+  font-weight: 400 900;
+  src: url("../node_modules/@fontsource-variable/schibsted-grotesk/files/schibsted-grotesk-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Young Serif";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("../node_modules/@fontsource/young-serif/files/young-serif-latin-400-normal.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
@@ -22,58 +32,65 @@
  * texto/fundo está medido em docs/35-design-tokens.md.
  */
 @theme {
-  --font-sans: "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Young Serif", Georgia, serif;
 
-  --color-canvas: #f7f8f8;
-  --color-surface: #ffffff;
+  --color-canvas: #eceeea;
+  --color-surface: #fafbf8;
   /* Mantido por compatibilidade; igual a `surface` (SPEC 46, 4.3). */
-  --color-raised: #ffffff;
-  --color-panel: #f1f5f5;
+  --color-raised: #fafbf8;
+  --color-panel: #f1f3ef;
+  --color-scrim: #0b100e;
   /* Fundo da sidebar: um tom abaixo de `canvas`, para separar navegação de conteúdo. */
-  --color-sidebar: #eef3f3;
+  --color-sidebar: #e4e8e2;
 
-  --color-ink: #132229;
-  --color-ink-hover: #2a3b42;
-  --color-subtle: #405159;
-  --color-muted: #52626a;
-  --color-neutral-ink: #405159;
+  --color-ink: #18221e;
+  --color-ink-hover: #2b3732;
+  --color-subtle: #3f4b45;
+  --color-muted: #55625b;
+  --color-neutral-ink: #3f4b45;
 
   /* Borda estrutural silenciosa (painel, divisão da sidebar); decorativa, sem mínimo WCAG. */
-  --color-line: #cbd7d8;
+  --color-line: #cbd2ca;
   /* Borda de botão outlined, pílula e chip; o rótulo, não a borda, carrega o significado. */
-  --color-line-strong: #9fb2b4;
-  /* Borda de campo de texto e checkbox: 3.79:1 sobre `surface` (WCAG 1.4.11). */
-  --color-control-line: #71878a;
-  --color-divider: #dde7e7;
+  --color-line-strong: #a3ada5;
+  /* Borda de campo de texto e checkbox: >= 3:1 sobre `surface` e `canvas` (WCAG 1.4.11). */
+  --color-control-line: #6f7b74;
+  --color-divider: #dce1da;
 
-  /* Acento petróleo (SPEC 54): orientação, item atual, link, foco e ação primária. */
-  --color-accent: #0b5d66;
-  --color-accent-hover: #084b52;
-  --color-accent-ink: #0b5d66;
-  --color-accent-surface: #edf5f4;
-  /* Marca do logotipo: petróleo com glifo `surface`; sem lima. */
-  --color-brand: #0b5d66;
+  /* Acento verde-rio (Bateia): orientação, item atual, link, foco e ação primária. */
+  --color-accent: #1e5b4b;
+  --color-accent-hover: #16483b;
+  --color-accent-ink: #1e5b4b;
+  --color-accent-surface: #e2eee8;
+  /* Marca do logotipo: verde-rio com glifo `surface`. */
+  --color-brand: #1e5b4b;
 
-  --color-success-surface: #e3f1ed;
-  --color-success-surface-soft: #eef7f4;
-  --color-success-surface-strong: #d3e9e1;
-  --color-success-line: #8fbfae;
-  --color-success-ink: #14553c;
-  --color-success-ink-strong: #0f4a33;
+  --color-success-surface: #e6f0df;
+  --color-success-surface-soft: #eef5e9;
+  --color-success-surface-strong: #d8e8cd;
+  --color-success-line: #a6c597;
+  --color-success-ink: #2d5a1e;
+  --color-success-ink-strong: #244a17;
 
-  --color-warning-surface: #fdf3e9;
-  --color-warning-surface-strong: #f5eadc;
-  --color-warning-line: #e9c89d;
-  --color-warning-ink: #704015;
-  --color-warning-ink-strong: #854312;
+  --color-warning-surface: #f7e9da;
+  --color-warning-surface-strong: #f1dec8;
+  --color-warning-line: #ddb58e;
+  --color-warning-ink: #7a3e10;
+  --color-warning-ink-strong: #6b360d;
 
-  --color-danger-surface: #fbeeee;
-  --color-danger-surface-strong: #f7e4e4;
-  --color-danger-line: #e2b8b8;
-  --color-danger-ink: #8c3030;
+  --color-danger-surface: #f8e6e3;
+  --color-danger-surface-strong: #f3dad6;
+  --color-danger-line: #ddafa8;
+  --color-danger-ink: #8a2e25;
 
-  --color-info-surface: #edf5f4;
-  --color-info-ink: #314a4d;
+  --color-info-surface: #e4ecee;
+  --color-info-ink: #2f4a52;
+
+  /* Pepita (DESIGN.md §2): só em pepitas do match, ponto do logo e veredito Alta prioridade. */
+  --color-nugget: #a87a12;
+  --color-nugget-ink: #7d5508;
+  --color-nugget-surface: #f6ebcf;
 
   /*
    * Escala de texto por papel. Tamanho, entrelinha, espaçamento e peso andam juntos
@@ -102,21 +119,21 @@
 
   /* Texto corrido, que precisa de entrelinha maior que rótulo e célula. */
   --text-body: 1rem;
-  --text-body--line-height: 1.75;
+  --text-body--line-height: 1.65;
   --text-prose: 0.875rem;
   --text-prose--line-height: 1.5;
 
   /* Forma. Elevação é por borda; a única sombra é a de sobreposição real (gaveta, menu). */
-  --radius-panel: 0.5rem;
-  --radius-control: 0.375rem;
-  --radius-chip: 0.25rem;
-  --shadow-overlay: 0 4px 12px rgb(19 34 41 / 0.12);
+  --radius-panel: 0.75rem;
+  --radius-control: 0.5rem;
+  --radius-chip: 999px;
+  --shadow-overlay: 0 4px 16px rgb(14 20 18 / 0.16);
 
   /* Papéis novos do redesenho (SPEC 46, 4.3; título ajustado pela SPEC 54, 5.2). */
-  --text-page-title: 1.5rem;
-  --text-page-title--line-height: 2rem;
-  --text-page-title--letter-spacing: -0.02em;
-  --text-page-title--font-weight: 600;
+  --text-page-title: 1.75rem;
+  --text-page-title--line-height: 2.25rem;
+  --text-page-title--letter-spacing: -0.01em;
+  --text-page-title--font-weight: 400;
 
   --text-body-sm: 0.875rem;
   --text-body-sm--line-height: 1.25rem;
@@ -125,6 +142,102 @@
   --text-caption: 0.75rem;
   --text-caption--line-height: 1rem;
   --text-caption--font-weight: 500;
+}
+
+/*
+ * Tema escuro (DESIGN.md §2): vale quando o sistema pede e a pessoa não forçou o claro, ou
+ * quando a pessoa escolhe (`data-theme="dark"`). Os dois blocos têm de ter os mesmos
+ * valores; styles.test.ts compara. Fica fora de `@theme` e depois dele para sobrescrever as
+ * propriedades que os utilitários do Tailwind leem.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-canvas: #0e1412;
+    --color-surface: #161e1b;
+    --color-raised: #1b2521;
+    --color-panel: #1a2420;
+    --color-scrim: #0b100e;
+    --color-sidebar: #111816;
+    --color-line: #2a3631;
+    --color-line-strong: #3e4c46;
+    --color-divider: #222d29;
+    --color-control-line: #6e7d76;
+    --color-ink: #e4eae5;
+    --color-ink-hover: #c9d2cc;
+    --color-subtle: #b4c0b9;
+    --color-muted: #98a69e;
+    --color-neutral-ink: #b4c0b9;
+    --color-accent: #79c2a6;
+    --color-accent-hover: #93d0b8;
+    --color-accent-ink: #79c2a6;
+    --color-accent-surface: #1c2e28;
+    --color-brand: #79c2a6;
+    --color-success-surface: #1b2a17;
+    --color-success-surface-soft: #17241a;
+    --color-success-surface-strong: #22351d;
+    --color-success-line: #4c6e3e;
+    --color-success-ink: #a9d38f;
+    --color-success-ink-strong: #bfe0a8;
+    --color-warning-surface: #33231a;
+    --color-warning-surface-strong: #3d2a1e;
+    --color-warning-line: #7a5233;
+    --color-warning-ink: #f0b07f;
+    --color-warning-ink-strong: #f5c39c;
+    --color-danger-surface: #351c1a;
+    --color-danger-surface-strong: #40221f;
+    --color-danger-line: #7d3f38;
+    --color-danger-ink: #f2a39a;
+    --color-info-surface: #1a2a2e;
+    --color-info-ink: #a7c8d0;
+    --color-nugget: #e2b54d;
+    --color-nugget-ink: #e9c46a;
+    --color-nugget-surface: #2e2814;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-canvas: #0e1412;
+  --color-surface: #161e1b;
+  --color-raised: #1b2521;
+  --color-panel: #1a2420;
+  --color-scrim: #0b100e;
+  --color-sidebar: #111816;
+  --color-line: #2a3631;
+  --color-line-strong: #3e4c46;
+  --color-divider: #222d29;
+  --color-control-line: #6e7d76;
+  --color-ink: #e4eae5;
+  --color-ink-hover: #c9d2cc;
+  --color-subtle: #b4c0b9;
+  --color-muted: #98a69e;
+  --color-neutral-ink: #b4c0b9;
+  --color-accent: #79c2a6;
+  --color-accent-hover: #93d0b8;
+  --color-accent-ink: #79c2a6;
+  --color-accent-surface: #1c2e28;
+  --color-brand: #79c2a6;
+  --color-success-surface: #1b2a17;
+  --color-success-surface-soft: #17241a;
+  --color-success-surface-strong: #22351d;
+  --color-success-line: #4c6e3e;
+  --color-success-ink: #a9d38f;
+  --color-success-ink-strong: #bfe0a8;
+  --color-warning-surface: #33231a;
+  --color-warning-surface-strong: #3d2a1e;
+  --color-warning-line: #7a5233;
+  --color-warning-ink: #f0b07f;
+  --color-warning-ink-strong: #f5c39c;
+  --color-danger-surface: #351c1a;
+  --color-danger-surface-strong: #40221f;
+  --color-danger-line: #7d3f38;
+  --color-danger-ink: #f2a39a;
+  --color-info-surface: #1a2a2e;
+  --color-info-ink: #a7c8d0;
+  --color-nugget: #e2b54d;
+  --color-nugget-ink: #e9c46a;
+  --color-nugget-surface: #2e2814;
 }
 
 :root {
@@ -138,9 +251,9 @@ body { margin: 0; min-width: 320px; }
 /*
  * Foco visível por padrão, em tudo.
  *
- * O anel é `accent` (petróleo, mais de 6.7:1 sobre canvas, surface, panel e sidebar). Ele
+ * O anel é `accent` (verde-rio, medido em docs/35-design-tokens.md sobre canvas, surface, panel e sidebar). Ele
  * é desenhado fora do elemento, com 3px de afastamento, então também fica visível ao redor
- * de um botão petróleo: o contraste é com o que está atrás do anel, não com o botão.
+ * de um botão verde-rio: o contraste é com o que está atrás do anel, não com o botão.
  */
 :focus-visible {
   outline: 3px solid var(--color-accent);

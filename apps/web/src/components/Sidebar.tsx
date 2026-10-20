@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom'
+import { BrandMark } from './ui/BrandMark'
+import { ThemeToggle } from './ui/ThemeToggle'
 import {
   ApplicationsIcon,
   CompaniesIcon,
@@ -70,16 +72,13 @@ export function Sidebar({ current, onNavigate, isOwner = false }: SidebarProps) 
         onClick={onNavigate}
         to="/"
       >
-        <span className="grid h-8 w-8 place-items-center rounded-full bg-brand text-base font-black text-surface">
-          ◉
-        </span>
-        <span className="text-section tracking-tight">Opportunity Radar</span>
+        <BrandMark />
       </Link>
       <nav aria-label="Navegação principal">
         <ul className="flex flex-col gap-5">
           {navigation.map((group) => (
             <li key={group.id}>
-              <p className="px-3 text-caption text-muted" id={`nav-${group.id}`}>
+              <p className="px-3 text-caption font-semibold text-muted" id={`nav-${group.id}`}>
                 {group.label}
               </p>
               <ul aria-labelledby={`nav-${group.id}`} className="mt-1 flex flex-col gap-1">
@@ -108,6 +107,10 @@ export function Sidebar({ current, onNavigate, isOwner = false }: SidebarProps) 
           ))}
         </ul>
       </nav>
+      <div className="mt-auto flex flex-col gap-3">
+        <p className="px-2 text-caption text-subtle">Nenhum recrutador vê seu perfil aqui.</p>
+        <ThemeToggle />
+      </div>
     </div>
   )
 }

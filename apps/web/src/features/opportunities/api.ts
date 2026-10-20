@@ -201,11 +201,11 @@ export async function getOpportunity(opportunityId: string, signal?: AbortSignal
     headers: { Accept: 'application/json' },
     signal,
   })
-  if (response.status === 404) throw new Error('Oportunidade não encontrada.')
+  if (response.status === 404) throw new Error('Vaga não encontrada.')
   if (!response.ok) throw await failureFrom(response)
   const body: unknown = await response.json()
   if (!isRecord(body) || typeof body.id !== 'string') {
-    throw new Error('A API retornou uma oportunidade inválida.')
+    throw new Error('A API retornou uma vaga inválida.')
   }
   return {
     id: body.id,
@@ -280,7 +280,7 @@ export async function getDuplicateCandidates(
     apiUrl(`/opportunities/${opportunityId}/duplicate-candidates`),
     { headers: { Accept: 'application/json' }, signal },
   )
-  if (response.status === 404) throw new Error('Oportunidade não encontrada.')
+  if (response.status === 404) throw new Error('Vaga não encontrada.')
   if (!response.ok) throw await failureFrom(response)
   const body: unknown = await response.json()
   if (!isRecord(body) || !Array.isArray(body.items)) {
@@ -358,7 +358,7 @@ export async function markRelevance(
       note: input.note ?? null,
     }),
   })
-  if (response.status === 404) throw new Error('Oportunidade não encontrada.')
+  if (response.status === 404) throw new Error('Vaga não encontrada.')
   if (!response.ok) throw new Error(`A API respondeu com ${response.status}.`)
   const body: unknown = await response.json()
   const mark = parseRelevanceMark(body)

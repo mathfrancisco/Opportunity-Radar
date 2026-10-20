@@ -239,6 +239,7 @@ function completePageMetrics(savedTotal = 0) {
   return createRequestMetricsFetch(async (request) => {
     const path = new URL(request.url).pathname
     if (path === '/api/overview') return new Response(JSON.stringify(overviewFixture()))
+    if (path === '/api/profile') return new Response(JSON.stringify({ id: 'profile-1', number: 1, status: 'ACTIVE', profile_lock_version: 1, skills: [], experiences: [], projects: [], preferences: {} }))
     if (path === '/api/analysis-metrics') return new Response(JSON.stringify({ generated_at: '2040-01-01T00:00:00Z', current_model: '', pending: 0, windows: [], ai: { state: 'disabled', window_hours: 24, by_model: [], cache_hit_rate: null } }))
     if (path === '/api/ai-budget') return new Response(JSON.stringify({
       state: 'disabled',
@@ -471,12 +472,12 @@ describe('request metrics harness', () => {
     }
     mount.unmount()
     const report = remember(`cold-overview-${savedTotal}`, metrics.report())
-    expect(report.requests).toHaveLength(requestMetricsMode() === 'baseline' ? 4 + savedTotal : 5)
+    expect(report.requests).toHaveLength(requestMetricsMode() === 'baseline' ? 5 + savedTotal : 6)
     expect(report.requests.every((entry) => entry.outcome === 'success')).toBe(true)
   })
 
   it.each([
-    ['Inbox', <InboxPage />, 2],
+    ['Inbox', <InboxPage />, 3],
     ['Detail', <Routes><Route path="/opportunities/:opportunityId" element={<OpportunityDetailPage />} /></Routes>, 4],
   ])('measures a fresh complete %s cold start', async (name, page, expectedRequests) => {
     const metrics = completePageMetrics()
@@ -616,7 +617,7 @@ describe('request metrics harness', () => {
     await flush()
     await flush()
     expect(metrics.report().requests).toHaveLength(requestMetricsMode() === 'baseline' ? 2 : 1)
-    const closed = container.querySelector<HTMLButtonElement>('button[aria-pressed="false"]')
+    const closed = container.querySelector<HTMLButtonElement>('main button[aria-pressed="false"]')
     expect(closed?.textContent).toContain('Encerradas')
     await act(async () => { closed?.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     await flush()

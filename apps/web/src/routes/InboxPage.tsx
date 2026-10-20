@@ -4,9 +4,11 @@ import { Button } from '../components/Button'
 import { Chip } from '../components/Chip'
 import { PrimaryText, SecondaryText } from '../components/cells'
 import { DataTable } from '../components/DataTable'
+import { FirstRunGuide } from '../components/FirstRunGuide'
 import { FilterBar } from '../components/FilterBar'
 import { FilterPill } from '../components/FilterPill'
 import { ChevronDownIcon } from '../components/icons'
+import { NuggetMeter } from '../components/ui/NuggetMeter'
 import { PageSizeSelect } from '../components/PageSizeSelect'
 import { Pagination } from '../components/Pagination'
 import { Field, controlClassName } from '../components/Field'
@@ -22,7 +24,9 @@ import {
   inboxOrders,
 } from '../features/dashboard/api'
 import { useInbox } from '../features/dashboard/useInbox'
+import { nuggetsFromScore } from '../features/matching/nuggets'
 import { verdictLabels, verdictTones } from '../features/matching/verdicts'
+import { useActiveProfile } from '../features/profile/useProfile'
 import { useMarkRelevance } from '../features/opportunities/useOpportunity'
 import { type ApplicationStage, stageLabels } from '../features/pipeline/api'
 import { roleFamilies } from '../features/dashboard/roleFamilies'
@@ -83,12 +87,6 @@ function formatDate(value: string | null) {
   return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleDateString('pt-BR')
 }
 
-function formatScore(value: string | null) {
-  if (value === null) return '—'
-  const parsed = Number(value)
-  return Number.isNaN(parsed) ? value : parsed.toFixed(1)
-}
-
 function VerdictBadge({ verdict }: { verdict: string | null }) {
   return (
     <StatusBadge
@@ -106,24 +104,19 @@ const appliedOptions = [
   { value: 'false', label: 'Ainda não aplicada' },
 ] as const
 
-const neutralScoreTone = 'border-line-strong bg-canvas text-neutral-ink'
-const absentScoreTone = 'border-dashed border-line-strong bg-surface text-muted'
-
 /**
- * The score as a tabular number in a box toned by the verdict. The tone only reinforces: the
- * verdict name is always written next to it by `VerdictBadge`, never colour alone.
+ * The score as a ten-nugget meter with the score in words beside it. Without a score the meter
+ * is absent and the text says so; the verdict name is always written next to it by `VerdictBadge`.
  */
-function ScoreBox({ item }: { item: InboxItem }) {
-  const tone =
-    item.score === null
-      ? absentScoreTone
-      : ((item.verdict && verdictTones[item.verdict]) ?? neutralScoreTone)
+function ScoreMeter({ score }: { score: string | null }) {
+  const met = nuggetsFromScore(score)
+  if (score === null || met === null) return <span className="text-body-sm text-muted">Sem avaliação</span>
   return (
-    <span
-      className={`inline-grid h-8 min-w-12 place-items-center rounded-chip border px-2 text-body-sm font-semibold tabular-nums ${tone}`}
-    >
-      {formatScore(item.score)}
-    </span>
+    <NuggetMeter
+      label={`${Math.round(Number(score))} de 100`}
+      met={met}
+      missed={10 - met}
+    />
   )
 }
 
@@ -163,6 +156,11 @@ function ItemRow({ item }: { item: InboxItem }) {
         <SecondaryText className="break-anywhere">
           {display(item.companyName)} · {display(item.location)}
         </SecondaryText>
+        {item.analysisSummary && (
+          <span data-testid="inbox-reason" className="mt-1 block break-anywhere text-caption text-ink">
+            {item.analysisSummary}
+          </span>
+        )}
         {(item.hasPendingDuplicate ||
           item.startupStrength ||
           item.siblingCount > 0 ||
@@ -185,7 +183,7 @@ function ItemRow({ item }: { item: InboxItem }) {
       </td>
       <td role="cell">
         <div className="flex flex-wrap items-center gap-2 xl:flex-col xl:items-start xl:gap-1.5">
-          <ScoreBox item={item} />
+          <ScoreMeter score={item.score} />
           <VerdictBadge verdict={item.verdict} />
           {item.applied && (
             <Chip tone={appliedTone}>
@@ -203,7 +201,7 @@ function ItemRow({ item }: { item: InboxItem }) {
         {item.isStale && (
           <SecondaryText className="mt-1.5 text-warning-ink">
             <span role="status">
-              Esta avaliação usa uma versão anterior do perfil ou da oportunidade. A
+              Esta avaliação usa uma versão anterior do perfil ou da vaga. A
               reavaliação está pendente; o resultado anterior continua disponível.
               {item.assessmentProfileVersionId && item.currentProfileVersionId && (
                 <> Perfil avaliado: {item.assessmentProfileVersionId.slice(0, 8)} · perfil atual: {item.currentProfileVersionId.slice(0, 8)}.</>
@@ -212,17 +210,17 @@ function ItemRow({ item }: { item: InboxItem }) {
           </SecondaryText>
         )}
         {item.analysisStatus && item.analysisStatus !== 'AI_COMPLETED' && (
-          <SecondaryText className="mt-1.5 text-warning-ink">
-            Análise semântica indisponível ({item.analysisStatus}). A decisão determinística
-            permanece completa.
-          </SecondaryText>
-        )}
-        {item.analysisSummary && (
-          <SecondaryText className="mt-1.5 text-subtle">{item.analysisSummary}</SecondaryText>
+          <div className="mt-1.5 text-caption text-muted">
+            <p>A IA não leu esta vaga. O match continua valendo.</p>
+            <details className="mt-1">
+              <summary className="cursor-pointer">Detalhe técnico</summary>
+              <p>{item.analysisStatus}</p>
+            </details>
+          </div>
         )}
         {item.analysisRecommendedReview === true && (
           <SecondaryText className="mt-1 font-medium text-warning-ink">
-            A análise sugere revisão humana antes de aplicar.
+            A leitura da IA sugere revisar antes de se candidatar.
           </SecondaryText>
         )}
       </td>
@@ -464,7 +462,7 @@ function InboxSearch({
     <SearchInput
       fullWidth
       id="inbox-search"
-      label="Buscar oportunidades"
+      label="Buscar vagas"
       onChange={setSearchInput}
       onSubmit={() => onSubmit(searchInput.trim())}
       placeholder="Título ou empresa"
@@ -558,6 +556,7 @@ export function InboxPage() {
   const [searchReset, setSearchReset] = useState(0)
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(advancedFilterCount > 0)
 
+  const profile = useActiveProfile()
   const inbox = useInbox({
     page,
     pageSize,
@@ -646,8 +645,12 @@ export function InboxPage() {
       }
       current="/inbox"
       eyebrow="Decidir"
-      title="Quais vagas merecem sua atenção agora?"
-      description="Compare sinais, evidências e recência antes de decidir o que acompanhar. Cada vaga mostra a decisão determinística mais recente; as ainda não avaliadas continuam visíveis."
+      title="Inbox"
+      description={
+        inbox.data
+          ? `${inbox.data.total} ${inbox.data.total === 1 ? 'vaga' : 'vagas'} para decidir.`
+          : undefined
+      }
     >
       <FilterBar
         search={
@@ -850,7 +853,7 @@ export function InboxPage() {
           onChange={(event) => update({ only_assessed: event.target.checked ? 'true' : null })}
           type="checkbox"
         />
-        Somente oportunidades já avaliadas
+        Somente vagas já avaliadas
       </label>
 
       <label className="mt-2 flex items-center gap-2 text-sm text-subtle max-md:min-h-11">
@@ -938,9 +941,9 @@ export function InboxPage() {
       </div>
 
       <aside className="mt-4 rounded-panel border border-line bg-surface px-4 py-3 text-sm text-subtle" aria-label="Como interpretar as avaliações">
-        Score, veredito e elegibilidade vêm de regras determinísticas. Fatores ausentes ou
-        desconhecidos pedem revisão; a análise semântica, quando disponível, é consultiva e
-        não altera a decisão. Resultados desatualizados permanecem identificados até nova avaliação.
+        Score, veredito e elegibilidade vêm de regras fixas. Fatores ausentes ou
+        desconhecidos pedem revisão; a leitura da IA, quando existe, é consultiva e
+        não altera o match. Resultados desatualizados permanecem identificados até nova avaliação.
       </aside>
 
       <div className="mt-5 grid gap-3">
@@ -948,10 +951,10 @@ export function InboxPage() {
           <>
             {/* One skeleton per breakpoint, the hidden one out of the accessibility tree. */}
             <div className="hidden xl:block">
-              <TableSkeleton columns={tableColumns.length} label="Carregando oportunidades…" />
+              <TableSkeleton columns={tableColumns.length} label="Carregando vagas…" />
             </div>
             <div className="xl:hidden">
-              <CardListSkeleton count={5} label="Carregando oportunidades…" />
+              <CardListSkeleton count={5} label="Carregando vagas…" />
             </div>
           </>
         )}
@@ -960,20 +963,23 @@ export function InboxPage() {
         )}
         {inbox.data?.items.length === 0 &&
           (activeFilterCount === 0 && !search ? (
+            profile.data === null ? (
+              <FirstRunGuide />
+            ) : (
             <EmptyState>
-              Ainda não há oportunidades para mostrar. Quando uma fonte trouxer vagas, elas
-              aparecem aqui.
+              Nada novo para decidir. A próxima coleta acontece no próximo ciclo.
             </EmptyState>
+            )
           ) : (
-            <EmptyState>Nenhuma oportunidade encontrada com esses filtros.</EmptyState>
+            <EmptyState>Nenhuma vaga encontrada com esses filtros.</EmptyState>
           ))}
         {inbox.data && inbox.data.items.length > 0 && (
           <>
             <p className="text-sm text-muted">
-              {inbox.data.total} oportunidade{inbox.data.total === 1 ? '' : 's'} encontrada
+              {inbox.data.total} vaga{inbox.data.total === 1 ? '' : 's'} encontrada
               {inbox.data.total === 1 ? '' : 's'}.
             </p>
-            <DataTable caption="Oportunidades" columns={tableColumns} stackBelowXl>
+            <DataTable caption="Vagas" columns={tableColumns} stackBelowXl>
               {inbox.data.items.map((item) => (
                 <ItemRow item={item} key={item.opportunityId} />
               ))}
@@ -981,8 +987,8 @@ export function InboxPage() {
             <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
               <Pagination
                 className="min-w-0 flex-1"
-                itemLabel="oportunidades"
-                label="Paginação de oportunidades"
+                itemLabel="vagas"
+                label="Paginação de vagas"
                 onPageChange={(next) => update({ page: next === 1 ? null : String(next) })}
                 page={page}
                 pageSize={pageSize}

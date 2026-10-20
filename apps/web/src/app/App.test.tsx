@@ -108,7 +108,7 @@ describe('App', () => {
 
     const container = renderApp(<App />, '/')
 
-    expect(container.querySelector('h1')?.textContent).toBe('Encontre oportunidades alinhadas à sua carreira.')
+    expect(container.querySelector('h1')?.textContent).toBe('Menos vagas, cada uma com o porquê.')
     expect(container.textContent).toContain('Entrar')
     expect(container.textContent).toContain('Criar conta')
     expect(container.querySelector('a[href="/sign-in"]')?.textContent).toContain('Entrar')
@@ -161,7 +161,7 @@ describe('App', () => {
     )
 
     expect(container.textContent).toContain(expectedText)
-    expect(container.querySelector('a[href="/"]')?.textContent).toContain('Opportunity Radar')
+    expect(container.querySelector('a[href="/"] [role="img"]')?.getAttribute('aria-label')).toBe('Bateia')
   })
 
   it.each([
@@ -196,11 +196,10 @@ describe('App', () => {
   it('mantém a marca e os CTAs do cabeçalho utilizáveis em telas pequenas', () => {
     clerkMock.isSignedIn = false
     const container = renderApp(<App />, '/')
-    const homeLink = container.querySelector('a[aria-label="Opportunity Radar — início"]')
+    const homeLink = container.querySelector('a[aria-label="Bateia — início"]')
 
     expect(homeLink?.className).toContain('min-h-11')
     expect(homeLink?.className).toContain('min-w-11')
-    expect(homeLink?.querySelector(':scope > span > span:nth-child(2)')?.className).toContain('hidden')
   })
 
   it('oferece alvos de toque no rodapé público', () => {
@@ -232,7 +231,7 @@ describe('App', () => {
       </QueryClientProvider>,
     )
 
-    expect(container.querySelector('h1')?.textContent).toBe('Encontre oportunidades alinhadas à sua carreira.')
+    expect(container.querySelector('h1')?.textContent).toBe('Menos vagas, cada uma com o porquê.')
     expect(container.querySelector('nav a[href="/sources"]')).toBeNull()
   })
 

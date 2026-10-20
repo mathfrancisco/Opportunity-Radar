@@ -5,6 +5,7 @@ import { ButtonLink } from '../components/Button'
 import { Card } from '../components/Card'
 import { Chip } from '../components/Chip'
 import { DataTable } from '../components/DataTable'
+import { FirstRunGuide } from '../components/FirstRunGuide'
 import { PageShell } from '../components/PageShell'
 import { Bone, Skeleton, TableSkeleton } from '../components/skeletons'
 import { EmptyState, ErrorState } from '../components/states'
@@ -26,6 +27,7 @@ import { verdictCountLabels, verdictOrder } from '../features/matching/verdicts'
 import { opportunityLabel, seniorityLabels } from '../features/opportunities/labels'
 import { type SavedSearchFilters } from '../features/saved-searches/api'
 import { useOpenSavedSearch, useSavedSearchSummary } from '../features/saved-searches/useSavedSearches'
+import { useActiveProfile } from '../features/profile/useProfile'
 import { coverageLabels, coverageTones } from '../features/sources/states'
 
 function savedSearchInboxLink(filters: SavedSearchFilters): string {
@@ -210,7 +212,7 @@ function SourceMetricsRow({ source }: { source: SourceMetrics }) {
               </p>
             )}
             <p className="mt-1 text-xs text-muted">
-              mapeamento {mappings.length > 0 ? mappings.join(', ') : 'sem procedência'}
+              mapeamento {mappings.length > 0 ? mappings.join(', ') : 'sem origem registrada'}
               {Object.keys(seniority.evidence).length > 0 &&
                 ` · evidência ${Object.entries(seniority.evidence)
                   .map(([origin, total]) => `${origin} ${total}`)
@@ -756,7 +758,7 @@ function Summary({ overview }: { overview: Overview }) {
         >
           <div className="grid gap-3">
             <MetricBlock
-              hint="Com decisão determinística registrada"
+              hint="Com match registrado"
               label="Avaliadas"
               to="/inbox?only_assessed=true"
               value={String(overview.assessedOpportunities)}
@@ -770,7 +772,7 @@ function Summary({ overview }: { overview: Overview }) {
           <dl className="mt-5 grid gap-3 text-sm">
             <SupportItem
               hint={`de ${overview.opportunitiesTotal} no total`}
-              label="Oportunidades ativas"
+              label="Vagas ativas"
               value={String(overview.opportunitiesActive)}
             />
             <SupportItem
@@ -835,6 +837,7 @@ function Summary({ overview }: { overview: Overview }) {
 
 export function OverviewPage() {
   const overview = useOverview()
+  const profile = useActiveProfile()
 
   return (
     <PageShell
@@ -847,9 +850,10 @@ export function OverviewPage() {
       eyebrow="Decidir"
       title="O que move sua busca esta semana?"
       description="Um ponto de partida calmo para escolher a próxima ação, com a origem dos dados à vista."
-      footer="Descubra oportunidades, preserve evidências e decida com contexto."
+      footer="Descubra vagas, preserve evidências e decida com contexto."
     >
       <div>
+        {profile.data === null && <div className="mb-6"><FirstRunGuide /></div>}
         {overview.isPending && (
           <SummarySkeleton />
         )}

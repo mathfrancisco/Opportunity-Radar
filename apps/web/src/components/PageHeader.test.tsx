@@ -40,4 +40,9 @@ describe('PageHeader', () => {
     expect(container.querySelector('p')).toBeNull()
     expect(container.querySelector('button')).toBeNull()
   })
+
+  it('desenha o h1 em fonte de exibição', () => {
+    const container = render(<PageHeader title="Inbox" />)
+    expect(container.querySelector('h1')?.classList.contains('font-display')).toBe(true)
+  })
 })

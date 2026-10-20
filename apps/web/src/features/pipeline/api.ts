@@ -99,7 +99,7 @@ function parseApplication(value: unknown): Application | null {
   return {
     id: value.id,
     opportunityId: required(value.opportunity_id),
-    opportunityTitle: required(value.opportunity_title, 'Oportunidade sem título'),
+    opportunityTitle: required(value.opportunity_title, 'Vaga sem título'),
     companyName: text(value.company_name),
     profileVersionId: required(value.profile_version_id),
     currentStage: required(value.current_stage, 'INTERESTED'),

@@ -1,6 +1,7 @@
 import { SignIn, SignUp, useAuth } from '@clerk/react'
 import { type ReactNode } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import { BrandMark } from '../components/ui/BrandMark'
 import { AuthPending, RequireOwnerUi, RequireSignedIn } from './RouteGuards'
 import { CompaniesPage } from '../routes/CompaniesPage'
 import { CompanyDetailPage } from '../routes/CompanyDetailPage'
@@ -48,12 +49,11 @@ function AuthenticationShell({ children }: { children: ReactNode }) {
         <section className="flex flex-col justify-between bg-sidebar p-6 sm:p-10">
           <div>
             <Link className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold tracking-tight text-ink" to="/">
-              <span aria-hidden="true" className="grid size-8 place-items-center rounded-control bg-brand text-sm font-bold text-surface">O</span>
-              Opportunity Radar
+              <BrandMark />
             </Link>
             <p className="mt-14 text-caption font-semibold uppercase tracking-[0.16em] text-accent-ink">Seu espaço de decisão</p>
             <h1 className="mt-4 max-w-md text-3xl font-semibold tracking-tight sm:text-4xl">Organize a busca antes da próxima candidatura.</h1>
-            <p className="mt-4 max-w-md text-body-sm text-subtle">Retome oportunidades, compare o que importa e acompanhe cada próxima ação em um só lugar.</p>
+            <p className="mt-4 max-w-md text-body-sm text-subtle">Retome vagas, compare o que importa e acompanhe cada próxima ação em um só lugar.</p>
           </div>
           <Link className="mt-12 inline-flex min-h-11 w-fit items-center text-sm font-semibold text-accent-ink hover:text-accent-hover" to="/">← Voltar para a página inicial</Link>
         </section>

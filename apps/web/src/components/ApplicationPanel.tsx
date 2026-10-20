@@ -98,7 +98,7 @@ function Tracker({
       {closed ? (
         <p className="mt-4 text-sm text-subtle">
           Candidatura encerrada como {label(application.outcome ?? 'CLOSED')}. O histórico
-          continua disponível, e a oportunidade pode receber uma nova candidatura.
+          continua disponível, e a vaga pode receber uma nova candidatura.
         </p>
       ) : (
         <>
@@ -219,7 +219,7 @@ export function ApplicationPanel({
           </Button>
         </div>
         <p className="mt-3 text-sm text-subtle">
-          A candidatura é acompanhada em separado da oportunidade: encerrar uma não
+          A candidatura é acompanhada em separado da vaga: encerrar uma não
           encerra a outra.
         </p>
         {start.isError &&

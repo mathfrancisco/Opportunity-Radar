@@ -205,7 +205,7 @@ export function PipelinePage() {
       current="/applications"
       eyebrow="Decidir"
       title="Onde cada candidatura precisa de atenção?"
-      description="Organize a próxima ação em cada etapa da sua busca. A oportunidade segue o ciclo dela; a candidatura segue o seu."
+      description="Organize a próxima ação em cada etapa da sua busca. A vaga segue o ciclo dela; a candidatura segue o seu."
     >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line">
         <div aria-label="Visão das candidaturas" className="flex flex-wrap gap-5" role="group">
@@ -239,7 +239,7 @@ export function PipelinePage() {
         <p className="mt-1 text-sm text-muted">{selectedDescription}</p>
         {view === 'closed' && (
           <p className="mt-2 text-sm text-subtle">
-            Encerramento é uma etapa manual da candidatura. O ciclo de vida da oportunidade é independente e não encerra candidaturas automaticamente.
+            Encerramento é uma etapa manual da candidatura. O ciclo de vida da vaga é independente e não encerra candidaturas automaticamente.
           </p>
         )}
         <Button className="mt-3" onClick={() => void selected.refetch()} variant="secondary">
@@ -258,7 +258,7 @@ export function PipelinePage() {
                 applications={selected.data.items}
                 emptyMessage={
                   view === 'active'
-                    ? 'Nenhuma candidatura em andamento. Comece pela inbox: abra uma oportunidade e registre o interesse.'
+                    ? 'Nenhuma candidatura em andamento. Comece pela inbox: abra uma vaga e registre o interesse.'
                     : 'Nenhuma candidatura encerrada até agora.'
                 }
                 stages={selectedStages}

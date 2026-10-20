@@ -4,9 +4,9 @@ import { ApplicationPanel } from '../components/ApplicationPanel'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { Chip } from '../components/Chip'
-import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
 import { EmptyState, ErrorState, LoadingState } from '../components/states'
+import { NuggetMeter } from '../components/ui/NuggetMeter'
 import { AnalysisPanel } from '../features/matching/AnalysisPanel'
 import {
   type EligibilityDetail,
@@ -21,7 +21,8 @@ import {
 import { type DuplicateCandidate, type OpportunityDetail } from '../features/opportunities/api'
 import { opportunityLabel, seniorityLabels, workModeLabels } from '../features/opportunities/labels'
 import { estimatedDateHint } from '../features/dashboard/api'
-import { verdictLabels } from '../features/matching/verdicts'
+import { countFactors, factorState } from '../features/matching/nuggets'
+import { verdictLabels, verdictTones } from '../features/matching/verdicts'
 import {
   useConfirmDuplicate,
   useDuplicateCandidates,
@@ -60,6 +61,27 @@ const eligibilityLabels: Record<string, string> = {
   ELIGIBLE: 'Atende aos filtros',
   INELIGIBLE: 'Não atende aos filtros',
   UNKNOWN: 'Aguardando confirmação',
+}
+
+const filterLabels: Record<string, string> = {
+  OPPORTUNITY_ACTIVE: 'Vaga aberta',
+  WORK_MODE_COMPATIBLE: 'Regime de trabalho',
+  COUNTRY_ALLOWED: 'País aceito',
+  SENIORITY_COMPATIBLE: 'Senioridade',
+  WORK_AUTHORIZATION_COMPATIBLE: 'Autorização de trabalho',
+  TIMEZONE_COMPATIBLE: 'Fuso horário',
+  CONTRACT_COMPATIBLE: 'Tipo de contrato',
+}
+
+const factorLabels: Record<string, string> = {
+  GEOGRAPHY_CONTRACT_FIT: 'Local e contrato',
+  TECHNOLOGY_FIT: 'Skills da vaga',
+  COMPANY_PRIORITY: 'Prioridade da empresa',
+  DOMAIN_EXPERIENCE: 'Experiência na área',
+  SENIORITY_SCOPE: 'Nível e escopo',
+  CONTRACT_COMPENSATION: 'Contrato e salário',
+  TIMEZONE: 'Fuso horário',
+  RECENCY: 'Vaga recente',
 }
 
 function label(value: string, labels: Record<string, string>) {
@@ -315,7 +337,7 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
   return (
     <>
       <p className="mb-3 rounded-control border border-info-line bg-info-surface p-3 text-sm text-info-ink">
-        Regra do ciclo da oportunidade: duas coletas completas consecutivas sem ocorrência podem encerrá-la; uma coleta parcial ou com falha não conta, e outra fonte ativa que ainda a encontre a preserva. A evidência disponível nesta tela não informa a causa específica do status atual.
+        Regra do ciclo da vaga: duas coletas completas consecutivas sem ocorrência podem encerrá-la; uma coleta parcial ou com falha não conta, e outra fonte ativa que ainda a encontre a preserva. A evidência disponível nesta tela não informa a causa específica do status atual.
       </p>
       <ul className="grid gap-3">
         {opportunity.occurrences.map((occurrence) => (
@@ -347,7 +369,7 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
                 {occurrence.payloadExpiredAt
                   ? ` em ${formatDate(occurrence.payloadExpiredAt)}`
                   : ''}
-                . A procedência permanece; o reprocessamento não está mais disponível.
+                . De onde veio a vaga continua registrado; o reprocessamento não está mais disponível.
               </p>
             )}
           </Card>
@@ -558,7 +580,7 @@ export function DuplicateCandidates({ opportunity }: { opportunity: OpportunityD
   }
   const pending = candidates.data.filter((candidate) => candidate.status === 'PENDING')
   if (pending.length === 0) {
-    return <EmptyState>Nenhum candidato a duplicata pendente para esta oportunidade.</EmptyState>
+    return <EmptyState>Nenhum candidato a duplicata pendente para esta vaga.</EmptyState>
   }
   return (
     <div className="grid gap-4">
@@ -574,13 +596,12 @@ export function DuplicateCandidates({ opportunity }: { opportunity: OpportunityD
 }
 
 function Eligibility({ details }: { details: EligibilityDetail[] }) {
-  if (details.length === 0) return <p className="text-subtle">Nenhum filtro avaliado.</p>
   return (
     <ul className="grid gap-2">
       {details.map((detail) => (
         <Card as="li" className="text-sm" key={detail.code}>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="font-medium">{detail.code}</span>
+            <span className="font-medium">{label(detail.code, filterLabels)}</span>
             <span
               className={
                 detail.result === 'FALSE'
@@ -600,49 +621,58 @@ function Eligibility({ details }: { details: EligibilityDetail[] }) {
   )
 }
 
+type FactorMark = { symbol: string; tone: string; word: string }
+
+const factorMarks: Record<'met' | 'missed' | 'unknown', FactorMark> = {
+  met: { symbol: '✓', tone: 'text-success-ink', word: 'Atendido' },
+  missed: { symbol: '−', tone: 'text-warning-ink', word: 'Faltante' },
+  unknown: { symbol: '?', tone: 'text-muted', word: 'Sem dado' },
+}
+
+/** The applicable factors as a nugget ruler plus one explained line each. */
 function Factors({ factors }: { factors: MatchFactor[] }) {
-  if (factors.length === 0) return <p className="text-subtle">Nenhum fator calculado.</p>
+  const counts = countFactors(factors)
+  const total = counts.met + counts.missed + counts.unknown
+  if (total === 0) return <p className="text-subtle">Nenhum fator avaliado.</p>
+  const label = `${counts.met} de ${total} fatores atendidos${
+    counts.unknown > 0 ? `, ${counts.unknown} sem dado` : ''
+  }`
   return (
-    <DataTable
-      caption="Fatores que compõem o score desta avaliação"
-      columns={['Fator', 'Peso', 'Contribuição', 'Estado', 'Explicação']}
-      stickyFirstColumn
-    >
-      {factors.map((factor) => (
-            <tr key={factor.factorCode}>
-              <td className="font-medium">{factor.factorCode}</td>
-              <td>{formatNumber(factor.weight, 2)}</td>
-              <td>{formatNumber(factor.contribution, 2)}</td>
-              <td>
-                {factor.status === 'UNKNOWN'
-                  ? 'Desconhecido; requer revisão'
-                  : factor.status === 'TRUE'
-                    ? 'Atende'
-                    : factor.status === 'FALSE'
-                      ? 'Não atende'
-                      : 'Em revisão'}
-                {factor.status === 'UNKNOWN' && (
-                  <span className="block text-xs text-muted">
-                    {factor.missingPolicy}
-                  </span>
-                )}
-              </td>
-              <td className="text-subtle">{factor.explanation}</td>
-            </tr>
-      ))}
-    </DataTable>
+    <div className="grid gap-3">
+      <NuggetMeter label={label} met={counts.met} missed={counts.missed} unknown={counts.unknown} />
+      <ul className="grid gap-2">
+        {factors.map((factor) => {
+          const state = factorState(factor)
+          if (!state) return null
+          const mark = factorMarks[state]
+          return (
+            <li className="flex items-baseline gap-2 text-sm" key={factor.factorCode}>
+              <span aria-hidden="true" className={`w-4 shrink-0 text-center font-semibold ${mark.tone}`}>
+                {mark.symbol}
+              </span>
+              <span>
+                <span className="font-medium">{factorLabels[factor.factorCode] ?? factor.factorCode}</span>
+                <span className="sr-only"> ({mark.word})</span>
+                <span className="block text-subtle">{factor.explanation}</span>
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }
 
 /** Deterministic matching: score, verdict, eligibility and factors, computed outside the AI. */
 function Decision({ assessment }: { assessment: MatchAssessment }) {
+  const blocking = assessment.eligibilityDetails.filter((detail) => detail.result === 'FALSE' || detail.result === 'UNKNOWN')
   return (
     <>
       <div className="flex flex-wrap items-baseline gap-4">
         <span className="text-metric-lg">
           {formatNumber(assessment.score)}
         </span>
-        <Chip className="text-body-sm font-medium">
+        <Chip className="text-body-sm font-medium" tone={verdictTones[assessment.verdict]}>
           {verdictLabels[assessment.verdict] ?? assessment.verdict}
         </Chip>
         <span className="text-sm text-muted">
@@ -663,11 +693,13 @@ function Decision({ assessment }: { assessment: MatchAssessment }) {
       </p>
 
       <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6">
-        <Section nested title="Filtros eliminatórios">
-          <Eligibility details={assessment.eligibilityDetails} />
-        </Section>
+        {blocking.length > 0 && (
+          <Section nested title="O que impede">
+            <Eligibility details={blocking} />
+          </Section>
+        )}
 
-        <Section nested title="Fatores do score">
+        <Section nested title="Por que combina">
           <Factors factors={assessment.factors} />
         </Section>
       </div>
@@ -688,7 +720,7 @@ function AnalysisSection({
     <Section
       id="analise"
       lead="Comentário consultivo gerado por IA para apoiar sua leitura. Não é veredito nem aprovação, e não decide nada por você."
-      title="Análise semântica"
+      title="Leitura da IA"
     >
       <AnalysisPanel
         analysis={assessment.analysis}
@@ -725,24 +757,24 @@ export function OpportunityDetailPage() {
           className="inline-flex items-center text-sm text-subtle underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11"
           to="/inbox"
         >
-          ← Voltar para as oportunidades
+          ← Voltar para as vagas
         </Link>
       }
-      eyebrow="Oportunidade"
+      eyebrow="Vaga"
       meta={opportunity.data && <TitleFacts opportunity={opportunity.data} />}
-      title={opportunity.data?.title ?? 'Detalhe da oportunidade'}
+      title={opportunity.data?.title ?? 'Detalhe da vaga'}
       description={
         opportunity.data
           ? undefined
-          : 'Carregando os dados preservados desta oportunidade.'
+          : 'Carregando os dados preservados desta vaga.'
       }
     >
       <div>
         {opportunity.isPending && (
-          <LoadingState className="mt-2">Carregando oportunidade…</LoadingState>
+          <LoadingState className="mt-2">Carregando vaga…</LoadingState>
         )}
         {opportunity.isError && (
-          <ErrorState className="mt-2" onRetry={() => void opportunity.refetch()}>Não foi possível carregar esta oportunidade. Tente novamente.</ErrorState>
+          <ErrorState className="mt-2" onRetry={() => void opportunity.refetch()}>Não foi possível carregar esta vaga. Tente novamente.</ErrorState>
         )}
 
         {opportunity.data && (
@@ -758,12 +790,12 @@ export function OpportunityDetailPage() {
                   Sua decisão
                 </h2>
                 <p className="mt-1 text-body-sm text-subtle">
-                  Marque a relevância e acompanhe a candidatura. A análise de IA é apoio, não decide por você.
+                  Marque a relevância e acompanhe a candidatura. A leitura da IA é apoio, não decide por você.
                 </p>
               </div>
               <Section
                 id="decisao"
-                lead="Matching determinístico: score, veredito e elegibilidade calculados por regras, fora da IA."
+                lead="Match por regras: score, veredito e elegibilidade são calculados fora da IA."
                 title="Decisão"
               >
                 <div className="mb-4 flex flex-wrap items-center gap-3 empty:hidden">
@@ -775,7 +807,7 @@ export function OpportunityDetailPage() {
                   <ErrorState onRetry={() => void assessment.refetch()}>Não foi possível carregar a avaliação.</ErrorState>
                 )}
                 {assessment.data === null && (
-                  <EmptyState>Esta oportunidade ainda não foi avaliada contra o perfil ativo.</EmptyState>
+                  <EmptyState>Esta vaga ainda não foi avaliada contra o perfil ativo.</EmptyState>
                 )}
                 {assessment.data && <Decision assessment={assessment.data} />}
               </Section>
@@ -788,11 +820,11 @@ export function OpportunityDetailPage() {
             </aside>
 
             <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-8 lg:col-start-1 lg:row-start-1">
-              <nav aria-label="Navegar nesta oportunidade" className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+              <nav aria-label="Navegar nesta vaga" className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
                 <a className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11" href="#resumo">Resumo</a>
                 <a className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11" href="#decisao">Decisão</a>
                 <a className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11" href="#candidatura">Candidatura</a>
-                <a className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11" href="#procedencia">Procedência</a>
+                <a className="inline-flex items-center underline decoration-accent decoration-2 underline-offset-4 max-md:min-h-11" href="#procedencia">De onde veio</a>
               </nav>
 
               <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
@@ -826,7 +858,7 @@ export function OpportunityDetailPage() {
                 <Section
                   id="procedencia"
                   lead="De onde veio a vaga e quando foi vista pela última vez."
-                  title="Procedência"
+                  title="De onde veio"
                 >
                   <Provenance opportunity={opportunity.data} />
                 </Section>

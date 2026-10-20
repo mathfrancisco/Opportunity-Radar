@@ -447,7 +447,7 @@ describe('OpportunityDetailPage', () => {
     )
     await flush(6)
 
-    const navigation = container.querySelector('nav[aria-label="Navegar nesta oportunidade"]')
+    const navigation = container.querySelector('nav[aria-label="Navegar nesta vaga"]')
     expect(navigation?.querySelector('a[href="#resumo"]')?.textContent).toBe('Resumo')
     expect(navigation?.querySelector('a[href="#decisao"]')?.textContent).toBe('Decisão')
     expect(navigation?.querySelector('a[href="#candidatura"]')?.textContent).toBe('Candidatura')
@@ -480,7 +480,47 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     analysis: null,
   }
 
-  async function renderDetail() {
+  const baseFactor = {
+    weight: '0.20',
+    contribution: '0.10',
+    confidence: '0.8',
+    missing_policy: 'NEUTRAL',
+    evidence_refs: [],
+  }
+  let factorSeq = 0
+  const known = (rawScore: string) => ({
+    ...baseFactor,
+    factor_code: `FATOR_${(factorSeq += 1)}`,
+    raw_score: rawScore,
+    status: 'KNOWN',
+    explanation: `Explicação ${factorSeq}`,
+  })
+  const unknown = () => ({
+    ...baseFactor,
+    factor_code: `FATOR_${(factorSeq += 1)}`,
+    raw_score: null,
+    status: 'UNKNOWN',
+    explanation: `Sem dado ${factorSeq}`,
+  })
+  const notApplicable = () => ({
+    ...baseFactor,
+    factor_code: `FATOR_${(factorSeq += 1)}`,
+    raw_score: null,
+    status: 'NOT_APPLICABLE',
+    explanation: `Não se aplica ${factorSeq}`,
+  })
+  const failedFilter = () => ({
+    code: 'LOCALIDADE',
+    result: 'FALSE',
+    reason: 'Fora da região aceita.',
+    severity: 'HARD',
+    confidence: '1',
+    evidence_refs: [],
+  })
+
+  async function renderDetail(
+    payload: { factors?: unknown[]; eligibility?: unknown[] } = {},
+  ) {
     const detail = opportunity({ description: 'Pesquisa com pessoas usuárias.' })
     vi.stubGlobal(
       'fetch',
@@ -488,7 +528,17 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
         const url = String(input)
         if (url.includes('/duplicate-candidates')) return new Response(JSON.stringify({ items: [] }))
         if (url.includes('/matches?')) {
-          return new Response(JSON.stringify({ items: [assessmentPayload] }))
+          return new Response(
+            JSON.stringify({
+              items: [
+                {
+                  ...assessmentPayload,
+                  factors: payload.factors ?? assessmentPayload.factors,
+                  eligibility_details: payload.eligibility ?? assessmentPayload.eligibility_details,
+                },
+              ],
+            }),
+          )
         }
         if (url.includes('/applications?')) {
           return new Response(JSON.stringify({ items: [], total: 0, offset: 0, limit: 1 }))
@@ -555,7 +605,7 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     const firstSection = panel.nextElementSibling?.querySelector('section') as HTMLElement
 
     expect(back.textContent).toContain('Voltar')
-    expect(kicker.textContent).toBe('Oportunidade')
+    expect(kicker.textContent).toBe('Vaga')
     expect(title.textContent).toBe('Backend Engineer')
     expect(facts.textContent).toContain('Acme')
     expect(facts.textContent).toContain('Remoto')
@@ -586,6 +636,83 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     expect(rule.textContent).toContain('reaparecer')
   })
 
+  it('resume os fatores em pepitas', async () => {
+    const container = await renderDetail({
+      factors: [known('0.9'), known('0.8'), known('0.1'), unknown()],
+    })
+    const meter = container.querySelector('[role="img"][aria-label$="fatores atendidos, 1 sem dado"]')
+    expect(meter?.getAttribute('aria-label')).toBe('2 de 4 fatores atendidos, 1 sem dado')
+  })
+
+  it('marca cada fator com símbolo, palavra e explicação', async () => {
+    const container = await renderDetail({
+      factors: [known('0.9'), known('0.1'), unknown(), notApplicable()],
+    })
+    const items = Array.from(container.querySelectorAll('li')).filter((li) =>
+      li.textContent?.includes('FATOR_'),
+    )
+    const rows = items.map((li) => [
+      li.querySelector('[aria-hidden="true"]')?.textContent,
+      li.querySelector('.sr-only')?.textContent?.trim(),
+      li.querySelector('.block')?.textContent,
+    ])
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toEqual(['✓', '(Atendido)', expect.stringMatching(/^Explicação \d+$/)])
+    expect(rows[1]).toEqual(['−', '(Faltante)', expect.stringMatching(/^Explicação \d+$/)])
+    expect(rows[2]).toEqual(['?', '(Sem dado)', expect.stringMatching(/^Sem dado \d+$/)])
+  })
+
+  it('sem fatores aplicáveis, diz Nenhum fator avaliado', async () => {
+    const container = await renderDetail({ factors: [notApplicable()] })
+    expect(container.textContent).toContain('Nenhum fator avaliado.')
+    expect(container.querySelector('[role="img"][aria-label*="fatores atendidos"]')).toBeNull()
+  })
+
+  it('sem filtro reprovado ou desconhecido, não mostra O que impede', async () => {
+    const passing = { ...failedFilter(), code: 'PAIS', result: 'TRUE', reason: 'País aceito.' }
+    const notApplicable = { ...failedFilter(), code: 'FUSO', result: 'NOT_APPLICABLE', reason: 'Sem dado de fuso.' }
+    const container = await renderDetail({ eligibility: [passing, notApplicable] })
+    const headings = Array.from(container.querySelectorAll('h1,h2,h3')).map((h) => h.textContent)
+    expect(headings).not.toContain('O que impede')
+    expect(headings).toContain('Por que combina')
+    expect(container.textContent).not.toContain('País aceito.')
+  })
+
+  it('lista só o filtro reprovado quando há também filtro não aplicável', async () => {
+    const na = { ...failedFilter(), code: 'FUSO', result: 'NOT_APPLICABLE', reason: 'Sem dado de fuso.' }
+    const container = await renderDetail({ eligibility: [failedFilter(), na] })
+    expect(container.textContent).toContain('Fora da região aceita.')
+    expect(container.textContent).not.toContain('Sem dado de fuso.')
+    expect(container.textContent).not.toContain('NOT_APPLICABLE')
+  })
+
+  it('rotula fatores conhecidos em português e mantém o código dos desconhecidos', async () => {
+    const container = await renderDetail({
+      factors: [{ ...known('0.9'), factor_code: 'TECHNOLOGY_FIT' }, known('0.8')],
+    })
+    const text = container.textContent ?? ''
+    expect(text).toContain('Skills da vaga')
+    expect(text).not.toContain('TECHNOLOGY_FIT')
+    expect(text).toMatch(/FATOR_\d+/)
+  })
+
+  it('rotula filtros de elegibilidade conhecidos e mantém o código dos desconhecidos', async () => {
+    const country = { ...failedFilter(), code: 'COUNTRY_ALLOWED' }
+    const container = await renderDetail({ eligibility: [country, failedFilter()] })
+    const text = container.textContent ?? ''
+    expect(text).toContain('País aceito')
+    expect(text).not.toContain('COUNTRY_ALLOWED')
+    expect(text).toContain('LOCALIDADE')
+  })
+
+  it('mostra O que impede antes de Por que combina', async () => {
+    const container = await renderDetail({ eligibility: [failedFilter()] })
+    const headings = Array.from(container.querySelectorAll('h1,h2,h3')).map((h) => h.textContent)
+    expect(headings).toContain('O que impede')
+    expect(headings).toContain('Por que combina')
+    expect(headings.indexOf('O que impede')).toBeLessThan(headings.indexOf('Por que combina'))
+  })
+
   it('separa o matching determinístico da análise de IA em regiões rotuladas', async () => {
     const container = await renderDetail()
 
@@ -599,7 +726,7 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     const nameOf = (section: HTMLElement) =>
       container.querySelector(`#${section.getAttribute('aria-labelledby')}`)?.textContent
     expect(nameOf(deterministic)).toBe('Decisão')
-    expect(nameOf(analysis)).toBe('Análise semântica')
+    expect(nameOf(analysis)).toBe('Leitura da IA')
     expect(deterministic.textContent).toContain('Recomendada')
     expect(deterministic.textContent).not.toContain('Analisar com IA')
     expect(analysis.textContent).toContain('Analisar com IA')

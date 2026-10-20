@@ -280,6 +280,63 @@ function inboxItem(overrides: Record<string, unknown> = {}) {
   }
 }
 
+describe('InboxPage primeiro acesso', () => {
+  function stubInbox(items: unknown[], profile: object | null) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.endsWith('/profile')) {
+          return profile ? new Response(JSON.stringify(profile), { status: 200 }) : new Response('{}', { status: 404 })
+        }
+        if (url.includes('/inbox')) {
+          return new Response(
+            JSON.stringify({ items, total: items.length, offset: 0, limit: 25, order: 'priority', off_filter_count: 0 }),
+            { status: 200 },
+          )
+        }
+        return new Response(JSON.stringify([]), { status: 200 })
+      }),
+    )
+  }
+  const profile = {
+    id: 'profile-1', number: 1, status: 'ACTIVE', profile_lock_version: 1,
+    skills: [], experiences: [], projects: [], preferences: {},
+  }
+
+  it('sem perfil e sem vagas, o guia substitui a lista vazia', async () => {
+    stubInbox([], null)
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush(6)
+
+    expect(Array.from(container.querySelectorAll('h2')).some((h) => h.textContent === 'Monte sua bateia')).toBe(true)
+    const cta = Array.from(container.querySelectorAll('a')).find((a) => a.textContent === 'Começar pelo perfil')
+    expect(cta?.getAttribute('href')).toBe('/profile')
+    expect(container.textContent).not.toContain('Nada novo para decidir. A próxima coleta acontece no próximo ciclo.')
+  })
+
+  it('sem perfil mas com vagas, a lista aparece como de costume', async () => {
+    stubInbox([inboxItem()], null)
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush(6)
+
+    expect(container.textContent).toContain('Backend Engineer')
+    expect(container.textContent).not.toContain('Monte sua bateia')
+  })
+
+  it('com perfil, o guia não aparece e a lista vazia continua', async () => {
+    stubInbox([], profile)
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush(6)
+
+    expect(container.textContent).not.toContain('Monte sua bateia')
+    expect(container.textContent).toContain('Nada novo para decidir. A próxima coleta acontece no próximo ciclo.')
+  })
+})
+
 /** Card F20-61: the recency toggle defaults to on (no `only_recent` param means the
  * server's own default already applies the filter) and unchecking it sends an
  * explicit `only_recent=false` request. */
@@ -660,7 +717,7 @@ describe('InboxPage table, pagination and filters', () => {
     expect(row.textContent).toContain('Possível duplicata')
     expect(row.querySelector('[data-testid="startup-badge"]')).not.toBeNull()
     expect(row.textContent).toContain('Não é para mim')
-    expect(container.textContent).toContain('1 oportunidade encontrada.')
+    expect(container.textContent).toContain('1 vaga encontrada.')
   })
 
   it('sincroniza busca submetida e filtros ao navegar para trás e para frente no histórico do Router', async () => {
@@ -733,7 +790,7 @@ describe('InboxPage table, pagination and filters', () => {
 
     const table = container.querySelector('[role="table"]') as HTMLElement
     expect(table).not.toBeNull()
-    expect(table.querySelector('caption')?.textContent).toBe('Oportunidades')
+    expect(table.querySelector('caption')?.textContent).toBe('Vagas')
     expect(
       [...table.querySelectorAll('[role="columnheader"]')].map((header) => header.textContent),
     ).toEqual(['Vaga', 'Score e decisão', 'Sinais', 'Publicada', 'Ações'])
@@ -745,37 +802,75 @@ describe('InboxPage table, pagination and filters', () => {
     expect(table.querySelectorAll('[role="rowgroup"]')).toHaveLength(2)
   })
 
-  it('mostra o score em caixa tabular e, ao lado, o nome do veredito', async () => {
-    stubInbox(1, [], [inboxItem({ score: '82', verdict: 'RECOMMENDED' })])
+  it('mostra a régua de pepitas a partir do score, com o nome do veredito', async () => {
+    stubInbox(1, [], [inboxItem({ score: '76.0', verdict: 'HIGH_PRIORITY' })])
     const container = renderAt('/inbox')
     await flush()
 
     const cell = container.querySelectorAll('tbody [role="cell"]')[1] as HTMLElement
-    expect(cell.textContent).toContain('82.0')
-    expect(cell.querySelector('.tabular-nums')?.textContent).toBe('82.0')
-    expect(cell.textContent).toContain('Recomendada')
+    const meter = cell.querySelector('[role="img"]')
+    expect(meter?.getAttribute('aria-label')).toBe('76 de 100')
+    expect(meter?.querySelectorAll('[data-nugget="met"]')).toHaveLength(8)
+    expect(meter?.querySelectorAll('[data-nugget="missed"]')).toHaveLength(2)
+    expect(cell.textContent).toContain('76 de 100')
+    expect(cell.textContent).toContain('Alta prioridade')
   })
 
-  it('desenha o kicker "Decidir", o título novo e as buscas salvas no cabeçalho', async () => {
+  it('sem score, não mostra régua e diz Sem avaliação', async () => {
+    stubInbox(1, [], [inboxItem({ score: null, verdict: null })])
+    const container = renderAt('/inbox')
+    await flush()
+
+    expect(container.textContent).toContain('Sem avaliação')
+    expect(container.querySelector('[role="img"][aria-label$="de 100"]')).toBeNull()
+  })
+
+  it('mostra o resumo da IA como motivo e não inventa motivo sem ele', async () => {
+    stubInbox(1, [], [inboxItem({ analysis_summary: 'Resumo X' })])
+    const withSummary = renderAt('/inbox')
+    await flush()
+    expect(withSummary.querySelector('[data-testid="inbox-reason"]')?.textContent).toBe('Resumo X')
+    const reasonClasses = withSummary.querySelector('[data-testid="inbox-reason"]')?.classList
+    expect(reasonClasses?.contains('text-ink')).toBe(true)
+    expect(reasonClasses?.contains('text-muted')).toBe(false)
+
+    stubInbox(1, [], [inboxItem({ analysis_summary: null })])
+    const without = renderAt('/inbox')
+    await flush()
+    expect(without.querySelector('[data-testid="inbox-reason"]')).toBeNull()
+  })
+
+  it('título longo continua quebrando dentro da linha', async () => {
+    const title = 'A'.repeat(200)
+    stubInbox(1, [], [inboxItem({ title })])
+    const container = renderAt('/inbox')
+    await flush()
+
+    const link = [...container.querySelectorAll('a')].find((a) => a.textContent === title)
+    expect(link?.closest('.break-anywhere')).not.toBeNull()
+  })
+
+  it('desenha o kicker "Decidir", o título Inbox e as buscas salvas no cabeçalho', async () => {
     stubInbox(1, [])
     const container = renderAt('/inbox')
     await flush()
 
     const header = container.querySelector('header') as HTMLElement
     expect(header.querySelector('p')?.textContent).toBe('Decidir')
-    expect(header.querySelector('h1')?.textContent).toBe('Quais vagas merecem sua atenção agora?')
+    expect(header.querySelector('h1')?.textContent).toBe('Inbox')
+    expect(header.textContent).toContain('1 vaga para decidir.')
     expect(
       [...header.querySelectorAll('button')].some((button) => button.textContent === 'Buscas salvas'),
     ).toBe(true)
   })
 
-  it('explica a leitura do score, fatores desconhecidos, análise semântica e avaliações stale', async () => {
+  it('explica a leitura do score, fatores desconhecidos, leitura da IA e avaliações stale', async () => {
     stubInbox(0, [])
     const container = renderAt('/inbox')
     await flush()
 
     const guidance = container.querySelector('aside[aria-label="Como interpretar as avaliações"]')
-    expect(guidance?.textContent).toContain('regras determinísticas')
+    expect(guidance?.textContent).toContain('regras fixas')
     expect(guidance?.textContent).toContain('pedem revisão')
     expect(guidance?.textContent).toContain('consultiva')
     expect(guidance?.textContent).toContain('desatualizados')
@@ -785,12 +880,12 @@ describe('InboxPage table, pagination and filters', () => {
     stubInbox(0, [], [])
     const bare = renderAt('/inbox')
     await flush()
-    expect(bare.textContent).toContain('Ainda não há oportunidades para mostrar')
-    expect(bare.textContent).not.toContain('Nenhuma oportunidade encontrada com esses filtros.')
+    expect(bare.textContent).toContain('Nada novo para decidir. A próxima coleta acontece no próximo ciclo.')
+    expect(bare.textContent).not.toContain('Nenhuma vaga encontrada com esses filtros.')
 
     const filtered = renderAt('/inbox?work_mode=REMOTE')
     await flush()
-    expect(filtered.textContent).toContain('Nenhuma oportunidade encontrada com esses filtros.')
+    expect(filtered.textContent).toContain('Nenhuma vaga encontrada com esses filtros.')
   })
 
   it('envia à API os mesmos parâmetros de sempre para os filtros primários e avançados', async () => {
@@ -833,7 +928,7 @@ describe('InboxPage table, pagination and filters', () => {
     await flush()
 
     expect(urls.some((url) => url.includes('/inbox') && url.includes('offset=25'))).toBe(true)
-    expect(container.textContent).toContain('Exibindo 26 a 50 de 60 oportunidades')
+    expect(container.textContent).toContain('Exibindo 26 a 50 de 60 vagas')
 
     const next = container.querySelector('button[aria-label="Próxima página"]') as HTMLButtonElement
     act(() => next.click())

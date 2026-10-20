@@ -24,8 +24,8 @@ export const verdictCountLabels: Record<string, string> = {
 }
 
 export const verdictTones: Record<string, string> = {
-  HIGH_PRIORITY: 'border-success-line bg-success-surface text-success-ink',
-  RECOMMENDED: 'border-success-line bg-success-surface-soft text-success-ink',
+  HIGH_PRIORITY: 'border-nugget bg-nugget-surface text-nugget-ink',
+  RECOMMENDED: 'border-line-strong bg-accent-surface text-accent-ink',
   REVIEW_REQUIRED: 'border-warning-line bg-warning-surface text-warning-ink',
   WATCHLIST: 'border-line-strong bg-canvas text-neutral-ink',
   LOW_MATCH: 'border-line-strong bg-canvas text-muted',
