@@ -5,12 +5,14 @@ import { Chip } from '../components/Chip'
 import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
 import { StatusBadge } from '../components/StatusBadge'
+import { TechnicalDetail } from '../components/TechnicalDetail'
 import { Unavailable } from '../components/Unavailable'
 import { SecondaryText, PrimaryText } from '../components/cells'
 import { TableSkeleton } from '../components/skeletons'
 import { EmptyState, ErrorState } from '../components/states'
 import { useReadiness } from '../features/health/useReadiness'
 import { type SourceHealth } from '../features/sources/api'
+import { sourceRunSentence } from '../features/sources/labels'
 import { runStatusLabels, runStatusTones } from '../features/sources/states'
 import { useSourceHealth } from '../features/sources/useSources'
 
@@ -121,13 +123,10 @@ function SourceMetrics() {
               <td className="text-subtle">
                 {source.lastRunErrorCode ? (
                   <>
-                    {source.name} não respondeu.
-                    <details className="mt-1 text-caption">
-                      <summary className="cursor-pointer">Detalhe técnico</summary>
-                      <p className="break-anywhere mt-1">
-                        {source.lastRunErrorCode}: {source.lastRunError ?? ''}
-                      </p>
-                    </details>
+                    {sourceRunSentence(source.name, source.lastRunStatus)}
+                    <TechnicalDetail>
+                      {source.lastRunErrorCode}: {source.lastRunError ?? ''}
+                    </TechnicalDetail>
                   </>
                 ) : (
                   <Unavailable reason="sem erro" />

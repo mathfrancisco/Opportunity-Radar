@@ -315,8 +315,9 @@ describe('SourcesPage — Bateia', () => {
     await flush()
 
     const visible = visibleTextOutsideDetails(container)
-    expect(visible).toContain('Gupy não respondeu.')
+    expect(visible).toContain('A última coleta em Gupy não terminou.')
     expect(visible).not.toContain('Tentamos de novo')
+    expect(visible).not.toContain('não respondeu')
     expect(visible).not.toMatch(/[A-Z]{3,}_[A-Z_]+/)
     const detail = [...container.querySelectorAll('details')].find((d) =>
       d.textContent?.includes('HTTP_503'),
@@ -397,6 +398,7 @@ describe('SourcesPage — Bateia', () => {
     expect(visible).not.toMatch(/[A-Z]{3,}_[A-Z_]+/)
     expect(visible).not.toContain('weird_new_state')
     expect(visible).toContain('evidência não reconhecida')
+    expect(visible).toContain('A última coleta em Fonte workday trouxe só parte das vagas.')
   })
 })
 

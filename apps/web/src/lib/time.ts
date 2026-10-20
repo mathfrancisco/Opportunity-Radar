@@ -7,6 +7,7 @@ const saoPaulo = new Intl.DateTimeFormat('pt-BR', {
 
 /** An hour of the day as it is said aloud in Brazil: "6h" on the hour, "14h10" otherwise. */
 export function formatHour(date: Date): string {
+  if (Number.isNaN(date.getTime())) return ''
   const parts = saoPaulo.formatToParts(date)
   const hour = Number(parts.find((part) => part.type === 'hour')?.value)
   const minute = parts.find((part) => part.type === 'minute')?.value ?? '00'

@@ -1,3 +1,4 @@
+import { evidenceLabels } from './labels'
 import { type SourceDefinition } from './api'
 
 export interface ControlsDraft {
@@ -27,7 +28,7 @@ export function missingForEnable(source: SourceDefinition, draft: ControlsDraft)
   const missing: string[] = []
   if (source.evidenceStatus !== 'confirmed') {
     missing.push(
-      `evidência confirmada — hoje é “${source.evidenceStatus}”. Ela é confirmada pelo teste do collector contra o endpoint público, logo abaixo.`,
+      `evidência confirmada — hoje está ${evidenceLabels[source.evidenceStatus] ?? 'não reconhecida'}. Ela é confirmada pelo teste do collector contra o endpoint público, logo abaixo.`,
     )
   }
   if (!draft.reviewedOn && !source.reviewedAt) missing.push('data de revisão')

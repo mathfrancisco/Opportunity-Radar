@@ -9,6 +9,7 @@ import {
 import { evidenceLabels } from '../features/sources/labels'
 import { ConflictError } from '../lib/api'
 import { Button } from './Button'
+import { TechnicalDetail } from './TechnicalDetail'
 import { Field, controlClassName } from './Field'
 import { ConflictNotice, ErrorState, LoadingState } from './states'
 
@@ -72,12 +73,9 @@ export function SourceControlsPanel({ sourceId }: { sourceId: string }) {
         {record.enabled ? 'Habilitada' : 'Desabilitada'} · evidência{' '}
         {evidenceLabels[record.evidenceStatus] ?? 'não reconhecida'}
       </p>
-      <details className="mt-1 text-caption text-subtle">
-        <summary className="cursor-pointer">Detalhe técnico</summary>
-        <p className="mt-1">
-          Evidência {record.evidenceStatus} · versão {record.version}
-        </p>
-      </details>
+      <TechnicalDetail>
+        Evidência {record.evidenceStatus} · versão {record.version}
+      </TechnicalDetail>
 
       <div className="mt-4">
         <Field hint="Cron (ex.: 0 */3 * * *). Vazio deixa a fonte sem agenda." label="Agenda">
@@ -181,12 +179,9 @@ export function SourceControlsPanel({ sourceId }: { sourceId: string }) {
             </p>
           )}
           {probe.data && probe.data.probe.status !== 'PASSED' && (
-            <details className="mt-1 text-caption text-subtle">
-              <summary className="cursor-pointer">Detalhe técnico</summary>
-              <p className="mt-1">
-                {probe.data.probe.errorCode ?? 'erro'} — {probe.data.probe.detail ?? 'sem detalhe'}
-              </p>
-            </details>
+            <TechnicalDetail>
+              {probe.data.probe.errorCode ?? 'erro'} — {probe.data.probe.detail ?? 'sem detalhe'}
+            </TechnicalDetail>
           )}
           {probe.isError &&
             (probe.error instanceof ConflictError ? (

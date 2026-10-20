@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { PrimaryText, SecondaryText, DateTimeCell } from '../components/cells'
@@ -15,7 +15,8 @@ import { StatusBadge } from '../components/StatusBadge'
 import { Unavailable } from '../components/Unavailable'
 import { SearchInput } from '../components/SearchInput'
 import { type SourceHealth, type SourceType } from '../features/sources/api'
-import { evidenceLabels, triggerLabels } from '../features/sources/labels'
+import { TechnicalDetail } from '../components/TechnicalDetail'
+import { evidenceLabels, sourceRunSentence, triggerLabels } from '../features/sources/labels'
 import { runStatusLabels, runStatusTones } from '../features/sources/states'
 import {
   useRunSource,
@@ -38,25 +39,6 @@ function formatDuration(seconds: number | null) {
   if (seconds === null) return <Unavailable reason="nunca executada" />
   if (seconds < 60) return `${seconds.toFixed(1)} s`
   return `${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s`
-}
-
-/** Technical codes live here, collapsed, and nowhere else on the screen. */
-function TechnicalDetail({ children }: { children: ReactNode }) {
-  return (
-    <details className="mt-1 text-caption text-subtle">
-      <summary className="cursor-pointer">Detalhe técnico</summary>
-      <p className="break-anywhere mt-1">{children}</p>
-    </details>
-  )
-}
-
-/** What a failed or partial last run says in plain words; the code stays in the detail. */
-function failureSentence(source: SourceHealth): string | null {
-  if (source.lastRunStatus === 'FAILED' || (source.lastRunError && source.lastRunStatus !== 'PARTIAL')) {
-    return `${source.name} não respondeu.`
-  }
-  if (source.lastRunStatus === 'PARTIAL') return `${source.name} respondeu só em parte.`
-  return null
 }
 
 function RunStatus({ status }: { status: string | null }) {
@@ -174,9 +156,9 @@ function SourceRows({
         <td className="min-w-48 align-top">
           <PrimaryText>{source.name}</PrimaryText>
           <SecondaryText>{source.sourceType}</SecondaryText>
-          {failureSentence(source) && (
+          {sourceRunSentence(source.name, source.lastRunStatus) && (
             <div className="mt-2 rounded-control border border-line-strong bg-canvas p-2 text-caption text-neutral-ink">
-              <p>{failureSentence(source)}</p>
+              <p>{sourceRunSentence(source.name, source.lastRunStatus)}</p>
               {(source.lastRunError || source.lastRunErrorCode) && (
                 <TechnicalDetail>
                   {source.lastRunErrorCode ? `${source.lastRunErrorCode}: ` : ''}

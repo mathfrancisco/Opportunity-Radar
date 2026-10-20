@@ -188,7 +188,7 @@ describe('StatusPage', () => {
     expect(rows[0]).toContain('12 gravados / 20 vistos')
     expect(rows[0]).toContain('8 repetidos')
     expect(rows[1]).toContain('Falhou')
-    expect(rows[1]).toContain('Lever board não respondeu.')
+    expect(rows[1]).toContain('A última coleta em Lever board não terminou.')
     const detail = container.querySelectorAll('tbody tr')[1].querySelector('details')
     expect(detail?.querySelector('summary')?.textContent).toBe('Detalhe técnico')
     expect(detail?.textContent).toContain('HTTP_503: quadro indisponível')
@@ -237,8 +237,32 @@ describe('StatusPage', () => {
 
     expect(container.textContent).toContain('Não conseguimos falar com a API agora')
     expect(container.textContent).toContain('O que já está salvo continua salvo.')
-    expect(container.querySelector('[role="status"]')?.innerHTML).not.toContain('danger')
+    const panel = container.querySelector('[role="status"]')
+    expect(panel?.textContent).toContain('Sem resposta da API')
+    expect(panel?.querySelector('span')?.className).toContain('neutral-ink')
+    expect(panel?.innerHTML).not.toContain('danger')
     expect(container.textContent).toContain('Tentar novamente')
+  })
+
+  it('não diz que uma coleta parcial falhou', async () => {
+    stubStatusFetch({
+      sources: [
+        sourceHealthItem({
+          name: 'Gupy',
+          last_run_status: 'PARTIAL',
+          last_run_error_code: 'PARSE_ERROR',
+          last_run_error: 'um item inválido',
+        }),
+      ],
+    })
+
+    const container = renderPage(<StatusPage />)
+    await flush(8)
+
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).toContain('A última coleta em Gupy trouxe só parte das vagas.')
+    expect(visible).not.toContain('não terminou')
+    expect(visible).not.toContain('não respondeu')
   })
 
   it('não mostra nenhum código técnico fora de "Detalhe técnico"', async () => {

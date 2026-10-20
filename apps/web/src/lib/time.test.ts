@@ -11,6 +11,10 @@ describe('formatHour', () => {
     expect(formatHour(new Date('2026-10-20T17:05:00Z'))).toBe('14h05')
   })
 
+  it('returns an empty string for an invalid date', () => {
+    expect(formatHour(new Date('not a date'))).toBe('')
+  })
+
   it('does not pad the hour and reads midnight as 0h', () => {
     expect(formatHour(new Date('2026-10-20T03:00:00Z'))).toBe('0h')
   })
