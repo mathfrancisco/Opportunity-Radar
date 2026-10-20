@@ -16,3 +16,24 @@ export function sourceRunSentence(name: string, status: string | null): string |
   if (status === 'PARTIAL') return `A última coleta em ${name} trouxe só parte das vagas.`
   return null
 }
+
+/** How a collector reads to a person. Unknown types never show their slug. */
+export const sourceTypeLabels: Record<string, string> = {
+  ashby: 'Ashby',
+  lever: 'Lever',
+  greenhouse: 'Greenhouse',
+  workday: 'Workday',
+  workable: 'Workable',
+  remotive: 'Remotive',
+  teamtailor: 'Teamtailor',
+  factorial: 'Factorial',
+  inhire: 'inHire',
+  jobposting: 'Página de vaga (JobPosting)',
+  hacker_news: 'Hacker News',
+  tavily_search: 'Busca na web (Tavily)',
+  manual: 'Manual (entrada avulsa de vaga)',
+}
+
+export function sourceTypeLabel(sourceType: string): string {
+  return sourceTypeLabels[sourceType] ?? 'Tipo não reconhecido'
+}

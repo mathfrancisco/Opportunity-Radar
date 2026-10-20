@@ -9,5 +9,7 @@ export const versionStatusLabels: Record<string, string> = {
 export const compensationPeriodLabels: Record<string, string> = {
   YEAR: 'Por ano',
   MONTH: 'Por mês',
+  WEEK: 'Por semana',
+  DAY: 'Por dia',
   HOUR: 'Por hora',
 }

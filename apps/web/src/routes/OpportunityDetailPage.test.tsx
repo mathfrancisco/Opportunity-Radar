@@ -722,6 +722,31 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     expect(details.some((text) => text?.includes('3f2b1c7e-9d0a-4e5b-8a61-2c4d5e6f7a8b'))).toBe(true)
   })
 
+  it.each([
+    ['WEEK', 'por semana'],
+    ['DAY', 'por dia'],
+  ])('rotula o período %s como "%s", sem dizer que não foi informado', async (period, label) => {
+    const container = await renderDetail({
+      extras: {
+        compensations: [
+          {
+            minimum: '500',
+            maximum: '900',
+            currency: 'BRL',
+            period,
+            gross_net: 'GROSS',
+            evidence_text: null,
+            evidence_source: null,
+            raw_item_id: 'raw-1',
+          },
+        ],
+      },
+    })
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).toContain(label)
+    expect(visible).not.toContain('período não informado')
+  })
+
   it('resume os fatores em pepitas', async () => {
     const container = await renderDetail({
       factors: [known('0.9'), known('0.8'), known('0.1'), unknown()],

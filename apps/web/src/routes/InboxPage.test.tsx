@@ -925,6 +925,14 @@ describe('InboxPage table, pagination and filters', () => {
     expect(filtered.textContent).toContain('Nenhuma vaga encontrada com esses filtros.')
   })
 
+  it('uma página posterior vazia não diz "Nada novo desde ontem."', async () => {
+    stubInbox(0, [], [])
+    const later = renderAt('/inbox?page=2')
+    await flush()
+    expect(later.textContent).not.toContain('Nada novo desde ontem.')
+    expect(later.textContent).toContain('Nenhuma vaga encontrada com esses filtros.')
+  })
+
   it('envia à API os mesmos parâmetros de sempre para os filtros primários e avançados', async () => {
     const urls: string[] = []
     stubInbox(

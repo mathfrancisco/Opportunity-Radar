@@ -20,7 +20,7 @@ import { CardListSkeleton, PanelSkeleton } from './skeletons'
 import { ConflictNotice, EmptyState, ErrorState } from './states'
 import { StatusBadge } from './StatusBadge'
 import { TechnicalDetail } from './TechnicalDetail'
-import { evidenceLabels } from '../features/sources/labels'
+import { evidenceLabels, sourceTypeLabel, sourceTypeLabels } from '../features/sources/labels'
 
 type QueueState = 'no_probe' | 'probe_failed' | 'confirmed' | 'ready'
 
@@ -105,8 +105,10 @@ function SequentialCard({
   return (
     <Card as="article">
       <h3 className="font-semibold">
-        {record.name} <span className="font-normal text-muted">({record.sourceType})</span>
+        {record.name}{' '}
+        <span className="font-normal text-muted">({sourceTypeLabel(record.sourceType)})</span>
       </h3>
+      {!(record.sourceType in sourceTypeLabels) && <TechnicalDetail>{record.sourceType}</TechnicalDetail>}
       <p className="mt-1 text-sm text-subtle">
         Evidência {evidenceLabels[record.evidenceStatus] ?? 'não reconhecida'}
       </p>
@@ -430,7 +432,10 @@ export function HomologationQueue() {
               </td>
               <td className="min-w-28">
                 <PrimaryText>{item.name}</PrimaryText>
-                <SecondaryText>{item.sourceType}</SecondaryText>
+                <SecondaryText>{sourceTypeLabel(item.sourceType)}</SecondaryText>
+                {!(item.sourceType in sourceTypeLabels) && (
+                  <TechnicalDetail>{item.sourceType}</TechnicalDetail>
+                )}
                 {result && (
                   <p
                     className={`mt-1 text-caption ${result.ok ? 'text-success-ink' : 'text-danger-ink'}`}

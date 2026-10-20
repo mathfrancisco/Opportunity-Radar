@@ -27,7 +27,7 @@ describe('HomologationQueuePage', () => {
     expect(container.querySelector('header')?.textContent).toContain('Aquisição')
     expect(container.querySelector('h1')?.textContent).toBe('Fila de homologação')
     expect(container.querySelector('header')?.textContent).toContain('habilite uma a uma')
-    expect(visibleTextOutsideDetails(container)).not.toMatch(/[A-Z]{3,}_[A-Z_]+/)
+    expect(visibleTextOutsideDetails(container)).not.toMatch(/[A-Z]{3,}_[A-Z_]+|\b[a-z]+(?:_[a-z]+)+\b/)
     expect(
       container.querySelector('a[href="/sources/homologation-queue"]')?.getAttribute('aria-current'),
     ).toBe('page')

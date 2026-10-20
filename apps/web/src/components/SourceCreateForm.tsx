@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react'
 import { type SourceDefinition, type SourceType, sourceTypes } from '../features/sources/api'
+import { sourceTypeLabel } from '../features/sources/labels'
 import { useCreateSource } from '../features/sources/useSources'
 import { FieldError } from '../lib/api'
 import { Button } from './Button'
@@ -106,19 +107,6 @@ const configFields: Record<SourceType, ConfigField[]> = {
     { key: 'company_name', label: 'Nome da empresa', required: false, hint: 'Opcional.' },
   ],
   manual: [],
-}
-
-const typeLabels: Record<SourceType, string> = {
-  ashby: 'Ashby',
-  lever: 'Lever',
-  greenhouse: 'Greenhouse',
-  workday: 'Workday',
-  workable: 'Workable',
-  remotive: 'Remotive',
-  teamtailor: 'Teamtailor',
-  factorial: 'Factorial',
-  inhire: 'inHire',
-  manual: 'Manual (entrada avulsa de vaga)',
 }
 
 interface Draft {
@@ -286,7 +274,7 @@ export function SourceCreateForm({ initialType, onCreated, onCancel }: SourceCre
           >
             {sourceTypes.map((type) => (
               <option key={type} value={type}>
-                {typeLabels[type]}
+                {sourceTypeLabel(type)}
               </option>
             ))}
           </select>

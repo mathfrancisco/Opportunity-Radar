@@ -966,10 +966,10 @@ export function InboxPage() {
           (activeFilterCount === 0 && !search ? (
             profile.data === null ? (
               <FirstRunGuide />
+            ) : isDefaultView ? (
+              <EmptyState>{nothingNewSentence(summary.data)}</EmptyState>
             ) : (
-            <EmptyState>
-              {nothingNewSentence(summary.data)}
-            </EmptyState>
+              <EmptyState>Nenhuma vaga encontrada com esses filtros.</EmptyState>
             )
           ) : (
             <EmptyState>Nenhuma vaga encontrada com esses filtros.</EmptyState>

@@ -16,7 +16,13 @@ import { Unavailable } from '../components/Unavailable'
 import { SearchInput } from '../components/SearchInput'
 import { type SourceHealth, type SourceType } from '../features/sources/api'
 import { TechnicalDetail } from '../components/TechnicalDetail'
-import { evidenceLabels, sourceRunSentence, triggerLabels } from '../features/sources/labels'
+import {
+  evidenceLabels,
+  sourceRunSentence,
+  sourceTypeLabel,
+  sourceTypeLabels,
+  triggerLabels,
+} from '../features/sources/labels'
 import { runStatusLabels, runStatusTones } from '../features/sources/states'
 import {
   useRunSource,
@@ -155,7 +161,10 @@ function SourceRows({
       <tr>
         <td className="min-w-48 align-top">
           <PrimaryText>{source.name}</PrimaryText>
-          <SecondaryText>{source.sourceType}</SecondaryText>
+          <SecondaryText>{sourceTypeLabel(source.sourceType)}</SecondaryText>
+          {!(source.sourceType in sourceTypeLabels) && (
+            <TechnicalDetail>{source.sourceType}</TechnicalDetail>
+          )}
           {sourceRunSentence(source.name, source.lastRunStatus) && (
             <div className="mt-2 rounded-control border border-line-strong bg-canvas p-2 text-caption text-neutral-ink">
               <p>{sourceRunSentence(source.name, source.lastRunStatus)}</p>
@@ -167,7 +176,12 @@ function SourceRows({
               )}
             </div>
           )}
-          {run.isError && <p className="mt-2 text-caption text-danger-ink">{run.error.message}</p>}
+          {run.isError && (
+            <div className="mt-2 text-caption text-neutral-ink">
+              <p>Não foi possível iniciar a coleta em {source.name}.</p>
+              <TechnicalDetail>{run.error.message}</TechnicalDetail>
+            </div>
+          )}
           {run.isSuccess && (
             <p className="mt-2 text-caption text-subtle">
               Execução: {(runStatusLabels[run.data.status] ?? 'concluída').toLowerCase()} ·{' '}

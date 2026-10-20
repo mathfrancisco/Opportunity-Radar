@@ -256,6 +256,23 @@ describe('HomologationQueue', () => {
     expect(sequential).not.toContain('board_token')
   })
 
+  it('mostra o tipo da fonte em português, sem o código', async () => {
+    stubFetch({
+      items: [
+        healthItem({ source_definition_id: 'source-1', name: 'Primeira', source_type: 'tavily_search' }),
+        healthItem({ source_definition_id: 'source-2', name: 'Segunda', source_type: 'novo_coletor' }),
+      ],
+    })
+
+    const container = renderWithClient(<HomologationQueue />)
+    await flush()
+
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).toContain('Busca na web (Tavily)')
+    expect(visible).toContain('Tipo não reconhecido')
+    expect(visible).not.toMatch(/\b[a-z]+(?:_[a-z]+)+\b/)
+  })
+
   it('o teste individual usa o mesmo verbo do botão na confirmação', async () => {
     stubFetch({ items: [healthItem({ source_definition_id: 'source-1', name: 'Primeira' })] })
 

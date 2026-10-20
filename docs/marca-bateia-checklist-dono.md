@@ -8,7 +8,7 @@ Nada aqui foi feito por agente. Nenhuma compra, conta, renomeação ou formulár
 
 Referências de linha são desta branch (`feat/marca-bateia-final`, 2026-10-20). Preços são "valor de referência, confira na hora".
 
-Ordem sugerida: 4 (INPI) primeiro, depois 3, 2 e 1. Se a busca no INPI der no-go, nada do resto vale o dinheiro.
+Ordem sugerida: 1 (INPI) primeiro, depois 3 e 2; o 4 (renomear o repositório) fica por último. Se a busca no INPI der no-go, nada do resto vale o dinheiro.
 
 ---
 

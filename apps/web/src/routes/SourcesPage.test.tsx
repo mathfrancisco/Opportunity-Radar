@@ -106,6 +106,15 @@ function stubFetch(items: ReturnType<typeof healthItem>[]) {
 // after the collector work landed (workday, teamtailor, workable, factorial, plus the
 // generic jobposting collector) — this proves each renders its card correctly instead
 // of falling back to "unknown" or crashing the list.
+const typeNames: Record<string, string> = {
+  workday: 'Workday',
+  teamtailor: 'Teamtailor',
+  workable: 'Workable',
+  factorial: 'Factorial',
+  jobposting: 'Página de vaga (JobPosting)',
+  inhire: 'inHire',
+}
+
 describe('SourcesPage — novos ATS', () => {
   it.each(['workday', 'teamtailor', 'workable', 'factorial', 'jobposting', 'inhire'])(
     'mostra o card da fonte %s com o tipo e o botão de execução',
@@ -115,7 +124,7 @@ describe('SourcesPage — novos ATS', () => {
       const container = renderPage(<SourcesPage />)
       await flush()
 
-      expect(container.textContent).toContain(sourceType)
+      expect(container.textContent).toContain(typeNames[sourceType])
       const runButton = [...container.querySelectorAll('button')].find(
         (button) => button.textContent === 'Executar agora',
       )
@@ -132,7 +141,7 @@ describe('SourcesPage — novos ATS', () => {
     await flush()
 
     for (const sourceType of types) {
-      expect(container.textContent).toContain(sourceType)
+      expect(container.textContent).toContain(typeNames[sourceType])
     }
     expect(container.querySelectorAll('tbody tr').length).toBe(types.length)
   })
@@ -148,6 +157,61 @@ describe('SourcesPage — novos ATS', () => {
     )
     expect(runButton?.disabled).toBe(true)
     expect(container.textContent).toContain('Fonte desabilitada')
+  })
+})
+
+describe('SourcesPage — texto sem códigos', () => {
+  it('traduz o tipo da fonte e guarda o código só no detalhe técnico', async () => {
+    stubFetch([
+      healthItem('hacker_news'),
+      healthItem('tavily_search'),
+      healthItem('novo_coletor'),
+    ])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).toContain('Hacker News')
+    expect(visible).toContain('Busca na web (Tavily)')
+    expect(visible).toContain('Tipo não reconhecido')
+    expect(visible).not.toMatch(/\b[a-z]+(?:_[a-z]+)+\b/)
+    const details = [...container.querySelectorAll('details')].map((d) => d.textContent)
+    expect(details.some((text) => text?.includes('novo_coletor'))).toBe(true)
+  })
+
+  it('falha ao executar: frase neutra e a mensagem crua só no detalhe técnico', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown, init?: RequestInit) => {
+        const url = String(input)
+        if (init?.method === 'POST') {
+          return new Response(JSON.stringify({ detail: 'boom_interno' }), { status: 500 })
+        }
+        if (url.includes('/source-health')) {
+          return new Response(
+            JSON.stringify({ items: [healthItem('greenhouse')], total: 1, failing: 0 }),
+            { status: 200 },
+          )
+        }
+        if (url.includes('/source-coverage')) {
+          return new Response(JSON.stringify(coverage()), { status: 200 })
+        }
+        return new Response('{}', { status: 404 })
+      }),
+    )
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+    const runButton = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Executar agora',
+    )
+    act(() => runButton?.click())
+    await flush()
+
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).toContain('Não foi possível iniciar a coleta em Fonte greenhouse.')
+    expect(container.querySelector('.text-danger-ink')).toBeNull()
   })
 })
 
@@ -218,7 +282,7 @@ describe('SourcesPage — tabela e ação de cabeçalho', () => {
 
     const row = container.querySelector('tbody tr')
     expect(row?.querySelector('.font-semibold')?.textContent).toBe('Fonte workday')
-    expect(row?.querySelector('.text-muted')?.textContent).toBe('workday')
+    expect(row?.querySelector('.text-muted')?.textContent).toBe('Workday')
     const run = [...(row?.querySelectorAll('button') ?? [])].find(
       (button) => button.textContent === 'Executar agora',
     )
