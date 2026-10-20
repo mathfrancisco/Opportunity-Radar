@@ -195,6 +195,9 @@ class InboxQuery:
     lifecycle_status: str | None = None
     published_after: datetime | None = None
     created_after: datetime | None = None
+    #: Postings first collected at or after this instant (`first_seen_at`). Used by the
+    #: Inbox summary ("coletadas desde ontem"); not a public Inbox filter.
+    first_seen_after: datetime | None = None
     only_assessed: bool = False
     applied: bool | None = None
     search: str | None = None
@@ -883,6 +886,8 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
         filters.append(OpportunityModel.published_at >= query.published_after)
     if query.created_after is not None:
         filters.append(OpportunityModel.created_at > query.created_after)
+    if query.first_seen_after is not None:
+        filters.append(OpportunityModel.first_seen_at >= query.first_seen_after)
     if query.seniorities:
         filters.append(OpportunityModel.seniority.in_(query.seniorities))
     if query.open_at_source:
