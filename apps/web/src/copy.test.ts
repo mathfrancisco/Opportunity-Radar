@@ -40,7 +40,7 @@ describe('Bateia voice guard', () => {
       for (const file of walk(join(root, dir))) {
         const text = stripComments(readFileSync(file, 'utf8'))
         for (const term of banned) {
-          if (text.includes(term)) hits.push(`${relative(root, file)}: ${term}`)
+          if (text.toLowerCase().includes(term.toLowerCase())) hits.push(`${relative(root, file)}: ${term}`)
         }
         const name = relative(root, file).replaceAll('\\', '/')
         for (const line of text.split('\n')) {

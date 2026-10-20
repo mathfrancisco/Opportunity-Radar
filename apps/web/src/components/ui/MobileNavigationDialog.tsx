@@ -27,7 +27,7 @@ export function MobileNavigationDialog({
       <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay
-          className="fixed inset-0 z-10 bg-ink/30 md:hidden"
+          className="fixed inset-0 z-10 bg-scrim/50 md:hidden"
           data-testid="drawer-backdrop"
         />
         <Dialog.Content className={contentClassName} id="sidebar">

@@ -75,8 +75,8 @@ export function AnalysisPanel({
         <EmptyState>A IA ainda não leu esta vaga.</EmptyState>
       )}
       {analysis && analysis.status !== 'AI_COMPLETED' && (
-        <div className="rounded-control border border-warning-line bg-warning-surface p-5 text-sm">
-          <p className="font-medium text-warning-ink">
+        <div className="rounded-control border border-line bg-panel p-5 text-sm">
+          <p className="font-medium text-subtle">
             A IA não leu esta vaga. O match acima continua valendo.
           </p>
           {analysis.detail && <p className="mt-2 text-subtle">{analysis.detail}</p>}
@@ -86,6 +86,7 @@ export function AnalysisPanel({
               {analysis.status}
               {analysis.failureCode ? `, ${analysis.failureCode}` : ''}
             </p>
+            <p className="mt-1">avaliação {assessment.id.slice(0, 8)}</p>
           </details>
         </div>
       )}
@@ -148,8 +149,7 @@ export function AnalysisPanel({
               : 'Analisar com IA'}
         </Button>
         <span className="text-xs text-muted">
-          A leitura da IA é consultiva: não altera score, verdict nem elegibilidade da avaliação{' '}
-          {assessment.id.slice(0, 8)}.
+          A leitura da IA é consultiva: não altera score, veredito nem elegibilidade.
         </span>
       </div>
       {failed && (

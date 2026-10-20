@@ -31,7 +31,13 @@ describe('ThemeToggle', () => {
     expect(buttons.map((b) => b.textContent)).toEqual(['Sistema', 'Claro', 'Escuro'])
     expect(buttons.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false'])
 
+    expect(buttons[0].className).toContain('border-control-line')
+    expect(buttons[1].className).toContain('border-transparent')
+
     act(() => buttons[2].click())
+
+    expect(buttons[2].className).toContain('border-control-line')
+    expect(buttons[0].className).toContain('border-transparent')
 
     expect(buttons.map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'false', 'true'])
     expect(document.documentElement.dataset.theme).toBe('dark')

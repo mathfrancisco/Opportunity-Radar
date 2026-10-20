@@ -1,6 +1,7 @@
 import { SignIn, SignUp, useAuth } from '@clerk/react'
 import { type ReactNode } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import { BrandMark } from '../components/ui/BrandMark'
 import { AuthPending, RequireOwnerUi, RequireSignedIn } from './RouteGuards'
 import { CompaniesPage } from '../routes/CompaniesPage'
 import { CompanyDetailPage } from '../routes/CompanyDetailPage'
@@ -48,8 +49,7 @@ function AuthenticationShell({ children }: { children: ReactNode }) {
         <section className="flex flex-col justify-between bg-sidebar p-6 sm:p-10">
           <div>
             <Link className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold tracking-tight text-ink" to="/">
-              <span aria-hidden="true" className="grid size-8 place-items-center rounded-control bg-brand text-sm font-bold text-surface">O</span>
-              Bateia
+              <BrandMark />
             </Link>
             <p className="mt-14 text-caption font-semibold uppercase tracking-[0.16em] text-accent-ink">Seu espaço de decisão</p>
             <h1 className="mt-4 max-w-md text-3xl font-semibold tracking-tight sm:text-4xl">Organize a busca antes da próxima candidatura.</h1>

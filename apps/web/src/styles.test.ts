@@ -108,6 +108,7 @@ const TEXT_PAIRS: Array<[string, string]> = [
 const CONTROL_PAIRS: Array<[string, string]> = [
   ['control-line', 'surface'],
   ['control-line', 'canvas'],
+  ['control-line', 'sidebar'],
   ['accent', 'surface'],
   ['ink', 'surface'],
   // Anel de foco (:focus-visible usa `accent`): contra cada fundo em que um alvo pode estar.
@@ -151,6 +152,7 @@ describe('contraste dos tokens de styles.css', () => {
       'nugget',
       'nugget-ink',
       'nugget-surface',
+      'scrim',
     ]) {
       expect(() => token(name)).not.toThrow()
     }

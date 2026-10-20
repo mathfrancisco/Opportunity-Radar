@@ -63,6 +63,17 @@ const eligibilityLabels: Record<string, string> = {
   UNKNOWN: 'Aguardando confirmação',
 }
 
+const factorLabels: Record<string, string> = {
+  GEOGRAPHY_CONTRACT_FIT: 'Local e contrato',
+  TECHNOLOGY_FIT: 'Skills da vaga',
+  COMPANY_PRIORITY: 'Prioridade da empresa',
+  DOMAIN_EXPERIENCE: 'Experiência na área',
+  SENIORITY_SCOPE: 'Nível e escopo',
+  CONTRACT_COMPENSATION: 'Contrato e salário',
+  TIMEZONE: 'Fuso horário',
+  RECENCY: 'Vaga recente',
+}
+
 function label(value: string, labels: Record<string, string>) {
   return labels[value] ?? value
 }
@@ -348,7 +359,7 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
                 {occurrence.payloadExpiredAt
                   ? ` em ${formatDate(occurrence.payloadExpiredAt)}`
                   : ''}
-                . A procedência permanece; o reprocessamento não está mais disponível.
+                . De onde veio a vaga continua registrado; o reprocessamento não está mais disponível.
               </p>
             )}
           </Card>
@@ -575,7 +586,6 @@ export function DuplicateCandidates({ opportunity }: { opportunity: OpportunityD
 }
 
 function Eligibility({ details }: { details: EligibilityDetail[] }) {
-  if (details.length === 0) return <p className="text-subtle">Nenhum filtro avaliado.</p>
   return (
     <ul className="grid gap-2">
       {details.map((detail) => (
@@ -613,7 +623,7 @@ const factorMarks: Record<'met' | 'missed' | 'unknown', FactorMark> = {
 function Factors({ factors }: { factors: MatchFactor[] }) {
   const counts = countFactors(factors)
   const total = counts.met + counts.missed + counts.unknown
-  if (total === 0) return <p className="text-subtle">Nenhum fator avaliado</p>
+  if (total === 0) return <p className="text-subtle">Nenhum fator avaliado.</p>
   const label = `${counts.met} de ${total} fatores atendidos${
     counts.unknown > 0 ? `, ${counts.unknown} sem dado` : ''
   }`
@@ -631,7 +641,7 @@ function Factors({ factors }: { factors: MatchFactor[] }) {
                 {mark.symbol}
               </span>
               <span>
-                <span className="font-medium">{factor.factorCode}</span>
+                <span className="font-medium">{factorLabels[factor.factorCode] ?? factor.factorCode}</span>
                 <span className="sr-only"> ({mark.word})</span>
                 <span className="block text-subtle">{factor.explanation}</span>
               </span>
@@ -645,6 +655,7 @@ function Factors({ factors }: { factors: MatchFactor[] }) {
 
 /** Deterministic matching: score, verdict, eligibility and factors, computed outside the AI. */
 function Decision({ assessment }: { assessment: MatchAssessment }) {
+  const blocking = assessment.eligibilityDetails.filter((detail) => detail.result !== 'TRUE')
   return (
     <>
       <div className="flex flex-wrap items-baseline gap-4">
@@ -672,9 +683,11 @@ function Decision({ assessment }: { assessment: MatchAssessment }) {
       </p>
 
       <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6">
-        <Section nested title="O que impede">
-          <Eligibility details={assessment.eligibilityDetails} />
-        </Section>
+        {blocking.length > 0 && (
+          <Section nested title="O que impede">
+            <Eligibility details={blocking} />
+          </Section>
+        )}
 
         <Section nested title="Por que combina">
           <Factors factors={assessment.factors} />

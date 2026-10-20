@@ -212,7 +212,7 @@ function SourceMetricsRow({ source }: { source: SourceMetrics }) {
               </p>
             )}
             <p className="mt-1 text-xs text-muted">
-              mapeamento {mappings.length > 0 ? mappings.join(', ') : 'sem procedência'}
+              mapeamento {mappings.length > 0 ? mappings.join(', ') : 'sem origem registrada'}
               {Object.keys(seniority.evidence).length > 0 &&
                 ` · evidência ${Object.entries(seniority.evidence)
                   .map(([origin, total]) => `${origin} ${total}`)

@@ -80,7 +80,7 @@ export function LandingPage() {
         <div className="max-w-2xl">
           <p className="text-caption font-semibold uppercase tracking-[0.16em] text-accent-ink">Decisões de carreira, com clareza</p>
           <h1 className="mt-5 max-w-xl text-4xl font-display tracking-tight text-ink sm:text-5xl sm:leading-[1.08]">Menos vagas, cada uma com o porquê.</h1>
-          <p className="mt-6 max-w-xl text-body text-subtle">Veja por que cada vaga combina com você, o que falta e o que impede. A leitura da IA apoia, a decisão é sua. Nenhuma empresa vê seu perfil aqui.</p>
+          <p className="mt-6 max-w-xl text-body text-subtle">Veja por que cada vaga combina com você, o que falta e o que impede. A leitura da IA apoia, a decisão é sua. Nenhum recrutador vê seu perfil aqui.</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link className="inline-flex min-h-11 items-center justify-center rounded-control bg-accent px-5 text-sm font-semibold text-surface hover:bg-accent-hover" to="/sign-up">Começar a organizar</Link>
             <a className="inline-flex min-h-11 items-center justify-center rounded-control border border-line-strong bg-surface px-5 text-sm font-semibold text-ink hover:border-ink" href="#como-funciona">Ver como funciona</a>

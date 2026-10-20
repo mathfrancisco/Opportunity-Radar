@@ -161,7 +161,7 @@ describe('App', () => {
     )
 
     expect(container.textContent).toContain(expectedText)
-    expect(container.querySelector('a[href="/"]')?.textContent).toContain('Bateia')
+    expect(container.querySelector('a[href="/"] [role="img"]')?.getAttribute('aria-label')).toBe('Bateia')
   })
 
   it.each([

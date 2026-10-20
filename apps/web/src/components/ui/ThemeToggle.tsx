@@ -31,8 +31,10 @@ export function ThemeToggle() {
             type="button"
             aria-pressed={pressed}
             onClick={() => choose(option.value)}
-            className={`flex-1 rounded-control px-2 text-caption max-md:min-h-11 md:h-7 ${
-              pressed ? 'bg-surface font-semibold text-ink' : 'text-subtle hover:text-ink'
+            className={`flex-1 rounded-control border px-2 text-caption max-md:min-h-11 md:h-7 ${
+              pressed
+                ? 'border-control-line bg-surface font-semibold text-ink'
+                : 'border-transparent text-subtle hover:text-ink'
             }`}
           >
             {option.label}

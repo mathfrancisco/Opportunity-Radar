@@ -70,7 +70,7 @@ describe('Sidebar', () => {
     const container = renderSidebar()
 
     expect(container.querySelector('[role="img"][aria-label="Bateia"]')).not.toBeNull()
-    expect(container.textContent).toContain('Nenhuma empresa vê seu perfil aqui.')
+    expect(container.textContent).toContain('Nenhum recrutador vê seu perfil aqui.')
     expect(container.querySelector('[role="group"][aria-label="Tema"]')).not.toBeNull()
     for (const label of container.querySelectorAll('nav p')) {
       expect(label.className).toContain('font-semibold')

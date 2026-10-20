@@ -2,8 +2,8 @@ import { ButtonLink } from './Button'
 
 const steps = [
   ['Diga o que você procura', 'Cargo, senioridade e regime de trabalho.'],
-  ['Marque o que é exigido', 'As skills que a vaga precisa ter para valer a pena.'],
-  ['Defina seu mínimo', 'Salário e local abaixo dos quais você não quer ver a vaga.'],
+  ['Diga o que você sabe', 'Skills, nível e tempo de uso.'],
+  ['Defina seus limites', 'Salário mínimo e países aceitos. Vaga fora deles perde pontos no match.'],
 ] as const
 
 /** Shown while there is no active profile: nothing can be matched until the profile exists. */

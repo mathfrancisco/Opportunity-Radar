@@ -193,8 +193,8 @@ function ItemRow({ item }: { item: InboxItem }) {
           </SecondaryText>
         )}
         {item.analysisStatus && item.analysisStatus !== 'AI_COMPLETED' && (
-          <div className="mt-1.5 text-caption text-warning-ink">
-            <p>A IA não leu esta vaga. O match ao lado continua valendo.</p>
+          <div className="mt-1.5 text-caption text-muted">
+            <p>A IA não leu esta vaga. O match continua valendo.</p>
             <details className="mt-1">
               <summary className="cursor-pointer">Detalhe técnico</summary>
               <p>{item.analysisStatus}</p>

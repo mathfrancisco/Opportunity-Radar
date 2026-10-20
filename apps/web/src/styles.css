@@ -40,6 +40,7 @@
   /* Mantido por compatibilidade; igual a `surface` (SPEC 46, 4.3). */
   --color-raised: #fafbf8;
   --color-panel: #f1f3ef;
+  --color-scrim: #0b100e;
   /* Fundo da sidebar: um tom abaixo de `canvas`, para separar navegação de conteúdo. */
   --color-sidebar: #e4e8e2;
 
@@ -156,6 +157,7 @@
     --color-surface: #161e1b;
     --color-raised: #1b2521;
     --color-panel: #1a2420;
+--color-scrim: #0b100e;
     --color-sidebar: #111816;
     --color-line: #2a3631;
     --color-line-strong: #3e4c46;
@@ -200,6 +202,7 @@
   --color-surface: #161e1b;
   --color-raised: #1b2521;
   --color-panel: #1a2420;
+--color-scrim: #0b100e;
   --color-sidebar: #111816;
   --color-line: #2a3631;
   --color-line-strong: #3e4c46;

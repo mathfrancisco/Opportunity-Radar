@@ -16,8 +16,8 @@ describe('FirstRunGuide', () => {
     expect(title?.className).toContain('font-display')
     expect(Array.from(container.querySelectorAll('li p:first-of-type')).map((p) => p.textContent)).toEqual([
       'Diga o que você procura',
-      'Marque o que é exigido',
-      'Defina seu mínimo',
+      'Diga o que você sabe',
+      'Defina seus limites',
     ])
     expect(container.querySelector('a[href="/profile"]')?.textContent).toBe('Começar pelo perfil')
   })

@@ -108,7 +108,7 @@ export function Sidebar({ current, onNavigate, isOwner = false }: SidebarProps) 
         </ul>
       </nav>
       <div className="mt-auto flex flex-col gap-3">
-        <p className="px-2 text-caption text-subtle">Nenhuma empresa vê seu perfil aqui.</p>
+        <p className="px-2 text-caption text-subtle">Nenhum recrutador vê seu perfil aqui.</p>
         <ThemeToggle />
       </div>
     </div>

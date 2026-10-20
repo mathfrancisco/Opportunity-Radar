@@ -664,8 +664,27 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
 
   it('sem fatores aplicáveis, diz Nenhum fator avaliado', async () => {
     const container = await renderDetail({ factors: [notApplicable()] })
-    expect(container.textContent).toContain('Nenhum fator avaliado')
+    expect(container.textContent).toContain('Nenhum fator avaliado.')
     expect(container.querySelector('[role="img"][aria-label*="fatores atendidos"]')).toBeNull()
+  })
+
+  it('sem filtro reprovado ou desconhecido, não mostra O que impede', async () => {
+    const passing = { ...failedFilter(), code: 'PAIS', result: 'TRUE', reason: 'País aceito.' }
+    const container = await renderDetail({ eligibility: [passing] })
+    const headings = Array.from(container.querySelectorAll('h1,h2,h3')).map((h) => h.textContent)
+    expect(headings).not.toContain('O que impede')
+    expect(headings).toContain('Por que combina')
+    expect(container.textContent).not.toContain('País aceito.')
+  })
+
+  it('rotula fatores conhecidos em português e mantém o código dos desconhecidos', async () => {
+    const container = await renderDetail({
+      factors: [{ ...known('0.9'), factor_code: 'TECHNOLOGY_FIT' }, known('0.8')],
+    })
+    const text = container.textContent ?? ''
+    expect(text).toContain('Skills da vaga')
+    expect(text).not.toContain('TECHNOLOGY_FIT')
+    expect(text).toMatch(/FATOR_\d+/)
   })
 
   it('mostra O que impede antes de Por que combina', async () => {
