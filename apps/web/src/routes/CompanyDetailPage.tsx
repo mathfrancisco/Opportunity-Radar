@@ -7,7 +7,9 @@ import { CompanyForm } from '../components/CompanyForm'
 import { CompanySourceForm } from '../components/CompanySourceForm'
 import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
-import { EmptyState, ErrorState, LoadingState } from '../components/states'
+import { VerdictBadge } from '../components/VerdictBadge'
+import { PanelSkeleton, TableSkeleton } from '../components/skeletons'
+import { EmptyState, ErrorState } from '../components/states'
 import {
   type CompanyDetail,
   type CompanyDetailSource,
@@ -19,6 +21,8 @@ import {
   useReopenHomologation,
   useUpdateCompany,
 } from '../features/companies/useCompanies'
+import { companyLabel, companyStatusLabels, priorityLabels, verificationLabels } from '../features/companies/labels'
+import { opportunityLabel, workModeLabels } from '../features/opportunities/labels'
 import { ConflictError } from '../lib/api'
 import { useInbox } from '../features/dashboard/useInbox'
 
@@ -32,33 +36,6 @@ const fieldLabels: Record<string, string> = {
   source_type: 'ATS',
   endpoint: 'endereço',
   external_key: 'chave',
-}
-
-const priorityLabels: Record<string, string> = {
-  high: 'Alta',
-  normal: 'Normal',
-  low: 'Baixa',
-}
-
-const companyStatusLabels: Record<string, string> = {
-  active: 'Ativa',
-  paused: 'Pausada',
-  backlog: 'Em fila',
-}
-
-const verificationLabels: Record<string, string> = {
-  VERIFIED: 'Verificada',
-  PENDING: 'Pendente',
-  UNVERIFIED: 'Não verificada',
-  unknown: 'Não informada',
-  unverified: 'Não verificada',
-  ats_identified: 'ATS identificado',
-  careers_confirmed: 'Carreiras confirmadas',
-  backlog: 'Em fila de homologação',
-}
-
-function label(value: string, labels: Record<string, string>) {
-  return labels[value] ?? value
 }
 
 const sensitiveConfigKey = /secret|token|password|credential|authorization|api.?key|email/i
@@ -131,10 +108,14 @@ function Proposal({ companyId, source }: { companyId: string; source: CompanyDet
     <div
       className={`mt-3 rounded-control p-3 text-xs ${proposal.outdated ? 'border border-warning-line bg-warning-surface text-warning-ink' : 'bg-panel text-subtle'}`}
     >
-      <p>
-        Fonte proposta: chave {proposal.externalKey ?? '—'} · {state} · evidência{' '}
-        {proposal.evidenceStatus}
-      </p>
+      <p>Fonte proposta: {state}.</p>
+      <details className="mt-2">
+        <summary className="cursor-pointer font-medium">Detalhe técnico</summary>
+        <p className="mt-1">
+          Chave {proposal.externalKey ?? '—'} · evidência {proposal.evidenceStatus} · versão{' '}
+          {proposal.version}
+        </p>
+      </details>
       {proposal.outdated && (
         <>
           <p className="mt-2">
@@ -177,7 +158,7 @@ function Sources({
   if (company.sources.length === 0) {
     return (
       <EmptyState>Nenhuma fonte associada. A pesquisa registrou a empresa, mas nenhum endpoint foi
-        confirmado.</EmptyState>
+        confirmado. Registre o ATS acima para propor uma.</EmptyState>
     )
   }
   return (
@@ -186,14 +167,19 @@ function Sources({
         <Card as="li" className="text-sm" key={source.id}>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <span className="font-semibold">{source.name}</span>
-            <span className="text-muted">{label(source.status, verificationLabels)}</span>
+            <span className="text-muted">{companyLabel(source.status, verificationLabels)}</span>
           </div>
           {source.url && <p className="mt-1 break-all text-subtle">{source.url}</p>}
           <p className="mt-2 text-xs text-muted">
-            Verificação: {source.verificationMethod ?? 'não informada'} · última em{' '}
-            {formatDate(source.lastVerifiedAt)}
-            {source.externalKey ? ` · chave ${source.externalKey}` : ''}
+            Última verificação em {formatDate(source.lastVerifiedAt)}.
           </p>
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs font-medium text-subtle">Detalhe técnico</summary>
+            <p className="mt-1 text-xs text-muted">
+              Status: {source.status} · método: {source.verificationMethod ?? 'não informado'}
+              {source.externalKey ? ` · chave ${source.externalKey}` : ''}
+            </p>
+          </details>
           {source.evidence && (
             <p className="mt-2 text-subtle">{source.evidence}</p>
           )}
@@ -212,16 +198,22 @@ function LatestOpportunities({ companyId }: { companyId: string }) {
   const inbox = useInbox({ page: 1, pageSize: 5, companyId, order: 'recency' })
 
   if (inbox.isPending) {
-    return <p className="text-sm text-subtle">Carregando vagas…</p>
+    return <TableSkeleton columns={4} label="Carregando vagas…" rows={3} />
   }
   if (inbox.isError) {
+    // Partial state: the company is on screen, only its vagas are missing.
     return (
-      <ErrorState onRetry={() => void inbox.refetch()}>Não foi possível carregar as vagas desta empresa.</ErrorState>
+      <div className="flex flex-wrap items-center gap-3 text-sm text-subtle" role="status">
+        <p>Não foi possível carregar as vagas agora. O resto desta empresa continua valendo.</p>
+        <Button onClick={() => void inbox.refetch()} size="sm" variant="secondary">
+          Tentar novamente
+        </Button>
+      </div>
     )
   }
   if (!inbox.data || inbox.data.items.length === 0) {
     return (
-      <EmptyState>Nenhuma vaga coletada desta empresa até agora.</EmptyState>
+      <EmptyState>Nenhuma vaga desta empresa até agora. Quando uma fonte habilitada coletar, ela aparece aqui.</EmptyState>
     )
   }
   return (
@@ -240,8 +232,10 @@ function LatestOpportunities({ companyId }: { companyId: string }) {
                 {item.title}
               </Link>
             </td>
-            <td className="text-subtle">{item.workMode}</td>
-            <td className="text-subtle">{item.verdict ?? 'não avaliada'}</td>
+            <td className="text-subtle">{opportunityLabel(item.workMode, workModeLabels)}</td>
+            <td>
+              <VerdictBadge verdict={item.verdict} />
+            </td>
             <td className="text-subtle">{item.score ? Number(item.score).toFixed(1) : '—'}</td>
           </tr>
         ))}
@@ -281,7 +275,7 @@ export function CompanyDetailPage() {
       }
       eyebrow="Catálogo local"
       title={company.data?.name ?? 'Empresa'}
-      description={company.data?.domain ?? undefined}
+      description={company.data?.domain ?? 'Prioridade, fontes e vagas desta empresa.'}
     >
       <p className="mt-2">
         <Link
@@ -294,10 +288,14 @@ export function CompanyDetailPage() {
 
       <div>
         {company.isPending && (
-          <LoadingState className="mt-8">Carregando empresa…</LoadingState>
+          <div className="mt-8">
+            <PanelSkeleton columns={4} label="Carregando empresa…" />
+          </div>
         )}
         {company.isError && (
-          <ErrorState className="mt-8" onRetry={() => void company.refetch()}>Não foi possível carregar a empresa. Tente novamente.</ErrorState>
+          <ErrorState className="mt-8" onRetry={() => void company.refetch()}>
+            Não foi possível carregar a empresa agora. Nada foi alterado e as outras empresas continuam disponíveis.
+          </ErrorState>
         )}
       </div>
 
@@ -348,15 +346,15 @@ export function CompanyDetailPage() {
           <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <dt className="text-muted">Prioridade</dt>
-              <dd className="mt-1 break-words font-medium">{label(company.data.priority, priorityLabels)}</dd>
+              <dd className="mt-1 break-words font-medium">{companyLabel(company.data.priority, priorityLabels)}</dd>
             </div>
             <div>
               <dt className="text-muted">Status no radar</dt>
-              <dd className="mt-1 break-words font-medium">{label(company.data.status, companyStatusLabels)}</dd>
+              <dd className="mt-1 break-words font-medium">{companyLabel(company.data.status, companyStatusLabels)}</dd>
             </div>
             <div>
               <dt className="text-muted">Verificação</dt>
-              <dd className="mt-1 break-words font-medium">{label(company.data.verificationState, verificationLabels)}</dd>
+              <dd className="mt-1 break-words font-medium">{companyLabel(company.data.verificationState, verificationLabels)}</dd>
             </div>
             <div>
               <dt className="text-muted">Última verificação</dt>

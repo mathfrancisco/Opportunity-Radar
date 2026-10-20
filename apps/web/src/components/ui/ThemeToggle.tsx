@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import {
   applyThemePreference,
   readThemePreference,
+  subscribeThemePreference,
   writeThemePreference,
   type ThemePreference,
 } from '../../lib/theme'
@@ -13,12 +14,11 @@ const options: { value: ThemePreference; label: string }[] = [
 ]
 
 export function ThemeToggle() {
-  const [preference, setPreference] = useState<ThemePreference>(readThemePreference)
+  const preference = useSyncExternalStore(subscribeThemePreference, readThemePreference)
 
   function choose(next: ThemePreference) {
-    writeThemePreference(next)
     applyThemePreference(next)
-    setPreference(next)
+    writeThemePreference(next)
   }
 
   return (

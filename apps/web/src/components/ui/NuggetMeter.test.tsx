@@ -37,13 +37,33 @@ describe('NuggetMeter', () => {
   })
 
   it('missed e unknown começam em zero e a ordem é cheia, vazada, tracejada', () => {
-    const container = render(<NuggetMeter met={2} label="2" />)
+    const container = render(<NuggetMeter met={2} label="2 de 2" />)
     expect(container.querySelectorAll('[data-nugget]')).toHaveLength(2)
-    const ordered = render(<NuggetMeter met={1} missed={1} unknown={1} label="x" />)
+    const ordered = render(<NuggetMeter met={1} missed={1} unknown={1} label="1 de 3 fatores atendidos" />)
     expect([...ordered.querySelectorAll('[data-nugget]')].map((el) => el.getAttribute('data-nugget'))).toEqual([
       'met',
       'missed',
       'unknown',
     ])
+  })
+
+  it('anuncia o rótulo uma vez: o texto visível fica oculto da árvore acessível', () => {
+    const label = '76 de 100'
+    const container = render(<NuggetMeter met={3} label={label} />)
+    expect(container.querySelectorAll(`[role="img"][aria-label="${label}"]`)).toHaveLength(1)
+    const visible = [...container.querySelectorAll('span')].find(
+      (el) => el.children.length === 0 && el.textContent === label,
+    )
+    expect(visible?.getAttribute('aria-hidden')).toBe('true')
+  })
+
+  it('não lança com contagens inválidas e usa o piso de valores finitos não negativos', () => {
+    const nan = render(<NuggetMeter met={Number.NaN} label="sem dado" />)
+    expect(nan.querySelectorAll('[data-nugget]')).toHaveLength(0)
+    const frac = render(<NuggetMeter met={2.6} label="2 de 3" />)
+    expect(frac.querySelectorAll('[data-nugget="met"]')).toHaveLength(2)
+    const neg = render(<NuggetMeter met={1} missed={-1} label="1 de 1" />)
+    expect(neg.querySelectorAll('[data-nugget="missed"]')).toHaveLength(0)
+    expect(neg.querySelectorAll('[data-nugget="met"]')).toHaveLength(1)
   })
 })

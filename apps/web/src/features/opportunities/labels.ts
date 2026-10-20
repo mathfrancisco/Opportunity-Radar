@@ -5,6 +5,15 @@ export const workModeLabels: Record<string, string> = {
   UNKNOWN: 'Não informado',
 }
 
+export const contractLabels: Record<string, string> = {
+  FULL_TIME: 'Tempo integral',
+  PART_TIME: 'Meio período',
+  CONTRACT: 'Contrato',
+  INTERNSHIP: 'Estágio',
+  TEMPORARY: 'Temporário',
+  UNKNOWN: 'Não informado',
+}
+
 export const seniorityLabels: Record<string, string> = {
   INTERN: 'Estágio',
   JUNIOR: 'Júnior',
@@ -19,5 +28,16 @@ export const seniorityLabels: Record<string, string> = {
 }
 
 export function opportunityLabel(value: string, labels: Record<string, string>): string {
-  return labels[value] ?? 'Em revisão'
+  return labels[value] ?? 'Estado não reconhecido'
+}
+
+export const grossNetLabels: Record<string, string> = {
+  GROSS: 'bruto',
+  NET: 'líquido',
+}
+
+export const skillRequirementLabels: Record<string, string> = {
+  REQUIRED: 'obrigatória',
+  PREFERRED: 'desejável',
+  UNKNOWN: 'não classificada',
 }

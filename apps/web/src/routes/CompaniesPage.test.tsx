@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render } from '../components/testing'
+import { render, visibleTextOutsideDetails } from '../components/testing'
 import { CompaniesPage } from './CompaniesPage'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -14,6 +14,22 @@ async function flush(times = 4) {
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
   }
+}
+
+const pendingFetches: Array<() => void> = []
+
+/** A fetch that stays open until `settlePending`, so no request outlives its test. */
+function holdFetch(): Promise<Response> {
+  return new Promise<Response>((resolve) => {
+    pendingFetches.push(() => resolve(new Response('{}', { status: 500 })))
+  })
+}
+
+async function settlePending() {
+  await act(async () => {
+    pendingFetches.splice(0).forEach((release) => release())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
 }
 
 function renderPage(element: ReactElement): HTMLElement {
@@ -300,6 +316,52 @@ describe('CompaniesPage', () => {
     expect(container.querySelector('table')).toBeNull()
     expect(container.querySelectorAll('article')).toHaveLength(25)
     expect(container.textContent).toContain('Exibindo 1 a 25 de 30 empresas')
+  })
+
+  it('mostra o esqueleto enquanto as empresas carregam', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => holdFetch()))
+
+    const container = renderPage(<CompaniesPage />)
+    await flush(1)
+
+    expect(container.querySelector('[aria-busy="true"]')?.textContent).toContain('Carregando empresas…')
+    await settlePending()
+  })
+
+  it('diz o que fazer quando o catálogo está vazio', async () => {
+    stubCompanies(0)
+
+    const container = renderPage(<CompaniesPage />)
+    await flush()
+
+    expect(container.textContent).toContain('Nenhuma empresa no catálogo ainda. Use Nova empresa')
+  })
+
+  it('no erro, diz o que continua valendo e oferece tentar de novo', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
+
+    const container = renderPage(<CompaniesPage />)
+    await flush()
+
+    const alert = container.querySelector('[role="alert"]')
+    expect(alert?.textContent).toContain('Nada foi alterado no seu catálogo.')
+    expect(alert?.querySelector('button')?.textContent).toBe('Tentar novamente')
+  })
+
+  it('não mostra código técnico no texto visível', async () => {
+    stubCompanies(2, {
+      priority: 'URGENT_REVIEW',
+      status: 'PAUSED_BY_OWNER',
+      verification_state: 'NEEDS_HUMAN_CHECK',
+      sources: [{ id: 's1', name: 'Gupy', status: 'NOT_CONFIRMED_YET' }],
+    })
+
+    const container = renderPage(<CompaniesPage />)
+    await flush()
+
+    const text = visibleTextOutsideDetails(container)
+    expect(text).toContain('Estado não reconhecido')
+    expect(text).not.toMatch(/[A-Z]{3,}_[A-Z_]+/)
   })
 })
 

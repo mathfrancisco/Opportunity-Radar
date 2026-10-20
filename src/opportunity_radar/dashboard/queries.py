@@ -51,6 +51,7 @@ from opportunity_radar.matching.models import (
     CurrentAssessmentModel,
     MatchAnalysisModel,
     MatchAssessmentModel,
+    MatchFactorModel,
 )
 from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.domain import (
@@ -153,6 +154,9 @@ class InboxItem:
     #: group (e.g. the same job in other cities), folded into this row. Nothing is
     #: merged: each is still its own opportunity, listed in this one's detail.
     sibling_count: int = 0
+    #: Task 10: the met factor (KNOWN, raw score >= 0.5) with the highest contribution in
+    #: the row's current assessment, ties broken by `factor_code`; `None` when none is met.
+    top_factor_code: str | None = None
 
     @property
     def applied(self) -> bool:
@@ -191,6 +195,9 @@ class InboxQuery:
     lifecycle_status: str | None = None
     published_after: datetime | None = None
     created_after: datetime | None = None
+    #: Postings first collected at or after this instant (`first_seen_at`). Used by the
+    #: Inbox summary ("coletadas desde ontem"); not a public Inbox filter.
+    first_seen_after: datetime | None = None
     only_assessed: bool = False
     applied: bool | None = None
     search: str | None = None
@@ -879,6 +886,8 @@ def _inbox_filters(query: InboxQuery, assessments: Any, applications: Any) -> li
         filters.append(OpportunityModel.published_at >= query.published_after)
     if query.created_after is not None:
         filters.append(OpportunityModel.created_at > query.created_after)
+    if query.first_seen_after is not None:
+        filters.append(OpportunityModel.first_seen_at >= query.first_seen_after)
     if query.seniorities:
         filters.append(OpportunityModel.seniority.in_(query.seniorities))
     if query.open_at_source:
@@ -1056,8 +1065,11 @@ def list_opportunity_inbox(
         totals_statement, _ = _inbox_statement(query, owner_sub=owner_sub, totals_only=True)
         totals_row = session.execute(totals_statement.limit(1)).first()
     total, broader_total = (totals_row[-2], totals_row[-1]) if totals_row else (0, 0)
+    top_factors = _top_factor_codes(session, [row[14] for row in rows if row[14] is not None])
     return InboxPage(
-        items=tuple(_inbox_item(row) for row in rows),
+        items=tuple(
+            _inbox_item(row, top_factor_code=top_factors.get(row[14])) for row in rows
+        ),
         total=total,
         offset=query.offset,
         limit=query.limit,
@@ -1149,7 +1161,37 @@ def count_opportunity_inbox_batch(
     return tuple(counts)
 
 
-def _inbox_item(row: Any) -> InboxItem:
+#: DESIGN.md section 5: a factor counts as met when it is KNOWN with a raw score >= 0.5.
+_MET_FACTOR_MIN_RAW_SCORE = Decimal("0.5")
+
+
+def _top_factor_codes(session: Session, assessment_ids: Sequence[UUID]) -> dict[UUID, str]:
+    """Return each assessment's strongest met factor in one statement for the whole page.
+
+    Assessment ids come from the owner-scoped current-assessment pointer, so the lookup
+    cannot reach another member's factors. The `(assessment_id, factor_code)` unique index
+    serves it; nothing is read for a page without assessments.
+    """
+    if not assessment_ids:
+        return {}
+    statement = (
+        select(MatchFactorModel.assessment_id, MatchFactorModel.factor_code)
+        .where(
+            MatchFactorModel.assessment_id.in_(assessment_ids),
+            MatchFactorModel.status == "KNOWN",
+            MatchFactorModel.raw_score >= _MET_FACTOR_MIN_RAW_SCORE,
+        )
+        .distinct(MatchFactorModel.assessment_id)
+        .order_by(
+            MatchFactorModel.assessment_id,
+            MatchFactorModel.contribution.desc(),
+            MatchFactorModel.factor_code.asc(),
+        )
+    )
+    return {assessment_id: code for assessment_id, code in session.execute(statement)}
+
+
+def _inbox_item(row: Any, *, top_factor_code: str | None = None) -> InboxItem:
     return InboxItem(
         opportunity_id=row[0],
         title=row[1],
@@ -1191,6 +1233,7 @@ def _inbox_item(row: Any) -> InboxItem:
         startup_batch=row[33],
         sibling_count=max(int(row[36]) - 1, 0),
         salary_match=row[37],
+        top_factor_code=top_factor_code,
     )
 
 

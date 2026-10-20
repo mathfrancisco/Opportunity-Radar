@@ -3,10 +3,26 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render } from '../components/testing'
+import { render, visibleTextOutsideDetails } from '../components/testing'
 import { ProfilePage } from './ProfilePage'
 
 afterEach(() => vi.unstubAllGlobals())
+
+const pendingFetches: (() => void)[] = []
+
+/** A fetch that stays open until `settlePending`, so no request outlives its test. */
+function holdFetch(): Promise<Response> {
+  return new Promise<Response>((resolve) => {
+    pendingFetches.push(() => resolve(new Response('{}', { status: 500 })))
+  })
+}
+
+async function settlePending() {
+  await act(async () => {
+    pendingFetches.splice(0).forEach((release) => release())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
 
 function version(
   id: string,
@@ -470,6 +486,157 @@ describe('ProfilePage — ajustes sugeridos pelo feedback', () => {
 
     expect(container.querySelector('#ajustes-sugeridos')).toBeNull()
     expect(container.querySelector('form')).not.toBeNull()
+  })
+  it('carregando: mostra o esqueleto do perfil', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => holdFetch()))
+
+    const container = renderPage(<ProfilePage />)
+    await flush(1)
+
+    expect(container.querySelector('[aria-busy="true"]')?.textContent).toContain('Carregando perfil…')
+    await settlePending()
+  })
+
+  it('vazio: diz como criar a primeira versão', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.endsWith('/profile/versions')) return new Response('[]')
+        return new Response('{}', { status: 404 })
+      }),
+    )
+
+    const container = renderPage(<ProfilePage />)
+    await flush()
+
+    expect(container.textContent).toContain('Nenhum perfil ativo ainda.')
+    expect(container.textContent).toContain('salve para criar a primeira versão')
+  })
+
+  it('erro: diz que nada mudou e oferece tentar de novo', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
+
+    const container = renderPage(<ProfilePage />)
+    await flush()
+
+    const alert = container.querySelector('[role="alert"]')
+    expect(alert?.textContent).toContain('Não foi possível carregar o perfil. Nada foi alterado')
+    expect(alert?.querySelector('button')?.textContent).toBe('Tentar novamente')
+  })
+
+  it('parcial: o histórico falha, o perfil segue editável', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.endsWith('/profile/versions')) return new Response('{}', { status: 500 })
+        return new Response(JSON.stringify(version('version-1', 3, [])))
+      }),
+    )
+
+    const container = renderPage(<ProfilePage />)
+    await flush()
+
+    expect(container.querySelector('form')).not.toBeNull()
+    expect(container.textContent).toContain(
+      'Não foi possível carregar o histórico de versões. O perfil ativo continua valendo.',
+    )
+  })
+
+  it('mostra modalidade, contrato, período e estado da versão em português, sem código', async () => {
+    const base = version('version-1', 3, [])
+    const active = {
+      ...base,
+      preferences: {
+        ...base.preferences,
+        work_modes: ['REMOTE'],
+        contracts: ['FULL_TIME'],
+        compensation_period: 'YEAR',
+        accepted_seniorities: ['MID'],
+      },
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.endsWith('/profile/versions')) {
+          return new Response(
+            JSON.stringify([
+              { ...active, status: 'ARCHIVED' },
+              { ...version('version-2', 4, []), status: 'IN_REVIEW_LATER' },
+            ]),
+          )
+        }
+        return new Response(JSON.stringify(active))
+      }),
+    )
+
+    const container = renderPage(<ProfilePage />)
+    await flush()
+
+    const text = visibleTextOutsideDetails(container)
+    for (const word of ['Remoto', 'Híbrido', 'Presencial', 'Tempo integral', 'Meio período', 'Por ano', 'Por mês', 'Por hora', 'Pleno']) {
+      expect(text).toContain(word)
+    }
+    expect(text).toContain('Arquivada')
+    expect(text).toContain('Estado não reconhecido')
+    expect(text).not.toMatch(/[A-Z]{3,}_[A-Z_]+/)
+    expect(text).not.toMatch(/\b(REMOTE|HYBRID|ONSITE|FULL_TIME|YEAR|ARCHIVED)\b/)
+    expect(text).not.toContain('lock')
+  })
+
+  it('salvar confirma com "Perfil salvo." e não promete o que a API não faz', async () => {
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/profile/versions') && init?.method === 'POST') {
+        return new Response(JSON.stringify(version('version-2', 4, [])), { status: 201 })
+      }
+      if (url.endsWith('/profile/versions')) return new Response('[]')
+      return new Response(JSON.stringify(version('version-1', 3, [])))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const container = renderPage(<ProfilePage />)
+    await flush()
+    await act(async () => {
+      container.querySelector('form')?.dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true }),
+      )
+    })
+    await flush()
+
+    const status = [...container.querySelectorAll('[role="status"]')].find((element) =>
+      element.textContent?.startsWith('Perfil salvo.'),
+    )
+    expect(status?.textContent).toBe('Perfil salvo.')
+  })
+
+  it('falha ao salvar diz que a versão ativa continua valendo', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown, init?: RequestInit) => {
+        const url = String(input)
+        if (url.endsWith('/profile/versions') && init?.method === 'POST') {
+          return new Response('{}', { status: 500 })
+        }
+        if (url.endsWith('/profile/versions')) return new Response('[]')
+        return new Response(JSON.stringify(version('version-1', 3, [])))
+      }),
+    )
+
+    const container = renderPage(<ProfilePage />)
+    await flush()
+    await act(async () => {
+      container.querySelector('form')?.dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true }),
+      )
+    })
+    await flush()
+
+    expect(visibleTextOutsideDetails(container)).toContain(
+      'Não foi possível salvar o perfil. A versão ativa continua valendo.',
+    )
   })
 })
 

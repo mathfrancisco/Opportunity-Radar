@@ -36,7 +36,8 @@ describe('missingForEnable', () => {
 
     const missing = missingForEnable(unverified, draft)
     expect(missing).toHaveLength(1)
-    expect(missing[0]).toContain('ats_identified')
+    expect(missing[0]).toContain('sistema identificado')
+    expect(missing[0]).not.toContain('ats_identified')
     expect(missing[0]).toContain('teste do collector')
   })
 

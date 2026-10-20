@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render } from '../components/testing'
+import { render, visibleTextOutsideDetails } from '../components/testing'
 import { type OpportunityDetail } from '../features/opportunities/api'
 import {
   AbsenceRule,
@@ -519,14 +519,22 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
   })
 
   async function renderDetail(
-    payload: { factors?: unknown[]; eligibility?: unknown[] } = {},
+    payload: {
+      factors?: unknown[]
+      eligibility?: unknown[]
+      analysis?: unknown
+      extras?: Record<string, unknown>
+      candidates?: unknown[]
+    } = {},
   ) {
     const detail = opportunity({ description: 'Pesquisa com pessoas usuárias.' })
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: unknown) => {
         const url = String(input)
-        if (url.includes('/duplicate-candidates')) return new Response(JSON.stringify({ items: [] }))
+        if (url.includes('/duplicate-candidates')) {
+          return new Response(JSON.stringify({ items: payload.candidates ?? [] }))
+        }
         if (url.includes('/matches?')) {
           return new Response(
             JSON.stringify({
@@ -535,6 +543,7 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
                   ...assessmentPayload,
                   factors: payload.factors ?? assessmentPayload.factors,
                   eligibility_details: payload.eligibility ?? assessmentPayload.eligibility_details,
+                  analysis: payload.analysis ?? assessmentPayload.analysis,
                 },
               ],
             }),
@@ -543,10 +552,10 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
         if (url.includes('/applications?')) {
           return new Response(JSON.stringify({ items: [], total: 0, offset: 0, limit: 1 }))
         }
-        if (url.endsWith('/opportunities/opportunity-1')) {
+        if (url.endsWith('/opportunities/opportunity-1') || url.endsWith('/opportunities/opportunity-2')) {
           return new Response(
             JSON.stringify({
-              id: detail.id,
+              id: url.endsWith('-2') ? 'opportunity-2' : detail.id,
               fingerprint: detail.fingerprint,
               fingerprint_version: detail.fingerprintVersion,
               title: detail.title,
@@ -570,6 +579,7 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
               normalization_results: [],
               sibling_locations: [],
               relevance_mark: null,
+              ...payload.extras,
             }),
           )
         }
@@ -630,10 +640,111 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     expect(rule).not.toBeNull()
     expect(rule.textContent).toContain('Quando a vaga é encerrada')
     expect(rule.textContent).toContain('mais de 24 h')
-    expect(rule.textContent).toContain('absence_after_hours')
+    expect(visibleTextOutsideDetails(rule)).not.toContain('absence_after_hours')
+    expect(rule.querySelector('details')?.textContent).toContain('absence_after_hours')
     expect(rule.textContent).toContain('execução completa')
     expect(rule.textContent).toContain('Execuções parciais ou com falha não encerram nada')
     expect(rule.textContent).toContain('reaparecer')
+  })
+
+  it('não mostra código técnico, versão nem identificador no texto principal da vaga', async () => {
+    const container = await renderDetail({
+      factors: [known('0.9'), unknown()],
+      eligibility: [failedFilter()],
+      extras: {
+        compensations: [
+          {
+            minimum: '8000',
+            maximum: '12000',
+            currency: 'BRL',
+            period: 'MONTH',
+            gross_net: 'GROSS',
+            evidence_text: 'Salário de 8 a 12 mil',
+            evidence_source: 'descrição',
+            raw_item_id: '3f2b1c7e-9d0a-4e5b-8a61-2c4d5e6f7a8b',
+          },
+        ],
+        skills: [
+          {
+            canonical_name: 'python',
+            display_name: 'Python',
+            requirement: 'REQUIRED',
+            taxonomy_version: 'tax-v2',
+            evidence: [],
+          },
+        ],
+        occurrences: [
+          {
+            id: 'occ-1',
+            raw_item_id: '3f2b1c7e-9d0a-4e5b-8a61-2c4d5e6f7a8b',
+            source_definition_id: 'source-1',
+            external_id: 'ext-1',
+            source_url: 'https://boards.example.com/jobs/1',
+            first_seen_at: '2026-09-10T00:00:00Z',
+            last_seen_at: '2026-09-12T00:00:00Z',
+          },
+        ],
+      },
+      candidates: [
+        {
+          id: 'candidate-1',
+          opportunity_id: 'opportunity-1',
+          duplicate_opportunity_id: 'opportunity-2',
+          survivor_opportunity_id: 'opportunity-1',
+          absorbed_opportunity_id: 'opportunity-2',
+          rule: 'title_location_window',
+          score: '0.93',
+          status: 'PENDING',
+          decided_by: null,
+          decided_at: null,
+          created_at: '2026-09-11T00:00:00Z',
+        },
+      ],
+    })
+
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).toContain('por mês')
+    expect(visible).toContain('bruto')
+    expect(visible).not.toMatch(/\b[a-z]+(?:_[a-z]+)+\b/)
+    expect(visible).not.toMatch(/\b[a-z]+-v\d+\b/)
+    expect(visible).not.toMatch(/\b[0-9a-f]{8}-[0-9a-f]{4}-/)
+    expect(visible).not.toMatch(/FATOR_\d|LOCALIDADE/)
+    expect(visible).toContain('Estado não reconhecido')
+    expect(visible).not.toContain('MONTH')
+    expect(visible).not.toContain('GROSS')
+    expect(visible).not.toContain('raw item')
+    expect(visible).not.toMatch(/matching-v1|skills-v1|fp-1/)
+    // Os códigos continuam acessíveis, recolhidos.
+    const details = Array.from(container.querySelectorAll('details')).map((d) => d.textContent)
+    expect(details.some((text) => text?.includes('tax-v2'))).toBe(true)
+    expect(details.some((text) => text?.includes('matching-v1'))).toBe(true)
+    expect(details.some((text) => text?.includes('title_location_window'))).toBe(true)
+    expect(details.some((text) => text?.includes('3f2b1c7e-9d0a-4e5b-8a61-2c4d5e6f7a8b'))).toBe(true)
+  })
+
+  it.each([
+    ['WEEK', 'por semana'],
+    ['DAY', 'por dia'],
+  ])('rotula o período %s como "%s", sem dizer que não foi informado', async (period, label) => {
+    const container = await renderDetail({
+      extras: {
+        compensations: [
+          {
+            minimum: '500',
+            maximum: '900',
+            currency: 'BRL',
+            period,
+            gross_net: 'GROSS',
+            evidence_text: null,
+            evidence_source: null,
+            raw_item_id: 'raw-1',
+          },
+        ],
+      },
+    })
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).toContain(label)
+    expect(visible).not.toContain('período não informado')
   })
 
   it('resume os fatores em pepitas', async () => {
@@ -686,22 +797,27 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     expect(container.textContent).not.toContain('NOT_APPLICABLE')
   })
 
-  it('rotula fatores conhecidos em português e mantém o código dos desconhecidos', async () => {
+  it('rotula fatores conhecidos em português e esconde o código dos desconhecidos', async () => {
     const container = await renderDetail({
       factors: [{ ...known('0.9'), factor_code: 'TECHNOLOGY_FIT' }, known('0.8')],
     })
     const text = container.textContent ?? ''
     expect(text).toContain('Skills da vaga')
     expect(text).not.toContain('TECHNOLOGY_FIT')
-    expect(text).toMatch(/FATOR_\d+/)
+    const outside = visibleTextOutsideDetails(container)
+    expect(outside).not.toMatch(/FATOR_\d+/)
+    expect(outside).toContain('Estado não reconhecido')
+    expect(Array.from(container.querySelectorAll('details')).map((d) => d.textContent).join(' ')).toMatch(/FATOR_\d+/)
   })
 
-  it('rotula filtros de elegibilidade conhecidos e mantém o código dos desconhecidos', async () => {
+  it('rotula filtros de elegibilidade conhecidos e esconde o código dos desconhecidos', async () => {
     const country = { ...failedFilter(), code: 'COUNTRY_ALLOWED' }
     const container = await renderDetail({ eligibility: [country, failedFilter()] })
     const text = container.textContent ?? ''
     expect(text).toContain('País aceito')
     expect(text).not.toContain('COUNTRY_ALLOWED')
+    expect(visibleTextOutsideDetails(container)).not.toContain('LOCALIDADE')
+    expect(visibleTextOutsideDetails(container)).toContain('Estado não reconhecido')
     expect(text).toContain('LOCALIDADE')
   })
 
@@ -732,6 +848,31 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     expect(analysis.textContent).toContain('Analisar com IA')
     expect(analysis.textContent).toContain('consultiv')
     expect(before(deterministic, analysis)).toBe(true)
+  })
+
+  it('IA indisponível usa classes neutras, sem cor de erro ou de aviso', async () => {
+    const container = await renderDetail({
+      analysis: {
+        id: 'analysis-1',
+        status: 'AI_FAILED',
+        failure_code: 'PROVIDER_ERROR',
+        detail: 'Serviço de IA fora do ar.',
+        schema_version: 'analysis-v1',
+        analyzed_at: '2026-09-17T12:00:00Z',
+      },
+    })
+
+    const message = Array.from(container.querySelectorAll('#analise p')).find((p) =>
+      p.textContent?.includes('A IA não leu esta vaga.'),
+    ) as HTMLElement
+    expect(message).toBeDefined()
+    const box = message.parentElement as HTMLElement
+    expect(box.className).toContain('bg-panel')
+    expect(message.className).toContain('text-subtle')
+    const analysisHtml = container.querySelector('#analise')?.innerHTML ?? ''
+    expect(analysisHtml).not.toMatch(/(?:danger|warning)-/)
+    // The code stays behind the technical-detail disclosure.
+    expect(box.querySelector('details')?.textContent).toContain('AI_FAILED')
   })
 })
 

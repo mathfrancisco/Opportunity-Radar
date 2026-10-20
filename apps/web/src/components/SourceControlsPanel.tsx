@@ -6,8 +6,10 @@ import {
   useUpdateSourceControls,
   useUpdateSourceSchedule,
 } from '../features/sources/useSources'
+import { evidenceLabels } from '../features/sources/labels'
 import { ConflictError } from '../lib/api'
 import { Button } from './Button'
+import { TechnicalDetail } from './TechnicalDetail'
 import { Field, controlClassName } from './Field'
 import { ConflictNotice, ErrorState, LoadingState } from './states'
 
@@ -68,9 +70,12 @@ export function SourceControlsPanel({ sourceId }: { sourceId: string }) {
         Homologação
       </h3>
       <p className="mt-1 text-sm text-subtle">
-        {record.enabled ? 'Habilitada' : 'Desabilitada'} · evidência {record.evidenceStatus} ·
-        versão {record.version}
+        {record.enabled ? 'Habilitada' : 'Desabilitada'} · evidência{' '}
+        {evidenceLabels[record.evidenceStatus] ?? 'não reconhecida'}
       </p>
+      <TechnicalDetail>
+        Evidência {record.evidenceStatus} · versão {record.version}
+      </TechnicalDetail>
 
       <div className="mt-4">
         <Field hint="Cron (ex.: 0 */3 * * *). Vazio deixa a fonte sem agenda." label="Agenda">
@@ -170,8 +175,13 @@ export function SourceControlsPanel({ sourceId }: { sourceId: string }) {
             >
               {probe.data.probe.status === 'PASSED'
                 ? `O collector leu o endpoint (${probe.data.probe.itemsSeen} item, ${probe.data.probe.httpRequests} requisição). Evidência confirmada.`
-                : `O teste falhou: ${probe.data.probe.errorCode ?? 'erro'} — ${probe.data.probe.detail ?? 'sem detalhe'}. A fonte não mudou.`}
+                : 'O teste não passou. A fonte não mudou.'}
             </p>
+          )}
+          {probe.data && probe.data.probe.status !== 'PASSED' && (
+            <TechnicalDetail>
+              {probe.data.probe.errorCode ?? 'erro'} — {probe.data.probe.detail ?? 'sem detalhe'}
+            </TechnicalDetail>
           )}
           {probe.isError &&
             (probe.error instanceof ConflictError ? (

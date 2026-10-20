@@ -3,9 +3,18 @@ import { Link } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { Field, controlClassName } from '../components/Field'
 import { PageShell } from '../components/PageShell'
-import { ConflictNotice, EmptyState, ErrorState, LoadingState } from '../components/states'
+import { PanelSkeleton, Skeleton, Bone } from '../components/skeletons'
+import { ConflictNotice, EmptyState, ErrorState } from '../components/states'
+import { TechnicalDetail } from '../components/TechnicalDetail'
 import { ConflictError } from '../lib/api'
 import { roleFamilies } from '../features/dashboard/roleFamilies'
+import {
+  contractLabels,
+  opportunityLabel,
+  seniorityLabels,
+  workModeLabels,
+} from '../features/opportunities/labels'
+import { compensationPeriodLabels, versionStatusLabels } from '../features/profile/labels'
 import {
   emptyPreferences,
   type ProfilePreferences,
@@ -24,16 +33,16 @@ const workModes = ['REMOTE', 'HYBRID', 'ONSITE']
 const contracts = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP']
 const periods = ['YEAR', 'MONTH', 'HOUR']
 const seniorities = [
-  { code: 'INTERN', label: 'Estágio' },
-  { code: 'JUNIOR', label: 'Júnior' },
-  { code: 'MID', label: 'Pleno' },
-  { code: 'SENIOR', label: 'Sênior' },
-  { code: 'STAFF', label: 'Staff' },
-  { code: 'LEAD', label: 'Lead' },
-  { code: 'MANAGER', label: 'Gestão' },
-  { code: 'DIRECTOR', label: 'Direção' },
-  { code: 'UNKNOWN', label: 'Não informada' },
-]
+  'INTERN',
+  'JUNIOR',
+  'MID',
+  'SENIOR',
+  'STAFF',
+  'LEAD',
+  'MANAGER',
+  'DIRECTOR',
+  'UNKNOWN',
+].map((code) => ({ code, label: opportunityLabel(code, seniorityLabels) }))
 
 
 function toList(value: string): string[] {
@@ -250,7 +259,7 @@ function Versions({ versions }: { versions: ProfileVersion[] }) {
           >
             <span className="font-medium">Versão {version.number}</span>
             <span className="text-muted">
-              {version.status} · {count(version.skills.length, 'skill', 'skills')} ·{' '}
+              {opportunityLabel(version.status, versionStatusLabels)} · {count(version.skills.length, 'skill', 'skills')} ·{' '}
               {count(version.experiences.length, 'experiência', 'experiências')} ·{' '}
               {count(version.projects.length, 'projeto', 'projetos')} ·{' '}
               {version.preferences.countries.join(', ') || 'sem países'}
@@ -430,17 +439,21 @@ export function ProfilePage() {
       current="/profile"
       eyebrow="Critérios de decisão"
       title="Perfil e preferências"
-      description="O que o matching considera ao avaliar uma vaga. Salvar cria uma nova versão e a ativa; as avaliações anteriores continuam apontando para a versão que as produziu."
+      description="O que conta ao avaliar uma vaga. Salvar cria uma versão nova e a ativa; as avaliações anteriores seguem ligadas à versão que as fez."
     >
       <div>
         {active.isPending && (
-          <LoadingState className="mt-8">Carregando perfil…</LoadingState>
+          <div className="mt-8">
+            <PanelSkeleton label="Carregando perfil…" columns={3} />
+          </div>
         )}
         {active.isError && (
-          <ErrorState className="mt-8" onRetry={() => void active.refetch()}>Não foi possível carregar o perfil.</ErrorState>
+          <ErrorState className="mt-8" onRetry={() => void active.refetch()}>
+            Não foi possível carregar o perfil. Nada foi alterado, e as avaliações atuais continuam valendo.
+          </ErrorState>
         )}
         {active.isSuccess && active.data === null && (
-          <EmptyState className="mt-8">Nenhum perfil ativo ainda. Preencha o formulário para criar a primeira versão.</EmptyState>
+          <EmptyState className="mt-8">Nenhum perfil ativo ainda. Preencha o formulário abaixo e salve para criar a primeira versão.</EmptyState>
         )}
       </div>
 
@@ -563,7 +576,7 @@ export function ProfilePage() {
                     }
                     type="checkbox"
                   />
-                  {mode}
+                  {opportunityLabel(mode, workModeLabels)}
                 </label>
               ))}
             </div>
@@ -581,7 +594,7 @@ export function ProfilePage() {
                     }
                     type="checkbox"
                   />
-                  {contract}
+                  {opportunityLabel(contract, contractLabels)}
                 </label>
               ))}
             </div>
@@ -680,7 +693,7 @@ export function ProfilePage() {
                 <option value="">—</option>
                 {periods.map((period) => (
                   <option key={period} value={period}>
-                    {period}
+                    {opportunityLabel(period, compensationPeriodLabels)}
                   </option>
                 ))}
               </select>
@@ -712,9 +725,10 @@ export function ProfilePage() {
               {save.isPending ? 'Salvando…' : 'Salvar como nova versão e ativar'}
             </Button>
             {active.data && (
-              <span className="text-xs text-muted">
-                Versão ativa {active.data.number} · lock {active.data.profileLockVersion}
-              </span>
+              <div className="text-xs text-muted">
+                Versão ativa {active.data.number}
+                <TechnicalDetail>Bloqueio de edição {active.data.profileLockVersion}</TechnicalDetail>
+              </div>
             )}
           </div>
 
@@ -724,12 +738,16 @@ export function ProfilePage() {
                 {save.error.message}
               </ConflictNotice>
             ) : (
-              <p className="text-sm text-danger-ink">{save.error.message}</p>
+              <div role="alert">
+                <p className="text-sm text-danger-ink">
+                  Não foi possível salvar o perfil. A versão ativa continua valendo.
+                </p>
+                <TechnicalDetail>{save.error.message}</TechnicalDetail>
+              </div>
             ))}
           {save.isSuccess && (
-            <p className="text-sm text-success-ink">
-              Versão {save.data.number} ativa. Avaliações antigas continuam apontando para
-              a versão que as produziu.
+            <p className="text-sm text-success-ink" role="status">
+              Perfil salvo.
             </p>
           )}
         </form>
@@ -741,12 +759,14 @@ export function ProfilePage() {
         </h2>
         <div className="mt-4">
           {versions.isPending && (
-            <p className="text-sm text-subtle">Carregando versões…</p>
+            <Skeleton label="Carregando versões…">
+              <Bone className="w-2/3" />
+            </Skeleton>
           )}
           {versions.isError && (
-            <p className="text-sm text-danger-ink">
-              Não foi possível carregar o histórico de versões.
-            </p>
+            <ErrorState onRetry={() => void versions.refetch()}>
+              Não foi possível carregar o histórico de versões. O perfil ativo continua valendo.
+            </ErrorState>
           )}
           {versions.data && <Versions versions={versions.data} />}
         </div>

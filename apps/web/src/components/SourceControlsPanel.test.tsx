@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SourceControlsPanel } from './SourceControlsPanel'
-import { render } from './testing'
+import { render, visibleTextOutsideDetails } from './testing'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -65,6 +65,23 @@ function stubFetch(options: {
       const method = init?.method ?? 'GET'
       const body = init?.body ? JSON.parse(String(init.body)) : undefined
       calls.push({ method, url, body })
+      if (url.endsWith('/probe')) {
+        return new Response(
+          JSON.stringify({
+            probe: {
+              id: 'probe-1',
+              status: 'FAILED',
+              items_seen: 0,
+              http_requests: 1,
+              error_code: 'HTTP_404',
+              detail: 'board not found',
+              evidence_recorded: false,
+            },
+            source: sourceDetail(),
+          }),
+          { status: 200 },
+        )
+      }
       if (url.endsWith('/schedule')) {
         const response = options.scheduleResponse ?? {
           status: 200,
@@ -169,6 +186,48 @@ describe('SourceControlsPanel — agenda', () => {
     await flush()
 
     expect(container.textContent).toContain('A fonte mudou depois que você a abriu')
+  })
+})
+
+describe('SourceControlsPanel — Bateia', () => {
+  it('lê a evidência em português e deixa o código e a versão em Detalhe técnico', async () => {
+    stubFetch({ detail: { evidence_status: 'confirmed', version: 7 } })
+    const container = renderWithClient(<SourceControlsPanel sourceId="source-1" />)
+    await flush()
+
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).toContain('evidência confirmada')
+    expect(visible).not.toContain('versão 7')
+    const detail = container.querySelector('details')
+    expect(detail?.querySelector('summary')?.textContent).toBe('Detalhe técnico')
+    expect(detail?.textContent).toContain('Evidência confirmed · versão 7')
+  })
+
+  it('numa evidência desconhecida, não mostra o código fora do detalhe', async () => {
+    stubFetch({ detail: { evidence_status: 'weird_new_state' } })
+    const container = renderWithClient(<SourceControlsPanel sourceId="source-1" />)
+    await flush()
+
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).toContain('evidência não reconhecida')
+    expect(visible).not.toContain('weird_new_state')
+  })
+
+  it('numa falha do teste do collector, o código fica só em Detalhe técnico', async () => {
+    stubFetch({})
+    const container = renderWithClient(<SourceControlsPanel sourceId="source-1" />)
+    await flush()
+
+    const test = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Testar o collector agora',
+    )
+    act(() => test?.click())
+    await flush()
+
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).toContain('O teste não passou. A fonte não mudou.')
+    expect(visible).not.toContain('HTTP_404')
+    expect(container.textContent).toContain('HTTP_404 — board not found')
   })
 })
 

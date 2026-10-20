@@ -17,7 +17,7 @@ from opportunity_radar.dashboard.queries import (
     list_opportunity_inbox,
     summarize_overview,
 )
-from opportunity_radar.matching.models import MatchAssessmentModel
+from opportunity_radar.matching.models import MatchAssessmentModel, MatchFactorModel
 from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.domain import SKILL_TAXONOMY_VERSION
 from opportunity_radar.opportunities.models import OpportunityModel
@@ -58,8 +58,9 @@ def _assessment(
     owner_sub: str,
     verdict: str,
     score: str,
+    factor_code: str | None = None,
 ) -> None:
-    session.add(
+    assessment = (
         MatchAssessmentModel(
             owner_sub=owner_sub,
             opportunity_id=opportunity.id,
@@ -78,7 +79,23 @@ def _assessment(
             assessed_at=NOW,
         )
     )
+    session.add(assessment)
     session.flush()
+    if factor_code is not None:
+        session.add(
+            MatchFactorModel(
+                assessment_id=assessment.id,
+                factor_code=factor_code,
+                weight=Decimal("0.1"),
+                raw_score=Decimal("0.9"),
+                contribution=Decimal("20"),
+                status="KNOWN",
+                confidence=Decimal("1"),
+                missing_policy="NEUTRAL",
+                explanation="synthetic",
+            )
+        )
+        session.flush()
 
 
 def test_dashboard_routes_reject_requests_without_a_verified_identity() -> None:
@@ -124,6 +141,7 @@ def test_inbox_and_overview_scope_personal_assessments_and_applications() -> Non
             owner_sub=OWNER_A,
             verdict="RECOMMENDED",
             score="81",
+            factor_code="TECHNOLOGY_FIT",
         )
         _assessment(
             session,
@@ -132,6 +150,7 @@ def test_inbox_and_overview_scope_personal_assessments_and_applications() -> Non
             owner_sub=OWNER_B,
             verdict="LOW_MATCH",
             score="13",
+            factor_code="LOCATION_FIT",
         )
         session.add_all(
             [
@@ -173,6 +192,9 @@ def test_inbox_and_overview_scope_personal_assessments_and_applications() -> Non
         assert member_b.items[0].verdict == "LOW_MATCH"
         assert str(member_b.items[0].score) == "13.0000"
         assert member_b.items[0].application_stage == "INTERVIEW"
+        # The top factor is read from the member's own assessment, never the other's.
+        assert member_a.items[0].top_factor_code == "TECHNOLOGY_FIT"
+        assert member_b.items[0].top_factor_code == "LOCATION_FIT"
 
         overview_a = summarize_overview(session, owner_sub=OWNER_A, now=NOW)
         overview_b = summarize_overview(session, owner_sub=OWNER_B, now=NOW)

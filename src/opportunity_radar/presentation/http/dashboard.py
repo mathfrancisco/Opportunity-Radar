@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal, cast
 from uuid import UUID
@@ -18,6 +18,7 @@ from opportunity_radar.dashboard.analysis_metrics import (
     analysis_metrics,
 )
 from opportunity_radar.dashboard.funnel import funnel_report
+from opportunity_radar.dashboard.inbox_summary import inbox_summary
 from opportunity_radar.dashboard.metrics import (
     METRIC_WINDOWS,
     SourceMetricsWindow,
@@ -134,6 +135,8 @@ class InboxItemResponse(BaseModel):
     sibling_count: int = 0
     #: D1: `matched`/`unknown` with a salary filter, `null` without one.
     salary_match: Literal["matched", "unknown"] | None = None
+    #: Task 10: the met factor with the highest contribution; `null` when none is met.
+    top_factor_code: str | None = None
 
 
 class InboxPageResponse(BaseModel):
@@ -143,6 +146,14 @@ class InboxPageResponse(BaseModel):
     limit: int
     order: str
     off_filter_count: int
+
+
+class InboxSummaryResponse(BaseModel):
+    worth_count: int
+    collected_count: int
+    since: datetime
+    next_collection_at: datetime | None
+    generated_at: datetime
 
 
 class SavedSearchCreateRequest(BaseModel):
@@ -644,6 +655,29 @@ def get_saved_search_new_count(
     return SavedSearchNewCountResponse(new_count=count)
 
 
+@router.get("/inbox/summary", response_model=InboxSummaryResponse)
+def get_inbox_summary(
+    session: Session = Depends(get_session),
+    identity: RequestIdentity = Depends(authenticated_identity),
+    settings: Settings = Depends(get_settings),
+) -> InboxSummaryResponse:
+    summary = inbox_summary(
+        session,
+        identity.sub,
+        now=datetime.now(UTC),
+        collection_timezone=settings.collection_timezone,
+        backoff_base=timedelta(seconds=settings.collection_backoff_base_seconds),
+        backoff_ceiling=timedelta(seconds=settings.collection_backoff_ceiling_seconds),
+    )
+    return InboxSummaryResponse(
+        worth_count=summary.worth_count,
+        collected_count=summary.collected_count,
+        since=summary.since,
+        next_collection_at=summary.next_collection_at,
+        generated_at=summary.generated_at,
+    )
+
+
 @router.get("/inbox", response_model=InboxPageResponse)
 def list_inbox(
     verdict: list[str] | None = Query(default=None),
@@ -1095,6 +1129,7 @@ def _inbox_item_response(item: InboxItem) -> InboxItemResponse:
         startup_batch=item.startup_batch,
         sibling_count=item.sibling_count,
         salary_match=item.salary_match,
+        top_factor_code=item.top_factor_code,
     )
 
 

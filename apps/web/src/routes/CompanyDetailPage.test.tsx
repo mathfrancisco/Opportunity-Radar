@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render } from '../components/testing'
+import { render, visibleTextOutsideDetails } from '../components/testing'
 import { CompanyDetailPage } from './CompanyDetailPage'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -14,6 +14,22 @@ async function flush(times = 4) {
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
   }
+}
+
+const pendingFetches: Array<() => void> = []
+
+/** A fetch that stays open until `settlePending`, so no request outlives its test. */
+function holdFetch(): Promise<Response> {
+  return new Promise<Response>((resolve) => {
+    pendingFetches.push(() => resolve(new Response('{}', { status: 500 })))
+  })
+}
+
+async function settlePending() {
+  await act(async () => {
+    pendingFetches.splice(0).forEach((release) => release())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
 }
 
 function renderWithProviders(element: ReactElement): HTMLElement {
@@ -149,6 +165,122 @@ describe('CompanyDetailPage', () => {
     expect(container.textContent).not.toContain('private-value')
     expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent === 'Propor fonte a partir do ATS')).toBe(true)
     expect(Array.from(container.querySelectorAll('button')).some((button) => button.textContent === 'Registrar ATS')).toBe(true)
+  })
+
+  function stubDetail(options: { inbox?: 'ok' | 'fail' | 'empty' | 'pending'; company?: 'ok' | 'fail' | 'pending' } = {}) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.includes('/inbox?')) {
+          if (options.inbox === 'pending') return holdFetch()
+          if (options.inbox === 'fail') return new Response('{}', { status: 500 })
+          const items = options.inbox === 'empty' ? [] : [
+            { opportunity_id: 'op-1', title: 'Engenheira de dados', work_mode: 'REMOTE', verdict: 'HIGH_PRIORITY', score: '88.0' },
+            { opportunity_id: 'op-2', title: 'Analista', work_mode: 'ONSITE', verdict: 'SOME_NEW_VERDICT', score: '40.0' },
+            { opportunity_id: 'op-3', title: 'Dev', work_mode: 'REMOTE', verdict: null, score: null },
+          ]
+          return new Response(JSON.stringify({ items, total: items.length, offset: 0, limit: 5 }))
+        }
+        if (url.endsWith('/companies/company-1')) {
+          if (options.company === 'pending') return holdFetch()
+          if (options.company === 'fail') return new Response('{}', { status: 500 })
+          return new Response(JSON.stringify({
+            id: 'company-1',
+            name: 'Acme',
+            domain: 'acme.example',
+            priority: 'URGENT_REVIEW',
+            status: 'active',
+            verification_state: 'NEEDS_HUMAN_CHECK',
+            aliases: [],
+            sources: [{
+              id: 'source-1',
+              name: 'Acme careers',
+              url: 'https://acme.example/careers',
+              status: 'NOT_CONFIRMED_YET',
+              external_key: 'acme-key',
+              verification_method: 'DISCOVERY_SCAN',
+              evidence: null,
+              last_verified_at: null,
+              version: 1,
+              revisions: [],
+              proposal: { source_id: 'p1', source_type: 'GREENHOUSE_BOARD', external_key: 'acme-key', enabled: false, evidence_status: 'NOT_CONFIRMED', version: 2 },
+            }],
+            version: 1,
+          }))
+        }
+        return new Response('{}', { status: 404 })
+      }),
+    )
+    return renderWithProviders(
+      <MemoryRouter initialEntries={['/companies/company-1']}>
+        <Routes>
+          <Route path="/companies/:companyId" element={<CompanyDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('mostra o esqueleto enquanto a empresa carrega', async () => {
+    const container = stubDetail({ company: 'pending' })
+    await flush(2)
+
+    expect(container.querySelector('[aria-busy="true"]')?.textContent).toContain('Carregando empresa…')
+    await settlePending()
+  })
+
+  it('no erro da empresa, diz o que continua valendo', async () => {
+    const container = stubDetail({ company: 'fail' })
+    await flush(6)
+
+    const alert = container.querySelector('[role="alert"]')
+    expect(alert?.textContent).toContain('outras empresas continuam disponíveis')
+    expect(alert?.querySelector('button')?.textContent).toBe('Tentar novamente')
+  })
+
+  it('sem vagas, explica quando elas aparecem', async () => {
+    const container = stubDetail({ inbox: 'empty' })
+    await flush(6)
+
+    expect(container.textContent).toContain('Nenhuma vaga desta empresa até agora.')
+  })
+
+  it('carrega vagas com esqueleto', async () => {
+    const container = stubDetail({ inbox: 'pending' })
+    await flush(6)
+
+    expect(container.textContent).toContain('Carregando vagas…')
+    expect(container.querySelectorAll('[aria-busy="true"]')).toHaveLength(1)
+    await settlePending()
+  })
+
+  it('parcial: se as vagas falham, a empresa continua na tela com uma nota neutra', async () => {
+    const container = stubDetail({ inbox: 'fail' })
+    await flush(6)
+
+    expect(container.querySelector('h1')?.textContent).toBe('Acme')
+    expect(container.querySelector('#fontes')?.textContent).toContain('Acme careers')
+    const notes = [...container.querySelectorAll('[role="status"]')].map((node) => node.textContent)
+    expect(notes.some((text) => text?.includes('Não foi possível carregar as vagas agora.'))).toBe(true)
+    expect(container.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('traduz o veredito com a mesma etiqueta da Inbox e não mostra código técnico', async () => {
+    const container = stubDetail()
+    await flush(6)
+
+    const rows = [...container.querySelectorAll('#vagas tbody tr')]
+    expect(rows[0].textContent).toContain('Alta prioridade')
+    expect(rows[0].textContent).toContain('Remoto')
+    expect(rows[0].querySelector('span.rounded-chip')?.className).toContain('bg-nugget-surface')
+    expect(rows[1].textContent).toContain('Estado não reconhecido')
+    expect(rows[2].textContent).toContain('Não avaliada')
+
+    const text = visibleTextOutsideDetails(container)
+    expect(text).not.toMatch(/[A-Z]{3,}_[A-Z_]+/)
+    expect(container.querySelector('details')?.textContent).toContain('Detalhe técnico')
+    const details = [...container.querySelectorAll('details')].map((node) => node.textContent ?? '')
+    expect(details.some((text) => text.includes('NOT_CONFIRMED'))).toBe(true)
   })
 })
 

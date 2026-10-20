@@ -17,3 +17,15 @@ export function render(element: ReactElement): HTMLElement {
   })
   return container
 }
+
+/**
+ * The text a person reads on a screen: everything except what sits inside `<details>`.
+ *
+ * Technical codes are allowed only in a collapsed "Detalhe técnico", so the tests assert
+ * that none shows up here.
+ */
+export function visibleTextOutsideDetails(container: HTMLElement): string {
+  const clone = container.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('details').forEach((details) => details.remove())
+  return clone.textContent ?? ''
+}

@@ -26,7 +26,11 @@ from opportunity_radar.dashboard.queries import (
     summarize_overview,
 )
 from opportunity_radar.dashboard.queries import list_opportunity_inbox as _list_opportunity_inbox
-from opportunity_radar.matching.models import MatchAnalysisModel, MatchAssessmentModel
+from opportunity_radar.matching.models import (
+    MatchAnalysisModel,
+    MatchAssessmentModel,
+    MatchFactorModel,
+)
 from opportunity_radar.matching.service import RULES_VERSION
 from opportunity_radar.opportunities.domain import SKILL_TAXONOMY_VERSION
 from opportunity_radar.opportunities.models import (
@@ -1285,3 +1289,130 @@ def test_ats_coverage_counts_every_ats_with_a_collector() -> None:
         "factorial",
     }
     assert set(ATS_COLLECTOR_SOURCE_TYPES) == ats_types
+
+
+def _factor(
+    session: Session,
+    assessment: MatchAssessmentModel,
+    code: str,
+    *,
+    status: str = "KNOWN",
+    raw_score: str | None = "0.9",
+    contribution: str = "10",
+) -> None:
+    session.add(
+        MatchFactorModel(
+            assessment_id=assessment.id,
+            factor_code=code,
+            weight=Decimal("0.1"),
+            raw_score=None if raw_score is None else Decimal(raw_score),
+            contribution=Decimal(contribution),
+            status=status,
+            confidence=Decimal("1") if status == "KNOWN" else Decimal("0"),
+            missing_policy="NEUTRAL",
+            explanation=f"{code} explanation",
+        )
+    )
+    session.flush()
+
+
+def _top_factor_page(
+    session: Session, factors: list[dict[str, str | None]]
+) -> tuple[str | None, OpportunityModel, MatchAssessmentModel]:
+    profile_version = _profile_version(session)
+    company = _company(session, "normal")
+    opportunity = _opportunity(session, company, title="Factor role", published_at=NOW)
+    assessment = _assessment(
+        session,
+        opportunity,
+        profile_version.id,
+        verdict="RECOMMENDED",
+        score="80.0000",
+        assessed_at=NOW,
+    )
+    for factor in factors:
+        _factor(session, assessment, **factor)  # type: ignore[arg-type]
+    page = list_opportunity_inbox(session, InboxQuery(company_id=company.id))
+    assert len(page.items) == 1
+    return page.items[0].top_factor_code, opportunity, assessment
+
+
+def test_top_factor_is_known_met_factor_with_highest_contribution() -> None:
+    with Session(create_database_engine(os.environ["DATABASE_URL"])) as session:
+        code, _, _ = _top_factor_page(
+            session,
+            [
+                {"code": "TECHNOLOGY_FIT", "raw_score": "0.9", "contribution": "30"},
+                {"code": "RECENCY", "raw_score": "1.0", "contribution": "10"},
+                {
+                    "code": "COMPANY_PRIORITY",
+                    "status": "UNKNOWN",
+                    "raw_score": None,
+                    "contribution": "50",
+                },
+            ],
+        )
+        assert code == "TECHNOLOGY_FIT"
+        session.rollback()
+
+
+def test_top_factor_ignores_missed_and_unknown() -> None:
+    with Session(create_database_engine(os.environ["DATABASE_URL"])) as session:
+        code, _, _ = _top_factor_page(
+            session,
+            [
+                {"code": "TECHNOLOGY_FIT", "raw_score": "0.4999", "contribution": "40"},
+                {"code": "RECENCY", "status": "UNKNOWN", "raw_score": None},
+                {
+                    "code": "SALARY",
+                    "status": "NOT_APPLICABLE",
+                    "raw_score": None,
+                    "contribution": "0",
+                },
+            ],
+        )
+        assert code is None
+        session.rollback()
+
+
+def test_top_factor_tie_breaks_by_factor_code() -> None:
+    with Session(create_database_engine(os.environ["DATABASE_URL"])) as session:
+        code, _, _ = _top_factor_page(
+            session,
+            [
+                {"code": "SENIORITY_FIT", "raw_score": "0.8", "contribution": "20"},
+                {"code": "LOCATION_FIT", "raw_score": "0.8", "contribution": "20"},
+                {"code": "TECHNOLOGY_FIT", "raw_score": "0.8", "contribution": "20"},
+            ],
+        )
+        assert code == "LOCATION_FIT"
+        session.rollback()
+
+
+def test_top_factor_uses_current_assessment_only() -> None:
+    with Session(create_database_engine(os.environ["DATABASE_URL"])) as session:
+        profile_version = _profile_version(session)
+        company = _company(session, "normal")
+        opportunity = _opportunity(session, company, title="Reassessed", published_at=NOW)
+        old = _assessment(
+            session,
+            opportunity,
+            profile_version.id,
+            verdict="WATCHLIST",
+            score="40.0000",
+            assessed_at=NOW - timedelta(hours=3),
+        )
+        _factor(session, old, "COMPANY_PRIORITY", contribution="90")
+        current = _assessment(
+            session,
+            opportunity,
+            profile_version.id,
+            verdict="RECOMMENDED",
+            score="80.0000",
+            assessed_at=NOW,
+        )
+        _factor(session, current, "TECHNOLOGY_FIT", contribution="15")
+        page = list_opportunity_inbox(session, InboxQuery(company_id=company.id))
+        assert page.items[0].assessment_id == current.id
+        assert page.items[0].top_factor_code == "TECHNOLOGY_FIT"
+        session.rollback()

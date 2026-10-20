@@ -52,6 +52,8 @@ export interface InboxItem {
   analysisStatus: string | null
   analysisRecommendedReview: boolean | null
   analysisSummary: string | null
+  /** Code of the met factor with the highest contribution; null when none. */
+  topFactorCode: string | null
   applied: boolean
   applicationId: string | null
   applicationStage: string | null
@@ -77,6 +79,15 @@ export interface InboxPage {
   order: InboxOrder
   /** Opportunities the same filters would show without the area filter, per F17-02. */
   offFilterCount: number
+}
+
+export interface InboxSummary {
+  /** Alta prioridade or Recomendada among vagas first seen since `since`. */
+  worthCount: number
+  collectedCount: number
+  since: string
+  nextCollectionAt: string | null
+  generatedAt: string
 }
 
 export interface InboxParams {
@@ -353,6 +364,7 @@ function parseInboxItem(value: unknown): InboxItem | null {
     analysisStatus: text(value.analysis_status),
     analysisRecommendedReview: flag(value.analysis_recommended_review),
     analysisSummary: text(value.analysis_summary),
+    topFactorCode: text(value.top_factor_code),
     applied: value.applied === true,
     applicationId: text(value.application_id),
     applicationStage: text(value.application_stage),
@@ -458,6 +470,31 @@ export async function getInbox({
     limit: typeof body.limit === 'number' ? body.limit : pageSize,
     order,
     offFilterCount: count(body.off_filter_count),
+  }
+}
+
+export async function getInboxSummary(signal?: AbortSignal): Promise<InboxSummary> {
+  const response = await privateFetch(apiUrl('/inbox/summary'), {
+    headers: { Accept: 'application/json' },
+    signal,
+  })
+  if (!response.ok) throw await failureFrom(response)
+  const body: unknown = await response.json()
+  if (
+    !isRecord(body) ||
+    typeof body.worth_count !== 'number' ||
+    typeof body.collected_count !== 'number' ||
+    typeof body.since !== 'string' ||
+    typeof body.generated_at !== 'string'
+  ) {
+    throw new Error('A API retornou um resumo da inbox inválido.')
+  }
+  return {
+    worthCount: count(body.worth_count),
+    collectedCount: count(body.collected_count),
+    since: body.since,
+    nextCollectionAt: text(body.next_collection_at),
+    generatedAt: body.generated_at,
   }
 }
 

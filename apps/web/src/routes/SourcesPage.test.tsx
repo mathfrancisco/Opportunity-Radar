@@ -3,10 +3,26 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render } from '../components/testing'
+import { render, visibleTextOutsideDetails } from '../components/testing'
 import { SourcesPage } from './SourcesPage'
 
 afterEach(() => vi.unstubAllGlobals())
+
+const pendingFetches: Array<() => void> = []
+
+/** A fetch that stays open until `settlePending`, so no request outlives its test. */
+function holdFetch(): Promise<Response> {
+  return new Promise<Response>((resolve) => {
+    pendingFetches.push(() => resolve(new Response('{}', { status: 500 })))
+  })
+}
+
+async function settlePending() {
+  await act(async () => {
+    pendingFetches.splice(0).forEach((release) => release())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
 
 async function flush(times = 4) {
   for (let i = 0; i < times; i += 1) {
@@ -90,6 +106,15 @@ function stubFetch(items: ReturnType<typeof healthItem>[]) {
 // after the collector work landed (workday, teamtailor, workable, factorial, plus the
 // generic jobposting collector) — this proves each renders its card correctly instead
 // of falling back to "unknown" or crashing the list.
+const typeNames: Record<string, string> = {
+  workday: 'Workday',
+  teamtailor: 'Teamtailor',
+  workable: 'Workable',
+  factorial: 'Factorial',
+  jobposting: 'Página de vaga (JobPosting)',
+  inhire: 'inHire',
+}
+
 describe('SourcesPage — novos ATS', () => {
   it.each(['workday', 'teamtailor', 'workable', 'factorial', 'jobposting', 'inhire'])(
     'mostra o card da fonte %s com o tipo e o botão de execução',
@@ -99,7 +124,7 @@ describe('SourcesPage — novos ATS', () => {
       const container = renderPage(<SourcesPage />)
       await flush()
 
-      expect(container.textContent).toContain(sourceType)
+      expect(container.textContent).toContain(typeNames[sourceType])
       const runButton = [...container.querySelectorAll('button')].find(
         (button) => button.textContent === 'Executar agora',
       )
@@ -116,7 +141,7 @@ describe('SourcesPage — novos ATS', () => {
     await flush()
 
     for (const sourceType of types) {
-      expect(container.textContent).toContain(sourceType)
+      expect(container.textContent).toContain(typeNames[sourceType])
     }
     expect(container.querySelectorAll('tbody tr').length).toBe(types.length)
   })
@@ -132,6 +157,61 @@ describe('SourcesPage — novos ATS', () => {
     )
     expect(runButton?.disabled).toBe(true)
     expect(container.textContent).toContain('Fonte desabilitada')
+  })
+})
+
+describe('SourcesPage — texto sem códigos', () => {
+  it('traduz o tipo da fonte e guarda o código só no detalhe técnico', async () => {
+    stubFetch([
+      healthItem('hacker_news'),
+      healthItem('tavily_search'),
+      healthItem('novo_coletor'),
+    ])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).toContain('Hacker News')
+    expect(visible).toContain('Busca na web (Tavily)')
+    expect(visible).toContain('Tipo não reconhecido')
+    expect(visible).not.toMatch(/\b[a-z]+(?:_[a-z]+)+\b/)
+    const details = [...container.querySelectorAll('details')].map((d) => d.textContent)
+    expect(details.some((text) => text?.includes('novo_coletor'))).toBe(true)
+  })
+
+  it('falha ao executar: frase neutra e a mensagem crua só no detalhe técnico', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown, init?: RequestInit) => {
+        const url = String(input)
+        if (init?.method === 'POST') {
+          return new Response(JSON.stringify({ detail: 'boom_interno' }), { status: 500 })
+        }
+        if (url.includes('/source-health')) {
+          return new Response(
+            JSON.stringify({ items: [healthItem('greenhouse')], total: 1, failing: 0 }),
+            { status: 200 },
+          )
+        }
+        if (url.includes('/source-coverage')) {
+          return new Response(JSON.stringify(coverage()), { status: 200 })
+        }
+        return new Response('{}', { status: 404 })
+      }),
+    )
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+    const runButton = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Executar agora',
+    )
+    act(() => runButton?.click())
+    await flush()
+
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).toContain('Não foi possível confirmar a coleta em Fonte greenhouse. Confira o histórico.')
+    expect(container.querySelector('.text-danger-ink')).toBeNull()
   })
 })
 
@@ -202,7 +282,7 @@ describe('SourcesPage — tabela e ação de cabeçalho', () => {
 
     const row = container.querySelector('tbody tr')
     expect(row?.querySelector('.font-semibold')?.textContent).toBe('Fonte workday')
-    expect(row?.querySelector('.text-muted')?.textContent).toBe('workday')
+    expect(row?.querySelector('.text-muted')?.textContent).toBe('Workday')
     const run = [...(row?.querySelectorAll('button') ?? [])].find(
       (button) => button.textContent === 'Executar agora',
     )
@@ -281,6 +361,108 @@ describe('SourcesPage — tabela e ação de cabeçalho', () => {
 
     expect(history?.getAttribute('aria-expanded')).toBe('true')
     expect(container.querySelectorAll('tbody > tr').length).toBeGreaterThanOrEqual(2)
+  })
+})
+
+describe('SourcesPage — Bateia', () => {
+  it('diz que a fonte não respondeu, sem inventar horário de nova tentativa, e guarda o código em detalhe', async () => {
+    stubFetch([
+      healthItem('greenhouse', {
+        name: 'Gupy',
+        last_run_status: 'FAILED',
+        last_run_error_code: 'HTTP_503',
+        last_run_error: 'quadro indisponível',
+      }),
+    ])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).toContain('A última coleta em Gupy não terminou.')
+    expect(visible).not.toContain('Tentamos de novo')
+    expect(visible).not.toContain('não respondeu')
+    expect(visible).not.toMatch(/[A-Z]{3,}_[A-Z_]+/)
+    const detail = [...container.querySelectorAll('details')].find((d) =>
+      d.textContent?.includes('HTTP_503'),
+    )
+    expect(detail?.querySelector('summary')?.textContent).toBe('Detalhe técnico')
+  })
+
+  it('mostra o esqueleto enquanto as fontes carregam', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => holdFetch()))
+
+    const container = renderPage(<SourcesPage />)
+    await flush(1)
+
+    expect(
+      [...container.querySelectorAll('[aria-busy="true"]')].some((node) =>
+        node.textContent?.includes('Carregando fontes…'),
+      ),
+    ).toBe(true)
+    await settlePending()
+  })
+
+  it('diz o próximo passo quando não há fontes', async () => {
+    stubFetch([])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    expect(container.textContent).toContain('Nenhuma fonte cadastrada ainda. Use Adicionar fonte')
+  })
+
+  it('no erro, diz o que continua valendo e oferece tentar de novo', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    const alert = container.querySelector('[role="alert"]')
+    expect(alert?.textContent).toContain('As vagas já salvas continuam no radar.')
+    expect(alert?.textContent).toContain('Tentar novamente')
+  })
+
+  it('parcial: mantém a lista quando só a cobertura falha', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.includes('/source-health')) {
+          return new Response(
+            JSON.stringify({ items: [healthItem('workday')], total: 1, failing: 0 }),
+            { status: 200 },
+          )
+        }
+        return new Response('{}', { status: 500 })
+      }),
+    )
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    expect(container.textContent).toContain('Fonte workday')
+    expect(container.textContent).toContain('A lista de fontes abaixo continua valendo.')
+  })
+
+  it('não mostra código técnico fora de "Detalhe técnico", nem estado desconhecido pelo código', async () => {
+    stubFetch([
+      healthItem('workday', {
+        evidence_status: 'weird_new_state',
+        last_run_status: 'PARTIAL',
+        last_run_error_code: 'PARSE_ERROR',
+        last_run_error: 'x',
+      }),
+    ])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).not.toMatch(/[A-Z]{3,}_[A-Z_]+/)
+    expect(visible).not.toContain('weird_new_state')
+    expect(visible).toContain('evidência não reconhecida')
+    expect(visible).toContain('A última coleta em Fonte workday trouxe só parte das vagas.')
   })
 })
 

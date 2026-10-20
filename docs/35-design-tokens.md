@@ -59,7 +59,7 @@ cor de fundo. Valores no formato claro / escuro.
 | Sucesso | `success-surface` `#E6F0DF` / `#1B2A17`, `success-surface-soft` `#EEF5E9` / `#17241A`, `success-surface-strong` `#D8E8CD` / `#22351D` | `success-line` `#A6C597` / `#4C6E3E` | `success-ink` `#2D5A1E` / `#A9D38F`, `success-ink-strong` `#244A17` / `#BFE0A8` |
 | Atenção | `warning-surface` `#F7E9DA` / `#33231A`, `warning-surface-strong` `#F1DEC8` / `#3D2A1E` | `warning-line` `#DDB58E` / `#7A5233` | `warning-ink` `#7A3E10` / `#F0B07F`, `warning-ink-strong` `#6B360D` / `#F5C39C` |
 | Erro | `danger-surface` `#F8E6E3` / `#351C1A`, `danger-surface-strong` `#F3DAD6` / `#40221F` | `danger-line` `#DDAFA8` / `#7D3F38` | `danger-ink` `#8A2E25` / `#F2A39A` |
-| Informação | `info-surface` `#E4ECEE` / `#1A2A2E` | — | `info-ink` `#2F4A52` / `#A7C8D0` |
+| Informação | `info-surface` `#E4ECEE` / `#1A2A2E` | `info-line` `#6A8890` / `#56808A` | `info-ink` `#2F4A52` / `#A7C8D0` |
 
 ## Contraste medido
 
@@ -123,6 +123,7 @@ Componentes e anel de foco (mínimo 3; o anel de foco usa `accent`):
 | `accent-hover` | `surface` | 9.99 | 9.68 |
 | `nugget` | `surface` | 3.70 | 8.86 |
 | `nugget` | `canvas` | 3.30 | 9.71 |
+| `info-line` | `info-surface` | 3.17 | 3.43 |
 
 `line` e `line-strong` não entram na tabela de componentes: `line` é borda estrutural
 decorativa; `line-strong` contorna botão e pílula que têm rótulo, ícone e chevron visíveis,

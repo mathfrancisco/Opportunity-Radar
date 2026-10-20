@@ -16,12 +16,12 @@ describe('StatusBadge', () => {
     expect(badge?.className).toContain('rounded-chip')
   })
 
-  it('mostra o próprio código quando o estado não tem tradução', () => {
+  it('diz que não reconhece o estado, sem mostrar o código', () => {
     const container = render(<StatusBadge labels={labels} tones={tones} value="QUARANTINED" />)
     const badge = container.querySelector('span')
 
-    // Inventar "desconhecido" esconderia justamente o caso que vale ler.
-    expect(badge?.textContent).toBe('QUARANTINED')
+    expect(badge?.textContent).toBe('Estado não reconhecido')
+    expect(container.textContent).not.toContain('QUARANTINED')
     expect(badge?.className).toContain('bg-canvas')
   })
 

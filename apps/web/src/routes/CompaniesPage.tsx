@@ -14,6 +14,7 @@ import { SearchInput } from '../components/SearchInput'
 import { CardListSkeleton, TableSkeleton } from '../components/skeletons'
 import { EmptyState, ErrorState } from '../components/states'
 import { type Company } from '../features/companies/api'
+import { companyLabel, companyStatusLabels, priorityLabels, verificationLabels } from '../features/companies/labels'
 import { useCompanies, useRegisterCompany } from '../features/companies/useCompanies'
 import { useMediaQuery } from '../lib/useMediaQuery'
 
@@ -21,27 +22,6 @@ const defaultPageSize = 25
 // The endpoint accepts page_size up to 100 (companies.py).
 const pageSizeOptions = [10, 25, 50, 100] as const
 const tableColumns = ['Empresa', 'Prioridade', 'Status', 'Verificação', 'Fontes']
-
-const priorityLabels: Record<string, string> = {
-  high: 'Alta',
-  normal: 'Normal',
-  low: 'Baixa',
-}
-
-const statusLabels: Record<string, string> = {
-  active: 'Ativa',
-  paused: 'Pausada',
-  backlog: 'Em fila',
-}
-
-const verificationLabels: Record<string, string> = {
-  api_json_confirmed: 'API JSON confirmada',
-  unverified: 'Não verificada',
-  ats_identified: 'ATS identificado',
-  careers_confirmed: 'Carreiras confirmadas',
-  research_recorded: 'Pesquisa registrada',
-  backlog: 'Em fila de homologação',
-}
 
 function display(value: string | number | null | undefined) {
   return value === undefined || value === null || value === '' ? '—' : value
@@ -52,7 +32,7 @@ function sourceNames(company: Company) {
   return company.sources
     .map((source) => {
       const name = source.name ?? source.url ?? 'Fonte sem nome'
-      return source.status ? `${name} (${sourceStatusLabels[source.status] ?? source.status})` : name
+      return source.status ? `${name} (${companyLabel(source.status, verificationLabels)})` : name
     })
     .join(', ')
 }
@@ -68,17 +48,7 @@ function ValueChip({
   const shown = display(value)
   if (shown === '—') return <span className="text-muted">—</span>
   const key = String(shown)
-  return <Chip>{labels?.[key] ?? key}</Chip>
-}
-
-const sourceStatusLabels: Record<string, string> = {
-  VERIFIED: 'Verificada',
-  PENDING: 'Pendente',
-  UNVERIFIED: 'Não verificada',
-  unverified: 'Não verificada',
-  ats_identified: 'ATS identificado',
-  careers_confirmed: 'Carreiras confirmadas',
-  backlog: 'Em fila de homologação',
+  return <Chip>{labels ? companyLabel(key, labels) : key}</Chip>
 }
 
 function CompanyLink({ company }: { company: Company }) {
@@ -108,7 +78,7 @@ function CompanyList({ companies, isDesktop }: { companies: Company[]; isDesktop
               <ValueChip labels={priorityLabels} value={company.priority} />
             </td>
             <td>
-              <ValueChip labels={statusLabels} value={company.status} />
+              <ValueChip labels={companyStatusLabels} value={company.status} />
             </td>
             <td>
               <ValueChip labels={verificationLabels} value={company.verificationState} />
@@ -137,7 +107,7 @@ function CompanyList({ companies, isDesktop }: { companies: Company[]; isDesktop
             <div>
               <dt className="text-muted">Status</dt>
               <dd className="mt-1">
-                <ValueChip labels={statusLabels} value={company.status} />
+                <ValueChip labels={companyStatusLabels} value={company.status} />
               </dd>
             </div>
             <div>
@@ -187,7 +157,7 @@ export function CompaniesPage() {
       current="/companies"
       eyebrow="Catálogo local"
       title="Empresas"
-      description="Consulte as empresas monitoradas e as fontes associadas a cada uma."
+      description="As empresas que o radar acompanha e de onde vêm as vagas de cada uma."
     >
       <div className="mt-8">
         {creating ? (
@@ -301,10 +271,16 @@ export function CompaniesPage() {
             <CardListSkeleton label="Carregando empresas…" />
           ))}
         {companies.isError && (
-          <ErrorState onRetry={() => void companies.refetch()}>Não foi possível carregar as empresas.</ErrorState>
+          <ErrorState onRetry={() => void companies.refetch()}>
+            Não foi possível carregar as empresas agora. Nada foi alterado no seu catálogo.
+          </ErrorState>
         )}
         {companies.data?.items.length === 0 && (
-          <EmptyState>Nenhuma empresa encontrada{query ? ` para “${query}”` : ''}.</EmptyState>
+          <EmptyState>
+            {query
+              ? `Nenhuma empresa para “${query}”. Tente outro nome ou domínio.`
+              : 'Nenhuma empresa no catálogo ainda. Use Nova empresa para cadastrar a primeira.'}
+          </EmptyState>
         )}
         {companies.data && companies.data.items.length > 0 && (
           <>

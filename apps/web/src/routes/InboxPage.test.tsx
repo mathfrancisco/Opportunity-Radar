@@ -313,7 +313,7 @@ describe('InboxPage primeiro acesso', () => {
     expect(Array.from(container.querySelectorAll('h2')).some((h) => h.textContent === 'Monte sua bateia')).toBe(true)
     const cta = Array.from(container.querySelectorAll('a')).find((a) => a.textContent === 'Começar pelo perfil')
     expect(cta?.getAttribute('href')).toBe('/profile')
-    expect(container.textContent).not.toContain('Nada novo para decidir. A próxima coleta acontece no próximo ciclo.')
+    expect(container.textContent).not.toContain('Nada novo desde ontem.')
   })
 
   it('sem perfil mas com vagas, a lista aparece como de costume', async () => {
@@ -333,7 +333,22 @@ describe('InboxPage primeiro acesso', () => {
     await flush(6)
 
     expect(container.textContent).not.toContain('Monte sua bateia')
-    expect(container.textContent).toContain('Nada novo para decidir. A próxima coleta acontece no próximo ciclo.')
+    expect(container.textContent).toContain('Nada novo desde ontem.')
+  })
+
+  it('erro ao carregar o perfil não mostra o guia e mantém a lista vazia', async () => {
+    stubInbox([], profile)
+    const stub = fetch as ReturnType<typeof vi.fn>
+    const base = stub.getMockImplementation() as (input: unknown) => Promise<Response>
+    stub.mockImplementation(async (input: unknown) =>
+      String(input).endsWith('/profile') ? new Response('{}', { status: 500 }) : base(input),
+    )
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush(6)
+
+    expect(container.textContent).not.toContain('Monte sua bateia')
+    expect(container.textContent).toContain('Nada novo desde ontem.')
   })
 })
 
@@ -816,13 +831,35 @@ describe('InboxPage table, pagination and filters', () => {
     expect(cell.textContent).toContain('Alta prioridade')
   })
 
-  it('sem score, não mostra régua e diz Sem avaliação', async () => {
+  it('sem score e sem veredito, mostra só o chip Não avaliada', async () => {
     stubInbox(1, [], [inboxItem({ score: null, verdict: null })])
+    const container = renderAt('/inbox')
+    await flush()
+
+    expect(container.textContent).toContain('Não avaliada')
+    expect(container.textContent).not.toContain('Sem avaliação')
+    expect(container.querySelector('[role="img"][aria-label$="de 100"]')).toBeNull()
+  })
+
+  it('com veredito e sem score, não mostra régua e diz Sem avaliação', async () => {
+    stubInbox(1, [], [inboxItem({ score: null, verdict: 'HIGH_PRIORITY' })])
     const container = renderAt('/inbox')
     await flush()
 
     expect(container.textContent).toContain('Sem avaliação')
     expect(container.querySelector('[role="img"][aria-label$="de 100"]')).toBeNull()
+  })
+
+  it('fora da paginação, a contagem "6 vagas" aparece uma vez só', async () => {
+    stubInbox(6, [])
+    const container = renderAt('/inbox')
+    await flush()
+
+    const pagination = container.querySelector('nav[aria-label="Paginação de vagas"]')
+    expect(pagination).not.toBeNull()
+    expect(pagination?.textContent).toContain('6 vagas')
+    const rest = (container.textContent ?? '').replace(pagination?.textContent ?? '', '')
+    expect(rest.match(/\b6 vagas\b/g)).toHaveLength(1)
   })
 
   it('mostra o resumo da IA como motivo e não inventa motivo sem ele', async () => {
@@ -858,7 +895,7 @@ describe('InboxPage table, pagination and filters', () => {
     const header = container.querySelector('header') as HTMLElement
     expect(header.querySelector('p')?.textContent).toBe('Decidir')
     expect(header.querySelector('h1')?.textContent).toBe('Inbox')
-    expect(header.textContent).toContain('1 vaga para decidir.')
+    expect(header.textContent).not.toContain('1 vaga')
     expect(
       [...header.querySelectorAll('button')].some((button) => button.textContent === 'Buscas salvas'),
     ).toBe(true)
@@ -880,12 +917,20 @@ describe('InboxPage table, pagination and filters', () => {
     stubInbox(0, [], [])
     const bare = renderAt('/inbox')
     await flush()
-    expect(bare.textContent).toContain('Nada novo para decidir. A próxima coleta acontece no próximo ciclo.')
+    expect(bare.textContent).toContain('Nada novo desde ontem.')
     expect(bare.textContent).not.toContain('Nenhuma vaga encontrada com esses filtros.')
 
     const filtered = renderAt('/inbox?work_mode=REMOTE')
     await flush()
     expect(filtered.textContent).toContain('Nenhuma vaga encontrada com esses filtros.')
+  })
+
+  it('uma página posterior vazia não diz "Nada novo desde ontem."', async () => {
+    stubInbox(0, [], [])
+    const later = renderAt('/inbox?page=2')
+    await flush()
+    expect(later.textContent).not.toContain('Nada novo desde ontem.')
+    expect(later.textContent).toContain('Nenhuma vaga encontrada com esses filtros.')
   })
 
   it('envia à API os mesmos parâmetros de sempre para os filtros primários e avançados', async () => {
@@ -898,7 +943,7 @@ describe('InboxPage table, pagination and filters', () => {
     renderAt('/inbox?verdict=RECOMMENDED&work_mode=REMOTE&order=score&minimum_score=60&seniority=SENIOR&search=backend&size=50')
     await flush()
 
-    const inbox = new URL(urls.find((url) => url.includes('/inbox')) as string, 'http://localhost')
+    const inbox = new URL(urls.find((url) => url.includes('/inbox?')) as string, 'http://localhost')
     expect(inbox.searchParams.getAll('verdict')).toEqual(['RECOMMENDED'])
     expect(inbox.searchParams.get('work_mode')).toBe('REMOTE')
     expect(inbox.searchParams.get('order')).toBe('score')
@@ -915,7 +960,7 @@ describe('InboxPage table, pagination and filters', () => {
     )
     await flush()
 
-    const inbox = new URL(urls.find((url) => url.includes('/inbox')) as string, 'http://localhost')
+    const inbox = new URL(urls.find((url) => url.includes('/inbox?')) as string, 'http://localhost')
     expect(inbox.searchParams.getAll('seniority')).toEqual(['JUNIOR', 'MID'])
     expect(inbox.searchParams.getAll('verdict')).toEqual(['RECOMMENDED', 'WATCHLIST'])
     expect(inbox.searchParams.getAll('source_definition_id')).toEqual(['src-a', 'src-b'])
@@ -1164,6 +1209,23 @@ describe('InboxPage salary unit (D1)', () => {
       document.getElementById(label?.getAttribute('for') ?? '')) as HTMLInputElement
   }
 
+  it('mostra a etapa da candidatura uma vez só, sem repetir a palavra', async () => {
+    stub(
+      [],
+      [
+        inboxItem({ applied: true, application_stage: 'APPLIED' }),
+        inboxItem({ opportunity_id: 'o-2', applied: true, application_stage: 'SCREENING' }),
+      ],
+    )
+    const container = renderAt('/inbox')
+    await flush()
+
+    const text = container.textContent ?? ''
+    expect(text).toContain('Candidatura enviada')
+    expect(text).not.toContain('Candidatura: Candidatura')
+    expect(text).toContain('Candidatura: Triagem')
+  })
+
   it('envia BRL e MONTH por padrão quando há salário mínimo', async () => {
     const urls: string[] = []
     stub(urls)
@@ -1249,3 +1311,179 @@ describe('InboxPage salary unit (D1)', () => {
 })
 
 installTestAuth()
+
+/** Task 12: the reason fallback and the daily summary come from the API. */
+describe('InboxPage reason and daily summary', () => {
+  const profile = {
+    id: 'profile-1', number: 1, status: 'ACTIVE', profile_lock_version: 1,
+    skills: [], experiences: [], projects: [], preferences: {},
+  }
+
+  function summaryBody(overrides: Record<string, unknown> = {}) {
+    return {
+      worth_count: 6,
+      collected_count: 214,
+      since: '2026-10-19T03:00:00Z',
+      next_collection_at: null,
+      generated_at: '2026-10-20T12:00:00Z',
+      ...overrides,
+    }
+  }
+
+  function stub(items: unknown[], summary: Record<string, unknown> | 'error') {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.includes('/inbox/summary')) {
+          return summary === 'error'
+            ? new Response('{}', { status: 500 })
+            : new Response(JSON.stringify(summary), { status: 200 })
+        }
+        if (url.endsWith('/profile')) return new Response(JSON.stringify(profile), { status: 200 })
+        if (url.includes('/inbox')) {
+          return new Response(
+            JSON.stringify({ items, total: items.length, offset: 0, limit: 25, order: 'priority', off_filter_count: 0 }),
+            { status: 200 },
+          )
+        }
+        return new Response(JSON.stringify([]), { status: 200 })
+      }),
+    )
+  }
+
+  async function open(items: unknown[], summary: Record<string, unknown> | 'error') {
+    stub(items, summary)
+    const container = renderWithProviders(<InboxPage />)
+    await flush(6)
+    return container
+  }
+
+  const reasonOf = (container: HTMLElement) =>
+    container.querySelector('[data-testid="inbox-reason"]')?.textContent ?? null
+
+  it('sem resumo da IA, usa o fator atendido de maior peso', async () => {
+    const container = await open([inboxItem({ top_factor_code: 'TECHNOLOGY_FIT' })], summaryBody())
+    expect(reasonOf(container)).toBe('Combina em skills da vaga.')
+  })
+
+  it('o resumo da IA vence o fator', async () => {
+    const container = await open(
+      [inboxItem({ analysis_summary: 'Resumo X', top_factor_code: 'TECHNOLOGY_FIT' })],
+      summaryBody(),
+    )
+    expect(reasonOf(container)).toBe('Resumo X')
+  })
+
+  it('código sem rótulo não vira linha de motivo', async () => {
+    const container = await open([inboxItem({ top_factor_code: 'NEW_FACTOR' })], summaryBody())
+    expect(reasonOf(container)).toBeNull()
+    expect(container.textContent).not.toContain('NEW_FACTOR')
+  })
+
+  it('o cabeçalho diz quantas vagas valem o tempo', async () => {
+    const container = await open([inboxItem()], summaryBody())
+    expect(container.textContent).toContain('6 vagas valem seu tempo, de 214 coletadas desde ontem.')
+    expect(container.textContent).not.toContain('1 vaga encontrada.')
+  })
+
+  it('no singular, concorda em número', async () => {
+    const container = await open([inboxItem()], summaryBody({ worth_count: 1, collected_count: 1 }))
+    expect(container.textContent).toContain('1 vaga vale seu tempo, de 1 coletada desde ontem.')
+  })
+
+  it('sem vaga que valha mas com coletadas, o cabeçalho diz isso', async () => {
+    const none = await open([inboxItem()], summaryBody({ worth_count: 0, collected_count: 37 }))
+    expect(none.textContent).toContain('Nenhuma vaga nova vale seu tempo, das 37 coletadas desde ontem.')
+    expect(none.textContent).not.toContain('1 vaga encontrada.')
+    const one = await open([inboxItem()], summaryBody({ worth_count: 0, collected_count: 1 }))
+    expect(one.textContent).toContain('Nenhuma vaga nova vale seu tempo, da 1 coletada desde ontem.')
+  })
+
+  it('sem nada coletado, o cabeçalho diz só "Nada novo desde ontem."', async () => {
+    const container = await open(
+      [inboxItem()],
+      summaryBody({ worth_count: 0, collected_count: 0, next_collection_at: '2026-10-20T20:00:00Z' }),
+    )
+    expect(container.textContent).toContain('Nada novo desde ontem.')
+    expect(container.textContent).not.toContain('próxima coleta')
+  })
+
+  it('com filtro ativo, o cabeçalho mostra a contagem da lista, não o resumo do dia', async () => {
+    stub([inboxItem()], summaryBody())
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const container = render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/inbox?work_mode=REMOTE']}>
+          <InboxPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await flush(6)
+    expect(container.textContent).toContain('1 vaga encontrada.')
+    expect(container.textContent).not.toContain('valem seu tempo')
+  })
+
+  it('com o resumo ainda pendente, a lista aparece com a contagem da lista', async () => {
+    let release: (response: Response) => void = () => {}
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.includes('/inbox/summary')) return new Promise<Response>((resolve) => { release = resolve })
+        if (url.endsWith('/profile')) return new Response(JSON.stringify(profile), { status: 200 })
+        if (url.includes('/inbox')) {
+          return new Response(
+            JSON.stringify({ items: [inboxItem()], total: 1, offset: 0, limit: 25, order: 'priority', off_filter_count: 0 }),
+            { status: 200 },
+          )
+        }
+        return new Response(JSON.stringify([]), { status: 200 })
+      }),
+    )
+    const container = renderWithProviders(<InboxPage />)
+    await flush(6)
+    expect(container.textContent).toContain('Backend Engineer')
+    expect(container.textContent).toContain('1 vaga encontrada.')
+    await act(async () => {
+      release(new Response(JSON.stringify(summaryBody()), { status: 200 }))
+    })
+  })
+
+  it('com o resumo em erro, o cabeçalho volta ao total da lista e a lista aparece', async () => {
+    const container = await open([inboxItem()], 'error')
+    expect(container.textContent).toContain('Backend Engineer')
+    expect(container.textContent).toContain('1 vaga encontrada.')
+  })
+
+  it('vazio com próxima coleta hoje, na hora de São Paulo', async () => {
+    const container = await open([], summaryBody({ next_collection_at: '2026-10-20T20:00:00Z' }))
+    expect(container.textContent).toContain('Nada novo desde ontem. A próxima coleta roda às 17h.')
+    const early = await open([], summaryBody({ next_collection_at: '2026-10-20T15:00:00Z', generated_at: '2026-10-20T12:00:00Z' }))
+    expect(early.textContent).toContain('A próxima coleta roda às 12h.')
+  })
+
+  it('vazio sem próxima coleta diz só o que já se sabe', async () => {
+    const container = await open([], summaryBody({ next_collection_at: null }))
+    expect(container.textContent).toContain('Nada novo desde ontem.')
+    expect(container.textContent).not.toContain('próxima coleta')
+  })
+
+  it('vazio com fonte já devida diz que a coleta está na fila', async () => {
+    const container = await open([], summaryBody({ next_collection_at: '2026-10-20T11:00:00Z' }))
+    expect(container.textContent).toContain('Nada novo desde ontem. A próxima coleta já está na fila.')
+  })
+
+  it('vazio com coleta amanhã diz "amanhã às 6h"; depois disso omite a hora', async () => {
+    const tomorrow = await open([], summaryBody({ next_collection_at: '2026-10-21T09:00:00Z' }))
+    expect(tomorrow.textContent).toContain('Nada novo desde ontem. A próxima coleta roda amanhã às 6h.')
+    const later = await open([], summaryBody({ next_collection_at: '2026-10-24T09:00:00Z' }))
+    expect(later.textContent).toContain('Nada novo desde ontem.')
+    expect(later.textContent).not.toContain('próxima coleta')
+  })
+
+  it('vazio com o resumo em erro cai para "Nada novo desde ontem."', async () => {
+    const container = await open([], 'error')
+    expect(container.textContent).toContain('Nada novo desde ontem.')
+  })
+})

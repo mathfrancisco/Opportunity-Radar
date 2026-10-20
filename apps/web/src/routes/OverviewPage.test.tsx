@@ -373,16 +373,45 @@ describe('OverviewPage — primeiro acesso', () => {
     expect(container.textContent).not.toContain('Monte sua bateia')
   })
 
-  it('não mostra o guia enquanto o perfil carrega nem quando ele falha', async () => {
+  function stubProfile(respond: () => Promise<Response>) {
     stubOverviewFetch(overviewBody(), [])
     const stub = fetch as ReturnType<typeof vi.fn>
     const base = stub.getMockImplementation() as (input: unknown) => Promise<Response>
     stub.mockImplementation(async (input: unknown) =>
-      String(input).endsWith('/profile') ? new Response('{}', { status: 500 }) : base(input),
+      String(input).endsWith('/profile') ? respond() : base(input),
     )
+  }
+
+  it('não mostra o guia enquanto o perfil carrega, e só o mostra depois que ele responde', async () => {
+    let releaseRequests: () => void = () => {}
+    const gate = new Promise<void>((resolve) => { releaseRequests = resolve })
+    stubOverviewFetch(overviewBody(), [], null)
+    const stub = fetch as ReturnType<typeof vi.fn>
+    const base = stub.getMockImplementation() as (input: unknown) => Promise<Response>
+    stub.mockImplementation(async (input: unknown) => {
+      const url = String(input)
+      if (url.endsWith('/profile') || url.endsWith('/overview')) await gate
+      return base(input)
+    })
 
     const container = renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    // Both requests are still pending: the skeleton is up and the page must not guess.
+    expect(container.querySelector('[aria-busy="true"]')?.textContent).toContain('Carregando o resumo')
     expect(container.textContent).not.toContain('Monte sua bateia')
+
+    releaseRequests()
+    await flush(6)
+
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull()
+    expect(container.textContent).toContain('Monte sua bateia')
+  })
+
+  it('não mostra o guia quando o perfil falha', async () => {
+    stubProfile(async () => new Response('{}', { status: 500 }))
+
+    const container = renderWithProviders(<OverviewPage />)
     await flush(6)
 
     expect(container.textContent).not.toContain('Monte sua bateia')

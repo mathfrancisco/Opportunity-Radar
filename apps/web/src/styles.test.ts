@@ -192,4 +192,19 @@ describe('contraste dos tokens de styles.css', () => {
     expect(css).toContain('"Young Serif"')
     expect(css).not.toContain('Inter Variable')
   })
+
+  it('todo token --color-* do bloco claro existe nos dois blocos escuros', () => {
+    const start = css.indexOf('@theme {')
+    const light = Object.keys(parseColors(css.slice(start, css.indexOf('\n}', start))))
+    expect(light.length).toBeGreaterThan(20)
+    const missing = (block: Record<string, string>) => light.filter((name) => !(name in block))
+    expect(missing(mediaDarkBlock())).toEqual([])
+    expect(missing(dataThemeDarkBlock())).toEqual([])
+  })
+
+  it('info-line existe nos três blocos e tem >= 3:1 sobre info-surface', () => {
+    expect(mediaDarkBlock()['info-line']).toBeDefined()
+    expect(contrast('info-line', 'info-surface')).toBeGreaterThanOrEqual(3)
+    expect(contrastOf(darkToken('info-line'), darkToken('info-surface'))).toBeGreaterThanOrEqual(3)
+  })
 })

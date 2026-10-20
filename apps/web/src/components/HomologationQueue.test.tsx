@@ -1,11 +1,28 @@
 import { installTestAuth } from '../test/auth'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HomologationQueue } from './HomologationQueue'
-import { render } from './testing'
+import { render, visibleTextOutsideDetails } from './testing'
 
 afterEach(() => vi.unstubAllGlobals())
+
+const pendingFetches: (() => void)[] = []
+
+/** A fetch that stays open until `settlePending`, so no request outlives its test. */
+function holdFetch(): Promise<Response> {
+  return new Promise<Response>((resolve) => {
+    pendingFetches.push(() => resolve(new Response('{}', { status: 500 })))
+  })
+}
+
+async function settlePending() {
+  await act(async () => {
+    pendingFetches.splice(0).forEach((release) => release())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
 
 /** Flushes the micro- and macrotasks a react-query fetch resolves through. */
 async function flush(times = 4) {
@@ -20,7 +37,11 @@ function renderWithClient(element: ReactElement): HTMLElement {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
-  return render(<QueryClientProvider client={client}>{element}</QueryClientProvider>)
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>{element}</MemoryRouter>
+    </QueryClientProvider>,
+  )
 }
 
 function healthItem(overrides: Record<string, unknown> = {}) {
@@ -116,6 +137,158 @@ function stubFetch(options: {
 }
 
 describe('HomologationQueue', () => {
+  it('carregando: mostra o esqueleto da fila', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => holdFetch()))
+
+    const container = renderWithClient(<HomologationQueue />)
+    await flush(1)
+
+    expect(container.querySelector('[aria-busy="true"]')?.textContent).toContain(
+      'Carregando a fila de homologação…',
+    )
+    await settlePending()
+  })
+
+  it('vazio: diz o próximo passo e leva às fontes', async () => {
+    stubFetch({ items: [] })
+
+    const container = renderWithClient(<HomologationQueue />)
+    await flush()
+
+    expect(container.textContent).toContain('Nenhuma proposta aguardando.')
+    expect(container.querySelector('a[href="/sources"]')?.textContent).toBe('Ver as fontes')
+  })
+
+  it('erro: diz o que continua valendo e oferece tentar de novo', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
+
+    const container = renderWithClient(<HomologationQueue />)
+    await flush()
+
+    const alert = container.querySelector('[role="alert"]')
+    expect(alert?.textContent).toContain('As fontes já habilitadas continuam coletando.')
+    expect(alert?.querySelector('button')?.textContent).toBe('Tentar novamente')
+  })
+
+  it('parcial: resume o lote quando parte das fontes não passou', async () => {
+    stubFetch({
+      items: [
+        healthItem({ source_definition_id: 'source-1', name: 'Limitada' }),
+        healthItem({ source_definition_id: 'source-2', name: 'Confirmada' }),
+      ],
+      probeResponses: [
+        {
+          probe: {
+            id: 'probe-1',
+            status: 'FAILED',
+            items_seen: 0,
+            http_requests: 1,
+            error_code: 'SOURCE_RATE_LIMITED',
+            detail: null,
+            evidence_recorded: false,
+            finished_at: null,
+            retry_after_seconds: 0,
+          },
+          source: sourceDetail('source-1'),
+        },
+      ],
+    })
+
+    const container = renderWithClient(<HomologationQueue />)
+    await flush()
+    act(() => container.querySelector<HTMLInputElement>('input[aria-label="Selecionar todas as propostas"]')?.click())
+    await flush()
+    const batchButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.startsWith('Testar selecionadas'),
+    )
+    act(() => batchButton?.click())
+    await flush()
+    await flush()
+
+    expect(container.textContent).toContain(
+      '1 de 2 fontes testadas. 1 não passou e segue como proposta.',
+    )
+  })
+
+  it('não mostra código técnico no texto visível', async () => {
+    stubFetch({
+      detail: { evidence_status: 'ats_identified' },
+      items: [
+        healthItem({ source_definition_id: 'source-1', name: 'Limitada', evidence_status: 'ats_identified' }),
+      ],
+      probeResponses: [
+        {
+          probe: {
+            id: 'probe-1',
+            status: 'FAILED',
+            items_seen: 0,
+            http_requests: 1,
+            error_code: 'SOURCE_RATE_LIMITED',
+            detail: 'limite',
+            evidence_recorded: false,
+            finished_at: null,
+            retry_after_seconds: 0,
+          },
+          source: sourceDetail('source-1'),
+        },
+      ],
+    })
+
+    const container = renderWithClient(<HomologationQueue />)
+    await flush()
+    act(() => container.querySelector<HTMLInputElement>('input[aria-label="Selecionar Limitada"]')?.click())
+    await flush()
+    act(() =>
+      Array.from(container.querySelectorAll('button'))
+        .find((button) => button.textContent?.startsWith('Testar selecionadas'))
+        ?.click(),
+    )
+    await flush()
+    await flush()
+    expect(visibleTextOutsideDetails(container)).not.toMatch(/[A-Z]{3,}_[A-Z_]+/)
+
+    act(() => container.querySelector<HTMLButtonElement>('tbody tr button')?.click())
+    await flush()
+    const sequential = visibleTextOutsideDetails(container)
+    expect(sequential).toContain('Evidência sistema identificado')
+    expect(sequential).not.toMatch(/[A-Z]{3,}_[A-Z_]+/)
+    expect(sequential).not.toContain('ats_identified')
+    expect(sequential).not.toContain('board_token')
+  })
+
+  it('mostra o tipo da fonte em português, sem o código', async () => {
+    stubFetch({
+      items: [
+        healthItem({ source_definition_id: 'source-1', name: 'Primeira', source_type: 'tavily_search' }),
+        healthItem({ source_definition_id: 'source-2', name: 'Segunda', source_type: 'novo_coletor' }),
+      ],
+    })
+
+    const container = renderWithClient(<HomologationQueue />)
+    await flush()
+
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).toContain('Busca na web (Tavily)')
+    expect(visible).toContain('Tipo não reconhecido')
+    expect(visible).not.toMatch(/\b[a-z]+(?:_[a-z]+)+\b/)
+  })
+
+  it('o teste individual usa o mesmo verbo do botão na confirmação', async () => {
+    stubFetch({ items: [healthItem({ source_definition_id: 'source-1', name: 'Primeira' })] })
+
+    const container = renderWithClient(<HomologationQueue />)
+    await flush()
+    act(() => container.querySelector<HTMLButtonElement>('tbody tr button')?.click())
+    await flush()
+    const test = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Testar a fonte',
+    )
+    act(() => test?.click())
+    await flush()
+
+    expect(container.textContent).toContain('Fonte testada. Leu 1 item.')
+  })
+
   it('lista as propostas por estado e prioridade', async () => {
     stubFetch({
       items: [
@@ -133,7 +306,7 @@ describe('HomologationQueue', () => {
 
     const names = Array.from(container.querySelectorAll('tbody tr')).map((item) => item.textContent)
     expect(names[0]).toContain('Alta prioridade')
-    expect(names[0]).toContain('Sem sonda')
+    expect(names[0]).toContain('Sem teste')
     expect(names[1]).toContain('Confirmada')
     expect(names[1]).toContain('Evidência confirmada')
   })
@@ -150,7 +323,7 @@ describe('HomologationQueue', () => {
     await flush()
 
     expect(container.querySelector('table')).not.toBeNull()
-    expect(container.querySelector('tbody tr span.rounded-chip')?.textContent).toBe('Sem sonda')
+    expect(container.querySelector('tbody tr span.rounded-chip')?.textContent).toBe('Sem teste')
     const second = container.querySelectorAll('tbody tr')[1]
     const button = second.querySelector('button')
     expect(button?.textContent).toBe('Homologar')
@@ -203,7 +376,7 @@ describe('HomologationQueue', () => {
     await flush()
 
     const sequentialButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Modo sequencial',
+      (button) => button.textContent === 'Revisar uma a uma',
     )
     expect(sequentialButton).toBeDefined()
     act(() => sequentialButton?.click())
@@ -295,8 +468,8 @@ describe('HomologationQueue', () => {
 
     const rows = Array.from(container.querySelectorAll('tbody tr'))
     expect(rows[0].textContent).toContain('SOURCE_RATE_LIMITED')
-    expect(rows[0].textContent).toContain('aguardar 0s')
-    expect(rows[1].textContent).toContain('Sonda confirmada')
+    expect(rows[0].textContent).toContain('Aguarde 0s antes de tentar de novo')
+    expect(rows[1].textContent).toContain('Fonte testada.')
   })
 
   it('seleciona todas as propostas e destaca as linhas selecionadas', async () => {

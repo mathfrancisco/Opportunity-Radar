@@ -16,16 +16,18 @@ import { PageShell } from '../components/PageShell'
 import { CardListSkeleton, TableSkeleton } from '../components/skeletons'
 import { EmptyState, ErrorState } from '../components/states'
 import { SearchInput } from '../components/SearchInput'
-import { StatusBadge } from '../components/StatusBadge'
+import { VerdictBadge } from '../components/VerdictBadge'
 import {
   type InboxItem,
   type InboxOrder,
   estimatedDateHint,
   inboxOrders,
 } from '../features/dashboard/api'
-import { useInbox } from '../features/dashboard/useInbox'
+import { nothingNewSentence, worthSentence } from '../features/dashboard/inboxSummary'
+import { useInbox, useInboxSummary } from '../features/dashboard/useInbox'
+import { topFactorSentence } from '../features/matching/factors'
 import { nuggetsFromScore } from '../features/matching/nuggets'
-import { verdictLabels, verdictTones } from '../features/matching/verdicts'
+import { verdictLabels } from '../features/matching/verdicts'
 import { useActiveProfile } from '../features/profile/useProfile'
 import { useMarkRelevance } from '../features/opportunities/useOpportunity'
 import { type ApplicationStage, stageLabels } from '../features/pipeline/api'
@@ -77,6 +79,13 @@ const lifecycleLabels: Record<string, string> = {
   DISCOVERED: 'Descoberta', ACTIVE: 'Ativa', STALE: 'Desatualizada', CLOSED: 'Encerrada',
 }
 
+/** The stage once: "Candidatura enviada" already says it, "Triagem" needs the noun. */
+function applicationChipText(stage: string | null): string {
+  const label = stage === null ? undefined : stageLabels[stage as ApplicationStage]
+  if (!label) return 'Candidatura registrada'
+  return label.startsWith('Candidatura') ? label : `Candidatura: ${label}`
+}
+
 function display(value: string | null) {
   return value === null || value === '' ? '—' : value
 }
@@ -87,17 +96,6 @@ function formatDate(value: string | null) {
   return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleDateString('pt-BR')
 }
 
-function VerdictBadge({ verdict }: { verdict: string | null }) {
-  return (
-    <StatusBadge
-      absent="Não avaliada"
-      labels={verdictLabels}
-      tones={verdictTones}
-      value={verdict}
-    />
-  )
-}
-
 const appliedOptions = [
   { value: '', label: 'Todas' },
   { value: 'true', label: 'Já aplicada' },
@@ -106,11 +104,13 @@ const appliedOptions = [
 
 /**
  * The score as a ten-nugget meter with the score in words beside it. Without a score the meter
- * is absent and the text says so; the verdict name is always written next to it by `VerdictBadge`.
+ * is absent: a verdict with no score says so, and with neither the "Não avaliada" chip speaks alone.
  */
-function ScoreMeter({ score }: { score: string | null }) {
+function ScoreMeter({ score, verdict }: { score: string | null; verdict: string | null }) {
   const met = nuggetsFromScore(score)
-  if (score === null || met === null) return <span className="text-body-sm text-muted">Sem avaliação</span>
+  if (met === null) {
+    return verdict === null ? null : <span className="text-body-sm text-muted">Sem avaliação</span>
+  }
   return (
     <NuggetMeter
       label={`${Math.round(Number(score))} de 100`}
@@ -135,6 +135,11 @@ function StartupChip({ item }: { item: InboxItem }) {
   )
 }
 
+/** The AI summary wins; otherwise the heaviest met factor the API names. */
+function inboxReason(item: InboxItem): string | null {
+  return item.analysisSummary ?? topFactorSentence(item.topFactorCode)
+}
+
 /**
  * One row of the comparison table; below `md` the same row is a card. The explicit ARIA roles
  * keep row and cell semantics when the table is laid out as `display: block`. Everything that
@@ -142,6 +147,7 @@ function StartupChip({ item }: { item: InboxItem }) {
  */
 function ItemRow({ item }: { item: InboxItem }) {
   const mark = useMarkRelevance(item.opportunityId)
+  const reason = inboxReason(item)
   return (
     <tr className="align-top" role="row">
       <td className="xl:min-w-56" role="cell">
@@ -156,9 +162,9 @@ function ItemRow({ item }: { item: InboxItem }) {
         <SecondaryText className="break-anywhere">
           {display(item.companyName)} · {display(item.location)}
         </SecondaryText>
-        {item.analysisSummary && (
+        {reason && (
           <span data-testid="inbox-reason" className="mt-1 block break-anywhere text-caption text-ink">
-            {item.analysisSummary}
+            {reason}
           </span>
         )}
         {(item.hasPendingDuplicate ||
@@ -183,13 +189,10 @@ function ItemRow({ item }: { item: InboxItem }) {
       </td>
       <td role="cell">
         <div className="flex flex-wrap items-center gap-2 xl:flex-col xl:items-start xl:gap-1.5">
-          <ScoreMeter score={item.score} />
+          <ScoreMeter score={item.score} verdict={item.verdict} />
           <VerdictBadge verdict={item.verdict} />
           {item.applied && (
-            <Chip tone={appliedTone}>
-              Candidatura: {stageLabels[item.applicationStage as ApplicationStage] ??
-                item.applicationStage}
-            </Chip>
+            <Chip tone={appliedTone}>{applicationChipText(item.applicationStage)}</Chip>
           )}
         </div>
       </td>
@@ -197,7 +200,7 @@ function ItemRow({ item }: { item: InboxItem }) {
         <PrimaryText className="font-medium">
           {opportunityLabel(item.workMode, workModeLabels)} · {opportunityLabel(item.seniority, seniorityLabels)}
         </PrimaryText>
-        <SecondaryText>Status {lifecycleLabels[item.lifecycleStatus] ?? 'Em revisão'}</SecondaryText>
+        <SecondaryText>Status {lifecycleLabels[item.lifecycleStatus] ?? 'Estado não reconhecido'}</SecondaryText>
         {item.isStale && (
           <SecondaryText className="mt-1.5 text-warning-ink">
             <span role="status">
@@ -537,6 +540,8 @@ export function InboxPage() {
     recencyLens,
     onlyStartups,
   ].filter(Boolean).length
+  /** The daily summary is global: only the unfiltered first page may speak with it. */
+  const isDefaultView = activeFilterCount === 0 && !search && page === 1
   const advancedFilterCount = [
     companyId,
     lifecycleStatus,
@@ -557,6 +562,7 @@ export function InboxPage() {
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(advancedFilterCount > 0)
 
   const profile = useActiveProfile()
+  const summary = useInboxSummary()
   const inbox = useInbox({
     page,
     pageSize,
@@ -646,11 +652,6 @@ export function InboxPage() {
       current="/inbox"
       eyebrow="Decidir"
       title="Inbox"
-      description={
-        inbox.data
-          ? `${inbox.data.total} ${inbox.data.total === 1 ? 'vaga' : 'vagas'} para decidir.`
-          : undefined
-      }
     >
       <FilterBar
         search={
@@ -965,10 +966,10 @@ export function InboxPage() {
           (activeFilterCount === 0 && !search ? (
             profile.data === null ? (
               <FirstRunGuide />
+            ) : isDefaultView ? (
+              <EmptyState>{nothingNewSentence(summary.data)}</EmptyState>
             ) : (
-            <EmptyState>
-              Nada novo para decidir. A próxima coleta acontece no próximo ciclo.
-            </EmptyState>
+              <EmptyState>Nenhuma vaga encontrada com esses filtros.</EmptyState>
             )
           ) : (
             <EmptyState>Nenhuma vaga encontrada com esses filtros.</EmptyState>
@@ -976,8 +977,8 @@ export function InboxPage() {
         {inbox.data && inbox.data.items.length > 0 && (
           <>
             <p className="text-sm text-muted">
-              {inbox.data.total} vaga{inbox.data.total === 1 ? '' : 's'} encontrada
-              {inbox.data.total === 1 ? '' : 's'}.
+              {(isDefaultView ? worthSentence(summary.data) : null) ??
+                `${inbox.data.total} vaga${inbox.data.total === 1 ? '' : 's'} encontrada${inbox.data.total === 1 ? '' : 's'}.`}
             </p>
             <DataTable caption="Vagas" columns={tableColumns} stackBelowXl>
               {inbox.data.items.map((item) => (

@@ -5,11 +5,14 @@ import { Chip } from '../components/Chip'
 import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
 import { StatusBadge } from '../components/StatusBadge'
+import { TechnicalDetail } from '../components/TechnicalDetail'
 import { Unavailable } from '../components/Unavailable'
 import { SecondaryText, PrimaryText } from '../components/cells'
-import { EmptyState, ErrorState, LoadingState } from '../components/states'
+import { TableSkeleton } from '../components/skeletons'
+import { EmptyState, ErrorState } from '../components/states'
 import { useReadiness } from '../features/health/useReadiness'
 import { type SourceHealth } from '../features/sources/api'
+import { sourceRunSentence } from '../features/sources/labels'
 import { runStatusLabels, runStatusTones } from '../features/sources/states'
 import { useSourceHealth } from '../features/sources/useSources'
 
@@ -18,16 +21,16 @@ const content = {
     title: 'Verificando o radar',
     description: 'Conectando à API para confirmar que o ambiente está pronto.',
     tone: 'border-line-strong bg-info-surface text-info-ink',
-    label: 'Consultando /api/health/ready',
+    label: 'Consultando a API',
     nextAction: 'Aguarde a confirmação dos serviços antes de iniciar uma coleta.',
   },
   error: {
-    title: 'A API não está disponível',
+    title: 'Não conseguimos falar com a API agora',
     description:
-      'Confirme que a API está no ar e tente novamente. O painel volta a consultar a API quando você recarregar a página.',
-    tone: 'border-danger-line bg-danger-surface-strong text-danger-ink',
-    label: 'Conexão pendente',
-    nextAction: 'Confirme que a API está no ar e tente a verificação novamente.',
+      'O que já está salvo continua salvo. Tente de novo em instantes; a verificação também roda quando você recarrega a página.',
+    tone: 'border-line-strong bg-canvas text-neutral-ink',
+    label: 'Sem resposta da API',
+    nextAction: 'Tente a verificação de novo. Se continuar sem resposta, volte um pouco mais tarde.',
   },
   degraded: {
     title: 'Radar disponível com recursos limitados',
@@ -71,15 +74,17 @@ function SourceMetrics() {
 
   let body
   if (health.isPending) {
-    body = <LoadingState className="mt-3">Carregando métricas por fonte…</LoadingState>
+    body = <TableSkeleton columns={4} label="Carregando métricas por fonte…" />
   } else if (health.isError) {
     body = (
       <ErrorState className="mt-3" onRetry={() => void health.refetch()}>
-        Não foi possível carregar as métricas por fonte.
+        Não foi possível carregar as métricas por fonte agora. O estado do ambiente acima continua valendo.
       </ErrorState>
     )
   } else if (health.data.items.length === 0) {
-    body = <EmptyState className="mt-3">Nenhuma fonte cadastrada.</EmptyState>
+    body = <EmptyState className="mt-3">
+        Nenhuma fonte cadastrada ainda. Em Fontes, adicione a primeira.
+      </EmptyState>
   } else {
     body = (
       <>
@@ -117,7 +122,12 @@ function SourceMetrics() {
               <td>{itemsText(source)}</td>
               <td className="text-subtle">
                 {source.lastRunErrorCode ? (
-                  `${source.lastRunErrorCode}: ${source.lastRunError ?? ''}`
+                  <>
+                    {sourceRunSentence(source.name, source.lastRunStatus)}
+                    <TechnicalDetail>
+                      {source.lastRunErrorCode}: {source.lastRunError ?? ''}
+                    </TechnicalDetail>
+                  </>
                 ) : (
                   <Unavailable reason="sem erro" />
                 )}
@@ -141,7 +151,6 @@ function SourceMetrics() {
 
 export function StatusPage() {
   const readiness = useReadiness()
-  const environmentLabel = 'Ambiente não informado'
   const state = readiness.isPending
     ? 'loading'
     : readiness.isError
@@ -152,7 +161,6 @@ export function StatusPage() {
   return (
     <PageShell
       current="/status"
-      eyebrow={environmentLabel}
       title={view.title}
       description={readiness.data?.detail ?? view.description}
       footer="Descubra vagas, preserve evidências e decida com contexto."

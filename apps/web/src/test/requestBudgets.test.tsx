@@ -252,6 +252,7 @@ function completePageMetrics(savedTotal = 0) {
     if (path === '/api/saved-searches/summary') return new Response(JSON.stringify(savedSearches(savedTotal).map((item) => ({ ...item, new_count: 0 }))))
     if (path === '/api/saved-searches') return new Response(JSON.stringify(savedSearches(savedTotal)))
     if (/^\/api\/saved-searches\/saved-\d+\/new-count$/.test(path)) return new Response(JSON.stringify({ new_count: 0 }))
+    if (path === '/api/inbox/summary') return new Response(JSON.stringify({ worth_count: 1, collected_count: 1, since: '2039-12-31T03:00:00Z', next_collection_at: null, generated_at: '2040-01-01T00:00:00Z' }))
     if (path === '/api/inbox') return new Response(JSON.stringify({ items: [inboxFixture()], total: 1, offset: 0, limit: 25, off_filter_count: 0 }))
     if (path === '/api/opportunities/opportunity-1') return new Response(JSON.stringify(opportunityFixture()))
     if (path === '/api/matches') return new Response(JSON.stringify({ items: [] }))
@@ -477,7 +478,7 @@ describe('request metrics harness', () => {
   })
 
   it.each([
-    ['Inbox', <InboxPage />, 3],
+    ['Inbox', <InboxPage />, 4],
     ['Detail', <Routes><Route path="/opportunities/:opportunityId" element={<OpportunityDetailPage />} /></Routes>, 4],
   ])('measures a fresh complete %s cold start', async (name, page, expectedRequests) => {
     const metrics = completePageMetrics()

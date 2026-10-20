@@ -11,12 +11,14 @@ const nuggetShape: Record<'met' | 'missed' | 'unknown', string> = {
   unknown: 'border-dashed border-muted bg-transparent',
 }
 
-/** Nuggets in the order met, missed, unknown; the label is always shown beside them. */
+const count = (n: number): number => (Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0)
+
+/** Nuggets in the order met, missed, unknown; the label is always shown beside them (hidden from AT: role=img already announces it). */
 export function NuggetMeter({ met, missed = 0, unknown = 0, label }: NuggetMeterProps) {
   const nuggets = [
-    ...Array<'met'>(Math.max(0, met)).fill('met'),
-    ...Array<'missed'>(Math.max(0, missed)).fill('missed'),
-    ...Array<'unknown'>(Math.max(0, unknown)).fill('unknown'),
+    ...Array<'met'>(count(met)).fill('met'),
+    ...Array<'missed'>(count(missed)).fill('missed'),
+    ...Array<'unknown'>(count(unknown)).fill('unknown'),
   ]
   return (
     <span className="inline-flex items-center gap-2">
@@ -29,7 +31,7 @@ export function NuggetMeter({ met, missed = 0, unknown = 0, label }: NuggetMeter
           />
         ))}
       </span>
-      <span className="text-caption text-subtle">{label}</span>
+      <span aria-hidden="true" className="text-caption text-subtle">{label}</span>
     </span>
   )
 }
