@@ -55,3 +55,43 @@ Nao verificado:
 - CSS/JS de alguns templates continua minificado.
 
 Filtros e acoes sao demonstrativos. Nao ha autenticacao, API, banco, publicacao ou persistencia. Nao interpretar estas capturas como aceite da SPEC.
+
+## Marca Bateia
+
+Conferencia visual e de pacote da marca Bateia (branch `feat/marca-bateia`, base 333167c), medida em 2026-10-20.
+
+### Pacote (`npm run build` em `apps/web`)
+
+- JS inicial: 216.86 kB gzip (768.32 kB bruto), um unico chunk `index-*.js`. Baseline vigente 215.83 kB (main em 01c7dfb, ja com Clerk): +1.03 kB, +0.48%; limite de +10% = 237.4 kB. Dentro do limite.
+- O 150.07 kB citado no plano e o numero anterior ao Clerk e esta defasado; contra ele o crescimento seria +44.5%, mas a comparacao nao e valida, porque o Clerk entrou depois.
+- CSS: 42.17 kB (8.82 kB gzip).
+- Fontes `.woff2` emitidas: Schibsted Grotesk variavel 46 752 B + Young Serif 400 26 992 B = 73 744 B (73.74 kB). Apenas subconjunto latin.
+
+### Captura
+
+Os prototipos estaticos desta pasta (`capture-playwright.cjs`) nao exercitam o app real, entao eles nao foram reutilizados. Foi feito um runner novo, fora do repositorio e sem commit de capturas (scratchpad), com o Playwright de `tests/e2e/browser`:
+
+- Build de Vite do app real, com `@clerk/react` e `@clerk/localizations` trocados por stubs (usuario assinado ou nao, controlado por flag) e a API simulada por `page.route` em `/api/*` com dados sinteticos. Nao e o build de producao: Clerk e backend reais nao foram usados. O CSS gerado e identico ao de producao (mesmo hash).
+- Matriz: 11 caminhos (landing deslogada, Visao geral, Inbox, Detalhe da vaga, Pipeline, Perfil, Empresas, Detalhe da empresa, Fontes, Fila de homologacao, Status) x 5 larguras (320, 360, 768, 1280, 1440 px) x 2 temas (claro e escuro, via `localStorage` `bateia-theme`, confirmado em `data-theme`) = 110 capturas de pagina inteira.
+- Dados sinteticos cobrem titulo longo (130 caracteres) e empresa com nome longo, os seis vereditos, a regua de pepitas e o fator desconhecido.
+
+Resultados:
+
+- Rolagem horizontal (`scrollWidth > clientWidth`): 0 de 110 capturas, inclusive 320 px nos dois temas.
+- `pageerror`: 0. Requisicoes fora de 127.0.0.1: 0 (bloqueadas e registradas).
+- Erros de console: 150, todos "404 Not Found" de endpoints que o runner nao simulou (`/analysis-metrics`, `/ai-budget`, `/source-metrics`, `/source-health`, `/source-coverage`, `/health/ready`, `/profile/versions`, `/profile/suggestions`, `/companies/:id`). Por isso Status, Fontes, Detalhe da empresa e Empresas mostram estado vazio ou de erro; o conteudo real dessas telas (WP5, nao migradas) nao foi avaliado.
+- Inspecao visual de PNGs em 320 px: landing (BrandMark ao lado de "Entrar" e "Criar conta"), Inbox (regua de pepitas, chip de veredito, titulo longo) e Detalhe (titulo longo, regua, lista de fatores, tema escuro). Regua, veredito e titulo cabem sem corte; titulos longos quebram em varias linhas.
+
+### Problemas encontrados
+
+- Cabecalho da landing em 320 px: o botao "Criar conta" quebra em duas linhas. Cabe, sem rolagem, mas e uma quebra pouco elegante. Nao corrigido nesta tarefa. A inspecao foi feita em imagem reduzida; nao houve medicao do botao.
+- `AuthenticationShell` em `apps/web/src/app/App.tsx` (telas de entrar e criar conta) ainda usa o quadrado com "O" em vez do BrandMark. As telas SignIn/SignUp nao foram capturadas (Clerk stubado). Nao corrigido.
+- Nenhum defeito de layout (estouro horizontal, corte de texto) nas telas migradas.
+
+### Nao verificado
+
+- Leitor de tela, zoom real do navegador, aparelho fisico, reduced-motion manual.
+- E2E com Docker, backend real e Clerk real (login, SignIn/SignUp, UserButton).
+- Contraste visual do tema escuro alem do que `styles.test.ts` ja cobre; as capturas escuras foram so olhadas em amostra (Detalhe em 320 px).
+- Telas WP5 (Empresas, Fontes, Homologacao, Perfil, Status) com dados reais; apenas rolagem horizontal e erros de pagina foram medidos.
+- Fontes de producao em hospedagem real (cache, CSP).
