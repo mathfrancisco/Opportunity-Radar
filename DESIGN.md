@@ -176,8 +176,8 @@ caixa alta com espaçamento largo; grupo da sidebar usa `text-caption` em 600, c
   Recomendada usa `accent-surface`/`accent-ink`; Revisão necessária usa `warning-*`;
   Inelegível usa `danger-*`; Observação e Baixa aderência são neutros.
 - **Motivo principal:** na linha da Inbox, a frase é `analysisSummary` quando existe. Sem ela,
-  a linha não inventa motivo. Um motivo determinístico vindo da API é melhoria futura fora
-  deste plano.
+  a linha usa o fator atendido de maior peso vindo da API (`top_factor_code`), no formato
+  "Combina em skills da vaga.". Código sem rótulo conhecido não gera linha: nunca mostra o código.
 - **Detalhe:** caixa "Por que combina" lista cada fator com sua `explanation`, ✓ para
   atendido, − para faltante e ? para sem dado; "O que impede" (filtros eliminatórios) aparece
   antes, quando houver.

@@ -23,7 +23,9 @@ import {
   estimatedDateHint,
   inboxOrders,
 } from '../features/dashboard/api'
-import { useInbox } from '../features/dashboard/useInbox'
+import { nothingNewSentence, worthSentence } from '../features/dashboard/inboxSummary'
+import { useInbox, useInboxSummary } from '../features/dashboard/useInbox'
+import { topFactorSentence } from '../features/matching/factors'
 import { nuggetsFromScore } from '../features/matching/nuggets'
 import { verdictLabels } from '../features/matching/verdicts'
 import { useActiveProfile } from '../features/profile/useProfile'
@@ -131,8 +133,14 @@ function StartupChip({ item }: { item: InboxItem }) {
  * keep row and cell semantics when the table is laid out as `display: block`. Everything that
  * decides (verdict, duplicate, startup) stays in the row.
  */
+/** The AI summary wins; otherwise the heaviest met factor the API names. */
+function inboxReason(item: InboxItem): string | null {
+  return item.analysisSummary ?? topFactorSentence(item.topFactorCode)
+}
+
 function ItemRow({ item }: { item: InboxItem }) {
   const mark = useMarkRelevance(item.opportunityId)
+  const reason = inboxReason(item)
   return (
     <tr className="align-top" role="row">
       <td className="xl:min-w-56" role="cell">
@@ -147,9 +155,9 @@ function ItemRow({ item }: { item: InboxItem }) {
         <SecondaryText className="break-anywhere">
           {display(item.companyName)} · {display(item.location)}
         </SecondaryText>
-        {item.analysisSummary && (
+        {reason && (
           <span data-testid="inbox-reason" className="mt-1 block break-anywhere text-caption text-ink">
-            {item.analysisSummary}
+            {reason}
           </span>
         )}
         {(item.hasPendingDuplicate ||
@@ -548,6 +556,7 @@ export function InboxPage() {
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(advancedFilterCount > 0)
 
   const profile = useActiveProfile()
+  const summary = useInboxSummary()
   const inbox = useInbox({
     page,
     pageSize,
@@ -953,7 +962,7 @@ export function InboxPage() {
               <FirstRunGuide />
             ) : (
             <EmptyState>
-              Nada novo para decidir. A próxima coleta acontece no próximo ciclo.
+              {nothingNewSentence(summary.data)}
             </EmptyState>
             )
           ) : (
@@ -962,8 +971,8 @@ export function InboxPage() {
         {inbox.data && inbox.data.items.length > 0 && (
           <>
             <p className="text-sm text-muted">
-              {inbox.data.total} vaga{inbox.data.total === 1 ? '' : 's'} encontrada
-              {inbox.data.total === 1 ? '' : 's'}.
+              {worthSentence(summary.data) ??
+                `${inbox.data.total} vaga${inbox.data.total === 1 ? '' : 's'} encontrada${inbox.data.total === 1 ? '' : 's'}.`}
             </p>
             <DataTable caption="Vagas" columns={tableColumns} stackBelowXl>
               {inbox.data.items.map((item) => (

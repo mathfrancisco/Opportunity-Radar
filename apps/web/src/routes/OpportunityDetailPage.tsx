@@ -26,6 +26,7 @@ import {
   workModeLabels,
 } from '../features/opportunities/labels'
 import { estimatedDateHint } from '../features/dashboard/api'
+import { factorLabels } from '../features/matching/factors'
 import { countFactors, factorState } from '../features/matching/nuggets'
 import { verdictLabels, verdictTones } from '../features/matching/verdicts'
 import {
@@ -67,17 +68,6 @@ const filterLabels: Record<string, string> = {
   WORK_AUTHORIZATION_COMPATIBLE: 'Autorização de trabalho',
   TIMEZONE_COMPATIBLE: 'Fuso horário',
   CONTRACT_COMPATIBLE: 'Tipo de contrato',
-}
-
-const factorLabels: Record<string, string> = {
-  GEOGRAPHY_CONTRACT_FIT: 'Local e contrato',
-  TECHNOLOGY_FIT: 'Skills da vaga',
-  COMPANY_PRIORITY: 'Prioridade da empresa',
-  DOMAIN_EXPERIENCE: 'Experiência na área',
-  SENIORITY_SCOPE: 'Nível e escopo',
-  CONTRACT_COMPENSATION: 'Contrato e salário',
-  TIMEZONE: 'Fuso horário',
-  RECENCY: 'Vaga recente',
 }
 
 function label(value: string, labels: Record<string, string>) {
