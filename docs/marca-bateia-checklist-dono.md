@@ -38,8 +38,8 @@ Ordem sugerida: 4 (INPI) primeiro, depois 3, 2 e 1. Se a busca no INPI der no-go
 **Riscos**
 
 - A busca não garante registro. O INPI examina o pedido e terceiros podem se opor.
-- Pedir o registro só depois de decidir usar o nome. Pedido protocolado pode ser indeferido e a taxa não volta.
-- Usar a marca antes do registro é permitido, mas sem prioridade sobre quem pedir antes.
+- Em geral, só peça o registro depois de decidir usar o nome: pedido protocolado pode ser indeferido. Confirme com um agente de propriedade industrial se a taxa é devolvida nesse caso.
+- Em geral, usar a marca antes do registro não dá prioridade sobre quem pedir antes. Confirme com um agente de propriedade industrial.
 
 **O que muda no código depois:** nada. Se der no-go, o plano de marca volta para as finalistas (Quilate, Pinça) e os itens 2 e 3 não valem.
 
@@ -89,7 +89,7 @@ Verificado em 2026-10-20: os dois estavam livres. Confira de novo antes de compr
 - [ ] Escolher o domínio principal. Sugestão: `getbateia.com`. O outro redireciona para ele.
 - [ ] Apontar o DNS para a Cloudflare (zona do domínio). Para o `.com.br`, trocar os servidores DNS no registro.br pelos da Cloudflare.
 - [ ] Criar o registro do site: domínio personalizado no Worker (Workers & Pages, aba Domains & Routes).
-- [ ] Criar o registro da API: um subdomínio, por exemplo `api.getbateia.com`, apontando para a VM OCI (hoje `radar-api.163-176-11-135.sslip.io`). O proxy reverso da VM precisa emitir o certificado para o novo nome.
+- [ ] Criar o registro da API: um subdomínio, por exemplo `api.getbateia.com`, apontando para a VM OCI (hoje `<host-da-api>`, ver o runbook de hospedagem). O proxy reverso da VM precisa emitir o certificado para o novo nome.
 - [ ] Configurar o redirecionamento 301 do domínio secundário para o principal.
 - [ ] Ativar SPF, DKIM e DMARC só se for enviar e-mail do domínio. Não é necessário agora.
 
@@ -103,7 +103,7 @@ Verificado em 2026-10-20: os dois estavam livres. Confira de novo antes de compr
 - Sem CPF ou CNPJ válido, o registro.br não registra.
 - O titular do domínio é quem manda nele. Use a conta de quem será dono da marca.
 - Domínio comprado antes do INPI pode ficar sem uso. Custo baixo.
-- O site hoje roda em `https://opportunity-radar.math-francisco2.workers.dev` (`docs/53-roadmap-hospedagem/evidencias/2026-10-16-f53-fechamento-piloto.md:3`). O domínio novo é adicionado ao lado. Não apague o `workers.dev` até testar.
+- O site hoje roda em `https://opportunity-radar.<seu-subdominio>.workers.dev` (`docs/53-roadmap-hospedagem/evidencias/2026-10-16-f53-fechamento-piloto.md:3`). O domínio novo é adicionado ao lado. Não apague o `workers.dev` até testar.
 - Trocar de origem derruba sessões do Clerk. Testar login depois da troca.
 
 **O que muda no código e na configuração depois**
@@ -139,7 +139,7 @@ Hoje: `mathfrancisco/Opportunity-Radar`. Sugestão: `bateia` (se o handle do ite
 
 **O que fazer**
 
-- [ ] Avisar quem tem clone local (hoje só você e os worktrees).
+- [ ] Confirme quem tem clone local do repositório (além de você e dos worktrees) e avise.
 - [ ] Antes: anotar PRs abertos e secrets/variables do Actions (eles permanecem, mas confira).
 - [ ] Renomear no GitHub.
 - [ ] Atualizar o `origin` em todo clone e worktree (comandos abaixo).
@@ -147,12 +147,13 @@ Hoje: `mathfrancisco/Opportunity-Radar`. Sugestão: `bateia` (se o handle do ite
 
 **Custo:** gratuito.
 
-**Como o GitHub trata o nome antigo (conferir na documentação do GitHub, "Renaming a repository")**
+**Como o GitHub trata o nome antigo (não verificado, escrito de memória: confira em "Renaming a repository" na documentação do GitHub antes de renomear)**
 
 - A página do repositório, issues, PRs, `git clone`, `fetch` e `push` no nome antigo continuam funcionando por redirecionamento.
 - O redirecionamento morre se alguém criar um repositório novo com o nome antigo na mesma conta. Não crie.
 - GitHub Pages não redireciona. Este repositório não usa Pages (o site vai por Cloudflare Workers), então não há efeito. Confirme em Settings, Pages.
-- Workflows de outros repositórios que usam `uses: mathfrancisco/Opportunity-Radar/...` quebram no nome antigo. Este repositório não é usado como action por outro.
+- Workflows de outros repositórios que usam `uses: mathfrancisco/Opportunity-Radar/...` quebram no nome antigo.
+- [ ] Confirme que nenhum outro repositório usa este como action.
 - Badges: nenhum no README hoje. Se existir em outro lugar, atualize a URL.
 - Imagens GHCR: o nome vem de `${{ github.repository_owner }}/opportunity-radar-<imagem>` (`.github/workflows/pipeline.yml:779`), não do nome do repositório. A renomeação não muda. Depois de renomear, confira em Packages se cada pacote continua ligado ao repositório.
 - Integrações ligadas ao repositório (Cloudflare Workers Builds, Dependabot, apps instalados) seguem o ID, mas confira no painel do Cloudflare que a conexão com o Git continua verde.
@@ -166,14 +167,14 @@ git remote set-url origin https://github.com/mathfrancisco/bateia.git
 git remote -v
 ```
 
-Todos os diretórios de `git worktree list` (inclusive o de `C:/Users/mathf/.codex/worktrees/`) compartilham o mesmo `.git`. Se existir algum clone feito à parte com `git clone`, rode o `set-url` nele também. A pasta local `Opportunity-Radar` pode ficar com o nome antigo.
+Todos os diretórios de `git worktree list` (inclusive o do Codex) compartilham o mesmo `.git`. Se existir algum clone feito à parte com `git clone`, rode o `set-url` nele também. A pasta local `Opportunity-Radar` pode ficar com o nome antigo.
 
 **O que muda no código depois**
 
 Mudar:
 
 - [ ] `CLAUDE.md:3`: "This is the public `mathfrancisco/Opportunity-Radar` repository" para o nome novo.
-- [ ] `~/.claude/projects/.../memory/` e `~/.codex/AGENTS.md` do usuário que citam o repositório (fora do repositório).
+- [ ] Sua configuração local de agentes (memória e instruções globais) que cita o repositório, fora do repositório.
 - [ ] `README.md:1`, `:5`, `:170` dizem "Opportunity Radar" como nome do produto. Trocar por "Bateia" é decisão de texto, separada da renomeação do repositório. Não é obrigatório para o rename funcionar.
 - [ ] Links de docs que apontam para `github.com/mathfrancisco/Opportunity-Radar`: a busca no repositório fora de `docs/` não achou nenhum. Dentro de `docs/` os links antigos continuam por redirecionamento. Atualize só os que importam.
 
@@ -210,7 +211,7 @@ Custo: nenhum. Código: nenhuma mudança.
 | --- | --- | --- | --- |
 | 1 | Busca INPI (classes 9, 35, 42) | busca gratuita; pedido R$ 440 a R$ 880 por classe | não |
 | 2 | Handle `bateia-app` | gratuito | só se transferir o repositório |
-| 3 | Domínios | `.com.br` R$ 40/ano; `.com` não conferido | não em arquivos; variáveis na VM, Cloudflare e Clerk |
+| 3 | Domínios | `.com.br` R$ 40/ano; `.com` não conferido | nenhum arquivo obrigatório; variáveis na VM, Cloudflare e Clerk |
 | 4 | Renomear repositório | gratuito | `CLAUDE.md:3` e remotes locais |
 | 5 | Nome no Clerk | gratuito | não |
 
