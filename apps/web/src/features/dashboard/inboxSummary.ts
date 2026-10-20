@@ -17,10 +17,14 @@ export function nothingNewSentence(summary: InboxSummary | undefined): string {
   return base
 }
 
-/** The header sentence; null when the summary has nothing to say (the list count takes over). */
+/** The header sentence for the default view; null while there is no summary (the list count takes over). */
 export function worthSentence(summary: InboxSummary | undefined): string | null {
-  if (!summary || summary.worthCount < 1) return null
+  if (!summary) return null
   const { worthCount: worth, collectedCount: collected } = summary
+  if (worth < 1 && collected < 1) return 'Nada novo desde ontem.'
+  if (worth < 1) {
+    return `Nenhuma vaga nova vale seu tempo, ${collected === 1 ? 'da 1 coletada' : `das ${collected} coletadas`} desde ontem.`
+  }
   const subject = worth === 1 ? '1 vaga vale' : `${worth} vagas valem`
   const total = collected === 1 ? '1 coletada' : `${collected} coletadas`
   return `${subject} seu tempo, de ${total} desde ontem.`

@@ -128,16 +128,16 @@ function StartupChip({ item }: { item: InboxItem }) {
   )
 }
 
-/**
- * One row of the comparison table; below `md` the same row is a card. The explicit ARIA roles
- * keep row and cell semantics when the table is laid out as `display: block`. Everything that
- * decides (verdict, duplicate, startup) stays in the row.
- */
 /** The AI summary wins; otherwise the heaviest met factor the API names. */
 function inboxReason(item: InboxItem): string | null {
   return item.analysisSummary ?? topFactorSentence(item.topFactorCode)
 }
 
+/**
+ * One row of the comparison table; below `md` the same row is a card. The explicit ARIA roles
+ * keep row and cell semantics when the table is laid out as `display: block`. Everything that
+ * decides (verdict, duplicate, startup) stays in the row.
+ */
 function ItemRow({ item }: { item: InboxItem }) {
   const mark = useMarkRelevance(item.opportunityId)
   const reason = inboxReason(item)
@@ -536,6 +536,8 @@ export function InboxPage() {
     recencyLens,
     onlyStartups,
   ].filter(Boolean).length
+  /** The daily summary is global: only the unfiltered first page may speak with it. */
+  const isDefaultView = activeFilterCount === 0 && !search && page === 1
   const advancedFilterCount = [
     companyId,
     lifecycleStatus,
@@ -971,7 +973,7 @@ export function InboxPage() {
         {inbox.data && inbox.data.items.length > 0 && (
           <>
             <p className="text-sm text-muted">
-              {worthSentence(summary.data) ??
+              {(isDefaultView ? worthSentence(summary.data) : null) ??
                 `${inbox.data.total} vaga${inbox.data.total === 1 ? '' : 's'} encontrada${inbox.data.total === 1 ? '' : 's'}.`}
             </p>
             <DataTable caption="Vagas" columns={tableColumns} stackBelowXl>
