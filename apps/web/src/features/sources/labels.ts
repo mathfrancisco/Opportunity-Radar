@@ -35,5 +35,5 @@ export const sourceTypeLabels: Record<string, string> = {
 }
 
 export function sourceTypeLabel(sourceType: string): string {
-  return sourceTypeLabels[sourceType] ?? 'Tipo não reconhecido'
+  return Object.hasOwn(sourceTypeLabels, sourceType) ? sourceTypeLabels[sourceType] : 'Tipo não reconhecido'
 }

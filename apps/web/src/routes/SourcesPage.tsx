@@ -178,7 +178,7 @@ function SourceRows({
           )}
           {run.isError && (
             <div className="mt-2 text-caption text-neutral-ink">
-              <p>Não foi possível iniciar a coleta em {source.name}.</p>
+              <p>Não foi possível confirmar a coleta em {source.name}. Confira o histórico.</p>
               <TechnicalDetail>{run.error.message}</TechnicalDetail>
             </div>
           )}

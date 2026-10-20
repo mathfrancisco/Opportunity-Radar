@@ -210,7 +210,7 @@ describe('SourcesPage — texto sem códigos', () => {
     await flush()
 
     const visible = visibleTextOutsideDetails(container)
-    expect(visible).toContain('Não foi possível iniciar a coleta em Fonte greenhouse.')
+    expect(visible).toContain('Não foi possível confirmar a coleta em Fonte greenhouse. Confira o histórico.')
     expect(container.querySelector('.text-danger-ink')).toBeNull()
   })
 })
