@@ -49,4 +49,14 @@ describe('ThemeToggle', () => {
     const container = render(<ThemeToggle />)
     expect(container.querySelectorAll('button')[1].getAttribute('aria-pressed')).toBe('true')
   })
+
+  it('mantém duas instâncias sincronizadas', () => {
+    const first = render(<ThemeToggle />)
+    const second = render(<ThemeToggle />)
+    act(() => first.querySelectorAll('button')[2].click())
+    const pressed = (c: HTMLElement) =>
+      [...c.querySelectorAll('button')].map((b) => b.getAttribute('aria-pressed'))
+    expect(pressed(first)).toEqual(['false', 'false', 'true'])
+    expect(pressed(second)).toEqual(['false', 'false', 'true'])
+  })
 })
