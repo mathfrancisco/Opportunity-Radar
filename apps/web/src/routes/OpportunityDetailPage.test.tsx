@@ -649,6 +649,8 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
 
   it('não mostra código técnico, versão nem identificador no texto principal da vaga', async () => {
     const container = await renderDetail({
+      factors: [known('0.9'), unknown()],
+      eligibility: [failedFilter()],
       extras: {
         compensations: [
           {
@@ -706,6 +708,8 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     expect(visible).not.toMatch(/\b[a-z]+(?:_[a-z]+)+\b/)
     expect(visible).not.toMatch(/\b[a-z]+-v\d+\b/)
     expect(visible).not.toMatch(/\b[0-9a-f]{8}-[0-9a-f]{4}-/)
+    expect(visible).not.toMatch(/FATOR_\d|LOCALIDADE/)
+    expect(visible).toContain('Estado não reconhecido')
     expect(visible).not.toContain('MONTH')
     expect(visible).not.toContain('GROSS')
     expect(visible).not.toContain('raw item')
@@ -768,22 +772,27 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     expect(container.textContent).not.toContain('NOT_APPLICABLE')
   })
 
-  it('rotula fatores conhecidos em português e mantém o código dos desconhecidos', async () => {
+  it('rotula fatores conhecidos em português e esconde o código dos desconhecidos', async () => {
     const container = await renderDetail({
       factors: [{ ...known('0.9'), factor_code: 'TECHNOLOGY_FIT' }, known('0.8')],
     })
     const text = container.textContent ?? ''
     expect(text).toContain('Skills da vaga')
     expect(text).not.toContain('TECHNOLOGY_FIT')
-    expect(text).toMatch(/FATOR_\d+/)
+    const outside = visibleTextOutsideDetails(container)
+    expect(outside).not.toMatch(/FATOR_\d+/)
+    expect(outside).toContain('Estado não reconhecido')
+    expect(Array.from(container.querySelectorAll('details')).map((d) => d.textContent).join(' ')).toMatch(/FATOR_\d+/)
   })
 
-  it('rotula filtros de elegibilidade conhecidos e mantém o código dos desconhecidos', async () => {
+  it('rotula filtros de elegibilidade conhecidos e esconde o código dos desconhecidos', async () => {
     const country = { ...failedFilter(), code: 'COUNTRY_ALLOWED' }
     const container = await renderDetail({ eligibility: [country, failedFilter()] })
     const text = container.textContent ?? ''
     expect(text).toContain('País aceito')
     expect(text).not.toContain('COUNTRY_ALLOWED')
+    expect(visibleTextOutsideDetails(container)).not.toContain('LOCALIDADE')
+    expect(visibleTextOutsideDetails(container)).toContain('Estado não reconhecido')
     expect(text).toContain('LOCALIDADE')
   })
 

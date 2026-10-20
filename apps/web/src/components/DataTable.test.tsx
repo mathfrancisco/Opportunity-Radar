@@ -31,9 +31,25 @@ describe('DataTable', () => {
 
     expect(frame.className).toContain('scroll-x-shadow')
     expect(frame.getAttribute('role')).toBe('region')
-    expect(frame.getAttribute('aria-label')).toBe('Fontes')
+    expect(frame.getAttribute('aria-labelledby')).toBe(container.querySelector('caption')?.id)
+    expect(frame.hasAttribute('aria-label')).toBe(false)
     expect(frame.tabIndex).toBe(0)
     expect(container.querySelector('table')?.className).toContain('min-w-[34rem]')
+  })
+
+  it('não vira região focável quando a tabela é estreita', () => {
+    const container = render(
+      <DataTable caption="Execuções" columns={['Fonte', 'Total']}>
+        <tr>
+          <td>Greenhouse</td>
+          <td>3</td>
+        </tr>
+      </DataTable>,
+    )
+    const frame = container.firstElementChild as HTMLElement
+
+    expect(frame.hasAttribute('role')).toBe(false)
+    expect(frame.hasAttribute('tabindex')).toBe(false)
   })
 
   it('associa cada cabeçalho à sua coluna', () => {

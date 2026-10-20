@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef } from 'react'
+import { type ReactNode, useEffect, useId, useRef } from 'react'
 
 interface DataTableProps {
   /** Column headings, in order. With `selectable`, the selection column comes before them. */
@@ -93,6 +93,8 @@ export function DataTable({
     : ''
   // Three or more columns squeezed into a phone clip words; keep them wide and let the frame scroll.
   const wide = columns.length >= 3
+  const scrolls = wide && !stackBelowXl && Boolean(caption)
+  const captionId = `${useId()}-caption`
   const frame = stackBelowXl
     ? 'xl:overflow-x-auto rounded-panel xl:border xl:border-line xl:bg-surface'
     : 'scroll-x-shadow min-w-0 max-w-full overflow-x-auto rounded-control border border-line'
@@ -109,13 +111,14 @@ export function DataTable({
     <div
       className={`relative ${frame} ${className}`.trim()}
       id={id}
-      // A scrollable region has to be reachable by keyboard, or its last columns are not.
-      role={stackBelowXl || !caption ? undefined : 'region'}
-      aria-label={stackBelowXl || !caption ? undefined : caption}
-      tabIndex={stackBelowXl || !caption ? undefined : 0}
+      // A scrolling region has to be reachable by keyboard, or its last columns are not.
+      // The caption names it; aria-labelledby avoids announcing the same text twice.
+      role={scrolls ? 'region' : undefined}
+      aria-labelledby={scrolls ? captionId : undefined}
+      tabIndex={scrolls ? 0 : undefined}
     >
       <table className={tableClass} role={stackBelowXl ? 'table' : undefined}>
-        {caption && <caption className="sr-only">{caption}</caption>}
+        {caption && <caption className="sr-only" id={captionId}>{caption}</caption>}
         <thead
           className={`bg-panel text-caption text-muted${stackBelowXl ? ' max-xl:sr-only' : ''}`}
           role={stackBelowXl ? 'rowgroup' : undefined}
