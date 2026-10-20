@@ -191,6 +191,8 @@ def _inbox_statements(session: Session, **params: Any) -> list[str]:
             "seniority": None,
             "salary_min": None,
             "salary_max": None,
+            "salary_currency": None,
+            "salary_period": None,
             "source_definition_id": None,
             "offset": 0,
             "recency_window_days": 30,

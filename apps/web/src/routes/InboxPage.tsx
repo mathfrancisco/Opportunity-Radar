@@ -29,6 +29,14 @@ import { roleFamilies } from '../features/dashboard/roleFamilies'
 import { opportunityLabel, seniorityLabels, workModeLabels } from '../features/opportunities/labels'
 import type { SavedSearch, SavedSearchFilters } from '../features/saved-searches/api'
 import {
+  defaultSalaryCurrency,
+  defaultSalaryPeriod,
+  filtersFromParams,
+  salaryCurrencies,
+  salaryPeriods,
+  salaryUnit,
+} from './inboxFilters'
+import {
   useCreateSavedSearch,
   useDeleteSavedSearch,
   useOpenSavedSearch,
@@ -155,7 +163,10 @@ function ItemRow({ item }: { item: InboxItem }) {
         <SecondaryText className="break-anywhere">
           {display(item.companyName)} · {display(item.location)}
         </SecondaryText>
-        {(item.hasPendingDuplicate || item.startupStrength || item.siblingCount > 0) && (
+        {(item.hasPendingDuplicate ||
+          item.startupStrength ||
+          item.siblingCount > 0 ||
+          item.salaryMatch === 'unknown') && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {item.siblingCount > 0 && (
               <span data-testid="sibling-chip">
@@ -163,6 +174,9 @@ function ItemRow({ item }: { item: InboxItem }) {
                   +{item.siblingCount} {item.siblingCount === 1 ? 'local' : 'locais'}
                 </Chip>
               </span>
+            )}
+            {item.salaryMatch === 'unknown' && (
+              <Chip tone="border-line bg-surface text-ink">remuneração não informada</Chip>
             )}
             {item.hasPendingDuplicate && <Chip tone={duplicateTone}>Possível duplicata</Chip>}
             <StartupChip item={item} />
@@ -245,16 +259,6 @@ function ItemRow({ item }: { item: InboxItem }) {
 }
 
 const tableColumns = ['Vaga', 'Score e decisão', 'Sinais', 'Publicada', 'Ações']
-
-function filtersFromParams(params: URLSearchParams): SavedSearchFilters {
-  const filters: SavedSearchFilters = {}
-  for (const key of new Set(params.keys())) {
-    if (key === 'page' || key === 'size') continue
-    const values = params.getAll(key)
-    filters[key] = values.length > 1 ? values : values[0]
-  }
-  return filters
-}
 
 function paramsFromFilters(filters: SavedSearchFilters): URLSearchParams {
   const next = new URLSearchParams()
@@ -497,6 +501,10 @@ export function InboxPage() {
   const seniority = seniorityValues[0] ?? ''
   const salaryMin = params.get('salary_min') ?? ''
   const salaryMax = params.get('salary_max') ?? ''
+  const hasSalary = Boolean(salaryMin || salaryMax)
+  const salaryHelp =
+    'Compara só vagas na mesma moeda e período. Vagas sem remuneração informada continuam na lista.'
+  const { currency: salaryCurrency, period: salaryPeriod } = salaryUnit(params)
   const sources = params.getAll('source').filter(Boolean)
   const source = sources[0] ?? ''
   const allowedCountry = params.get('allowed_country') ?? ''
@@ -567,6 +575,8 @@ export function InboxPage() {
     seniorities: seniorityValues.length > 0 ? seniorityValues : undefined,
     salaryMin: salaryMin || undefined,
     salaryMax: salaryMax || undefined,
+    salaryCurrency: hasSalary ? salaryCurrency : undefined,
+    salaryPeriod: hasSalary ? salaryPeriod : undefined,
     sourceDefinitionIds: sources.length > 0 ? sources : undefined,
     allowedCountry: allowedCountry || undefined,
     onlyRecent,
@@ -762,6 +772,7 @@ export function InboxPage() {
 
           <Field label="Remuneração mínima">
             <input
+              aria-describedby="inbox-salary-help"
               className={controlClassName}
               min={0}
               onChange={(event) => update({ salary_min: event.target.value })}
@@ -772,6 +783,7 @@ export function InboxPage() {
 
           <Field label="Remuneração máxima">
             <input
+              aria-describedby="inbox-salary-help"
               className={controlClassName}
               min={0}
               onChange={(event) => update({ salary_max: event.target.value })}
@@ -779,6 +791,34 @@ export function InboxPage() {
               value={salaryMax}
             />
           </Field>
+
+          <FilterPill
+            description={
+              hasSalary ? salaryHelp : 'Preencha a remuneração mínima ou máxima para escolher a moeda.'
+            }
+            disabled={!hasSalary}
+            id="inbox-salary-currency"
+            label="Moeda"
+            onChange={(value) => update({ salary_currency: value || null })}
+            options={salaryCurrencies.map((value) => ({ value, label: value }))}
+            value={salaryCurrency}
+            defaultValue={defaultSalaryCurrency}
+          />
+          <FilterPill
+            description={
+              hasSalary ? salaryHelp : 'Preencha a remuneração mínima ou máxima para escolher o período.'
+            }
+            disabled={!hasSalary}
+            id="inbox-salary-period"
+            label="Período"
+            onChange={(value) => update({ salary_period: value || null })}
+            options={salaryPeriods}
+            value={salaryPeriod}
+            defaultValue={defaultSalaryPeriod}
+          />
+          <p className="text-sm text-muted sm:col-span-full" id="inbox-salary-help">
+            {salaryHelp}
+          </p>
 
           <Field label="Fonte (id)">
             <input

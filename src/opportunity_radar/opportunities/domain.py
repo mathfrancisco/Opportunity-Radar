@@ -489,15 +489,37 @@ def _compensation_from_range(value: Any, evidence_source: str) -> Compensation |
 def _period_from_text(value: Any) -> CompensationPeriod | None:
     if not isinstance(value, str):
         return None
-    text = value.casefold()
+    # "dia a dia" is an idiom for daily routine, not a daily rate.
+    text = re.sub(r"\bdia\s+a\s+dia\b", " ", value.casefold())
     matches = {
         period
         for period, patterns in {
-            CompensationPeriod.YEAR: (r"\byear", r"\bannual", r"\bannum"),
-            CompensationPeriod.MONTH: (r"\bmonth", r"\bmonthly"),
-            CompensationPeriod.WEEK: (r"\bweek", r"\bweekly"),
-            CompensationPeriod.DAY: (r"\bday", r"\bdaily"),
-            CompensationPeriod.HOUR: (r"\bhour", r"\bhourly"),
+            CompensationPeriod.YEAR: (
+                r"\byear",
+                r"\bannual",
+                r"\bannum",
+                r"\bano\b",
+                r"\banua(?:l|is)",
+            ),
+            CompensationPeriod.MONTH: (
+                r"\bmonth",
+                r"\bmonthly",
+                r"\bm[eê]s\b",
+                r"\bmensa(?:l|is)",
+            ),
+            CompensationPeriod.WEEK: (
+                r"\bweek",
+                r"\bweekly",
+                r"\bsemana",
+                r"\bsemanal",
+            ),
+            CompensationPeriod.DAY: (
+                r"\bday",
+                r"\bdaily",
+                r"\bdia\b",
+                r"\bdi[aá]ria",
+            ),
+            CompensationPeriod.HOUR: (r"\bhour", r"\bhourly", r"\bhoras?\b"),
         }.items()
         if any(re.search(pattern, text) for pattern in patterns)
     }
@@ -517,13 +539,21 @@ def _gross_net_from_text(value: Any) -> GrossNet | None:
 
 _TEXT_COMPENSATION = re.compile(
     r"(?P<currency>\b(?:USD|BRL|EUR|GBP|CAD|AUD)\b)?\s*"
-    r"(?P<currency_symbol>[$€£])?\s*"
-    r"(?P<first>\d[\d,.]*\s*[kK]?)"
+    r"(?P<currency_symbol>R\$|[$€£])?\s*"
+    r"(?P<first>\d[\d,.]*(?:\s*(?:[kK]|mil\b))?)"
     r"(?:\s*(?:-|–|to|a|até)\s*"
-    r"(?:(?:USD|BRL|EUR|GBP|CAD|AUD)\s*)?[$€£]?\s*"
-    r"(?P<second>\d[\d,.]*\s*[kK]?))?"
-    r"(?:\s*(?P<currency_after>\b(?:USD|BRL|EUR|GBP|CAD|AUD)\b))?"
-    r"(?:\s*(?:per|/|por)\s*(?P<period>year|yearly|annual|month|monthly|week|weekly|day|daily|hour|hourly))?",
+    r"(?:(?:USD|BRL|EUR|GBP|CAD|AUD)\s*)?(?:R\$|[$€£])?\s*"
+    r"(?P<second>\d[\d,.]*(?:\s*(?:[kK]|mil\b))?))?"
+    r"(?:\s*(?P<currency_after>\b(?:USD|BRL|EUR|GBP|CAD|AUD|reais)\b))?"
+    r"(?:\s*(?:per|/|por|ao)\s*(?P<period>year|yearly|annual|month|monthly|week"
+    r"|weekly|day|daily|hour|hourly|m[eê]s|mensal|ano|anual|semana|semanal|dia"
+    r"|di[aá]ria|horas?|mensais|anuais)\b)?",
+    re.IGNORECASE,
+)
+
+
+_BENEFIT_WORD = re.compile(
+    r"\b(?:vale|vr|va|aux[ií]lio|b[oô]nus|plr|refei[çc][ãa]o|alimenta[çc][ãa]o)\b",
     re.IGNORECASE,
 )
 
@@ -534,11 +564,21 @@ def _text_compensation(
     text = _clean_text(value)
     if text is None:
         return None
+    # Drop the idiom first so the short period tail cannot cut it in half.
+    text = re.sub(r"\bdia\s+a\s+dia\b", " ", text, flags=re.I)
     for match in _TEXT_COMPENSATION.finditer(text):
         first = _money_amount(match.group("first"))
         second = _money_amount(match.group("second"))
         if first is None:
             continue
+        if (
+            second is not None
+            and not _has_multiplier(match.group("first"))
+            and _has_multiplier(match.group("second"))
+            and first * 1000 <= second
+        ):
+            # "5 a 7 mil": the scale written once applies to both ends.
+            first *= 1000
         # A bare number in a description is not compensation evidence.
         nearby = text[max(0, match.start() - 48) : match.end() + 48]
         currency_symbol = match.group("currency_symbol")
@@ -547,22 +587,35 @@ def _text_compensation(
             or match.group("currency_after")
             or currency_symbol
             or re.search(
-                r"\b(?:salary|compensation|pay|remunera[çc][ãa]o)\b", nearby, re.I
+                r"\b(?:salary|compensation|pay|sal[áa]rio|remunera[çc][ãa]o)\b", nearby, re.I
             )
         ):
+            continue
+        # A benefit amount ("VR R$ 40/dia") is not pay. Look only at the short
+        # prefix before the match, not the tail: the tail of the salary match
+        # in "Salário: R$ 5.000 por mês + VR R$ 40/dia" holds the benefit.
+        if _BENEFIT_WORD.search(_period_prefix(text, match.start())):
             continue
         currency = (
             match.group("currency")
             or match.group("currency_after")
-            or {"€": "EUR", "£": "GBP"}.get(currency_symbol or "")
+            or {"€": "EUR", "£": "GBP", "R$": "BRL"}.get(currency_symbol or "")
             or ""
         ).upper()
+        if currency == "REAIS":
+            currency = "BRL"
         try:
             return Compensation(
                 minimum=first,
                 maximum=second,
                 currency=currency or None,
-                period=_period_from_text(nearby),
+                # Matched span plus a short tail only: the wide window picks
+                # up "4-day week" or "weekly 1:1" from unrelated prose.
+                period=_period_from_text(match.group("period"))
+                or _period_from_text(
+                    _period_prefix(text, match.start())
+                    + text[match.start() : match.end() + 16]
+                ),
                 gross_net=_gross_net_from_text(nearby),
                 evidence=match.group(0).strip(),
                 evidence_source=evidence_source,
@@ -572,15 +625,24 @@ def _text_compensation(
     return None
 
 
+def _period_prefix(text: str, start: int) -> str:
+    """Up to 24 characters before a match, cut after the last sentence end."""
+    prefix = text[max(0, start - 24) : start]
+    cut = max(prefix.rfind(mark) for mark in ".;!?\n")
+    return prefix[cut + 1 :]
+
+
 def _money_amount(value: str | None) -> Decimal | None:
     if value is None:
         return None
     normalized = value.replace(" ", "")
-    multiplier = (
-        Decimal("1000") if normalized.casefold().endswith("k") else Decimal("1")
-    )
-    amount = _decimal(normalized.rstrip("kK"))
+    multiplier = Decimal("1000") if _has_multiplier(normalized) else Decimal("1")
+    amount = _decimal(re.sub(r"(?:k|mil)$", "", normalized, flags=re.I))
     return amount * multiplier if amount is not None else None
+
+
+def _has_multiplier(value: str | None) -> bool:
+    return value is not None and bool(re.search(r"(?:k|mil)$", value.strip(), re.I))
 
 
 def extract_compensation(

@@ -65,6 +65,8 @@ export interface InboxItem {
   /** Card F48-10: other postings of the same company/title/source folded into this row
    * (the same job in other cities). Nothing is merged; the detail lists them. */
   siblingCount: number
+  /** `unknown`: kept in a salary-filtered list because its pay unit is not known. */
+  salaryMatch: 'matched' | 'unknown' | null
 }
 
 export interface InboxPage {
@@ -96,6 +98,10 @@ export interface InboxParams {
   seniorities?: string[]
   salaryMin?: string
   salaryMax?: string
+  /** ISO 4217 code; sent only together with a salary bound (the API requires the pair). */
+  salaryCurrency?: string
+  /** `CompensationPeriod` value; sent only together with a salary bound. */
+  salaryPeriod?: string
   sourceDefinitionIds?: string[]
   /** ISO country code from the `regions-v1` table. Unknown-country opportunities are
    * never implicitly excluded — the API keeps them visible (card F17-06). */
@@ -361,6 +367,10 @@ function parseInboxItem(value: unknown): InboxItem | null {
       typeof value.sibling_count === 'number' && value.sibling_count > 0
         ? Math.floor(value.sibling_count)
         : 0,
+    salaryMatch:
+      value.salary_match === 'matched' || value.salary_match === 'unknown'
+        ? value.salary_match
+        : null,
   }
 }
 
@@ -394,6 +404,8 @@ export async function getInbox({
   seniorities,
   salaryMin,
   salaryMax,
+  salaryCurrency,
+  salaryPeriod,
   sourceDefinitionIds,
   allowedCountry,
   onlyRecent = true,
@@ -419,6 +431,10 @@ export async function getInbox({
   seniorities?.forEach((value) => params.append('seniority', value))
   if (salaryMin) params.set('salary_min', salaryMin)
   if (salaryMax) params.set('salary_max', salaryMax)
+  if ((salaryMin || salaryMax) && salaryCurrency && salaryPeriod) {
+    params.set('salary_currency', salaryCurrency)
+    params.set('salary_period', salaryPeriod)
+  }
   sourceDefinitionIds?.forEach((value) => params.append('source_definition_id', value))
   if (allowedCountry) params.set('allowed_country', allowedCountry)
   if (!onlyRecent) params.set('only_recent', 'false')
