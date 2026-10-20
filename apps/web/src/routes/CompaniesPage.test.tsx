@@ -16,6 +16,22 @@ async function flush(times = 4) {
   }
 }
 
+const pendingFetches: Array<() => void> = []
+
+/** A fetch that stays open until `settlePending`, so no request outlives its test. */
+function holdFetch(): Promise<Response> {
+  return new Promise<Response>((resolve) => {
+    pendingFetches.push(() => resolve(new Response('{}', { status: 500 })))
+  })
+}
+
+async function settlePending() {
+  await act(async () => {
+    pendingFetches.splice(0).forEach((release) => release())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
+
 function renderPage(element: ReactElement): HTMLElement {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -303,12 +319,13 @@ describe('CompaniesPage', () => {
   })
 
   it('mostra o esqueleto enquanto as empresas carregam', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
+    vi.stubGlobal('fetch', vi.fn(() => holdFetch()))
 
     const container = renderPage(<CompaniesPage />)
     await flush(1)
 
     expect(container.querySelector('[aria-busy="true"]')?.textContent).toContain('Carregando empresas…')
+    await settlePending()
   })
 
   it('diz o que fazer quando o catálogo está vazio', async () => {
@@ -343,7 +360,7 @@ describe('CompaniesPage', () => {
     await flush()
 
     const text = visibleTextOutsideDetails(container)
-    expect(text).toContain('Em revisão')
+    expect(text).toContain('Estado não reconhecido')
     expect(text).not.toMatch(/[A-Z]{3,}_[A-Z_]+/)
   })
 })

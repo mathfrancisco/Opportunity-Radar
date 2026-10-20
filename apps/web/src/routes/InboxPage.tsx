@@ -16,7 +16,7 @@ import { PageShell } from '../components/PageShell'
 import { CardListSkeleton, TableSkeleton } from '../components/skeletons'
 import { EmptyState, ErrorState } from '../components/states'
 import { SearchInput } from '../components/SearchInput'
-import { StatusBadge } from '../components/StatusBadge'
+import { VerdictBadge } from '../components/VerdictBadge'
 import {
   type InboxItem,
   type InboxOrder,
@@ -25,7 +25,7 @@ import {
 } from '../features/dashboard/api'
 import { useInbox } from '../features/dashboard/useInbox'
 import { nuggetsFromScore } from '../features/matching/nuggets'
-import { verdictLabels, verdictTones } from '../features/matching/verdicts'
+import { verdictLabels } from '../features/matching/verdicts'
 import { useActiveProfile } from '../features/profile/useProfile'
 import { useMarkRelevance } from '../features/opportunities/useOpportunity'
 import { type ApplicationStage, stageLabels } from '../features/pipeline/api'
@@ -85,17 +85,6 @@ function formatDate(value: string | null) {
   if (!value) return '—'
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleDateString('pt-BR')
-}
-
-function VerdictBadge({ verdict }: { verdict: string | null }) {
-  return (
-    <StatusBadge
-      absent="Não avaliada"
-      labels={verdictLabels}
-      tones={verdictTones}
-      value={verdict}
-    />
-  )
 }
 
 const appliedOptions = [
@@ -199,7 +188,7 @@ function ItemRow({ item }: { item: InboxItem }) {
         <PrimaryText className="font-medium">
           {opportunityLabel(item.workMode, workModeLabels)} · {opportunityLabel(item.seniority, seniorityLabels)}
         </PrimaryText>
-        <SecondaryText>Status {lifecycleLabels[item.lifecycleStatus] ?? 'Em revisão'}</SecondaryText>
+        <SecondaryText>Status {lifecycleLabels[item.lifecycleStatus] ?? 'Estado não reconhecido'}</SecondaryText>
         {item.isStale && (
           <SecondaryText className="mt-1.5 text-warning-ink">
             <span role="status">

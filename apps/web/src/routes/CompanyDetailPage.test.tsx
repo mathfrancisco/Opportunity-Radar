@@ -16,6 +16,22 @@ async function flush(times = 4) {
   }
 }
 
+const pendingFetches: Array<() => void> = []
+
+/** A fetch that stays open until `settlePending`, so no request outlives its test. */
+function holdFetch(): Promise<Response> {
+  return new Promise<Response>((resolve) => {
+    pendingFetches.push(() => resolve(new Response('{}', { status: 500 })))
+  })
+}
+
+async function settlePending() {
+  await act(async () => {
+    pendingFetches.splice(0).forEach((release) => release())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
+
 function renderWithProviders(element: ReactElement): HTMLElement {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -157,7 +173,7 @@ describe('CompanyDetailPage', () => {
       vi.fn(async (input: unknown) => {
         const url = String(input)
         if (url.includes('/inbox?')) {
-          if (options.inbox === 'pending') return new Promise<Response>(() => {})
+          if (options.inbox === 'pending') return holdFetch()
           if (options.inbox === 'fail') return new Response('{}', { status: 500 })
           const items = options.inbox === 'empty' ? [] : [
             { opportunity_id: 'op-1', title: 'Engenheira de dados', work_mode: 'REMOTE', verdict: 'HIGH_PRIORITY', score: '88.0' },
@@ -167,7 +183,7 @@ describe('CompanyDetailPage', () => {
           return new Response(JSON.stringify({ items, total: items.length, offset: 0, limit: 5 }))
         }
         if (url.endsWith('/companies/company-1')) {
-          if (options.company === 'pending') return new Promise<Response>(() => {})
+          if (options.company === 'pending') return holdFetch()
           if (options.company === 'fail') return new Response('{}', { status: 500 })
           return new Response(JSON.stringify({
             id: 'company-1',
@@ -210,6 +226,7 @@ describe('CompanyDetailPage', () => {
     await flush(2)
 
     expect(container.querySelector('[aria-busy="true"]')?.textContent).toContain('Carregando empresa…')
+    await settlePending()
   })
 
   it('no erro da empresa, diz o que continua valendo', async () => {
@@ -234,6 +251,7 @@ describe('CompanyDetailPage', () => {
 
     expect(container.textContent).toContain('Carregando vagas…')
     expect(container.querySelectorAll('[aria-busy="true"]')).toHaveLength(1)
+    await settlePending()
   })
 
   it('parcial: se as vagas falham, a empresa continua na tela com uma nota neutra', async () => {
@@ -255,13 +273,14 @@ describe('CompanyDetailPage', () => {
     expect(rows[0].textContent).toContain('Alta prioridade')
     expect(rows[0].textContent).toContain('Remoto')
     expect(rows[0].querySelector('span.rounded-chip')?.className).toContain('bg-nugget-surface')
-    expect(rows[1].textContent).toContain('Em revisão')
+    expect(rows[1].textContent).toContain('Estado não reconhecido')
     expect(rows[2].textContent).toContain('Não avaliada')
 
     const text = visibleTextOutsideDetails(container)
     expect(text).not.toMatch(/[A-Z]{3,}_[A-Z_]+/)
     expect(container.querySelector('details')?.textContent).toContain('Detalhe técnico')
-    expect(container.textContent).toContain('NOT_CONFIRMED')
+    const details = [...container.querySelectorAll('details')].map((node) => node.textContent ?? '')
+    expect(details.some((text) => text.includes('NOT_CONFIRMED'))).toBe(true)
   })
 })
 

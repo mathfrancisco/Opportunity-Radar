@@ -1,7 +1,7 @@
 /**
  * Company vocabulary in pt-BR, named once for the list and the detail.
  *
- * An unmapped code reads "Em revisão" and never the code itself (DESIGN.md §8): the raw
+ * An unmapped code reads "Estado não reconhecido" and never the code itself (DESIGN.md §8): the raw
  * value belongs in a "Detalhe técnico", not in the main text.
  */
 
@@ -31,5 +31,5 @@ export const verificationLabels: Record<string, string> = {
 }
 
 export function companyLabel(value: string, labels: Record<string, string>): string {
-  return labels[value] ?? 'Em revisão'
+  return labels[value] ?? 'Estado não reconhecido'
 }

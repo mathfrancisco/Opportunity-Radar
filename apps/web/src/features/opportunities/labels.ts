@@ -19,5 +19,5 @@ export const seniorityLabels: Record<string, string> = {
 }
 
 export function opportunityLabel(value: string, labels: Record<string, string>): string {
-  return labels[value] ?? 'Em revisão'
+  return labels[value] ?? 'Estado não reconhecido'
 }

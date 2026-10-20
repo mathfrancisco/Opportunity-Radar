@@ -7,7 +7,7 @@ import { CompanyForm } from '../components/CompanyForm'
 import { CompanySourceForm } from '../components/CompanySourceForm'
 import { DataTable } from '../components/DataTable'
 import { PageShell } from '../components/PageShell'
-import { StatusBadge } from '../components/StatusBadge'
+import { VerdictBadge } from '../components/VerdictBadge'
 import { PanelSkeleton, TableSkeleton } from '../components/skeletons'
 import { EmptyState, ErrorState } from '../components/states'
 import {
@@ -23,7 +23,6 @@ import {
 } from '../features/companies/useCompanies'
 import { companyLabel, companyStatusLabels, priorityLabels, verificationLabels } from '../features/companies/labels'
 import { opportunityLabel, workModeLabels } from '../features/opportunities/labels'
-import { verdictLabels, verdictTones } from '../features/matching/verdicts'
 import { ConflictError } from '../lib/api'
 import { useInbox } from '../features/dashboard/useInbox'
 
@@ -37,18 +36,6 @@ const fieldLabels: Record<string, string> = {
   source_type: 'ATS',
   endpoint: 'endereço',
   external_key: 'chave',
-}
-
-function VerdictBadge({ verdict }: { verdict: string | null }) {
-  // A verdict this screen has no word for reads "Em revisão", never the code.
-  return (
-    <StatusBadge
-      absent="Não avaliada"
-      labels={verdict === null || verdict in verdictLabels ? verdictLabels : { [verdict]: 'Em revisão' }}
-      tones={verdictTones}
-      value={verdict}
-    />
-  )
 }
 
 const sensitiveConfigKey = /secret|token|password|credential|authorization|api.?key|email/i
@@ -189,7 +176,7 @@ function Sources({
           <details className="mt-2">
             <summary className="cursor-pointer text-xs font-medium text-subtle">Detalhe técnico</summary>
             <p className="mt-1 text-xs text-muted">
-              Método: {source.verificationMethod ?? 'não informado'}
+              Status: {source.status} · método: {source.verificationMethod ?? 'não informado'}
               {source.externalKey ? ` · chave ${source.externalKey}` : ''}
             </p>
           </details>
