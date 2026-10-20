@@ -19,7 +19,12 @@ import {
   useLatestAssessment,
 } from '../features/matching/useAssessment'
 import { type DuplicateCandidate, type OpportunityDetail } from '../features/opportunities/api'
-import { opportunityLabel, seniorityLabels, workModeLabels } from '../features/opportunities/labels'
+import {
+  contractLabels,
+  opportunityLabel,
+  seniorityLabels,
+  workModeLabels,
+} from '../features/opportunities/labels'
 import { estimatedDateHint } from '../features/dashboard/api'
 import { countFactors, factorState } from '../features/matching/nuggets'
 import { verdictLabels, verdictTones } from '../features/matching/verdicts'
@@ -39,15 +44,6 @@ const resultLabels: Record<string, string> = {
   TRUE: 'Atende',
   FALSE: 'Não atende',
   UNKNOWN: 'Desconhecido',
-}
-
-const contractLabels: Record<string, string> = {
-  FULL_TIME: 'Tempo integral',
-  PART_TIME: 'Meio período',
-  CONTRACT: 'Contrato',
-  INTERNSHIP: 'Estágio',
-  TEMPORARY: 'Temporário',
-  UNKNOWN: 'Não informado',
 }
 
 const lifecycleLabels: Record<string, string> = {

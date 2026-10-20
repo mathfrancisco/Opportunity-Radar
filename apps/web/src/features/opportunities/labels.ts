@@ -5,6 +5,15 @@ export const workModeLabels: Record<string, string> = {
   UNKNOWN: 'Não informado',
 }
 
+export const contractLabels: Record<string, string> = {
+  FULL_TIME: 'Tempo integral',
+  PART_TIME: 'Meio período',
+  CONTRACT: 'Contrato',
+  INTERNSHIP: 'Estágio',
+  TEMPORARY: 'Temporário',
+  UNKNOWN: 'Não informado',
+}
+
 export const seniorityLabels: Record<string, string> = {
   INTERN: 'Estágio',
   JUNIOR: 'Júnior',

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { type ControlsDraft, draftFrom, missingForEnable } from '../features/sources/gate'
 import { type SourceHealth } from '../features/sources/api'
 import {
@@ -15,15 +16,17 @@ import { ConfigValue } from './ConfigValue'
 import { PrimaryText, SecondaryText } from './cells'
 import { DataTable, RowSelect } from './DataTable'
 import { controlClassName } from './Field'
-import { CardListSkeleton } from './skeletons'
-import { ConflictNotice, EmptyState, ErrorState, LoadingState } from './states'
+import { CardListSkeleton, PanelSkeleton } from './skeletons'
+import { ConflictNotice, EmptyState, ErrorState } from './states'
 import { StatusBadge } from './StatusBadge'
+import { TechnicalDetail } from './TechnicalDetail'
+import { evidenceLabels } from '../features/sources/labels'
 
 type QueueState = 'no_probe' | 'probe_failed' | 'confirmed' | 'ready'
 
 const stateLabels: Record<QueueState, string> = {
-  no_probe: 'Sem sonda',
-  probe_failed: 'Sonda falhou',
+  no_probe: 'Sem teste',
+  probe_failed: 'Teste falhou',
   confirmed: 'Evidência confirmada',
   ready: 'Pronta para habilitar',
 }
@@ -33,6 +36,15 @@ const stateTones: Record<QueueState, string> = {
   probe_failed: 'border-danger-line bg-danger-surface-strong text-danger-ink',
   confirmed: 'border-success-line bg-success-surface text-success-ink',
   ready: 'border-accent bg-accent-surface text-accent-ink',
+}
+
+/** One sentence on a finished batch: how many passed, and that the rest are still proposals. */
+function batchSummary(results: { ok: boolean }[]): string {
+  const passed = results.filter((result) => result.ok).length
+  const failed = results.length - passed
+  if (failed === 0) return `${passed} de ${results.length} fontes testadas.`
+  const rest = failed === 1 ? '1 não passou e segue como proposta.' : `${failed} não passaram e seguem como propostas.`
+  return `${passed} de ${results.length} fontes testadas. ${rest}`
 }
 
 /** The queue's own read of a proposal's state — never persisted, only ever displayed. */
@@ -63,11 +75,11 @@ function SequentialCard({
   const update = useUpdateSourceControls(sourceId)
   const [draft, setDraft] = useState<ControlsDraft | null>(null)
 
-  if (source.isPending) return <LoadingState className="mt-4">Carregando proposta…</LoadingState>
+  if (source.isPending) return <PanelSkeleton label="Carregando proposta…" />
   if (source.isError || !source.data) {
     return (
       <ErrorState className="mt-4" onRetry={() => void source.refetch()}>
-        Não foi possível carregar esta proposta.
+        Não foi possível carregar esta proposta. As outras continuam na fila.
       </ErrorState>
     )
   }
@@ -96,24 +108,27 @@ function SequentialCard({
         {record.name} <span className="font-normal text-muted">({record.sourceType})</span>
       </h3>
       <p className="mt-1 text-sm text-subtle">
-        evidência {record.evidenceStatus} · versão {record.version}
+        Evidência {evidenceLabels[record.evidenceStatus] ?? 'não reconhecida'}
       </p>
-      {Object.keys(record.configuration).length > 0 && (
-        <dl className="mt-3 grid gap-1 text-sm">
-          {Object.entries(record.configuration).map(([key, value]) => (
-            <div className="flex gap-2" key={key}>
-              <dt className="text-muted">{key}</dt>
-              <dd className="font-medium">
-                <ConfigValue value={value} />
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
+      <TechnicalDetail>
+        Evidência {record.evidenceStatus} · versão {record.version}
+        {Object.keys(record.configuration).length > 0 && (
+          <dl className="mt-2 grid gap-1">
+            {Object.entries(record.configuration).map(([key, value]) => (
+              <div className="flex gap-2" key={key}>
+                <dt className="text-muted">{key}</dt>
+                <dd className="font-medium">
+                  <ConfigValue value={value} />
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </TechnicalDetail>
 
       <ol className="mt-4 flex flex-col gap-3">
         <li>
-          <p className="text-sm font-medium">1. Testar o collector</p>
+          <p className="text-sm font-medium">1. Testar a fonte</p>
           <Button
             className="mt-2"
             disabled={probe.isPending}
@@ -121,7 +136,7 @@ function SequentialCard({
             size="sm"
             variant="secondary"
           >
-            {probe.isPending ? 'Testando…' : 'Testar o collector'}
+            {probe.isPending ? 'Testando…' : 'Testar a fonte'}
           </Button>
           {probe.data && (
             <p
@@ -129,9 +144,14 @@ function SequentialCard({
               role="status"
             >
               {probe.data.probe.status === 'PASSED'
-                ? `Confirmado (${probe.data.probe.itemsSeen} item).`
-                : `Falhou: ${probe.data.probe.errorCode ?? 'erro'} — ${probe.data.probe.detail ?? 'sem detalhe'}.`}
+                ? `Fonte testada. Leu ${probe.data.probe.itemsSeen} ${probe.data.probe.itemsSeen === 1 ? 'item' : 'itens'}.`
+                : 'O teste não passou. A fonte não mudou.'}
             </p>
+          )}
+          {probe.data && probe.data.probe.status !== 'PASSED' && (
+            <TechnicalDetail>
+              {probe.data.probe.errorCode ?? 'erro'} — {probe.data.probe.detail ?? 'sem detalhe'}
+            </TechnicalDetail>
           )}
         </li>
         <li>
@@ -174,7 +194,12 @@ function SequentialCard({
             A fonte mudou enquanto você a homologava. Recarregue e confira antes de habilitar.
           </ConflictNotice>
         ) : (
-          <ErrorState className="mt-4">{update.error.message}</ErrorState>
+          <>
+            <ErrorState className="mt-4">
+              Não foi possível habilitar a fonte. Ela continua como estava.
+            </ErrorState>
+            <TechnicalDetail>{update.error.message}</TechnicalDetail>
+          </>
         ))}
 
       <div className="mt-5 flex flex-wrap gap-3 max-md:[&_button]:flex-1">
@@ -251,12 +276,20 @@ export function HomologationQueue() {
   if (health.isError) {
     return (
       <ErrorState onRetry={() => void health.refetch()}>
-        Não foi possível carregar a fila de homologação.
+        Não foi possível carregar a fila. As fontes já habilitadas continuam coletando.
       </ErrorState>
     )
   }
   if (items.length === 0) {
-    return <EmptyState>Nenhuma proposta aguardando homologação.</EmptyState>
+    return (
+      <EmptyState>
+        Nenhuma proposta aguardando. Fontes novas aparecem aqui para teste e habilitação.{' '}
+        <Link className="underline decoration-2 underline-offset-4" to="/sources">
+          Ver as fontes
+        </Link>
+        .
+      </EmptyState>
+    )
   }
 
   if (mode === 'sequential') {
@@ -269,8 +302,8 @@ export function HomologationQueue() {
             <div>
               <p className="text-sm font-semibold">Revisão uma a uma</p>
               <p className="mt-1 text-sm text-subtle">
-                Teste o collector, registre a revisão dos termos e habilite somente quando os
-                requisitos estiverem concluídos.
+                Teste a fonte, registre a revisão dos termos e habilite só quando tudo estiver
+                feito.
               </p>
             </div>
             <p className="text-sm font-medium text-ink">
@@ -290,7 +323,8 @@ export function HomologationQueue() {
           </div>
         ) : (
           <EmptyState className="mt-3">
-            Fila percorrida. {enabledCount} habilitada{enabledCount === 1 ? '' : 's'} nesta sessão.
+            Fila percorrida. {enabledCount}{' '}
+            {enabledCount === 1 ? 'fonte habilitada' : 'fontes habilitadas'} nesta sessão.
           </EmptyState>
         )}
         <Button className="mt-4" onClick={() => setMode('list')} variant="secondary">
@@ -307,7 +341,7 @@ export function HomologationQueue() {
           <div>
             <h2 className="text-sm font-semibold">Propostas aguardando homologação</h2>
             <p className="mt-1 text-sm text-subtle">
-              Selecione fontes para testar em lote ou revise uma fonte por vez antes de habilitar.
+              Selecione fontes para testar em lote ou revise uma por vez antes de habilitar.
             </p>
           </div>
           <p aria-live="polite" className="text-sm font-medium text-ink">
@@ -318,11 +352,11 @@ export function HomologationQueue() {
 
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         <div className="rounded-control border border-line bg-surface p-3">
-          <dt className="text-muted">Sem sonda</dt>
+          <dt className="text-muted">Sem teste</dt>
           <dd className="mt-1 text-lg font-semibold">{counters.withoutProbe}</dd>
         </div>
         <div className="rounded-control border border-line bg-surface p-3">
-          <dt className="text-muted">Sonda falhou</dt>
+          <dt className="text-muted">Teste falhou</dt>
           <dd className="mt-1 text-lg font-semibold">{counters.probeFailed}</dd>
         </div>
         <div className="rounded-control border border-line bg-surface p-3">
@@ -338,7 +372,7 @@ export function HomologationQueue() {
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <section aria-labelledby="batch-mode-title" className="rounded-control border border-line bg-surface p-4">
           <h3 className="text-sm font-semibold" id="batch-mode-title">Teste em lote</h3>
-          <p className="mt-1 text-sm text-subtle">Confirma se os collectors respondem; termos e habilitação continuam individuais.</p>
+          <p className="mt-1 text-sm text-subtle">Confirma se as fontes respondem. Termos e habilitação continuam um a um.</p>
           <Button
             className="mt-3 w-full sm:w-auto"
             disabled={selected.size === 0 || batch.isPending}
@@ -347,10 +381,15 @@ export function HomologationQueue() {
           >
             {batch.isPending ? 'Testando…' : `Testar selecionadas (${selected.size})`}
           </Button>
+          {batch.data && (
+            <p className="mt-2 text-sm text-subtle" role="status">
+              {batchSummary(batch.data)}
+            </p>
+          )}
         </section>
         <section aria-labelledby="sequential-mode-title" className="rounded-control border border-line bg-surface p-4">
           <h3 className="text-sm font-semibold" id="sequential-mode-title">Revisão uma a uma</h3>
-          <p className="mt-1 text-sm text-subtle">Conduz cada fonte pela sonda, revisão de termos e habilitação.</p>
+          <p className="mt-1 text-sm text-subtle">Conduz cada fonte pelo teste, pela revisão de termos e pela habilitação.</p>
           <Button
             className="mt-3 w-full sm:w-auto"
             onClick={() => {
@@ -358,7 +397,7 @@ export function HomologationQueue() {
               setMode('sequential')
             }}
           >
-            Modo sequencial
+            Revisar uma a uma
           </Button>
         </section>
       </div>
@@ -398,13 +437,16 @@ export function HomologationQueue() {
                     role="status"
                   >
                     {result.ok
-                      ? 'Sonda confirmada.'
-                      : `Falhou: ${result.errorCode ?? 'erro'}${
+                      ? 'Fonte testada.'
+                      : `O teste não passou.${
                           result.retryAfterSeconds !== null
-                            ? ` — aguardar ${result.retryAfterSeconds}s`
+                            ? ` Aguarde ${result.retryAfterSeconds}s antes de tentar de novo.`
                             : ''
                         }`}
                   </p>
+                )}
+                {result && !result.ok && (
+                  <TechnicalDetail>{result.errorCode ?? 'erro'}</TechnicalDetail>
                 )}
               </td>
               <td>
