@@ -22,9 +22,46 @@ function luminance(hex: string): number {
   return 0.2126 * channel(0) + 0.7152 * channel(1) + 0.0722 * channel(2)
 }
 
-function contrast(fg: string, bg: string): number {
-  const [a, b] = [luminance(token(fg)), luminance(token(bg))].sort((x, y) => y - x)
+function contrastOf(fgHex: string, bgHex: string): number {
+  const [a, b] = [luminance(fgHex), luminance(bgHex)].sort((x, y) => y - x)
   return (a + 0.05) / (b + 0.05)
+}
+
+function contrast(fg: string, bg: string): number {
+  return contrastOf(token(fg), token(bg))
+}
+
+function parseColors(block: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const m of block.matchAll(/--color-([a-z-]+):\s*([^;]+);/g)) out[m[1]] = m[2].trim()
+  return out
+}
+
+function dataThemeDarkText(): string {
+  const m = /:root\[data-theme="dark"\]\s*{([^}]*)}/.exec(css)
+  if (!m) throw new Error('bloco :root[data-theme="dark"] não encontrado em styles.css')
+  return m[1]
+}
+
+function mediaDarkText(): string {
+  const m =
+    /@media \(prefers-color-scheme: dark\)\s*{\s*:root:not\(\[data-theme="light"\]\)\s*{([^}]*)}/.exec(css)
+  if (!m) throw new Error('bloco @media (prefers-color-scheme: dark) não encontrado em styles.css')
+  return m[1]
+}
+
+function dataThemeDarkBlock(): Record<string, string> {
+  return parseColors(dataThemeDarkText())
+}
+
+function mediaDarkBlock(): Record<string, string> {
+  return parseColors(mediaDarkText())
+}
+
+function darkToken(name: string): string {
+  const value = dataThemeDarkBlock()[name]
+  if (!value) throw new Error(`token --color-${name} não encontrado no bloco escuro`)
+  return value
 }
 
 const TEXT_PAIRS: Array<[string, string]> = [
@@ -63,6 +100,9 @@ const TEXT_PAIRS: Array<[string, string]> = [
   ['surface', 'accent'],
   ['surface', 'accent-hover'],
   ['surface', 'brand'],
+  ['nugget-ink', 'nugget-surface'],
+  ['nugget-ink', 'surface'],
+  ['nugget-ink', 'canvas'],
 ]
 
 const CONTROL_PAIRS: Array<[string, string]> = [
@@ -76,6 +116,8 @@ const CONTROL_PAIRS: Array<[string, string]> = [
   ['accent', 'sidebar'],
   ['accent', 'accent-surface'],
   ['accent-hover', 'surface'],
+  ['nugget', 'surface'],
+  ['nugget', 'canvas'],
 ]
 
 describe('contraste dos tokens de styles.css', () => {
@@ -106,6 +148,9 @@ describe('contraste dos tokens de styles.css', () => {
       'subtle',
       'brand',
       'sidebar',
+      'nugget',
+      'nugget-ink',
+      'nugget-surface',
     ]) {
       expect(() => token(name)).not.toThrow()
     }
@@ -117,8 +162,32 @@ describe('contraste dos tokens de styles.css', () => {
       '--text-body-sm:',
       '--text-caption:',
       '--shadow-overlay:',
+      '--font-display:',
     ]) {
       expect(css).toContain(t)
     }
+  })
+
+  it.each(TEXT_PAIRS)('tema escuro: texto %s sobre %s >= 4.5', (fg, bg) => {
+    expect(contrastOf(darkToken(fg), darkToken(bg))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it.each(CONTROL_PAIRS)('tema escuro: controle %s sobre %s >= 3', (fg, bg) => {
+    expect(contrastOf(darkToken(fg), darkToken(bg))).toBeGreaterThanOrEqual(3)
+  })
+
+  it('o bloco do sistema e o bloco data-theme escuro têm os mesmos valores', () => {
+    expect(mediaDarkBlock()).toEqual(dataThemeDarkBlock())
+    expect(mediaDarkText()).toContain('color-scheme: dark')
+    expect(dataThemeDarkText()).toContain('color-scheme: dark')
+  })
+
+  it('usa a marca Bateia', () => {
+    expect(token('accent').slice(1).toUpperCase()).toBe('1E5B4B')
+    expect(token('nugget').slice(1).toUpperCase()).toBe('A87A12')
+    expect(darkToken('accent').slice(1).toUpperCase()).toBe('79C2A6')
+    expect(css).toContain('"Schibsted Grotesk Variable"')
+    expect(css).toContain('"Young Serif"')
+    expect(css).not.toContain('Inter Variable')
   })
 })
