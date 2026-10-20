@@ -18,6 +18,10 @@ interface FilterPillProps {
   /** Decorative icon on the left; a funnel when omitted. */
   icon?: ReactNode
   className?: string
+  /** Locks the select; the visible value stays whatever `value` selects. */
+  disabled?: boolean
+  /** Accessible description of the pill (why it is locked, for instance). */
+  description?: string
 }
 
 /**
@@ -37,7 +41,10 @@ export function FilterPill({
   onChange,
   icon,
   className = '',
+  disabled = false,
+  description,
 }: FilterPillProps) {
+  const descriptionId = description ? `${id}-description` : undefined
   const active = value !== defaultValue
   return (
     <div
@@ -54,6 +61,8 @@ export function FilterPill({
       </label>
       <select
         className="h-full min-w-0 cursor-pointer appearance-none bg-transparent pr-8 pl-1 font-medium text-ink outline-none"
+        aria-describedby={descriptionId}
+        disabled={disabled}
         id={id}
         onChange={(event) => onChange(event.target.value)}
         value={value}
@@ -64,6 +73,11 @@ export function FilterPill({
           </option>
         ))}
       </select>
+      {description ? (
+        <span className="sr-only" id={descriptionId}>
+          {description}
+        </span>
+      ) : null}
       <span aria-hidden="true" className="pointer-events-none absolute right-2.5 text-muted">
         <ChevronDownIcon />
       </span>

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-SYNONYMS_VERSION = "synonyms-v1"
+SYNONYMS_VERSION = "synonyms-v2"
 
 _GROUPS: tuple[frozenset[str], ...] = (
     frozenset(
@@ -33,8 +33,19 @@ _TERM_TO_SYNONYMS: dict[str, frozenset[str]] = {
     term.lower(): group for group in _GROUPS for term in group
 }
 
+#: Concepts that name the posting itself ("vaga engenheiro" = "engineer job"). They
+#: carry no meaning next to another term, so the per-concept path drops them there.
+_FILLER_TERMS = frozenset({"vaga", "job"})
+
 #: A quoted phrase, or a single non-space token.
 _TOKEN_RE = re.compile(r'"[^"]*"|\S+')
+
+#: Punctuation glued to a token ("dados,") that the text parser ignores anyway.
+_EDGE_PUNCTUATION = ",.;:!?()[]{}"
+
+
+def _synonyms_of(token: str) -> frozenset[str] | None:
+    return _TERM_TO_SYNONYMS.get(token.strip(_EDGE_PUNCTUATION).lower())
 
 
 def synonym_variants(query: str) -> list[str]:
@@ -52,11 +63,11 @@ def synonym_variants(query: str) -> list[str]:
     for index, token in enumerate(tokens):
         if token.startswith('"') or token.startswith("-"):
             continue
-        synonyms = _TERM_TO_SYNONYMS.get(token.lower())
+        synonyms = _synonyms_of(token)
         if not synonyms:
             continue
         for synonym in sorted(synonyms):
-            if synonym == token.lower():
+            if synonym == token.strip(_EDGE_PUNCTUATION).lower():
                 continue
             candidate_tokens = list(tokens)
             candidate_tokens[index] = synonym
@@ -67,4 +78,49 @@ def synonym_variants(query: str) -> list[str]:
     return variants
 
 
-__all__ = ["SYNONYMS_VERSION", "synonym_variants"]
+#: Above this many tokens the per-concept form is skipped (keeps the tsquery bounded).
+MAX_SYNONYM_GROUPS = 8
+
+
+def synonym_groups(query: str) -> tuple[list[list[str]], str] | None:
+    """Split a plain query into synonym concepts plus the remaining text.
+
+    Returns `(groups, rest)`: one group per token that has synonyms (the token plus its
+    synonyms, ANDed by the caller), and the other tokens joined in their original order
+    (`rest`, parsed by the caller in each dictionary so each drops its own stopwords).
+    This lets `desenvolvedor dados` match "Data Developer". Filler concepts (`vaga`,
+    `job`) are dropped when any other token remains, so `groups` may be empty.
+
+    Returns `None` when no token has synonyms, or the query has quotes, a negated token
+    (`-word`), an `OR`, or more than `MAX_SYNONYM_GROUPS` tokens; the caller then keeps
+    the `synonym_variants` path so `websearch_to_tsquery` semantics are preserved.
+    """
+    if '"' in query:
+        return None
+    tokens = query.split()
+    if not tokens or len(tokens) > MAX_SYNONYM_GROUPS:
+        return None
+    if any(token.startswith("-") or token.lower() == "or" for token in tokens):
+        return None
+    groups: list[list[str]] = []
+    rest: list[str] = []
+    has_filler = False
+    for token in tokens:
+        word = token.strip(_EDGE_PUNCTUATION)
+        synonyms = _synonyms_of(token)
+        if synonyms:
+            if word.lower() in _FILLER_TERMS:
+                has_filler = True
+            groups.append([word, *sorted(s for s in synonyms if s != word.lower())])
+        else:
+            rest.append(token)
+    if not groups:
+        return None
+    if has_filler:
+        kept = [group for group in groups if group[0].lower() not in _FILLER_TERMS]
+        if kept or rest:
+            groups = kept
+    return groups, " ".join(rest)
+
+
+__all__ = ["SYNONYMS_VERSION", "synonym_groups", "synonym_variants"]

@@ -1,0 +1,377 @@
+"""Invalid saved-search filters are a 422 on create and on count, never a 500."""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from uuid import uuid4
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import delete, select
+from sqlalchemy.orm import Session
+
+from opportunity_radar.acquisition.models import (
+    RawItemModel,
+    SourceDefinitionModel,
+    SourceRunModel,
+)
+from opportunity_radar.companies.models import Company, CompanyStartupEvidence
+from opportunity_radar.dashboard.models import SavedSearchModel
+from opportunity_radar.opportunities.models import (
+    OpportunityCompensationModel,
+    OpportunityModel,
+    SourceOccurrenceModel,
+)
+from opportunity_radar.platform.config import Settings
+from opportunity_radar.platform.database import create_database_engine
+from opportunity_radar.presentation.http.app import create_development_app
+from opportunity_radar.presentation.http.auth import RequestIdentity, authenticated_identity
+from opportunity_radar.presentation.http.dependencies import get_session
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        os.environ.get("RUN_DATABASE_INTEGRATION") != "1",
+        reason="database integration is enabled only in the isolated CI database",
+    ),
+]
+
+
+@pytest.fixture
+def owner_client() -> Iterator[tuple[TestClient, Session, str]]:
+    owner = f"test-f4-{uuid4().hex}"
+    with Session(create_database_engine(os.environ["DATABASE_URL"])) as session:
+        app = create_development_app(Settings(database_url=os.environ["DATABASE_URL"]))
+        app.dependency_overrides[get_session] = lambda: session
+        app.dependency_overrides[authenticated_identity] = lambda: RequestIdentity(
+            sub=owner, is_owner=False
+        )
+        with TestClient(app, raise_server_exceptions=False) as client:
+            yield client, session, owner
+
+
+def test_post_saved_search_with_invalid_filter_returns_422(
+    owner_client: tuple[TestClient, Session, str],
+) -> None:
+    client, _, _ = owner_client
+
+    response = client.post("/saved-searches", json={"name": "x", "filters": {"order": 42}})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "invalid_filters"
+    assert client.get("/saved-searches").json() == []
+
+
+def test_post_saved_search_with_invalid_lens_returns_422(
+    owner_client: tuple[TestClient, Session, str],
+) -> None:
+    client, _, _ = owner_client
+
+    response = client.post("/saved-searches", json={"name": "x", "filters": {"lens": "recentes"}})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "invalid_filters"
+
+
+def test_new_count_of_legacy_invalid_saved_search_returns_422_not_500(
+    owner_client: tuple[TestClient, Session, str],
+) -> None:
+    client, session, owner = owner_client
+    legacy = SavedSearchModel(owner_sub=owner, name="legacy", filters={"order": 42})
+    session.add(legacy)
+    session.commit()
+
+    response = client.get(f"/saved-searches/{legacy.id}/new-count")
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "invalid_filters"
+    summary = client.get("/saved-searches/summary").json()
+    assert next(i for i in summary if i["id"] == str(legacy.id))["count_error"] == "invalid_filters"
+
+
+@pytest.mark.parametrize(
+    "filters",
+    [
+        {"salary_min": "5000"},
+        {"salary_max": "5000"},
+        {"salary_min": "5000", "salary_currency": "BRL"},
+        {"salary_min": "5000", "salary_period": "MONTH"},
+        {"salary_min": "5000", "salary_currency": "reais", "salary_period": "MONTH"},
+        {"salary_min": "5000", "salary_currency": "BRL", "salary_period": "UNKNOWN"},
+    ],
+)
+def test_post_saved_search_with_salary_bound_and_incomplete_unit_returns_422(
+    owner_client: tuple[TestClient, Session, str], filters: dict[str, str]
+) -> None:
+    client, _, _ = owner_client
+
+    response = client.post("/saved-searches", json={"name": "x", "filters": filters})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "invalid_filters"
+    assert client.get("/saved-searches").json() == []
+
+
+def test_post_saved_search_with_complete_salary_unit_is_created(
+    owner_client: tuple[TestClient, Session, str],
+) -> None:
+    client, _, _ = owner_client
+    filters = {"salary_min": "5000", "salary_currency": "BRL", "salary_period": "MONTH"}
+
+    response = client.post("/saved-searches", json={"name": "x", "filters": filters})
+
+    assert response.status_code == 201
+    assert response.json()["filters"] == filters
+
+
+def test_summary_exposes_count_note_only_for_a_legacy_salary_search(
+    owner_client: tuple[TestClient, Session, str],
+) -> None:
+    client, session, owner = owner_client
+    legacy = SavedSearchModel(
+        owner_sub=owner, name="legacy", filters={"salary_min": "5000", "all_areas": True}
+    )
+    complete = SavedSearchModel(
+        owner_sub=owner,
+        name="complete",
+        filters={
+            "salary_min": "5000",
+            "salary_currency": "BRL",
+            "salary_period": "MONTH",
+            "all_areas": True,
+        },
+    )
+    session.add_all([legacy, complete])
+    session.commit()
+
+    summary = {item["id"]: item for item in client.get("/saved-searches/summary").json()}
+
+    assert summary[str(legacy.id)]["count_note"] == "salary_unit_defaulted"
+    assert summary[str(legacy.id)]["count_error"] is None
+    assert isinstance(summary[str(legacy.id)]["new_count"], int)
+    assert summary[str(complete.id)]["count_note"] is None
+
+
+def _http_params(saved_params: dict[str, str]) -> dict[str, str]:
+    """What the Inbox page sends for the same URL params (`InboxPage.tsx` useInbox call)."""
+    params = {key: value for key, value in saved_params.items() if key != "lens"}
+    if saved_params.get("lens") == "novas":
+        params["recency_window_days"] = "14"
+    if saved_params.get("lens") == "abertas":
+        params["open_at_source"] = "true"
+    return params
+
+
+@pytest.mark.parametrize(
+    ("params", "expected_total"),
+    [
+        # Each total differs from the default (3) so dropping a filter changes the count.
+        ({"all_areas": "true"}, 3),
+        ({"all_areas": "true", "only_startups": "true"}, 1),
+        ({"all_areas": "true", "only_recent": "false"}, 5),
+        ({"all_areas": "true", "lens": "novas"}, 2),
+        ({"all_areas": "true", "lens": "abertas"}, 4),
+        ({"all_areas": "true", "lens": "abertas", "only_startups": "true"}, 2),
+        # startup_recent pays BRL/MONTH 6000-8000, plain_recent USD/YEAR 90000-120000;
+        # the other three have no compensation (unknown, kept).
+        (
+            {
+                "all_areas": "true",
+                "salary_min": "5000",
+                "salary_currency": "BRL",
+                "salary_period": "MONTH",
+            },
+            2,
+        ),
+        (
+            {
+                "all_areas": "true",
+                "salary_max": "500",
+                "salary_currency": "BRL",
+                "salary_period": "MONTH",
+            },
+            1,
+        ),
+        (
+            {
+                "all_areas": "true",
+                "salary_min": "100000",
+                "salary_currency": "USD",
+                "salary_period": "YEAR",
+            },
+            2,
+        ),
+    ],
+)
+def test_saved_search_new_count_equals_inbox_total_for_same_url_params(
+    owner_client: tuple[TestClient, Session, str], params: dict[str, str], expected_total: int
+) -> None:
+    client, session, owner = owner_client
+    marker = uuid4().hex[:12]
+    now = datetime.now(UTC)
+    opened_before_seed = now - timedelta(hours=1)
+    company = Company(
+        canonical_name=f"Startup {marker}", normalized_name=f"startup {marker}"
+    )
+    session.add(company)
+    session.flush()
+    session.add(
+        CompanyStartupEvidence(
+            company_id=company.id, signal="other", strength="weak", source_text="test"
+        )
+    )
+
+    def opportunity(label: str, *, age_days: int, startup: bool) -> OpportunityModel:
+        return OpportunityModel(
+            id=uuid4(),
+            fingerprint=uuid4().hex + uuid4().hex,
+            fingerprint_version="v1",
+            canonical_title=f"Role {label} {marker}",
+            normalized_title=f"role {label} {marker}",
+            canonical_company_id=company.id if startup else None,
+            work_mode="UNKNOWN",
+            seniority="UNKNOWN",
+            contract_type="UNKNOWN",
+            lifecycle_status="ACTIVE",
+            published_at=now - timedelta(days=age_days),
+            version=1,
+        )
+
+    startup_recent = opportunity("a", age_days=1, startup=True)
+    startup_old = opportunity("b", age_days=60, startup=True)
+    plain_recent = opportunity("c", age_days=1, startup=False)
+    plain_old_open = opportunity("d", age_days=90, startup=False)
+    # 20 days old: inside the default 30-day window, outside the 14-day "novas" lens.
+    plain_mid = opportunity("e", age_days=20, startup=False)
+    opportunities = [startup_recent, startup_old, plain_recent, plain_old_open, plain_mid]
+    source = SourceDefinitionModel(
+        id=uuid4(),
+        source_type="manual",
+        name=f"parity {marker}",
+        enabled=True,
+        configuration={},
+        rate_limit_policy={},
+    )
+    session.add(source)
+    session.commit()
+    run = SourceRunModel(
+        id=uuid4(),
+        source_definition_id=source.id,
+        execution_trigger="SCHEDULED",
+        status="SUCCEEDED",
+        started_at=now - timedelta(minutes=30),
+        complete=True,
+    )
+    session.add(run)
+    session.add_all(opportunities)
+    session.flush()
+    raw_ids = []
+    # plain_recent is the only row not open at source.
+    for open_item in (startup_recent, startup_old, plain_old_open, plain_mid):
+        raw = RawItemModel(
+            id=uuid4(),
+            source_run_id=run.id,
+            source_definition_id=source.id,
+            external_id=f"ext-{uuid4().hex[:8]}",
+            identity_key=f"external:{uuid4().hex[:8]}",
+            payload_hash=uuid4().hex + uuid4().hex,
+            item_metadata={},
+        )
+        session.add(raw)
+        session.flush()
+        raw_ids.append(raw.id)
+        session.add(
+            SourceOccurrenceModel(
+                id=uuid4(),
+                opportunity_id=open_item.id,
+                raw_item_id=raw.id,
+                source_definition_id=source.id,
+                external_id=raw.external_id,
+                first_seen_at=run.started_at,
+                last_seen_at=run.started_at,
+                last_seen_run_id=run.id,
+            )
+        )
+    # Compensation needs an occurrence: startup_recent reuses its own; plain_recent gets
+    # one that no run saw, so it stays "not open at source" for the abertas lens.
+    startup_occurrence = session.scalar(
+        select(SourceOccurrenceModel).where(
+            SourceOccurrenceModel.opportunity_id == startup_recent.id
+        )
+    )
+    assert startup_occurrence is not None
+    plain_raw = RawItemModel(
+        id=uuid4(),
+        source_run_id=run.id,
+        source_definition_id=source.id,
+        external_id=f"ext-{uuid4().hex[:8]}",
+        identity_key=f"external:{uuid4().hex[:8]}",
+        payload_hash=uuid4().hex + uuid4().hex,
+        item_metadata={},
+    )
+    session.add(plain_raw)
+    session.flush()
+    raw_ids.append(plain_raw.id)
+    plain_occurrence = SourceOccurrenceModel(
+        id=uuid4(),
+        opportunity_id=plain_recent.id,
+        raw_item_id=plain_raw.id,
+        source_definition_id=source.id,
+        external_id=plain_raw.external_id,
+        first_seen_at=run.started_at,
+        last_seen_at=run.started_at,
+    )
+    session.add(plain_occurrence)
+    session.flush()
+    for target, occurrence, amounts, currency, period in (
+        (startup_recent, startup_occurrence, ("6000", "8000"), "BRL", "MONTH"),
+        (plain_recent, plain_occurrence, ("90000", "120000"), "USD", "YEAR"),
+    ):
+        session.add(
+            OpportunityCompensationModel(
+                opportunity_id=target.id,
+                amount_min=Decimal(amounts[0]),
+                amount_max=Decimal(amounts[1]),
+                currency=currency,
+                period=period,
+                normalizer_version="test",
+                source_occurrence_id=occurrence.id,
+                raw_item_id=occurrence.raw_item_id,
+            )
+        )
+    saved = SavedSearchModel(
+        owner_sub=owner,
+        name="parity",
+        term=marker,
+        filters=params,
+        last_opened_at=opened_before_seed,
+    )
+    session.add(saved)
+    session.commit()
+    try:
+        inbox_total = client.get(
+            "/inbox", params={**_http_params(params), "search": marker, "limit": 200}
+        ).json()["total"]
+        count = client.get(f"/saved-searches/{saved.id}/new-count").json()["new_count"]
+        assert inbox_total == expected_total
+        assert count == inbox_total
+    finally:
+        session.execute(delete(SavedSearchModel).where(SavedSearchModel.id == saved.id))
+        session.execute(
+            delete(SourceOccurrenceModel).where(
+                SourceOccurrenceModel.source_definition_id == source.id
+            )
+        )
+        session.execute(
+            delete(OpportunityModel).where(OpportunityModel.id.in_([o.id for o in opportunities]))
+        )
+        session.execute(delete(RawItemModel).where(RawItemModel.id.in_(raw_ids)))
+        session.execute(
+            delete(SourceRunModel).where(SourceRunModel.source_definition_id == source.id)
+        )
+        session.execute(delete(SourceDefinitionModel).where(SourceDefinitionModel.id == source.id))
+        session.execute(delete(Company).where(Company.id == company.id))
+        session.commit()

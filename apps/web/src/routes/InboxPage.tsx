@@ -33,6 +33,14 @@ import { roleFamilies } from '../features/dashboard/roleFamilies'
 import { opportunityLabel, seniorityLabels, workModeLabels } from '../features/opportunities/labels'
 import type { SavedSearch, SavedSearchFilters } from '../features/saved-searches/api'
 import {
+  defaultSalaryCurrency,
+  defaultSalaryPeriod,
+  filtersFromParams,
+  salaryCurrencies,
+  salaryPeriods,
+  salaryUnit,
+} from './inboxFilters'
+import {
   useCreateSavedSearch,
   useDeleteSavedSearch,
   useOpenSavedSearch,
@@ -48,6 +56,9 @@ const orderLabels: Record<InboxOrder, string> = {
   recency: 'Mais recentes',
   score: 'Maior score',
 }
+
+const searchOrderDescription =
+  'Com texto na busca, os resultados são ordenados por relevância'
 
 const workModes = ['REMOTE', 'HYBRID', 'ONSITE', 'UNKNOWN']
 const lifecycleStatuses = ['DISCOVERED', 'ACTIVE', 'STALE', 'CLOSED']
@@ -150,7 +161,10 @@ function ItemRow({ item }: { item: InboxItem }) {
             {item.analysisSummary}
           </span>
         )}
-        {(item.hasPendingDuplicate || item.startupStrength || item.siblingCount > 0) && (
+        {(item.hasPendingDuplicate ||
+          item.startupStrength ||
+          item.siblingCount > 0 ||
+          item.salaryMatch === 'unknown') && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {item.siblingCount > 0 && (
               <span data-testid="sibling-chip">
@@ -158,6 +172,9 @@ function ItemRow({ item }: { item: InboxItem }) {
                   +{item.siblingCount} {item.siblingCount === 1 ? 'local' : 'locais'}
                 </Chip>
               </span>
+            )}
+            {item.salaryMatch === 'unknown' && (
+              <Chip tone="border-line bg-surface text-ink">remuneração não informada</Chip>
             )}
             {item.hasPendingDuplicate && <Chip tone={duplicateTone}>Possível duplicata</Chip>}
             <StartupChip item={item} />
@@ -240,16 +257,6 @@ function ItemRow({ item }: { item: InboxItem }) {
 }
 
 const tableColumns = ['Vaga', 'Score e decisão', 'Sinais', 'Publicada', 'Ações']
-
-function filtersFromParams(params: URLSearchParams): SavedSearchFilters {
-  const filters: SavedSearchFilters = {}
-  for (const key of new Set(params.keys())) {
-    if (key === 'page' || key === 'size') continue
-    const values = params.getAll(key)
-    filters[key] = values.length > 1 ? values : values[0]
-  }
-  return filters
-}
 
 function paramsFromFilters(filters: SavedSearchFilters): URLSearchParams {
   const next = new URLSearchParams()
@@ -466,7 +473,9 @@ function InboxSearch({
 
 export function InboxPage() {
   const [params, setParams] = useSearchParams()
-  const verdict = params.get('verdict') ?? ''
+  // Repeated values survive from the URL to the query; the single-select pills show the first.
+  const verdicts = params.getAll('verdict').filter(Boolean)
+  const verdict = verdicts[0] ?? ''
   const companyId = params.get('company_id') ?? ''
   const workMode = params.get('work_mode') ?? ''
   const lifecycleStatus = params.get('lifecycle_status') ?? ''
@@ -474,6 +483,7 @@ export function InboxPage() {
   const onlyAssessed = params.get('only_assessed') === 'true'
   const appliedFilter = params.get('applied') ?? ''
   const search = params.get('search') ?? ''
+  const searching = search !== ''
   const rawOrder = params.get('order') ?? 'priority'
   const order: InboxOrder = inboxOrders.includes(rawOrder as InboxOrder)
     ? (rawOrder as InboxOrder)
@@ -485,10 +495,16 @@ export function InboxPage() {
     : defaultPageSize
   const allAreas = params.get('all_areas') === 'true'
   const areaFilter = params.getAll('area')
-  const seniority = params.get('seniority') ?? ''
+  const seniorityValues = params.getAll('seniority').filter(Boolean)
+  const seniority = seniorityValues[0] ?? ''
   const salaryMin = params.get('salary_min') ?? ''
   const salaryMax = params.get('salary_max') ?? ''
-  const source = params.get('source') ?? ''
+  const hasSalary = Boolean(salaryMin || salaryMax)
+  const salaryHelp =
+    'Compara só vagas na mesma moeda e período. Vagas sem remuneração informada continuam na lista.'
+  const { currency: salaryCurrency, period: salaryPeriod } = salaryUnit(params)
+  const sources = params.getAll('source').filter(Boolean)
+  const source = sources[0] ?? ''
   const allowedCountry = params.get('allowed_country') ?? ''
   // Card F20-61: absent parameter means "filtered", matching the server's own
   // default — only an explicit `only_recent=false` (the "mostrar tudo" click) turns
@@ -502,7 +518,7 @@ export function InboxPage() {
   // Card F20-54: display/filter only, never changes score or verdict.
   const onlyStartups = params.get('only_startups') === 'true'
   const activeFilterCount = [
-    verdict,
+    verdicts.length > 0,
     companyId,
     workMode,
     lifecycleStatus,
@@ -512,10 +528,10 @@ export function InboxPage() {
     order !== 'priority',
     allAreas,
     ...areaFilter,
-    seniority,
+    seniorityValues.length > 0,
     salaryMin,
     salaryMax,
-    source,
+    sources.length > 0,
     allowedCountry,
     !onlyRecent,
     recencyLens,
@@ -529,10 +545,10 @@ export function InboxPage() {
     appliedFilter,
     allAreas,
     ...areaFilter,
-    seniority,
+    seniorityValues.length > 0,
     salaryMin,
     salaryMax,
-    source,
+    sources.length > 0,
     allowedCountry,
     !onlyRecent,
     onlyStartups,
@@ -544,7 +560,7 @@ export function InboxPage() {
   const inbox = useInbox({
     page,
     pageSize,
-    verdicts: verdict ? [verdict] : undefined,
+    verdicts: verdicts.length > 0 ? verdicts : undefined,
     minimumScore: minimumScore || undefined,
     companyId: companyId || undefined,
     workMode: workMode || undefined,
@@ -555,10 +571,12 @@ export function InboxPage() {
     order,
     roleFamilies: allAreas || areaFilter.length === 0 ? undefined : areaFilter,
     allAreas,
-    seniorities: seniority ? [seniority] : undefined,
+    seniorities: seniorityValues.length > 0 ? seniorityValues : undefined,
     salaryMin: salaryMin || undefined,
     salaryMax: salaryMax || undefined,
-    sourceDefinitionIds: source ? [source] : undefined,
+    salaryCurrency: hasSalary ? salaryCurrency : undefined,
+    salaryPeriod: hasSalary ? salaryPeriod : undefined,
+    sourceDefinitionIds: sources.length > 0 ? sources : undefined,
     allowedCountry: allowedCountry || undefined,
     onlyRecent,
     recencyWindowDays: recencyLens === 'novas' ? 14 : undefined,
@@ -662,11 +680,17 @@ export function InboxPage() {
         />
         <FilterPill
           defaultValue="priority"
+          description={searching ? searchOrderDescription : undefined}
+          disabled={searching}
           id="inbox-order"
           label="Ordenar por"
           onChange={(value) => update({ order: value })}
-          options={inboxOrders.map((value) => ({ value, label: orderLabels[value] }))}
-          value={order}
+          options={
+            searching
+              ? [{ value: 'relevance', label: 'Relevância' }]
+              : inboxOrders.map((value) => ({ value, label: orderLabels[value] }))
+          }
+          value={searching ? 'relevance' : order}
         />
         <FilterPill
           id="inbox-recency-lens"
@@ -751,6 +775,7 @@ export function InboxPage() {
 
           <Field label="Remuneração mínima">
             <input
+              aria-describedby="inbox-salary-help"
               className={controlClassName}
               min={0}
               onChange={(event) => update({ salary_min: event.target.value })}
@@ -761,6 +786,7 @@ export function InboxPage() {
 
           <Field label="Remuneração máxima">
             <input
+              aria-describedby="inbox-salary-help"
               className={controlClassName}
               min={0}
               onChange={(event) => update({ salary_max: event.target.value })}
@@ -768,6 +794,34 @@ export function InboxPage() {
               value={salaryMax}
             />
           </Field>
+
+          <FilterPill
+            description={
+              hasSalary ? salaryHelp : 'Preencha a remuneração mínima ou máxima para escolher a moeda.'
+            }
+            disabled={!hasSalary}
+            id="inbox-salary-currency"
+            label="Moeda"
+            onChange={(value) => update({ salary_currency: value || null })}
+            options={salaryCurrencies.map((value) => ({ value, label: value }))}
+            value={salaryCurrency}
+            defaultValue={defaultSalaryCurrency}
+          />
+          <FilterPill
+            description={
+              hasSalary ? salaryHelp : 'Preencha a remuneração mínima ou máxima para escolher o período.'
+            }
+            disabled={!hasSalary}
+            id="inbox-salary-period"
+            label="Período"
+            onChange={(value) => update({ salary_period: value || null })}
+            options={salaryPeriods}
+            value={salaryPeriod}
+            defaultValue={defaultSalaryPeriod}
+          />
+          <p className="text-sm text-muted sm:col-span-full" id="inbox-salary-help">
+            {salaryHelp}
+          </p>
 
           <Field label="Fonte (id)">
             <input

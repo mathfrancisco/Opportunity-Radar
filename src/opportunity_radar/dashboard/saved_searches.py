@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,13 +16,25 @@ from opportunity_radar.dashboard.models import SavedSearchModel
 from opportunity_radar.dashboard.queries import (
     InboxOrder,
     InboxQuery,
+    InvalidInboxQueryError,
     count_opportunity_inbox,
     count_opportunity_inbox_batch,
+)
+from opportunity_radar.opportunities.domain import (
+    DEFAULT_RECENCY_WINDOW_DAYS,
+    NEW_RECENCY_WINDOW_DAYS,
+    CompensationPeriod,
 )
 from opportunity_radar.profile.domain import ProfileNotFoundError
 from opportunity_radar.profile.service import ProfileService
 
 logger = logging.getLogger(__name__)
+
+#: Read-time unit for a legacy saved search that has a salary bound but no unit; the
+#: same default the Inbox page applies (D1).
+LEGACY_SALARY_CURRENCY = "BRL"
+LEGACY_SALARY_PERIOD = CompensationPeriod.MONTH
+SALARY_UNIT_DEFAULTED = "salary_unit_defaulted"
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +52,9 @@ class SavedSearchSummary:
     saved_search: SavedSearch
     new_count: int | None
     count_error: str | None = None
+    #: `"salary_unit_defaulted"` when a legacy search with a salary bound and no
+    #: currency/period was counted as BRL/MONTH (D1); `None` otherwise.
+    count_note: str | None = None
 
 
 class SavedSearchNotFoundError(LookupError):
@@ -72,6 +87,25 @@ def _find_saved_search(session: Session, saved_search_id: UUID, owner_sub: str) 
     return saved_search
 
 
+def validate_saved_search_filters(filters: dict[str, Any]) -> None:
+    """Raise InvalidSavedSearchFiltersError unless the filters parse back into an Inbox query.
+
+    Strict, unlike reading a stored search: a salary bound needs an explicit currency and
+    period here; only rows saved before that rule are given the legacy default on read.
+    """
+    _saved_search_inbox_query(
+        SavedSearch(
+            id=uuid4(),
+            name="",
+            term=None,
+            filters=filters,
+            last_opened_at=None,
+            created_at=datetime.now(UTC),
+        ),
+        default_salary_unit=False,
+    )
+
+
 def create_saved_search(
     session: Session,
     *,
@@ -80,6 +114,7 @@ def create_saved_search(
     filters: dict[str, Any],
     owner_sub: str,
 ) -> SavedSearch:
+    validate_saved_search_filters(filters)
     saved_search = SavedSearchModel(owner_sub=owner_sub, name=name, term=term, filters=filters)
     session.add(saved_search)
     session.flush()
@@ -104,6 +139,7 @@ def list_saved_search_summaries(
     saved_searches = list_saved_searches(session, owner_sub=owner_sub)
     parsed: list[tuple[SavedSearch, InboxQuery, bool]] = []
     invalid_ids: set[UUID] = set()
+    defaulted_ids: set[UUID] = set()
     for saved_search in saved_searches:
         try:
             query, needs_profile_fallback = _saved_search_inbox_query(saved_search)
@@ -111,6 +147,8 @@ def list_saved_search_summaries(
             invalid_ids.add(saved_search.id)
             continue
         parsed.append((saved_search, query, needs_profile_fallback))
+        if _salary_unit_defaulted(saved_search.filters):
+            defaulted_ids.add(saved_search.id)
 
     fallback_role_families: tuple[str, ...] = ()
     if any(needs_profile_fallback for _, _, needs_profile_fallback in parsed):
@@ -134,6 +172,7 @@ def list_saved_search_summaries(
             saved_search=saved_search,
             new_count=counts_by_id.get(saved_search.id),
             count_error="invalid_filters" if saved_search.id in invalid_ids else None,
+            count_note=SALARY_UNIT_DEFAULTED if saved_search.id in defaulted_ids else None,
         )
         for saved_search in saved_searches
     )
@@ -179,7 +218,52 @@ def new_count(session: Session, saved_search: SavedSearch, *, owner_sub: str) ->
     return count_opportunity_inbox(session, query, owner_sub=owner_sub)
 
 
-def _saved_search_inbox_query(saved_search: SavedSearch) -> tuple[InboxQuery, bool]:
+def _saved_search_inbox_query(
+    saved_search: SavedSearch, *, default_salary_unit: bool = True
+) -> tuple[InboxQuery, bool]:
+    try:
+        return _read_saved_search_inbox_query(
+            saved_search, default_salary_unit=default_salary_unit
+        )
+    except InvalidInboxQueryError as error:
+        raise InvalidSavedSearchFiltersError(str(error)) from error
+
+
+def _is_blank(value: object) -> bool:
+    return value is None or value == ""
+
+
+def _salary_unit_defaulted(filters: dict[str, Any]) -> bool:
+    """True for a legacy search with a salary bound and neither currency nor period."""
+    has_bound = not (_is_blank(filters.get("salary_min")) and _is_blank(filters.get("salary_max")))
+    return (
+        has_bound
+        and _is_blank(filters.get("salary_currency"))
+        and _is_blank(filters.get("salary_period"))
+    )
+
+
+def _saved_search_salary_period(value: object) -> CompensationPeriod | None:
+    if _is_blank(value):
+        return None
+    try:
+        return CompensationPeriod(str(value))
+    except ValueError as error:
+        raise InvalidSavedSearchFiltersError("invalid salary_period filter") from error
+
+
+def _read_saved_search_inbox_query(
+    saved_search: SavedSearch, *, default_salary_unit: bool
+) -> tuple[InboxQuery, bool]:
+    """Read a saved search's filters back as the Inbox query the Inbox page would run.
+
+    Recency rules (single source of truth, mirrors `GET /inbox` and `InboxPage`):
+    - `only_recent`: absent/true -> True (the Inbox default); false -> False.
+    - `lens`: `novas` -> recency_window_days=14; `abertas` -> open_at_source=True;
+      absent or "" -> no effect; any other value is invalid.
+    - `recency_window_days`: integer 1-365 (int or digit string); `lens=novas` wins.
+    - `open_at_source`, `only_startups`: booleans, same name on the query.
+    """
     filters = saved_search.filters
     _validate_saved_search_filter_shapes(filters)
     search_filter = filters.get("search")
@@ -201,10 +285,17 @@ def _saved_search_inbox_query(saved_search: SavedSearch) -> tuple[InboxQuery, bo
         "allowed_country",
         "salary_min",
         "salary_max",
+        "salary_currency",
+        "salary_period",
         "source",
         "source_definition_id",
         "profile_version_id",
         "order",
+        "only_recent",
+        "recency_window_days",
+        "open_at_source",
+        "only_startups",
+        "lens",
     }
     for key in filters.keys() - known_filter_keys:
         logger.warning("Ignoring unknown saved search filter key %r", key)
@@ -226,6 +317,15 @@ def _saved_search_inbox_query(saved_search: SavedSearch) -> tuple[InboxQuery, bo
         if applied_value in ("true", "false")
         else None
     )
+    only_recent = filters.get("only_recent") not in (False, "false")
+    open_at_source = filters.get("open_at_source") in (True, "true")
+    only_startups = filters.get("only_startups") in (True, "true")
+    recency_window_days = _saved_search_recency_window(filters.get("recency_window_days"))
+    lens = filters.get("lens")
+    if lens == "novas":
+        recency_window_days = NEW_RECENCY_WINDOW_DAYS
+    elif lens == "abertas":
+        open_at_source = True
     only_assessed_value = filters.get("only_assessed", False)
     only_assessed = only_assessed_value is True or only_assessed_value == "true"
     published_after_value = filters.get("published_after")
@@ -233,6 +333,14 @@ def _saved_search_inbox_query(saved_search: SavedSearch) -> tuple[InboxQuery, bo
     minimum_score_value = filters.get("minimum_score")
     salary_min_value = filters.get("salary_min")
     salary_max_value = filters.get("salary_max")
+    salary_currency_value = filters.get("salary_currency")
+    if not _is_blank(salary_currency_value) and not isinstance(salary_currency_value, str):
+        raise InvalidSavedSearchFiltersError("invalid salary_currency filter")
+    salary_currency = salary_currency_value or None
+    salary_period = _saved_search_salary_period(filters.get("salary_period"))
+    if default_salary_unit and _salary_unit_defaulted(filters):
+        salary_currency = LEGACY_SALARY_CURRENCY
+        salary_period = LEGACY_SALARY_PERIOD
     query = InboxQuery(
         verdicts=verdicts,
         minimum_score=_saved_search_decimal(minimum_score_value),
@@ -253,12 +361,18 @@ def _saved_search_inbox_query(saved_search: SavedSearch) -> tuple[InboxQuery, bo
         ),
         salary_min=_saved_search_decimal(salary_min_value),
         salary_max=_saved_search_decimal(salary_max_value),
+        salary_currency=salary_currency,
+        salary_period=salary_period,
         source_definition_ids=tuple(_saved_search_uuid(value) for value in source_ids),
         profile_version_id=(
             _saved_search_uuid(filters["profile_version_id"])
             if filters.get("profile_version_id")
             else None
         ),
+        only_recent=only_recent,
+        recency_window_days=recency_window_days,
+        open_at_source=open_at_source,
+        only_startups=only_startups,
         order=_saved_search_order(filters.get("order", InboxOrder.PRIORITY.value)),
     )
     return query, needs_profile_fallback
@@ -281,12 +395,36 @@ def _validate_saved_search_filter_shapes(filters: dict[str, Any]) -> None:
         if value is not None and not isinstance(value, str):
             raise InvalidSavedSearchFiltersError(f"invalid {key} filter")
 
-    for key in ("applied", "only_assessed", "all_areas"):
+    lens = filters.get("lens")
+    if lens is not None and lens not in ("", "novas", "abertas"):
+        raise InvalidSavedSearchFiltersError("invalid lens filter")
+
+    for key in (
+        "applied",
+        "only_assessed",
+        "all_areas",
+        "only_recent",
+        "open_at_source",
+        "only_startups",
+    ):
         value = filters.get(key)
         if value is not None and not (
             isinstance(value, bool) or value in ("true", "false")
         ):
             raise InvalidSavedSearchFiltersError(f"invalid {key} filter")
+
+
+def _saved_search_recency_window(value: object) -> int:
+    if value is None or value == "":
+        return DEFAULT_RECENCY_WINDOW_DAYS
+    if isinstance(value, bool) or not (
+        isinstance(value, int) or (isinstance(value, str) and value.isascii() and value.isdigit())
+    ):
+        raise InvalidSavedSearchFiltersError("invalid recency_window_days filter")
+    days = int(value)
+    if not 1 <= days <= 365:
+        raise InvalidSavedSearchFiltersError("invalid recency_window_days filter")
+    return days
 
 
 def _saved_search_decimal(value: object) -> Decimal | None:

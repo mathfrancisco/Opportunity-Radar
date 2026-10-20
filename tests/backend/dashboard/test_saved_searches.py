@@ -9,7 +9,7 @@ from time import perf_counter
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import RawItemModel, SourceDefinitionModel, SourceRunModel
@@ -18,6 +18,7 @@ from opportunity_radar.dashboard import saved_searches as saved_search_service
 from opportunity_radar.dashboard.models import SavedSearchModel
 from opportunity_radar.dashboard.queries import InboxQuery, list_opportunity_inbox
 from opportunity_radar.dashboard.saved_searches import (
+    InvalidSavedSearchFiltersError,
     SavedSearchNotFoundError,
     create_saved_search,
     delete_saved_search,
@@ -29,7 +30,7 @@ from opportunity_radar.dashboard.saved_searches import (
 )
 from opportunity_radar.matching.models import MatchAssessmentModel
 from opportunity_radar.matching.service import RULES_VERSION
-from opportunity_radar.opportunities.domain import SKILL_TAXONOMY_VERSION
+from opportunity_radar.opportunities.domain import SKILL_TAXONOMY_VERSION, CompensationPeriod
 from opportunity_radar.opportunities.models import OpportunityModel, SourceOccurrenceModel
 from opportunity_radar.platform.database import create_database_engine
 from opportunity_radar.profile.domain import EmploymentPreference, ProfileSnapshot
@@ -176,6 +177,34 @@ def test_create_list_rename_delete_saved_search() -> None:
 
         delete_saved_search(session, saved.id, owner_sub=OWNER_A)
         assert all(item.id != saved.id for item in list_saved_searches(session, owner_sub=OWNER_A))
+
+
+@pytest.mark.parametrize(
+    "filters",
+    [
+        {"order": 42},
+        {"salary_min": "abc"},
+        {"seniority": 5},
+        {"company_id": "not-a-uuid"},
+        {"published_after": "ontem"},
+        {"applied": "talvez"},
+    ],
+)
+def test_create_saved_search_rejects_invalid_filters(filters: dict[str, object]) -> None:
+    owner_sub = f"test-f4-{uuid4().hex}"
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        with pytest.raises(InvalidSavedSearchFiltersError):
+            create_saved_search(
+                session, name="x", term=None, filters=filters, owner_sub=owner_sub
+            )
+
+        stored = session.scalar(
+            select(func.count())
+            .select_from(SavedSearchModel)
+            .where(SavedSearchModel.owner_sub == owner_sub)
+        )
+        assert stored == 0
 
 
 def test_open_saved_search_updates_last_opened_at() -> None:
@@ -561,15 +590,20 @@ def test_saved_search_summary_isolates_invalid_legacy_filters_per_owner() -> Non
             ("NaN score", {"minimum_score": "NaN", "all_areas": True}),
             ("Infinite salary", {"salary_max": "Infinity", "all_areas": True}),
         )
-        invalid = [
-            create_saved_search(
-                session,
-                name=name,
-                term=None,
-                filters=filters,
-                owner_sub=owner_sub,
-            )
+        # Legacy rows predate create-time validation, so they are seeded directly.
+        invalid_models = [
+            SavedSearchModel(owner_sub=owner_sub, name=name, term=None, filters=filters)
             for name, filters in invalid_filters
+        ]
+        session.add_all(invalid_models)
+        session.commit()
+        invalid = [
+            next(
+                item
+                for item in list_saved_searches(session, owner_sub=owner_sub)
+                if item.id == model.id
+            )
+            for model in invalid_models
         ]
 
         summaries = {
@@ -770,3 +804,151 @@ def test_saved_search_summary_keeps_assessments_scoped_to_each_profile_and_owner
         assert {
             saved_search_id: item.new_count for saved_search_id, item in summaries.items()
         } == expected
+
+
+def _query_for(filters: dict[str, object]) -> InboxQuery:
+    saved = saved_search_service.SavedSearch(
+        id=uuid4(),
+        name="",
+        term=None,
+        filters=filters,
+        last_opened_at=None,
+        created_at=datetime.now(UTC),
+    )
+    return saved_search_service._saved_search_inbox_query(saved)[0]
+
+
+@pytest.mark.parametrize(
+    ("filters", "only_recent", "window", "open_at_source"),
+    [
+        ({}, True, 30, False),
+        ({"only_recent": True}, True, 30, False),
+        ({"only_recent": "true"}, True, 30, False),
+        ({"only_recent": False}, False, 30, False),
+        ({"only_recent": "false"}, False, 30, False),
+        ({"lens": ""}, True, 30, False),
+        ({"lens": "novas"}, True, 14, False),
+        ({"lens": "abertas"}, True, 30, True),
+        ({"recency_window_days": 7}, True, 7, False),
+        ({"recency_window_days": "90"}, True, 90, False),
+        ({"recency_window_days": 365}, True, 365, False),
+        ({"recency_window_days": 90, "lens": "novas"}, True, 14, False),
+        ({"open_at_source": "true"}, True, 30, True),
+    ],
+)
+def test_saved_search_recency_keys_map_to_inbox_query(
+    filters: dict[str, object], only_recent: bool, window: int, open_at_source: bool
+) -> None:
+    query = _query_for(filters)
+
+    assert query.only_recent is only_recent
+    assert query.recency_window_days == window
+    assert query.open_at_source is open_at_source
+
+
+@pytest.mark.parametrize(
+    "filters",
+    [
+        {"lens": "recentes"},
+        {"lens": 5},
+        {"recency_window_days": 0},
+        {"recency_window_days": 366},
+        {"recency_window_days": "abc"},
+        {"recency_window_days": True},
+        {"only_recent": "maybe"},
+        {"only_startups": "yes"},
+    ],
+)
+def test_saved_search_invalid_recency_keys_are_rejected(filters: dict[str, object]) -> None:
+    with pytest.raises(InvalidSavedSearchFiltersError):
+        saved_search_service.validate_saved_search_filters(filters)
+
+
+@pytest.mark.parametrize(
+    "filters",
+    [
+        {"salary_min": "5000"},
+        {"salary_max": "5000"},
+        {"salary_min": "5000", "salary_currency": "BRL"},
+        {"salary_min": "5000", "salary_period": "MONTH"},
+        {"salary_min": "5000", "salary_currency": "reais", "salary_period": "MONTH"},
+        {"salary_min": "5000", "salary_currency": "BRL", "salary_period": "UNKNOWN"},
+        {"salary_min": "5000", "salary_currency": "BRL", "salary_period": "FORTNIGHT"},
+    ],
+)
+def test_create_saved_search_requires_a_complete_salary_unit(
+    filters: dict[str, object],
+) -> None:
+    with pytest.raises(InvalidSavedSearchFiltersError):
+        saved_search_service.validate_saved_search_filters(filters)
+
+
+def test_create_saved_search_accepts_salary_unit_and_ignores_it_without_a_bound() -> None:
+    saved_search_service.validate_saved_search_filters(
+        {"salary_min": "5000", "salary_currency": "USD", "salary_period": "YEAR"}
+    )
+    saved_search_service.validate_saved_search_filters(
+        {"salary_currency": "USD", "salary_period": "YEAR"}
+    )
+
+
+def test_saved_search_salary_unit_maps_to_inbox_query() -> None:
+    query = _query_for(
+        {"salary_min": "5000", "salary_currency": "USD", "salary_period": "YEAR"}
+    )
+
+    assert (query.salary_currency, query.salary_period) == ("USD", CompensationPeriod.YEAR)
+
+
+def test_legacy_saved_search_salary_defaults_to_brl_month_when_read() -> None:
+    query = _query_for({"salary_min": "5000"})
+
+    assert query.salary_currency == "BRL"
+    assert query.salary_period == CompensationPeriod.MONTH
+
+
+def test_legacy_saved_search_summary_notes_the_defaulted_salary_unit() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    owner_sub = f"{OWNER_A}-salary-unit-{uuid4().hex}"
+    with Session(engine) as session:
+        # Legacy rows predate create-time validation, so they are seeded directly.
+        models = {
+            "legacy": SavedSearchModel(
+                owner_sub=owner_sub,
+                name="legacy",
+                filters={"salary_min": "5000", "all_areas": True},
+            ),
+            "complete": SavedSearchModel(
+                owner_sub=owner_sub,
+                name="complete",
+                filters={
+                    "salary_min": "5000",
+                    "salary_currency": "USD",
+                    "salary_period": "YEAR",
+                    "all_areas": True,
+                },
+            ),
+            "no_salary": SavedSearchModel(
+                owner_sub=owner_sub, name="no_salary", filters={"all_areas": True}
+            ),
+            "bad_unit": SavedSearchModel(
+                owner_sub=owner_sub,
+                name="bad_unit",
+                filters={"salary_min": "5000", "salary_currency": "reais", "all_areas": True},
+            ),
+        }
+        session.add_all(models.values())
+        session.commit()
+
+        by_name = {
+            item.saved_search.name: item
+            for item in list_saved_search_summaries(session, owner_sub=owner_sub)
+        }
+
+        assert by_name["legacy"].count_note == "salary_unit_defaulted"
+        assert by_name["legacy"].count_error is None
+        assert by_name["legacy"].new_count is not None
+        assert by_name["complete"].count_note is None
+        assert by_name["no_salary"].count_note is None
+        assert by_name["bad_unit"].count_error == "invalid_filters"
+        assert by_name["bad_unit"].count_note is None

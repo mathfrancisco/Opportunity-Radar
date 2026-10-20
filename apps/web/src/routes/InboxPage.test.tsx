@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render } from '../components/testing'
 import { type SavedSearchFilters } from '../features/saved-searches/api'
 import { InboxPage, SaveSearchForm, SavedSearches } from './InboxPage'
+import { filtersFromParams } from './inboxFilters'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -906,6 +907,20 @@ describe('InboxPage table, pagination and filters', () => {
     expect(inbox.searchParams.get('limit')).toBe('50')
   })
 
+  it('envia à API todos os valores repetidos de verdict, seniority e source da URL', async () => {
+    const urls: string[] = []
+    stubInbox(1, urls, [inboxItem()])
+    renderAt(
+      '/inbox?seniority=JUNIOR&seniority=MID&verdict=RECOMMENDED&verdict=WATCHLIST&source=src-a&source=src-b',
+    )
+    await flush()
+
+    const inbox = new URL(urls.find((url) => url.includes('/inbox')) as string, 'http://localhost')
+    expect(inbox.searchParams.getAll('seniority')).toEqual(['JUNIOR', 'MID'])
+    expect(inbox.searchParams.getAll('verdict')).toEqual(['RECOMMENDED', 'WATCHLIST'])
+    expect(inbox.searchParams.getAll('source_definition_id')).toEqual(['src-a', 'src-b'])
+  })
+
   it('pagina pelo Pagination, preserva ?page= e envia a página à API', async () => {
     const urls: string[] = []
     stubInbox(60, urls)
@@ -1059,6 +1074,177 @@ describe('InboxPage table, pagination and filters', () => {
     expect(search(container).get('search')).toBeNull()
     expect(search(container).get('work_mode')).toBe('REMOTE')
     expect((container.querySelector('#inbox-search') as HTMLInputElement).value).toBe('')
+  })
+  it('mostra Relevância e desabilita a ordenação enquanto há texto na busca, preservando order', async () => {
+    stubInbox(1, [])
+    const container = renderAt('/inbox?search=react&order=score')
+    await flush()
+
+    const select = container.querySelector('#inbox-order') as HTMLSelectElement
+    expect(select.disabled).toBe(true)
+    expect(select.selectedOptions[0].textContent).toBe('Relevância')
+    const description = document.getElementById(select.getAttribute('aria-describedby') ?? '')
+    expect(description?.textContent).toBe(
+      'Com texto na busca, os resultados são ordenados por relevância',
+    )
+    expect(search(container).get('order')).toBe('score')
+  })
+
+  it('mantém a ordenação habilitada e com o valor da URL sem texto na busca', async () => {
+    stubInbox(1, [])
+    const container = renderAt('/inbox?order=score')
+    await flush()
+
+    const select = container.querySelector('#inbox-order') as HTMLSelectElement
+    expect(select.disabled).toBe(false)
+    expect(select.selectedOptions[0].textContent).toBe('Maior score')
+    expect(select.hasAttribute('aria-describedby')).toBe(false)
+  })
+})
+
+describe('InboxPage salary unit (D1)', () => {
+  function stub(urls: string[], items: unknown[] = [inboxItem()]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        urls.push(url)
+        if (url.includes('/inbox')) {
+          return new Response(
+            JSON.stringify({ items, total: items.length, offset: 0, limit: 25, order: 'priority', off_filter_count: 0 }),
+            { status: 200 },
+          )
+        }
+        return new Response(JSON.stringify([]), { status: 200 })
+      }),
+    )
+  }
+
+  function Probe() {
+    const location = useLocation()
+    return <output data-testid="location">{location.search}</output>
+  }
+
+  function renderAt(path: string): HTMLElement {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[path]}>
+          <InboxPage />
+          <Probe />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  function search(container: HTMLElement): URLSearchParams {
+    return new URLSearchParams(container.querySelector('[data-testid="location"]')?.textContent ?? '')
+  }
+
+  function choose(select: HTMLSelectElement, value: string) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+    act(() => {
+      setter?.call(select, value)
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+  }
+
+  function lastInbox(urls: string[]): URL {
+    const inbox = urls.filter((url) => url.includes('/inbox'))
+    return new URL(inbox[inbox.length - 1], 'http://localhost')
+  }
+
+  function salaryMinInput(container: HTMLElement): HTMLInputElement {
+    const label = Array.from(container.querySelectorAll('label')).find((candidate) =>
+      candidate.textContent?.includes('Remuneração mínima'),
+    )
+    return (label?.querySelector('input') ??
+      document.getElementById(label?.getAttribute('for') ?? '')) as HTMLInputElement
+  }
+
+  it('envia BRL e MONTH por padrão quando há salário mínimo', async () => {
+    const urls: string[] = []
+    stub(urls)
+    const container = renderAt('/inbox')
+    await flush()
+    typeInto(salaryMinInput(container), '5000')
+    await flush()
+
+    const inbox = lastInbox(urls)
+    expect(inbox.searchParams.get('salary_min')).toBe('5000')
+    expect(inbox.searchParams.get('salary_currency')).toBe('BRL')
+    expect(inbox.searchParams.get('salary_period')).toBe('MONTH')
+  })
+
+  it('trocar moeda e período altera a API e a URL', async () => {
+    const urls: string[] = []
+    stub(urls)
+    const container = renderAt('/inbox?salary_min=100')
+    await flush()
+    choose(container.querySelector('#inbox-salary-currency') as HTMLSelectElement, 'USD')
+    await flush()
+    choose(container.querySelector('#inbox-salary-period') as HTMLSelectElement, 'YEAR')
+    await flush()
+
+    const inbox = lastInbox(urls)
+    expect(inbox.searchParams.get('salary_currency')).toBe('USD')
+    expect(inbox.searchParams.get('salary_period')).toBe('YEAR')
+    expect(search(container).get('salary_currency')).toBe('USD')
+    expect(search(container).get('salary_period')).toBe('YEAR')
+    const describedBy = (id: string) =>
+      container.querySelector(`#${id}`)?.getAttribute('aria-describedby') ?? ''
+    for (const id of ['inbox-salary-currency', 'inbox-salary-period']) {
+      const description = container.querySelector(`#${describedBy(id)}`)
+      expect(description?.textContent).toContain('Compara só vagas')
+    }
+  })
+
+  it('sem valor salarial não envia moeda nem período e desabilita os selects', async () => {
+    const urls: string[] = []
+    stub(urls)
+    const container = renderAt('/inbox?salary_currency=USD&salary_period=YEAR')
+    await flush()
+
+    const inbox = lastInbox(urls)
+    expect(inbox.searchParams.has('salary_currency')).toBe(false)
+    expect(inbox.searchParams.has('salary_period')).toBe(false)
+    const currency = container.querySelector('#inbox-salary-currency') as HTMLSelectElement
+    expect(currency.disabled).toBe(true)
+    expect(currency.value).toBe('USD')
+    expect((container.querySelector('#inbox-salary-period') as HTMLSelectElement).disabled).toBe(true)
+    expect(container.textContent).toContain('Compara só vagas na mesma moeda e período.')
+  })
+
+  it('mostra o selo só para salary_match unknown', async () => {
+    const urls: string[] = []
+    stub(urls, [
+      inboxItem({ opportunity_id: 'a', title: 'Vaga A', salary_match: 'unknown' }),
+      inboxItem({ opportunity_id: 'b', title: 'Vaga B', salary_match: 'matched' }),
+    ])
+    const container = renderAt('/inbox?salary_min=100')
+    await flush()
+
+    const rows = Array.from(container.querySelectorAll('tr'))
+    const rowA = rows.find((row) => row.textContent?.includes('Vaga A'))
+    const rowB = rows.find((row) => row.textContent?.includes('Vaga B'))
+    expect(rowA?.textContent).toContain('remuneração não informada')
+    expect(rowB?.textContent).not.toContain('remuneração não informada')
+  })
+
+  it('a busca salva leva moeda e período quando há faixa salarial', () => {
+    expect(filtersFromParams(new URLSearchParams('salary_min=100'))).toEqual({
+      salary_min: '100',
+      salary_currency: 'BRL',
+      salary_period: 'MONTH',
+    })
+    expect(
+      filtersFromParams(new URLSearchParams('salary_max=9&salary_currency=EUR&salary_period=HOUR')),
+    ).toEqual({ salary_max: '9', salary_currency: 'EUR', salary_period: 'HOUR' })
+    expect(filtersFromParams(new URLSearchParams('salary_currency=USD&work_mode=REMOTE'))).toEqual({
+      work_mode: 'REMOTE',
+    })
   })
 })
 

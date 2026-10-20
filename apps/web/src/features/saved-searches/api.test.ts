@@ -74,6 +74,15 @@ describe('saved searches API', () => {
     expect(parseSummary([{ ...summary, new_count: 1.5 }])[0]).toMatchObject({ newCount: null, countError: 'invalid_summary' })
   })
 
+  it('lê count_note do resumo', () => {
+    const base = { id: 's', name: 'N', filters: {}, new_count: 1 }
+    expect(parseSummary([{ ...base, count_note: 'salary_unit_defaulted' }])[0]).toMatchObject({
+      countNote: 'salary_unit_defaulted',
+    })
+    expect(parseSummary([{ ...base, count_note: 'other' }])[0]).toMatchObject({ countNote: null })
+    expect(parseSummary([base])[0]).toMatchObject({ countNote: null })
+  })
+
   it('isola filtros legados inválidos e preserva contagens válidas e filtros booleanos', () => {
     const result = parseSummary([
       { id: 'bad', name: 'Legada', filters: { order: 42 }, new_count: null, count_error: 'invalid_filters' },

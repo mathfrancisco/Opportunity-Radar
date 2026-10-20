@@ -151,3 +151,232 @@ def test_title_match_ranks_above_description_only_match() -> None:
             title_match.id,
             description_match.id,
         ]
+
+
+@pytest.mark.parametrize(
+    ("title", "queries"),
+    [
+        ("Gestão de Produto", ("gestão", "gestao")),
+        ("Análise de Dados", ("análise", "analise")),
+        ("Ciência de Dados", ("ciência de dados", "ciencia de dados")),
+        ("Programação Backend", ("programação", "programacao")),
+        ("Ação Social", ("ação", "acao")),
+        ("Gestao sem acento", ("gestão", "gestao")),
+        ("Analista Júnior", ("júnior", "junior")),
+        ("Engenheiro Sênior", ("sênior", "senior")),
+    ],
+)
+def test_accented_and_plain_queries_find_the_same_title(
+    title: str, queries: tuple[str, ...]
+) -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        target = _opportunity(session, company, title=title, published_at=NOW)
+        session.commit()
+
+        for query in queries:
+            found = list_opportunity_inbox(
+                session, InboxQuery(company_id=company.id, search=query)
+            )
+            assert [item.opportunity_id for item in found.items] == [target.id], query
+
+
+def test_accented_phrase_and_negation_keep_their_semantics() -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        ciencia_de_dados = _opportunity(
+            session, company, title="Ciência de Dados", published_at=NOW
+        )
+        _opportunity(session, company, title="Dados de Ciência", published_at=NOW)
+        estagio = _opportunity(
+            session, company, title="Engenharia de Dados Estágio", published_at=NOW
+        )
+        pleno = _opportunity(
+            session, company, title="Engenharia de Dados Pleno", published_at=NOW
+        )
+        session.commit()
+
+        def ids(search: str) -> list:
+            found = list_opportunity_inbox(
+                session, InboxQuery(company_id=company.id, search=search)
+            )
+            return [item.opportunity_id for item in found.items]
+
+        assert ids('"ciência de dados"') == [ciencia_de_dados.id]
+        negated = ids("dados -estágio")
+        assert pleno.id in negated
+        assert estagio.id not in negated
+
+
+@pytest.mark.parametrize("term", ["ção", "-", '""', "- ção"])
+def test_operator_only_or_accent_only_queries_do_not_raise(term: str) -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        session.commit()
+
+        list_opportunity_inbox(session, InboxQuery(company_id=company.id, search=term))
+
+
+@pytest.mark.parametrize(
+    ("query", "title"),
+    [
+        ("desenvolvedor remoto", "Developer Remote"),
+        ("engenheiro junior", "Junior Engineer"),
+        ("dados remoto", "Data Remote"),
+        ("desenvolvedor dados", "Data Developer"),
+        ("vaga dados", "Data Job"),
+    ],
+)
+def test_two_concept_bilingual_queries_find_the_translated_title(
+    query: str, title: str
+) -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        target = _opportunity(session, company, title=title, published_at=NOW)
+        _opportunity(session, company, title="Unrelated Analyst", published_at=NOW)
+        session.commit()
+
+        found = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search=query)
+        )
+        assert target.id in [item.opportunity_id for item in found.items]
+
+
+def test_synonym_groups_require_every_concept() -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        both = _opportunity(session, company, title="Data Developer", published_at=NOW)
+        only_dev = _opportunity(
+            session, company, title="Backend Developer", published_at=NOW
+        )
+        only_data = _opportunity(
+            session, company, title="Data Analyst", published_at=NOW
+        )
+        session.commit()
+
+        found = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search="desenvolvedor dados")
+        )
+        ids = [item.opportunity_id for item in found.items]
+        assert both.id in ids
+        assert only_dev.id not in ids
+        assert only_data.id not in ids
+
+
+def test_quoted_phrase_and_negation_do_not_expand_across_concepts() -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        data_developer = _opportunity(
+            session, company, title="Data Developer", published_at=NOW
+        )
+        desenvolvedor_dados = _opportunity(
+            session, company, title="Desenvolvedor de Dados", published_at=NOW
+        )
+        session.commit()
+
+        def ids(search: str) -> list:
+            found = list_opportunity_inbox(
+                session, InboxQuery(company_id=company.id, search=search)
+            )
+            return [item.opportunity_id for item in found.items]
+
+        quoted = ids('"desenvolvedor de dados"')
+        assert desenvolvedor_dados.id in quoted
+        assert data_developer.id not in quoted
+        # Negation stays literal (current websearch_to_tsquery path): `-dados` excludes
+        # the Portuguese title; it is not widened to the synonym "data".
+        negated = ids("desenvolvedor -dados")
+        assert desenvolvedor_dados.id not in negated
+
+
+@pytest.mark.parametrize(
+    ("query", "title", "description"),
+    [
+        (
+            "desenvolvedor de dados",
+            "Data Developer",
+            "Build pipelines for the analytics platform with the product team.",
+        ),
+        (
+            "engenheiro de software",
+            "Software Engineer",
+            "Design and build backend services for a growing team.",
+        ),
+        (
+            "head of data",
+            "Head de Dados",
+            "Lidera a area de dados e a estrategia de analytics da empresa.",
+        ),
+    ],
+)
+def test_stopword_of_one_dictionary_does_not_become_required(
+    query: str, title: str, description: str
+) -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        target = _opportunity(
+            session, company, title=title, published_at=NOW, description=description
+        )
+        session.commit()
+
+        found = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search=query)
+        )
+        assert target.id in [item.opportunity_id for item in found.items]
+
+
+def test_mixed_rest_keeps_its_content_word_required() -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        target = _opportunity(
+            session, company, title="Kubernetes Engineer", published_at=NOW
+        )
+        other = _opportunity(session, company, title="Software Engineer", published_at=NOW)
+        session.commit()
+
+        found = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search="engenheiro de kubernetes")
+        )
+        ids = [item.opportunity_id for item in found.items]
+        assert target.id in ids
+        assert other.id not in ids
+
+
+@pytest.mark.parametrize(
+    ("query", "title"),
+    [
+        ("desenvolvedor dados,", "Data Developer"),
+        ("vaga engenheiro", "Software Engineer"),
+        ("vaga python", "Python Developer"),
+    ],
+)
+def test_punctuation_and_filler_words_do_not_narrow_the_search(
+    query: str, title: str
+) -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        target = _opportunity(session, company, title=title, published_at=NOW)
+        _opportunity(session, company, title="Unrelated Analyst", published_at=NOW)
+        session.commit()
+
+        found = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search=query)
+        )
+        ids = [item.opportunity_id for item in found.items]
+        assert target.id in ids
+
+
+def test_one_dictionary_stopword_rest_raises_no_notice() -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        target = _opportunity(session, company, title="Data Developer", published_at=NOW)
+        session.commit()
+
+        notices: list[str] = []
+        driver_connection = session.connection().connection.driver_connection
+        driver_connection.add_notice_handler(lambda diag: notices.append(diag.message_primary))
+        found = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search="desenvolvedor de dados")
+        )
+        assert target.id in [item.opportunity_id for item in found.items]
+        assert notices == []
