@@ -91,9 +91,11 @@ export function DataTable({
     ? ' [&_td:first-child]:sticky [&_td:first-child]:left-0 [&_td:first-child]:bg-surface' +
       ' [&_th:first-child]:sticky [&_th:first-child]:left-0 [&_th:first-child]:bg-panel'
     : ''
+  // Three or more columns squeezed into a phone clip words; keep them wide and let the frame scroll.
+  const wide = columns.length >= 3
   const frame = stackBelowXl
     ? 'xl:overflow-x-auto rounded-panel xl:border xl:border-line xl:bg-surface'
-    : 'overflow-x-auto rounded-control border border-line bg-surface'
+    : 'scroll-x-shadow min-w-0 max-w-full overflow-x-auto rounded-control border border-line'
   const tableClass = stackBelowXl
     ? 'w-full text-left text-body-sm max-xl:block max-xl:[&_tbody]:block max-xl:[&_tr]:block ' +
       'max-xl:[&_td]:block max-xl:[&_tbody_tr]:mb-3 max-xl:[&_tbody_tr]:rounded-panel ' +
@@ -101,10 +103,17 @@ export function DataTable({
       'max-xl:[&_tbody_tr]:py-2 max-xl:[&_td]:px-4 max-xl:[&_td]:py-1.5 xl:border-collapse ' +
       'xl:[&_tbody_td]:px-4 xl:[&_tbody_td]:py-3 xl:[&_tbody_tr]:border-t xl:[&_tbody_tr]:border-divider ' +
       'xl:[&_tbody_tr:first-child]:border-t-0'
-    : 'w-full border-collapse text-left text-body-sm [&_tbody_td]:h-11 [&_tbody_td]:px-4 ' +
+    : `w-full ${wide ? 'min-w-[34rem] ' : ''}border-collapse text-left text-body-sm [&_tbody_td]:h-11 [&_tbody_td]:px-4 ` +
       `[&_tbody_td]:py-2 [&_tbody_tr]:border-t [&_tbody_tr]:border-line${sticky}`
   return (
-    <div className={`relative ${frame} ${className}`.trim()} id={id}>
+    <div
+      className={`relative ${frame} ${className}`.trim()}
+      id={id}
+      // A scrollable region has to be reachable by keyboard, or its last columns are not.
+      role={stackBelowXl || !caption ? undefined : 'region'}
+      aria-label={stackBelowXl || !caption ? undefined : caption}
+      tabIndex={stackBelowXl || !caption ? undefined : 0}
+    >
       <table className={tableClass} role={stackBelowXl ? 'table' : undefined}>
         {caption && <caption className="sr-only">{caption}</caption>}
         <thead

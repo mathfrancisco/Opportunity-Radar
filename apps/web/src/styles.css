@@ -281,3 +281,16 @@ body { margin: 0; min-width: 320px; }
 
 /* Um endereço de vaga não pode empurrar a página inteira para o lado. */
 .break-anywhere { overflow-wrap: anywhere; }
+
+/*
+ * Tabela que rola para o lado: uma sombra na borda mostra que há mais coluna do outro lado.
+ * As duas faixas de cor da superfície (`local`) cobrem a sombra quando o conteúdo chega ao fim.
+ */
+.scroll-x-shadow {
+  background:
+    linear-gradient(to right, var(--color-surface) 30%, transparent) left center / 2rem 100% no-repeat local,
+    linear-gradient(to left, var(--color-surface) 30%, transparent) right center / 2rem 100% no-repeat local,
+    linear-gradient(to right, var(--color-control-line), transparent) left center / 0.75rem 100% no-repeat scroll,
+    linear-gradient(to left, var(--color-control-line), transparent) right center / 0.75rem 100% no-repeat scroll,
+    var(--color-surface);
+}

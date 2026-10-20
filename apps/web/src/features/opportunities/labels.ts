@@ -30,3 +30,14 @@ export const seniorityLabels: Record<string, string> = {
 export function opportunityLabel(value: string, labels: Record<string, string>): string {
   return labels[value] ?? 'Estado não reconhecido'
 }
+
+export const grossNetLabels: Record<string, string> = {
+  GROSS: 'bruto',
+  NET: 'líquido',
+}
+
+export const skillRequirementLabels: Record<string, string> = {
+  REQUIRED: 'obrigatória',
+  PREFERRED: 'desejável',
+  UNKNOWN: 'não classificada',
+}

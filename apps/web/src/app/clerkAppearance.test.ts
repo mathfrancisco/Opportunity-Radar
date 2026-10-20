@@ -26,4 +26,16 @@ describe('clerkAppearance', () => {
       expect(variables[key], key).toBeDefined()
     }
   })
+
+  it('draws field borders with the control line, which holds 3:1 against the field (DESIGN §6.2)', () => {
+    expect(variables.colorBorder).toBe('var(--color-control-line)')
+    const elements = clerkAppearance.elements as Record<string, string>
+    expect(elements.formFieldInput).toContain('border-control-line')
+  })
+
+  it('lets the card shrink inside the shell gutter', () => {
+    const elements = clerkAppearance.elements as Record<string, Record<string, string | number>>
+    expect(elements.cardBox.maxWidth).toBe('100%')
+    expect(elements.cardBox.minWidth).toBe(0)
+  })
 })

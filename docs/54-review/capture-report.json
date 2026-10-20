@@ -1,6 +1,6 @@
 {
   "date": "2026-10-20",
-  "head": "aa99dd9",
+  "head": "863913e",
   "branch": "feat/marca-bateia-final",
   "mock": {
     "widths": [
@@ -2715,7 +2715,7 @@
       "img.clerk.com"
     ],
     "viteLogTail": [
-      "\u001b[2m18:49:15\u001b[22m \u001b[33m\u001b[1m[vite]\u001b[22m\u001b[39m \u001b[33m\u001b[2m(client)\u001b[22m\u001b[39m \u001b[2m[console.warn] \u001b[22mClerk: Clerk has been loaded with development keys. Development "
+      "\u001b[2m19:09:54\u001b[22m \u001b[33m\u001b[1m[vite]\u001b[22m\u001b[39m \u001b[33m\u001b[2m(client)\u001b[22m\u001b[39m \u001b[2m[console.warn] \u001b[22mClerk: Clerk has been loaded with development keys. Development "
     ],
     "rows": [
       {
@@ -2746,7 +2746,16 @@
             "bg": "rgb(250, 251, 248)",
             "token": "rgb(250, 251, 248)",
             "color": "rgb(24, 34, 30)",
-            "colorToken": "rgb(24, 34, 30)"
+            "colorToken": "rgb(24, 34, 30)",
+            "border": "rgb(111, 123, 116)",
+            "shadow": "color(srgb 0.435294 0.482353 0.454902 / 0.11) 0px 0px 0px 1px, color(srgb 0.435294 0.482353 0.454902 / 0.07) 0px 0px 1px 0px",
+            "bw": "1px",
+            "borderToken": "rgb(111, 123, 116)"
+          },
+          "cardBox": {
+            "width": 246,
+            "left": 37,
+            "right": 37
           }
         },
         "dangerVisible": 0,
@@ -2785,7 +2794,16 @@
             "bg": "rgb(250, 251, 248)",
             "token": "rgb(250, 251, 248)",
             "color": "rgb(24, 34, 30)",
-            "colorToken": "rgb(24, 34, 30)"
+            "colorToken": "rgb(24, 34, 30)",
+            "border": "rgb(111, 123, 116)",
+            "shadow": "color(srgb 0.435294 0.482353 0.454902 / 0.11) 0px 0px 0px 1px, color(srgb 0.435294 0.482353 0.454902 / 0.07) 0px 0px 1px 0px",
+            "bw": "1px",
+            "borderToken": "rgb(111, 123, 116)"
+          },
+          "cardBox": {
+            "width": 246,
+            "left": 37,
+            "right": 37
           }
         },
         "dangerVisible": 0,
@@ -2824,7 +2842,16 @@
             "bg": "rgb(250, 251, 248)",
             "token": "rgb(250, 251, 248)",
             "color": "rgb(24, 34, 30)",
-            "colorToken": "rgb(24, 34, 30)"
+            "colorToken": "rgb(24, 34, 30)",
+            "border": "rgb(111, 123, 116)",
+            "shadow": "color(srgb 0.435294 0.482353 0.454902 / 0.11) 0px 0px 0px 1px, color(srgb 0.435294 0.482353 0.454902 / 0.07) 0px 0px 1px 0px",
+            "bw": "1px",
+            "borderToken": "rgb(111, 123, 116)"
+          },
+          "cardBox": {
+            "width": 434.34375,
+            "left": 828.65625,
+            "right": 177
           }
         },
         "dangerVisible": 0,
@@ -2863,7 +2890,16 @@
             "bg": "rgb(250, 251, 248)",
             "token": "rgb(250, 251, 248)",
             "color": "rgb(24, 34, 30)",
-            "colorToken": "rgb(24, 34, 30)"
+            "colorToken": "rgb(24, 34, 30)",
+            "border": "rgb(111, 123, 116)",
+            "shadow": "color(srgb 0.435294 0.482353 0.454902 / 0.11) 0px 0px 0px 1px, color(srgb 0.435294 0.482353 0.454902 / 0.07) 0px 0px 1px 0px",
+            "bw": "1px",
+            "borderToken": "rgb(111, 123, 116)"
+          },
+          "cardBox": {
+            "width": 434.34375,
+            "left": 828.65625,
+            "right": 177
           }
         },
         "dangerVisible": 0,
@@ -2902,7 +2938,16 @@
             "bg": "rgb(22, 30, 27)",
             "token": "rgb(22, 30, 27)",
             "color": "rgb(228, 234, 229)",
-            "colorToken": "rgb(228, 234, 229)"
+            "colorToken": "rgb(228, 234, 229)",
+            "border": "rgb(110, 125, 118)",
+            "shadow": "color(srgb 0.431373 0.490196 0.462745 / 0.11) 0px 0px 0px 1px, color(srgb 0.431373 0.490196 0.462745 / 0.07) 0px 0px 1px 0px",
+            "bw": "1px",
+            "borderToken": "rgb(110, 125, 118)"
+          },
+          "cardBox": {
+            "width": 246,
+            "left": 37,
+            "right": 37
           }
         },
         "dangerVisible": 0,
@@ -2941,7 +2986,16 @@
             "bg": "rgb(22, 30, 27)",
             "token": "rgb(22, 30, 27)",
             "color": "rgb(228, 234, 229)",
-            "colorToken": "rgb(228, 234, 229)"
+            "colorToken": "rgb(228, 234, 229)",
+            "border": "rgb(110, 125, 118)",
+            "shadow": "color(srgb 0.431373 0.490196 0.462745 / 0.11) 0px 0px 0px 1px, color(srgb 0.431373 0.490196 0.462745 / 0.07) 0px 0px 1px 0px",
+            "bw": "1px",
+            "borderToken": "rgb(110, 125, 118)"
+          },
+          "cardBox": {
+            "width": 246,
+            "left": 37,
+            "right": 37
           }
         },
         "dangerVisible": 0,
@@ -2980,7 +3034,16 @@
             "bg": "rgb(22, 30, 27)",
             "token": "rgb(22, 30, 27)",
             "color": "rgb(228, 234, 229)",
-            "colorToken": "rgb(228, 234, 229)"
+            "colorToken": "rgb(228, 234, 229)",
+            "border": "rgb(110, 125, 118)",
+            "shadow": "color(srgb 0.431373 0.490196 0.462745 / 0.11) 0px 0px 0px 1px, color(srgb 0.431373 0.490196 0.462745 / 0.07) 0px 0px 1px 0px",
+            "bw": "1px",
+            "borderToken": "rgb(110, 125, 118)"
+          },
+          "cardBox": {
+            "width": 434.34375,
+            "left": 828.65625,
+            "right": 177
           }
         },
         "dangerVisible": 0,
@@ -3019,7 +3082,16 @@
             "bg": "rgb(22, 30, 27)",
             "token": "rgb(22, 30, 27)",
             "color": "rgb(228, 234, 229)",
-            "colorToken": "rgb(228, 234, 229)"
+            "colorToken": "rgb(228, 234, 229)",
+            "border": "rgb(110, 125, 118)",
+            "shadow": "color(srgb 0.431373 0.490196 0.462745 / 0.11) 0px 0px 0px 1px, color(srgb 0.431373 0.490196 0.462745 / 0.07) 0px 0px 1px 0px",
+            "bw": "1px",
+            "borderToken": "rgb(110, 125, 118)"
+          },
+          "cardBox": {
+            "width": 434.34375,
+            "left": 828.65625,
+            "right": 177
           }
         },
         "dangerVisible": 0,

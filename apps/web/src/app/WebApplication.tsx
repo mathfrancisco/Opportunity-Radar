@@ -1,10 +1,10 @@
 import { ClerkProvider, useAuth } from '@clerk/react'
-import { ptBR } from '@clerk/localizations'
 import { Fragment, type ReactNode, useLayoutEffect, useRef } from 'react'
 import { QueryClientProvider, useQueryClient } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import { App } from './App'
 import { clerkAppearance } from './clerkAppearance'
+import { clerkLocalization } from './clerkLocalization'
 import { setAuthSession, setAuthTokenGetter } from '../lib/api'
 import { createQueryClient } from '../lib/queryClient'
 
@@ -68,7 +68,7 @@ export function WebApplication({ publishableKey }: { publishableKey: string }) {
     <ClerkProvider
       appearance={clerkAppearance}
       afterSignOutUrl="/"
-      localization={ptBR}
+      localization={clerkLocalization}
       publishableKey={key}
       signInFallbackRedirectUrl="/"
       signInUrl="/sign-in"

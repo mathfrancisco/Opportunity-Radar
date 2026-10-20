@@ -17,12 +17,12 @@ const absentTone = 'border-dashed border-line-strong bg-surface text-muted'
  * A state, rendered the same way everywhere, as an outlined `Chip`.
  *
  * The badge knows nothing about sources, runs or verdicts: it is handed the maps. A state
- * without a label shows its own code rather than a friendly word — inventing "desconhecido"
- * for a value the backend named would hide exactly the case worth reading.
+ * without a label reads "Estado não reconhecido"; the raw code is a technical detail and
+ * never main text (DESIGN.md §8).
  */
 export function StatusBadge({ value, labels, tones, absent }: StatusBadgeProps) {
   if (value === null) {
     return <Chip tone={absentTone}>{absent ?? 'Sem registro'}</Chip>
   }
-  return <Chip tone={tones[value] ?? neutralTone}>{labels[value] ?? value}</Chip>
+  return <Chip tone={tones[value] ?? neutralTone}>{labels[value] ?? 'Estado não reconhecido'}</Chip>
 }

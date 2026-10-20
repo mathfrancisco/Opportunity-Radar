@@ -1201,6 +1201,23 @@ describe('InboxPage salary unit (D1)', () => {
       document.getElementById(label?.getAttribute('for') ?? '')) as HTMLInputElement
   }
 
+  it('mostra a etapa da candidatura uma vez só, sem repetir a palavra', async () => {
+    stub(
+      [],
+      [
+        inboxItem({ applied: true, application_stage: 'APPLIED' }),
+        inboxItem({ opportunity_id: 'o-2', applied: true, application_stage: 'SCREENING' }),
+      ],
+    )
+    const container = renderAt('/inbox')
+    await flush()
+
+    const text = container.textContent ?? ''
+    expect(text).toContain('Candidatura enviada')
+    expect(text).not.toContain('Candidatura: Candidatura')
+    expect(text).toContain('Candidatura: Triagem')
+  })
+
   it('envia BRL e MONTH por padrão quando há salário mínimo', async () => {
     const urls: string[] = []
     stub(urls)

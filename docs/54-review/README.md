@@ -166,7 +166,7 @@ Adaptacoes do ambiente (nenhuma muda o que o CI verifica): (1) a rede padrao do 
 
 #### Problemas encontrados
 
-Nenhum estouro de layout da pagina. Defeitos visiveis nas imagens (nao corrigidos nesta tarefa):
+Nenhum estouro de layout da pagina. Defeitos visiveis nas imagens (corrigidos na secao seguinte, "Correcoes"):
 
 - `fontes-light-320.png`: a tabela de fontes e cortada pela direita; a coluna Estado fica sem as ultimas letras ("termos revisa", "evidencia sist") e Ultima execucao, Itens e Acoes ficam fora de vista. A pagina nao rola; o corte e dentro do conteiner.
 - `status-light-320.png`: a tabela "Metricas por fonte" tambem e cortada (coluna Itens truncada, coluna Erro fora de vista).
@@ -178,6 +178,18 @@ Nenhum estouro de layout da pagina. Defeitos visiveis nas imagens (nao corrigido
 - `inbox-light-1440.png` e outras de 1440 px: a barra lateral termina aos 900 px de altura na captura de pagina inteira (provavel artefato da captura com sidebar de altura de janela; nao medido em uso real).
 - `clerk-real-sign-up-dark-1440.png`: placeholder em ingles ("Create a password"); o subtitulo diz "para continuar em Opportunity Radar" (nome do app na instancia do Clerk, nao Bateia); no escuro, as bordas dos campos e do botao do Google quase nao aparecem. A faixa "Development mode" e do Clerk em desenvolvimento.
 - `clerk-real-sign-in-dark-320.png`: o cartao do Clerk encosta nas bordas do painel.
+
+#### Correcoes (fix(web): defects from the final Bateia capture)
+
+Rodada de captura repetida depois das correcoes: mock 156 capturas, overflow 0, `pageerror` 0, erros de console 0; Clerk real 8 capturas, overflow 0, erros 0. `npm run check` em `apps/web`: exit 0, 63 arquivos, 678 testes, JS 219.80 kB gzip (limite 237.4 kB).
+
+- Tabelas em 320 px (`fontes-light-320`, `status-light-320`, `homologacao-dark-320`): a tabela ja rolava dentro do conteiner, mas sem sinal e com colunas espremidas. `DataTable` com 3 colunas ou mais passa a ter largura minima de 34rem, sombra nas bordas (`.scroll-x-shadow`) que mostra que ha mais coluna, e a regiao vira `role="region"` com nome e foco por teclado. Todas as colunas ficam alcancaveis por rolagem.
+- Codigo cru em chip (`STATUS_NOVO`): `StatusBadge` mostra "Estado não reconhecido".
+- Detalhe da vaga: periodo e bruto/liquido em portugues ("por mes, bruto"), exigencia da skill ("obrigatória"); versoes, regra de duplicata, configuracao `absence_after_hours`, fingerprint e ids de item bruto foram para "Detalhe técnico". Teste com `visibleTextOutsideDetails` pega snake_case minusculo, versoes `x-v1` e uuids.
+- Inbox: a etapa aparece uma vez ("Candidatura enviada"; as demais seguem "Candidatura: Triagem").
+- Status: o eyebrow "Ambiente não informado" saiu; a API nunca informa o ambiente, entao o rotulo sempre contradizia o painel.
+- Clerk: `clerkLocalization` completa `formFieldInputPlaceholder__signUpPassword` ("Crie uma senha"); campos e botao do Google com borda 1px `--color-control-line` (medido: `rgb(110, 125, 118)` no escuro); `rootBox` e `cardBox` encolhem, e em 320 px o cartao ficou com 37 px de cada lado.
+- Nao reproduzivel / fora de escopo: nome "Opportunity Radar" no Clerk (configuracao do painel do Clerk). O rotulo "Evidência: description" no detalhe vem do dado simulado.
 
 #### Nao verificado
 

@@ -79,6 +79,13 @@ const lifecycleLabels: Record<string, string> = {
   DISCOVERED: 'Descoberta', ACTIVE: 'Ativa', STALE: 'Desatualizada', CLOSED: 'Encerrada',
 }
 
+/** The stage once: "Candidatura enviada" already says it, "Triagem" needs the noun. */
+function applicationChipText(stage: string | null): string {
+  const label = stage === null ? undefined : stageLabels[stage as ApplicationStage]
+  if (!label) return 'Candidatura registrada'
+  return label.startsWith('Candidatura') ? label : `Candidatura: ${label}`
+}
+
 function display(value: string | null) {
   return value === null || value === '' ? '—' : value
 }
@@ -185,10 +192,7 @@ function ItemRow({ item }: { item: InboxItem }) {
           <ScoreMeter score={item.score} verdict={item.verdict} />
           <VerdictBadge verdict={item.verdict} />
           {item.applied && (
-            <Chip tone={appliedTone}>
-              Candidatura: {stageLabels[item.applicationStage as ApplicationStage] ??
-                item.applicationStage}
-            </Chip>
+            <Chip tone={appliedTone}>{applicationChipText(item.applicationStage)}</Chip>
           )}
         </div>
       </td>

@@ -5,6 +5,7 @@ import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { Chip } from '../components/Chip'
 import { PageShell } from '../components/PageShell'
+import { TechnicalDetail } from '../components/TechnicalDetail'
 import { EmptyState, ErrorState, LoadingState } from '../components/states'
 import { NuggetMeter } from '../components/ui/NuggetMeter'
 import { AnalysisPanel } from '../features/matching/AnalysisPanel'
@@ -19,10 +20,13 @@ import {
   useLatestAssessment,
 } from '../features/matching/useAssessment'
 import { type DuplicateCandidate, type OpportunityDetail } from '../features/opportunities/api'
+import { compensationPeriodLabels } from '../features/profile/labels'
 import {
   contractLabels,
+  grossNetLabels,
   opportunityLabel,
   seniorityLabels,
+  skillRequirementLabels,
   workModeLabels,
 } from '../features/opportunities/labels'
 import { estimatedDateHint } from '../features/dashboard/api'
@@ -223,19 +227,21 @@ export function AbsenceRule({ status, hours }: { status: string; hours: number |
   // does not know whether the posting left the board or the board run was read in full.
   const absentFor = hours === null ? 'mais tempo que o prazo configurado' : `mais de ${hours} h`
   return (
-    <p
+    <div
       className="mt-3 max-w-[72ch] text-body-sm text-subtle"
       data-testid="absence-rule"
       id="regra-ausencia"
     >
-      <span className="font-medium text-ink">
-        {status === 'CLOSED' ? 'Regra de encerramento: ' : 'Quando a vaga é encerrada: '}
-      </span>
-      a vaga é encerrada quando some do quadro da fonte por {absentFor} (configuração{' '}
-      <code>absence_after_hours</code>) e a execução completa mais recente da fonte leu o quadro
-      inteiro. Execuções parciais ou com falha não encerram nada. Se a vaga reaparecer em uma execução completa, volta a ficar
-      ativa.
-    </p>
+      <p>
+        <span className="font-medium text-ink">
+          {status === 'CLOSED' ? 'Regra de encerramento: ' : 'Quando a vaga é encerrada: '}
+        </span>
+        a vaga é encerrada quando some do quadro da fonte por {absentFor} e a execução completa
+        mais recente da fonte leu o quadro inteiro. Execuções parciais ou com falha não encerram
+        nada. Se a vaga reaparecer em uma execução completa, volta a ficar ativa.
+      </p>
+      <TechnicalDetail>Configuração: absence_after_hours</TechnicalDetail>
+    </div>
   )
 }
 
@@ -253,15 +259,16 @@ function Compensation({ opportunity }: { opportunity: OpportunityDetail }) {
           <p className="font-semibold">
             {display(item.minimum)} – {display(item.maximum)} {display(item.currency)}{' '}
             <span className="font-normal text-muted">
-              ({item.period}, {item.grossNet})
+              (
+              {(compensationPeriodLabels[item.period] ?? 'período não informado').toLowerCase()},{' '}
+              {grossNetLabels[item.grossNet] ?? 'tipo não informado'})
             </span>
           </p>
           {item.evidenceText && (
             <p className="mt-2 text-subtle">“{item.evidenceText}”</p>
           )}
-          <p className="mt-2 text-xs text-muted">
-            Evidência: {display(item.evidenceSource)} · raw item {item.rawItemId}
-          </p>
+          <p className="mt-2 text-xs text-muted">Evidência: {display(item.evidenceSource)}</p>
+          <TechnicalDetail>Item bruto {item.rawItemId}</TechnicalDetail>
         </Card>
       ))}
     </ul>
@@ -279,9 +286,12 @@ function Skills({ opportunity }: { opportunity: OpportunityDetail }) {
           <Chip className="text-body-sm">
             <span className="font-medium">{skill.displayName}</span>
             <span className="text-muted">
-              {skill.requirement.toLowerCase()} · {skill.taxonomyVersion}
+              {skillRequirementLabels[skill.requirement] ?? 'não classificada'}
             </span>
           </Chip>
+          {skill.taxonomyVersion && (
+            <TechnicalDetail>Taxonomia {skill.taxonomyVersion}</TechnicalDetail>
+          )}
         </li>
       ))}
     </ul>
@@ -346,9 +356,7 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
               Primeira vez {formatDate(occurrence.firstSeenAt)} · última{' '}
               {formatDate(occurrence.lastSeenAt)}
             </p>
-            <p className="break-anywhere mt-1 text-xs text-muted">
-              raw item {occurrence.rawItemId}
-            </p>
+            <TechnicalDetail>Item bruto {occurrence.rawItemId}</TechnicalDetail>
             {!occurrence.payloadRetained && (
               <p className="mt-2 rounded-control border border-warning-line bg-warning-surface px-3 py-2 text-xs text-warning-ink">
                 Conteúdo bruto expirado pela retenção
@@ -361,11 +369,13 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
           </Card>
         ))}
       </ul>
-      <p className="break-anywhere mt-4 text-sm text-muted">
-        Fingerprint {opportunity.fingerprint} ({opportunity.fingerprintVersion}) ·{' '}
+      <p className="mt-4 text-sm text-muted">
         {opportunity.normalizationResults.length} resultado
         {opportunity.normalizationResults.length === 1 ? '' : 's'} de normalização.
       </p>
+      <TechnicalDetail>
+        Fingerprint {opportunity.fingerprint} ({opportunity.fingerprintVersion})
+      </TechnicalDetail>
     </>
   )
 }
@@ -473,9 +483,12 @@ function DuplicateCandidateCard({
   return (
     <Card as="article" className="text-sm">
       <p className="text-xs text-muted">
+        Estas duas vagas parecem ser a mesma. Confirme ou separe.
+      </p>
+      <TechnicalDetail>
         Regra: {candidate.rule}
         {candidate.score !== null ? ` · score ${candidate.score}` : ''}
-      </p>
+      </TechnicalDetail>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {[opportunity, otherOpportunity].map((side) => (
           <div className="rounded-control border border-line bg-surface p-4" key={side.id}>
@@ -672,11 +685,11 @@ function Decision({ assessment }: { assessment: MatchAssessment }) {
           os detalhes abaixo permanecem disponíveis como histórico.
         </p>
       )}
-      <p className="break-anywhere mt-2 text-xs text-muted">
+      <p className="mt-2 text-xs text-muted">Avaliada em {formatDate(assessment.assessedAt)}</p>
+      <TechnicalDetail>
         Regras {assessment.rulesVersion} · taxonomia {assessment.taxonomyVersion} · perfil{' '}
-        {assessment.profileVersionId.slice(0, 8)} · avaliada em{' '}
-        {formatDate(assessment.assessedAt)} · hash {assessment.inputHash.slice(0, 12)}…
-      </p>
+        {assessment.profileVersionId.slice(0, 8)} · hash {assessment.inputHash.slice(0, 12)}…
+      </TechnicalDetail>
 
       <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6">
         {blocking.length > 0 && (

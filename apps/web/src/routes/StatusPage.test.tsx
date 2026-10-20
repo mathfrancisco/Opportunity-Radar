@@ -131,7 +131,8 @@ describe('StatusPage', () => {
     const main = container.querySelector('main')?.textContent ?? container.textContent ?? ''
     expect(main).not.toContain('Ambiente local')
     expect(main).not.toMatch(/local/i)
-    expect(main).toContain('Ambiente não informado')
+    // O ambiente nunca vem da API: um rótulo "não informado" ao lado de um painel pronto contradiz.
+    expect(main).not.toContain('Ambiente não informado')
   })
 
   it('apresenta estado degradado quando os sinais de saúde não estão completos', async () => {
