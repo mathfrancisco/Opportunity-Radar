@@ -153,6 +153,7 @@ class InboxSummaryResponse(BaseModel):
     collected_count: int
     since: datetime
     next_collection_at: datetime | None
+    generated_at: datetime
 
 
 class SavedSearchCreateRequest(BaseModel):
@@ -673,6 +674,7 @@ def get_inbox_summary(
         collected_count=summary.collected_count,
         since=summary.since,
         next_collection_at=summary.next_collection_at,
+        generated_at=summary.generated_at,
     )
 
 

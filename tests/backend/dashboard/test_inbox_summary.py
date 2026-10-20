@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from opportunity_radar.acquisition.models import SourceDefinitionModel
+from opportunity_radar.acquisition.models import SourceDefinitionModel, SourceRunModel
 from opportunity_radar.companies.models import Company
 from opportunity_radar.dashboard.inbox_summary import inbox_summary, summary_since
 from opportunity_radar.matching.models import MatchAssessmentModel
@@ -145,36 +145,82 @@ def test_counts_follow_since_verdict_and_owner(session: Session) -> None:
     assert inbox_summary(session, other, now=NOW).worth_count >= 1
 
 
+def _source(
+    session: Session,
+    name: str,
+    schedule: str | None,
+    *,
+    enabled: bool = True,
+    last_run_at: datetime | None = None,
+) -> SourceDefinitionModel:
+    source = SourceDefinitionModel(
+        source_type="greenhouse",
+        name=f"{name}-{uuid4().hex}",
+        enabled=enabled,
+        schedule=schedule,
+        configuration={"board_token": uuid4().hex},
+    )
+    session.add(source)
+    session.flush()
+    if last_run_at is not None:
+        session.add(
+            SourceRunModel(
+                source_definition_id=source.id,
+                status="SUCCEEDED",
+                started_at=last_run_at,
+                finished_at=last_run_at + timedelta(minutes=1),
+            )
+        )
+        session.flush()
+    return source
+
+
 @pytest.mark.integration
 @needs_database
-def test_next_collection_is_earliest_future_among_scheduled_sources(session: Session) -> None:
+def test_next_collection_is_earliest_due_time_among_scheduled_sources(
+    session: Session,
+) -> None:
     session.execute(update(SourceDefinitionModel).values(enabled=False))
     owner = f"o-{uuid4().hex}"
     assert inbox_summary(session, owner, now=NOW).next_collection_at is None
 
-    def source(name: str, schedule: str | None, enabled: bool = True) -> None:
-        session.add(
-            SourceDefinitionModel(
-                source_type="greenhouse",
-                name=f"{name}-{uuid4().hex}",
-                enabled=enabled,
-                schedule=schedule,
-                configuration={"board_token": uuid4().hex},
-            )
-        )
-
-    source("manual", "manual")
-    source("none", None)
-    source("disabled", "0 3 * * *", enabled=False)
-    session.flush()
+    _source(session, "manual", "manual")
+    _source(session, "none", None)
+    _source(session, "disabled", "0 3 * * *", enabled=False)
     assert inbox_summary(session, owner, now=NOW).next_collection_at is None
 
-    source("daily", "0 6 * * *")
-    source("later", "0 9 * * *")
-    session.flush()
-    assert inbox_summary(session, owner, now=NOW).next_collection_at == datetime(
-        2026, 10, 20, 6, 0, tzinfo=UTC
-    )
+    # Both ran yesterday afternoon, so their next slot is a real cron fire time.
+    yesterday = datetime(2026, 10, 19, 20, 0, tzinfo=UTC)
+    _source(session, "daily", "0 6 * * *", last_run_at=yesterday)
+    _source(session, "later", "0 9 * * *", last_run_at=yesterday)
+    summary = inbox_summary(session, owner, now=NOW)
+    assert summary.next_collection_at == datetime(2026, 10, 20, 6, 0, tzinfo=UTC)
+    assert summary.generated_at == NOW
+
+
+@pytest.mark.integration
+@needs_database
+def test_a_never_run_scheduled_source_is_reported_as_due_now(session: Session) -> None:
+    session.execute(update(SourceDefinitionModel).values(enabled=False))
+    _source(session, "later", "0 9 * * *", last_run_at=datetime(2026, 10, 19, 20, 0, tzinfo=UTC))
+    _source(session, "fresh", "0 6 * * *")
+
+    summary = inbox_summary(session, f"o-{uuid4().hex}", now=NOW)
+
+    assert summary.next_collection_at == NOW
+    assert summary.generated_at == NOW
+
+
+@pytest.mark.integration
+@needs_database
+def test_a_source_with_an_invalid_schedule_is_skipped(session: Session) -> None:
+    session.execute(update(SourceDefinitionModel).values(enabled=False))
+    _source(session, "broken", "not a cron", last_run_at=datetime(2026, 10, 19, 20, 0, tzinfo=UTC))
+    _source(session, "ok", "0 9 * * *", last_run_at=datetime(2026, 10, 19, 20, 0, tzinfo=UTC))
+
+    summary = inbox_summary(session, f"o-{uuid4().hex}", now=NOW)
+
+    assert summary.next_collection_at == datetime(2026, 10, 20, 9, 0, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -196,7 +242,13 @@ def test_summary_route_is_not_shadowed_and_returns_the_contract(client: TestClie
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"worth_count", "collected_count", "since", "next_collection_at"}
+    assert set(body) == {
+        "worth_count",
+        "collected_count",
+        "since",
+        "next_collection_at",
+        "generated_at",
+    }
     assert body["worth_count"] <= body["collected_count"]
 
 
