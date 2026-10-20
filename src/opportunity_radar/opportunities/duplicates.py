@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import and_, exists, or_, select, update
+from sqlalchemy import and_, exists, or_, select, tuple_, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
@@ -176,17 +176,27 @@ def find_title_location_window_candidates(
         )
     ).all()
 
-    created: list[DuplicateCandidateModel] = []
-    for match in matches:
-        pair = _ordered_pair(opportunity.id, match.id)
-        lower_opportunity = opportunity if opportunity.id == pair.lower_id else match
-        higher_opportunity = match if lower_opportunity is opportunity else opportunity
-        existing = session.scalar(
+    if not matches:
+        return []
+
+    pairs = [_ordered_pair(opportunity.id, match.id) for match in matches]
+    existing_by_pair = {
+        (row.opportunity_id, row.duplicate_opportunity_id): row
+        for row in session.scalars(
             select(DuplicateCandidateModel).where(
-                DuplicateCandidateModel.opportunity_id == pair.lower_id,
-                DuplicateCandidateModel.duplicate_opportunity_id == pair.higher_id,
+                tuple_(
+                    DuplicateCandidateModel.opportunity_id,
+                    DuplicateCandidateModel.duplicate_opportunity_id,
+                ).in_([(pair.lower_id, pair.higher_id) for pair in pairs])
             )
         )
+    }
+
+    created: list[DuplicateCandidateModel] = []
+    for match, pair in zip(matches, pairs, strict=True):
+        lower_opportunity = opportunity if opportunity.id == pair.lower_id else match
+        higher_opportunity = match if lower_opportunity is opportunity else opportunity
+        existing = existing_by_pair.get((pair.lower_id, pair.higher_id))
         if existing is not None:
             if existing.status == "REJECTED" and (
                 existing.rejected_version_opportunity != lower_opportunity.version

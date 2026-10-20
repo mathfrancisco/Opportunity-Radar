@@ -571,6 +571,21 @@ class SqlAlchemyMatchingRepository:
         )
         return self.session.execute(statement).scalar_one_or_none() is not None
 
+    def holds_analysis_claim(self, assessment_id: UUID, *, owner: str, now: datetime) -> bool:
+        """Whether this attempt still owns a live lease; locks the row until commit/rollback."""
+        return (
+            self.session.execute(
+                select(MatchAnalysisClaimModel.assessment_id)
+                .where(
+                    MatchAnalysisClaimModel.assessment_id == assessment_id,
+                    MatchAnalysisClaimModel.owner == owner,
+                    MatchAnalysisClaimModel.expires_at > now,
+                )
+                .with_for_update()
+            ).scalar_one_or_none()
+            is not None
+        )
+
     def release_analysis_claim(self, assessment_id: UUID, *, owner: str) -> None:
         """Release only our own lease: a lease already taken over is not ours to drop."""
         self.session.execute(

@@ -811,6 +811,20 @@ describe('InboxPage table, pagination and filters', () => {
     expect(inbox.searchParams.get('limit')).toBe('50')
   })
 
+  it('envia à API todos os valores repetidos de verdict, seniority e source da URL', async () => {
+    const urls: string[] = []
+    stubInbox(1, urls, [inboxItem()])
+    renderAt(
+      '/inbox?seniority=JUNIOR&seniority=MID&verdict=RECOMMENDED&verdict=WATCHLIST&source=src-a&source=src-b',
+    )
+    await flush()
+
+    const inbox = new URL(urls.find((url) => url.includes('/inbox')) as string, 'http://localhost')
+    expect(inbox.searchParams.getAll('seniority')).toEqual(['JUNIOR', 'MID'])
+    expect(inbox.searchParams.getAll('verdict')).toEqual(['RECOMMENDED', 'WATCHLIST'])
+    expect(inbox.searchParams.getAll('source_definition_id')).toEqual(['src-a', 'src-b'])
+  })
+
   it('pagina pelo Pagination, preserva ?page= e envia a página à API', async () => {
     const urls: string[] = []
     stubInbox(60, urls)
@@ -964,6 +978,31 @@ describe('InboxPage table, pagination and filters', () => {
     expect(search(container).get('search')).toBeNull()
     expect(search(container).get('work_mode')).toBe('REMOTE')
     expect((container.querySelector('#inbox-search') as HTMLInputElement).value).toBe('')
+  })
+  it('mostra Relevância e desabilita a ordenação enquanto há texto na busca, preservando order', async () => {
+    stubInbox(1, [])
+    const container = renderAt('/inbox?search=react&order=score')
+    await flush()
+
+    const select = container.querySelector('#inbox-order') as HTMLSelectElement
+    expect(select.disabled).toBe(true)
+    expect(select.selectedOptions[0].textContent).toBe('Relevância')
+    const description = document.getElementById(select.getAttribute('aria-describedby') ?? '')
+    expect(description?.textContent).toBe(
+      'Com texto na busca, os resultados são ordenados por relevância',
+    )
+    expect(search(container).get('order')).toBe('score')
+  })
+
+  it('mantém a ordenação habilitada e com o valor da URL sem texto na busca', async () => {
+    stubInbox(1, [])
+    const container = renderAt('/inbox?order=score')
+    await flush()
+
+    const select = container.querySelector('#inbox-order') as HTMLSelectElement
+    expect(select.disabled).toBe(false)
+    expect(select.selectedOptions[0].textContent).toBe('Maior score')
+    expect(select.hasAttribute('aria-describedby')).toBe(false)
   })
 })
 

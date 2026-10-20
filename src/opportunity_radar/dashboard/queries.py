@@ -29,6 +29,7 @@ from sqlalchemy import (
     cast,
     func,
     literal,
+    or_,
     select,
     true,
     union_all,
@@ -43,7 +44,7 @@ from opportunity_radar.acquisition.models import (
 )
 from opportunity_radar.companies.models import Company, CompanySource, CompanyStartupEvidence
 from opportunity_radar.dashboard.metrics import _is_homologated
-from opportunity_radar.dashboard.search_synonyms import synonym_variants
+from opportunity_radar.dashboard.search_synonyms import synonym_groups, synonym_variants
 from opportunity_radar.matching import currency
 from opportunity_radar.matching.models import (
     CurrentAssessmentModel,
@@ -855,19 +856,51 @@ _DICTIONARIES = ("portuguese", "english")
 
 
 def _search_tsquery(term: str) -> Any:
-    """`websearch_to_tsquery` over both dictionaries, ORed across synonym variants.
+    """`websearch_to_tsquery` over both dictionaries, combined across synonyms.
 
-    Quoted phrases, `AND`/`OR`/`-negation` in `term` come from `websearch_to_tsquery`
-    itself; `synonym_variants` only substitutes plain tokens before parsing, so those
-    semantics survive (SPEC 37, "Contrato de consulta"). The variant goes through
-    `opportunities.f_unaccent` like `search_document` does, so accented and plain
-    spellings match the same rows.
+    Plain queries are split per concept: each synonym token's alternatives (itself plus
+    synonyms) are ORed and the concepts ANDed with the remaining text, so
+    `desenvolvedor dados` finds "Data Developer". Queries with quotes, `-negation` or
+    `OR` (or too many tokens) keep the `synonym_variants` path, where
+    `websearch_to_tsquery` parses the text itself and only plain tokens are substituted
+    (SPEC 37, "Contrato de consulta"). Every text goes
+    through `opportunities.f_unaccent` like `search_document` does, so accented and
+    plain spellings match the same rows.
     """
-    expressions: list[Any] = [
-        func.websearch_to_tsquery(dictionary, func.opportunities.f_unaccent(variant))
-        for variant in synonym_variants(term)
-        for dictionary in _DICTIONARIES
-    ]
+
+    def parsed(text: str) -> list[Any]:
+        return [
+            func.websearch_to_tsquery(dictionary, func.opportunities.f_unaccent(text))
+            for dictionary in _DICTIONARIES
+        ]
+
+    split = synonym_groups(term)
+    if split is not None:
+        groups, rest = split
+        concepts = [
+            reduce(
+                lambda left, right: left.op("||")(right),
+                [expr for alternative in group for expr in parsed(alternative)],
+            )
+            for group in groups
+        ]
+        if rest:
+            # Untranslated text: each dictionary parses it and drops its own stopwords.
+            # If either side drops everything (e.g. `de`), the text is a stopword there
+            # and must not become a required lexeme from the other side; an empty
+            # tsquery is ignored by `&&`.
+            pt_rest, en_rest = parsed(rest)
+            concepts.append(
+                case(
+                    (
+                        or_(func.numnode(pt_rest) == 0, func.numnode(en_rest) == 0),
+                        func.websearch_to_tsquery("simple", ""),
+                    ),
+                    else_=pt_rest.op("||")(en_rest),
+                )
+            )
+        return reduce(lambda left, right: left.op("&&")(right), concepts)
+    expressions = [expr for variant in synonym_variants(term) for expr in parsed(variant)]
     return reduce(lambda left, right: left.op("||")(right), expressions)
 
 

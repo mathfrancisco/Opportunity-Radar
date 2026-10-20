@@ -19,6 +19,10 @@ from opportunity_radar.dashboard.queries import (
     count_opportunity_inbox,
     count_opportunity_inbox_batch,
 )
+from opportunity_radar.opportunities.domain import (
+    DEFAULT_RECENCY_WINDOW_DAYS,
+    NEW_RECENCY_WINDOW_DAYS,
+)
 from opportunity_radar.profile.domain import ProfileNotFoundError
 from opportunity_radar.profile.service import ProfileService
 
@@ -195,6 +199,15 @@ def new_count(session: Session, saved_search: SavedSearch, *, owner_sub: str) ->
 
 
 def _saved_search_inbox_query(saved_search: SavedSearch) -> tuple[InboxQuery, bool]:
+    """Read a saved search's filters back as the Inbox query the Inbox page would run.
+
+    Recency rules (single source of truth, mirrors `GET /inbox` and `InboxPage`):
+    - `only_recent`: absent/true -> True (the Inbox default); false -> False.
+    - `lens`: `novas` -> recency_window_days=14; `abertas` -> open_at_source=True;
+      absent or "" -> no effect; any other value is invalid.
+    - `recency_window_days`: integer 1-365 (int or digit string); `lens=novas` wins.
+    - `open_at_source`, `only_startups`: booleans, same name on the query.
+    """
     filters = saved_search.filters
     _validate_saved_search_filter_shapes(filters)
     search_filter = filters.get("search")
@@ -220,6 +233,11 @@ def _saved_search_inbox_query(saved_search: SavedSearch) -> tuple[InboxQuery, bo
         "source_definition_id",
         "profile_version_id",
         "order",
+        "only_recent",
+        "recency_window_days",
+        "open_at_source",
+        "only_startups",
+        "lens",
     }
     for key in filters.keys() - known_filter_keys:
         logger.warning("Ignoring unknown saved search filter key %r", key)
@@ -241,6 +259,15 @@ def _saved_search_inbox_query(saved_search: SavedSearch) -> tuple[InboxQuery, bo
         if applied_value in ("true", "false")
         else None
     )
+    only_recent = filters.get("only_recent") not in (False, "false")
+    open_at_source = filters.get("open_at_source") in (True, "true")
+    only_startups = filters.get("only_startups") in (True, "true")
+    recency_window_days = _saved_search_recency_window(filters.get("recency_window_days"))
+    lens = filters.get("lens")
+    if lens == "novas":
+        recency_window_days = NEW_RECENCY_WINDOW_DAYS
+    elif lens == "abertas":
+        open_at_source = True
     only_assessed_value = filters.get("only_assessed", False)
     only_assessed = only_assessed_value is True or only_assessed_value == "true"
     published_after_value = filters.get("published_after")
@@ -274,6 +301,10 @@ def _saved_search_inbox_query(saved_search: SavedSearch) -> tuple[InboxQuery, bo
             if filters.get("profile_version_id")
             else None
         ),
+        only_recent=only_recent,
+        recency_window_days=recency_window_days,
+        open_at_source=open_at_source,
+        only_startups=only_startups,
         order=_saved_search_order(filters.get("order", InboxOrder.PRIORITY.value)),
     )
     return query, needs_profile_fallback
@@ -296,12 +327,36 @@ def _validate_saved_search_filter_shapes(filters: dict[str, Any]) -> None:
         if value is not None and not isinstance(value, str):
             raise InvalidSavedSearchFiltersError(f"invalid {key} filter")
 
-    for key in ("applied", "only_assessed", "all_areas"):
+    lens = filters.get("lens")
+    if lens is not None and lens not in ("", "novas", "abertas"):
+        raise InvalidSavedSearchFiltersError("invalid lens filter")
+
+    for key in (
+        "applied",
+        "only_assessed",
+        "all_areas",
+        "only_recent",
+        "open_at_source",
+        "only_startups",
+    ):
         value = filters.get(key)
         if value is not None and not (
             isinstance(value, bool) or value in ("true", "false")
         ):
             raise InvalidSavedSearchFiltersError(f"invalid {key} filter")
+
+
+def _saved_search_recency_window(value: object) -> int:
+    if value is None or value == "":
+        return DEFAULT_RECENCY_WINDOW_DAYS
+    if isinstance(value, bool) or not (
+        isinstance(value, int) or (isinstance(value, str) and value.isascii() and value.isdigit())
+    ):
+        raise InvalidSavedSearchFiltersError("invalid recency_window_days filter")
+    days = int(value)
+    if not 1 <= days <= 365:
+        raise InvalidSavedSearchFiltersError("invalid recency_window_days filter")
+    return days
 
 
 def _saved_search_decimal(value: object) -> Decimal | None:

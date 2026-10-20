@@ -19,6 +19,7 @@ from opportunity_radar.matching.models import (
 )
 from opportunity_radar.matching.service import (
     AnalysisInProgressError,
+    AnalysisLeaseLostError,
     MatchingService,
     MatchNotFoundError,
     MatchOpportunityNotFoundError,
@@ -219,7 +220,7 @@ async def analyze_match(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "match_not_found", "message": "Match assessment not found."},
         ) from error
-    except AnalysisInProgressError as error:
+    except (AnalysisInProgressError, AnalysisLeaseLostError) as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={

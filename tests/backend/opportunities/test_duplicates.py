@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, event, func, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import (
@@ -431,6 +431,108 @@ def test_reject_duplicate_resurfaces_after_a_material_version_change() -> None:
             assert resurfaced[0].rejected_version_opportunity is None
         finally:
             _cleanup(session, [older.id, newer.id])
+
+
+def test_candidate_detection_loads_existing_pairs_in_one_query() -> None:
+    """F6: one SELECT for the matches plus one for the existing pairs, whatever C is."""
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    marker = f"f6-budget-{uuid4().hex}"
+    with Session(engine) as session:
+        rows = [
+            _opportunity(
+                created_at=NOW - timedelta(minutes=index),
+                published_at=NOW + timedelta(days=index % 5),
+                company=marker,
+            )
+            for index in range(10)
+        ]
+        session.add_all(rows)
+        session.commit()
+        ids = [row.id for row in rows]
+        target = rows[0]
+        session.refresh(target)
+        statements: list[str] = []
+
+        def _count(conn, cursor, statement, parameters, context, executemany) -> None:
+            statements.append(statement)
+
+        try:
+            event.listen(engine, "before_cursor_execute", _count)
+            try:
+                created = find_title_location_window_candidates(session, target)
+            finally:
+                event.remove(engine, "before_cursor_execute", _count)
+            session.commit()
+            selects = [s for s in statements if s.lstrip().upper().startswith("SELECT")]
+            assert len(created) == 9
+            assert len(selects) == 2, selects
+        finally:
+            _cleanup(session, ids)
+
+
+def test_candidate_detection_handles_new_pending_and_rejected_pairs_together() -> None:
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    marker = f"f6-mixed-{uuid4().hex}"
+    with Session(engine) as session:
+        target, pending, rejected_same, rejected_changed = (
+            _opportunity(
+                created_at=NOW - timedelta(minutes=index),
+                published_at=NOW + timedelta(days=index),
+                company=marker,
+            )
+            for index in range(4)
+        )
+        fresh = _opportunity(
+            created_at=NOW - timedelta(minutes=9),
+            published_at=NOW + timedelta(days=5),
+            company=marker,
+        )
+        session.add_all([target, pending, rejected_same, rejected_changed])
+        session.commit()
+        ids = [target.id, pending.id, rejected_same.id, rejected_changed.id, fresh.id]
+        try:
+            seeded = find_title_location_window_candidates(session, target)
+            session.commit()
+            assert len(seeded) == 3
+            by_other = {
+                (
+                    c.duplicate_opportunity_id
+                    if c.opportunity_id == target.id
+                    else c.opportunity_id
+                ): c
+                for c in seeded
+            }
+            reject_duplicate(session, by_other[rejected_same.id].id, decided_by="op")
+            reject_duplicate(session, by_other[rejected_changed.id].id, decided_by="op")
+            rejected_changed.version += 1
+            session.add(fresh)
+            session.commit()
+
+            created = find_title_location_window_candidates(session, target)
+            session.commit()
+
+            assert len(created) == 2
+            assert by_other[rejected_changed.id].id in {c.id for c in created}
+            assert by_other[rejected_changed.id].status == "PENDING"
+            assert by_other[rejected_same.id].status == "REJECTED"
+            assert by_other[pending.id].id not in {c.id for c in created}
+            new_pairs = [c for c in created if c.id != by_other[rejected_changed.id].id]
+            assert len(new_pairs) == 1
+            assert {new_pairs[0].opportunity_id, new_pairs[0].duplicate_opportunity_id} == {
+                target.id,
+                fresh.id,
+            }
+            total = session.scalar(
+                select(func.count())
+                .select_from(DuplicateCandidateModel)
+                .where(
+                    (DuplicateCandidateModel.opportunity_id == target.id)
+                    | (DuplicateCandidateModel.duplicate_opportunity_id == target.id)
+                )
+            )
+            assert total == 4
+        finally:
+            _cleanup(session, ids)
 
 
 def test_confirm_duplicate_is_idempotent_on_retry() -> None:
