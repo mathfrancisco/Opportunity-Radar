@@ -4,6 +4,7 @@ import { Button } from '../components/Button'
 import { Chip } from '../components/Chip'
 import { PrimaryText, SecondaryText } from '../components/cells'
 import { DataTable } from '../components/DataTable'
+import { FirstRunGuide } from '../components/FirstRunGuide'
 import { FilterBar } from '../components/FilterBar'
 import { FilterPill } from '../components/FilterPill'
 import { ChevronDownIcon } from '../components/icons'
@@ -25,6 +26,7 @@ import {
 import { useInbox } from '../features/dashboard/useInbox'
 import { nuggetsFromScore } from '../features/matching/nuggets'
 import { verdictLabels, verdictTones } from '../features/matching/verdicts'
+import { useActiveProfile } from '../features/profile/useProfile'
 import { useMarkRelevance } from '../features/opportunities/useOpportunity'
 import { type ApplicationStage, stageLabels } from '../features/pipeline/api'
 import { roleFamilies } from '../features/dashboard/roleFamilies'
@@ -535,6 +537,7 @@ export function InboxPage() {
   const [searchReset, setSearchReset] = useState(0)
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(advancedFilterCount > 0)
 
+  const profile = useActiveProfile()
   const inbox = useInbox({
     page,
     pageSize,
@@ -903,10 +906,14 @@ export function InboxPage() {
         )}
         {inbox.data?.items.length === 0 &&
           (activeFilterCount === 0 && !search ? (
+            profile.data === null ? (
+              <FirstRunGuide />
+            ) : (
             <EmptyState>
               Ainda não há oportunidades para mostrar. Quando uma fonte trouxer vagas, elas
               aparecem aqui.
             </EmptyState>
+            )
           ) : (
             <EmptyState>Nenhuma oportunidade encontrada com esses filtros.</EmptyState>
           ))}

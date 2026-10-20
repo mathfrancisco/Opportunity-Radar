@@ -279,6 +279,63 @@ function inboxItem(overrides: Record<string, unknown> = {}) {
   }
 }
 
+describe('InboxPage primeiro acesso', () => {
+  function stubInbox(items: unknown[], profile: object | null) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.endsWith('/profile')) {
+          return profile ? new Response(JSON.stringify(profile), { status: 200 }) : new Response('{}', { status: 404 })
+        }
+        if (url.includes('/inbox')) {
+          return new Response(
+            JSON.stringify({ items, total: items.length, offset: 0, limit: 25, order: 'priority', off_filter_count: 0 }),
+            { status: 200 },
+          )
+        }
+        return new Response(JSON.stringify([]), { status: 200 })
+      }),
+    )
+  }
+  const profile = {
+    id: 'profile-1', number: 1, status: 'ACTIVE', profile_lock_version: 1,
+    skills: [], experiences: [], projects: [], preferences: {},
+  }
+
+  it('sem perfil e sem vagas, o guia substitui a lista vazia', async () => {
+    stubInbox([], null)
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush(6)
+
+    expect(Array.from(container.querySelectorAll('h2')).some((h) => h.textContent === 'Monte sua bateia')).toBe(true)
+    const cta = Array.from(container.querySelectorAll('a')).find((a) => a.textContent === 'Começar pelo perfil')
+    expect(cta?.getAttribute('href')).toBe('/profile')
+    expect(container.textContent).not.toContain('Ainda não há oportunidades para mostrar')
+  })
+
+  it('sem perfil mas com vagas, a lista aparece como de costume', async () => {
+    stubInbox([inboxItem()], null)
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush(6)
+
+    expect(container.textContent).toContain('Backend Engineer')
+    expect(container.textContent).not.toContain('Monte sua bateia')
+  })
+
+  it('com perfil, o guia não aparece e a lista vazia continua', async () => {
+    stubInbox([], profile)
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush(6)
+
+    expect(container.textContent).not.toContain('Monte sua bateia')
+    expect(container.textContent).toContain('Ainda não há oportunidades para mostrar')
+  })
+})
+
 /** Card F20-61: the recency toggle defaults to on (no `only_recent` param means the
  * server's own default already applies the filter) and unchecking it sends an
  * explicit `only_recent=false` request. */

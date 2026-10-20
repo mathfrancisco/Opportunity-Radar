@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { BrandMark } from '../components/ui/BrandMark'
 
 const benefits = [
   ['Inbox com contexto', 'Reúna oportunidades relevantes e retome a decisão com as informações essenciais à vista.'],
@@ -7,19 +8,10 @@ const benefits = [
 ]
 
 const faqs = [
-  ['O Opportunity Radar envia candidaturas?', 'Não. A plataforma organiza sua busca e ajuda você a decidir a próxima ação; a candidatura continua sob seu controle.'],
+  ['A Bateia envia candidaturas?', 'Não. A plataforma organiza sua busca e ajuda você a decidir a próxima ação; a candidatura continua sob seu controle.'],
   ['Como o matching ajuda na decisão?', 'Ele apresenta critérios do perfil ao lado da oportunidade. A análise por IA, quando disponível, é um apoio consultivo e não substitui sua avaliação.'],
   ['Posso começar por uma oportunidade específica?', 'Sim. Ao entrar, você pode usar a inbox, registrar uma candidatura e acompanhar a próxima ação pelo pipeline.'],
 ]
-
-function Wordmark() {
-  return (
-    <span className="inline-flex items-center gap-2 text-sm font-semibold tracking-tight text-ink">
-      <span aria-hidden="true" className="grid size-8 place-items-center rounded-control bg-brand text-sm font-bold text-surface">O</span>
-      <span className="hidden sm:inline">Opportunity Radar</span>
-    </span>
-  )
-}
 
 function ProductPreview() {
   return (
@@ -71,7 +63,7 @@ export function LandingPage() {
     <main className="min-h-screen overflow-x-hidden bg-canvas text-ink">
       <header className="border-b border-line bg-surface">
         <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8 lg:px-10">
-          <Link aria-label="Opportunity Radar — início" className="inline-flex min-h-11 min-w-11 items-center" to="/"><Wordmark /></Link>
+          <Link aria-label="Bateia — início" className="inline-flex min-h-11 min-w-11 items-center" to="/"><BrandMark /></Link>
           <nav aria-label="Navegação da página" className="hidden items-center gap-6 text-sm text-subtle md:flex">
             <a className="hover:text-accent-ink" href="#como-funciona">Como funciona</a>
             <a className="hover:text-accent-ink" href="#recursos">Recursos</a>
@@ -87,8 +79,8 @@ export function LandingPage() {
       <section className="mx-auto grid max-w-7xl gap-10 px-5 py-14 sm:px-8 sm:py-20 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-center lg:px-10 lg:py-24">
         <div className="max-w-2xl">
           <p className="text-caption font-semibold uppercase tracking-[0.16em] text-accent-ink">Decisões de carreira, com clareza</p>
-          <h1 className="mt-5 max-w-xl text-4xl font-semibold tracking-tight text-ink sm:text-5xl sm:leading-[1.08]">Encontre oportunidades alinhadas à sua carreira.</h1>
-          <p className="mt-6 max-w-xl text-body text-subtle">Um espaço para organizar vagas, comparar o que importa para você e transformar intenção em próxima ação.</p>
+          <h1 className="mt-5 max-w-xl text-4xl font-display tracking-tight text-ink sm:text-5xl sm:leading-[1.08]">Menos vagas, cada uma com o porquê.</h1>
+          <p className="mt-6 max-w-xl text-body text-subtle">Veja por que cada vaga combina com você, o que falta e o que impede. A leitura da IA apoia, a decisão é sua. Nenhuma empresa vê seu perfil aqui.</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link className="inline-flex min-h-11 items-center justify-center rounded-control bg-accent px-5 text-sm font-semibold text-surface hover:bg-accent-hover" to="/sign-up">Começar a organizar</Link>
             <a className="inline-flex min-h-11 items-center justify-center rounded-control border border-line-strong bg-surface px-5 text-sm font-semibold text-ink hover:border-ink" href="#como-funciona">Ver como funciona</a>
@@ -123,7 +115,7 @@ export function LandingPage() {
 
       <section className="mx-auto max-w-7xl px-5 py-14 sm:px-8 lg:px-10"><div className="rounded-panel bg-ink px-6 py-10 text-surface sm:px-10"><p className="text-caption font-semibold uppercase tracking-[0.16em] text-sidebar">Comece pelo que importa</p><div className="mt-4 flex flex-col justify-between gap-6 md:flex-row md:items-end"><div className="max-w-2xl"><h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Sua busca pode ter mais critério e menos ruído.</h2><p className="mt-3 text-body-sm text-sidebar">Crie seu espaço de decisão e avance uma próxima ação por vez.</p></div><Link className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-control bg-surface px-5 text-sm font-semibold text-ink hover:bg-panel" to="/sign-up">Criar conta</Link></div></div></section>
 
-      <footer className="border-t border-line bg-surface"><div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-7 text-body-sm text-subtle sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-10"><Wordmark /><div className="flex gap-3"><a className="inline-flex min-h-11 items-center px-1 hover:text-accent-ink" href="#recursos">Recursos</a><a className="inline-flex min-h-11 items-center px-1 hover:text-accent-ink" href="#perguntas">Perguntas</a><Link className="inline-flex min-h-11 items-center px-1 hover:text-accent-ink" to="/sign-in">Entrar</Link></div></div></footer>
+      <footer className="border-t border-line bg-surface"><div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-7 text-body-sm text-subtle sm:flex-row sm:items-center sm:justify-between sm:px-8 lg:px-10"><BrandMark /><div className="flex gap-3"><a className="inline-flex min-h-11 items-center px-1 hover:text-accent-ink" href="#recursos">Recursos</a><a className="inline-flex min-h-11 items-center px-1 hover:text-accent-ink" href="#perguntas">Perguntas</a><Link className="inline-flex min-h-11 items-center px-1 hover:text-accent-ink" to="/sign-in">Entrar</Link></div></div></footer>
     </main>
   )
 }

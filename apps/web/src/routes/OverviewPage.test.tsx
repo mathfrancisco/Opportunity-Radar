@@ -244,12 +244,21 @@ const disabledAIBudget = {
 }
 
 /** Routes /overview, /source-metrics, /analysis-metrics, /ai-budget and saved-search summary by URL. */
-function stubOverviewFetch(overview: ReturnType<typeof overviewBody>, sourceTypes: string[]) {
+const activeProfileBody = { id: 'profile-1', number: 1, status: 'ACTIVE', profile_lock_version: 1, skills: [], experiences: [], projects: [], preferences: {} }
+
+function stubOverviewFetch(
+  overview: ReturnType<typeof overviewBody>,
+  sourceTypes: string[],
+  profile: typeof activeProfileBody | null = activeProfileBody,
+) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: unknown) => {
       const url = String(input)
       if (url.endsWith('/saved-searches/summary')) return new Response('[]', { status: 200 })
+      if (url.endsWith('/profile')) {
+        return profile ? new Response(JSON.stringify(profile), { status: 200 }) : new Response('{}', { status: 404 })
+      }
       if (url.endsWith('/overview')) return new Response(JSON.stringify(overview), { status: 200 })
       if (url.endsWith('/analysis-metrics')) {
         return new Response(JSON.stringify(disabledAnalysisMetrics), { status: 200 })
@@ -341,6 +350,45 @@ describe('OverviewPage — orientação', () => {
   })
 })
 
+describe('OverviewPage — primeiro acesso', () => {
+  it('sem perfil, mostra o guia com o link para o perfil', async () => {
+    stubOverviewFetch(overviewBody(), [], null)
+
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    const heading = Array.from(container.querySelectorAll('h2')).find((h) => h.textContent === 'Monte sua bateia')
+    expect(heading).toBeDefined()
+    const cta = Array.from(container.querySelectorAll('a')).find((a) => a.textContent === 'Começar pelo perfil')
+    expect(cta?.getAttribute('href')).toBe('/profile')
+  })
+
+  it('com perfil, o guia não aparece', async () => {
+    stubOverviewFetch(overviewBody(), [])
+
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(6)
+
+    expect(container.querySelector('h1')).not.toBeNull()
+    expect(container.textContent).not.toContain('Monte sua bateia')
+  })
+
+  it('não mostra o guia enquanto o perfil carrega nem quando ele falha', async () => {
+    stubOverviewFetch(overviewBody(), [])
+    const stub = fetch as ReturnType<typeof vi.fn>
+    const base = stub.getMockImplementation() as (input: unknown) => Promise<Response>
+    stub.mockImplementation(async (input: unknown) =>
+      String(input).endsWith('/profile') ? new Response('{}', { status: 500 }) : base(input),
+    )
+
+    const container = renderWithProviders(<OverviewPage />)
+    expect(container.textContent).not.toContain('Monte sua bateia')
+    await flush(6)
+
+    expect(container.textContent).not.toContain('Monte sua bateia')
+  })
+})
+
 describe('OverviewPage — composição', () => {
   it('põe a decisão antes dos números e a operação por último, na ordem do DOM', async () => {
     stubOverviewFetch(overviewBody({ new_opportunities: 2 }), [])
@@ -387,7 +435,7 @@ describe('OverviewPage — composição', () => {
     )
   })
 
-  it('faz as mesmas requisições de antes, mais o orçamento diário de IA (R55-C6), sem outras', async () => {
+  it('faz as mesmas requisições de antes, mais o orçamento diário de IA (R55-C6) e o perfil ativo, sem outras', async () => {
     stubOverviewFetch(overviewBody(), ['greenhouse'])
 
     renderWithProviders(<OverviewPage />)
@@ -398,10 +446,11 @@ describe('OverviewPage — composição', () => {
       '/api/ai-budget',
       '/api/analysis-metrics',
       '/api/overview',
+      '/api/profile',
       '/api/saved-searches/summary',
       '/api/source-metrics',
     ])
-    expect(calls).toHaveLength(5)
+    expect(calls).toHaveLength(6)
     expect(document.body.textContent).not.toContain('Não foi possível carregar o orçamento de IA.')
   })
 

@@ -5,6 +5,7 @@ import { ButtonLink } from '../components/Button'
 import { Card } from '../components/Card'
 import { Chip } from '../components/Chip'
 import { DataTable } from '../components/DataTable'
+import { FirstRunGuide } from '../components/FirstRunGuide'
 import { PageShell } from '../components/PageShell'
 import { Bone, Skeleton, TableSkeleton } from '../components/skeletons'
 import { EmptyState, ErrorState } from '../components/states'
@@ -26,6 +27,7 @@ import { verdictCountLabels, verdictOrder } from '../features/matching/verdicts'
 import { opportunityLabel, seniorityLabels } from '../features/opportunities/labels'
 import { type SavedSearchFilters } from '../features/saved-searches/api'
 import { useOpenSavedSearch, useSavedSearchSummary } from '../features/saved-searches/useSavedSearches'
+import { useActiveProfile } from '../features/profile/useProfile'
 import { coverageLabels, coverageTones } from '../features/sources/states'
 
 function savedSearchInboxLink(filters: SavedSearchFilters): string {
@@ -835,6 +837,7 @@ function Summary({ overview }: { overview: Overview }) {
 
 export function OverviewPage() {
   const overview = useOverview()
+  const profile = useActiveProfile()
 
   return (
     <PageShell
@@ -850,6 +853,7 @@ export function OverviewPage() {
       footer="Descubra oportunidades, preserve evidências e decida com contexto."
     >
       <div>
+        {profile.data === null && <div className="mb-6"><FirstRunGuide /></div>}
         {overview.isPending && (
           <SummarySkeleton />
         )}
