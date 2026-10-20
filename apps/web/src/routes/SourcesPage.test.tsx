@@ -3,10 +3,26 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render } from '../components/testing'
+import { render, visibleTextOutsideDetails } from '../components/testing'
 import { SourcesPage } from './SourcesPage'
 
 afterEach(() => vi.unstubAllGlobals())
+
+const pendingFetches: Array<() => void> = []
+
+/** A fetch that stays open until `settlePending`, so no request outlives its test. */
+function holdFetch(): Promise<Response> {
+  return new Promise<Response>((resolve) => {
+    pendingFetches.push(() => resolve(new Response('{}', { status: 500 })))
+  })
+}
+
+async function settlePending() {
+  await act(async () => {
+    pendingFetches.splice(0).forEach((release) => release())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
 
 async function flush(times = 4) {
   for (let i = 0; i < times; i += 1) {
@@ -281,6 +297,106 @@ describe('SourcesPage — tabela e ação de cabeçalho', () => {
 
     expect(history?.getAttribute('aria-expanded')).toBe('true')
     expect(container.querySelectorAll('tbody > tr').length).toBeGreaterThanOrEqual(2)
+  })
+})
+
+describe('SourcesPage — Bateia', () => {
+  it('diz que a fonte não respondeu, sem inventar horário de nova tentativa, e guarda o código em detalhe', async () => {
+    stubFetch([
+      healthItem('greenhouse', {
+        name: 'Gupy',
+        last_run_status: 'FAILED',
+        last_run_error_code: 'HTTP_503',
+        last_run_error: 'quadro indisponível',
+      }),
+    ])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).toContain('Gupy não respondeu.')
+    expect(visible).not.toContain('Tentamos de novo')
+    expect(visible).not.toMatch(/[A-Z]{3,}_[A-Z_]+/)
+    const detail = [...container.querySelectorAll('details')].find((d) =>
+      d.textContent?.includes('HTTP_503'),
+    )
+    expect(detail?.querySelector('summary')?.textContent).toBe('Detalhe técnico')
+  })
+
+  it('mostra o esqueleto enquanto as fontes carregam', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => holdFetch()))
+
+    const container = renderPage(<SourcesPage />)
+    await flush(1)
+
+    expect(
+      [...container.querySelectorAll('[aria-busy="true"]')].some((node) =>
+        node.textContent?.includes('Carregando fontes…'),
+      ),
+    ).toBe(true)
+    await settlePending()
+  })
+
+  it('diz o próximo passo quando não há fontes', async () => {
+    stubFetch([])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    expect(container.textContent).toContain('Nenhuma fonte cadastrada ainda. Use Adicionar fonte')
+  })
+
+  it('no erro, diz o que continua valendo e oferece tentar de novo', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    const alert = container.querySelector('[role="alert"]')
+    expect(alert?.textContent).toContain('As vagas já salvas continuam no radar.')
+    expect(alert?.textContent).toContain('Tentar novamente')
+  })
+
+  it('parcial: mantém a lista quando só a cobertura falha', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: unknown) => {
+        const url = String(input)
+        if (url.includes('/source-health')) {
+          return new Response(
+            JSON.stringify({ items: [healthItem('workday')], total: 1, failing: 0 }),
+            { status: 200 },
+          )
+        }
+        return new Response('{}', { status: 500 })
+      }),
+    )
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    expect(container.textContent).toContain('Fonte workday')
+    expect(container.textContent).toContain('A lista de fontes abaixo continua valendo.')
+  })
+
+  it('não mostra código técnico fora de "Detalhe técnico", nem estado desconhecido pelo código', async () => {
+    stubFetch([
+      healthItem('workday', {
+        evidence_status: 'weird_new_state',
+        last_run_status: 'PARTIAL',
+        last_run_error_code: 'PARSE_ERROR',
+        last_run_error: 'x',
+      }),
+    ])
+
+    const container = renderPage(<SourcesPage />)
+    await flush()
+
+    const visible = visibleTextOutsideDetails(container)
+    expect(visible).not.toMatch(/[A-Z]{3,}_[A-Z_]+/)
+    expect(visible).not.toContain('weird_new_state')
+    expect(visible).toContain('evidência não reconhecida')
   })
 })
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../components/Button'
 import { PrimaryText, SecondaryText, DateTimeCell } from '../components/cells'
@@ -15,6 +15,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { Unavailable } from '../components/Unavailable'
 import { SearchInput } from '../components/SearchInput'
 import { type SourceHealth, type SourceType } from '../features/sources/api'
+import { evidenceLabels, triggerLabels } from '../features/sources/labels'
 import { runStatusLabels, runStatusTones } from '../features/sources/states'
 import {
   useRunSource,
@@ -37,6 +38,25 @@ function formatDuration(seconds: number | null) {
   if (seconds === null) return <Unavailable reason="nunca executada" />
   if (seconds < 60) return `${seconds.toFixed(1)} s`
   return `${Math.floor(seconds / 60)} min ${Math.round(seconds % 60)} s`
+}
+
+/** Technical codes live here, collapsed, and nowhere else on the screen. */
+function TechnicalDetail({ children }: { children: ReactNode }) {
+  return (
+    <details className="mt-1 text-caption text-subtle">
+      <summary className="cursor-pointer">Detalhe técnico</summary>
+      <p className="break-anywhere mt-1">{children}</p>
+    </details>
+  )
+}
+
+/** What a failed or partial last run says in plain words; the code stays in the detail. */
+function failureSentence(source: SourceHealth): string | null {
+  if (source.lastRunStatus === 'FAILED' || (source.lastRunError && source.lastRunStatus !== 'PARTIAL')) {
+    return `${source.name} não respondeu.`
+  }
+  if (source.lastRunStatus === 'PARTIAL') return `${source.name} respondeu só em parte.`
+  return null
 }
 
 function RunStatus({ status }: { status: string | null }) {
@@ -79,7 +99,7 @@ function RunHistory({ sourceId, id }: { sourceId: string; id: string }) {
               <td>
                 <RunStatus status={run.status} />
               </td>
-              <td>{run.executionTrigger}</td>
+              <td>{triggerLabels[run.executionTrigger] ?? 'Outra origem'}</td>
               <td>{formatDate(run.startedAt)}</td>
               <td>
                 {run.itemsPersisted} persistidos / {run.itemsSeen} vistos
@@ -88,7 +108,12 @@ function RunHistory({ sourceId, id }: { sourceId: string; id: string }) {
               </td>
               <td className="text-subtle">
                 {run.errorCode ? (
-                  `${run.errorCode}: ${run.errorSummary ?? ''}`
+                  <>
+                    Esta execução não terminou bem.
+                    <TechnicalDetail>
+                      {run.errorCode}: {run.errorSummary ?? ''}
+                    </TechnicalDetail>
+                  </>
                 ) : (
                   <Unavailable reason="sem erro" />
                 )}
@@ -149,23 +174,30 @@ function SourceRows({
         <td className="min-w-48 align-top">
           <PrimaryText>{source.name}</PrimaryText>
           <SecondaryText>{source.sourceType}</SecondaryText>
-          {source.lastRunError && (
-            <p className="break-anywhere mt-2 rounded-control border border-danger-line bg-danger-surface p-2 text-caption text-danger-ink">
-              {source.lastRunErrorCode ? `${source.lastRunErrorCode}: ` : ''}
-              {source.lastRunError}
-            </p>
+          {failureSentence(source) && (
+            <div className="mt-2 rounded-control border border-line-strong bg-canvas p-2 text-caption text-neutral-ink">
+              <p>{failureSentence(source)}</p>
+              {(source.lastRunError || source.lastRunErrorCode) && (
+                <TechnicalDetail>
+                  {source.lastRunErrorCode ? `${source.lastRunErrorCode}: ` : ''}
+                  {source.lastRunError}
+                </TechnicalDetail>
+              )}
+            </div>
           )}
           {run.isError && <p className="mt-2 text-caption text-danger-ink">{run.error.message}</p>}
           {run.isSuccess && (
             <p className="mt-2 text-caption text-subtle">
-              Execução {run.data.status} · {run.data.itemsPersisted} itens persistidos.
+              Execução: {(runStatusLabels[run.data.status] ?? 'concluída').toLowerCase()} ·{' '}
+              {run.data.itemsPersisted} itens gravados.
             </p>
           )}
         </td>
         <td className="align-top">
           <RunStatus status={source.lastRunStatus} />
           <SecondaryText className="mt-1">
-            {source.enabled ? 'Habilitada' : 'Desabilitada'} · evidência {source.evidenceStatus}
+            {source.enabled ? 'Habilitada' : 'Desabilitada'} · evidência{' '}
+            {evidenceLabels[source.evidenceStatus] ?? 'não reconhecida'}
           </SecondaryText>
           <SecondaryText>
             termos {source.termsReviewed ? 'revisados' : 'não revisados'} · collector{' '}
@@ -303,8 +335,8 @@ export function SourcesPage() {
       }
       current="/sources"
       eyebrow="Aquisição"
-      title="Fontes e execuções"
-      description="O que cada fonte produziu na última execução, e o que fazer quando ela falha. Uma fonte só executa depois de habilitada."
+      title="Fontes"
+      description="De onde vêm as vagas e como foi a última busca em cada uma. Uma fonte só roda depois de habilitada."
     >
       {/* A cobertura é uma consulta própria e chega antes ou depois da lista; sem o espaço
           reservado, a que chega por último empurra a outra. */}
@@ -312,6 +344,11 @@ export function SourcesPage() {
         <div className="mt-8">
           <PanelSkeleton label="Carregando a cobertura…" />
         </div>
+      )}
+      {coverage.isError && (
+        <p className="mt-8 rounded-control border border-line-strong bg-canvas p-4 text-sm text-neutral-ink" role="status">
+          Não foi possível carregar a cobertura agora. A lista de fontes abaixo continua valendo.
+        </p>
       )}
       {coverage.data && (
         <section className="mt-8 grid gap-3 rounded-control border border-line bg-panel p-5 text-sm sm:grid-cols-3">
@@ -363,10 +400,12 @@ export function SourcesPage() {
       <div className="mt-6 grid gap-3">
         {health.isPending && <TableSkeleton columns={sourceColumns.length} label="Carregando fontes…" />}
         {health.isError && (
-          <ErrorState onRetry={() => void health.refetch()}>Não foi possível carregar as fontes.</ErrorState>
+          <ErrorState onRetry={() => void health.refetch()}>
+            Não foi possível carregar as fontes agora. As vagas já salvas continuam no radar.
+          </ErrorState>
         )}
         {health.data?.items.length === 0 && (
-          <EmptyState>Nenhuma fonte cadastrada.</EmptyState>
+          <EmptyState>Nenhuma fonte cadastrada ainda. Use Adicionar fonte para começar.</EmptyState>
         )}
         {health.data && health.data.items.length > 0 && (
           <>

@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { type ReactElement, act } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render } from '../components/testing'
+import { render, visibleTextOutsideDetails } from '../components/testing'
 import { StatusPage } from './StatusPage'
 
 vi.mock('../lib/session', () => ({
@@ -11,6 +11,22 @@ vi.mock('../lib/session', () => ({
 }))
 
 afterEach(() => vi.unstubAllGlobals())
+
+const pendingFetches: Array<() => void> = []
+
+/** A fetch that stays open until `settlePending`, so no request outlives its test. */
+function holdFetch(): Promise<Response> {
+  return new Promise<Response>((resolve) => {
+    pendingFetches.push(() => resolve(new Response('{}', { status: 500 })))
+  })
+}
+
+async function settlePending() {
+  await act(async () => {
+    pendingFetches.splice(0).forEach((release) => release())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
 
 function sourceHealthItem(overrides: Record<string, unknown> = {}) {
   return {
@@ -172,7 +188,10 @@ describe('StatusPage', () => {
     expect(rows[0]).toContain('12 gravados / 20 vistos')
     expect(rows[0]).toContain('8 repetidos')
     expect(rows[1]).toContain('Falhou')
-    expect(rows[1]).toContain('HTTP_503: quadro indisponível')
+    expect(rows[1]).toContain('Lever board não respondeu.')
+    const detail = container.querySelectorAll('tbody tr')[1].querySelector('details')
+    expect(detail?.querySelector('summary')?.textContent).toBe('Detalhe técnico')
+    expect(detail?.textContent).toContain('HTTP_503: quadro indisponível')
     expect(rows[2]).toContain('Nunca executada')
     expect(rows[2]).toContain('desabilitada')
   })
@@ -183,7 +202,7 @@ describe('StatusPage', () => {
     const container = renderPage(<StatusPage />)
     await flush(8)
 
-    expect(container.textContent).toContain('Nenhuma fonte cadastrada.')
+    expect(container.textContent).toContain('Nenhuma fonte cadastrada ainda.')
     expect(container.querySelector('tbody')).toBeNull()
   })
 
@@ -194,7 +213,50 @@ describe('StatusPage', () => {
     await flush(8)
 
     expect(container.textContent).toContain('Radar pronto para começar')
-    expect(container.textContent).toContain('Não foi possível carregar as métricas por fonte.')
+    expect(container.textContent).toContain('Não foi possível carregar as métricas por fonte')
+    expect(container.textContent).toContain('O estado do ambiente acima continua valendo.')
+  })
+
+  it('mostra o esqueleto das métricas enquanto a lista de fontes carrega', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => holdFetch()))
+
+    const container = renderPage(<StatusPage />)
+    await flush(1)
+
+    expect(container.querySelector('[aria-busy="true"]')?.textContent).toContain(
+      'Carregando métricas por fonte…',
+    )
+    await settlePending()
+  })
+
+  it('com a API fora, usa tom neutro e diz o que continua valendo', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
+
+    const container = renderPage(<StatusPage />)
+    await flush(8)
+
+    expect(container.textContent).toContain('Não conseguimos falar com a API agora')
+    expect(container.textContent).toContain('O que já está salvo continua salvo.')
+    expect(container.querySelector('[role="status"]')?.innerHTML).not.toContain('danger')
+    expect(container.textContent).toContain('Tentar novamente')
+  })
+
+  it('não mostra nenhum código técnico fora de "Detalhe técnico"', async () => {
+    stubStatusFetch({
+      sources: [
+        sourceHealthItem({
+          last_run_status: 'FAILED',
+          last_run_error_code: 'HTTP_503',
+          last_run_error: 'quadro indisponível',
+        }),
+      ],
+    })
+
+    const container = renderPage(<StatusPage />)
+    await flush(8)
+
+    expect(visibleTextOutsideDetails(container)).not.toMatch(/[A-Z]{3,}_[A-Z_]+/)
+    expect(container.textContent).toContain('HTTP_503')
   })
 })
 
