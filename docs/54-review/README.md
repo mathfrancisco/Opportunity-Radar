@@ -104,7 +104,7 @@ Corrige os dois minors da rodada anterior: o build comparado esta nomeado (abaix
 
 #### Pacote (`npm run build` em `apps/web`)
 
-- JS inicial: 219.97 kB gzip (777.26 kB bruto), um unico chunk `index-*.js`. Build comparado: baseline vigente 215.83 kB (main em 01c7dfb, ja com Clerk). Diferenca +4.14 kB, +1.92%; limite de +10% = 237.4 kB. Dentro do limite. A rodada anterior media 216.86 kB em `feat/marca-bateia` (333167c); o crescimento desde entao (+3.11 kB) vem das telas WP5 e do Inbox novo.
+- JS inicial: 219.97 kB gzip (777.26 kB bruto), um unico chunk `index-*.js`. Build comparado: baseline vigente 215.83 kB (main em 01c7dfb, ja com Clerk). Diferenca +4.14 kB, +1.92%; limite de +10% = 237.4 kB. Dentro do limite. A rodada anterior media 216.86 kB em `feat/marca-bateia` (333167c); o crescimento desde entao e de +3.11 kB (a causa nao foi investigada).
 - CSS: 42.13 kB (8.82 kB gzip), mesmo hash `index-B5blV0Ju.css` do build de captura.
 
 #### Metodo
@@ -132,7 +132,7 @@ Corrige os dois minors da rodada anterior: o build comparado esta nomeado (abaix
 | Fila de homologacao | 6 | 6 | 0 |
 | Status | 6 | 6 | 0 |
 
-- Rolagem horizontal da pagina (`scrollWidth > clientWidth`): 0 de 156. Tema aplicado igual ao pedido: 156 de 156. `pageerror`: 0. Erros de console: 0. Requisicoes bloqueadas fora de 127.0.0.1: 0. Nenhuma tela caiu em estado de erro ou de carregamento.
+- Rolagem horizontal da pagina (`scrollWidth > clientWidth`): 0 de 156. Tema aplicado igual ao pedido: 156 de 156. `pageerror`: 0. Erros de console: 0. Requisicoes bloqueadas fora de 127.0.0.1: 0. Nenhuma tela caiu em estado de erro ou de carregamento: isso se apoia so em duas expressoes regulares em `capture-app.cjs` (erro: "Não foi possível", "não encontrada", "Configuração de autenticação"; carregamento: "Verificando sessão", "Carregando"), nao em inspecao de cada tela. A contagem de requisicoes sem mock so registra rotas que o mapa de respostas nao conhece; uma rota conhecida com corpo incompleto nao entra nela.
 - Contraste: nao medido por captura. Valem `styles.test.ts` e as imagens abaixo, olhadas a olho.
 - Imagens inspecionadas (Read) em 320 e 1440 px, claro e escuro: Inbox, Detalhe da vaga, Empresas, Fontes, Status, Perfil, Fila de homologacao, entrar e landing (amostra; as demais so pela medicao).
 
@@ -145,6 +145,22 @@ Corrige os dois minors da rodada anterior: o build comparado esta nomeado (abaix
 #### Docker E2E
 
 Reproduzido o job `e2e` de `.github/workflows/pipeline.yml` passo a passo (script fora do repositorio, executando o `run:` de cada passo com Git Bash no Windows; `compose.ci.yaml` fornece tudo, nenhum `.env` lido ou criado). Resultado: 24 de 24 passos executados passaram, incluindo "Start application", fronteira de autenticacao, importacao do catalogo (379 empresas), aquisicao manual, matching, analise, read models, pipeline, doctor, persistencia apos reinicio, backup e restauracao, ciclo autonomo (240 s), kill switches, curadoria e o projeto de browser (`7 passed`: 5 offline-no-clerk-config e 2 api-authenticated). `down -v` ao final, sem containers, redes ou volumes do projeto sobrando.
+
+Saida literal (logs do script, ultima execucao completa; os trechos vem de `step24.log`, `step27.log` e do resumo por passo):
+
+```
+23 PASS Install the browser journey's own dependencies (6s)
+24 PASS Run the offline browser project and the API-authenticated project (57s)
+27 PASS Stop application (7s)
+28 PASS Remove the ephemeral authentication directory (0s)
+  7 passed (54.6s)
+ Volume opportunity-radar_postgres_data Removed
+ Volume opportunity-radar_local_backups Removed
+ Volume opportunity-radar_local_exports Removed
+ Network opportunity-radar_app_net Removed
+```
+
+O resumo completo (passos 02 a 28, todos PASS) ficou no `e2e_results.json` do script, fora do repositorio; so o trecho acima e literal aqui.
 
 Adaptacoes do ambiente (nenhuma muda o que o CI verifica): (1) a rede padrao do Docker local estava sem faixas livres (`all predefined address pools have been fully subnetted`, 31 redes de outros projetos), entao um arquivo `compose` extra, fora do repositorio, fixa `app_net` em 10.250.0.0/24; (2) o curl nativo do Windows usa Schannel, entao o runner embrulha `curl` com `--ssl-no-revoke`, troca `/dev/null` por `NUL` e `/tmp` pelo caminho do Windows; (3) o runner honra o `working-directory` dos passos 23 e 24. Passos de `actions/*` (checkout, buildx, setup-node, upload de artefato) nao foram executados.
 

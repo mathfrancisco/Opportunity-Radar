@@ -794,7 +794,7 @@ export default defineConfig((env) => mergeConfig(typeof base === 'function' ? ba
     vite.kill()
     fs.rmSync(cfg, { force: true })
   }
-  return { rows, hosts: [...hosts].sort(), viteLogTail: log.split('\n').filter((l) => /error|warn/i.test(l)).slice(-5) }
+  return { rows, hosts: [...hosts].sort(), viteLogTail: log.split('\n').filter((l) => /development keys/i.test(l)).slice(-1).map((l) => l.replace(/pk_\w+/g, '<key>').slice(0, 160)) }
 }
 
 function summarize(rows) {

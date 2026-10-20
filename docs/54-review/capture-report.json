@@ -1,6 +1,6 @@
 {
   "date": "2026-10-20",
-  "head": "82bfd7d",
+  "head": "aa99dd9",
   "branch": "feat/marca-bateia-final",
   "mock": {
     "widths": [
@@ -2715,11 +2715,7 @@
       "img.clerk.com"
     ],
     "viteLogTail": [
-      "\u001b[2m17:40:01\u001b[22m \u001b[33m\u001b[1m[vite]\u001b[22m\u001b[39m \u001b[33m\u001b[2m(client)\u001b[22m\u001b[39m \u001b[2m[console.warn] \u001b[22mClerk: Clerk has been loaded with development keys. Development instances have strict usage limits and should not be used when deploying your application to production. Learn more: https://clerk.com/docs/deployments/overview",
-      "\u001b[2m17:40:04\u001b[22m \u001b[33m\u001b[1m[vite]\u001b[22m\u001b[39m \u001b[33m\u001b[2m(client)\u001b[22m\u001b[39m \u001b[2m[console.warn] \u001b[22mClerk: Clerk has been loaded with development keys. Development instances have strict usage limits and should not be used when deploying your application to production. Learn more: https://clerk.com/docs/deployments/overview",
-      "\u001b[2m17:40:07\u001b[22m \u001b[33m\u001b[1m[vite]\u001b[22m\u001b[39m \u001b[33m\u001b[2m(client)\u001b[22m\u001b[39m \u001b[2m[console.warn] \u001b[22mClerk: Clerk has been loaded with development keys. Development instances have strict usage limits and should not be used when deploying your application to production. Learn more: https://clerk.com/docs/deployments/overview",
-      "\u001b[2m17:40:10\u001b[22m \u001b[33m\u001b[1m[vite]\u001b[22m\u001b[39m \u001b[33m\u001b[2m(client)\u001b[22m\u001b[39m \u001b[2m[console.warn] \u001b[22mClerk: Clerk has been loaded with development keys. Development instances have strict usage limits and should not be used when deploying your application to production. Learn more: https://clerk.com/docs/deployments/overview",
-      "\u001b[2m17:40:13\u001b[22m \u001b[33m\u001b[1m[vite]\u001b[22m\u001b[39m \u001b[33m\u001b[2m(client)\u001b[22m\u001b[39m \u001b[2m[console.warn] \u001b[22mClerk: Clerk has been loaded with development keys. Development instances have strict usage limits and should not be used when deploying your application to production. Learn more: https://clerk.com/docs/deployments/overview"
+      "\u001b[2m18:49:15\u001b[22m \u001b[33m\u001b[1m[vite]\u001b[22m\u001b[39m \u001b[33m\u001b[2m(client)\u001b[22m\u001b[39m \u001b[2m[console.warn] \u001b[22mClerk: Clerk has been loaded with development keys. Development "
     ],
     "rows": [
       {
