@@ -44,6 +44,7 @@ from opportunity_radar.dashboard.queries import (
     useful_yield_metrics,
 )
 from opportunity_radar.dashboard.saved_searches import (
+    InvalidSavedSearchFiltersError,
     SavedSearch,
     SavedSearchNotFoundError,
     create_saved_search,
@@ -535,15 +536,19 @@ def post_saved_search(
     session: Session = Depends(get_session),
     identity: RequestIdentity = Depends(authenticated_identity),
 ) -> SavedSearchResponse:
-    return _saved_search_response(
-        create_saved_search(
+    try:
+        saved_search = create_saved_search(
             session,
             name=request.name,
             term=request.term,
             filters=request.filters,
             owner_sub=identity.sub,
         )
-    )
+    except InvalidSavedSearchFiltersError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="invalid_filters"
+        ) from error
+    return _saved_search_response(saved_search)
 
 
 @router.get("/saved-searches", response_model=list[SavedSearchResponse])
@@ -624,7 +629,12 @@ def get_saved_search_new_count(
     saved_search = saved_searches.get(saved_search_id)
     if saved_search is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    count = new_count(session, saved_search, owner_sub=identity.sub)
+    try:
+        count = new_count(session, saved_search, owner_sub=identity.sub)
+    except InvalidSavedSearchFiltersError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="invalid_filters"
+        ) from error
     return SavedSearchNewCountResponse(new_count=count)
 
 

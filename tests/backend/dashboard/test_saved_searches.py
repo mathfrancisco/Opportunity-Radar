@@ -9,7 +9,7 @@ from time import perf_counter
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
 from opportunity_radar.acquisition.models import RawItemModel, SourceDefinitionModel, SourceRunModel
@@ -18,6 +18,7 @@ from opportunity_radar.dashboard import saved_searches as saved_search_service
 from opportunity_radar.dashboard.models import SavedSearchModel
 from opportunity_radar.dashboard.queries import InboxQuery, list_opportunity_inbox
 from opportunity_radar.dashboard.saved_searches import (
+    InvalidSavedSearchFiltersError,
     SavedSearchNotFoundError,
     create_saved_search,
     delete_saved_search,
@@ -176,6 +177,34 @@ def test_create_list_rename_delete_saved_search() -> None:
 
         delete_saved_search(session, saved.id, owner_sub=OWNER_A)
         assert all(item.id != saved.id for item in list_saved_searches(session, owner_sub=OWNER_A))
+
+
+@pytest.mark.parametrize(
+    "filters",
+    [
+        {"order": 42},
+        {"salary_min": "abc"},
+        {"seniority": 5},
+        {"company_id": "not-a-uuid"},
+        {"published_after": "ontem"},
+        {"applied": "talvez"},
+    ],
+)
+def test_create_saved_search_rejects_invalid_filters(filters: dict[str, object]) -> None:
+    owner_sub = f"test-f4-{uuid4().hex}"
+    engine = create_database_engine(os.environ["DATABASE_URL"])
+    with Session(engine) as session:
+        with pytest.raises(InvalidSavedSearchFiltersError):
+            create_saved_search(
+                session, name="x", term=None, filters=filters, owner_sub=owner_sub
+            )
+
+        stored = session.scalar(
+            select(func.count())
+            .select_from(SavedSearchModel)
+            .where(SavedSearchModel.owner_sub == owner_sub)
+        )
+        assert stored == 0
 
 
 def test_open_saved_search_updates_last_opened_at() -> None:
@@ -561,15 +590,20 @@ def test_saved_search_summary_isolates_invalid_legacy_filters_per_owner() -> Non
             ("NaN score", {"minimum_score": "NaN", "all_areas": True}),
             ("Infinite salary", {"salary_max": "Infinity", "all_areas": True}),
         )
-        invalid = [
-            create_saved_search(
-                session,
-                name=name,
-                term=None,
-                filters=filters,
-                owner_sub=owner_sub,
-            )
+        # Legacy rows predate create-time validation, so they are seeded directly.
+        invalid_models = [
+            SavedSearchModel(owner_sub=owner_sub, name=name, term=None, filters=filters)
             for name, filters in invalid_filters
+        ]
+        session.add_all(invalid_models)
+        session.commit()
+        invalid = [
+            next(
+                item
+                for item in list_saved_searches(session, owner_sub=owner_sub)
+                if item.id == model.id
+            )
+            for model in invalid_models
         ]
 
         summaries = {
