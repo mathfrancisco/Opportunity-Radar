@@ -2,15 +2,15 @@ import { Link } from 'react-router-dom'
 import { BrandMark } from '../components/ui/BrandMark'
 
 const benefits = [
-  ['Inbox com contexto', 'Reúna oportunidades relevantes e retome a decisão com as informações essenciais à vista.'],
+  ['Inbox com contexto', 'Reúna vagas relevantes e retome a decisão com as informações essenciais à vista.'],
   ['Matching explicável', 'Compare a vaga com critérios do seu perfil e use a IA como apoio consultivo à leitura.'],
   ['Pipeline para agir', 'Acompanhe etapas, próximas ações e candidaturas sem perder o fio da busca.'],
 ]
 
 const faqs = [
   ['A Bateia envia candidaturas?', 'Não. A plataforma organiza sua busca e ajuda você a decidir a próxima ação; a candidatura continua sob seu controle.'],
-  ['Como o matching ajuda na decisão?', 'Ele apresenta critérios do perfil ao lado da oportunidade. A análise por IA, quando disponível, é um apoio consultivo e não substitui sua avaliação.'],
-  ['Posso começar por uma oportunidade específica?', 'Sim. Ao entrar, você pode usar a inbox, registrar uma candidatura e acompanhar a próxima ação pelo pipeline.'],
+  ['Como o matching ajuda na decisão?', 'Ele apresenta critérios do perfil ao lado da vaga. A análise por IA, quando disponível, é um apoio consultivo e não substitui sua avaliação.'],
+  ['Posso começar por uma vaga específica?', 'Sim. Ao entrar, você pode usar a inbox, registrar uma candidatura e acompanhar a próxima ação pelo pipeline.'],
 ]
 
 function ProductPreview() {

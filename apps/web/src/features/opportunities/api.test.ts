@@ -151,7 +151,7 @@ describe('getOpportunity', () => {
 
   it('rejeita um corpo sem identidade', async () => {
     respond({ title: 'sem id' })
-    await expect(getOpportunity('opportunity-1')).rejects.toThrow('oportunidade inválida')
+    await expect(getOpportunity('opportunity-1')).rejects.toThrow('vaga inválida')
   })
 })
 

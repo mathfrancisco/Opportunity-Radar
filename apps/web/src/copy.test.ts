@@ -3,7 +3,7 @@ import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const root = join(__dirname)
-const dirs = ['routes', 'components', 'features']
+const dirs = ['app', 'routes', 'components', 'features']
 const banned = [
   'Opportunity Radar',
   'Análise semântica',
@@ -13,11 +13,15 @@ const banned = [
   'decisão determinística',
 ]
 
+// Product word is "vaga" (DESIGN.md §8). Add { file, text } here only with a justification.
+const oportunidadeAllowlist: { file: string; text: string }[] = []
+const oportunidade = /\boportunidades?\b/i
+
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name)
     if (statSync(path).isDirectory()) return walk(path)
-    return path.endsWith('.tsx') && !path.endsWith('.test.tsx') ? [path] : []
+    return /\.tsx?$/.test(path) && !/\.test\.tsx?$/.test(path) ? [path] : []
   })
 }
 
@@ -37,6 +41,12 @@ describe('Bateia voice guard', () => {
         const text = stripComments(readFileSync(file, 'utf8'))
         for (const term of banned) {
           if (text.includes(term)) hits.push(`${relative(root, file)}: ${term}`)
+        }
+        const name = relative(root, file).replaceAll('\\', '/')
+        for (const line of text.split('\n')) {
+          if (!oportunidade.test(line)) continue
+          if (oportunidadeAllowlist.some((a) => a.file === name && line.includes(a.text))) continue
+          hits.push(`${name}: oportunidade -> ${line.trim().slice(0, 100)}`)
         }
       }
     }

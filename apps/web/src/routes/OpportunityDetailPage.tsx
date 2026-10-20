@@ -316,7 +316,7 @@ function Provenance({ opportunity }: { opportunity: OpportunityDetail }) {
   return (
     <>
       <p className="mb-3 rounded-control border border-info-line bg-info-surface p-3 text-sm text-info-ink">
-        Regra do ciclo da oportunidade: duas coletas completas consecutivas sem ocorrência podem encerrá-la; uma coleta parcial ou com falha não conta, e outra fonte ativa que ainda a encontre a preserva. A evidência disponível nesta tela não informa a causa específica do status atual.
+        Regra do ciclo da vaga: duas coletas completas consecutivas sem ocorrência podem encerrá-la; uma coleta parcial ou com falha não conta, e outra fonte ativa que ainda a encontre a preserva. A evidência disponível nesta tela não informa a causa específica do status atual.
       </p>
       <ul className="grid gap-3">
         {opportunity.occurrences.map((occurrence) => (

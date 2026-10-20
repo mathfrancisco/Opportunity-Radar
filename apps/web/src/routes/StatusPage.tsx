@@ -155,7 +155,7 @@ export function StatusPage() {
       eyebrow={environmentLabel}
       title={view.title}
       description={readiness.data?.detail ?? view.description}
-      footer="Descubra oportunidades, preserve evidências e decida com contexto."
+      footer="Descubra vagas, preserve evidências e decida com contexto."
     >
       <div className="mt-8 grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <Card className="p-6">

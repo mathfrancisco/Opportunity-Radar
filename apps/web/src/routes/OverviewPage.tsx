@@ -772,7 +772,7 @@ function Summary({ overview }: { overview: Overview }) {
           <dl className="mt-5 grid gap-3 text-sm">
             <SupportItem
               hint={`de ${overview.opportunitiesTotal} no total`}
-              label="Oportunidades ativas"
+              label="Vagas ativas"
               value={String(overview.opportunitiesActive)}
             />
             <SupportItem
@@ -850,7 +850,7 @@ export function OverviewPage() {
       eyebrow="Decidir"
       title="O que move sua busca esta semana?"
       description="Um ponto de partida calmo para escolher a próxima ação, com a origem dos dados à vista."
-      footer="Descubra oportunidades, preserve evidências e decida com contexto."
+      footer="Descubra vagas, preserve evidências e decida com contexto."
     >
       <div>
         {profile.data === null && <div className="mb-6"><FirstRunGuide /></div>}

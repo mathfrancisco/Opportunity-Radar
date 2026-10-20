@@ -455,7 +455,7 @@ function InboxSearch({
     <SearchInput
       fullWidth
       id="inbox-search"
-      label="Buscar oportunidades"
+      label="Buscar vagas"
       onChange={setSearchInput}
       onSubmit={() => onSubmit(searchInput.trim())}
       placeholder="Título ou empresa"
@@ -799,7 +799,7 @@ export function InboxPage() {
           onChange={(event) => update({ only_assessed: event.target.checked ? 'true' : null })}
           type="checkbox"
         />
-        Somente oportunidades já avaliadas
+        Somente vagas já avaliadas
       </label>
 
       <label className="mt-2 flex items-center gap-2 text-sm text-subtle max-md:min-h-11">
@@ -933,8 +933,8 @@ export function InboxPage() {
             <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
               <Pagination
                 className="min-w-0 flex-1"
-                itemLabel="oportunidades"
-                label="Paginação de oportunidades"
+                itemLabel="vagas"
+                label="Paginação de vagas"
                 onPageChange={(next) => update({ page: next === 1 ? null : String(next) })}
                 page={page}
                 pageSize={pageSize}

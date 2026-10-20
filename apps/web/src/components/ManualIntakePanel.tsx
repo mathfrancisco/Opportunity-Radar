@@ -94,9 +94,9 @@ const outcomeLabels: Record<string, string> = {
 }
 
 const decisionLabels: Record<string, string> = {
-  NEW: 'oportunidade nova',
-  MERGED: 'juntada a uma oportunidade existente',
-  REFRESHED: 'atualizou uma oportunidade existente',
+  NEW: 'vaga nova',
+  MERGED: 'juntada a uma vaga existente',
+  REFRESHED: 'atualizou uma vaga existente',
   REVIEW: 'identidade ambígua, para revisão',
 }
 
@@ -302,7 +302,7 @@ export function ManualIntakePanel({ sourceId }: { sourceId: string }) {
                       className="mt-1 inline-block underline decoration-accent decoration-2 underline-offset-4"
                       to={`/opportunities/${item.opportunityId}`}
                     >
-                      {item.opportunityTitle ?? 'Abrir a oportunidade'}
+                      {item.opportunityTitle ?? 'Abrir a vaga'}
                     </Link>
                   ) : (
                     <p className="mt-1 text-danger-ink">

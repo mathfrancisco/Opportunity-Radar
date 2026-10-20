@@ -913,7 +913,7 @@ describe('InboxPage table, pagination and filters', () => {
     await flush()
 
     expect(urls.some((url) => url.includes('/inbox') && url.includes('offset=25'))).toBe(true)
-    expect(container.textContent).toContain('Exibindo 26 a 50 de 60 oportunidades')
+    expect(container.textContent).toContain('Exibindo 26 a 50 de 60 vagas')
 
     const next = container.querySelector('button[aria-label="Próxima página"]') as HTMLButtonElement
     act(() => next.click())
