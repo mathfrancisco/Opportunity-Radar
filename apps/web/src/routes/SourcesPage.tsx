@@ -162,7 +162,7 @@ function SourceRows({
         <td className="min-w-48 align-top">
           <PrimaryText>{source.name}</PrimaryText>
           <SecondaryText>{sourceTypeLabel(source.sourceType)}</SecondaryText>
-          {!(source.sourceType in sourceTypeLabels) && (
+          {!Object.hasOwn(sourceTypeLabels, source.sourceType) && (
             <TechnicalDetail>{source.sourceType}</TechnicalDetail>
           )}
           {sourceRunSentence(source.name, source.lastRunStatus) && (

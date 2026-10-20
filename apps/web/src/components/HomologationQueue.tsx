@@ -108,7 +108,7 @@ function SequentialCard({
         {record.name}{' '}
         <span className="font-normal text-muted">({sourceTypeLabel(record.sourceType)})</span>
       </h3>
-      {!(record.sourceType in sourceTypeLabels) && <TechnicalDetail>{record.sourceType}</TechnicalDetail>}
+      {!Object.hasOwn(sourceTypeLabels, record.sourceType) && <TechnicalDetail>{record.sourceType}</TechnicalDetail>}
       <p className="mt-1 text-sm text-subtle">
         Evidência {evidenceLabels[record.evidenceStatus] ?? 'não reconhecida'}
       </p>
@@ -433,7 +433,7 @@ export function HomologationQueue() {
               <td className="min-w-28">
                 <PrimaryText>{item.name}</PrimaryText>
                 <SecondaryText>{sourceTypeLabel(item.sourceType)}</SecondaryText>
-                {!(item.sourceType in sourceTypeLabels) && (
+                {!Object.hasOwn(sourceTypeLabels, item.sourceType) && (
                   <TechnicalDetail>{item.sourceType}</TechnicalDetail>
                 )}
                 {result && (
