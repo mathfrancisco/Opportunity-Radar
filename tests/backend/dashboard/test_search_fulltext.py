@@ -323,3 +323,60 @@ def test_stopword_of_one_dictionary_does_not_become_required(
             session, InboxQuery(company_id=company.id, search=query)
         )
         assert target.id in [item.opportunity_id for item in found.items]
+
+
+def test_mixed_rest_keeps_its_content_word_required() -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        target = _opportunity(
+            session, company, title="Kubernetes Engineer", published_at=NOW
+        )
+        other = _opportunity(session, company, title="Software Engineer", published_at=NOW)
+        session.commit()
+
+        found = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search="engenheiro de kubernetes")
+        )
+        ids = [item.opportunity_id for item in found.items]
+        assert target.id in ids
+        assert other.id not in ids
+
+
+@pytest.mark.parametrize(
+    ("query", "title"),
+    [
+        ("desenvolvedor dados,", "Data Developer"),
+        ("vaga engenheiro", "Software Engineer"),
+        ("vaga python", "Python Developer"),
+    ],
+)
+def test_punctuation_and_filler_words_do_not_narrow_the_search(
+    query: str, title: str
+) -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        target = _opportunity(session, company, title=title, published_at=NOW)
+        _opportunity(session, company, title="Unrelated Analyst", published_at=NOW)
+        session.commit()
+
+        found = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search=query)
+        )
+        ids = [item.opportunity_id for item in found.items]
+        assert target.id in ids
+
+
+def test_one_dictionary_stopword_rest_raises_no_notice() -> None:
+    with _session() as session:
+        company = _company(session, "normal")
+        target = _opportunity(session, company, title="Data Developer", published_at=NOW)
+        session.commit()
+
+        notices: list[str] = []
+        driver_connection = session.connection().connection.driver_connection
+        driver_connection.add_notice_handler(lambda diag: notices.append(diag.message_primary))
+        found = list_opportunity_inbox(
+            session, InboxQuery(company_id=company.id, search="desenvolvedor de dados")
+        )
+        assert target.id in [item.opportunity_id for item in found.items]
+        assert notices == []
