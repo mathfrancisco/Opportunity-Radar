@@ -670,11 +670,20 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
 
   it('sem filtro reprovado ou desconhecido, não mostra O que impede', async () => {
     const passing = { ...failedFilter(), code: 'PAIS', result: 'TRUE', reason: 'País aceito.' }
-    const container = await renderDetail({ eligibility: [passing] })
+    const notApplicable = { ...failedFilter(), code: 'FUSO', result: 'NOT_APPLICABLE', reason: 'Sem dado de fuso.' }
+    const container = await renderDetail({ eligibility: [passing, notApplicable] })
     const headings = Array.from(container.querySelectorAll('h1,h2,h3')).map((h) => h.textContent)
     expect(headings).not.toContain('O que impede')
     expect(headings).toContain('Por que combina')
     expect(container.textContent).not.toContain('País aceito.')
+  })
+
+  it('lista só o filtro reprovado quando há também filtro não aplicável', async () => {
+    const na = { ...failedFilter(), code: 'FUSO', result: 'NOT_APPLICABLE', reason: 'Sem dado de fuso.' }
+    const container = await renderDetail({ eligibility: [failedFilter(), na] })
+    expect(container.textContent).toContain('Fora da região aceita.')
+    expect(container.textContent).not.toContain('Sem dado de fuso.')
+    expect(container.textContent).not.toContain('NOT_APPLICABLE')
   })
 
   it('rotula fatores conhecidos em português e mantém o código dos desconhecidos', async () => {

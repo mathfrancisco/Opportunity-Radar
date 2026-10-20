@@ -655,7 +655,7 @@ function Factors({ factors }: { factors: MatchFactor[] }) {
 
 /** Deterministic matching: score, verdict, eligibility and factors, computed outside the AI. */
 function Decision({ assessment }: { assessment: MatchAssessment }) {
-  const blocking = assessment.eligibilityDetails.filter((detail) => detail.result !== 'TRUE')
+  const blocking = assessment.eligibilityDetails.filter((detail) => detail.result === 'FALSE' || detail.result === 'UNKNOWN')
   return (
     <>
       <div className="flex flex-wrap items-baseline gap-4">
