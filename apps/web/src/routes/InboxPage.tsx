@@ -144,9 +144,9 @@ function ItemRow({ item }: { item: InboxItem }) {
           {display(item.companyName)} · {display(item.location)}
         </SecondaryText>
         {item.analysisSummary && (
-          <SecondaryText className="mt-1 break-anywhere text-ink">
-            <span data-testid="inbox-reason">{item.analysisSummary}</span>
-          </SecondaryText>
+          <span data-testid="inbox-reason" className="mt-1 block break-anywhere text-caption text-ink">
+            {item.analysisSummary}
+          </span>
         )}
         {(item.hasPendingDuplicate || item.startupStrength || item.siblingCount > 0) && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">

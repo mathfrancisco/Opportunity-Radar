@@ -772,6 +772,9 @@ describe('InboxPage table, pagination and filters', () => {
     const withSummary = renderAt('/inbox')
     await flush()
     expect(withSummary.querySelector('[data-testid="inbox-reason"]')?.textContent).toBe('Resumo X')
+    const reasonClasses = withSummary.querySelector('[data-testid="inbox-reason"]')?.classList
+    expect(reasonClasses?.contains('text-ink')).toBe(true)
+    expect(reasonClasses?.contains('text-muted')).toBe(false)
 
     stubInbox(1, [], [inboxItem({ analysis_summary: null })])
     const without = renderAt('/inbox')
