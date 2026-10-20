@@ -24,7 +24,7 @@ export function BrandMark({ className }: { className?: string }) {
       className={['inline-flex items-center gap-2', className].filter(Boolean).join(' ')}
     >
       <BrandSymbol />
-      <span className="font-display text-xl leading-none text-ink">bateia</span>
+      <span className="font-display text-2xl leading-none text-ink">bateia</span>
     </span>
   )
 }

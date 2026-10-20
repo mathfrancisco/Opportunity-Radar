@@ -150,12 +150,15 @@ caixa alta com espaçamento largo; grupo da sidebar usa `text-caption` em 600, c
 - **Símbolo:** a bateia vista de cima. Três anéis concêntricos em `brand` (raios 14, 9 e 4
   numa grade de 32, traço 2) e uma pepita em `nugget` (raio 2.8) no quadrante superior
   direito, centro em (21.5, 11). Lê como bateia e como radar; é a ponte com o nome antigo.
-- **Wordmark:** `bateia` em Young Serif, minúsculo, à direita do símbolo, altura do x igual a
-  metade do símbolo. Espaço livre mínimo: a distância entre dois anéis.
+- **Wordmark:** `bateia` em Young Serif, minúsculo, à direita do símbolo. Na interface, wordmark
+  em 1.5rem ao lado do símbolo de 28px; a regra de altura do x vale para o logo em arte, não
+  para a interface. Na arte, altura do x igual a metade do símbolo. Espaço livre mínimo: a
+  distância entre dois anéis.
 - **Ícone do app:** quadrado com cantos de 22% em `brand`, anéis em `surface` e pepita em
   `nugget`. No tema escuro: fundo `surface`, anéis em `brand`.
 - **Favicon:** SVG com o ícone do app; em 16px some o anel interno. PNG 32/180/192/512 gerados
-  do mesmo SVG.
+  do mesmo SVG. O ícone de toque (180) é quadrado cheio, sem cantos transparentes; o maskable
+  (512) tem os anéis dentro de 80% do centro.
 - O símbolo nunca gira, nunca ganha gradiente e a pepita nunca muda de lugar.
 
 ## 5. Match explicado

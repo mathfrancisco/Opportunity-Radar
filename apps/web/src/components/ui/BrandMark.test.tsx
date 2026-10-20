@@ -33,8 +33,9 @@ describe('BrandMark', () => {
 
   it('o wordmark é lido como Bateia', () => {
     const { container } = render(<BrandMark />)
-    const word = [...container.querySelectorAll('span')].find((el) => el.children.length === 0 && el.textContent === 'bateia')
-    expect(word?.classList.contains('font-display')).toBe(true)
+    const word = container.querySelector('.font-display')
+    expect(word?.textContent).toBe('bateia')
+    expect(word?.classList.contains('text-2xl')).toBe(true)
     expect(container.querySelector('[role="img"][aria-label="Bateia"]')).not.toBeNull()
   })
 })
