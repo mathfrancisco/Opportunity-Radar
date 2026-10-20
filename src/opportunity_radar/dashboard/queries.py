@@ -944,22 +944,32 @@ def _search_tsquery(term: str) -> Any:
             )
             for group in groups
         ]
-        if rest:
-            # Untranslated text: each dictionary parses it and drops its own stopwords.
-            # If either side drops everything (e.g. `de`), the text is a stopword there
-            # and must not become a required lexeme from the other side; an empty
-            # tsquery is ignored by `&&`.
-            pt_rest, en_rest = parsed(rest)
-            concepts.append(
-                case(
-                    (
-                        or_(func.numnode(pt_rest) == 0, func.numnode(en_rest) == 0),
-                        func.websearch_to_tsquery("simple", ""),
-                    ),
-                    else_=pt_rest.op("||")(en_rest),
-                )
-            )
-        return reduce(lambda left, right: left.op("&&")(right), concepts)
+        if not rest:
+            return reduce(lambda left, right: left.op("&&")(right), concepts)
+        pt_rest, en_rest = parsed(rest)
+        rest_query = pt_rest.op("||")(en_rest)
+        if not concepts:
+            return rest_query
+        required = reduce(lambda left, right: left.op("&&")(right), concepts)
+        # Untranslated text: each dictionary parses it and drops its own stopwords.
+        # If either side drops everything (e.g. `de`), the text is a stopword there and
+        # must not become a required lexeme from the other side. The check uses
+        # `to_tsvector`, which, unlike parsing a stopword-only tsquery, raises no NOTICE.
+        return case(
+            (
+                or_(
+                    *(
+                        func.length(
+                            func.to_tsvector(dictionary, func.opportunities.f_unaccent(rest))
+                        )
+                        == 0
+                        for dictionary in _DICTIONARIES
+                    )
+                ),
+                required,
+            ),
+            else_=required.op("&&")(rest_query),
+        )
     expressions = [expr for variant in synonym_variants(term) for expr in parsed(variant)]
     return reduce(lambda left, right: left.op("||")(right), expressions)
 

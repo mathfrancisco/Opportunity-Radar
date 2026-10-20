@@ -59,3 +59,35 @@ def test_groups_are_none_without_synonyms_quotes_negation_or_and_long_queries() 
     assert synonym_groups("remoto or pleno") is None
     assert synonym_groups(" ".join(["dados"] * 9)) is None
     assert synonym_groups(" ".join(["dados"] * 8)) is not None
+
+
+def test_punctuation_glued_to_a_token_still_finds_its_synonyms() -> None:
+    split = synonym_groups("desenvolvedor dados,")
+    assert split is not None
+    groups, rest = split
+    assert set(groups[1]) == {"dados", "data"}
+    assert rest == ""
+    assert "data, desenvolvedor" not in synonym_variants("dados, desenvolvedor")
+    assert "data desenvolvedor" in synonym_variants("dados, desenvolvedor")
+
+
+def test_filler_concept_is_dropped_next_to_another_term() -> None:
+    split = synonym_groups("vaga engenheiro")
+    assert split is not None
+    groups, rest = split
+    assert [group[0] for group in groups] == ["engenheiro"]
+    assert rest == ""
+
+    split = synonym_groups("vaga python")
+    assert split is not None
+    groups, rest = split
+    assert groups == []
+    assert rest == "python"
+
+
+def test_filler_concept_alone_is_kept() -> None:
+    split = synonym_groups("vaga")
+    assert split is not None
+    groups, rest = split
+    assert set(groups[0]) == {"vaga", "job"}
+    assert rest == ""
