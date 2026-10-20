@@ -335,6 +335,21 @@ describe('InboxPage primeiro acesso', () => {
     expect(container.textContent).not.toContain('Monte sua bateia')
     expect(container.textContent).toContain('Nada novo para decidir. A próxima coleta acontece no próximo ciclo.')
   })
+
+  it('erro ao carregar o perfil não mostra o guia e mantém a lista vazia', async () => {
+    stubInbox([], profile)
+    const stub = fetch as ReturnType<typeof vi.fn>
+    const base = stub.getMockImplementation() as (input: unknown) => Promise<Response>
+    stub.mockImplementation(async (input: unknown) =>
+      String(input).endsWith('/profile') ? new Response('{}', { status: 500 }) : base(input),
+    )
+
+    const container = renderWithProviders(<InboxPage />)
+    await flush(6)
+
+    expect(container.textContent).not.toContain('Monte sua bateia')
+    expect(container.textContent).toContain('Nada novo para decidir. A próxima coleta acontece no próximo ciclo.')
+  })
 })
 
 /** Card F20-61: the recency toggle defaults to on (no `only_recent` param means the

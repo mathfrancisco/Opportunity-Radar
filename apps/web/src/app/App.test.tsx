@@ -109,6 +109,9 @@ describe('App', () => {
     const container = renderApp(<App />, '/')
 
     expect(container.querySelector('h1')?.textContent).toBe('Menos vagas, cada uma com o porquê.')
+    const brand = container.querySelector('header [role="img"]')
+    expect(brand?.getAttribute('aria-label')).toBe('Bateia')
+    expect(brand?.closest('a')?.getAttribute('href')).toBe('/')
     expect(container.textContent).toContain('Entrar')
     expect(container.textContent).toContain('Criar conta')
     expect(container.querySelector('a[href="/sign-in"]')?.textContent).toContain('Entrar')

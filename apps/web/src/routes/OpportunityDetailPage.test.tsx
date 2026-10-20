@@ -519,7 +519,7 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
   })
 
   async function renderDetail(
-    payload: { factors?: unknown[]; eligibility?: unknown[] } = {},
+    payload: { factors?: unknown[]; eligibility?: unknown[]; analysis?: unknown } = {},
   ) {
     const detail = opportunity({ description: 'Pesquisa com pessoas usuárias.' })
     vi.stubGlobal(
@@ -535,6 +535,7 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
                   ...assessmentPayload,
                   factors: payload.factors ?? assessmentPayload.factors,
                   eligibility_details: payload.eligibility ?? assessmentPayload.eligibility_details,
+                  analysis: payload.analysis ?? assessmentPayload.analysis,
                 },
               ],
             }),
@@ -732,6 +733,31 @@ describe('OpportunityDetailPage composition (SPEC 54)', () => {
     expect(analysis.textContent).toContain('Analisar com IA')
     expect(analysis.textContent).toContain('consultiv')
     expect(before(deterministic, analysis)).toBe(true)
+  })
+
+  it('IA indisponível usa classes neutras, sem cor de erro ou de aviso', async () => {
+    const container = await renderDetail({
+      analysis: {
+        id: 'analysis-1',
+        status: 'AI_FAILED',
+        failure_code: 'PROVIDER_ERROR',
+        detail: 'Serviço de IA fora do ar.',
+        schema_version: 'analysis-v1',
+        analyzed_at: '2026-09-17T12:00:00Z',
+      },
+    })
+
+    const message = Array.from(container.querySelectorAll('#analise p')).find((p) =>
+      p.textContent?.includes('A IA não leu esta vaga.'),
+    ) as HTMLElement
+    expect(message).toBeDefined()
+    const box = message.parentElement as HTMLElement
+    expect(box.className).toContain('bg-panel')
+    expect(message.className).toContain('text-subtle')
+    const analysisHtml = container.querySelector('#analise')?.innerHTML ?? ''
+    expect(analysisHtml).not.toMatch(/(?:danger|warning)-/)
+    // The code stays behind the technical-detail disclosure.
+    expect(box.querySelector('details')?.textContent).toContain('AI_FAILED')
   })
 })
 
