@@ -96,7 +96,9 @@ Resultados:
 - Telas WP5 (Empresas, Fontes, Homologacao, Perfil, Status) com dados reais; apenas rolagem horizontal e erros de pagina foram medidos.
 - Fontes de producao em hospedagem real (cache, CSP).
 
-### Captura final (2026-10-20, branch `feat/marca-bateia-final` em 82bfd7d)
+### Captura final (2026-10-20, branch `feat/marca-bateia-final`)
+
+Primeira rodada em 82bfd7d (numeros de pacote abaixo). O `capture-report.json` versionado e o da rodada repetida depois das correcoes: o campo `head` diz 863913e porque a captura rodou sobre 863913e com as correcoes de 1011278 ainda nao commitadas.
 
 Segunda rodada, com o runner agora versionado: `docs/54-review/capture-app.cjs` (`node docs/54-review/capture-app.cjs mock` e `... clerk`). O relatorio estruturado fica em `docs/54-review/capture-report.json`. Os PNG ficam em `docs/54-review/screenshots/bateia-final/` e nao sao versionados (`.gitignore` local).
 
@@ -182,6 +184,8 @@ Nenhum estouro de layout da pagina. Defeitos visiveis nas imagens (corrigidos na
 #### Correcoes (fix(web): defects from the final Bateia capture)
 
 Rodada de captura repetida depois das correcoes: mock 156 capturas, overflow 0, `pageerror` 0, erros de console 0; Clerk real 8 capturas, overflow 0, erros 0. `npm run check` em `apps/web`: exit 0, 63 arquivos, 678 testes, JS 219.80 kB gzip (limite 237.4 kB).
+
+Verificacao final da branch (0ed1be0, depois da revisao final e das correcoes residuais): `npm run check` em `apps/web` exit 0, 64 arquivos, 687 testes, JS 220.15 kB gzip (limite 237.4 kB). As capturas nao foram repetidas depois de 1011278.
 
 - Tabelas em 320 px (`fontes-light-320`, `status-light-320`, `homologacao-dark-320`): a tabela ja rolava dentro do conteiner, mas sem sinal e com colunas espremidas. `DataTable` com 3 colunas ou mais passa a ter largura minima de 34rem, sombra nas bordas (`.scroll-x-shadow`) que mostra que ha mais coluna, e a regiao vira `role="region"` com nome e foco por teclado. Todas as colunas ficam alcancaveis por rolagem.
 - Codigo cru em chip (`STATUS_NOVO`): `StatusBadge` mostra "Estado não reconhecido".
