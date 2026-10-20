@@ -816,13 +816,35 @@ describe('InboxPage table, pagination and filters', () => {
     expect(cell.textContent).toContain('Alta prioridade')
   })
 
-  it('sem score, não mostra régua e diz Sem avaliação', async () => {
+  it('sem score e sem veredito, mostra só o chip Não avaliada', async () => {
     stubInbox(1, [], [inboxItem({ score: null, verdict: null })])
+    const container = renderAt('/inbox')
+    await flush()
+
+    expect(container.textContent).toContain('Não avaliada')
+    expect(container.textContent).not.toContain('Sem avaliação')
+    expect(container.querySelector('[role="img"][aria-label$="de 100"]')).toBeNull()
+  })
+
+  it('com veredito e sem score, não mostra régua e diz Sem avaliação', async () => {
+    stubInbox(1, [], [inboxItem({ score: null, verdict: 'HIGH_PRIORITY' })])
     const container = renderAt('/inbox')
     await flush()
 
     expect(container.textContent).toContain('Sem avaliação')
     expect(container.querySelector('[role="img"][aria-label$="de 100"]')).toBeNull()
+  })
+
+  it('fora da paginação, a contagem "6 vagas" aparece uma vez só', async () => {
+    stubInbox(6, [])
+    const container = renderAt('/inbox')
+    await flush()
+
+    const pagination = container.querySelector('nav[aria-label="Paginação de vagas"]')
+    expect(pagination).not.toBeNull()
+    expect(pagination?.textContent).toContain('6 vagas')
+    const rest = (container.textContent ?? '').replace(pagination?.textContent ?? '', '')
+    expect(rest.match(/\b6 vagas\b/g)).toHaveLength(1)
   })
 
   it('mostra o resumo da IA como motivo e não inventa motivo sem ele', async () => {
@@ -858,7 +880,7 @@ describe('InboxPage table, pagination and filters', () => {
     const header = container.querySelector('header') as HTMLElement
     expect(header.querySelector('p')?.textContent).toBe('Decidir')
     expect(header.querySelector('h1')?.textContent).toBe('Inbox')
-    expect(header.textContent).toContain('1 vaga para decidir.')
+    expect(header.textContent).not.toContain('1 vaga')
     expect(
       [...header.querySelectorAll('button')].some((button) => button.textContent === 'Buscas salvas'),
     ).toBe(true)

@@ -113,14 +113,15 @@ prioridade**. Não é cor de botão, de link nem de decoração.
 | Sucesso | `success-surface` `#E6F0DF` / `#1B2A17`; `-soft` `#EEF5E9` / `#17241A`; `-strong` `#D8E8CD` / `#22351D` | `success-line` `#A6C597` / `#4C6E3E` | `success-ink` `#2D5A1E` / `#A9D38F`; `-strong` `#244A17` / `#BFE0A8` |
 | Atenção | `warning-surface` `#F7E9DA` / `#33231A`; `-strong` `#F1DEC8` / `#3D2A1E` | `warning-line` `#DDB58E` / `#7A5233` | `warning-ink` `#7A3E10` / `#F0B07F`; `-strong` `#6B360D` / `#F5C39C` |
 | Erro | `danger-surface` `#F8E6E3` / `#351C1A`; `-strong` `#F3DAD6` / `#40221F` | `danger-line` `#DDAFA8` / `#7D3F38` | `danger-ink` `#8A2E25` / `#F2A39A` |
-| Informação | `info-surface` `#E4ECEE` / `#1A2A2E` | — | `info-ink` `#2F4A52` / `#A7C8D0` |
+| Informação | `info-surface` `#E4ECEE` / `#1A2A2E` | `info-line` `#6A8890` / `#56808A` | `info-ink` `#2F4A52` / `#A7C8D0` |
 
 O verde de sucesso puxa para folha (amarelado); o acento puxa para rio (azulado). Os dois não
 se confundem e sucesso nunca vira marca.
 
 Contraste medido em 2026-10-20 para todos os pares de `styles.test.ts`, nos dois temas: todos
 os textos >= 4.5:1 e todos os controles >= 3:1. Menores valores: `muted` sobre `sidebar` 5.16
-(claro); `nugget` sobre `canvas` 3.30 (claro).
+(claro); `info-line` sobre `info-surface` 3.17 (claro) e 3.43 (escuro), o menor par de controle;
+`nugget` sobre `canvas` 3.30 (claro).
 
 ## 3. Forma, tipografia e ritmo
 

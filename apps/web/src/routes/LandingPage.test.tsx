@@ -14,4 +14,13 @@ describe('LandingPage header', () => {
     expect(Array.from(actions).map((a) => a.textContent)).toEqual(['Entrar', 'Criar conta'])
     for (const action of Array.from(actions)) expect(action.className).toContain('whitespace-nowrap')
   })
+
+  it('describes the AI reading in the FAQ', () => {
+    const container = render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>,
+    )
+    expect(container.textContent).toContain('A leitura da IA, quando disponível')
+  })
 })

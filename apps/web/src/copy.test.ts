@@ -25,12 +25,23 @@ function walk(dir: string): string[] {
   })
 }
 
+/**
+ * Drops block comments and whole-line // comments. A line that starts with // is kept when it is
+ * rendered text: inside a template literal (odd backtick count so far) or right after a JSX tag.
+ */
 function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .split('\n')
-    .filter((line) => !line.trim().startsWith('//'))
-    .join('\n')
+  const out: string[] = []
+  let backticks = 0
+  let previous = ''
+  for (const line of source.replace(/\/\*[\s\S]*?\*\//g, '').split('\n')) {
+    const wholeLineComment = /^\s*\/\//.test(line) && backticks % 2 === 0 && !previous.endsWith('>')
+    if (!wholeLineComment) {
+      out.push(line)
+      backticks += (line.match(/`/g) ?? []).length
+      if (line.trim()) previous = line.trim()
+    }
+  }
+  return out.join('\n')
 }
 
 describe('Bateia voice guard', () => {
@@ -51,5 +62,36 @@ describe('Bateia voice guard', () => {
       }
     }
     expect(hits).toEqual([])
+  })
+
+  it('keeps labels in sentence case (no uppercase with wide tracking)', () => {
+    const hits: string[] = []
+    for (const dir of dirs) {
+      for (const file of walk(join(root, dir))) {
+        const text = stripComments(readFileSync(file, 'utf8'))
+        if (/\buppercase\b[^"'`]*\btracking-\[|\btracking-\[[^"'`]*\buppercase\b/.test(text)) {
+          hits.push(relative(root, file))
+        }
+      }
+    }
+    expect(hits).toEqual([])
+  })
+
+  it('does not call the reading "análise por IA"', () => {
+    const hits: string[] = []
+    for (const dir of dirs) {
+      for (const file of walk(join(root, dir))) {
+        if (/análise por IA/i.test(stripComments(readFileSync(file, 'utf8')))) hits.push(relative(root, file))
+      }
+    }
+    expect(hits).toEqual([])
+  })
+
+  it('strips only whole-line // comments, not rendered text', () => {
+    expect(stripComments('  // análise por IA\nconst a = 1')).not.toContain('análise')
+    expect(stripComments('<p>\n//análise por IA\n</p>')).toContain('análise')
+    expect(stripComments('const t = `\n// análise por IA\n`')).toContain('análise')
+    expect(stripComments("const u = 'http://x'")).toContain('http')
+    expect(stripComments('const a = 1 // note')).toContain('note')
   })
 })

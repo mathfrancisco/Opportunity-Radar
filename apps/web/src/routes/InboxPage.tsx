@@ -106,11 +106,13 @@ const appliedOptions = [
 
 /**
  * The score as a ten-nugget meter with the score in words beside it. Without a score the meter
- * is absent and the text says so; the verdict name is always written next to it by `VerdictBadge`.
+ * is absent: a verdict with no score says so, and with neither the "Não avaliada" chip speaks alone.
  */
-function ScoreMeter({ score }: { score: string | null }) {
+function ScoreMeter({ score, verdict }: { score: string | null; verdict: string | null }) {
   const met = nuggetsFromScore(score)
-  if (score === null || met === null) return <span className="text-body-sm text-muted">Sem avaliação</span>
+  if (met === null) {
+    return verdict === null ? null : <span className="text-body-sm text-muted">Sem avaliação</span>
+  }
   return (
     <NuggetMeter
       label={`${Math.round(Number(score))} de 100`}
@@ -183,7 +185,7 @@ function ItemRow({ item }: { item: InboxItem }) {
       </td>
       <td role="cell">
         <div className="flex flex-wrap items-center gap-2 xl:flex-col xl:items-start xl:gap-1.5">
-          <ScoreMeter score={item.score} />
+          <ScoreMeter score={item.score} verdict={item.verdict} />
           <VerdictBadge verdict={item.verdict} />
           {item.applied && (
             <Chip tone={appliedTone}>
@@ -646,11 +648,6 @@ export function InboxPage() {
       current="/inbox"
       eyebrow="Decidir"
       title="Inbox"
-      description={
-        inbox.data
-          ? `${inbox.data.total} ${inbox.data.total === 1 ? 'vaga' : 'vagas'} para decidir.`
-          : undefined
-      }
     >
       <FilterBar
         search={

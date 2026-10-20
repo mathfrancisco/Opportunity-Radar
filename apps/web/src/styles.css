@@ -85,6 +85,7 @@
   --color-danger-ink: #8a2e25;
 
   --color-info-surface: #e4ecee;
+  --color-info-line: #6a8890;
   --color-info-ink: #2f4a52;
 
   /* Pepita (DESIGN.md §2): só em pepitas do match, ponto do logo e veredito Alta prioridade. */
@@ -189,6 +190,7 @@
     --color-danger-line: #7d3f38;
     --color-danger-ink: #f2a39a;
     --color-info-surface: #1a2a2e;
+    --color-info-line: #56808a;
     --color-info-ink: #a7c8d0;
     --color-nugget: #e2b54d;
     --color-nugget-ink: #e9c46a;
@@ -234,6 +236,7 @@
   --color-danger-line: #7d3f38;
   --color-danger-ink: #f2a39a;
   --color-info-surface: #1a2a2e;
+  --color-info-line: #56808a;
   --color-info-ink: #a7c8d0;
   --color-nugget: #e2b54d;
   --color-nugget-ink: #e9c46a;
@@ -258,7 +261,7 @@ body { margin: 0; min-width: 320px; }
 :focus-visible {
   outline: 3px solid var(--color-accent);
   outline-offset: 3px;
-  border-radius: 0.35rem;
+  border-radius: inherit;
 }
 
 /* Números de métrica não dançam quando o valor muda. */
