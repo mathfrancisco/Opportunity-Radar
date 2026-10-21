@@ -9,9 +9,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _provider_variables() -> list[str]:
-    names = [
-        f"{spec.name}_{suffix}" for spec in PROVIDERS for suffix in ("api_key", "base_url", "models")
-    ]
+    suffixes = ("api_key", "base_url", "models")
+    names = [f"{spec.name}_{suffix}" for spec in PROVIDERS for suffix in suffixes]
     return [*names, "cloudflare_account_id", "ai_reserve_order", "ai_provider_limits"]
 
 
