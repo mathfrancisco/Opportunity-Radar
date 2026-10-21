@@ -1,4 +1,4 @@
-"""Run the evaluation set against Groq and compare it with a baseline.
+"""Run the evaluation set against the configured AI provider and compare it with a baseline.
 
     python scripts/eval_analysis.py --prompt v1
     python scripts/eval_analysis.py --prompt v1 --model openai/gpt-oss-120b \
@@ -52,7 +52,8 @@ from opportunity_radar.matching.evaluation import (
 from opportunity_radar.matching.groq import GroqAnalysisAdapter
 from opportunity_radar.matching.prompts import load_prompt, prompts_root
 from opportunity_radar.platform.ai.breaker import CircuitBreaker
-from opportunity_radar.platform.ai.providers.groq import GroqProvider
+from opportunity_radar.platform.ai.providers.registry import limits_for_model
+from opportunity_radar.platform.ai.providers.routed import build_provider
 from opportunity_radar.platform.ai.quota import (
     QuotaGuard,
     QuotaLimits,
@@ -218,13 +219,12 @@ def resolve_routes(settings: Settings, model: str | None) -> dict[AITask, ModelR
 
 def _adapter(settings: Settings, args: argparse.Namespace, engine: Engine) -> GroqAnalysisAdapter:
     routes = resolve_routes(settings, args.model)
-    provider = GroqProvider(
-        api_key=settings.groq_api_key.get_secret_value(),
-        base_url=settings.groq_base_url,
-        timeout_seconds=settings.ai_timeout_seconds,
-        connect_timeout_seconds=settings.ai_connect_timeout_seconds,
+    # Routed by the model's prefix, so `--model cerebras:gpt-oss-120b` reaches Cerebras and
+    # each model is judged against its own provider's limits.
+    provider = build_provider(settings)
+    quota_guard = QuotaGuard(
+        engine, _quota_limits(settings), limits_for=limits_for_model(settings)
     )
-    quota_guard = QuotaGuard(engine, _quota_limits(settings))
     breaker = CircuitBreaker(
         failures=settings.ai_breaker_failures,
         cooldown_seconds=settings.ai_breaker_cooldown_seconds,
@@ -458,7 +458,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     settings = Settings()  # type: ignore[call-arg]  # values come from the environment
-    model = args.model or settings.groq_reasoning_model
+    model = args.model or resolve_routes(settings, None)[AITask.JOB_MATCH].chain[0]
     cases = load_cases(args.cases)
     if args.split != "all":
         cases = [case for case in cases if case.split == args.split]
@@ -490,7 +490,7 @@ def main(argv: list[str] | None = None) -> int:
             adapter,
             quota_guard,
             model,
-            _quota_limits(settings),
+            limits_for_model(settings)(model),
             pending_cases,
             max(1, args.repeat),
             allow_partial=args.allow_partial,

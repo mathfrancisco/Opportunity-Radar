@@ -7,7 +7,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.engine import Engine
@@ -282,8 +282,10 @@ def test_adapter_keeps_quota_guard_and_sets_fallback_for_the_model_flag(
     )
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(eval_analysis, "GroqProvider", lambda **kwargs: object())
-    monkeypatch.setattr(eval_analysis, "QuotaGuard", lambda engine, limits: "quota-guard")
+    monkeypatch.setattr(eval_analysis, "build_provider", lambda settings: object())
+    monkeypatch.setattr(
+        eval_analysis, "QuotaGuard", lambda engine, limits, **kwargs: "quota-guard"
+    )
     monkeypatch.setattr(eval_analysis, "CircuitBreaker", lambda **kwargs: object())
 
     def build_router(provider: object, routes: object, **kwargs: object) -> object:
@@ -669,3 +671,40 @@ def test_the_comparison_reads_each_criterion_in_its_own_direction() -> None:
     assert verdicts["inventions"] == "empate"
     assert verdicts["total_ms"] == "piora"
     assert verdicts["fidelity"] == "não comparável"
+
+
+def test_adapter_routes_a_prefixed_model_to_its_provider_and_limits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        database_url="postgresql+psycopg://u:p@localhost/db",
+        _env_file=None,  # type: ignore[call-arg]
+        cerebras_api_key="csk-test",
+    )
+    captured: dict[str, Any] = {}
+
+    def build_guard(engine: object, limits: object, **kwargs: Any) -> object:
+        captured["limits_for"] = kwargs["limits_for"]
+        return "quota-guard"
+
+    def build_router(provider: object, routes: object, **kwargs: object) -> object:
+        captured["provider"] = provider
+        return object()
+
+    monkeypatch.setattr(eval_analysis, "QuotaGuard", build_guard)
+    monkeypatch.setattr(eval_analysis, "AIRouter", build_router)
+    monkeypatch.setattr(eval_analysis, "load_prompt", lambda prompt: object())
+    monkeypatch.setattr(eval_analysis, "GroqAnalysisAdapter", lambda **kwargs: kwargs)
+
+    _adapter(
+        settings,
+        SimpleNamespace(prompt="v1", model="cerebras:gpt-oss-120b"),
+        cast(Engine, object()),
+    )
+
+    backend = captured["provider"].backend_for("cerebras:gpt-oss-120b")
+    assert backend.name == "cerebras"
+    assert captured["limits_for"]("cerebras:gpt-oss-120b").minute_requests == 4
+    assert captured["limits_for"]("openai/gpt-oss-120b").minute_requests == (
+        settings.ai_minute_requests_soft_limit
+    )

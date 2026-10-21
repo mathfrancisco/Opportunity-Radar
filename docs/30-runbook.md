@@ -373,6 +373,8 @@ O Workers AI sem `CLOUDFLARE_ACCOUNT_ID` fica fora da cadeia, e o `make doctor` 
 motivo. Limites de terceiros mudam sem aviso: conferir na página do fornecedor antes de
 ligar. Fonte e detalhes: `docs/research/2026-10-20-llm-gratuitos.md`.
 
+Para conferir o que cada provedor com chave realmente aceita, rode `python scripts/probe_ai_providers.py [--provider NOME] [--json CAMINHO]`. Ele gasta uma requisição mínima e sintética (sem dados de usuário) por modelo, contra a cota real, e imprime `provider model status latency_ms schema_ok rate_headers finish_reason`, com `json_object_only` quando o provedor só aceita `json_object`. Ignora `AI_ENABLED`, não usa o banco nem a cota e nunca imprime a chave.
+
 - **Privacidade:** o projeto aceita treino com os prompts (decisão do dono, 2026-10-20).
   O texto enviado continua passando por `sanitize_for_llm`, e nenhum dado de contato do
   perfil sai.
