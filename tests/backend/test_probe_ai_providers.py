@@ -119,3 +119,39 @@ def test_probe_without_any_key_prints_a_hint_and_exits_zero(
 
     assert code == 0
     assert "no provider to probe" in capsys.readouterr().out
+
+
+def test_target_repr_hides_the_api_key() -> None:
+    settings = _settings(cerebras_api_key=_KEY, cerebras_models="gpt-oss-120b")
+
+    target = probe.targets(settings)[0]
+
+    assert _KEY not in repr(target)
+    assert target.api_key == _KEY
+
+
+def test_probe_records_an_unexpected_exception_by_class_and_finishes(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        model = json.loads(request.content)["model"]
+        calls.append(model)
+        if model == "gpt-oss-120b":
+            raise RuntimeError(f"boom {_KEY}")
+        return httpx.Response(200, json=_GOOD)
+
+    out_path = tmp_path / "probe.json"
+    settings = _settings(cerebras_api_key=_KEY, cerebras_models="gpt-oss-120b,qwen-3.8-27b")
+    code = probe.main(
+        ["--json", str(out_path)], settings=settings, client_factory=_factory(handler)
+    )
+
+    captured = capsys.readouterr()
+    rows = json.loads(out_path.read_text(encoding="utf-8"))
+    assert code == 0
+    assert [row["status"] for row in rows] == ["error:RuntimeError", "200"]
+    assert calls == ["gpt-oss-120b", "qwen-3.8-27b"]
+    assert "boom" not in captured.out + captured.err + out_path.read_text(encoding="utf-8")
+    assert _KEY not in captured.out + captured.err + out_path.read_text(encoding="utf-8")

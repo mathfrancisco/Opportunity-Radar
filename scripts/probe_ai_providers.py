@@ -27,7 +27,7 @@ import asyncio
 import json
 from collections.abc import Callable, Sequence
 from contextlib import AbstractAsyncContextManager
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -81,7 +81,7 @@ class Target:
     provider: str
     model: str  # as routed: prefixed for reserve providers, bare for Groq
     spec: ProviderSpec | None
-    api_key: str
+    api_key: str = field(repr=False)  # never in a repr, so a traceback cannot leak it
     base_url: str
 
 
@@ -209,8 +209,24 @@ async def probe_target(
 async def probe_all(
     settings: Settings, only: str | None = None, client_factory: ClientFactory | None = None
 ) -> list[Row]:
-    """Probe sequentially, so a provider's per-minute limit sees one request at a time."""
-    return [await probe_target(t, settings, client_factory) for t in targets(settings, only)]
+    """Probe sequentially, so a provider's per-minute limit sees one request at a time.
+
+    A target that fails in a way the provider layer does not wrap becomes an
+    `error:<ExceptionClassName>` row (never the message, which may echo a key), so the run
+    still finishes and writes its report.
+    """
+    rows: list[Row] = []
+    for target in targets(settings, only):
+        try:
+            rows.append(await probe_target(target, settings, client_factory))
+        except Exception as error:  # noqa: BLE001 - one bad target must not end the run
+            rows.append(
+                Row(
+                    target.provider, target.model, f"error:{type(error).__name__}", None,
+                    False, False, None, "",
+                )
+            )
+    return rows
 
 
 _COLUMNS = (
