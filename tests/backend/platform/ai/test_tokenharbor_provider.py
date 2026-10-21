@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+from functools import partial
 from uuid import uuid4
 
 import httpx
@@ -14,8 +15,9 @@ from opportunity_radar.platform.ai.breaker import CircuitBreaker
 from opportunity_radar.platform.ai.errors import ErrorKind, ProviderError
 from opportunity_radar.platform.ai.providers.base import LLMRequest
 from opportunity_radar.platform.ai.providers.groq import GroqProvider
+from opportunity_radar.platform.ai.providers.openai_compat import OpenAICompatibleProvider
+from opportunity_radar.platform.ai.providers.registry import TOKENHARBOR
 from opportunity_radar.platform.ai.providers.routed import RoutedProvider, build_provider
-from opportunity_radar.platform.ai.providers.tokenharbor import TokenHarborProvider
 from opportunity_radar.platform.ai.router import AIRouter
 from opportunity_radar.platform.ai.tasks import AITask, default_routes
 from opportunity_radar.platform.ai.telemetry import (
@@ -27,6 +29,7 @@ from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 
 _KEY = "thk_live_test-key"
+_harbor_factory = partial(OpenAICompatibleProvider, TOKENHARBOR)
 _FREE = "tokenharbor:deepseek-v4.1-flash:free"
 
 
@@ -73,7 +76,7 @@ def test_request_drops_the_prefix_and_the_response_keeps_the_route_name() -> Non
         return _ok("deepseek-v4.1-flash")
 
     provider = _backend(
-        TokenHarborProvider, handler, base_url="https://tokenharbor.ai/v1/", api_key=_KEY
+        _harbor_factory, handler, base_url="https://tokenharbor.ai/v1/", api_key=_KEY
     )
     response = asyncio.run(provider.complete(_request(_FREE)))
 
@@ -93,7 +96,7 @@ def test_429_is_quota_with_retry_after_and_the_key_stays_out_of_the_summary() ->
         return httpx.Response(429, headers={"Retry-After": "12"}, text=f"slow down {_KEY}")
 
     provider = _backend(
-        TokenHarborProvider, handler, base_url="https://tokenharbor.ai/v1", api_key=_KEY
+        _harbor_factory, handler, base_url="https://tokenharbor.ai/v1", api_key=_KEY
     )
     try:
         asyncio.run(provider.complete(_request(_FREE)))
@@ -116,7 +119,7 @@ def test_routed_provider_sends_each_model_to_its_backend() -> None:
         _backend(GroqProvider, handler, base_url="https://api.groq.com/openai/v1", api_key="g"),
         {
             "tokenharbor:": _backend(
-                TokenHarborProvider, handler, base_url="https://tokenharbor.ai/v1", api_key=_KEY
+                _harbor_factory, handler, base_url="https://tokenharbor.ai/v1", api_key=_KEY
             )
         },
     )
@@ -170,7 +173,7 @@ def test_router_falls_to_token_harbor_when_groq_is_rate_limited_and_telemetry_na
         _backend(GroqProvider, handler, base_url=settings.groq_base_url, api_key="g"),
         {
             "tokenharbor:": _backend(
-                TokenHarborProvider, handler, base_url=settings.tokenharbor_base_url, api_key=_KEY
+                _harbor_factory, handler, base_url=settings.tokenharbor_base_url, api_key=_KEY
             )
         },
     )
@@ -211,7 +214,7 @@ def test_inherited_error_paths_carry_the_transport_facts_and_the_route_name() ->
 
     def fail(handler) -> ProviderError:
         provider = _backend(
-            TokenHarborProvider, handler, base_url="https://tokenharbor.ai/v1", api_key=_KEY
+            _harbor_factory, handler, base_url="https://tokenharbor.ai/v1", api_key=_KEY
         )
         with pytest.raises(ProviderError) as excinfo:
             asyncio.run(provider.complete(request()))

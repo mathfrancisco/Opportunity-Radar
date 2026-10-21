@@ -9,7 +9,7 @@ from opportunity_radar.platform.ai.breaker import CircuitBreaker
 from opportunity_radar.platform.ai.errors import ErrorKind, ProviderError
 from opportunity_radar.platform.ai.quota import Reservation
 from opportunity_radar.platform.ai.router import AIRouter, RouterResult
-from opportunity_radar.platform.ai.tasks import AITask, default_routes
+from opportunity_radar.platform.ai.tasks import AITask, ModelRoute, TaskBudget, default_routes
 from opportunity_radar.platform.config import Settings
 
 from .fakes import FakeProvider, response
@@ -437,3 +437,159 @@ def test_router_skips_open_model() -> None:
 
     assert result.response.model == _ALT
     assert provider.models_called() == [_ALT]
+
+
+def test_429_without_retry_after_blocks_only_that_model() -> None:
+    # Zen and Cerebras send no Retry-After: the router uses its default cooldown for the
+    # 429ing model alone and moves on to the next provider.
+    provider = FakeProvider(
+        {
+            "zen:a": [ProviderError(ErrorKind.QUOTA, "429")],
+            "cerebras:b": [response("cerebras:b")],
+        }
+    )
+    router = AIRouter(
+        provider,
+        {
+            AITask.JOB_MATCH: ModelRoute(
+                AITask.JOB_MATCH, ("zen:a", "cerebras:b"), TaskBudget(5000, 900, "low")
+            )
+        },
+        fallback_enabled=True,
+        max_retries=2,
+    )
+
+    result = _run(router)
+
+    assert provider.models_called() == ["zen:a", "cerebras:b"]
+    assert result.response.model == "cerebras:b"
+    assert router._is_blocked("zen:a")
+    assert not router._is_blocked("cerebras:b")
+
+
+def _mixed_router(provider: FakeProvider, chain: tuple[str, ...], **kwargs: object) -> AIRouter:
+    budget = TaskBudget(max_input_tokens=1000, max_output_tokens=500, reasoning_effort="low")
+    routes = {AITask.JOB_MATCH: ModelRoute(AITask.JOB_MATCH, chain, budget)}
+    return AIRouter(provider, routes, **kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("kind", [ErrorKind.REQUEST, ErrorKind.CONFIGURATION])
+def test_error_on_one_reserve_provider_blocks_that_model_and_continues(kind: ErrorKind) -> None:
+    clock = _FakeClock()
+    provider = FakeProvider(
+        {
+            "cerebras:a": [ProviderError(kind, "rejected", status=400)],
+            "zen:b": [response("zen:b"), response("zen:b")],
+        }
+    )
+    router = _mixed_router(provider, ("cerebras:a", "zen:b"), clock=clock)
+
+    first = _run(router)
+    second = _run(router)
+
+    assert first.response.model == "zen:b"
+    assert first.fallback_used is True
+    assert [a.error_kind for a in first.attempts] == [kind, None]
+    assert second.response.model == "zen:b"
+    # The failing model sits out its cooldown instead of being retried by the next run.
+    assert provider.models_called() == ["cerebras:a", "zen:b", "zen:b"]
+    clock.now = 3601.0
+    assert router._is_blocked("cerebras:a") is False
+
+
+def test_request_error_on_the_last_model_still_raises() -> None:
+    provider = FakeProvider({"cerebras:a": [ProviderError(ErrorKind.REQUEST, "bad", status=400)]})
+
+    with pytest.raises(ProviderError) as raised:
+        _run(_mixed_router(provider, ("cerebras:a",)))
+
+    assert raised.value.kind is ErrorKind.REQUEST
+
+
+def test_request_error_between_models_of_the_same_provider_still_raises() -> None:
+    provider = FakeProvider(
+        {
+            "cerebras:a": [ProviderError(ErrorKind.REQUEST, "bad", status=400)],
+            "cerebras:b": [response("cerebras:b")],
+        }
+    )
+
+    with pytest.raises(ProviderError):
+        _run(_mixed_router(provider, ("cerebras:a", "cerebras:b")))
+
+    assert provider.models_called() == ["cerebras:a"]
+
+
+def test_groq_only_chain_request_error_still_raises() -> None:
+    provider = FakeProvider(
+        {
+            "g0": [ProviderError(ErrorKind.REQUEST, "bad", status=400)],
+            "g1": [response("g1")],
+        }
+    )
+
+    with pytest.raises(ProviderError) as raised:
+        _run(_mixed_router(provider, ("g0", "g1")))
+
+    assert raised.value.kind is ErrorKind.REQUEST
+    assert provider.models_called() == ["g0"]
+
+
+def test_404_configuration_error_blocks_the_model_and_the_next_provider_answers() -> None:
+    provider = FakeProvider(
+        {
+            "cerebras:a": [ProviderError(ErrorKind.CONFIGURATION, "model gone", status=404)],
+            "zen:b": [response("zen:b")],
+        }
+    )
+    router = _mixed_router(provider, ("cerebras:a", "zen:b"))
+
+    result = _run(router)
+
+    assert result.response.model == "zen:b"
+    assert router._is_blocked("cerebras:a")
+
+
+def test_400_json_schema_error_blocks_the_model_and_the_next_provider_answers() -> None:
+    provider = FakeProvider(
+        {
+            "cerebras:a": [
+                ProviderError(ErrorKind.REQUEST, "json_schema is not supported", status=400)
+            ],
+            "zen:b": [response("zen:b")],
+        }
+    )
+    router = _mixed_router(provider, ("cerebras:a", "zen:b"))
+
+    result = _run(router)
+
+    assert result.response.model == "zen:b"
+    assert router._is_blocked("cerebras:a")
+
+
+@pytest.mark.parametrize(
+    ("status", "summary"),
+    [
+        (413, "request entity too large"),
+        (400, "This model's Maximum Context Length is 8192 tokens"),
+        (422, "unprocessable"),
+        (None, "bad request"),
+    ],
+)
+def test_payload_request_errors_still_raise_and_do_not_block(
+    status: int | None, summary: str
+) -> None:
+    provider = FakeProvider(
+        {
+            "cerebras:a": [ProviderError(ErrorKind.REQUEST, summary, status=status)],
+            "zen:b": [response("zen:b")],
+        }
+    )
+    router = _mixed_router(provider, ("cerebras:a", "zen:b"))
+
+    with pytest.raises(ProviderError) as raised:
+        _run(router)
+
+    assert raised.value.kind is ErrorKind.REQUEST
+    assert provider.models_called() == ["cerebras:a"]
+    assert not router._is_blocked("cerebras:a")

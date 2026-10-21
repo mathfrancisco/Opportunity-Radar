@@ -31,8 +31,9 @@ from opportunity_radar.platform.ai.providers.base import (
     Usage,
 )
 from opportunity_radar.platform.ai.providers.groq import GroqProvider
+from opportunity_radar.platform.ai.providers.openai_compat import OpenAICompatibleProvider
+from opportunity_radar.platform.ai.providers.registry import TOKENHARBOR
 from opportunity_radar.platform.ai.providers.routed import RoutedProvider
-from opportunity_radar.platform.ai.providers.tokenharbor import MODEL_PREFIX, TokenHarborProvider
 from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits, Reservation
 from opportunity_radar.platform.ai.router import AIRouter, Attempt
 from opportunity_radar.platform.ai.tasks import AITask, ModelRoute, TaskBudget
@@ -372,13 +373,13 @@ def _http_provider(behaviours: dict[str, Callable[[httpx.Request], Any]]) -> Rou
         return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
     groq = GroqProvider(api_key="k", base_url="http://groq.test", client_factory=factory)
-    harbor = TokenHarborProvider(
-        api_key="k", base_url="http://harbor.test", client_factory=factory
+    harbor = OpenAICompatibleProvider(
+        TOKENHARBOR, api_key="k", base_url="http://harbor.test", client_factory=factory
     )
-    return RoutedProvider(groq, {MODEL_PREFIX: harbor})
+    return RoutedProvider(groq, {TOKENHARBOR.prefix: harbor})
 
 
-_HTTP_CHAIN = ("g0", "g1", MODEL_PREFIX + "t2", MODEL_PREFIX + "t3")
+_HTTP_CHAIN = ("g0", "g1", TOKENHARBOR.prefix + "t2", TOKENHARBOR.prefix + "t3")
 
 
 @pytest.mark.parametrize("position", range(len(_HTTP_CHAIN)))
@@ -389,7 +390,7 @@ def test_http_providers_leave_no_reservation_unexplained(position: int, label: s
     guard = QuotaGuard(engine, _limits(), now=lambda: _NOW)
     behaviours: dict[str, Callable[[httpx.Request], Any]] = {}
     for index, model in enumerate(_HTTP_CHAIN):
-        wire = model.removeprefix(MODEL_PREFIX)
+        wire = model.removeprefix(TOKENHARBOR.prefix)
         if index < position:
             behaviours[wire] = _HTTP_BEHAVIOURS["429-usage"]
         elif index == position:

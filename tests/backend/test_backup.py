@@ -425,6 +425,19 @@ def test_manifest_never_contains_groq_api_key(monkeypatch: pytest.MonkeyPatch) -
     assert os.environ["GROQ_API_KEY"] not in serialized
 
 
+def test_manifest_guard_names_every_provider_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    from opportunity_radar.platform.ai.providers.registry import PROVIDERS
+
+    for spec in PROVIDERS:
+        assert f"{spec.name.upper()}_API_KEY" in FORBIDDEN_MANIFEST_STRINGS
+    assert "GROQ_API_KEY" in FORBIDDEN_MANIFEST_STRINGS
+    monkeypatch.setenv("CEREBRAS_API_KEY", "csk_super_secret_value_for_this_test")
+
+    serialized = json.dumps(_manifest(counts={"companies": 3, "ai_call_record": 0}))
+
+    assert os.environ["CEREBRAS_API_KEY"] not in serialized
+
+
 @pytest.mark.integration
 @pytest.mark.skipif(
     os.environ.get("RUN_DATABASE_INTEGRATION") != "1",

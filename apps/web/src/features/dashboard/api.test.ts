@@ -413,6 +413,7 @@ describe('getAnalysisMetrics', () => {
         by_model: [
           {
             model: 'openai/gpt-oss-120b',
+            provider: 'groq',
             requests: 120,
             success_rate: 0.97,
             rate_limited_rate: 0.02,
@@ -438,6 +439,7 @@ describe('getAnalysisMetrics', () => {
     expect(report.ai.cacheHitRate).toBe(0.35)
     expect(report.ai.byModel[0]).toMatchObject({
       model: 'openai/gpt-oss-120b',
+      provider: 'groq',
       dayRequestsUsed: 120,
       dayRequestsLimit: 850,
       fallbackRate: 0.01,
@@ -520,6 +522,7 @@ describe('getAIBudget', () => {
       models: [
         {
           model: 'openai/gpt-oss-120b',
+          provider: 'groq',
           provider_requests_limit: 1000,
           requests_soft_limit: 850,
           requests_used: 120,
@@ -531,6 +534,7 @@ describe('getAIBudget', () => {
         },
         {
           model: 'tokenharbor/x',
+          provider: 'tokenharbor',
           provider_requests_limit: null,
           requests_soft_limit: 850,
           requests_used: 0,
@@ -551,6 +555,7 @@ describe('getAIBudget', () => {
     expect(budget.models).toHaveLength(2)
     expect(budget.models[0]).toMatchObject({
       model: 'openai/gpt-oss-120b',
+      provider: 'groq',
       providerRequestsLimit: 1000,
       requestsUsed: 120,
       requestsRemaining: 880,

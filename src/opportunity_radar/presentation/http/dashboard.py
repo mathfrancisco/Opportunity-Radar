@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal, cast
@@ -76,8 +77,12 @@ from opportunity_radar.platform.ai.metrics import (
     ai_budget,
     ai_metrics,
 )
-from opportunity_radar.platform.ai.providers.tokenharbor import MODEL_PREFIX
-from opportunity_radar.platform.ai.tasks import default_routes
+from opportunity_radar.platform.ai.providers.registry import (
+    limits_for_model,
+    provider_name_for,
+    spec_for_model,
+)
+from opportunity_radar.platform.ai.tasks import AITask, default_routes
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.presentation.http.auth import RequestIdentity, authenticated_identity
 from opportunity_radar.presentation.http.dependencies import get_analysis_adapter, get_session
@@ -360,6 +365,7 @@ class AnalysisMetricsWindowResponse(BaseModel):
 
 class ModelAIMetricsResponse(BaseModel):
     model: str
+    provider: str
     requests: int
     success_rate: float | None
     rate_limited_rate: float | None
@@ -398,6 +404,7 @@ class AIMetricsResponse(BaseModel):
 
 class ModelBudgetResponse(BaseModel):
     model: str
+    provider: str
     provider_requests_limit: int | None
     requests_soft_limit: int
     requests_used: int
@@ -883,7 +890,7 @@ def get_analysis_metrics(
     )
     report = analysis_metrics(
         session,
-        current_model=settings.groq_reasoning_model,
+        current_model=_current_analysis_model(settings),
         pending=pending,
         windows=selected,
     )
@@ -908,6 +915,7 @@ def _ai_metrics_response(
         breaker=getattr(adapter, "breaker", None),
         day_requests_limit=settings.ai_daily_requests_soft_limit,
         day_tokens_limit=settings.ai_daily_tokens_soft_limit,
+        limits_for=limits_for_model(settings),
     )
     return AIMetricsResponse(
         state=report.state,
@@ -950,13 +958,33 @@ def get_ai_budget(
         cast(Engine, session.get_bind()),
         state=ai_status(settings).value,
         models=models,
-        requests_soft_limit=settings.ai_daily_requests_soft_limit,
-        tokens_limit=settings.ai_daily_tokens_soft_limit,
+        limits_for=limits_for_model(settings),
         interactive_reserve_requests=settings.ai_interactive_reserve_requests,
-        provider_requests_limit=settings.ai_provider_daily_requests_limit,
-        provider_limit_models=[name for name in models if not name.startswith(MODEL_PREFIX)],
+        provider_requests_limit_for=_provider_requests_limit_for(settings),
     )
     return _ai_budget_response(report)
+
+
+def _provider_requests_limit_for(settings: Settings) -> Callable[[str], int | None]:
+    """The provider's own daily request cap for a model; `None` when it is unknown."""
+
+    def limit_for(model: str) -> int | None:
+        spec = spec_for_model(model)
+        if spec is None:
+            return settings.ai_provider_daily_requests_limit
+        return spec.provider_day_requests
+
+    return limit_for
+
+
+def _current_analysis_model(settings: Settings) -> str:
+    """The model that answers a fit analysis first: the head of its chain.
+
+    Equals `groq_reasoning_model` when Groq has a key; with reserves only it is the first
+    reserve model, so the label never names a provider that is off.
+    """
+    chain = default_routes(settings)[AITask.JOB_MATCH].chain
+    return chain[0] if chain else settings.groq_reasoning_model
 
 
 def _ai_budget_response(report: AIBudgetReport) -> AIBudgetResponse:
@@ -972,6 +1000,7 @@ def _ai_budget_response(report: AIBudgetReport) -> AIBudgetResponse:
 def _model_budget_response(item: ModelBudget) -> ModelBudgetResponse:
     return ModelBudgetResponse(
         model=item.model,
+        provider=provider_name_for(item.model),
         provider_requests_limit=item.provider_requests_limit,
         requests_soft_limit=item.requests_soft_limit,
         requests_used=item.requests_used,
@@ -986,6 +1015,7 @@ def _model_budget_response(item: ModelBudget) -> ModelBudgetResponse:
 def _model_ai_metrics_response(item: ModelAIMetrics) -> ModelAIMetricsResponse:
     return ModelAIMetricsResponse(
         model=item.model,
+        provider=provider_name_for(item.model),
         requests=item.requests,
         success_rate=item.success_rate,
         rate_limited_rate=item.rate_limited_rate,

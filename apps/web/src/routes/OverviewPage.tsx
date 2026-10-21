@@ -27,6 +27,7 @@ import { verdictCountLabels, verdictOrder } from '../features/matching/verdicts'
 import { opportunityLabel, seniorityLabels } from '../features/opportunities/labels'
 import { type SavedSearchFilters } from '../features/saved-searches/api'
 import { useOpenSavedSearch, useSavedSearchSummary } from '../features/saved-searches/useSavedSearches'
+import { modelName } from '../features/dashboard/modelName'
 import { useActiveProfile } from '../features/profile/useProfile'
 import { coverageLabels, coverageTones } from '../features/sources/states'
 
@@ -469,7 +470,7 @@ function AIUsageCard() {
   if (metrics.isError) {
     return (
       <Card>
-        <p className="text-sm text-muted">IA (Groq)</p>
+        <p className="text-sm text-muted">IA na nuvem</p>
         <p className="mt-2 text-sm text-subtle">Não foi possível carregar as métricas de IA.</p>
       </Card>
     )
@@ -478,7 +479,7 @@ function AIUsageCard() {
   if (metrics.isPending) {
     return (
       <Card>
-        <p className="text-sm text-muted">IA (Groq)</p>
+        <p className="text-sm text-muted">IA na nuvem</p>
         <p className="mt-2 text-sm text-subtle" role="status">
           Carregando métricas de IA…
         </p>
@@ -488,10 +489,10 @@ function AIUsageCard() {
   if (!ai || ai.state !== 'enabled') {
     return (
       <Card>
-        <p className="text-sm text-muted">IA (Groq)</p>
+        <p className="text-sm text-muted">IA na nuvem</p>
         <p className="mt-2 text-sm text-subtle">
           {ai?.state === 'blocked_by_configuration'
-            ? 'Bloqueada por configuração: falta a chave da Groq.'
+            ? 'Bloqueada por configuração: nenhum provedor de IA tem chave.'
             : 'Desligada (AI_ENABLED=false).'}
         </p>
       </Card>
@@ -500,7 +501,7 @@ function AIUsageCard() {
   if (ai.byModel.length === 0) {
     return (
       <Card>
-        <p className="text-sm text-muted">IA (Groq)</p>
+        <p className="text-sm text-muted">IA na nuvem</p>
         <p className="mt-2 text-sm text-subtle">
           Nenhuma chamada nas últimas {ai.windowHours} h.
         </p>
@@ -510,7 +511,7 @@ function AIUsageCard() {
 
   return (
     <Card>
-      <p className="text-sm text-muted">IA (Groq) · últimas {ai.windowHours} h</p>
+      <p className="text-sm text-muted">IA na nuvem · últimas {ai.windowHours} h</p>
       <ul className="mt-3 space-y-3">
         {ai.byModel.map((model) => {
           const used = model.dayRequestsLimit
@@ -520,7 +521,16 @@ function AIUsageCard() {
           return (
             <li key={model.model}>
               <div className="flex items-baseline justify-between gap-2">
-                <span className="truncate text-sm font-medium">{model.model}</span>
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="truncate text-sm font-medium">
+                    {modelName(model.model, model.provider)}
+                  </span>
+                  {model.provider && (
+                    <span className="shrink-0 text-xs font-normal text-subtle">
+                      {model.provider}
+                    </span>
+                  )}
+                </span>
                 {breakerOpen && (
                   <Chip tone="border-danger-line bg-danger-surface text-danger-ink">
                     breaker {model.breaker}
@@ -814,7 +824,7 @@ function Summary({ overview }: { overview: Overview }) {
             value={String(overview.sourcesFailing)}
           />
           <SupportItem
-            hint="IA (Groq) indisponível, sem quota ou desligada"
+            hint="IA indisponível, sem cota ou desligada"
             label="Análises degradadas"
             value={String(overview.analysesDegraded)}
           />

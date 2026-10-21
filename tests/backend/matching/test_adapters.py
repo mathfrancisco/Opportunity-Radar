@@ -35,7 +35,7 @@ def test_blocked_builds_null_adapter_and_warns_once(
         build_analysis_adapter(settings, _engine())
 
     assert isinstance(first, NullAnalysisAdapter)
-    assert [r.getMessage() for r in caplog.records].count("groq api key missing") == 1
+    assert [r.getMessage() for r in caplog.records].count("no ai provider key") == 1
 
 
 def test_enabled_builds_groq_adapter() -> None:

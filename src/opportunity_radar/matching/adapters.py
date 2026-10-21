@@ -20,6 +20,7 @@ from opportunity_radar.matching.groq import GroqAnalysisAdapter
 from opportunity_radar.matching.prompts import load_prompt
 from opportunity_radar.platform.ai.breaker import CircuitBreaker
 from opportunity_radar.platform.ai.config import AIState, ai_status
+from opportunity_radar.platform.ai.providers.registry import limits_for_model
 from opportunity_radar.platform.ai.providers.routed import build_provider
 from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits
 from opportunity_radar.platform.ai.router import AIRouter
@@ -50,7 +51,7 @@ def build_analysis_adapter(
     if state is AIState.BLOCKED_BY_CONFIGURATION:
         global _missing_key_warned
         if not _missing_key_warned:
-            logger.warning("groq api key missing")
+            logger.warning("no ai provider key")
             _missing_key_warned = True
         return NullAnalysisAdapter()
 
@@ -65,6 +66,7 @@ def build_analysis_adapter(
             day_requests=settings.ai_daily_requests_soft_limit,
             day_tokens=settings.ai_daily_tokens_soft_limit,
         ),
+        limits_for=limits_for_model(settings),
     )
     breaker = CircuitBreaker(
         failures=settings.ai_breaker_failures,

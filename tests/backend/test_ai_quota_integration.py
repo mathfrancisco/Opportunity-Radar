@@ -282,3 +282,53 @@ def test_a_provider_refill_never_raises_the_window_ceiling() -> None:
         assert guard.reserve(_MODEL, estimated_tokens=1) is not None
     assert guard.reserve(_MODEL, estimated_tokens=1) is None
 
+
+
+_SMALL = QuotaLimits(
+    minute_requests=1000, minute_tokens=1_000_000, day_requests=5, day_tokens=1_000_000
+)
+
+
+def test_each_provider_has_its_own_day_limit() -> None:
+    engine = _engine()
+    _reset(engine)
+    guard = QuotaGuard(
+        engine,
+        _limits(day_requests=850),
+        limits_for=lambda m: _SMALL if m.startswith("openrouter:") else _limits(day_requests=850),
+    )
+    for _ in range(_SMALL.day_requests):
+        assert guard.reserve("openrouter:m", 10) is not None
+    assert guard.reserve("openrouter:m", 10) is None
+    assert guard.reserve(_MODEL, 10) is not None
+    assert guard.has_day_balance("openrouter:m", estimated_tokens=1) is False
+    assert guard.has_day_balance(_MODEL, estimated_tokens=1) is True
+
+
+def test_worker_ceiling_is_min_with_small_provider_limit() -> None:
+    engine = _engine()
+    _reset(engine)
+    guard = QuotaGuard(engine, _limits(day_requests=850), limits_for=lambda m: _SMALL)
+
+    taken = sum(
+        guard.reserve("openrouter:m", 1, ceiling_requests=750) is not None
+        for _ in range(_SMALL.day_requests + 5)
+    )
+
+    assert taken == _SMALL.day_requests
+
+
+def test_next_available_at_uses_the_models_own_limits() -> None:
+    engine = _engine()
+    _reset(engine)
+    moment = datetime(2026, 10, 20, 12, 0, 30, tzinfo=UTC)
+    guard = QuotaGuard(
+        engine,
+        _limits(day_requests=850),
+        now=lambda: moment,
+        limits_for=lambda m: _SMALL if m.startswith("zen:") else _limits(day_requests=850),
+    )
+    for _ in range(_SMALL.day_requests):
+        assert guard.reserve("zen:a", 1) is not None
+
+    assert guard.next_available_at("zen:a") == datetime(2026, 10, 21, tzinfo=UTC)

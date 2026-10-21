@@ -160,7 +160,8 @@ class Settings(BaseSettings):
     # How late a job may be before the doctor calls it late rather than merely busy.
     doctor_job_grace_seconds: int = 120
 
-    # Cloud AI is deliberately opt-in; the Groq adapter is the only analysis provider.
+    # Cloud AI is deliberately opt-in; Groq is the primary analysis provider and every other
+    # provider below is a reserve that joins the chains only once it has a key.
     ai_enabled: bool = False
     ai_provider: str = "groq"
     groq_api_key: SecretStr = SecretStr("")
@@ -173,6 +174,35 @@ class Settings(BaseSettings):
     tokenharbor_api_key: SecretStr = SecretStr("")
     tokenharbor_base_url: str = "https://tokenharbor.ai/v1"
     tokenharbor_models: str = "deepseek-v4.1-flash:free,mimo-v2.6-flash:free"
+    # Reserve providers (docs/research/2026-10-20-llm-gratuitos.md): each is off until its
+    # key is set, and its models follow the Groq ones in `ai_reserve_order`.
+    cerebras_api_key: SecretStr = SecretStr("")
+    cerebras_base_url: str = "https://api.cerebras.ai/v1"
+    cerebras_models: str = "gpt-oss-120b,qwen-3.8-27b"
+    zen_api_key: SecretStr = SecretStr("")
+    zen_base_url: str = "https://opencode.ai/inference/openai/v1"
+    zen_models: str = "deepseek-v4.1-flash-free,glm-5.3-flash-free,minimax-m3.1-flash-free"
+    gemini_api_key: SecretStr = SecretStr("")
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    gemini_models: str = "gemma-4-31b-it"
+    openrouter_api_key: SecretStr = SecretStr("")
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_models: str = "openai/gpt-oss-120b:free"
+    mistral_api_key: SecretStr = SecretStr("")
+    mistral_base_url: str = "https://api.mistral.ai/v1"
+    mistral_models: str = "mistral-small-latest"
+    nim_api_key: SecretStr = SecretStr("")
+    nim_base_url: str = "https://integrate.api.nvidia.com/v1"
+    nim_models: str = "openai/gpt-oss-120b"
+    workersai_api_key: SecretStr = SecretStr("")
+    # The URL carries the account id; without CLOUDFLARE_ACCOUNT_ID the provider stays out.
+    workersai_base_url: str = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"
+    workersai_models: str = "@cf/openai/gpt-oss-120b"
+    cloudflare_account_id: str = ""
+    ai_reserve_order: str = "cerebras,zen,nim,tokenharbor,gemini,mistral,openrouter,workersai"
+    # Per-provider overrides of the spec's soft limits, JSON in the env:
+    # {"zen": {"day_requests": 100}}; keys minute_requests|minute_tokens|day_requests|day_tokens.
+    ai_provider_limits: dict[str, dict[str, int]] = {}
     ai_timeout_seconds: float = 25.0
     ai_connect_timeout_seconds: float = 5.0
     ai_max_retries: int = 2
@@ -329,6 +359,15 @@ class Settings(BaseSettings):
         for name, value in positive_limits.items():
             if value <= 0:
                 raise ValueError(f"{name} must be positive, got {value!r}")
+        # Unknown provider names and fields are ignored on purpose (a typo must not take AI
+        # down), but a value that is not a positive integer is rejected whatever its name.
+        for provider, overrides in self.ai_provider_limits.items():
+            for limit_name, limit_value in overrides.items():
+                if limit_value <= 0:
+                    raise ValueError(
+                        f"AI_PROVIDER_LIMITS {provider}.{limit_name} must be positive, "
+                        f"got {limit_value!r}"
+                    )
         if self.ingest_max_age_days < 0:
             raise ValueError(
                 f"INGEST_MAX_AGE_DAYS cannot be negative, got {self.ingest_max_age_days!r}"

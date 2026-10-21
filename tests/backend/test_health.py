@@ -65,7 +65,7 @@ def test_ai_health_never_makes_a_network_call_and_is_degraded_when_off() -> None
 def test_ai_health_is_degraded_when_enabled_without_a_key() -> None:
     result = ai_health(settings(ai_enabled=True, groq_api_key=""))
 
-    assert result == DependencyHealth("degraded", "groq api key missing")
+    assert result == DependencyHealth("degraded", "no ai provider key")
 
 
 def test_ai_health_is_healthy_when_enabled_with_a_key() -> None:

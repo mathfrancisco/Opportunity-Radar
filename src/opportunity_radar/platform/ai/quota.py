@@ -166,10 +166,16 @@ class QuotaGuard:
         engine: Engine,
         limits: QuotaLimits,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        limits_for: Callable[[str], QuotaLimits] | None = None,
     ) -> None:
         self._engine = engine
         self._limits = limits
         self._now = now
+        self._limits_for = limits_for
+
+    def _limits_of(self, model: str) -> QuotaLimits:
+        """The limits of one model: `limits_for(model)` when given, else the shared ones."""
+        return self._limits if self._limits_for is None else self._limits_for(model)
 
     def _reserve_window(
         self,
@@ -212,10 +218,11 @@ class QuotaGuard:
         now = self._now()
         minute_start = minute_window(now)
         day_start = day_window(now)
+        limits = self._limits_of(model)
         day_requests_limit = (
-            self._limits.day_requests
+            limits.day_requests
             if ceiling_requests is None
-            else min(self._limits.day_requests, ceiling_requests)
+            else min(limits.day_requests, ceiling_requests)
         )
         try:
             with self._engine.begin() as connection:
@@ -225,8 +232,8 @@ class QuotaGuard:
                     "minute",
                     minute_start,
                     estimated_tokens,
-                    self._limits.minute_requests,
-                    self._limits.minute_tokens,
+                    limits.minute_requests,
+                    limits.minute_tokens,
                 ):
                     raise _WindowExhausted
                 if not self._reserve_window(
@@ -236,7 +243,7 @@ class QuotaGuard:
                     day_start,
                     estimated_tokens,
                     day_requests_limit,
-                    self._limits.day_tokens,
+                    limits.day_tokens,
                 ):
                     raise _WindowExhausted
         except _WindowExhausted:
@@ -314,17 +321,18 @@ class QuotaGuard:
                 .mappings()
                 .first()
             )
+        limits = self._limits_of(model)
         requests_limit = (
-            self._limits.day_requests
+            limits.day_requests
             if ceiling_requests is None
-            else min(self._limits.day_requests, ceiling_requests)
+            else min(limits.day_requests, ceiling_requests)
         )
         requests_used = 0 if row is None else row["requests"]
         tokens_used = 0 if row is None else row["tokens"]
         requests_ceiling = None if row is None else row["requests_ceiling"]
         requests_cap = effective_ceiling(requests_limit, requests_ceiling)
         tokens_ceiling = None if row is None else row["tokens_ceiling"]
-        tokens_cap = effective_ceiling(self._limits.day_tokens, tokens_ceiling) * token_fraction
+        tokens_cap = effective_ceiling(limits.day_tokens, tokens_ceiling) * token_fraction
         return requests_used + 1 <= requests_cap and tokens_used + estimated_tokens <= tokens_cap
 
     def next_available_at(self, model: str) -> datetime:
@@ -349,12 +357,13 @@ class QuotaGuard:
                 .mappings()
                 .first()
             )
+        limits = self._limits_of(model)
         if minute_row is not None and self._window_exhausted(
-            minute_row, self._limits.minute_requests, self._limits.minute_tokens
+            minute_row, limits.minute_requests, limits.minute_tokens
         ):
             return minute_start + timedelta(minutes=1)
         if day_row is not None and self._window_exhausted(
-            day_row, self._limits.day_requests, self._limits.day_tokens
+            day_row, limits.day_requests, limits.day_tokens
         ):
             return day_start + timedelta(days=1)
         # Neither window's stored total has *reached* its ceiling yet, so a failed

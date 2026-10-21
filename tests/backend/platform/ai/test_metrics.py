@@ -16,8 +16,10 @@ from sqlalchemy.engine import Engine
 
 from opportunity_radar.platform.ai.breaker import BreakerState, CircuitBreaker
 from opportunity_radar.platform.ai.metrics import ai_metrics, ai_period_comparison
+from opportunity_radar.platform.ai.providers.registry import limits_for_model
 from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits
 from opportunity_radar.platform.ai.telemetry import AICallRecord, record_calls
+from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 
 pytestmark = [
@@ -281,11 +283,13 @@ def test_budget_shows_used_and_remaining_per_model_for_the_day() -> None:
         engine,
         state="enabled",
         models=[_MODEL, "openai/gpt-oss-20b", "tokenharbor/x"],
-        requests_soft_limit=850,
-        tokens_limit=170_000,
+        limits_for=lambda _model: QuotaLimits(
+            minute_requests=100, minute_tokens=100_000, day_requests=850, day_tokens=170_000
+        ),
         interactive_reserve_requests=100,
-        provider_requests_limit=1000,
-        provider_limit_models=[_MODEL, "openai/gpt-oss-20b"],
+        provider_requests_limit_for=lambda model: (
+            1000 if model in (_MODEL, "openai/gpt-oss-20b") else None
+        ),
         now=NOW,
     )
 
@@ -299,6 +303,38 @@ def test_budget_shows_used_and_remaining_per_model_for_the_day() -> None:
     assert by_model["tokenharbor/x"].requests_remaining is None
     assert report.resets_at - report.day == timedelta(days=1)
     assert report.interactive_reserve_requests == 100
+
+
+def test_budget_uses_each_models_own_limit() -> None:
+    from opportunity_radar.platform.ai.metrics import ai_budget
+
+    engine = _engine()
+    _reset(engine)
+    small = QuotaLimits(minute_requests=5, minute_tokens=9_000, day_requests=40, day_tokens=70_000)
+    big = QuotaLimits(
+        minute_requests=100, minute_tokens=100_000, day_requests=850, day_tokens=170_000
+    )
+
+    report = ai_budget(
+        engine,
+        state="enabled",
+        models=[_MODEL, "openrouter:x", "zen:y"],
+        limits_for=lambda model: small if model.startswith("openrouter:") else big,
+        interactive_reserve_requests=100,
+        provider_requests_limit_for=lambda model: (
+            50 if model.startswith("openrouter:") else 1000 if "/" in model else None
+        ),
+        now=NOW,
+    )
+
+    by_model = {item.model: item for item in report.models}
+    assert by_model["openrouter:x"].requests_soft_limit == 40
+    assert by_model["openrouter:x"].tokens_limit == 70_000
+    assert by_model["openrouter:x"].provider_requests_limit == 50
+    assert by_model["openrouter:x"].requests_remaining == 50
+    assert by_model[_MODEL].requests_soft_limit == 850
+    assert by_model["zen:y"].provider_requests_limit is None
+    assert by_model["zen:y"].requests_remaining is None
 
 
 def test_calls_without_an_operation_id_are_each_a_job_and_cache_hits_are_not() -> None:
@@ -339,3 +375,33 @@ def test_calls_without_an_operation_id_are_each_a_job_and_cache_hits_are_not() -
     assert match.tokens == 110 + 220 + 330
     assert match.avg_tokens_per_job == pytest.approx(220.0)
     assert match.fallback_jobs == 1 and match.fallback_rate == pytest.approx(1 / 3)
+
+
+def test_limits_for_sets_each_row_day_limits_from_its_own_provider() -> None:
+    engine = _engine()
+    _reset(engine)
+    record_calls(
+        engine,
+        [_record(), _record(provider="cerebras", model="cerebras:gpt-oss-120b")],
+        now=NOW - timedelta(minutes=1),
+    )
+
+    report = ai_metrics(
+        engine,
+        state="enabled",
+        guard=None,
+        breaker=None,
+        day_requests_limit=850,
+        day_tokens_limit=170_000,
+        limits_for=limits_for_model(
+            Settings(  # type: ignore[call-arg]
+                _env_file=None, database_url="postgresql+psycopg://u@h/db"
+            )
+        ),
+        now=NOW,
+    )
+
+    rows = {row.model: row for row in report.by_model}
+    assert (rows[_MODEL].day_requests_limit, rows[_MODEL].day_tokens_limit) == (850, 170_000)
+    reserve = rows["cerebras:gpt-oss-120b"]
+    assert (reserve.day_requests_limit, reserve.day_tokens_limit) == (900, 950_000)

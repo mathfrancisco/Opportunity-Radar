@@ -16,6 +16,30 @@ x-app-environment: &app-environment
   TOKENHARBOR_API_KEY: ${TOKENHARBOR_API_KEY:-}
   TOKENHARBOR_BASE_URL: ${TOKENHARBOR_BASE_URL:-https://tokenharbor.ai/v1}
   TOKENHARBOR_MODELS: ${TOKENHARBOR_MODELS:-deepseek-v4.1-flash:free,mimo-v2.6-flash:free}
+  CEREBRAS_API_KEY: ${CEREBRAS_API_KEY:-}
+  CEREBRAS_BASE_URL: ${CEREBRAS_BASE_URL:-https://api.cerebras.ai/v1}
+  CEREBRAS_MODELS: ${CEREBRAS_MODELS:-gpt-oss-120b,qwen-3.8-27b}
+  ZEN_API_KEY: ${ZEN_API_KEY:-}
+  ZEN_BASE_URL: ${ZEN_BASE_URL:-https://opencode.ai/inference/openai/v1}
+  ZEN_MODELS: ${ZEN_MODELS:-deepseek-v4.1-flash-free,glm-5.3-flash-free,minimax-m3.1-flash-free}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
+  GEMINI_MODELS: ${GEMINI_MODELS:-gemma-4-31b-it}
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+  OPENROUTER_MODELS: ${OPENROUTER_MODELS:-openai/gpt-oss-120b:free}
+  MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+  MISTRAL_BASE_URL: ${MISTRAL_BASE_URL:-https://api.mistral.ai/v1}
+  MISTRAL_MODELS: ${MISTRAL_MODELS:-mistral-small-latest}
+  NIM_API_KEY: ${NIM_API_KEY:-}
+  NIM_BASE_URL: ${NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
+  NIM_MODELS: ${NIM_MODELS:-openai/gpt-oss-120b}
+  WORKERSAI_API_KEY: ${WORKERSAI_API_KEY:-}
+  WORKERSAI_BASE_URL: ${WORKERSAI_BASE_URL:-https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1}
+  WORKERSAI_MODELS: ${WORKERSAI_MODELS:-@cf/openai/gpt-oss-120b}
+  CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
+  AI_RESERVE_ORDER: ${AI_RESERVE_ORDER:-cerebras,zen,nim,tokenharbor,gemini,mistral,openrouter,workersai}
+  AI_PROVIDER_LIMITS: ${AI_PROVIDER_LIMITS:-{}}
   AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-25}
   AI_CONNECT_TIMEOUT_SECONDS: ${AI_CONNECT_TIMEOUT_SECONDS:-5}
   AI_MAX_RETRIES: ${AI_MAX_RETRIES:-2}

@@ -1,5 +1,6 @@
 import { useAIBudget, useAnalysisMetrics } from '../features/dashboard/useOverview'
 import { type ModelBudget, type TaskAIMetrics } from '../features/dashboard/api'
+import { modelName } from '../features/dashboard/modelName'
 import { Card } from './Card'
 import { Bone } from './skeletons'
 
@@ -31,17 +32,23 @@ function ModelRow({ budget }: { budget: ModelBudget }) {
   // none known falls back to the operational ceiling the router enforces.
   const limit = budget.providerRequestsLimit ?? budget.requestsSoftLimit
   const remaining = budget.requestsRemaining ?? budget.requestsRemainingOperational
+  const name = modelName(budget.model, budget.provider)
   const used = limit > 0 ? Math.min(1, budget.requestsUsed / limit) : 0
   return (
     <li>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate text-sm font-medium">{budget.model}</span>
+        <span className="flex min-w-0 items-baseline gap-2">
+          <span className="truncate text-sm font-medium">{name}</span>
+          {budget.provider && (
+            <span className="shrink-0 text-xs font-normal text-subtle">{budget.provider}</span>
+          )}
+        </span>
         <span className="text-xs text-subtle">
           restam {formatCount(remaining)} req
         </span>
       </div>
       <div
-        aria-label={`${budget.model}: ${budget.requestsUsed} de ${limit} requisições hoje`}
+        aria-label={`${name}${budget.provider ? ` (${budget.provider})` : ''}: ${budget.requestsUsed} de ${limit} requisições hoje`}
         className="mt-1 h-2 w-full overflow-hidden rounded-full bg-line"
         role="img"
       >
@@ -109,7 +116,7 @@ export function AIBudgetCard() {
         <p className="text-sm text-muted">Orçamento diário de IA</p>
         <p className="mt-2 text-sm text-subtle">
           {data.state === 'blocked_by_configuration'
-            ? 'Bloqueada por configuração: falta a chave da Groq.'
+            ? 'Bloqueada por configuração: nenhum provedor de IA tem chave.'
             : 'IA desligada: nenhuma requisição é gasta.'}
         </p>
       </Card>
@@ -117,6 +124,7 @@ export function AIBudgetCard() {
   }
 
   const reset = resetTime(data.resetsAt)
+  const hasGroq = data.models.some((model) => model.provider === 'groq')
   const tasks = metrics.data?.ai.byTask ?? []
   return (
     <Card>
@@ -127,8 +135,12 @@ export function AIBudgetCard() {
         ))}
       </ul>
       <p className="mt-3 text-xs text-subtle">
-        Reserva interativa: {formatCount(data.interactiveReserveRequests)} req
-        {reset ? ` · zera às ${reset}` : ''}
+        {/* The interactive reserve protects the Groq budget only; other providers' budgets are all the worker's. */}
+        {hasGroq
+          ? `Reserva interativa: ${formatCount(data.interactiveReserveRequests)} req`
+          : null}
+        {hasGroq && reset ? ' · ' : ''}
+        {reset ? `zera às ${reset}` : ''}
       </p>
       {tasks.length > 0 && (
         <div className="mt-4 border-t border-line pt-3">

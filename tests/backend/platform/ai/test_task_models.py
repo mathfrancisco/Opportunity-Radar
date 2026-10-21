@@ -33,3 +33,52 @@ def test_every_task_keeps_a_fallback_behind_its_first_choice() -> None:
     for route in default_routes(_settings()).values():
         assert len(route.chain) >= 2
         assert len(set(route.chain)) == len(route.chain)
+
+
+def test_reserve_chain_follows_order_and_skips_keyless() -> None:
+    s = _settings(
+        groq_api_key="g",
+        cerebras_api_key="c",
+        zen_api_key="z",
+        ai_reserve_order="zen,cerebras,openrouter",
+    )
+    chain = default_routes(s)[AITask.JOB_MATCH].chain
+    assert chain == (
+        "openai/gpt-oss-120b",
+        "qwen/qwen3.8-27b",
+        "zen:deepseek-v4.1-flash-free",
+        "zen:glm-5.3-flash-free",
+        "zen:minimax-m3.1-flash-free",
+        "cerebras:gpt-oss-120b",
+        "cerebras:qwen-3.8-27b",
+    )
+
+
+def test_groq_only_routes_match_main() -> None:
+    s = _settings(groq_api_key="g")
+    assert default_routes(s)[AITask.JOB_CLASSIFICATION].chain == (
+        "openai/gpt-oss-20b",
+        "qwen/qwen3.8-27b",
+    )
+    assert default_routes(s)[AITask.JOB_MATCH].chain == ("openai/gpt-oss-120b", "qwen/qwen3.8-27b")
+
+
+def test_tokenharbor_alone_keeps_its_place_after_groq() -> None:
+    s = _settings(groq_api_key="g", tokenharbor_api_key="t")
+    assert default_routes(s)[AITask.JOB_MATCH].chain == (
+        "openai/gpt-oss-120b",
+        "qwen/qwen3.8-27b",
+        "tokenharbor:deepseek-v4.1-flash:free",
+        "tokenharbor:mimo-v2.6-flash:free",
+    )
+
+
+def test_without_groq_key_no_unprefixed_model_enters_a_chain() -> None:
+    routes = default_routes(_settings(cerebras_api_key="c"))
+    for route in routes.values():
+        assert route.chain == ("cerebras:gpt-oss-120b", "cerebras:qwen-3.8-27b")
+
+
+def test_provider_with_empty_models_contributes_nothing() -> None:
+    s = _settings(groq_api_key="g", zen_api_key="z", zen_models=" , ")
+    assert default_routes(s)[AITask.JOB_MATCH].chain == ("openai/gpt-oss-120b", "qwen/qwen3.8-27b")

@@ -32,8 +32,16 @@ from opportunity_radar.operations.collection_alarm import (
     collection_gap_report,
 )
 from opportunity_radar.operations.service import recent_passes
-from opportunity_radar.platform.ai.config import AIState, ai_status
+from opportunity_radar.platform.ai.config import (
+    AIState,
+    ai_status,
+    configured_providers,
+    excluded_providers,
+    provider_models,
+)
+from opportunity_radar.platform.ai.providers.registry import limits_for_model
 from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits, day_window
+from opportunity_radar.platform.ai.tasks import default_routes
 from opportunity_radar.platform.ai.telemetry import ai_call_record
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
@@ -365,38 +373,53 @@ def check_prompts(root: Path) -> Check:
 
 
 def check_ai(settings: Settings) -> Check:
-    """Whether the cloud AI is on, has a key, and which model runs each role.
+    """Whether the cloud AI is on, which providers are configured, and which model runs each role.
 
-    Never makes a network call — a doctor run should not spend Groq quota — and never
-    prints the key itself, only whether one is present.
+    Never makes a network call — a doctor run should not spend provider quota — and never
+    prints a key, only whether one is present and which providers it enables.
     """
+    configured = configured_providers(settings)
+    excluded = excluded_providers(settings)
+    groq_key = bool(settings.groq_api_key.get_secret_value())
     facts: dict[str, Any] = {
         "enabled": settings.ai_enabled,
         "provider": settings.ai_provider,
-        "key_present": bool(settings.groq_api_key.get_secret_value()),
+        "key_present": groq_key,
         "reasoning_model": settings.groq_reasoning_model,
         "fast_model": settings.groq_fast_model,
         "alt_model": settings.groq_alt_model,
+        "providers": {
+            spec.name: {
+                "models": len(provider_models(settings, spec)),
+                "may_retain_prompts": spec.may_retain_prompts,
+            }
+            for spec, _, _ in configured
+        },
+        "excluded": excluded,
     }
     if not settings.ai_enabled:
         return Check(
             "ai",
             WARN,
             "AI is disabled; the semantic layer stays degraded",
-            "set AI_ENABLED=true and a real GROQ_API_KEY to turn it on",
+            "set AI_ENABLED=true and at least one provider key (GROQ_API_KEY, ...) to turn it on",
             facts,
         )
-    if not facts["key_present"]:
+    if not groq_key and not configured:
+        why = "; ".join(f"{name}: {reason}" for name, reason in excluded.items())
         return Check(
             "ai",
             WARN,
-            "AI is enabled but GROQ_API_KEY is missing",
-            "set GROQ_API_KEY in the untracked .env file",
+            "AI is enabled but no provider has a usable key" + (f" ({why})" if why else ""),
+            "set GROQ_API_KEY or a reserve provider key in the untracked .env file",
             facts,
         )
-    return Check(
-        "ai", OK, f"Groq is on; reasoning model {settings.groq_reasoning_model}", None, facts
-    )
+    parts = ["Groq" + (f" ({settings.groq_reasoning_model})" if groq_key else " (no key)")]
+    for spec, _, _ in configured:
+        marker = ", may retain prompts" if spec.may_retain_prompts else ""
+        parts.append(f"{spec.name} ({len(provider_models(settings, spec))} models{marker})")
+    parts += [f"{name} left out ({reason})" for name, reason in excluded.items()]
+    return Check("ai", OK, "AI is on; " + "; ".join(parts), None, facts)
 
 
 def check_analysis(settings: Settings) -> Check:
@@ -596,12 +619,13 @@ def check_funnel(settings: Settings) -> Check:
 
 
 def check_ai_usage(settings: Settings) -> Check:
-    """Daily Groq quota balance and a telemetry-based breaker alert (card F20-20)."""
+    """Daily quota balance per chain model and a telemetry-based breaker alert (card F20-20)."""
     state = ai_status(settings)
     if state is not AIState.ENABLED:
         return Check("ai_usage", OK, f"AI is {state.value}; nothing to check")
     try:
         engine = create_database_engine(settings.database_url)
+        limits_for = limits_for_model(settings)
         guard = QuotaGuard(
             engine,
             QuotaLimits(
@@ -610,6 +634,7 @@ def check_ai_usage(settings: Settings) -> Check:
                 day_requests=settings.ai_daily_requests_soft_limit,
                 day_tokens=settings.ai_daily_tokens_soft_limit,
             ),
+            limits_for=limits_for,
         )
         today = day_window(datetime.now(UTC))
         day_rows = {
@@ -626,13 +651,13 @@ def check_ai_usage(settings: Settings) -> Check:
 
     alerts: list[str] = []
     facts: dict[str, Any] = {"models": {}}
-    for model in (
-        settings.groq_reasoning_model,
-        settings.groq_fast_model,
-        settings.groq_alt_model,
-    ):
+    # The models the chains really run (Groq roles and every keyed reserve), once each.
+    chain_models = dict.fromkeys(
+        model for route in default_routes(settings).values() for model in route.chain
+    )
+    for model in chain_models:
         used = day_rows.get(model, {}).get("requests", 0)
-        limit = settings.ai_daily_requests_soft_limit
+        limit = limits_for(model).day_requests
         remaining_ratio = 1 - used / limit if limit else 1.0
         breaker_alert = model in likely_open
         facts["models"][model] = {

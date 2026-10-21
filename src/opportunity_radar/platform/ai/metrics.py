@@ -9,7 +9,7 @@ connection and never sees a prompt or a response body.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -20,6 +20,7 @@ from sqlalchemy.engine import Engine
 from opportunity_radar.platform.ai.breaker import BreakerState, CircuitBreaker
 from opportunity_radar.platform.ai.quota import (
     QuotaGuard,
+    QuotaLimits,
     ai_quota_usage,
     day_window,
     effective_ceiling,
@@ -199,10 +200,15 @@ def ai_metrics(
     breaker: CircuitBreaker | None,
     day_requests_limit: int | None = None,
     day_tokens_limit: int | None = None,
+    limits_for: Callable[[str], QuotaLimits] | None = None,
     window_hours: int = DEFAULT_WINDOW_HOURS,
     now: datetime | None = None,
 ) -> AIMetricsReport:
-    """`guard` and `breaker` are `None` when AI is disabled: an empty report follows."""
+    """`guard` and `breaker` are `None` when AI is disabled: an empty report follows.
+
+    `limits_for`, when given, sets each row's day limits from its own provider; the flat
+    `day_*_limit` values then apply only to callers that pass none.
+    """
     reference = now or datetime.now(UTC)
     since = reference - timedelta(hours=window_hours)
     rows = _aggregates(engine, since, reference)
@@ -225,9 +231,13 @@ def ai_metrics(
             json_valid_rate=_json_valid_rate(row.invalid_output, row.requests),
             breaker=str(breaker_snapshot.get(row.model, BreakerState.CLOSED).value),
             day_requests_used=day_usage.get(row.model, {}).get("requests", 0),
-            day_requests_limit=day_requests_limit,
+            day_requests_limit=(
+                limits_for(row.model).day_requests if limits_for else day_requests_limit
+            ),
             day_tokens_used=day_usage.get(row.model, {}).get("tokens", 0),
-            day_tokens_limit=day_tokens_limit,
+            day_tokens_limit=(
+                limits_for(row.model).day_tokens if limits_for else day_tokens_limit
+            ),
         )
         for row in rows
     )
@@ -322,19 +332,19 @@ def ai_budget(
     *,
     state: str,
     models: Sequence[str],
-    requests_soft_limit: int,
-    tokens_limit: int,
+    limits_for: Callable[[str], QuotaLimits],
     interactive_reserve_requests: int,
-    provider_requests_limit: int | None,
-    provider_limit_models: Sequence[str] = (),
+    provider_requests_limit_for: Callable[[str], int | None],
     now: datetime | None = None,
 ) -> AIBudgetReport:
     """Today's (UTC) requests and tokens used and remaining, for every model of the routes.
 
     Read from `platform.ai_quota_usage`, the counters `QuotaGuard` reserves against, so the
     number is the one the router enforces. A model that was never called today shows zero
-    used. The effective cap honours the absolute ceiling a provider reported in its
-    headers, when that is lower than the configured soft limit.
+    used. Each model is judged against its own limits (`limits_for`) and its provider's own
+    daily request cap (`provider_requests_limit_for`, `None` when unknown). The effective
+    cap honours the absolute ceiling a provider reported in its headers, when that is lower
+    than the configured soft limit.
     """
     reference = now or datetime.now(UTC)
     today = day_window(reference)
@@ -355,15 +365,15 @@ def ai_budget(
             )
         }
     names = list(dict.fromkeys([*models, *rows]))
-    capped = set(provider_limit_models)
     budgets = []
     for name in names:
         row = rows.get(name)
         used_requests = int(row.requests) if row else 0
         used_tokens = int(row.tokens) if row else 0
-        soft = effective_ceiling(requests_soft_limit, row.requests_ceiling if row else None)
-        token_cap = effective_ceiling(tokens_limit, row.tokens_ceiling if row else None)
-        provider = provider_requests_limit if name in capped else None
+        limits = limits_for(name)
+        soft = effective_ceiling(limits.day_requests, row.requests_ceiling if row else None)
+        token_cap = effective_ceiling(limits.day_tokens, row.tokens_ceiling if row else None)
+        provider = provider_requests_limit_for(name)
         budgets.append(
             ModelBudget(
                 model=name,

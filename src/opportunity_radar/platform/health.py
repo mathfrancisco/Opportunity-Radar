@@ -9,6 +9,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from opportunity_radar.platform.ai.config import AIState, ai_status
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
 
@@ -43,16 +44,17 @@ def database_health(engine: Engine) -> DependencyHealth:
 
 
 def ai_health(settings: Settings) -> DependencyHealth:
-    """Never makes a network call: healthy = AI on and a key present.
+    """Never makes a network call: healthy = AI on and a usable provider key present.
 
-    Degraded when the AI is turned off or no key is configured (detail: "ai disabled"
-    or "groq api key missing"). A network probe here would spend Groq quota on every
-    health check, which is not what a liveness check is for.
+    Degraded when the AI is turned off or no provider has a key (detail: "ai disabled"
+    or "no ai provider key"). A network probe here would spend quota on every health
+    check, which is not what a liveness check is for.
     """
-    if not settings.ai_enabled:
+    state = ai_status(settings)
+    if state is AIState.DISABLED:
         return DependencyHealth("degraded", "ai disabled")
-    if not settings.groq_api_key.get_secret_value():
-        return DependencyHealth("degraded", "groq api key missing")
+    if state is AIState.BLOCKED_BY_CONFIGURATION:
+        return DependencyHealth("degraded", "no ai provider key")
     return DependencyHealth("healthy")
 
 

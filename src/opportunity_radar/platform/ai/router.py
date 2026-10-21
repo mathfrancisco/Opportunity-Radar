@@ -19,11 +19,29 @@ from uuid import UUID, uuid4
 from opportunity_radar.platform.ai.breaker import CircuitBreaker
 from opportunity_radar.platform.ai.errors import ErrorKind, ProviderError
 from opportunity_radar.platform.ai.providers.base import LLMProvider, LLMRequest, LLMResponse
+from opportunity_radar.platform.ai.providers.registry import provider_name_for
 from opportunity_radar.platform.ai.quota import QuotaGuard, Reservation
 from opportunity_radar.platform.ai.tasks import AITask, ModelRoute
 
 #: `blocked_until` when the whole chain is rate limited and no header gave a better hint.
 _DEFAULT_QUOTA_COOLDOWN_SECONDS = 60.0
+
+#: How long a model sits out after a CONFIGURATION or REQUEST error that did not stop the
+#: chain (the next model belongs to another provider, so the fault is that model's alone).
+_MODEL_FAULT_COOLDOWN_SECONDS = 3600.0
+
+# Lower-case fragments of an error summary that mean the payload is too big for the model.
+_PAYLOAD_SIZE_MARKERS = (
+    "context_length",
+    "context length",
+    "context window",
+    "maximum context",
+    "too long",
+    "too many tokens",
+    "reduce the length",
+    "request too large",
+    "payload too large",
+)
 
 _REPAIR_SUFFIX = (
     "\n\nA resposta anterior foi rejeitada: {summary}. Responda só com JSON válido no schema."
@@ -93,6 +111,22 @@ class AIRouter:
     def quota_guard(self) -> QuotaGuard | None:
         """`None` only when this router was built without persistent quota tracking."""
         return self._quota_guard
+
+    @staticmethod
+    def _next_is_other_provider(chain: tuple[str, ...], position: int) -> bool:
+        following = position + 1
+        return following < len(chain) and provider_name_for(chain[following]) != provider_name_for(
+            chain[position]
+        )
+
+    @staticmethod
+    def _is_model_fault(error: ProviderError) -> bool:
+        if error.kind is ErrorKind.CONFIGURATION:
+            return True
+        if error.kind is ErrorKind.REQUEST and error.status == 400:
+            summary = error.summary.lower()
+            return not any(marker in summary for marker in _PAYLOAD_SIZE_MARKERS)
+        return False
 
     def _is_blocked(self, model: str) -> bool:
         until = self._blocked_until.get(model)
@@ -190,7 +224,7 @@ class AIRouter:
         last_error: ProviderError | None = None
         any_model_tried = False
         quota_exhausted = False
-        for model in chain:
+        for position, model in enumerate(chain):
             if self._is_blocked(model) or not self._breaker.allow(model):
                 continue
             any_model_tried = True
@@ -288,6 +322,15 @@ class AIRouter:
                             await self._settle_error(reservation, error)
                         else:
                             await self._release(reservation)
+                        if self._is_model_fault(error) and self._next_is_other_provider(
+                            chain, position
+                        ):
+                            # A bad key, schema or model name (not payload size) is that
+                            # model's fault: the next model, on another provider, may answer.
+                            self._blocked_until[model] = (
+                                self._clock() + _MODEL_FAULT_COOLDOWN_SECONDS
+                            )
+                            break
                         error.attempts = tuple(attempts)
                         raise
                     if error.kind is ErrorKind.TRANSIENT:
