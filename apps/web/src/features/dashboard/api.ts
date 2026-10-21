@@ -238,6 +238,7 @@ export interface AnalysisMetricsWindow {
 
 export interface ModelAIMetrics {
   model: string
+  provider: string
   requests: number
   successRate: number | null
   rateLimitedRate: number | null
@@ -608,6 +609,7 @@ function parseModelAIMetrics(value: unknown): ModelAIMetrics | null {
   if (!isRecord(value) || typeof value.model !== 'string') return null
   return {
     model: value.model,
+    provider: text(value.provider) ?? '',
     requests: count(value.requests),
     successRate: optionalNumber(value.success_rate),
     rateLimitedRate: optionalNumber(value.rate_limited_rate),

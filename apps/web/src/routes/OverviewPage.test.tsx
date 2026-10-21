@@ -502,6 +502,50 @@ describe('OverviewPage — composição', () => {
     expect(container.textContent).toContain('2')
   })
 
+  it('o cartão de uso mostra o provedor ao lado do modelo e o limite do próprio provedor', async () => {
+    const usage = {
+      requests: 4,
+      success_rate: 1,
+      rate_limited_rate: 0,
+      fallback_rate: 0,
+      latency_ms_avg: 100,
+      latency_ms_p95: 200,
+      prompt_tokens: 10,
+      completion_tokens: 5,
+      json_valid_rate: 1,
+      breaker: 'closed',
+      day_requests_used: 3,
+      day_tokens_used: 10,
+      day_tokens_limit: 950000,
+    }
+    const enabledMetrics = {
+      ...disabledAnalysisMetrics,
+      ai: {
+        state: 'enabled',
+        window_hours: 24,
+        cache_hit_rate: null,
+        by_model: [
+          { ...usage, model: 'cerebras:gpt-oss-120b', provider: 'cerebras', day_requests_limit: 900 },
+        ],
+      },
+    }
+    vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
+      const url = String(input)
+      if (url.endsWith('/saved-searches/summary')) return new Response('[]', { status: 200 })
+      if (url.endsWith('/overview')) return new Response(JSON.stringify(overviewBody()), { status: 200 })
+      if (url.endsWith('/analysis-metrics')) return new Response(JSON.stringify(enabledMetrics), { status: 200 })
+      if (url.endsWith('/ai-budget')) return new Response(JSON.stringify(disabledAIBudget), { status: 200 })
+      return new Response(JSON.stringify({ generated_at: '', windows: [] }), { status: 200 })
+    }))
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(8)
+    const text = container.textContent ?? ''
+    expect(text).toContain('gpt-oss-120b')
+    expect(text).toContain('cerebras')
+    expect(text).not.toContain('cerebras:gpt-oss-120b')
+    expect(text).toMatch(/3 \/ 900 req hoje/)
+  })
+
   it('não cita Groq: o cartão de IA é por provedor e a dica não nomeia nenhum', async () => {
     vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
       const url = String(input)

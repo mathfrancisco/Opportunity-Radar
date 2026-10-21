@@ -1,5 +1,6 @@
 import { useAIBudget, useAnalysisMetrics } from '../features/dashboard/useOverview'
 import { type ModelBudget, type TaskAIMetrics } from '../features/dashboard/api'
+import { modelName } from '../features/dashboard/modelName'
 import { Card } from './Card'
 import { Bone } from './skeletons'
 
@@ -26,26 +27,20 @@ function resetTime(iso: string): string | null {
   return `${moment.toISOString().slice(11, 16)} UTC`
 }
 
-/** The model name without its provider prefix ("cerebras:gpt-oss-120b" becomes "gpt-oss-120b"). */
-function modelName(budget: ModelBudget): string {
-  const prefix = `${budget.provider}:`
-  return budget.model.startsWith(prefix) ? budget.model.slice(prefix.length) : budget.model
-}
-
 function ModelRow({ budget }: { budget: ModelBudget }) {
   // The provider's own daily limit is the headline (1 000/dia on Groq free); a model with
   // none known falls back to the operational ceiling the router enforces.
   const limit = budget.providerRequestsLimit ?? budget.requestsSoftLimit
   const remaining = budget.requestsRemaining ?? budget.requestsRemainingOperational
-  const name = modelName(budget)
+  const name = modelName(budget.model, budget.provider)
   const used = limit > 0 ? Math.min(1, budget.requestsUsed / limit) : 0
   return (
     <li>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate text-sm font-medium">
-          {name}
+        <span className="flex min-w-0 items-baseline gap-2">
+          <span className="truncate text-sm font-medium">{name}</span>
           {budget.provider && (
-            <span className="ml-2 text-xs font-normal text-subtle">{budget.provider}</span>
+            <span className="shrink-0 text-xs font-normal text-subtle">{budget.provider}</span>
           )}
         </span>
         <span className="text-xs text-subtle">
@@ -53,7 +48,7 @@ function ModelRow({ budget }: { budget: ModelBudget }) {
         </span>
       </div>
       <div
-        aria-label={`${name}: ${budget.requestsUsed} de ${limit} requisições hoje`}
+        aria-label={`${name}${budget.provider ? ` (${budget.provider})` : ''}: ${budget.requestsUsed} de ${limit} requisições hoje`}
         className="mt-1 h-2 w-full overflow-hidden rounded-full bg-line"
         role="img"
       >
@@ -129,6 +124,7 @@ export function AIBudgetCard() {
   }
 
   const reset = resetTime(data.resetsAt)
+  const hasGroq = data.models.some((model) => model.provider === 'groq')
   const tasks = metrics.data?.ai.byTask ?? []
   return (
     <Card>
@@ -139,8 +135,12 @@ export function AIBudgetCard() {
         ))}
       </ul>
       <p className="mt-3 text-xs text-subtle">
-        Reserva interativa: {formatCount(data.interactiveReserveRequests)} req
-        {reset ? ` · zera às ${reset}` : ''}
+        {/* The interactive reserve protects the Groq budget only; other providers' budgets are all the worker's. */}
+        {hasGroq
+          ? `Reserva interativa: ${formatCount(data.interactiveReserveRequests)} req`
+          : null}
+        {hasGroq && reset ? ' · ' : ''}
+        {reset ? `zera às ${reset}` : ''}
       </p>
       {tasks.length > 0 && (
         <div className="mt-4 border-t border-line pt-3">

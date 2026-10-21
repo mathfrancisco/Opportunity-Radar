@@ -365,6 +365,7 @@ class AnalysisMetricsWindowResponse(BaseModel):
 
 class ModelAIMetricsResponse(BaseModel):
     model: str
+    provider: str
     requests: int
     success_rate: float | None
     rate_limited_rate: float | None
@@ -914,6 +915,7 @@ def _ai_metrics_response(
         breaker=getattr(adapter, "breaker", None),
         day_requests_limit=settings.ai_daily_requests_soft_limit,
         day_tokens_limit=settings.ai_daily_tokens_soft_limit,
+        limits_for=limits_for_model(settings),
     )
     return AIMetricsResponse(
         state=report.state,
@@ -1013,6 +1015,7 @@ def _model_budget_response(item: ModelBudget) -> ModelBudgetResponse:
 def _model_ai_metrics_response(item: ModelAIMetrics) -> ModelAIMetricsResponse:
     return ModelAIMetricsResponse(
         model=item.model,
+        provider=provider_name_for(item.model),
         requests=item.requests,
         success_rate=item.success_rate,
         rate_limited_rate=item.rate_limited_rate,

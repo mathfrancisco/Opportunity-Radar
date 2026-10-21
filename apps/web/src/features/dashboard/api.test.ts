@@ -413,6 +413,7 @@ describe('getAnalysisMetrics', () => {
         by_model: [
           {
             model: 'openai/gpt-oss-120b',
+            provider: 'groq',
             requests: 120,
             success_rate: 0.97,
             rate_limited_rate: 0.02,
@@ -438,6 +439,7 @@ describe('getAnalysisMetrics', () => {
     expect(report.ai.cacheHitRate).toBe(0.35)
     expect(report.ai.byModel[0]).toMatchObject({
       model: 'openai/gpt-oss-120b',
+      provider: 'groq',
       dayRequestsUsed: 120,
       dayRequestsLimit: 850,
       fallbackRate: 0.01,

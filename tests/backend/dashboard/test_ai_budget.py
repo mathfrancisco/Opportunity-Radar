@@ -103,3 +103,19 @@ def test_the_budget_row_names_the_provider_and_its_own_limits() -> None:
     assert limit_for("openai/gpt-oss-120b") == settings.ai_provider_daily_requests_limit
     assert limit_for("openrouter:x") == 50
     assert limit_for("tokenharbor:x") is None
+
+
+def test_the_usage_row_names_its_provider() -> None:
+    from opportunity_radar.platform.ai.metrics import ModelAIMetrics
+    from opportunity_radar.presentation.http.dashboard import _model_ai_metrics_response
+
+    def row(model: str) -> ModelAIMetrics:
+        return ModelAIMetrics(
+            model=model, requests=1, success_rate=1.0, rate_limited_rate=0.0,
+            fallback_rate=0.0, latency_ms_avg=1.0, latency_ms_p95=1.0, prompt_tokens=1,
+            completion_tokens=1, json_valid_rate=1.0, breaker="closed", day_requests_used=1,
+            day_requests_limit=900, day_tokens_used=1, day_tokens_limit=950_000,
+        )
+
+    assert _model_ai_metrics_response(row("openai/gpt-oss-120b")).provider == "groq"
+    assert _model_ai_metrics_response(row("cerebras:gpt-oss-120b")).provider == "cerebras"

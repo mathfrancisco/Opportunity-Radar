@@ -200,10 +200,15 @@ def ai_metrics(
     breaker: CircuitBreaker | None,
     day_requests_limit: int | None = None,
     day_tokens_limit: int | None = None,
+    limits_for: Callable[[str], QuotaLimits] | None = None,
     window_hours: int = DEFAULT_WINDOW_HOURS,
     now: datetime | None = None,
 ) -> AIMetricsReport:
-    """`guard` and `breaker` are `None` when AI is disabled: an empty report follows."""
+    """`guard` and `breaker` are `None` when AI is disabled: an empty report follows.
+
+    `limits_for`, when given, sets each row's day limits from its own provider; the flat
+    `day_*_limit` values then apply only to callers that pass none.
+    """
     reference = now or datetime.now(UTC)
     since = reference - timedelta(hours=window_hours)
     rows = _aggregates(engine, since, reference)
@@ -226,9 +231,13 @@ def ai_metrics(
             json_valid_rate=_json_valid_rate(row.invalid_output, row.requests),
             breaker=str(breaker_snapshot.get(row.model, BreakerState.CLOSED).value),
             day_requests_used=day_usage.get(row.model, {}).get("requests", 0),
-            day_requests_limit=day_requests_limit,
+            day_requests_limit=(
+                limits_for(row.model).day_requests if limits_for else day_requests_limit
+            ),
             day_tokens_used=day_usage.get(row.model, {}).get("tokens", 0),
-            day_tokens_limit=day_tokens_limit,
+            day_tokens_limit=(
+                limits_for(row.model).day_tokens if limits_for else day_tokens_limit
+            ),
         )
         for row in rows
     )

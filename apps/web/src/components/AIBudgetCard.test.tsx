@@ -114,7 +114,7 @@ describe('AIBudgetCard', () => {
     expect(text).toContain('zera às 00:00 UTC')
     const bar = container.querySelector('[role="img"]')
     expect(bar?.getAttribute('aria-label')).toBe(
-      'openai/gpt-oss-120b: 120 de 1000 requisições hoje',
+      'openai/gpt-oss-120b (groq): 120 de 1000 requisições hoje',
     )
   })
 
@@ -208,6 +208,44 @@ describe('AIBudgetCard', () => {
     expect(text).toContain('cerebras')
     expect(text).toContain('gpt-oss-120b')
     expect(text).not.toContain('cerebras:gpt-oss-120b')
+  })
+
+  it('mantém o provedor fora do trecho truncado do nome', async () => {
+    stub(budget())
+
+    const container = renderWithClient(<AIBudgetCard />)
+    await flush()
+
+    const label = Array.from(container.querySelectorAll('span')).find(
+      (span) => span.textContent === 'groq',
+    )
+    expect(label).toBeDefined()
+    expect(label?.closest('.truncate')).toBeNull()
+  })
+
+  it('só cita a reserva interativa quando há modelo do Groq', async () => {
+    const cerebras = {
+      model: 'cerebras:gpt-oss-120b',
+      provider: 'cerebras',
+      provider_requests_limit: null,
+      requests_soft_limit: 900,
+      requests_used: 3,
+      requests_remaining: null,
+      requests_remaining_operational: 897,
+      tokens_limit: 950000,
+      tokens_used: 10,
+      tokens_remaining: 949990,
+    }
+    stub(budget({ models: [cerebras] }))
+    const reserveOnly = renderWithClient(<AIBudgetCard />)
+    await flush()
+    expect(reserveOnly.textContent).not.toContain('Reserva interativa')
+    expect(reserveOnly.textContent).toContain('zera às 00:00 UTC')
+
+    stub(budget({ models: [...budget().models, cerebras] }))
+    const mixed = renderWithClient(<AIBudgetCard />)
+    await flush()
+    expect(mixed.textContent).toContain('Reserva interativa: 100 req · zera às 00:00 UTC')
   })
 
   it('avisa quando o orçamento não pôde ser carregado', async () => {

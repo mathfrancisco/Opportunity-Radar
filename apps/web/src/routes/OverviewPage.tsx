@@ -27,6 +27,7 @@ import { verdictCountLabels, verdictOrder } from '../features/matching/verdicts'
 import { opportunityLabel, seniorityLabels } from '../features/opportunities/labels'
 import { type SavedSearchFilters } from '../features/saved-searches/api'
 import { useOpenSavedSearch, useSavedSearchSummary } from '../features/saved-searches/useSavedSearches'
+import { modelName } from '../features/dashboard/modelName'
 import { useActiveProfile } from '../features/profile/useProfile'
 import { coverageLabels, coverageTones } from '../features/sources/states'
 
@@ -520,7 +521,16 @@ function AIUsageCard() {
           return (
             <li key={model.model}>
               <div className="flex items-baseline justify-between gap-2">
-                <span className="truncate text-sm font-medium">{model.model}</span>
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="truncate text-sm font-medium">
+                    {modelName(model.model, model.provider)}
+                  </span>
+                  {model.provider && (
+                    <span className="shrink-0 text-xs font-normal text-subtle">
+                      {model.provider}
+                    </span>
+                  )}
+                </span>
                 {breakerOpen && (
                   <Chip tone="border-danger-line bg-danger-surface text-danger-ink">
                     breaker {model.breaker}
