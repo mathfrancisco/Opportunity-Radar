@@ -17,7 +17,7 @@ class ErrorKind(StrEnum):
     TRANSIENT = "transient"  # timeout, connection error, 5xx
     QUOTA = "quota"  # 429
     INVALID_OUTPUT = "invalid_output"  # body without valid JSON, or outside the schema
-    CONFIGURATION = "configuration"  # 401, 403, 404
+    CONFIGURATION = "configuration"  # 401, 403, 404, 410
     REQUEST = "request"  # 400, 413, 422
     CANCELLED = "cancelled"  # caller cancellation after provider transport began
 
