@@ -23,6 +23,10 @@ from pathlib import Path
 from typing import Generator
 from urllib.parse import parse_qs, unquote, urlparse, urlunparse
 
+from pydantic import SecretStr
+
+from opportunity_radar.platform.config import Settings
+
 #: Bumped whenever the manifest's shape changes in a way `restore_check.py` must not read
 #: as if it were the previous shape. A manifest with a different value is incompatible.
 FORMAT_VERSION = 1
@@ -77,13 +81,16 @@ MANIFEST_EXCLUDED_TABLES: dict[str, str] = {
     ),
 }
 
-#: Never allowed to appear in a manifest's serialized JSON. The Groq API key never enters
-#: `pg_dump`'s output (it only ever dumps the Postgres database, never the filesystem or
-#: environment), but the manifest is built from plain Python values this process also
-#: has `GROQ_API_KEY` in its environment for, so this is defense in depth, not the only
-#: guard: a future field (an AI call record's request/response body, once F20-19 lands)
-#: must never carry the key by accident either.
-FORBIDDEN_MANIFEST_STRINGS: tuple[str, ...] = ("GROQ_API_KEY",)
+#: Never allowed to appear in a manifest's serialized JSON: the environment name of every
+#: secret `Settings` holds (each AI provider key). A key never enters `pg_dump`'s output (it
+#: only ever dumps the Postgres database, never the filesystem or environment), but the
+#: manifest is built from plain Python values this process also has those variables in its
+#: environment for, so this is defense in depth, not the only guard: a future field (an AI
+#: call record's request/response body, once F20-19 lands) must never carry a key by
+#: accident either. Derived from the `SecretStr` fields so a new provider is covered.
+FORBIDDEN_MANIFEST_STRINGS: tuple[str, ...] = tuple(
+    name.upper() for name, field in Settings.model_fields.items() if field.annotation is SecretStr
+)
 
 #: A count alone can agree by coincidence; these must always be zero, in the manifest and
 #: after a restore, or a relationship a table count cannot see (a dangling foreign key
