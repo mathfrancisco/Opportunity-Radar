@@ -9,7 +9,7 @@ from opportunity_radar.platform.ai.breaker import CircuitBreaker
 from opportunity_radar.platform.ai.errors import ErrorKind, ProviderError
 from opportunity_radar.platform.ai.quota import Reservation
 from opportunity_radar.platform.ai.router import AIRouter, RouterResult
-from opportunity_radar.platform.ai.tasks import AITask, default_routes
+from opportunity_radar.platform.ai.tasks import AITask, ModelRoute, TaskBudget, default_routes
 from opportunity_radar.platform.config import Settings
 
 from .fakes import FakeProvider, response
@@ -437,3 +437,31 @@ def test_router_skips_open_model() -> None:
 
     assert result.response.model == _ALT
     assert provider.models_called() == [_ALT]
+
+
+def test_429_without_retry_after_blocks_only_that_model() -> None:
+    # Zen and Cerebras send no Retry-After: the router uses its default cooldown for the
+    # 429ing model alone and moves on to the next provider.
+    provider = FakeProvider(
+        {
+            "zen:a": [ProviderError(ErrorKind.QUOTA, "429")],
+            "cerebras:b": [response("cerebras:b")],
+        }
+    )
+    router = AIRouter(
+        provider,
+        {
+            AITask.JOB_MATCH: ModelRoute(
+                AITask.JOB_MATCH, ("zen:a", "cerebras:b"), TaskBudget(5000, 900, "low")
+            )
+        },
+        fallback_enabled=True,
+        max_retries=2,
+    )
+
+    result = _run(router)
+
+    assert provider.models_called() == ["zen:a", "cerebras:b"]
+    assert result.response.model == "cerebras:b"
+    assert router._is_blocked("zen:a")
+    assert not router._is_blocked("cerebras:b")

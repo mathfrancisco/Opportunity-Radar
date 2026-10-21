@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -395,6 +395,7 @@ class _AISettings:
     groq_reasoning_model: str = "openai/gpt-oss-120b"
     groq_fast_model: str = "openai/gpt-oss-20b"
     groq_alt_model: str = "qwen/qwen3.8-27b"
+    ai_provider_limits: dict[str, dict[str, int]] = field(default_factory=dict)
 
     @property
     def groq_api_key(self) -> object:

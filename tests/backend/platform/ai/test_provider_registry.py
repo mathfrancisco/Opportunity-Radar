@@ -13,9 +13,12 @@ from opportunity_radar.platform.ai.providers.openai_compat import OpenAICompatib
 from opportunity_radar.platform.ai.providers.registry import (
     PROVIDERS,
     TOKENHARBOR,
+    limits_for_model,
     provider_name_for,
     spec_for_model,
 )
+from opportunity_radar.platform.ai.quota import QuotaLimits
+from opportunity_radar.platform.config import Settings
 
 _KEY = "thk_live_test-key"
 
@@ -116,3 +119,61 @@ def test_build_provider_groq_only_is_plain_groq() -> None:
 
     s = Settings(_env_file=None, database_url="postgresql+psycopg://u@h/db", groq_api_key="g")  # type: ignore[call-arg]
     assert isinstance(build_provider(s), GroqProvider)
+
+
+def _limit_settings(**overrides: Any) -> Settings:
+    return Settings(  # type: ignore[call-arg]
+        _env_file=None, database_url="postgresql+psycopg://u@h/db", **overrides
+    )
+
+
+def _global_limits(settings: Settings) -> QuotaLimits:
+    return QuotaLimits(
+        settings.ai_minute_requests_soft_limit,
+        settings.ai_minute_tokens_soft_limit,
+        settings.ai_daily_requests_soft_limit,
+        settings.ai_daily_tokens_soft_limit,
+    )
+
+
+def test_groq_and_tokenharbor_use_the_global_soft_limits() -> None:
+    settings = _limit_settings()
+    limits_for = limits_for_model(settings)
+
+    assert limits_for("openai/gpt-oss-120b") == _global_limits(settings)
+    assert limits_for("tokenharbor:m") == _global_limits(settings)
+
+
+def test_a_provider_uses_its_spec_default_limits() -> None:
+    limits_for = limits_for_model(_limit_settings())
+
+    assert limits_for("cerebras:gpt-oss-120b") == QuotaLimits(4, 80_000, 900, 950_000)
+    assert limits_for("zen:a").day_requests == 300
+
+
+def test_override_beats_spec_default_field_by_field() -> None:
+    settings = _limit_settings(ai_provider_limits={"cerebras": {"day_requests": 10}})
+    limits = limits_for_model(settings)("cerebras:gpt-oss-120b")
+
+    assert limits.day_requests == 10
+    assert limits.minute_requests == 4
+    assert limits.minute_tokens == 80_000
+    assert limits.day_tokens == 950_000
+
+
+def test_override_on_a_spec_without_defaults_falls_back_to_global_per_field() -> None:
+    settings = _limit_settings(ai_provider_limits={"tokenharbor": {"day_requests": 7}})
+    limits = limits_for_model(settings)("tokenharbor:m")
+
+    assert limits.day_requests == 7
+    assert limits.minute_requests == settings.ai_minute_requests_soft_limit
+
+
+def test_unknown_override_provider_or_field_is_ignored() -> None:
+    settings = _limit_settings(
+        ai_provider_limits={"nope": {"day_requests": 1}, "zen": {"bogus": 1, "day_requests": 5}}
+    )
+    limits_for = limits_for_model(settings)
+
+    assert limits_for("zen:a") == QuotaLimits(20, 60_000, 5, 1_500_000)
+    assert limits_for("openai/gpt-oss-120b") == _global_limits(settings)

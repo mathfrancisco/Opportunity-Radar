@@ -39,6 +39,7 @@ from opportunity_radar.platform.ai.config import (
     excluded_providers,
     provider_models,
 )
+from opportunity_radar.platform.ai.providers.registry import limits_for_model
 from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits, day_window
 from opportunity_radar.platform.ai.telemetry import ai_call_record
 from opportunity_radar.platform.config import Settings
@@ -623,6 +624,7 @@ def check_ai_usage(settings: Settings) -> Check:
         return Check("ai_usage", OK, f"AI is {state.value}; nothing to check")
     try:
         engine = create_database_engine(settings.database_url)
+        limits_for = limits_for_model(settings)
         guard = QuotaGuard(
             engine,
             QuotaLimits(
@@ -631,6 +633,7 @@ def check_ai_usage(settings: Settings) -> Check:
                 day_requests=settings.ai_daily_requests_soft_limit,
                 day_tokens=settings.ai_daily_tokens_soft_limit,
             ),
+            limits_for=limits_for,
         )
         today = day_window(datetime.now(UTC))
         day_rows = {
@@ -653,7 +656,7 @@ def check_ai_usage(settings: Settings) -> Check:
         settings.groq_alt_model,
     ):
         used = day_rows.get(model, {}).get("requests", 0)
-        limit = settings.ai_daily_requests_soft_limit
+        limit = limits_for(model).day_requests
         remaining_ratio = 1 - used / limit if limit else 1.0
         breaker_alert = model in likely_open
         facts["models"][model] = {

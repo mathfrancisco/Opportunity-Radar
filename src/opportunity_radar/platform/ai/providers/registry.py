@@ -19,10 +19,14 @@ enforced (the router's validator and its repair turn cover that), and a 429 carr
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from opportunity_radar.platform.ai.quota import QuotaLimits
+
+if TYPE_CHECKING:
+    from opportunity_radar.platform.config import Settings
 
 
 @dataclass(frozen=True)
@@ -151,3 +155,35 @@ def spec_for_model(model: str) -> ProviderSpec | None:
 def provider_name_for(model: str) -> str:
     spec = spec_for_model(model)
     return spec.name if spec is not None else "groq"
+
+
+_LIMIT_FIELDS = ("minute_requests", "minute_tokens", "day_requests", "day_tokens")
+
+
+def limits_for_model(settings: Settings) -> Callable[[str], QuotaLimits]:
+    """Per-model quota limits, resolved field by field.
+
+    Precedence: `AI_PROVIDER_LIMITS[provider]` > the spec's `default_limits` > the global
+    `AI_*` soft limits. Groq models (no spec) and Token Harbor (no defaults) therefore use
+    the global limits unless overridden. Unknown providers or fields in the override are
+    ignored.
+    """
+    global_limits = QuotaLimits(
+        minute_requests=settings.ai_minute_requests_soft_limit,
+        minute_tokens=settings.ai_minute_tokens_soft_limit,
+        day_requests=settings.ai_daily_requests_soft_limit,
+        day_tokens=settings.ai_daily_tokens_soft_limit,
+    )
+    resolved: dict[str, QuotaLimits] = {}
+    for spec in PROVIDERS:
+        base = spec.default_limits or global_limits
+        overrides = settings.ai_provider_limits.get(spec.name, {})
+        resolved[spec.name] = QuotaLimits(
+            **{field: overrides.get(field, getattr(base, field)) for field in _LIMIT_FIELDS}
+        )
+
+    def limits_for(model: str) -> QuotaLimits:
+        spec = spec_for_model(model)
+        return global_limits if spec is None else resolved[spec.name]
+
+    return limits_for
