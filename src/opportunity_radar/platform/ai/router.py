@@ -19,11 +19,16 @@ from uuid import UUID, uuid4
 from opportunity_radar.platform.ai.breaker import CircuitBreaker
 from opportunity_radar.platform.ai.errors import ErrorKind, ProviderError
 from opportunity_radar.platform.ai.providers.base import LLMProvider, LLMRequest, LLMResponse
+from opportunity_radar.platform.ai.providers.registry import provider_name_for
 from opportunity_radar.platform.ai.quota import QuotaGuard, Reservation
 from opportunity_radar.platform.ai.tasks import AITask, ModelRoute
 
 #: `blocked_until` when the whole chain is rate limited and no header gave a better hint.
 _DEFAULT_QUOTA_COOLDOWN_SECONDS = 60.0
+
+#: How long a model sits out after a CONFIGURATION or REQUEST error that did not stop the
+#: chain (the next model belongs to another provider, so the fault is that model's alone).
+_MODEL_FAULT_COOLDOWN_SECONDS = 3600.0
 
 _REPAIR_SUFFIX = (
     "\n\nA resposta anterior foi rejeitada: {summary}. Responda só com JSON válido no schema."
@@ -93,6 +98,13 @@ class AIRouter:
     def quota_guard(self) -> QuotaGuard | None:
         """`None` only when this router was built without persistent quota tracking."""
         return self._quota_guard
+
+    @staticmethod
+    def _next_is_other_provider(chain: tuple[str, ...], position: int) -> bool:
+        following = position + 1
+        return following < len(chain) and provider_name_for(chain[following]) != provider_name_for(
+            chain[position]
+        )
 
     def _is_blocked(self, model: str) -> bool:
         until = self._blocked_until.get(model)
@@ -190,7 +202,7 @@ class AIRouter:
         last_error: ProviderError | None = None
         any_model_tried = False
         quota_exhausted = False
-        for model in chain:
+        for position, model in enumerate(chain):
             if self._is_blocked(model) or not self._breaker.allow(model):
                 continue
             any_model_tried = True
@@ -288,6 +300,15 @@ class AIRouter:
                             await self._settle_error(reservation, error)
                         else:
                             await self._release(reservation)
+                        if error.kind is not ErrorKind.CANCELLED and self._next_is_other_provider(
+                            chain, position
+                        ):
+                            # A bad key or request body is that provider's fault: the next
+                            # model, on another provider, may still answer.
+                            self._blocked_until[model] = (
+                                self._clock() + _MODEL_FAULT_COOLDOWN_SECONDS
+                            )
+                            break
                         error.attempts = tuple(attempts)
                         raise
                     if error.kind is ErrorKind.TRANSIENT:

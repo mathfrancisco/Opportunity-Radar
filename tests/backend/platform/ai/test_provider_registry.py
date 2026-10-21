@@ -177,3 +177,9 @@ def test_unknown_override_provider_or_field_is_ignored() -> None:
 
     assert limits_for("zen:a") == QuotaLimits(20, 60_000, 5, 1_500_000)
     assert limits_for("openai/gpt-oss-120b") == _global_limits(settings)
+
+
+def test_reasoning_effort_spec_sends_reasoning_effort() -> None:
+    spec = replace(TOKENHARBOR, reasoning_effort=True)
+    body = _provider(spec)._body(_request("tokenharbor:m"))
+    assert body["reasoning_effort"] == "low"

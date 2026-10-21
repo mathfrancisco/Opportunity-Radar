@@ -38,6 +38,43 @@ def test_cloud_compose_only_exposes_proxy_and_uses_finite_worker() -> None:
     assert "volumes" not in cloud
 
 
+def _provider_variables() -> list[str]:
+    names = [
+        f"{spec.name}_{suffix}" for spec in PROVIDERS for suffix in ("api_key", "base_url", "models")
+    ]
+    return [*names, "cloudflare_account_id", "ai_reserve_order", "ai_provider_limits"]
+
+
+def test_every_provider_registry_setting_exists_on_settings() -> None:
+    for name in _provider_variables():
+        assert name in Settings.model_fields, name
+
+
+def test_provider_variables_reach_both_compose_environments() -> None:
+    cloud = yaml.safe_load((ROOT / "compose.cloud.yaml").read_text(encoding="utf-8"))
+    local = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
+    environments = {
+        "compose.cloud.yaml": cloud["services"]["worker"]["environment"],
+        "compose.yaml": local["x-app-environment"],
+    }
+    for file_name, environment in environments.items():
+        for name in _provider_variables():
+            assert name.upper() in environment, f"{name.upper()} missing in {file_name}"
+
+
+def test_provider_variable_defaults_match_settings() -> None:
+    cloud = yaml.safe_load((ROOT / "compose.cloud.yaml").read_text(encoding="utf-8"))
+    local = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
+    environments = (cloud["services"]["worker"]["environment"], local["x-app-environment"])
+    for environment in environments:
+        for name in _provider_variables():
+            field = Settings.model_fields[name]
+            if name.endswith("_api_key"):
+                continue
+            default = "{}" if name == "ai_provider_limits" else field.default
+            assert environment[name.upper()] == "${" + f"{name.upper()}:-{default}" + "}", name
+
+
 def test_cloud_proxy_template_rejects_foreign_host_and_never_redirects_it() -> None:
     proxy = (ROOT / "docker" / "proxy" / "nginx.conf.template").read_text(encoding="utf-8")
 
