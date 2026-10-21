@@ -56,7 +56,7 @@ A importação é idempotente: reexecutar não duplica empresa.
 5. O worker normaliza os itens pendentes a cada 60 segundos; para forçar,
    `POST /api/opportunities/normalizations/pending`.
 6. Avalie em `/inbox` ou por `POST /api/matches/evaluate`.
-7. Analise com IA (Groq) pelo detalhe da oportunidade.
+7. Analise com IA na nuvem pelo detalhe da vaga.
 8. Registre a candidatura e acompanhe-a em `/applications`.
 
 ---
@@ -111,7 +111,7 @@ momento, e o descartável é removido ao final — use `--keep` se quiser inspec
   `sha256` divergente do arquivo, `restore-check` falha antes de restaurar qualquer coisa.
   `--allow-missing-manifest` é a única forma explícita de restaurar mesmo assim, e nesse
   caso a verificação vira só "o arquivo é legível", nunca "os dados batem".
-- O backup nunca inclui `.env` nem `GROQ_API_KEY`: `pg_dump` só lê o conteúdo do banco, e
+- O backup nunca inclui `.env` nem chaves de API (`GROQ_API_KEY` e as dos outros provedores): `pg_dump` só lê o conteúdo do banco, e
   nenhum dos dois vive lá.
 - As tabelas de telemetria de IA (fila de quota `ai_quota_usage`, registro de chamada
   F20-19, identidade de cache F20-16) ainda não existem neste código — quando os cards que
@@ -219,12 +219,13 @@ histórico.
 A API e a tela da oportunidade marcam a ocorrência cujo conteúdo expirou: a procedência
 continua, o reprocessamento não.
 
-### Dados enviados ao Groq
+### Dados enviados aos provedores de IA
 
-A análise semântica só chama a nuvem quando `AI_ENABLED=true` e `GROQ_API_KEY` está
-configurada; sem chave, a análise fica bloqueada por configuração e o resto do radar
-segue normalmente (mesma regra da Tavily). O operador liga a IA conscientemente,
-sabendo o que sai da máquina.
+A análise semântica só chama a nuvem quando `AI_ENABLED=true` e pelo menos um provedor
+tem chave (`GROQ_API_KEY` ou a de um provedor de reserva); sem nenhuma chave, a análise
+fica bloqueada por configuração e o resto do radar segue normalmente (mesma regra da
+Tavily). Os dados sanitizados seguem para os provedores configurados, na ordem da cadeia.
+O operador liga a IA conscientemente, sabendo o que sai da máquina.
 
 `sanitize_for_llm` (`platform/ai/sanitizer.py`) roda sobre o payload inteiro antes de
 renderizar o prompt e antes de calcular o `payload_hash` do cache. O que é removido:
@@ -241,8 +242,9 @@ O que continua intacto: o texto da vaga (é público e é o objeto da análise),
 trilha, anos de experiência, skills e a evidência de cada experiência/projeto — o
 perfil enviado ao modelo é o **perfil estruturado mínimo**, sem nome nem contato.
 
-O Free Plan da Groq pode ter retenção de dados diferente do plano pago; trate o que sai
-da máquina de acordo com esse risco, não como se fosse local.
+O plano grátis de um provedor pode ter retenção de dados diferente do plano pago (veja a
+coluna de privacidade em "Provedores de reserva"); trate o que sai da máquina de acordo
+com esse risco, não como se fosse local.
 
 ### Gate de 72 horas
 
@@ -272,8 +274,8 @@ Causa mais comum: migração fora do head. `make migrate` resolve.
 
 ### `/health` responde `degraded` em `ai`
 
-Esperado quando `AI_ENABLED=false`, `GROQ_API_KEY` está ausente ou o Groq está fora do
-ar. O fluxo determinístico continua inteiro; só a camada semântica degrada. `make doctor`
+Esperado quando `AI_ENABLED=false`, nenhum provedor tem chave (`GROQ_API_KEY` ou a de
+um reserva) ou os provedores configurados estão fora do ar. O fluxo determinístico continua inteiro; só a camada semântica degrada. `make doctor`
 mostra o motivo exato no check `ai` (IA ligada/desligada, chave presente, modelo por
 papel — nunca a chave em si).
 
@@ -385,6 +387,11 @@ Para conferir o que cada provedor com chave realmente aceita, rode `python scrip
   limites de um provedor, campo a campo (`minute_requests`, `minute_tokens`,
   `day_requests`, `day_tokens`), por exemplo `{"zen": {"day_requests": 100}}`. Sem
   sobrescrita valem os padrões do provedor e, na falta deles, os `AI_*` globais.
+- **Teto diário por modelo, não por provedor:** o `day_requests` de cada provedor vale
+  para cada modelo da sua lista `*_MODELS`. O limite de 50 por dia do OpenRouter e o de
+  10 k neurons por dia do Workers AI são por conta; por isso cada modelo a mais na lista
+  multiplica o teto real, e o uso pode passar do que o fornecedor concede de graça.
+  Ajuste `AI_PROVIDER_LIMITS` ou mantenha a lista curta.
 - **Teto interativo:** a reserva interativa (`AI_INTERACTIVE_RESERVE_REQUESTS`) protege só
   o Groq. Num provedor pequeno (50 por dia no OpenRouter), o worker pode gastar o dia todo.
 - **Painel:** o card de orçamento da Visão geral lista cada modelo com o nome do provedor
