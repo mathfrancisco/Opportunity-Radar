@@ -7,6 +7,7 @@ from enum import StrEnum
 
 from pydantic import SecretStr
 
+from opportunity_radar.platform.ai.providers.registry import PROVIDERS, ProviderSpec
 from opportunity_radar.platform.config import Settings
 
 
@@ -16,11 +17,58 @@ class AIState(StrEnum):
     BLOCKED_BY_CONFIGURATION = "blocked_by_configuration"
 
 
+def provider_models(settings: Settings, spec: ProviderSpec) -> tuple[str, ...]:
+    """The unprefixed model names configured for `spec`, blanks dropped."""
+    raw: str = getattr(settings, f"{spec.name}_models")
+    return tuple(name for name in (part.strip() for part in raw.split(",")) if name)
+
+
+def excluded_providers(settings: Settings) -> dict[str, str]:
+    """Providers that have a key but cannot join a chain, with the reason."""
+    out: dict[str, str] = {}
+    for spec in PROVIDERS:
+        if not getattr(settings, f"{spec.name}_api_key").get_secret_value():
+            continue
+        needs_account = "{account_id}" in getattr(settings, f"{spec.name}_base_url")
+        if needs_account and not settings.cloudflare_account_id.strip():
+            out[spec.name] = "falta CLOUDFLARE_ACCOUNT_ID"
+        elif not provider_models(settings, spec):
+            out[spec.name] = f"{spec.name.upper()}_MODELS vazio"
+    return out
+
+
+def configured_providers(settings: Settings) -> list[tuple[ProviderSpec, str, str]]:
+    """(spec, api key, base URL) of each usable reserve provider, in `ai_reserve_order`.
+
+    Unknown names in the order are ignored. A provider is usable with a key, at least one
+    model and, for Workers AI, the account id its URL needs: no request URL is ever built
+    with an empty `{account_id}`.
+    """
+    by_name = {spec.name: spec for spec in PROVIDERS}
+    skipped = excluded_providers(settings)
+    result: list[tuple[ProviderSpec, str, str]] = []
+    seen: set[str] = set()
+    for raw in settings.ai_reserve_order.split(","):
+        name = raw.strip().lower()
+        spec = by_name.get(name)
+        if spec is None or name in seen:
+            continue
+        seen.add(name)
+        key = getattr(settings, f"{name}_api_key").get_secret_value()
+        if not key or name in skipped:
+            continue
+        base_url: str = getattr(settings, f"{name}_base_url").replace(
+            "{account_id}", settings.cloudflare_account_id.strip()
+        )
+        result.append((spec, key, base_url))
+    return result
+
+
 def ai_status(settings: Settings) -> AIState:
-    """Return the supported runtime state without exposing the API key."""
+    """Return the supported runtime state without exposing any API key."""
     if not settings.ai_enabled:
         return AIState.DISABLED
-    if not settings.groq_api_key.get_secret_value():
+    if not settings.groq_api_key.get_secret_value() and not configured_providers(settings):
         return AIState.BLOCKED_BY_CONFIGURATION
     return AIState.ENABLED
 

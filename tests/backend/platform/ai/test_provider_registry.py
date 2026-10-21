@@ -43,7 +43,7 @@ def _provider(spec: Any = TOKENHARBOR, **kwargs: Any) -> OpenAICompatibleProvide
 
 
 def test_registry_holds_token_harbor() -> None:
-    assert PROVIDERS == (TOKENHARBOR,)
+    assert TOKENHARBOR in PROVIDERS
     assert TOKENHARBOR.prefix == "tokenharbor:"
     assert TOKENHARBOR.may_retain_prompts is True
 
@@ -85,3 +85,34 @@ def test_error_summary_redacts_key() -> None:
         asyncio.run(provider.complete(_request("tokenharbor:m")))
     assert _KEY not in str(caught.value)
     assert _KEY not in repr(provider)
+
+
+def test_registry_has_the_eight_prefixes() -> None:
+    assert [spec.prefix for spec in PROVIDERS] == [
+        "tokenharbor:", "cerebras:", "zen:", "gemini:",
+        "openrouter:", "mistral:", "nim:", "workersai:",
+    ]  # fmt: skip
+
+
+def test_build_provider_without_groq_key_routes_only_by_prefix() -> None:
+    from opportunity_radar.platform.ai.providers.routed import build_provider
+    from opportunity_radar.platform.config import Settings
+
+    s = Settings(  # type: ignore[call-arg]
+        _env_file=None,
+        database_url="postgresql+psycopg://u@h/db",
+        cerebras_api_key="c",
+        zen_api_key="z",
+    )
+    provider = build_provider(s)
+    assert provider.name == "cerebras+zen"
+    assert provider.backend_for("zen:m").name == "zen"  # type: ignore[attr-defined]
+
+
+def test_build_provider_groq_only_is_plain_groq() -> None:
+    from opportunity_radar.platform.ai.providers.groq import GroqProvider
+    from opportunity_radar.platform.ai.providers.routed import build_provider
+    from opportunity_radar.platform.config import Settings
+
+    s = Settings(_env_file=None, database_url="postgresql+psycopg://u@h/db", groq_api_key="g")  # type: ignore[call-arg]
+    assert isinstance(build_provider(s), GroqProvider)

@@ -52,7 +52,95 @@ TOKENHARBOR = ProviderSpec(
     may_retain_prompts=True,
 )
 
-PROVIDERS: tuple[ProviderSpec, ...] = (TOKENHARBOR,)
+# Defaults below follow docs/research/2026-10-20-llm-gratuitos.md. `response_format` and
+# `reasoning_effort` are first guesses that the probe script confirms per model.
+CEREBRAS = ProviderSpec(
+    name="cerebras",
+    prefix="cerebras:",
+    default_base_url="https://api.cerebras.ai/v1",
+    reasoning_effort=True,
+    response_format="json_schema",
+    default_limits=QuotaLimits(4, 80_000, 900, 950_000),
+    provider_day_requests=None,
+    may_retain_prompts=False,
+)
+
+ZEN = ProviderSpec(
+    name="zen",
+    prefix="zen:",
+    default_base_url="https://opencode.ai/inference/openai/v1",
+    reasoning_effort=False,
+    response_format="json_schema",
+    default_limits=QuotaLimits(20, 60_000, 300, 1_500_000),
+    provider_day_requests=None,
+    may_retain_prompts=False,
+)
+
+GEMINI = ProviderSpec(
+    name="gemini",
+    prefix="gemini:",
+    default_base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+    reasoning_effort=False,
+    response_format="json_schema",
+    default_limits=QuotaLimits(10, 60_000, 500, 1_000_000),
+    provider_day_requests=None,
+    may_retain_prompts=True,
+)
+
+OPENROUTER = ProviderSpec(
+    name="openrouter",
+    prefix="openrouter:",
+    default_base_url="https://openrouter.ai/api/v1",
+    reasoning_effort=False,
+    response_format="json_schema",
+    default_limits=QuotaLimits(15, 60_000, 45, 300_000),
+    provider_day_requests=50,
+    may_retain_prompts=True,
+)
+
+MISTRAL = ProviderSpec(
+    name="mistral",
+    prefix="mistral:",
+    default_base_url="https://api.mistral.ai/v1",
+    reasoning_effort=False,
+    response_format="json_schema",
+    default_limits=QuotaLimits(20, 60_000, 500, 1_000_000),
+    provider_day_requests=None,
+    may_retain_prompts=True,
+)
+
+NIM = ProviderSpec(
+    name="nim",
+    prefix="nim:",
+    default_base_url="https://integrate.api.nvidia.com/v1",
+    reasoning_effort=True,
+    response_format="json_schema",
+    default_limits=QuotaLimits(30, 60_000, 1_000, 1_000_000),
+    provider_day_requests=None,
+    may_retain_prompts=True,
+)
+
+WORKERSAI = ProviderSpec(
+    name="workersai",
+    prefix="workersai:",
+    default_base_url="https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1",
+    reasoning_effort=False,
+    response_format="json_schema",
+    default_limits=QuotaLimits(20, 60_000, 40, 250_000),
+    provider_day_requests=None,
+    may_retain_prompts=False,
+)
+
+PROVIDERS: tuple[ProviderSpec, ...] = (
+    TOKENHARBOR,
+    CEREBRAS,
+    ZEN,
+    GEMINI,
+    OPENROUTER,
+    MISTRAL,
+    NIM,
+    WORKERSAI,
+)
 
 
 def spec_for_model(model: str) -> ProviderSpec | None:

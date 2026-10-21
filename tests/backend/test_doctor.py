@@ -229,6 +229,29 @@ def test_check_ai_warns_when_key_is_missing() -> None:
     assert check.facts["key_present"] is False
 
 
+def test_check_ai_is_ok_with_only_a_reserve_key_and_lists_it() -> None:
+    check = check_ai(_settings(ai_enabled=True, groq_api_key="", gemini_api_key="gk-secret"))
+
+    assert check.status == doctor.OK
+    assert "gk-secret" not in str(check.facts) + check.detail
+    assert check.facts["providers"]["gemini"]["models"] == 1
+    assert check.facts["providers"]["gemini"]["may_retain_prompts"] is True
+
+
+def test_check_ai_explains_why_workersai_is_left_out() -> None:
+    check = check_ai(_settings(ai_enabled=True, groq_api_key="g", workersai_api_key="w-secret"))
+
+    assert check.status == doctor.OK
+    assert "w-secret" not in str(check.facts) + check.detail
+    assert "CLOUDFLARE_ACCOUNT_ID" in check.facts["excluded"]["workersai"]
+
+
+def test_check_ai_warns_with_no_key_at_all() -> None:
+    check = check_ai(_settings(ai_enabled=True, groq_api_key=""))
+
+    assert check.status == doctor.WARN
+
+
 def test_check_ai_is_ok_when_enabled_with_a_key() -> None:
     check = check_ai(_settings(ai_enabled=True, groq_api_key="sk-fake"))
 

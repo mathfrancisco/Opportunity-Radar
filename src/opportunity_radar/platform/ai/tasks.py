@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from opportunity_radar.platform.ai.providers.registry import TOKENHARBOR
+from opportunity_radar.platform.ai.config import configured_providers, provider_models
 from opportunity_radar.platform.config import Settings
 
 
@@ -46,12 +46,13 @@ def _model_for(settings: Settings, role: ModelRole) -> str:
     }[role]
 
 
-def _tokenharbor_models(settings: Settings) -> tuple[str, ...]:
-    """Token Harbor's models as route names, or nothing while the provider has no key."""
-    if not settings.tokenharbor_api_key.get_secret_value():
-        return ()
-    names = (name.strip() for name in settings.tokenharbor_models.split(","))
-    return tuple(TOKENHARBOR.prefix + name for name in names if name)
+def _reserve_models(settings: Settings) -> tuple[str, ...]:
+    """Prefixed model names of every configured reserve provider, in reserve order."""
+    return tuple(
+        spec.prefix + name
+        for spec, _, _ in configured_providers(settings)
+        for name in provider_models(settings, spec)
+    )
 
 
 def _effort_for(settings: Settings, task: AITask) -> str:
@@ -84,11 +85,15 @@ def default_routes(settings: Settings) -> dict[AITask, ModelRoute]:
         AITask.JOB_CLASSIFICATION: ((ModelRole.FAST, ModelRole.ALT), 1500, 300),
         AITask.JOB_EXTRACTION: ((ModelRole.FAST, ModelRole.REASONING), 3000, 600),
     }
-    reserve = _tokenharbor_models(settings)
+    reserve = _reserve_models(settings)
+    # Groq models are unprefixed, so they must not enter a chain that a reserve serves
+    # without a Groq key. With no key at all the AI is blocked and nothing runs the chain,
+    # so the Groq roles stay (the shape on main) for callers that only inspect routes.
+    has_groq = bool(settings.groq_api_key.get_secret_value()) or not reserve
     return {
         task: ModelRoute(
             task=task,
-            chain=(*(_model_for(settings, role) for role in roles), *reserve),
+            chain=(*(_model_for(settings, role) for role in roles if has_groq), *reserve),
             budget=TaskBudget(max_input, max_output, _effort_for(settings, task)),
         )
         for task, (roles, max_input, max_output) in table.items()

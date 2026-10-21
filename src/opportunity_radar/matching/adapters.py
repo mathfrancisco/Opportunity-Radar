@@ -50,7 +50,7 @@ def build_analysis_adapter(
     if state is AIState.BLOCKED_BY_CONFIGURATION:
         global _missing_key_warned
         if not _missing_key_warned:
-            logger.warning("groq api key missing")
+            logger.warning("no ai provider key")
             _missing_key_warned = True
         return NullAnalysisAdapter()
 
