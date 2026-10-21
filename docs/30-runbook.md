@@ -331,44 +331,66 @@ make soak               # gate de 72 horas contra relógio controlado
 ```
 
 
-## IA na nuvem (Groq)
+## IA na nuvem
 
-A análise semântica roda no Groq (SPEC 43), não mais localmente: nenhuma GPU, download
-de modelo ou `compose.cpu.yaml` é necessário. Para ligar:
+A análise semântica roda em provedores de nuvem (SPEC 43), não mais localmente: nenhuma
+GPU, download de modelo ou `compose.cpu.yaml` é necessário. Para ligar:
 
-1. defina `AI_ENABLED=true` e `GROQ_API_KEY=<chave real>` no `.env` (nunca commitado);
+1. defina `AI_ENABLED=true` e a chave de pelo menos um provedor (`GROQ_API_KEY` ou a de
+   um provedor de reserva, abaixo) no `.env` (nunca commitado);
 2. suba normalmente com `make up`.
 
-Sem chave, ou com `AI_ENABLED=false`, a análise fica bloqueada por configuração e o
-resto do radar — coleta, normalização, avaliação — continua funcionando (ver a seção
+Sem nenhuma chave, ou com `AI_ENABLED=false`, a análise fica bloqueada por configuração e
+o resto do radar — coleta, normalização, avaliação — continua funcionando (ver a seção
 "`/health` responde `degraded` em `ai`" acima). `make doctor` mostra o check `ai` com o
-estado, se a chave está presente e o modelo por papel, sem nunca imprimir a chave.
+estado, quais provedores têm chave e o modelo por papel, sem nunca imprimir a chave.
 
 
-### Segundo provedor: Token Harbor (opcional)
+### Provedores de reserva
 
-Com `TOKENHARBOR_API_KEY` no `.env`, os modelos de `TOKENHARBOR_MODELS` (padrão
-`deepseek-v4.1-flash:free` e `mimo-v2.6-flash:free`) entram no fim da cadeia de toda tarefa
-de IA, depois dos modelos do Groq. Sem a chave, nada muda. O Groq continua obrigatório: a IA
-só liga com `GROQ_API_KEY`.
+O Groq deixou de ser obrigatório: a IA liga com a chave de qualquer provedor. Cada
+provedor só entra na cadeia se a sua chave estiver no `.env`; sem a chave, nada muda.
 
-- **Quando respondem:** só quando os modelos do Groq estão sem saldo na cota, bloqueados por
-  `429` ou com o disjuntor aberto. Cota e disjuntor são por modelo, então o uso de um
-  provedor não consome o do outro; os limites diários e por minuto (`AI_DAILY_*`,
-  `AI_MINUTE_*`) valem para cada modelo em separado.
-- **Nos registros:** o modelo aparece como `tokenharbor:<id>` e o provedor como
-  `tokenharbor` em `platform.ai_call_record`.
-- **Limites do fornecedor (conta gratuita, lidos em 2026-10-05):** 60 requisições por minuto
-  e 1.800 por hora por conta; cota em janela móvel de 7 dias, de tamanho não publicado; `429`
-  com `Retry-After`. A resposta não traz cabeçalhos `x-ratelimit-*`.
-- **Privacidade:** os modelos gratuitos precisam ser ativados na conta da Token Harbor, e a
-  página de preços diz que o fornecedor "may retain those prompts and responses for
-  diagnostics, safety, optimisation and model or product improvement". O texto enviado já
-  passa por `sanitize_for_llm`.
-- **Saída estruturada:** a API aceita o `json_schema`, mas não o impõe. Numa chamada real, o
-  `deepseek-v4.1-flash:free` devolveu um campo fora do schema. Na análise, o roteador pede um
-  reparo e, se falhar de novo, a resposta é descartada. Qualidade da análise com esses
-  modelos: não medida.
+**Regra da cadeia:** com `GROQ_API_KEY` definida, os modelos do Groq (um por papel da
+tarefa) vêm primeiro; depois vêm os modelos dos provedores de reserva com chave, na ordem
+de `AI_RESERVE_ORDER` (padrão: `cerebras,zen,nim,tokenharbor,gemini,mistral,openrouter,workersai`).
+Sem `GROQ_API_KEY`, a cadeia tem só os reservas. Os modelos de reserva aparecem como
+`<prefixo>:<id>` (por exemplo `cerebras:gpt-oss-120b`) nos registros e na cota; o prefixo
+nunca vai à API do provedor.
+
+| Provedor | Prefixo | Variáveis do `.env` | Limite grátis (lido em 2026-10-20) | Privacidade |
+|---|---|---|---|---|
+| Cerebras | `cerebras:` | `CEREBRAS_API_KEY`, `CEREBRAS_MODELS` | oficial: 5 RPM, 90 k TPM, 1 M tokens/hora e por dia, por modelo; exige cartão verificado | não declarada |
+| OpenCode Zen | `zen:` | `ZEN_API_KEY`, `ZEN_MODELS` | oficial: grátis "por tempo limitado"; limites não publicados | oficial: zero retenção, sem treino nesses modelos |
+| NVIDIA NIM | `nim:` | `NIM_API_KEY`, `NIM_MODELS` | 40 RPM | "trial use only": não enviar dados pessoais ou confidenciais |
+| Token Harbor | `tokenharbor:` | `TOKENHARBOR_API_KEY`, `TOKENHARBOR_MODELS` | 60 RPM e 1,8 k por hora; cota em janela móvel de 7 dias | pode reter prompts |
+| Google AI Studio (Gemma) | `gemini:` | `GEMINI_API_KEY`, `GEMINI_MODELS` | não publicado por modelo; um blog cita 3 k por dia | no plano grátis, pode ser usado para melhorar produtos fora de EEA/UK/CH |
+| Mistral | `mistral:` | `MISTRAL_API_KEY`, `MISTRAL_MODELS` | não publicado | o plano grátis exige aceitar treino |
+| OpenRouter (`:free`) | `openrouter:` | `OPENROUTER_API_KEY`, `OPENROUTER_MODELS` | 20 RPM e 50 por dia (1 k por dia após US$ 10 em créditos, uma vez) | provedores grátis podem registrar prompts |
+| Cloudflare Workers AI | `workersai:` | `WORKERSAI_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `WORKERSAI_MODELS`, `WORKERSAI_BASE_URL` | oficial: 10 k neurons por dia; acima disso é cobrado (US$ 0,011 por 1 k neurons) | não declarada |
+
+O Workers AI sem `CLOUDFLARE_ACCOUNT_ID` fica fora da cadeia, e o `make doctor` diz o
+motivo. Limites de terceiros mudam sem aviso: conferir na página do fornecedor antes de
+ligar. Fonte e detalhes: `docs/research/2026-10-20-llm-gratuitos.md`.
+
+- **Privacidade:** o projeto aceita treino com os prompts (decisão do dono, 2026-10-20).
+  O texto enviado continua passando por `sanitize_for_llm`, e nenhum dado de contato do
+  perfil sai.
+- **Quando respondem:** só quando os modelos antes deles na cadeia estão sem saldo na
+  cota, bloqueados por `429` ou com o disjuntor aberto. Cota e disjuntor são por modelo,
+  então o uso de um provedor não consome o de outro.
+- **Limites por provedor:** `AI_PROVIDER_LIMITS` é um JSON no `.env` que sobrescreve os
+  limites de um provedor, campo a campo (`minute_requests`, `minute_tokens`,
+  `day_requests`, `day_tokens`), por exemplo `{"zen": {"day_requests": 100}}`. Sem
+  sobrescrita valem os padrões do provedor e, na falta deles, os `AI_*` globais.
+- **Teto interativo:** a reserva interativa (`AI_INTERACTIVE_RESERVE_REQUESTS`) protege só
+  o Groq. Num provedor pequeno (50 por dia no OpenRouter), o worker pode gastar o dia todo.
+- **Painel:** o card de orçamento da Visão geral lista cada modelo com o nome do provedor
+  ao lado, contra o limite do próprio provedor.
+- **Saída estruturada:** a API pode aceitar o `json_schema` sem impô-lo. Na análise, o
+  roteador pede um reparo e, se falhar de novo, a resposta é descartada. Qualidade da
+  análise com cada modelo: não medida.
+
 
 ## Embeddings (F20-05)
 

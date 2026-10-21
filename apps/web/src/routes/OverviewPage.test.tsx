@@ -502,6 +502,23 @@ describe('OverviewPage — composição', () => {
     expect(container.textContent).toContain('2')
   })
 
+  it('não cita Groq: o cartão de IA é por provedor e a dica não nomeia nenhum', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: unknown) => {
+      const url = String(input)
+      if (url.endsWith('/saved-searches/summary')) return new Response('[]', { status: 200 })
+      if (url.endsWith('/overview')) return new Response(JSON.stringify(overviewBody()), { status: 200 })
+      if (url.endsWith('/analysis-metrics')) return new Response(JSON.stringify(disabledAnalysisMetrics), { status: 200 })
+      if (url.endsWith('/ai-budget')) return new Response(JSON.stringify(disabledAIBudget), { status: 200 })
+      return new Response(JSON.stringify({ generated_at: '', windows: [] }), { status: 200 })
+    }))
+    const container = renderWithProviders(<OverviewPage />)
+    await flush(8)
+    const text = container.textContent ?? ''
+    expect(text).toContain('IA na nuvem')
+    expect(text).toContain('IA indisponível, sem cota ou desligada')
+    expect(text).not.toMatch(/Groq/)
+  })
+
   it('abrir uma busca salva com novidade continua marcando a busca como aberta', async () => {
     const search = savedSearch({ id: 'saved-1', name: 'Backend remoto' })
     const base = vi.fn(async (input: unknown, init?: RequestInit) => {

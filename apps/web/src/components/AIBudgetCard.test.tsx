@@ -33,6 +33,7 @@ function budget(overrides: Record<string, unknown> = {}) {
     models: [
       {
         model: 'openai/gpt-oss-120b',
+        provider: 'groq',
         provider_requests_limit: 1000,
         requests_soft_limit: 850,
         requests_used: 120,
@@ -44,6 +45,7 @@ function budget(overrides: Record<string, unknown> = {}) {
       },
       {
         model: 'openai/gpt-oss-20b',
+        provider: 'groq',
         provider_requests_limit: 1000,
         requests_soft_limit: 850,
         requests_used: 0,
@@ -173,7 +175,39 @@ describe('AIBudgetCard', () => {
     stub(budget({ state: 'blocked_by_configuration', models: [] }))
     const blocked = renderWithClient(<AIBudgetCard />)
     await flush()
-    expect(blocked.textContent).toContain('falta a chave da Groq')
+    expect(blocked.textContent).toContain(
+      'Bloqueada por configuração: nenhum provedor de IA tem chave.',
+    )
+    expect(blocked.textContent).not.toMatch(/Groq/)
+  })
+
+  it('mostra o provedor ao lado do modelo, sem o prefixo', async () => {
+    stub(
+      budget({
+        models: [
+          {
+            model: 'cerebras:gpt-oss-120b',
+            provider: 'cerebras',
+            provider_requests_limit: null,
+            requests_soft_limit: 100,
+            requests_used: 3,
+            requests_remaining: null,
+            requests_remaining_operational: 97,
+            tokens_limit: 1000,
+            tokens_used: 10,
+            tokens_remaining: 990,
+          },
+        ],
+      }),
+    )
+
+    const container = renderWithClient(<AIBudgetCard />)
+    await flush()
+
+    const text = container.textContent ?? ''
+    expect(text).toContain('cerebras')
+    expect(text).toContain('gpt-oss-120b')
+    expect(text).not.toContain('cerebras:gpt-oss-120b')
   })
 
   it('avisa quando o orçamento não pôde ser carregado', async () => {

@@ -278,6 +278,7 @@ export interface AIMetrics {
 /** Card R55-C6: one model's day balance. `null` limit means no provider limit is known. */
 export interface ModelBudget {
   model: string
+  provider: string
   providerRequestsLimit: number | null
   requestsSoftLimit: number
   requestsUsed: number
@@ -664,6 +665,7 @@ function parseModelBudget(value: unknown): ModelBudget | null {
   if (!isRecord(value) || typeof value.model !== 'string') return null
   return {
     model: value.model,
+    provider: text(value.provider) ?? '',
     providerRequestsLimit: optionalNumber(value.provider_requests_limit),
     requestsSoftLimit: count(value.requests_soft_limit),
     requestsUsed: count(value.requests_used),

@@ -26,22 +26,34 @@ function resetTime(iso: string): string | null {
   return `${moment.toISOString().slice(11, 16)} UTC`
 }
 
+/** The model name without its provider prefix ("cerebras:gpt-oss-120b" becomes "gpt-oss-120b"). */
+function modelName(budget: ModelBudget): string {
+  const prefix = `${budget.provider}:`
+  return budget.model.startsWith(prefix) ? budget.model.slice(prefix.length) : budget.model
+}
+
 function ModelRow({ budget }: { budget: ModelBudget }) {
   // The provider's own daily limit is the headline (1 000/dia on Groq free); a model with
   // none known falls back to the operational ceiling the router enforces.
   const limit = budget.providerRequestsLimit ?? budget.requestsSoftLimit
   const remaining = budget.requestsRemaining ?? budget.requestsRemainingOperational
+  const name = modelName(budget)
   const used = limit > 0 ? Math.min(1, budget.requestsUsed / limit) : 0
   return (
     <li>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate text-sm font-medium">{budget.model}</span>
+        <span className="truncate text-sm font-medium">
+          {name}
+          {budget.provider && (
+            <span className="ml-2 text-xs font-normal text-subtle">{budget.provider}</span>
+          )}
+        </span>
         <span className="text-xs text-subtle">
           restam {formatCount(remaining)} req
         </span>
       </div>
       <div
-        aria-label={`${budget.model}: ${budget.requestsUsed} de ${limit} requisições hoje`}
+        aria-label={`${name}: ${budget.requestsUsed} de ${limit} requisições hoje`}
         className="mt-1 h-2 w-full overflow-hidden rounded-full bg-line"
         role="img"
       >
@@ -109,7 +121,7 @@ export function AIBudgetCard() {
         <p className="text-sm text-muted">Orçamento diário de IA</p>
         <p className="mt-2 text-sm text-subtle">
           {data.state === 'blocked_by_configuration'
-            ? 'Bloqueada por configuração: falta a chave da Groq.'
+            ? 'Bloqueada por configuração: nenhum provedor de IA tem chave.'
             : 'IA desligada: nenhuma requisição é gasta.'}
         </p>
       </Card>

@@ -46,6 +46,7 @@ def test_the_endpoint_lists_every_route_model_with_the_1000_a_day_limit() -> Non
     assert settings.groq_reasoning_model in models and settings.groq_fast_model in models
     big = models[settings.groq_reasoning_model]
     assert big["provider_requests_limit"] == 1000
+    assert big["provider"] == "groq"
     assert big["requests_used"] == 120 and big["requests_remaining"] == 880
     assert big["tokens_used"] == 40000
     assert big["tokens_remaining"] == settings.ai_daily_tokens_soft_limit - 40000
@@ -75,3 +76,30 @@ def test_a_non_owner_cannot_read_the_ai_budget() -> None:
     response = client.get("/ai-budget", headers=auth_headers(private_key, "someone-else"))
 
     assert response.status_code == 403
+
+
+def test_the_current_analysis_model_is_the_first_of_the_chain() -> None:
+    from opportunity_radar.presentation.http.dashboard import _current_analysis_model
+
+    def make(**overrides: object) -> Settings:
+        return Settings(  # type: ignore[call-arg]
+            _env_file=None, database_url="postgresql+psycopg://u@h/db", **overrides
+        )
+
+    groq = make(groq_api_key="g", cerebras_api_key="c")
+    assert _current_analysis_model(groq) == groq.groq_reasoning_model
+    reserve_only = _current_analysis_model(make(cerebras_api_key="c"))
+    assert reserve_only.startswith("cerebras:")
+    assert _current_analysis_model(make()) == make().groq_reasoning_model
+
+
+def test_the_budget_row_names_the_provider_and_its_own_limits() -> None:
+    from opportunity_radar.presentation.http.dashboard import _provider_requests_limit_for
+
+    settings = Settings(  # type: ignore[call-arg]
+        _env_file=None, database_url="postgresql+psycopg://u@h/db"
+    )
+    limit_for = _provider_requests_limit_for(settings)
+    assert limit_for("openai/gpt-oss-120b") == settings.ai_provider_daily_requests_limit
+    assert limit_for("openrouter:x") == 50
+    assert limit_for("tokenharbor:x") is None
