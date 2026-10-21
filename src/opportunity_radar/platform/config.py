@@ -187,13 +187,16 @@ class Settings(BaseSettings):
     gemini_models: str = "gemma-4-31b-it"
     openrouter_api_key: SecretStr = SecretStr("")
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    openrouter_models: str = "openai/gpt-oss-120b:free"
+    # No default: the `:free` catalogue changes often (gpt-oss-120b:free returned 404 on
+    # 2026-10-21). Empty keeps OpenRouter out of the chain until a probed id is set.
+    openrouter_models: str = ""
     mistral_api_key: SecretStr = SecretStr("")
     mistral_base_url: str = "https://api.mistral.ai/v1"
     mistral_models: str = "mistral-small-latest"
     nim_api_key: SecretStr = SecretStr("")
     nim_base_url: str = "https://integrate.api.nvidia.com/v1"
-    nim_models: str = "openai/gpt-oss-120b"
+    # openai/gpt-oss-120b answered 410 (retired) on NIM on 2026-10-21; gpt-oss-20b passed the probe.
+    nim_models: str = "openai/gpt-oss-20b"
     workersai_api_key: SecretStr = SecretStr("")
     # The URL carries the account id; without CLOUDFLARE_ACCOUNT_ID the provider stays out.
     workersai_base_url: str = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"

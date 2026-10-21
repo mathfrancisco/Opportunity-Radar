@@ -204,7 +204,7 @@ class GroqProvider:
                 ErrorKind.REQUEST, summary, status=status, model=model,
                 **usage_payload, **common,
             )
-        if status in (401, 403, 404):
+        if status in (401, 403, 404, 410):
             raise ProviderError(
                 ErrorKind.CONFIGURATION, summary, status=status, model=model,
                 **usage_payload, **common,

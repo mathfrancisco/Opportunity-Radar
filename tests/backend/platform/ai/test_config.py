@@ -214,6 +214,16 @@ def test_provider_settings_default_empty_and_off() -> None:
     assert s.ai_provider_limits == {}
 
 
+def test_nim_defaults_to_a_live_model_and_openrouter_has_no_default() -> None:
+    from opportunity_radar.platform.ai.config import configured_providers
+
+    s = _settings(nim_api_key="n", openrouter_api_key="o")
+    assert s.nim_models == "openai/gpt-oss-20b"
+    assert s.openrouter_models == ""
+    # Without an explicit OPENROUTER_MODELS the keyed provider stays out of the chain.
+    assert [spec.name for spec, _, _ in configured_providers(s)] == ["nim"]
+
+
 def test_provider_limits_parse_from_json_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AI_PROVIDER_LIMITS", '{"zen": {"day_requests": 100}}')
     assert _settings().ai_provider_limits == {"zen": {"day_requests": 100}}

@@ -116,6 +116,7 @@ def test_body_for_qwen_sends_reasoning_format_hidden() -> None:
         (401, ErrorKind.CONFIGURATION),
         (403, ErrorKind.CONFIGURATION),
         (404, ErrorKind.CONFIGURATION),
+        (410, ErrorKind.CONFIGURATION),
         (413, ErrorKind.REQUEST),
         (422, ErrorKind.REQUEST),
         (429, ErrorKind.QUOTA),
