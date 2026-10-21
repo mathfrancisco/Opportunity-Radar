@@ -108,6 +108,109 @@ describe('FilterPill', () => {
     expect(select?.disabled).toBe(false)
     expect(select?.hasAttribute('aria-describedby')).toBe(false)
   })
+
+  it('no formato de campo usa um combobox temático rotulado e ocupa toda a largura disponível', () => {
+    const container = render(
+      <FilterPill
+        className="w-full"
+        id="verdict"
+        label="Decisão"
+        onChange={() => {}}
+        options={options}
+        value="apply"
+        variant="field"
+      />,
+    )
+    const trigger = container.querySelector<HTMLButtonElement>('#verdict')
+    const label = container.querySelector('#verdict-label')
+
+    expect(label?.textContent).toBe('Decisão')
+    expect(trigger?.getAttribute('role')).toBe('combobox')
+    expect(trigger?.getAttribute('aria-expanded')).toBe('false')
+    expect(trigger?.className).toContain('w-full')
+    expect(trigger?.className).toContain('border-ink')
+    expect(trigger?.className).toContain('max-md:h-11')
+    expect(container.querySelector('select')).toBeNull()
+    expect(container.firstElementChild?.className).toContain('w-full')
+    expect(container.firstElementChild?.getAttribute('data-active')).toBe('true')
+  })
+
+  it('no formato de campo deixa o estado desabilitado explícito', () => {
+    const container = render(
+      <FilterPill
+        description="Explicação do estado"
+        disabled
+        id="verdict"
+        label="Decisão"
+        onChange={() => {}}
+        options={options}
+        value=""
+        variant="field"
+      />,
+    )
+    const trigger = container.querySelector<HTMLButtonElement>('#verdict')
+    const describedBy = trigger?.getAttribute('aria-describedby') ?? ''
+
+    expect(container.firstElementChild?.getAttribute('data-disabled')).toBe('true')
+    expect(trigger?.disabled).toBe(true)
+    expect(trigger?.className).toContain('cursor-not-allowed')
+    expect(document.getElementById(describedBy)?.textContent).toBe('Explicação do estado')
+  })
+
+  it('no formato de campo informa a opção escolhida', () => {
+    const chosen: string[] = []
+    const container = render(
+      <FilterPill
+        id="verdict"
+        label="Decisão"
+        onChange={(value) => chosen.push(value)}
+        options={options}
+        value=""
+        variant="field"
+      />,
+    )
+    const trigger = container.querySelector<HTMLButtonElement>('#verdict')
+
+    act(() => {
+      trigger?.click()
+    })
+    expect(trigger?.getAttribute('aria-expanded')).toBe('true')
+    const option = Array.from(container.querySelectorAll('[role="option"]')).find(
+      (candidate) => candidate.textContent?.includes('Descartar'),
+    ) as HTMLButtonElement
+    act(() => option.click())
+
+    expect(chosen).toEqual(['skip'])
+  })
+
+  it('ancora a lista aberta no botão, mesmo quando a raiz inclui a lista', () => {
+    const container = render(<FilterPill id="verdict" label="Decisão" onChange={() => {}} options={options} value="" variant="field" />)
+    const trigger = container.querySelector<HTMLButtonElement>('#verdict')
+
+    Object.defineProperty(trigger, 'getBoundingClientRect', {
+      value: () => ({ bottom: 200, height: 36, left: 40, right: 240, top: 164, width: 200 }),
+    })
+    Object.defineProperty(container.firstElementChild, 'getBoundingClientRect', {
+      value: () => ({ bottom: 506, height: 342, left: 40, right: 240, top: 164, width: 200 }),
+    })
+
+    act(() => trigger?.click())
+
+    expect(container.querySelector<HTMLElement>('[role="listbox"]')?.style.top).toBe('204px')
+  })
+
+  it('navega e escolhe com teclado, fecha com Escape e expõe a opção ativa', () => {
+    const chosen: string[] = []
+    const container = render(<FilterPill id="verdict" label="Decisão" onChange={(value) => chosen.push(value)} options={options} value="" variant="field" />)
+    const trigger = container.querySelector<HTMLButtonElement>('#verdict')
+    act(() => trigger?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })))
+    expect(trigger?.getAttribute('aria-expanded')).toBe('true')
+    expect(trigger?.getAttribute('aria-activedescendant')).toContain('option-1')
+    act(() => trigger?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })))
+    expect(chosen).toEqual(['apply'])
+    act(() => trigger?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    expect(trigger?.getAttribute('aria-expanded')).toBe('false')
+  })
 })
 
 describe('SearchInput', () => {
@@ -194,5 +297,16 @@ describe('FilterBar', () => {
     )
 
     expect(container.firstElementChild?.children).toHaveLength(1)
+  })
+
+  it('alinha os campos do toolbar pela base', () => {
+    const container = render(
+      <FilterBar variant="toolbar">
+        <span>pílula</span>
+      </FilterBar>,
+    )
+
+    expect(container.firstElementChild?.className).toContain('items-end')
+    expect(container.querySelector('[role="group"]')?.className).toContain('items-end')
   })
 })

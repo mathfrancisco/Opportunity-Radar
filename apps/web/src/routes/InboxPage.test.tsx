@@ -468,11 +468,23 @@ describe('InboxPage recency lenses', () => {
     )
   }
 
-  function choose(select: HTMLSelectElement, value: string) {
-    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+  function choose(select: HTMLElement, value: string) {
+    if (select instanceof HTMLSelectElement) {
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+      act(() => {
+        setter?.call(select, value)
+        select.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      return
+    }
     act(() => {
-      setter?.call(select, value)
-      select.dispatchEvent(new Event('change', { bubbles: true }))
+      select.click()
+    })
+    const option = document.getElementById(select.getAttribute('aria-controls') ?? '')?.querySelector(
+      `[data-value="${value}"]`,
+    ) as HTMLButtonElement
+    act(() => {
+      option.click()
     })
   }
 
@@ -483,13 +495,9 @@ describe('InboxPage recency lenses', () => {
     const container = renderWithProviders(<InboxPage />)
     await flush()
 
-    const lens = container.querySelector('#inbox-recency-lens') as HTMLSelectElement
+    const lens = container.querySelector('#inbox-recency-lens') as HTMLButtonElement
     expect(lens).not.toBeNull()
-    expect(Array.from(lens.options).map((option) => option.textContent)).toEqual([
-      'Últimos 30 dias',
-      'Novas (14 dias)',
-      'Abertas na fonte',
-    ])
+    expect(lens.textContent).toContain('Últimos 30 dias')
     expect(calledUrls.every((url) => !url.includes('recency_window_days'))).toBe(true)
 
     choose(lens, 'novas')
@@ -498,7 +506,7 @@ describe('InboxPage recency lenses', () => {
       calledUrls.some((url) => url.includes('/inbox') && url.includes('recency_window_days=14')),
     ).toBe(true)
 
-    choose(container.querySelector('#inbox-recency-lens') as HTMLSelectElement, 'abertas')
+    choose(container.querySelector('#inbox-recency-lens') as HTMLButtonElement, 'abertas')
     await flush()
     expect(
       calledUrls.some((url) => url.includes('/inbox') && url.includes('open_at_source=true')),
@@ -700,11 +708,23 @@ describe('InboxPage table, pagination and filters', () => {
     return new URLSearchParams(container.querySelector('[data-testid="location"]')?.textContent ?? '')
   }
 
-  function choose(select: HTMLSelectElement, value: string) {
-    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+  function choose(select: HTMLElement, value: string) {
+    if (select instanceof HTMLSelectElement) {
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+      act(() => {
+        setter?.call(select, value)
+        select.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+      return
+    }
     act(() => {
-      setter?.call(select, value)
-      select.dispatchEvent(new Event('change', { bubbles: true }))
+      select.click()
+    })
+    const option = document.getElementById(select.getAttribute('aria-controls') ?? '')?.querySelector(
+      `[data-value="${value}"]`,
+    ) as HTMLButtonElement
+    act(() => {
+      option.click()
     })
   }
 
@@ -1032,6 +1052,24 @@ describe('InboxPage table, pagination and filters', () => {
     expect(search(container).get('applied')).toBe('true')
   })
 
+  it('dá aos filtros do Inbox campos rotulados, largos e sem colunas apertadas', async () => {
+    stubInbox(1, [])
+    const container = renderAt('/inbox')
+    await flush()
+
+    const toolbar = container.querySelector('[aria-label="Filtros"]')
+    const advancedGrid = container.querySelector('details > div')
+    const verdict = container.querySelector('#inbox-verdict') as HTMLButtonElement
+    const status = container.querySelector('#inbox-status') as HTMLButtonElement
+
+    expect(toolbar?.className).toContain('items-end')
+    expect(container.querySelector('#inbox-verdict-label')?.textContent).toBe('Decisão')
+    expect(verdict.className).toContain('w-full')
+    expect(status.className).toContain('w-full')
+    expect(advancedGrid?.className).toContain('lg:grid-cols-3')
+    expect(advancedGrid?.className).toContain('xl:grid-cols-4')
+  })
+
   it('concentra filtros secundários no disclosure, informa os ativos e os limpa sem apagar a busca', async () => {
     stubInbox(1, [])
     const container = renderAt(
@@ -1125,9 +1163,9 @@ describe('InboxPage table, pagination and filters', () => {
     const container = renderAt('/inbox?search=react&order=score')
     await flush()
 
-    const select = container.querySelector('#inbox-order') as HTMLSelectElement
+    const select = container.querySelector('#inbox-order') as HTMLButtonElement
     expect(select.disabled).toBe(true)
-    expect(select.selectedOptions[0].textContent).toBe('Relevância')
+    expect(select.textContent).toContain('Relevância')
     const description = document.getElementById(select.getAttribute('aria-describedby') ?? '')
     expect(description?.textContent).toBe(
       'Com texto na busca, os resultados são ordenados por relevância',
@@ -1140,9 +1178,9 @@ describe('InboxPage table, pagination and filters', () => {
     const container = renderAt('/inbox?order=score')
     await flush()
 
-    const select = container.querySelector('#inbox-order') as HTMLSelectElement
+    const select = container.querySelector('#inbox-order') as HTMLButtonElement
     expect(select.disabled).toBe(false)
-    expect(select.selectedOptions[0].textContent).toBe('Maior score')
+    expect(select.textContent).toContain('Maior score')
     expect(select.hasAttribute('aria-describedby')).toBe(false)
   })
 })
@@ -1188,11 +1226,15 @@ describe('InboxPage salary unit (D1)', () => {
     return new URLSearchParams(container.querySelector('[data-testid="location"]')?.textContent ?? '')
   }
 
-  function choose(select: HTMLSelectElement, value: string) {
-    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+  function choose(select: HTMLElement, value: string) {
     act(() => {
-      setter?.call(select, value)
-      select.dispatchEvent(new Event('change', { bubbles: true }))
+      select.click()
+    })
+    const option = document.getElementById(select.getAttribute('aria-controls') ?? '')?.querySelector(
+      `[data-value="${value}"]`,
+    ) as HTMLButtonElement
+    act(() => {
+      option.click()
     })
   }
 
@@ -1272,10 +1314,10 @@ describe('InboxPage salary unit (D1)', () => {
     const inbox = lastInbox(urls)
     expect(inbox.searchParams.has('salary_currency')).toBe(false)
     expect(inbox.searchParams.has('salary_period')).toBe(false)
-    const currency = container.querySelector('#inbox-salary-currency') as HTMLSelectElement
+    const currency = container.querySelector('#inbox-salary-currency') as HTMLButtonElement
     expect(currency.disabled).toBe(true)
-    expect(currency.value).toBe('USD')
-    expect((container.querySelector('#inbox-salary-period') as HTMLSelectElement).disabled).toBe(true)
+    expect(currency.textContent).toContain('USD')
+    expect((container.querySelector('#inbox-salary-period') as HTMLButtonElement).disabled).toBe(true)
     expect(container.textContent).toContain('Compara só vagas na mesma moeda e período.')
   })
 
