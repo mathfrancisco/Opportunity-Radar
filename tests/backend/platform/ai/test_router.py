@@ -533,3 +533,63 @@ def test_groq_only_chain_request_error_still_raises() -> None:
 
     assert raised.value.kind is ErrorKind.REQUEST
     assert provider.models_called() == ["g0"]
+
+
+def test_404_configuration_error_blocks_the_model_and_the_next_provider_answers() -> None:
+    provider = FakeProvider(
+        {
+            "cerebras:a": [ProviderError(ErrorKind.CONFIGURATION, "model gone", status=404)],
+            "zen:b": [response("zen:b")],
+        }
+    )
+    router = _mixed_router(provider, ("cerebras:a", "zen:b"))
+
+    result = _run(router)
+
+    assert result.response.model == "zen:b"
+    assert router._is_blocked("cerebras:a")
+
+
+def test_400_json_schema_error_blocks_the_model_and_the_next_provider_answers() -> None:
+    provider = FakeProvider(
+        {
+            "cerebras:a": [
+                ProviderError(ErrorKind.REQUEST, "json_schema is not supported", status=400)
+            ],
+            "zen:b": [response("zen:b")],
+        }
+    )
+    router = _mixed_router(provider, ("cerebras:a", "zen:b"))
+
+    result = _run(router)
+
+    assert result.response.model == "zen:b"
+    assert router._is_blocked("cerebras:a")
+
+
+@pytest.mark.parametrize(
+    ("status", "summary"),
+    [
+        (413, "request entity too large"),
+        (400, "This model's Maximum Context Length is 8192 tokens"),
+        (422, "unprocessable"),
+        (None, "bad request"),
+    ],
+)
+def test_payload_request_errors_still_raise_and_do_not_block(
+    status: int | None, summary: str
+) -> None:
+    provider = FakeProvider(
+        {
+            "cerebras:a": [ProviderError(ErrorKind.REQUEST, summary, status=status)],
+            "zen:b": [response("zen:b")],
+        }
+    )
+    router = _mixed_router(provider, ("cerebras:a", "zen:b"))
+
+    with pytest.raises(ProviderError) as raised:
+        _run(router)
+
+    assert raised.value.kind is ErrorKind.REQUEST
+    assert provider.models_called() == ["cerebras:a"]
+    assert not router._is_blocked("cerebras:a")

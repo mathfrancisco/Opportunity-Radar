@@ -383,6 +383,10 @@ Para conferir o que cada provedor com chave realmente aceita, rode `python scrip
 - **Quando respondem:** só quando os modelos antes deles na cadeia estão sem saldo na
   cota, bloqueados por `429` ou com o disjuntor aberto. Cota e disjuntor são por modelo,
   então o uso de um provedor não consome o de outro.
+  Também respondem quando o modelo anterior, de outro provedor, falhou com erro de
+  configuração (401/403/404) ou com um `400` que não é de tamanho do payload; esse modelo
+  fica bloqueado por 1 h. Erros de payload (`413`, estouro de contexto) continuam
+  falhando a análise como antes.
 - **Limites por provedor:** `AI_PROVIDER_LIMITS` é um JSON no `.env` que sobrescreve os
   limites de um provedor, campo a campo (`minute_requests`, `minute_tokens`,
   `day_requests`, `day_tokens`), por exemplo `{"zen": {"day_requests": 100}}`. Sem
