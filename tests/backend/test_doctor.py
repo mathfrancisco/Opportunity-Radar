@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -382,31 +382,14 @@ def test_check_funnel_reads_an_owned_active_profile() -> None:
             _cleanup_profile(session, owner_sub)
 
 
-@dataclass(frozen=True)
-class _AISettings:
-    ai_enabled: bool = True
-    groq_api_key_value: str = "gsk_test"
-    database_url: str = "postgresql+psycopg://test:test@localhost/test"
-    ai_minute_requests_soft_limit: int = 25
-    ai_minute_tokens_soft_limit: int = 7_000
-    ai_daily_requests_soft_limit: int = 850
-    ai_daily_tokens_soft_limit: int = 170_000
-    ai_breaker_failures: int = 5
-    groq_reasoning_model: str = "openai/gpt-oss-120b"
-    groq_fast_model: str = "openai/gpt-oss-20b"
-    groq_alt_model: str = "qwen/qwen3.8-27b"
-    ai_provider_limits: dict[str, dict[str, int]] = field(default_factory=dict)
-
-    @property
-    def groq_api_key(self) -> object:
-        class _Secret:
-            def __init__(self, value: str) -> None:
-                self._value = value
-
-            def get_secret_value(self) -> str:
-                return self._value
-
-        return _Secret(self.groq_api_key_value)
+def _AISettings(**overrides: object) -> Settings:  # noqa: N802 - kept as the old stub's name
+    """Real settings (the usage check now reads the real route chains), with a Groq key."""
+    base: dict[str, object] = {"groq_api_key": "gsk_test", "ai_enabled": True}
+    return Settings(  # type: ignore[call-arg]
+        _env_file=None,
+        database_url="postgresql+psycopg://test:test@localhost/test",
+        **{**base, **overrides},
+    )
 
 
 def test_check_ai_skips_everything_when_ai_is_disabled() -> None:
@@ -455,3 +438,68 @@ class _NullSessionContext:
 
     def __exit__(self, *args: object) -> None:
         return None
+
+
+def _stub_usage(monkeypatch: pytest.MonkeyPatch, rows: list[dict]) -> None:
+    monkeypatch.setattr(doctor, "create_database_engine", lambda _url: object())
+
+    class _StubGuard:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def snapshot(self) -> list[dict]:
+            return rows
+
+    monkeypatch.setattr(doctor, "QuotaGuard", _StubGuard)
+    monkeypatch.setattr(doctor, "_models_with_a_recent_failure_streak", lambda *_a, **_k: set())
+    monkeypatch.setattr(doctor, "Session", lambda _engine: _NullSessionContext())
+
+
+def test_check_ai_usage_groq_only_covers_the_three_role_models(monkeypatch) -> None:
+    settings = _AISettings()
+    _stub_usage(monkeypatch, [])
+
+    check = doctor.check_ai_usage(settings)
+
+    assert set(check.facts["models"]) == {
+        settings.groq_reasoning_model,
+        settings.groq_fast_model,
+        settings.groq_alt_model,
+    }
+    assert all(item["day_requests_limit"] == 850 for item in check.facts["models"].values())
+
+
+def test_check_ai_usage_checks_every_model_the_chains_run_against_its_own_limit(
+    monkeypatch,
+) -> None:
+    settings = _AISettings(cerebras_api_key="c-secret", cerebras_models="gpt-oss-120b")
+    today = doctor.day_window(doctor.datetime.now(doctor.UTC))
+    _stub_usage(
+        monkeypatch,
+        [
+            {
+                "model": "cerebras:gpt-oss-120b",
+                "window_kind": "day",
+                "window_start": today,
+                "requests": 890,  # 99% of Cerebras' own 900, but only 105% of nothing for Groq
+                "tokens": 1,
+            }
+        ],
+    )
+
+    check = doctor.check_ai_usage(settings)
+
+    reserve = check.facts["models"]["cerebras:gpt-oss-120b"]
+    assert reserve["day_requests_limit"] == 900
+    assert check.status == doctor.WARN
+    assert "cerebras:gpt-oss-120b daily balance" in check.detail
+    assert "c-secret" not in str(check.facts) + check.detail
+
+
+def test_check_ai_explains_a_provider_left_out_of_the_reserve_order() -> None:
+    check = check_ai(
+        _settings(ai_enabled=True, groq_api_key="g", zen_api_key="z-secret", ai_reserve_order="nim")
+    )
+
+    assert check.facts["excluded"]["zen"] == "fora de AI_RESERVE_ORDER"
+    assert "z-secret" not in str(check.facts) + check.detail

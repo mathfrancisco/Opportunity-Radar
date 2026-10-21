@@ -41,6 +41,7 @@ from opportunity_radar.platform.ai.config import (
 )
 from opportunity_radar.platform.ai.providers.registry import limits_for_model
 from opportunity_radar.platform.ai.quota import QuotaGuard, QuotaLimits, day_window
+from opportunity_radar.platform.ai.tasks import default_routes
 from opportunity_radar.platform.ai.telemetry import ai_call_record
 from opportunity_radar.platform.config import Settings
 from opportunity_radar.platform.database import create_database_engine
@@ -618,7 +619,7 @@ def check_funnel(settings: Settings) -> Check:
 
 
 def check_ai_usage(settings: Settings) -> Check:
-    """Daily Groq quota balance and a telemetry-based breaker alert (card F20-20)."""
+    """Daily quota balance per chain model and a telemetry-based breaker alert (card F20-20)."""
     state = ai_status(settings)
     if state is not AIState.ENABLED:
         return Check("ai_usage", OK, f"AI is {state.value}; nothing to check")
@@ -650,11 +651,11 @@ def check_ai_usage(settings: Settings) -> Check:
 
     alerts: list[str] = []
     facts: dict[str, Any] = {"models": {}}
-    for model in (
-        settings.groq_reasoning_model,
-        settings.groq_fast_model,
-        settings.groq_alt_model,
-    ):
+    # The models the chains really run (Groq roles and every keyed reserve), once each.
+    chain_models = dict.fromkeys(
+        model for route in default_routes(settings).values() for model in route.chain
+    )
+    for model in chain_models:
         used = day_rows.get(model, {}).get("requests", 0)
         limit = limits_for(model).day_requests
         remaining_ratio = 1 - used / limit if limit else 1.0
