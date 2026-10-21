@@ -3,7 +3,13 @@ import pathlib
 import pytest
 from pydantic import ValidationError
 
-from opportunity_radar.platform.ai.config import AISettings, AIState, ai_status
+from opportunity_radar.platform.ai.config import (
+    AISettings,
+    AIState,
+    ai_status,
+    configured_providers,
+    excluded_providers,
+)
 from opportunity_radar.platform.config import Settings
 
 _ENV_EXAMPLE = pathlib.Path(__file__).resolve().parents[4] / ".env.example"
@@ -215,3 +221,26 @@ def test_provider_limits_parse_from_json_env(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_keys_never_show_in_settings_repr() -> None:
     assert "secret-c" not in repr(_settings(cerebras_api_key="secret-c"))
+
+
+def test_a_keyed_provider_missing_from_the_reserve_order_is_excluded_with_a_reason() -> None:
+    settings = _settings(
+        ai_reserve_order="zen", zen_api_key="z", cerebras_api_key="c", mistral_api_key=""
+    )
+
+    assert excluded_providers(settings) == {"cerebras": "fora de AI_RESERVE_ORDER"}
+    assert [spec.name for spec, _, _ in configured_providers(settings)] == ["zen"]
+
+
+@pytest.mark.parametrize("value", [0, -5, "many", 1.5])
+def test_provider_limit_values_must_be_positive_integers(value: object) -> None:
+    with pytest.raises(ValidationError):
+        _settings(ai_provider_limits={"zen": {"day_requests": value}})
+
+
+def test_unknown_provider_limit_names_and_fields_are_still_ignored() -> None:
+    settings = _settings(
+        ai_provider_limits={"nope": {"day_requests": 5}, "zen": {"typo": 5, "day_requests": 100}}
+    )
+
+    assert settings.ai_provider_limits["zen"]["day_requests"] == 100

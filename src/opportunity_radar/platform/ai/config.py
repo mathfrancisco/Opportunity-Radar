@@ -26,8 +26,12 @@ def provider_models(settings: Settings, spec: ProviderSpec) -> tuple[str, ...]:
 def excluded_providers(settings: Settings) -> dict[str, str]:
     """Providers that have a key but cannot join a chain, with the reason."""
     out: dict[str, str] = {}
+    ordered = {part.strip().lower() for part in settings.ai_reserve_order.split(",")}
     for spec in PROVIDERS:
         if not getattr(settings, f"{spec.name}_api_key").get_secret_value():
+            continue
+        if spec.name not in ordered:
+            out[spec.name] = "fora de AI_RESERVE_ORDER"
             continue
         needs_account = "{account_id}" in getattr(settings, f"{spec.name}_base_url")
         if needs_account and not settings.cloudflare_account_id.strip():

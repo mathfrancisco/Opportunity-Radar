@@ -359,6 +359,15 @@ class Settings(BaseSettings):
         for name, value in positive_limits.items():
             if value <= 0:
                 raise ValueError(f"{name} must be positive, got {value!r}")
+        # Unknown provider names and fields are ignored on purpose (a typo must not take AI
+        # down), but a value that is not a positive integer is rejected whatever its name.
+        for provider, overrides in self.ai_provider_limits.items():
+            for limit_name, limit_value in overrides.items():
+                if limit_value <= 0:
+                    raise ValueError(
+                        f"AI_PROVIDER_LIMITS {provider}.{limit_name} must be positive, "
+                        f"got {limit_value!r}"
+                    )
         if self.ingest_max_age_days < 0:
             raise ValueError(
                 f"INGEST_MAX_AGE_DAYS cannot be negative, got {self.ingest_max_age_days!r}"
