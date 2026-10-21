@@ -668,6 +668,7 @@ export function InboxPage() {
             ...Object.entries(verdictLabels).map(([value, label]) => ({ value, label })),
           ]}
           value={verdict}
+          variant="field"
         />
         <FilterPill
           id="inbox-work-mode"
@@ -678,6 +679,7 @@ export function InboxPage() {
             ...workModes.map((value) => ({ value, label: opportunityLabel(value, workModeLabels) })),
           ]}
           value={workMode}
+          variant="field"
         />
         <FilterPill
           defaultValue="priority"
@@ -692,6 +694,7 @@ export function InboxPage() {
               : inboxOrders.map((value) => ({ value, label: orderLabels[value] }))
           }
           value={searching ? 'relevance' : order}
+          variant="field"
         />
         <FilterPill
           id="inbox-recency-lens"
@@ -703,6 +706,7 @@ export function InboxPage() {
             { value: 'abertas', label: 'Abertas na fonte' },
           ]}
           value={recencyLens}
+          variant="field"
         />
       </FilterBar>
 
@@ -735,7 +739,7 @@ export function InboxPage() {
           {advancedFilterCount > 0 &&
             ` (${advancedFilterCount} ativo${advancedFilterCount === 1 ? '' : 's'})`}
         </summary>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <FilterPill
             id="inbox-status"
             label="Status"
@@ -745,6 +749,8 @@ export function InboxPage() {
               ...lifecycleStatuses.map((value) => ({ value, label: value })),
             ]}
             value={lifecycleStatus}
+            variant="field"
+            className="w-full"
           />
           <FilterPill
             id="inbox-seniority"
@@ -755,6 +761,8 @@ export function InboxPage() {
               ...seniorities.map((value) => ({ value, label: opportunityLabel(value, seniorityLabels) })),
             ]}
             value={seniority}
+            variant="field"
+            className="w-full"
           />
           <FilterPill
             id="inbox-applied"
@@ -762,6 +770,8 @@ export function InboxPage() {
             onChange={(value) => update({ applied: value || null })}
             options={appliedOptions}
             value={appliedFilter}
+            variant="field"
+            className="w-full"
           />
           <Field label="Score mínimo">
             <input
@@ -807,6 +817,8 @@ export function InboxPage() {
             options={salaryCurrencies.map((value) => ({ value, label: value }))}
             value={salaryCurrency}
             defaultValue={defaultSalaryCurrency}
+            variant="field"
+            className="w-full"
           />
           <FilterPill
             description={
@@ -819,6 +831,8 @@ export function InboxPage() {
             options={salaryPeriods}
             value={salaryPeriod}
             defaultValue={defaultSalaryPeriod}
+            variant="field"
+            className="w-full"
           />
           <p className="text-sm text-muted sm:col-span-full" id="inbox-salary-help">
             {salaryHelp}

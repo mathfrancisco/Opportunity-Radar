@@ -30,14 +30,18 @@ export function FilterBar({
   className = '',
 }: FilterBarProps) {
   const group = (
-    <div aria-label={label} className="flex min-w-0 flex-wrap items-center gap-2" role="group">
+    <div
+      aria-label={label}
+      className={`flex min-w-0 flex-wrap gap-2 ${variant === 'toolbar' ? 'items-end' : 'items-center'}`}
+      role="group"
+    >
       {children}
     </div>
   )
   if (variant === 'toolbar') {
     return (
       <div
-        className={`flex flex-wrap items-center gap-3 border-y border-line py-4 ${className}`.trim()}
+        className={`flex flex-wrap items-end gap-3 border-y border-line py-4 ${className}`.trim()}
       >
         {search && <div className="w-full md:min-w-64 md:max-w-md md:flex-1">{search}</div>}
         {group}
