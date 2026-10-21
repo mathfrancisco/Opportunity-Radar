@@ -22,7 +22,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Engine
 
-from opportunity_radar.platform.ai.providers.tokenharbor import MODEL_PREFIX, TokenHarborProvider
+from opportunity_radar.platform.ai.providers.registry import spec_for_model
 
 if TYPE_CHECKING:
     from opportunity_radar.platform.ai.router import Attempt
@@ -116,8 +116,9 @@ class AIOperationCohort:
 
 
 def _provider_for(model: str, default: str) -> str:
-    """The backend that serves `model`: a prefixed model name belongs to Token Harbor."""
-    return TokenHarborProvider.name if model.startswith(MODEL_PREFIX) else default
+    """The backend that serves `model`: a registered prefix names it, else `default`."""
+    spec = spec_for_model(model)
+    return spec.name if spec is not None else default
 
 
 def start_operation(

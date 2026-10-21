@@ -11,7 +11,8 @@ from collections.abc import Mapping
 
 from opportunity_radar.platform.ai.providers.base import LLMProvider, LLMRequest, LLMResponse
 from opportunity_radar.platform.ai.providers.groq import GroqProvider
-from opportunity_radar.platform.ai.providers.tokenharbor import MODEL_PREFIX, TokenHarborProvider
+from opportunity_radar.platform.ai.providers.openai_compat import OpenAICompatibleProvider
+from opportunity_radar.platform.ai.providers.registry import TOKENHARBOR
 from opportunity_radar.platform.config import Settings
 
 
@@ -48,7 +49,8 @@ def build_provider(settings: Settings) -> LLMProvider:
     return RoutedProvider(
         groq,
         {
-            MODEL_PREFIX: TokenHarborProvider(
+            TOKENHARBOR.prefix: OpenAICompatibleProvider(
+                TOKENHARBOR,
                 api_key=tokenharbor_key,
                 base_url=settings.tokenharbor_base_url,
                 timeout_seconds=settings.ai_timeout_seconds,

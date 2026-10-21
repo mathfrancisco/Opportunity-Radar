@@ -76,7 +76,7 @@ from opportunity_radar.platform.ai.metrics import (
     ai_budget,
     ai_metrics,
 )
-from opportunity_radar.platform.ai.providers.tokenharbor import MODEL_PREFIX
+from opportunity_radar.platform.ai.providers.registry import spec_for_model
 from opportunity_radar.platform.ai.tasks import default_routes
 from opportunity_radar.platform.config import Settings, get_settings
 from opportunity_radar.presentation.http.auth import RequestIdentity, authenticated_identity
@@ -954,7 +954,7 @@ def get_ai_budget(
         tokens_limit=settings.ai_daily_tokens_soft_limit,
         interactive_reserve_requests=settings.ai_interactive_reserve_requests,
         provider_requests_limit=settings.ai_provider_daily_requests_limit,
-        provider_limit_models=[name for name in models if not name.startswith(MODEL_PREFIX)],
+        provider_limit_models=[name for name in models if spec_for_model(name) is None],
     )
     return _ai_budget_response(report)
 

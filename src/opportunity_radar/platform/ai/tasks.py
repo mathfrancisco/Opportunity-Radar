@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from opportunity_radar.platform.ai.providers.tokenharbor import MODEL_PREFIX
+from opportunity_radar.platform.ai.providers.registry import TOKENHARBOR
 from opportunity_radar.platform.config import Settings
 
 
@@ -51,7 +51,7 @@ def _tokenharbor_models(settings: Settings) -> tuple[str, ...]:
     if not settings.tokenharbor_api_key.get_secret_value():
         return ()
     names = (name.strip() for name in settings.tokenharbor_models.split(","))
-    return tuple(MODEL_PREFIX + name for name in names if name)
+    return tuple(TOKENHARBOR.prefix + name for name in names if name)
 
 
 def _effort_for(settings: Settings, task: AITask) -> str:
