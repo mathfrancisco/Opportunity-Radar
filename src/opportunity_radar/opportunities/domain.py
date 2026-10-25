@@ -580,7 +580,7 @@ def _text_compensation(
             # "5 a 7 mil": the scale written once applies to both ends.
             first *= 1000
         # A bare number in a description is not compensation evidence.
-        nearby = text[max(0, match.start() - 48) : match.end() + 48]
+        nearby = _sentence_nearby(text, match.start(), match.end())
         currency_symbol = match.group("currency_symbol")
         if not (
             match.group("currency")
@@ -595,6 +595,11 @@ def _text_compensation(
         # prefix before the match, not the tail: the tail of the salary match
         # in "Salário: R$ 5.000 por mês + VR R$ 40/dia" holds the benefit.
         if _BENEFIT_WORD.search(_period_prefix(text, match.start())):
+            continue
+        # Benefits can also name their purpose immediately after the amount.
+        # Stop at a separator so a later benefit does not hide a real salary.
+        benefit_tail = text[match.end() : match.end() + 24]
+        if re.match(r"\s*(?:de\s+)?" + _BENEFIT_WORD.pattern, benefit_tail, re.I):
             continue
         currency = (
             match.group("currency")
@@ -630,6 +635,19 @@ def _period_prefix(text: str, start: int) -> str:
     prefix = text[max(0, start - 24) : start]
     cut = max(prefix.rfind(mark) for mark in ".;!?\n")
     return prefix[cut + 1 :]
+
+
+def _sentence_nearby(text: str, start: int, end: int) -> str:
+    """Local context for salary words, without borrowing from another sentence."""
+    prefix = text[max(0, start - 48) : start]
+    boundaries = list(re.finditer(r"[.!?;\n]\s+", prefix))
+    if boundaries:
+        prefix = prefix[boundaries[-1].end() :]
+    tail = text[end : end + 48]
+    boundary = re.search(r"[.!?;\n](?:\s|$)", tail)
+    if boundary:
+        tail = tail[: boundary.start()]
+    return prefix + text[start:end] + tail
 
 
 def _money_amount(value: str | None) -> Decimal | None:
