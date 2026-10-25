@@ -120,3 +120,35 @@ def test_bare_number_range_without_salary_word_is_ignored():
 )
 def test_benefit_amounts_are_not_compensation(text):
     assert extract_compensation({}, text, source_type="test") is None
+
+
+@pytest.mark.parametrize(
+    ("text", "minimum", "maximum", "period"),
+    [
+        (
+            "We run a 4-day week. Salary: $100,000 - $120,000 per year",
+            100000,
+            120000,
+            Y,
+        ),
+        (
+            "5 - 10k employees. Salary: $100,000 - $120,000 per year",
+            100000,
+            120000,
+            Y,
+        ),
+    ],
+)
+def test_unrelated_number_before_salary_does_not_become_pay(
+    text, minimum, maximum, period
+):
+    result = extract_compensation({}, text, source_type="test")
+
+    assert result is not None
+    assert result.minimum == Decimal(minimum)
+    assert result.maximum == Decimal(maximum)
+    assert result.period == period
+
+
+def test_benefit_named_after_amount_is_not_pay():
+    assert extract_compensation({}, "R$ 150 de auxílio", source_type="test") is None
